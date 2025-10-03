@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 
-const BabylonScene = ({ sceneBuilder }) => {
+const BabylonScene = ({ sceneBuilder, onSceneReady }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
@@ -60,6 +60,11 @@ const BabylonScene = ({ sceneBuilder }) => {
 
       sceneRef.current = scene;
 
+      // Notify parent component that scene is ready
+      if (onSceneReady) {
+        onSceneReady(scene);
+      }
+
       // Run the render loop
       engine.runRenderLoop(() => {
         scene.render();
@@ -83,7 +88,7 @@ const BabylonScene = ({ sceneBuilder }) => {
     return () => {
       cleanup.then(cleanupFn => cleanupFn && cleanupFn());
     };
-  }, [sceneBuilder]);
+  }, [sceneBuilder, onSceneReady]);
 
   return (
     <canvas

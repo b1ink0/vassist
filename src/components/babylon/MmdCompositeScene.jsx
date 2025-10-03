@@ -6,14 +6,12 @@ import "babylon-mmd/esm/Runtime/Animation/mmdCompositeRuntimeModelAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 
-import { BezierCurveEase } from "@babylonjs/core/Animations/easing";
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
-import { DepthOfFieldEffectBlurLevel } from "@babylonjs/core/PostProcesses/depthOfFieldEffect";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
@@ -27,10 +25,6 @@ import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { BvmdLoader } from "babylon-mmd/esm/Loader/Optimized/bvmdLoader";
 import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
-import {
-  MmdAnimationSpan,
-  MmdCompositeAnimation,
-} from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
@@ -40,6 +34,7 @@ import {
   MmdPlayerControl,
 } from "babylon-mmd/esm/Runtime/Util/mmdPlayerControl";
 import { MmdCameraAutoFocus } from "./MmdCameraAutoFocus";
+import { AnimationManager } from "./AnimationManager";
 
 export const buildMmdCompositeScene = async (canvas, engine) => {
   SdefInjector.OverrideEngineCreateEffect(engine);
@@ -179,7 +174,7 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
 
   // BVMD Loader
   const bvmdLoader = new BvmdLoader(scene);
-  bvmdLoader.loggingEnabled = true;
+  bvmdLoader.loggingEnabled = false;
 
   // Material builder
   const materialBuilder = new MmdStandardMaterialBuilder();
@@ -187,24 +182,13 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
     /* do nothing */
   };
 
-  // Load assets in parallel
-
-  // Load animations
-  const mmdAnimation1 = await bvmdLoader.loadAsync(
-    "motion1",
-    "res/private_test/motion/1.bvmd"
-  );
-
-  const mmdAnimation2 = await bvmdLoader.loadAsync(
-    "motion2",
-    "res/private_test/motion/2.bvmd"
-  );
-
+  // Load camera animation
   const cameraAnimation = await bvmdLoader.loadAsync(
     "camera",
     "res/private_test/motion/2.bvmd"
   );
 
+  // Load model
   const result = await LoadAssetContainerAsync(
     "res/private_test/model/1.bpmx",
     scene,
@@ -243,108 +227,26 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
     buildPhysics: true,
   });
 
-  // Create composite animation
-  const compositeAnimation = new MmdCompositeAnimation("composite");
-  const jogDuration = mmdAnimation1.endFrame;
-  const walkDuration = mmdAnimation2.endFrame;
-  const transitionDuration = 30;
+  // ========================================
+  // ANIMATION MANAGER INTEGRATION
+  // ========================================
+  
+  // Create AnimationManager with all dependencies
+  const animationManager = new AnimationManager(
+    scene,
+    mmdRuntime,
+    mmdModel,
+    bvmdLoader
+  );
 
-  console.log(`Jog duration: ${jogDuration} frames`);
-  console.log(`Walk duration: ${walkDuration} frames`);
-  console.log(`Transition duration: ${transitionDuration} frames`);
+  // Initialize animation system (loads first idle animation)
+  await animationManager.initialize();
 
-  // Track current state
-  let currentCycle = 0;
-  let lastAddedCycle = -1;
-  let firstActiveCycle = 0;
-  const maxCachedCycles = 3; // Keep only 3 cycles in memory at a time
-  const spanMap = new Map(); // Track spans by cycle number
+  console.log('[Scene] AnimationManager initialized and running');
 
-  // Function to add next animation cycle
-  const addNextCycle = () => {
-    const cycle = lastAddedCycle + 1;
-    const cycleStartTime = cycle * (jogDuration + walkDuration - transitionDuration);
-
-    console.log(`Adding cycle ${cycle} at frame ${cycleStartTime}`);
-
-    // Jog animation span
-    const jogStart = cycleStartTime;
-    const jogSpan = new MmdAnimationSpan(
-      mmdAnimation1,
-      undefined,
-      undefined,
-      jogStart,
-      1
-    );
-    if (cycle > 0) {
-      jogSpan.easeInFrameTime = transitionDuration;
-    }
-    jogSpan.easeOutFrameTime = transitionDuration;
-    jogSpan.easingFunction = new BezierCurveEase(0.25, 0.1, 0.75, 0.9);
-    compositeAnimation.addSpan(jogSpan);
-
-    // Walk animation span
-    const walkStart = cycleStartTime + jogDuration - transitionDuration;
-    const walkSpan = new MmdAnimationSpan(
-      mmdAnimation2,
-      undefined,
-      undefined,
-      walkStart,
-      1
-    );
-    walkSpan.easeInFrameTime = transitionDuration;
-    walkSpan.easeOutFrameTime = transitionDuration;
-    walkSpan.easingFunction = new BezierCurveEase(0.25, 0.1, 0.75, 0.9);
-    compositeAnimation.addSpan(walkSpan);
-
-    // Store spans for this cycle
-    spanMap.set(cycle, [jogSpan, walkSpan]);
-
-    lastAddedCycle = cycle;
-  };
-
-  // Function to remove old cycles to prevent memory buildup
-  const cleanupOldCycles = () => {
-    // Remove cycles that are more than maxCachedCycles behind the current cycle
-    const cycleToRemove = currentCycle - maxCachedCycles;
-    
-    if (cycleToRemove >= firstActiveCycle && spanMap.has(cycleToRemove)) {
-      const spansToRemove = spanMap.get(cycleToRemove);
-      
-      for (const span of spansToRemove) {
-        compositeAnimation.removeSpan(span);
-      }
-      
-      spanMap.delete(cycleToRemove);
-      firstActiveCycle = cycleToRemove + 1;
-      
-      console.log(`Cleaned up cycle ${cycleToRemove}. Active cycles: ${firstActiveCycle} to ${lastAddedCycle}`);
-    }
-  };
-
-  // Add first cycle to start
-  addNextCycle();
-
-  mmdModel.addAnimation(compositeAnimation);
-  mmdModel.setAnimation("composite");
-
-  // Monitor animation and add more cycles as needed
-  scene.onBeforeRenderObservable.add(() => {
-    const currentFrame = mmdRuntime.currentFrameTime;
-    const cycleDuration = jogDuration + walkDuration - transitionDuration;
-    
-    // Calculate which cycle we're in
-    currentCycle = Math.floor(currentFrame / cycleDuration);
-    
-    // If we're in the last added cycle, add the next one
-    if (currentCycle >= lastAddedCycle) {
-      console.log(`Current frame: ${currentFrame}, Current cycle: ${currentCycle}, Adding next cycle`);
-      addNextCycle();
-    }
-
-    // Cleanup old cycles to prevent memory buildup
-    cleanupOldCycles();
-  });
+  // ========================================
+  // END ANIMATION MANAGER INTEGRATION
+  // ========================================
 
   // Post-processing pipeline
   const defaultPipeline = new DefaultRenderingPipeline("default", true, scene);
@@ -381,6 +283,12 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
 
   // Start animation
   mmdRuntime.playAnimation();
+
+  // Expose AnimationManager via scene metadata for external control
+  scene.metadata = scene.metadata || {};
+  scene.metadata.animationManager = animationManager;
+
+  console.log('[Scene] Scene build complete, AnimationManager accessible via scene.metadata.animationManager');
 
   return scene;
 };
