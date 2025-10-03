@@ -228,11 +228,19 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   console.log(`Walk duration: ${walkDuration} frames`);
   console.log(`Transition duration: ${transitionDuration} frames`);
 
-  const totalCycles = 1000;
+  // Track current state
+  let currentCycle = 0;
+  let lastAddedCycle = -1;
+  let firstActiveCycle = 0;
+  const maxCachedCycles = 3; // Keep only 3 cycles in memory at a time
+  const spanMap = new Map(); // Track spans by cycle number
 
-  for (let cycle = 0; cycle < totalCycles; cycle++) {
-    const cycleStartTime =
-      cycle * (jogDuration + walkDuration - transitionDuration);
+  // Function to add next animation cycle
+  const addNextCycle = () => {
+    const cycle = lastAddedCycle + 1;
+    const cycleStartTime = cycle * (jogDuration + walkDuration - transitionDuration);
+
+    console.log(`Adding cycle ${cycle} at frame ${cycleStartTime}`);
 
     // Jog animation span
     const jogStart = cycleStartTime;
@@ -263,10 +271,55 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
     walkSpan.easeOutFrameTime = transitionDuration;
     walkSpan.easingFunction = new BezierCurveEase(0.25, 0.1, 0.75, 0.9);
     compositeAnimation.addSpan(walkSpan);
-  }
+
+    // Store spans for this cycle
+    spanMap.set(cycle, [jogSpan, walkSpan]);
+
+    lastAddedCycle = cycle;
+  };
+
+  // Function to remove old cycles to prevent memory buildup
+  const cleanupOldCycles = () => {
+    // Remove cycles that are more than maxCachedCycles behind the current cycle
+    const cycleToRemove = currentCycle - maxCachedCycles;
+    
+    if (cycleToRemove >= firstActiveCycle && spanMap.has(cycleToRemove)) {
+      const spansToRemove = spanMap.get(cycleToRemove);
+      
+      for (const span of spansToRemove) {
+        compositeAnimation.removeSpan(span);
+      }
+      
+      spanMap.delete(cycleToRemove);
+      firstActiveCycle = cycleToRemove + 1;
+      
+      console.log(`Cleaned up cycle ${cycleToRemove}. Active cycles: ${firstActiveCycle} to ${lastAddedCycle}`);
+    }
+  };
+
+  // Add first cycle to start
+  addNextCycle();
 
   mmdModel.addAnimation(compositeAnimation);
   mmdModel.setAnimation("composite");
+
+  // Monitor animation and add more cycles as needed
+  scene.onBeforeRenderObservable.add(() => {
+    const currentFrame = mmdRuntime.currentFrameTime;
+    const cycleDuration = jogDuration + walkDuration - transitionDuration;
+    
+    // Calculate which cycle we're in
+    currentCycle = Math.floor(currentFrame / cycleDuration);
+    
+    // If we're in the last added cycle, add the next one
+    if (currentCycle >= lastAddedCycle) {
+      console.log(`Current frame: ${currentFrame}, Current cycle: ${currentCycle}, Adding next cycle`);
+      addNextCycle();
+    }
+
+    // Cleanup old cycles to prevent memory buildup
+    cleanupOldCycles();
+  });
 
   // Post-processing pipeline
   const defaultPipeline = new DefaultRenderingPipeline("default", true, scene);
