@@ -7,8 +7,37 @@ function App() {
   const [sceneType, setSceneType] = useState('mmd') // 'basic' or 'mmd'
 
   return (
-    <div>
-      <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000 }}>
+    <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
+      {/* Background HTML content */}
+      <div style={{ 
+        position: 'absolute', 
+        top: 0, 
+        left: 0, 
+        width: '100%', 
+        height: '100%',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        zIndex: 0,
+      }}>
+        <h1 style={{ color: 'white', fontSize: '3rem', marginBottom: '1rem', textAlign: 'center' }}>
+          Virtual Assistant
+        </h1>
+        <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '1.2rem', maxWidth: '600px', textAlign: 'center' }}>
+          Orthographic 3D model rendered on transparent background
+        </p>
+      </div>
+
+      {/* Transparent 3D canvas overlay */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
+        <BabylonScene sceneBuilder={sceneType === 'mmd' ? buildMmdCompositeScene : null} />
+      </div>
+
+      {/* UI Controls on top */}
+      <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, pointerEvents: 'auto' }}>
         <button
           onClick={() => setSceneType('basic')}
           style={{
@@ -34,10 +63,9 @@ function App() {
             cursor: 'pointer'
           }}
         >
-          MMD Composite Scene
+          MMD Orthographic
         </button>
       </div>
-      <BabylonScene sceneBuilder={sceneType === 'mmd' ? buildMmdCompositeScene : null} />
     </div>
   )
 }

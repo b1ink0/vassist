@@ -14,6 +14,7 @@ const BabylonScene = ({ sceneBuilder }) => {
       const engine = new Engine(canvasRef.current, true, {
         preserveDrawingBuffer: true,
         stencil: true,
+        alpha: true, // Enable alpha channel for transparency
       });
       engineRef.current = engine;
 
@@ -92,6 +93,11 @@ const BabylonScene = ({ sceneBuilder }) => {
         height: '100vh',
         display: 'block',
         outline: 'none',
+        background: 'transparent', // Transparent canvas background
+        position: 'absolute', // Position over HTML content
+        top: 0,
+        left: 0,
+        pointerEvents: 'none', // Allow clicks to pass through to HTML below
       }}
     />
   );

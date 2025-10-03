@@ -7,6 +7,7 @@ import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 
 import { BezierCurveEase } from "@babylonjs/core/Animations/easing";
+import { Camera } from "@babylonjs/core/Cameras/camera";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -44,7 +45,8 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   SdefInjector.OverrideEngineCreateEffect(engine);
 
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.95, 0.95, 0.95, 1.0);
+  // Transparent background - only model visible
+  scene.clearColor = new Color4(0, 0, 0, 0); // RGBA with alpha = 0 (fully transparent)
 
   // Create MMD root and camera root
   const mmdRoot = new TransformNode("mmdRoot", scene);
@@ -57,6 +59,29 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   mmdCamera.maxZ = 5000;
   mmdCamera.ignoreParentScaling = true;
   mmdCamera.parent = cameraRoot;
+
+  // Enable orthographic mode for 2D-like appearance
+  mmdCamera.mode = Camera.ORTHOGRAPHIC_CAMERA;
+  
+  // Set orthographic frustum
+  const orthoHeight = 12; // Adjust this to zoom in/out (virtual units visible vertically)
+  const aspectRatio = engine.getAspectRatio(mmdCamera);
+  
+  mmdCamera.orthoTop = orthoHeight;
+  mmdCamera.orthoBottom = -orthoHeight;
+  mmdCamera.orthoLeft = -orthoHeight * aspectRatio;
+  mmdCamera.orthoRight = orthoHeight * aspectRatio;
+
+  // Set camera distance for orthographic view (MmdCamera uses distance property, not setPosition)
+  mmdCamera.distance = -30; // Negative distance moves camera back
+  mmdCamera.rotation.set(0, 0, 0); // Face forward
+
+  // Handle window resize to maintain aspect ratio
+  engine.onResizeObservable.add(() => {
+    const newAspect = engine.getAspectRatio(mmdCamera);
+    mmdCamera.orthoLeft = -orthoHeight * newAspect;
+    mmdCamera.orthoRight = orthoHeight * newAspect;
+  });
 
   // Create default ArcRotate camera
   const camera = new ArcRotateCamera(
@@ -327,8 +352,8 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   defaultPipeline.bloomEnabled = true;
   defaultPipeline.chromaticAberrationEnabled = true;
   defaultPipeline.chromaticAberration.aberrationAmount = 1;
-  defaultPipeline.depthOfFieldEnabled = true;
-  defaultPipeline.depthOfFieldBlurLevel = DepthOfFieldEffectBlurLevel.High;
+  defaultPipeline.depthOfFieldEnabled = false;
+  // defaultPipeline.depthOfFieldBlurLevel = DepthOfFieldEffectBlurLevel.High;
   defaultPipeline.fxaaEnabled = true;
   defaultPipeline.imageProcessingEnabled = true;
   defaultPipeline.imageProcessing.toneMappingEnabled = true;
@@ -344,15 +369,15 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   mmdCameraAutoFocus.register(scene);
 
   // Handle depth renderer
-  for (const depthRenderer of Object.values(scene._depthRenderer)) {
-    depthRenderer.forceDepthWriteTransparentMeshes = true;
-    engine.onResizeObservable.add(() =>
-      depthRenderer.getDepthMap().resize({
-        width: engine.getRenderWidth(),
-        height: engine.getRenderHeight(),
-      })
-    );
-  }
+  // for (const depthRenderer of Object.values(scene._depthRenderer)) {
+  //   depthRenderer.forceDepthWriteTransparentMeshes = true;
+  //   engine.onResizeObservable.add(() =>
+  //     depthRenderer.getDepthMap().resize({
+  //       width: engine.getRenderWidth(),
+  //       height: engine.getRenderHeight(),
+  //     })
+  //   );
+  // }
 
   // Start animation
   mmdRuntime.playAnimation();
