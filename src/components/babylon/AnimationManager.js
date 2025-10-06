@@ -57,6 +57,8 @@ export class AnimationManager {
     this.maxCachedCycles = 3; // Keep only 3 cycles in memory
     this.spanMap = new Map(); // cycle number -> [spans]
     this.animationStartFrame = 0; // Track when current animation started (CRITICAL for cycle calculation)
+    this.oldSpansToRemove = null; // Old spans from previous animation to remove after transition
+    this.oldSpansRemovalFrame = null; // Frame at which to remove old spans
 
     // Current animation tracking
     this.currentAnimationConfig = null;
@@ -218,9 +220,50 @@ export class AnimationManager {
     this.currentLoadedAnimation = loadedAnimation;
     this.currentAnimationDuration = loadedAnimation.endFrame;
 
-    // Store old spans but DON'T remove them yet
-    // They will remain active during the transition, blending with the new animation
+    // CRITICAL: Handle transition between different animations
+    // Keep old spans active during transition for smooth blending
     const oldSpans = Array.from(this.spanMap.values()).flat();
+    
+    if (oldSpans.length > 0) {
+      console.log(`[AnimationManager] Keeping ${oldSpans.length} old spans for transition blending`);
+      
+      // Apply ease-out to old spans
+      // CRITICAL: We need to truncate the old span's endFrame to the current position + transition duration
+      // This makes the ease-out start IMMEDIATELY from the current playback position
+      const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+      const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
+      
+      for (const span of oldSpans) {
+        // Calculate where we are in this span's playback
+        const spanAnimationFrame = currentTimelineFrame - span.offset;
+        
+        // Store the original endFrame before truncation
+        const originalEndFrame = span.endFrame;
+        
+        // Truncate the span to end at current position + transition duration
+        // BUT ensure we don't go beyond the animation's actual end
+        const targetEndFrame = spanAnimationFrame + transitionFrames;
+        span.endFrame = Math.min(originalEndFrame, targetEndFrame);
+        
+        // If we're already past the span's end, it will be removed anyway
+        // Set easeOutFrameTime to the remaining frames
+        const remainingFrames = span.endFrame - spanAnimationFrame;
+        span.easeOutFrameTime = Math.max(1, remainingFrames); // At least 1 frame
+        
+        span.easingFunction = new BezierCurveEase(
+          TransitionSettings.DEFAULT_EASING_CURVE.x1,
+          TransitionSettings.DEFAULT_EASING_CURVE.y1,
+          TransitionSettings.DEFAULT_EASING_CURVE.x2,
+          TransitionSettings.DEFAULT_EASING_CURVE.y2
+        );
+        
+        console.log(`[AnimationManager] Old span at offset ${span.offset}: originalEnd=${originalEndFrame}, currentFrame=${spanAnimationFrame.toFixed(2)}, truncatedEnd=${span.endFrame}, easeOut=${span.easeOutFrameTime}`);
+      }
+      
+      // Store old spans for delayed cleanup
+      this.oldSpansToRemove = oldSpans;
+      this.oldSpansRemovalFrame = this.mmdRuntime.currentFrameTime + transitionFrames;
+    }
     
     // Reset cycle tracking for new animation
     this.currentCycle = 0;
@@ -229,30 +272,33 @@ export class AnimationManager {
     this.spanMap.clear(); // Clear the map so new cycles start fresh
     this.animationStartFrame = this.mmdRuntime.currentFrameTime; // CRITICAL: Store when this animation started!
     
+    // Dynamically set runtime duration based on animation
+    // Set initial duration to support at least 10 cycles (can be extended later)
+    const loopTransition = animationConfig.loopTransition || false;
+    const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+    const effectiveDuration = loopTransition ? (this.currentAnimationDuration - transitionFrames) : this.currentAnimationDuration;
+    
+    // Calculate duration for multiple cycles with buffer
+    const initialCycles = 10; // Start with buffer for 10 cycles
+    const requiredDuration = this.animationStartFrame + (effectiveDuration * initialCycles);
+    
+    // Only update if we need more duration
+    if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
+      this.mmdRuntime.setManualAnimationDuration(requiredDuration);
+      console.log(`[AnimationManager] Set runtime duration to ${requiredDuration} frames (${initialCycles} cycles buffer from frame ${this.animationStartFrame})`);
+    }
+    
     // Reset idle switch timer
     this.idleSwitchTimer = 0;
     if (behavior.autoSwitchInterval) {
       this.idleSwitchInterval = behavior.autoSwitchInterval;
     }
 
-    // Add first cycle - it will ease in, blending WITH the old animation that's still playing
+    // Add first cycle - it will ease in smoothly, overlapping with old animation's ease-out
     this.addNextCycle();
     
     // Mark that we've started at least one animation (for smooth transitions)
     this.isFirstAnimationEver = false;
-    
-    // Schedule removal of old spans AFTER the new animation has fully eased in
-    if (oldSpans.length > 0) {
-      const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
-      const removeDelay = (transitionFrames / 30) * 1000; // Convert frames to milliseconds (30fps)
-      console.log(`[AnimationManager] Will remove ${oldSpans.length} old spans after ${transitionFrames} frames (${removeDelay}ms)`);
-      setTimeout(() => {
-        console.log(`[AnimationManager] Removing ${oldSpans.length} old spans after transition`);
-        for (const span of oldSpans) {
-          this.compositeAnimation.removeSpan(span);
-        }
-      }, removeDelay);
-    }
 
     console.log(`[AnimationManager] Animation started: ${animationConfig.name}, duration: ${this.currentAnimationDuration} frames`);
   }
@@ -260,6 +306,7 @@ export class AnimationManager {
   /**
    * Add next animation cycle with smooth transitions
    * For single looping animations, just add the next loop at the end
+   * With loopTransition: true, creates smooth overlap between cycles
    */
   addNextCycle() {
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
@@ -270,12 +317,26 @@ export class AnimationManager {
     const cycle = this.lastAddedCycle + 1;
     const duration = this.currentAnimationDuration;
     const transitionFrames = this.currentAnimationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+    const loopTransition = this.currentAnimationConfig.loopTransition || false;
 
-    // NO OVERLAP: Each cycle plays the full animation back-to-back
-    // Cycles placed at exact multiples of duration (no gap, no overlap)
-    const cycleStartTime = this.animationStartFrame + (cycle * duration);
+    // Calculate cycle start time
+    // With loopTransition: overlap by transitionFrames to create smooth blend
+    // Without loopTransition: cycles play back-to-back with no overlap
+    let cycleStartTime;
+    if (loopTransition) {
+      // Each cycle advances by (duration - transitionFrames) to create overlap
+      // Cycle 0: 0
+      // Cycle 1: 0 + (200-30)*1 = 170
+      // Cycle 2: 0 + (200-30)*2 = 340
+      // Cycle N: 0 + (200-30)*N
+      const effectiveDuration = duration - transitionFrames;
+      cycleStartTime = this.animationStartFrame + (cycle * effectiveDuration);
+    } else {
+      // No overlap - exact multiples of duration
+      cycleStartTime = this.animationStartFrame + (cycle * duration);
+    }
 
-    console.log(`[AnimationManager] Adding cycle ${cycle} at frame ${cycleStartTime}, animation duration: ${duration} frames`);
+    console.log(`[AnimationManager] Adding cycle ${cycle} at frame ${cycleStartTime}, animation duration: ${duration} frames, loopTransition: ${loopTransition}`);
 
     // Create animation span
     const span = new MmdAnimationSpan(
@@ -286,11 +347,10 @@ export class AnimationManager {
       1 // playback rate
     );
 
-    // Apply easing ONLY when transitioning from another animation
-    // For looping the same animation: NO easing (plays full animation)
-    // This prevents T-pose by ensuring each cycle plays completely
+    // Apply easing based on context
     if (cycle === 0 && !this.isFirstAnimationEver) {
       // First cycle of NEW animation: ease in from previous animation
+      console.log(`[AnimationManager] Applying ease-in to cycle 0 (animation switch transition)`);
       span.easeInFrameTime = transitionFrames;
       span.easingFunction = new BezierCurveEase(
         TransitionSettings.DEFAULT_EASING_CURVE.x1,
@@ -298,8 +358,36 @@ export class AnimationManager {
         TransitionSettings.DEFAULT_EASING_CURVE.x2,
         TransitionSettings.DEFAULT_EASING_CURVE.y2
       );
+    } else if (loopTransition && cycle > 0) {
+      // Loop transition: blend between cycles
+      // Ease in from previous cycle
+      console.log(`[AnimationManager] Applying ease-in to cycle ${cycle} (loop transition)`);
+      span.easeInFrameTime = transitionFrames;
+      span.easingFunction = new BezierCurveEase(
+        TransitionSettings.DEFAULT_EASING_CURVE.x1,
+        TransitionSettings.DEFAULT_EASING_CURVE.y1,
+        TransitionSettings.DEFAULT_EASING_CURVE.x2,
+        TransitionSettings.DEFAULT_EASING_CURVE.y2
+      );
+      
+      // Also ease out the previous cycle (if it exists)
+      const previousCycle = cycle - 1;
+      if (this.spanMap.has(previousCycle)) {
+        const previousSpans = this.spanMap.get(previousCycle);
+        console.log(`[AnimationManager] Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
+        for (const prevSpan of previousSpans) {
+          prevSpan.easeOutFrameTime = transitionFrames;
+          prevSpan.easingFunction = new BezierCurveEase(
+            TransitionSettings.DEFAULT_EASING_CURVE.x1,
+            TransitionSettings.DEFAULT_EASING_CURVE.y1,
+            TransitionSettings.DEFAULT_EASING_CURVE.x2,
+            TransitionSettings.DEFAULT_EASING_CURVE.y2
+          );
+        }
+      }
+    } else {
+      console.log(`[AnimationManager] No easing applied to cycle ${cycle} (cycle=${cycle}, isFirst=${this.isFirstAnimationEver}, loopTransition=${loopTransition})`);
     }
-    // No easeOut - let animation play fully to avoid gaps
 
     // Add span to composite animation
     this.compositeAnimation.addSpan(span);
@@ -308,6 +396,18 @@ export class AnimationManager {
     this.spanMap.set(cycle, [span]);
 
     this.lastAddedCycle = cycle;
+    
+    // CRITICAL: Extend MMD runtime duration to cover the new cycle
+    // The runtime duration is set to a large value in MmdCompositeScene.jsx (108000 frames = 1 hour)
+    // This is sufficient for continuous looping animations managed by AnimationManager
+    // If needed for very long sessions, we could dynamically extend it here:
+    const cycleEndTime = cycleStartTime + duration;
+    const requiredDuration = cycleEndTime + (duration * 2); // Add buffer for next 2 cycles
+    
+    if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
+      this.mmdRuntime.setManualAnimationDuration(requiredDuration);
+      console.log(`[AnimationManager] Extended runtime duration to ${requiredDuration} frames (cycle ${cycle} ends at ${cycleEndTime})`);
+    }
 
     console.log(`[AnimationManager] Cycle ${cycle} added. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
   }
@@ -373,13 +473,27 @@ export class AnimationManager {
     }
 
     const absoluteFrame = this.mmdRuntime.currentFrameTime;
+    
+    // Check if we need to remove old spans from previous animation after transition
+    if (this.oldSpansToRemove && absoluteFrame >= this.oldSpansRemovalFrame) {
+      console.log(`[AnimationManager] Removing ${this.oldSpansToRemove.length} old spans after transition complete`);
+      for (const span of this.oldSpansToRemove) {
+        this.compositeAnimation.removeSpan(span);
+      }
+      this.oldSpansToRemove = null;
+      this.oldSpansRemovalFrame = null;
+    }
+    
     // CRITICAL: Calculate frame RELATIVE to when this animation started!
     const currentFrame = absoluteFrame - this.animationStartFrame;
     const duration = this.currentAnimationDuration;
+    const transitionFrames = this.currentAnimationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+    const loopTransition = this.currentAnimationConfig.loopTransition || false;
     
-    // Cycle duration: For SINGLE looping animation, cycles are spaced at FULL duration
-    // No overlap needed - each cycle plays fully, easing only happens during state transitions
-    const cycleDuration = duration;
+    // Cycle duration calculation
+    // With loopTransition: effective cycle length is reduced by transition overlap
+    // Without loopTransition: cycles are spaced at full duration
+    const cycleDuration = loopTransition ? (duration - transitionFrames) : duration;
 
     // Calculate which cycle we're in (based on relative frame time)
     this.currentCycle = Math.floor(currentFrame / cycleDuration);
@@ -387,7 +501,7 @@ export class AnimationManager {
     // EXACT original logic: if we've entered a NEW cycle past the last added one, add the next
     // Use > not >= because we already added the initial cycle in playAnimation()
     if (this.currentCycle > this.lastAddedCycle) {
-      console.log(`[AnimationManager] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames`);
+      console.log(`[AnimationManager] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
       this.addNextCycle();
     }
 
@@ -417,11 +531,40 @@ export class AnimationManager {
       this.idleSwitchTimer += this.scene.getEngine().getDeltaTime();
 
       if (this.idleSwitchTimer >= this.idleSwitchInterval) {
-        console.log('[AnimationManager] Auto-switching idle animation');
-        this.idleSwitchTimer = 0;
+        // Get all idle animations
+        const idleAnimations = getAnimationsByCategory('idle');
         
-        // Switch to different random idle animation
-        this.transitionToState(AssistantState.IDLE);
+        // Only switch if we have multiple idle animations
+        if (idleAnimations.length <= 1) {
+          console.log('[AnimationManager] Only one idle animation available, skipping auto-switch');
+          this.idleSwitchTimer = 0;
+          return;
+        }
+        
+        // Select a DIFFERENT random idle animation
+        let newAnimation = null;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (attempts < maxAttempts) {
+          newAnimation = getRandomAnimation('idle');
+          // Make sure it's different from current
+          if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
+            break;
+          }
+          attempts++;
+        }
+        
+        if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
+          console.log(`[AnimationManager] Auto-switching idle animation: ${this.currentAnimationConfig?.name} -> ${newAnimation.name}`);
+          this.idleSwitchTimer = 0;
+          
+          // Play the new animation directly (already in IDLE state)
+          this.playAnimation(newAnimation, behavior);
+        } else {
+          console.log('[AnimationManager] Could not find different idle animation, skipping auto-switch');
+          this.idleSwitchTimer = 0;
+        }
       }
     } else {
       // Reset timer if not in idle

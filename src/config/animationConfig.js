@@ -73,6 +73,9 @@ export const TransitionSettings = {
  * - filePath: Path to .bvmd file
  * - transitionFrames: How long to blend when entering/exiting (default: 30)
  * - loop: Whether animation should loop (default: false)
+ * - loopTransition: If true, creates smooth blend between loop cycles (default: false)
+ *   When enabled, the end of each cycle will ease-out while the next cycle eases-in,
+ *   creating an overlap that smoothly blends mismatched start/end frames.
  * - weight: Default weight for blending (default: 1.0)
  * - metadata: Additional info (description, tags, etc.)
  */
@@ -82,9 +85,10 @@ export const AnimationRegistry = {
     {
       id: 'idle_breathing',
       name: 'Idle Breathing',
-      filePath: 'res/private_test/motion/1.bvmd',
+      filePath: 'res/private_test/motion/test.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
         description: 'Default idle animation with subtle breathing',
@@ -97,6 +101,7 @@ export const AnimationRegistry = {
       filePath: 'res/private_test/motion/2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
+      loopTransition: false,
       weight: 1.0,
       metadata: {
         description: 'Idle with occasional head movements',
