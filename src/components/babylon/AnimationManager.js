@@ -69,12 +69,16 @@ export class AnimationManager {
     // Idle animation switching
     this.idleSwitchTimer = 0;
     this.idleSwitchInterval = 10000; // 10 seconds (will use from StateBehavior)
+    this.lastSwitchFrame = null; // Track frame when last switch happened (prevent infinite loop)
 
     // Observable handle for cleanup
     this.renderObserver = null;
 
     // Initialization flag
     this.isInitialized = false;
+    
+    // Visibility change handling
+    this.visibilityChangeHandler = null;
 
     console.log('[AnimationManager] Created');
   }
@@ -103,6 +107,9 @@ export class AnimationManager {
 
     // Register onBeforeRender observer for dynamic span management
     this.registerRenderObserver();
+    
+    // Register visibility change handler to pause/resume on tab switch
+    this.registerVisibilityHandler();
 
     this.isInitialized = true;
     console.log('[AnimationManager] Initialized successfully');
@@ -290,6 +297,7 @@ export class AnimationManager {
     
     // Reset idle switch timer
     this.idleSwitchTimer = 0;
+    this.lastSwitchFrame = this.mmdRuntime.currentFrameTime; // Track when we last switched
     if (behavior.autoSwitchInterval) {
       this.idleSwitchInterval = behavior.autoSwitchInterval;
     }
@@ -498,6 +506,20 @@ export class AnimationManager {
     // Calculate which cycle we're in (based on relative frame time)
     this.currentCycle = Math.floor(currentFrame / cycleDuration);
     
+    // DYNAMIC DURATION EXTENSION: Check if we're approaching the runtime duration limit
+    // Extend by another 10 cycles if we're within 5 cycles of the limit
+    const currentAbsoluteFrame = this.mmdRuntime.currentFrameTime;
+    const remainingFrames = this.mmdRuntime.animationFrameTimeDuration - currentAbsoluteFrame;
+    const cyclesRemaining = Math.floor(remainingFrames / cycleDuration);
+    
+    if (cyclesRemaining < 5) {
+      // Extend duration by another 10 cycles
+      const extensionCycles = 10;
+      const newDuration = this.mmdRuntime.animationFrameTimeDuration + (cycleDuration * extensionCycles);
+      this.mmdRuntime.setManualAnimationDuration(newDuration);
+      console.log(`[AnimationManager] Extended runtime duration to ${newDuration} frames (+${extensionCycles} cycles, was approaching limit)`);
+    }
+    
     // EXACT original logic: if we've entered a NEW cycle past the last added one, add the next
     // Use > not >= because we already added the initial cycle in playAnimation()
     if (this.currentCycle > this.lastAddedCycle) {
@@ -528,6 +550,12 @@ export class AnimationManager {
     const behavior = StateBehavior[this.currentState];
     
     if (this.currentState === AssistantState.IDLE && behavior.autoSwitch) {
+      // Don't switch if we just switched on this frame (prevent infinite loop)
+      const currentFrame = this.mmdRuntime.currentFrameTime;
+      if (this.lastSwitchFrame && currentFrame === this.lastSwitchFrame) {
+        return;
+      }
+      
       this.idleSwitchTimer += this.scene.getEngine().getDeltaTime();
 
       if (this.idleSwitchTimer >= this.idleSwitchInterval) {
@@ -570,6 +598,27 @@ export class AnimationManager {
       // Reset timer if not in idle
       this.idleSwitchTimer = 0;
     }
+  }
+
+  /**
+   * Register visibility change handler to pause/resume animation on tab switch
+   * Prevents time jumps when user switches tabs and browser throttles the tab
+   */
+  registerVisibilityHandler() {
+    this.visibilityChangeHandler = () => {
+      if (document.hidden) {
+        // Tab is hidden - pause MMD runtime
+        console.log('[AnimationManager] Tab hidden - pausing animation');
+        this.mmdRuntime.pause();
+      } else {
+        // Tab is visible - resume MMD runtime
+        console.log('[AnimationManager] Tab visible - resuming animation');
+        this.mmdRuntime.resume();
+      }
+    };
+
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+    console.log('[AnimationManager] Visibility change handler registered');
   }
 
   /**
@@ -650,6 +699,13 @@ export class AnimationManager {
    */
   dispose() {
     console.log('[AnimationManager] Disposing...');
+
+    // Remove visibility change handler
+    if (this.visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+      console.log('[AnimationManager] Visibility handler removed');
+    }
 
     // Remove render observer
     if (this.renderObserver) {

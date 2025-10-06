@@ -313,6 +313,170 @@ export const StateTransitions = {
 };
 
 /**
+ * Emotion to Animation Mapping
+ * 
+ * Maps emotion strings to animation IDs.
+ * This allows VirtualAssistant.speak(text, emotion) to automatically
+ * select the appropriate base animation for the given emotion.
+ * 
+ * The base animation plays while TTS-generated VMD handles lip sync.
+ */
+export const EmotionMapping = {
+  // ===== POSITIVE EMOTIONS =====
+  happy: 'celebrating_1',
+  excited: 'celebrating_1',
+  joyful: 'celebrating_1',
+  cheerful: 'celebrating_1',
+  enthusiastic: 'celebrating_1',
+  
+  // ===== NEUTRAL/CALM EMOTIONS =====
+  neutral: 'idle_breathing',
+  calm: 'idle_breathing',
+  relaxed: 'idle_breathing',
+  idle: 'idle_breathing',
+  default: 'idle_breathing',
+  
+  // ===== THINKING/COGNITIVE EMOTIONS =====
+  thinking: 'thinking_1',
+  pondering: 'thinking_1',
+  contemplating: 'thinking_1',
+  analyzing: 'thinking_1',
+  processing: 'thinking_1',
+  
+  // ===== ATTENTIVE/CURIOUS EMOTIONS =====
+  curious: 'idle_looking',
+  attentive: 'idle_looking',
+  focused: 'idle_looking',
+  interested: 'idle_looking',
+  observing: 'idle_looking',
+  
+  // ===== ACTIVE/ENERGETIC EMOTIONS =====
+  active: 'walking_1',
+  energetic: 'walking_1',
+  working: 'walking_1',
+  busy: 'walking_1',
+  
+  // ===== ERROR/SYSTEM STATES =====
+  error: 'thinking_1',           // Thoughtful pose when something goes wrong
+  confused: 'thinking_1',         // Same - trying to figure it out
+  uncertain: 'thinking_1',        // Not sure about something
+  validation_error: 'thinking_1', // Data validation failed
+  
+  // ===== WAITING/LOADING STATES =====
+  waiting: 'idle_breathing',      // Calm while waiting
+  loading: 'idle_breathing',      // Processing in background
+  listening: 'idle_looking',      // Attentive while user speaks
+  
+  // ===== ACKNOWLEDGMENT STATES =====
+  acknowledging: 'idle_breathing', // Simple acknowledgment
+  understanding: 'idle_breathing', // Got it
+  agreeing: 'idle_breathing',      // Agreement
+  
+  // TODO: Add more emotions as animations become available:
+  // sad: 'sad_1',
+  // surprised: 'surprised_1',
+  // worried: 'worried_1',
+  // frustrated: 'frustrated_1',
+  // apologetic: 'apologetic_1',
+  // greeting: 'waving_1',
+  // farewell: 'waving_1',
+};
+
+/**
+ * Get animation for a given emotion
+ * 
+ * @param {string} emotion - Emotion string (e.g., 'happy', 'thinking', 'neutral')
+ * @returns {Object|null} Animation config for the emotion, or default idle if not found
+ */
+export function getAnimationForEmotion(emotion) {
+  // Handle null/undefined emotion
+  if (!emotion) {
+    console.warn('[AnimationConfig] No emotion provided, using default (neutral)');
+    return getAnimationById(EmotionMapping.default);
+  }
+  
+  // Normalize emotion string (lowercase, trim)
+  const normalizedEmotion = emotion.toLowerCase().trim();
+  
+  // Get animation ID from emotion mapping
+  const animationId = EmotionMapping[normalizedEmotion];
+  
+  // If no mapping found, default to neutral
+  if (!animationId) {
+    console.warn(`[AnimationConfig] Unknown emotion: "${emotion}", using default (neutral)`);
+    console.warn(`[AnimationConfig] Available emotions: ${Object.keys(EmotionMapping).join(', ')}`);
+    return getAnimationById(EmotionMapping.default);
+  }
+  
+  // Get animation config by ID
+  const animation = getAnimationById(animationId);
+  
+  // Fallback to neutral if animation not found (shouldn't happen if config is correct)
+  if (!animation) {
+    console.error(`[AnimationConfig] Animation not found for emotion: "${emotion}" (ID: ${animationId})`);
+    console.error('[AnimationConfig] This indicates a configuration error - emotion maps to non-existent animation');
+    return getAnimationById(EmotionMapping.default);
+  }
+  
+  return animation;
+}
+
+/**
+ * Get all available emotions
+ * @returns {Array} Array of emotion strings
+ */
+export function getAvailableEmotions() {
+  return Object.keys(EmotionMapping);
+}
+
+/**
+ * Check if an emotion is valid (exists in mapping)
+ * Useful for validating LLM output
+ * 
+ * @param {string} emotion - Emotion string to validate
+ * @returns {boolean} True if emotion is valid
+ */
+export function isValidEmotion(emotion) {
+  if (!emotion || typeof emotion !== 'string') {
+    return false;
+  }
+  const normalized = emotion.toLowerCase().trim();
+  return normalized in EmotionMapping;
+}
+
+/**
+ * Validate and sanitize emotion from LLM output
+ * Returns the emotion if valid, otherwise returns 'default'
+ * 
+ * @param {any} emotion - Emotion from LLM (might be invalid/malformed)
+ * @returns {string} Valid emotion string
+ */
+export function sanitizeEmotion(emotion) {
+  // Handle null/undefined
+  if (!emotion) {
+    console.warn('[AnimationConfig] Emotion is null/undefined, using default');
+    return 'default';
+  }
+  
+  // Handle non-string types
+  if (typeof emotion !== 'string') {
+    console.warn(`[AnimationConfig] Emotion is not a string (type: ${typeof emotion}), using default`);
+    return 'default';
+  }
+  
+  // Normalize
+  const normalized = emotion.toLowerCase().trim();
+  
+  // Check if valid
+  if (!(normalized in EmotionMapping)) {
+    console.warn(`[AnimationConfig] Invalid emotion "${emotion}" from LLM, using default`);
+    return 'default';
+  }
+  
+  return normalized;
+}
+
+/**
  * Check if a state transition is valid
  * @param {string} fromState - Current state
  * @param {string} toState - Target state
@@ -330,11 +494,16 @@ export default {
   AnimationRegistry,
   StateBehavior,
   StateTransitions,
+  EmotionMapping,
   getAllAnimations,
   getAnimationsByCategory,
   getAnimationById,
   getRandomAnimation,
   getAnimationTypes,
   validateAnimationConfig,
+  getAnimationForEmotion,
+  getAvailableEmotions,
+  isValidEmotion,
+  sanitizeEmotion,
   isValidTransition,
 };
