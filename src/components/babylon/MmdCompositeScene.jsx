@@ -36,6 +36,7 @@ import {
 import { MmdCameraAutoFocus } from "./MmdCameraAutoFocus";
 import { AnimationManager } from "./AnimationManager";
 import { PositionManager } from "./PositionManager";
+import { CanvasInteractionManager } from "./CanvasInteractionManager";
 
 export const buildMmdCompositeScene = async (canvas, engine) => {
   SdefInjector.OverrideEngineCreateEffect(engine);
@@ -160,19 +161,6 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   mmdRuntime.loggingEnabled = true;
   mmdRuntime.register(scene);
 
-  // Audio player
-  const audioPlayer = new StreamAudioPlayer(scene);
-  audioPlayer.preservesPitch = false;
-  audioPlayer.source = "res/private_test/motion/song.mp3";
-  mmdRuntime.setAudioPlayer(audioPlayer);
-
-  mmdRuntime.playAnimation();
-
-  // Player control
-  const playerControl = new MmdPlayerControl(scene, mmdRuntime, audioPlayer);
-  playerControl.displayTimeFormat = DisplayTimeFormat.Frames;
-  playerControl.showPlayerControl();
-
   // BVMD Loader
   const bvmdLoader = new BvmdLoader(scene);
   bvmdLoader.loggingEnabled = false;
@@ -257,7 +245,12 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   const positionManager = new PositionManager(
     scene,
     mmdCamera,
-    canvas
+    canvas,
+    {
+      boundaryPadding: 0,                // Uniform padding fallback (used if preset has no customBoundaries)
+      allowPartialOffscreen: false,      // Don't allow partial offscreen
+      partialOffscreenAmount: 0          // No partial offscreen amount
+    }
   );
 
   // Initialize positioning system (applies default bottom-right preset)
@@ -305,21 +298,53 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   // Start animation
   mmdRuntime.playAnimation();
 
+  // Create Canvas Interaction Manager for drag support
+  const interactionManager = new CanvasInteractionManager(scene, canvas, modelMesh);
+  interactionManager.initialize();
+  
+  // Setup drag callbacks to work with PositionManager
+  // Offset is now preserved during drag - boundaries adjust automatically
+  interactionManager.setDragCallbacks(
+    // onDragStart - called when drag begins
+    (startX, startY) => {
+      console.log('[Scene] Drag started at', startX, startY);
+    },
+    // onDrag - update position based on delta movement
+    (deltaX, deltaY) => {
+      const currentPos = positionManager.getPositionPixels();
+      positionManager.setPositionPixels(
+        currentPos.x + deltaX,
+        currentPos.y + deltaY,
+        currentPos.width,
+        currentPos.height,
+        positionManager.offset  // Keep the current offset (don't clear it)
+      );
+    },
+    // onDragEnd - called when drag completes
+    (endX, endY) => {
+      console.log('[Scene] Drag completed at', endX, endY);
+    }
+  );
+
   // Expose managers via scene metadata for external control
   scene.metadata = scene.metadata || {};
   scene.metadata.animationManager = animationManager;
   scene.metadata.positionManager = positionManager;
+  scene.metadata.interactionManager = interactionManager;
   scene.metadata.modelMesh = modelMesh; // Store model mesh reference for debug
 
   // Cleanup on scene dispose
   scene.onDisposeObservable.add(() => {
     console.log('[Scene] Scene disposing, cleaning up managers');
+    animationManager.dispose();
     positionManager.dispose();
+    interactionManager.dispose();
   });
 
   console.log('[Scene] Scene build complete');
   console.log('[Scene] - AnimationManager accessible via scene.metadata.animationManager');
   console.log('[Scene] - PositionManager accessible via scene.metadata.positionManager');
+  console.log('[Scene] - CanvasInteractionManager accessible via scene.metadata.interactionManager');
 
   return scene;
 };

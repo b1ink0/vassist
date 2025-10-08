@@ -38,12 +38,10 @@ function App() {
       </div>
 
       {/* Transparent 3D canvas overlay */}
-      <div className="absolute inset-0 z-[1]">
-        <VirtualAssistant 
-          ref={assistantRef}
-          onReady={handleAssistantReady}
-        />
-      </div>
+      <VirtualAssistant 
+        ref={assistantRef}
+        onReady={handleAssistantReady}
+      />
 
       {/* Unified Control Panel */}
       <ControlPanel

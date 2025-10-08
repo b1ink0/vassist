@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 
 const BabylonScene = ({ sceneBuilder, onSceneReady }) => {
@@ -90,21 +91,13 @@ const BabylonScene = ({ sceneBuilder, onSceneReady }) => {
     };
   }, [sceneBuilder, onSceneReady]);
 
-  return (
+  // Use portal to render canvas directly to document.body
+  return createPortal(
     <canvas
       ref={canvasRef}
-      style={{
-        width: '100%',
-        height: '100vh',
-        display: 'block',
-        outline: 'none',
-        background: 'transparent', // Transparent canvas background
-        position: 'absolute', // Position over HTML content
-        top: 0,
-        left: 0,
-        pointerEvents: 'none', // Allow clicks to pass through to HTML below
-      }}
-    />
+      className="w-full h-screen block outline-none bg-transparent absolute top-0 left-0 pointer-events-none z-[9999]"
+    />,
+    document.body
   );
 };
 

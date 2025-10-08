@@ -25,6 +25,11 @@
  *           - Positive = moves camera UP (model appears LOWER on screen)
  *           - Negative = moves camera DOWN (model appears HIGHER on screen)
  *         Tune these values to adjust positioning
+ * 
+ * customBoundaries: Optional per-edge boundary adjustments { left, right, top, bottom } in pixels
+ *         - Positive values = more restrictive (adds padding)
+ *         - Negative values = less restrictive (allows going past edge)
+ *         - Use to compensate for model-specific bounding box differences
  */
 export const PositionPresets = {
   'bottom-right': {
@@ -32,6 +37,7 @@ export const PositionPresets = {
     modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: -2, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: -80, right: 0, top: -80, bottom: 0 },  // Compensate for model bounding box
     description: 'Default chatbot position in bottom-right corner'
   },
   
@@ -40,6 +46,7 @@ export const PositionPresets = {
     modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: 2, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: 0, right: -80, top: -80, bottom: 0 },  // Compensate for model bounding box
     description: 'Chatbot position in bottom-left corner'
   },
   
@@ -48,14 +55,16 @@ export const PositionPresets = {
     modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: 0, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: -40, right: -40, top: -80, bottom: 0 },  // Compensate for model bounding box
     description: 'Chatbot position at bottom center'
   },
   
   'top-center': {
     name: 'Top Center',
-    modelSize: { width: 350, height: 550 },
+    modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: 0, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: -40, right: -40, top: 0, bottom: -80 },  // Compensate for model bounding box
     description: 'Model at top center of screen'
   },
   
@@ -64,6 +73,7 @@ export const PositionPresets = {
     modelSize: { width: 600, height: 900 },
     padding: 0,
     offset: { x: 0, y: 0 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: -80, right: -80, top: -80, bottom: -80 },  // Compensate for model bounding box
     description: 'Large centered view for development/debugging'
   },
   
@@ -72,6 +82,7 @@ export const PositionPresets = {
     modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: 2, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: 0, right: -80, top: 0, bottom: -80 },  // Compensate for model bounding box
     description: 'Top-left corner position'
   },
   
@@ -80,6 +91,7 @@ export const PositionPresets = {
     modelSize: { width: 300, height: 500 },
     padding: 0,
     offset: { x: -2, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    customBoundaries: { left: -80, right: 0, top: 0, bottom: -80 },  // Compensate for model bounding box
     description: 'Top-right corner position'
   }
 };
@@ -90,11 +102,27 @@ export class PositionManager {
    * @param {Scene} scene - Babylon.js scene
    * @param {MmdCamera} camera - MMD camera (must be orthographic)
    * @param {HTMLCanvasElement} canvas - Babylon.js canvas element
+   * @param {object} options - Optional configuration
+   * @param {number} options.boundaryPadding - Padding from screen edges in pixels (default: 0)
+   * @param {boolean} options.allowPartialOffscreen - Allow model to go partially offscreen (default: false)
+   * @param {number} options.partialOffscreenAmount - How much can go offscreen (0-1, default: 0)
    */
-  constructor(scene, camera, canvas) {
+  constructor(scene, camera, canvas, options = {}) {
     this.scene = scene;
     this.camera = camera;
     this.canvas = canvas;
+    
+    // Boundary configuration (TUNE THESE!)
+    this.boundaryPadding = options.boundaryPadding ?? 0; // Pixels from edge
+    this.allowPartialOffscreen = options.allowPartialOffscreen ?? false; // Allow going partially off
+    this.partialOffscreenAmount = options.partialOffscreenAmount ?? 0; // 0 = none, 0.5 = half can go off, 1 = full can go off
+    
+    // Custom boundary insets per edge (set by preset or manually)
+    // Use this to fine-tune boundaries for specific models
+    // Positive values = move boundary inward (more restrictive)
+    // Negative values = move boundary outward (less restrictive)
+    // Will be set automatically when applying a preset that defines customBoundaries
+    this.customBoundaries = null;
     
     // Current state (all in PIXELS relative to canvas)
     this.canvasWidth = 0;
@@ -112,7 +140,12 @@ export class PositionManager {
     // Constants
     this.RESIZE_DEBOUNCE_MS = 150; // Debounce window resize to prevent 60fps updates
     
-    console.log('[PositionManager] Created');
+    console.log('[PositionManager] Created with options:', {
+      boundaryPadding: this.boundaryPadding,
+      allowPartialOffscreen: this.allowPartialOffscreen,
+      partialOffscreenAmount: this.partialOffscreenAmount,
+      customBoundaries: this.customBoundaries
+    });
   }
   
   /**
@@ -165,6 +198,15 @@ export class PositionManager {
     const modelHeight = options.modelSizePx?.height || config.modelSize.height;
     const padding = options.padding !== undefined ? options.padding : config.padding;
     const offset = options.offset || config.offset || { x: 0, y: 0 };
+    
+    // Apply preset's custom boundaries (if defined)
+    if (config.customBoundaries) {
+      this.customBoundaries = { ...config.customBoundaries };
+      console.log(`[PositionManager] Applied custom boundaries from preset '${preset}':`, this.customBoundaries);
+    } else {
+      // Clear custom boundaries if preset doesn't define them
+      this.customBoundaries = null;
+    }
     
     let pixelX, pixelY;
     
@@ -378,38 +420,113 @@ export class PositionManager {
     let adjustedY = y;
     let valid = true;
     
+    // Calculate allowed offscreen amount if enabled
+    const allowedOffscreenX = this.allowPartialOffscreen ? width * this.partialOffscreenAmount : 0;
+    const allowedOffscreenY = this.allowPartialOffscreen ? height * this.partialOffscreenAmount : 0;
+    
+    // Calculate effective boundaries
+    // Use custom boundaries if provided, otherwise use uniform padding
+    let leftPadding, rightPadding, topPadding, bottomPadding;
+    
+    if (this.customBoundaries) {
+      // Custom per-edge boundaries (fine-tuned for specific model)
+      leftPadding = this.customBoundaries.left ?? this.boundaryPadding;
+      rightPadding = this.customBoundaries.right ?? this.boundaryPadding;
+      topPadding = this.customBoundaries.top ?? this.boundaryPadding;
+      bottomPadding = this.customBoundaries.bottom ?? this.boundaryPadding;
+    } else {
+      // Uniform padding on all edges
+      leftPadding = rightPadding = topPadding = bottomPadding = this.boundaryPadding;
+    }
+    
+    // Pure pixel boundaries (offset is handled separately in camera frustum)
+    const minX = leftPadding - allowedOffscreenX;
+    const maxX = this.canvasWidth - width - rightPadding + allowedOffscreenX;
+    const minY = topPadding - allowedOffscreenY;
+    const maxY = this.canvasHeight - height - bottomPadding + allowedOffscreenY;
+    
     // Check left edge
-    if (x < 0) {
-      adjustedX = 0;
+    if (x < minX) {
+      adjustedX = minX;
       valid = false;
     }
     
     // Check right edge
-    if (x + width > this.canvasWidth) {
-      adjustedX = this.canvasWidth - width;
+    if (x > maxX) {
+      adjustedX = maxX;
       valid = false;
     }
     
     // Check top edge
-    if (y < 0) {
-      adjustedY = 0;
+    if (y < minY) {
+      adjustedY = minY;
       valid = false;
     }
     
     // Check bottom edge
-    if (y + height > this.canvasHeight) {
-      adjustedY = this.canvasHeight - height;
+    if (y > maxY) {
+      adjustedY = maxY;
       valid = false;
     }
     
     // Final clamp to ensure within bounds
-    adjustedX = Math.max(0, Math.min(adjustedX, this.canvasWidth - width));
-    adjustedY = Math.max(0, Math.min(adjustedY, this.canvasHeight - height));
+    adjustedX = Math.max(minX, Math.min(adjustedX, maxX));
+    adjustedY = Math.max(minY, Math.min(adjustedY, maxY));
     
     return {
       valid,
       adjustedX,
-      adjustedY
+      adjustedY,
+      // Debug info
+      debug: {
+        boundaries: { minX, maxX, minY, maxY },
+        padding: { left: leftPadding, right: rightPadding, top: topPadding, bottom: bottomPadding },
+        modelSize: { width, height },
+        canvasSize: { width: this.canvasWidth, height: this.canvasHeight },
+        allowedOffscreen: { x: allowedOffscreenX, y: allowedOffscreenY }
+      }
+    };
+  }
+  
+  /**
+   * Set custom boundary insets for fine-tuning model-specific boundaries
+   * NOTE: Normally boundaries are set automatically by presets. Use this method to override.
+   * Useful for runtime adjustments or testing different boundary values.
+   * @param {object} boundaries - Custom boundary insets { left, right, top, bottom } in pixels
+   */
+  setCustomBoundaries(boundaries) {
+    this.customBoundaries = boundaries;
+    console.log('[PositionManager] Custom boundaries manually set (overriding preset):', boundaries);
+    
+    // Revalidate current position with new boundaries
+    const validated = this.validatePosition(this.positionX, this.positionY);
+    if (!validated.valid) {
+      this.positionX = validated.adjustedX;
+      this.positionY = validated.adjustedY;
+      this.updateCameraFrustum();
+      console.log('[PositionManager] Position adjusted due to new boundaries');
+    }
+  }
+  
+  /**
+   * Clear custom boundaries and use uniform padding
+   * Will revert to preset boundaries on next preset change
+   */
+  clearCustomBoundaries() {
+    this.customBoundaries = null;
+    console.log('[PositionManager] Custom boundaries cleared, using uniform padding');
+  }
+  
+  /**
+   * Get current boundary configuration
+   * @returns {object} - Current boundary settings
+   */
+  getBoundaryConfig() {
+    return {
+      uniformPadding: this.boundaryPadding,
+      customBoundaries: this.customBoundaries,
+      allowPartialOffscreen: this.allowPartialOffscreen,
+      partialOffscreenAmount: this.partialOffscreenAmount
     };
   }
   
