@@ -25,13 +25,17 @@ import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { BvmdLoader } from "babylon-mmd/esm/Loader/Optimized/bvmdLoader";
 import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
-// import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer"; // DISABLED - not needed without audio
+import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
-// import { DisplayTimeFormat, MmdPlayerControl } from "babylon-mmd/esm/Runtime/Util/mmdPlayerControl"; // DISABLED - requires audio player
+import {
+  DisplayTimeFormat,
+  MmdPlayerControl,
+} from "babylon-mmd/esm/Runtime/Util/mmdPlayerControl";
 import { MmdCameraAutoFocus } from "./MmdCameraAutoFocus";
 import { AnimationManager } from "./AnimationManager";
+import { PositionManager } from "./PositionManager";
 
 export const buildMmdCompositeScene = async (canvas, engine) => {
   SdefInjector.OverrideEngineCreateEffect(engine);
@@ -156,24 +160,18 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   mmdRuntime.loggingEnabled = true;
   mmdRuntime.register(scene);
 
-  // Audio player - DISABLED for now (causes runtime to stop when audio ends)
-  // TODO: Re-enable when you need audio synchronization
-  // const audioPlayer = new StreamAudioPlayer(scene);
-  // audioPlayer.preservesPitch = false;
-  // audioPlayer.source = "res/private_test/motion/song.mp3";
-  // mmdRuntime.setAudioPlayer(audioPlayer);
+  // Audio player
+  const audioPlayer = new StreamAudioPlayer(scene);
+  audioPlayer.preservesPitch = false;
+  audioPlayer.source = "res/private_test/motion/song.mp3";
+  mmdRuntime.setAudioPlayer(audioPlayer);
 
-  // Set initial animation duration - will be dynamically updated by AnimationManager
-  // Start with a reasonable default (10 minutes = 18000 frames at 30fps)
-  mmdRuntime.setManualAnimationDuration(18000);
-  
-  // Start playing the animation
   mmdRuntime.playAnimation();
 
-  // Player control - DISABLED (requires audio player)
-  // const playerControl = new MmdPlayerControl(scene, mmdRuntime, audioPlayer);
-  // playerControl.displayTimeFormat = DisplayTimeFormat.Frames;
-  // playerControl.showPlayerControl();
+  // Player control
+  const playerControl = new MmdPlayerControl(scene, mmdRuntime, audioPlayer);
+  playerControl.displayTimeFormat = DisplayTimeFormat.Frames;
+  playerControl.showPlayerControl();
 
   // BVMD Loader
   const bvmdLoader = new BvmdLoader(scene);
@@ -251,6 +249,26 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   // END ANIMATION MANAGER INTEGRATION
   // ========================================
 
+  // ========================================
+  // POSITION MANAGER INTEGRATION
+  // ========================================
+  
+  // Create PositionManager for pixel-based positioning
+  const positionManager = new PositionManager(
+    scene,
+    mmdCamera,
+    canvas
+  );
+
+  // Initialize positioning system (applies default bottom-right preset)
+  positionManager.initialize();
+
+  console.log('[Scene] PositionManager initialized and running');
+
+  // ========================================
+  // END POSITION MANAGER INTEGRATION
+  // ========================================
+
   // Post-processing pipeline
   const defaultPipeline = new DefaultRenderingPipeline("default", true, scene);
   defaultPipeline.samples = 4;
@@ -287,11 +305,20 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   // Start animation
   mmdRuntime.playAnimation();
 
-  // Expose AnimationManager via scene metadata for external control
+  // Expose managers via scene metadata for external control
   scene.metadata = scene.metadata || {};
   scene.metadata.animationManager = animationManager;
+  scene.metadata.positionManager = positionManager;
 
-  console.log('[Scene] Scene build complete, AnimationManager accessible via scene.metadata.animationManager');
+  // Cleanup on scene dispose
+  scene.onDisposeObservable.add(() => {
+    console.log('[Scene] Scene disposing, cleaning up managers');
+    positionManager.dispose();
+  });
+
+  console.log('[Scene] Scene build complete');
+  console.log('[Scene] - AnimationManager accessible via scene.metadata.animationManager');
+  console.log('[Scene] - PositionManager accessible via scene.metadata.positionManager');
 
   return scene;
 };

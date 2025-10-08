@@ -69,6 +69,18 @@ function App() {
     setCurrentState(assistantRef.current.getState())
   }
 
+  /**
+   * Change position preset
+   */
+  const changePosition = (preset) => {
+    if (!assistantRef.current || !assistantRef.current.isReady()) {
+      console.warn('[App] VirtualAssistant not ready')
+      return
+    }
+    console.log(`[App] Changing position to: ${preset}`)
+    assistantRef.current.setPosition(preset)
+  }
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
       {/* Background HTML content */}
@@ -191,6 +203,116 @@ function App() {
                 }}
               >
                 💬 Speak
+              </button>
+            </div>
+          </div>
+
+          {/* Position Controls */}
+          <div style={{ 
+            position: 'absolute', 
+            top: 20, 
+            right: 20, 
+            zIndex: 1000, 
+            pointerEvents: 'auto',
+            background: 'rgba(0, 0, 0, 0.8)',
+            padding: '15px',
+            borderRadius: '8px',
+            color: 'white',
+          }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>📍 Position Presets</h3>
+            <div style={{ marginBottom: '8px', fontSize: '11px', opacity: 0.7 }}>
+              Test different screen positions
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '200px' }}>
+              <button
+                onClick={() => changePosition('center')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#9C27B0',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                🎯 Center (Debug)
+              </button>
+              <button
+                onClick={() => changePosition('bottom-right')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#2196F3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                ↘️ Bottom Right
+              </button>
+              <button
+                onClick={() => changePosition('bottom-left')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#2196F3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                ↙️ Bottom Left
+              </button>
+              <button
+                onClick={() => changePosition('top-center')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                ⬆️ Top Center
+              </button>
+              <button
+                onClick={() => changePosition('top-left')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                ↖️ Top Left
+              </button>
+              <button
+                onClick={() => changePosition('top-right')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                }}
+              >
+                ↗️ Top Right
               </button>
             </div>
           </div>

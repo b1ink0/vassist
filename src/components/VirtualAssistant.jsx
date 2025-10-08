@@ -26,6 +26,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const { onReady } = props;
   
   const [animationManager, setAnimationManager] = useState(null);
+  const [positionManager, setPositionManager] = useState(null);
   const [currentState, setCurrentState] = useState(AssistantState.IDLE);
   const [isReady, setIsReady] = useState(false);
   const initializedRef = useRef(false);
@@ -45,7 +46,10 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     if (scene.metadata && scene.metadata.animationManager) {
       const manager = scene.metadata.animationManager;
+      const posMgr = scene.metadata.positionManager;
+      
       setAnimationManager(manager);
+      setPositionManager(posMgr);
       setCurrentState(manager.getCurrentState());
       setIsReady(true);
       initializedRef.current = true;
@@ -54,7 +58,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
       
       // Call onReady callback if provided
       if (onReady) {
-        onReady({ animationManager: manager });
+        onReady({ animationManager: manager, positionManager: posMgr });
       }
     } else {
       console.error('[VirtualAssistant] AnimationManager not found in scene metadata');
@@ -204,7 +208,29 @@ const VirtualAssistant = forwardRef((props, ref) => {
     getAnimationManager: () => {
       return animationManager;
     },
-  }), [animationManager, currentState, isReady]);
+
+    /**
+     * Set model position using preset
+     * @param {string} preset - Position preset: 'center', 'bottom-right', 'bottom-left', 'top-center', 'top-left', 'top-right'
+     */
+    setPosition: (preset) => {
+      if (!positionManager) {
+        console.warn('[VirtualAssistant] PositionManager not ready, cannot setPosition');
+        return;
+      }
+
+      console.log(`[VirtualAssistant] setPosition("${preset}")`);
+      positionManager.applyPreset(preset);
+    },
+
+    /**
+     * Get direct access to PositionManager (advanced usage)
+     * @returns {PositionManager|null} PositionManager instance
+     */
+    getPositionManager: () => {
+      return positionManager;
+    },
+  }), [animationManager, positionManager, currentState, isReady]);
 
   return (
     <BabylonScene 
