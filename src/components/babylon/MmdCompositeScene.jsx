@@ -309,6 +309,7 @@ export const buildMmdCompositeScene = async (canvas, engine) => {
   scene.metadata = scene.metadata || {};
   scene.metadata.animationManager = animationManager;
   scene.metadata.positionManager = positionManager;
+  scene.metadata.modelMesh = modelMesh; // Store model mesh reference for debug
 
   // Cleanup on scene dispose
   scene.onDisposeObservable.add(() => {

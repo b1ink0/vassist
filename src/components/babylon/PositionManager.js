@@ -43,6 +43,14 @@ export const PositionPresets = {
     description: 'Chatbot position in bottom-left corner'
   },
   
+  'bottom-center': {
+    name: 'Bottom Center',
+    modelSize: { width: 300, height: 500 },
+    padding: 0,
+    offset: { x: 0, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
+    description: 'Chatbot position at bottom center'
+  },
+  
   'top-center': {
     name: 'Top Center',
     modelSize: { width: 350, height: 550 },
@@ -169,6 +177,11 @@ export class PositionManager {
         
       case 'bottom-left':
         pixelX = padding;
+        pixelY = this.canvasHeight - modelHeight - padding;
+        break;
+        
+      case 'bottom-center':
+        pixelX = (this.canvasWidth - modelWidth) / 2;
         pixelY = this.canvasHeight - modelHeight - padding;
         break;
         

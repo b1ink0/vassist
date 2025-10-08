@@ -58,7 +58,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
       
       // Call onReady callback if provided
       if (onReady) {
-        onReady({ animationManager: manager, positionManager: posMgr });
+        onReady({ 
+          animationManager: manager, 
+          positionManager: posMgr,
+          scene: scene
+        });
       }
     } else {
       console.error('[VirtualAssistant] AnimationManager not found in scene metadata');
@@ -211,7 +215,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
     /**
      * Set model position using preset
-     * @param {string} preset - Position preset: 'center', 'bottom-right', 'bottom-left', 'top-center', 'top-left', 'top-right'
+     * @param {string} preset - Position preset: 'center', 'bottom-right', 'bottom-left', 'bottom-center', 'top-center', 'top-left', 'top-right'
      */
     setPosition: (preset) => {
       if (!positionManager) {
