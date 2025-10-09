@@ -190,6 +190,25 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
+     * Play composite animation (blend two animations)
+     * @param {string} anim1Name - First animation name
+     * Play composite animation with stitched fill
+     * @param {string} primaryAnimName - Primary animation (sets duration, e.g., mouth VMD)
+     * @param {string} fillCategory - Category for fill animations (e.g., 'talking')
+     * @param {Object} options - { primaryWeight: 1.0, fillWeight: 0.5 }
+     */
+    playComposite: async (primaryAnimName, fillCategory = 'talking', options = {}) => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready, cannot playComposite');
+        return;
+      }
+
+      console.log(`[VirtualAssistant] playComposite("${primaryAnimName}", category="${fillCategory}", primaryWeight=${options.primaryWeight ?? 1.0}, fillWeight=${options.fillWeight ?? 0.5})`);
+      await animationManager.playComposite(primaryAnimName, fillCategory, options);
+      setCurrentState(animationManager.getCurrentState());
+    },
+
+    /**
      * Get current state
      * @returns {string} Current assistant state
      */

@@ -113,16 +113,28 @@ const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
     if (!positionManager) return;
     
     const currentSize = positionManager.modelHeightPx || 500;
+    const currentWidth = positionManager.modelWidthPx || 300;
     const zoomAmount = 50; // Change size by 50px
     const newSize = direction === 'in' 
       ? currentSize + zoomAmount  // Zoom IN = BIGGER (no limit)
       : currentSize - zoomAmount; // Zoom OUT = SMALLER (no limit)
+    const newWidth = newSize * 0.6; // Maintain aspect ratio
     
     console.log(`[DebugOverlay] Zooming ${direction}: ${currentSize}px → ${newSize}px`);
     
-    // Update model size and recalculate frustum
+    // CRITICAL: Calculate current center position
+    const oldCenterX = positionManager.positionX + currentWidth / 2;
+    const oldCenterY = positionManager.positionY + currentSize / 2;
+    
+    // Update model size
     positionManager.modelHeightPx = newSize;
-    positionManager.modelWidthPx = newSize * 0.6; // Maintain aspect ratio
+    positionManager.modelWidthPx = newWidth;
+    
+    // CRITICAL: Recalculate position to keep center in same place
+    positionManager.positionX = oldCenterX - newWidth / 2;
+    positionManager.positionY = oldCenterY - newSize / 2;
+    
+    // Update camera frustum with new size AND position
     positionManager.updateCameraFrustum();
   };
 

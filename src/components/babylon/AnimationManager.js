@@ -21,6 +21,7 @@ import {
   TransitionSettings,
   getRandomAnimation,
   getAnimationsByCategory,
+  getAnimationsByName,
   isValidTransition,
 } from "../../config/animationConfig";
 
@@ -65,6 +66,13 @@ export class AnimationManager {
     this.currentLoadedAnimation = null;
     this.currentAnimationDuration = 0;
     this.isFirstAnimationEver = true; // Track if this is the very first animation (no blending needed)
+
+    // Composite animation mode
+    this.compositeMode = false; // Track if we're in composite mode
+    this.compositeConfig = null; // Store composite configuration (anim1, anim2, weight, delay)
+
+    // Transition tracking
+    this._isTransitioning = false; // Prevent multiple auto-return triggers
 
     // Idle animation switching
     this.idleSwitchTimer = 0;
@@ -166,47 +174,54 @@ export class AnimationManager {
    * Validates transition, selects appropriate animation, and starts playback
    * @param {string} newState - Target state from AssistantState
    */
-  async transitionToState(newState) {
+  async transitionToState(newState, customBehavior = null, customAnimation = null) {
+    console.log(`[AnimationManager] [TRANSITION START] ${this.currentState} -> ${newState}`);
+    
     // Validate transition
     if (this.currentState !== newState && !isValidTransition(this.currentState, newState)) {
-      console.warn(`[AnimationManager] Invalid transition: ${this.currentState} -> ${newState}`);
+      console.warn(`[AnimationManager] [TRANSITION INVALID] ${this.currentState} -> ${newState}`);
       return;
     }
-
-    console.log(`[AnimationManager] State transition: ${this.currentState} -> ${newState}`);
 
     this.previousState = this.currentState;
     this.currentState = newState;
 
-    // Get state behavior
-    const behavior = StateBehavior[newState];
+    // Use custom behavior if provided, otherwise use state behavior
+    const behavior = customBehavior || StateBehavior[newState];
     if (!behavior) {
-      console.error(`[AnimationManager] No behavior defined for state: ${newState}`);
+      console.error(`[AnimationManager] [TRANSITION ERROR] No behavior defined for state: ${newState}`);
       return;
     }
 
-    // Select animation based on state behavior
-    let animationConfig = null;
+    // Use custom animation if provided, otherwise select based on behavior
+    let animationConfig = customAnimation;
 
-    if (behavior.randomSelection) {
-      // Randomly pick from allowed animations
-      const allowedCategories = behavior.allowedAnimations;
-      const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
-      animationConfig = getRandomAnimation(randomCategory);
-    } else {
-      // Use first animation from first allowed category
-      const firstCategory = behavior.allowedAnimations[0];
-      const animations = getAnimationsByCategory(firstCategory);
-      animationConfig = animations.length > 0 ? animations[0] : null;
+    if (!animationConfig) {
+      if (behavior.randomSelection) {
+        // Randomly pick from allowed animations
+        const allowedCategories = behavior.allowedAnimations;
+        const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
+        animationConfig = getRandomAnimation(randomCategory);
+        console.log(`[AnimationManager] [TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
+      } else {
+        // Use first animation from first allowed category
+        const firstCategory = behavior.allowedAnimations[0];
+        const animations = getAnimationsByCategory(firstCategory);
+        animationConfig = animations.length > 0 ? animations[0] : null;
+      }
     }
 
     if (!animationConfig) {
-      console.error(`[AnimationManager] No animation found for state: ${newState}`);
+      console.error(`[AnimationManager] [TRANSITION ERROR] No animation found for state: ${newState}`);
       return;
     }
 
+    console.log(`[AnimationManager] [TRANSITION] Loading animation: ${animationConfig.name}`);
+    
     // Load and play animation
     await this.playAnimation(animationConfig, behavior);
+    
+    console.log(`[AnimationManager] [TRANSITION END] Animation loaded and playing: ${animationConfig.name}`);
   }
 
   /**
@@ -218,18 +233,29 @@ export class AnimationManager {
     const behavior = stateBehavior || StateBehavior[this.currentState];
     
     console.log(`[AnimationManager] Playing animation: ${animationConfig.name}`);
-
+    
     // Load animation
     const loadedAnimation = await this.loadAnimation(animationConfig);
-
-    // Store current animation info
+    
+    // Store animation info
     this.currentAnimationConfig = animationConfig;
     this.currentLoadedAnimation = loadedAnimation;
     this.currentAnimationDuration = loadedAnimation.endFrame;
 
     // CRITICAL: Handle transition between different animations
     // Keep old spans active during transition for smooth blending
-    const oldSpans = Array.from(this.spanMap.values()).flat();
+    const allOldSpans = Array.from(this.spanMap.values()).flat();
+    
+    // Filter out spans that already have ease-out (they're from a previous transition)
+    // We should remove those immediately, not keep them for another transition!
+    const oldSpans = allOldSpans.filter(span => {
+      if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
+        console.log(`[AnimationManager] Removing span at offset ${span.offset} - already easing out from previous transition`);
+        this.compositeAnimation.removeSpan(span);
+        return false; // Don't include in transition
+      }
+      return true; // Include in new transition
+    });
     
     if (oldSpans.length > 0) {
       console.log(`[AnimationManager] Keeping ${oldSpans.length} old spans for transition blending`);
@@ -240,6 +266,9 @@ export class AnimationManager {
       const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
       const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
       
+      // Track the latest end time across ALL old spans
+      let latestSpanEndTime = currentTimelineFrame;
+      
       for (const span of oldSpans) {
         // Calculate where we are in this span's playback
         const spanAnimationFrame = currentTimelineFrame - span.offset;
@@ -247,15 +276,14 @@ export class AnimationManager {
         // Store the original endFrame before truncation
         const originalEndFrame = span.endFrame;
         
-        // Truncate the span to end at current position + transition duration
-        // BUT ensure we don't go beyond the animation's actual end
+        // CRITICAL: TRUNCATE span to end at current position + transition duration
+        // This forces the animation to stop and ease out smoothly
+        // DO NOT use Math.max - we want to CUT it short, not extend it!
         const targetEndFrame = spanAnimationFrame + transitionFrames;
-        span.endFrame = Math.min(originalEndFrame, targetEndFrame);
+        span.endFrame = targetEndFrame; // Force truncation for smooth transition
         
-        // If we're already past the span's end, it will be removed anyway
-        // Set easeOutFrameTime to the remaining frames
-        const remainingFrames = span.endFrame - spanAnimationFrame;
-        span.easeOutFrameTime = Math.max(1, remainingFrames); // At least 1 frame
+        // Set easeOutFrameTime to the transition duration
+        span.easeOutFrameTime = transitionFrames;
         
         span.easingFunction = new BezierCurveEase(
           TransitionSettings.DEFAULT_EASING_CURVE.x1,
@@ -264,12 +292,21 @@ export class AnimationManager {
           TransitionSettings.DEFAULT_EASING_CURVE.y2
         );
         
-        console.log(`[AnimationManager] Old span at offset ${span.offset}: originalEnd=${originalEndFrame}, currentFrame=${spanAnimationFrame.toFixed(2)}, truncatedEnd=${span.endFrame}, easeOut=${span.easeOutFrameTime}`);
+        console.log(`[AnimationManager] Old span at offset ${span.offset}: originalEnd=${originalEndFrame}, currentFrame=${spanAnimationFrame.toFixed(2)}, newEnd=${span.endFrame}, easeOut=${span.easeOutFrameTime}`);
+        
+        // Track when this span will actually end
+        const spanEndTime = span.offset + span.endFrame;
+        latestSpanEndTime = Math.max(latestSpanEndTime, spanEndTime);
       }
       
       // Store old spans for delayed cleanup
+      // CRITICAL: Remove AFTER the LAST span finishes, not based on arbitrary timing
+      // Add 2 extra frames to ensure smooth transition finishes before cleanup
       this.oldSpansToRemove = oldSpans;
-      this.oldSpansRemovalFrame = this.mmdRuntime.currentFrameTime + transitionFrames;
+      this.oldSpansRemovalFrame = latestSpanEndTime + 2;
+      
+      console.log(`[AnimationManager] Scheduled old span removal at frame ${this.oldSpansRemovalFrame.toFixed(2)} (last span ends at ${latestSpanEndTime.toFixed(2)})`);
+    
     }
     
     // Reset cycle tracking for new animation
@@ -280,19 +317,20 @@ export class AnimationManager {
     this.animationStartFrame = this.mmdRuntime.currentFrameTime; // CRITICAL: Store when this animation started!
     
     // Dynamically set runtime duration based on animation
-    // Set initial duration to support at least 10 cycles (can be extended later)
     const loopTransition = animationConfig.loopTransition || false;
     const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
     const effectiveDuration = loopTransition ? (this.currentAnimationDuration - transitionFrames) : this.currentAnimationDuration;
     
-    // Calculate duration for multiple cycles with buffer
-    const initialCycles = 10; // Start with buffer for 10 cycles
+    // For looping animations, set initial duration to support at least 10 cycles (can be extended later)
+    // For non-looping (one-shot), just need enough for single playthrough
+    const shouldLoop = animationConfig.loop !== false; // Default to true unless explicitly false
+    const initialCycles = shouldLoop ? 10 : 1; // Single cycle for one-shot, 10 for looping
     const requiredDuration = this.animationStartFrame + (effectiveDuration * initialCycles);
     
     // Only update if we need more duration
     if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
       this.mmdRuntime.setManualAnimationDuration(requiredDuration);
-      console.log(`[AnimationManager] Set runtime duration to ${requiredDuration} frames (${initialCycles} cycles buffer from frame ${this.animationStartFrame})`);
+      console.log(`[AnimationManager] Set runtime duration to ${requiredDuration} frames (${initialCycles} cycle${initialCycles > 1 ? 's' : ''} buffer from frame ${this.animationStartFrame})`);
     }
     
     // Reset idle switch timer
@@ -328,93 +366,220 @@ export class AnimationManager {
     const loopTransition = this.currentAnimationConfig.loopTransition || false;
 
     // Calculate cycle start time
-    // With loopTransition: overlap by transitionFrames to create smooth blend
-    // Without loopTransition: cycles play back-to-back with no overlap
     let cycleStartTime;
     if (loopTransition) {
-      // Each cycle advances by (duration - transitionFrames) to create overlap
-      // Cycle 0: 0
-      // Cycle 1: 0 + (200-30)*1 = 170
-      // Cycle 2: 0 + (200-30)*2 = 340
-      // Cycle N: 0 + (200-30)*N
       const effectiveDuration = duration - transitionFrames;
       cycleStartTime = this.animationStartFrame + (cycle * effectiveDuration);
     } else {
-      // No overlap - exact multiples of duration
       cycleStartTime = this.animationStartFrame + (cycle * duration);
     }
 
-    console.log(`[AnimationManager] Adding cycle ${cycle} at frame ${cycleStartTime}, animation duration: ${duration} frames, loopTransition: ${loopTransition}`);
+    console.log(`[AnimationManager] Adding cycle ${cycle} at frame ${cycleStartTime}, duration: ${duration} frames`);
 
-    // Create animation span
-    const span = new MmdAnimationSpan(
-      this.currentLoadedAnimation,
-      undefined, // start frame (use animation default)
-      undefined, // end frame (use animation default)
-      cycleStartTime, // offset in timeline
-      1 // playback rate
-    );
-
-    // Apply easing based on context
-    if (cycle === 0 && !this.isFirstAnimationEver) {
-      // First cycle of NEW animation: ease in from previous animation
-      console.log(`[AnimationManager] Applying ease-in to cycle 0 (animation switch transition)`);
-      span.easeInFrameTime = transitionFrames;
-      span.easingFunction = new BezierCurveEase(
-        TransitionSettings.DEFAULT_EASING_CURVE.x1,
-        TransitionSettings.DEFAULT_EASING_CURVE.y1,
-        TransitionSettings.DEFAULT_EASING_CURVE.x2,
-        TransitionSettings.DEFAULT_EASING_CURVE.y2
-      );
-    } else if (loopTransition && cycle > 0) {
-      // Loop transition: blend between cycles
-      // Ease in from previous cycle
-      console.log(`[AnimationManager] Applying ease-in to cycle ${cycle} (loop transition)`);
-      span.easeInFrameTime = transitionFrames;
-      span.easingFunction = new BezierCurveEase(
-        TransitionSettings.DEFAULT_EASING_CURVE.x1,
-        TransitionSettings.DEFAULT_EASING_CURVE.y1,
-        TransitionSettings.DEFAULT_EASING_CURVE.x2,
-        TransitionSettings.DEFAULT_EASING_CURVE.y2
-      );
+    const spans = [];
+    
+    // Check if we're in COMPOSITE state - create combined animation with body bones + mouth morphs
+    if (this.currentState === AssistantState.COMPOSITE && this.compositePrimaryLoaded) {
+      console.log(`[AnimationManager] Creating composite cycle ${cycle} with merged body+morph animation`);
       
-      // Also ease out the previous cycle (if it exists)
-      const previousCycle = cycle - 1;
-      if (this.spanMap.has(previousCycle)) {
-        const previousSpans = this.spanMap.get(previousCycle);
-        console.log(`[AnimationManager] Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
-        for (const prevSpan of previousSpans) {
-          prevSpan.easeOutFrameTime = transitionFrames;
-          prevSpan.easingFunction = new BezierCurveEase(
+      // First, add all stitched fill segments as separate spans (body animations)
+      // ALSO: Extend the last segment to provide transition buffer for smooth ease-out
+      const fillSpans = [];
+      let actualOffset = cycleStartTime; // Track actual position in timeline
+      
+      for (let i = 0; i < this.compositeStitchedFillSpans.length; i++) {
+        const segment = this.compositeStitchedFillSpans[i];
+        const prevSegment = i > 0 ? this.compositeStitchedFillSpans[i - 1] : null;
+        const isLastSegment = i === this.compositeStitchedFillSpans.length - 1;
+        
+        // Determine if this segment should ease in (blend with previous)
+        const isSameAnimation = segment.previousConfig && segment.previousConfig.id === segment.config.id;
+        const hasLoopTransition = segment.config.loopTransition !== false;
+        // CRITICAL: Truncated segments ALWAYS need easing to prevent jumps
+        const shouldApplyEasing = !isSameAnimation || hasLoopTransition || segment.isTruncated;
+        
+        // CRITICAL: For the last segment, extend the animation to provide transition buffer
+        // This ensures the last body animation is still playing when transitioning to next state
+        let segmentAnimation = segment.animation;
+        if (isLastSegment) {
+          // Clone the animation and extend its endFrame
+          const extendedAnim = Object.assign(Object.create(Object.getPrototypeOf(segment.animation)), segment.animation);
+          extendedAnim.endFrame = segment.animation.endFrame + transitionFrames;
+          segmentAnimation = extendedAnim;
+          console.log(`[AnimationManager] Extended last body segment: ${segment.animation.endFrame}f → ${extendedAnim.endFrame}f (added ${transitionFrames}f buffer)`);
+        }
+        
+        // Create span at actual position (not overlapping position)
+        const fillSpan = new MmdAnimationSpan(
+          segmentAnimation,
+          undefined,
+          undefined,
+          actualOffset, // Use actual position, not segment.startFrame
+          1.0 // Full weight for body animations
+        );
+        
+        console.log(`[AnimationManager] Segment ${i} (${segment.config.name}): offset=${actualOffset.toFixed(2)}, duration=${segment.duration}f, same=${isSameAnimation}, loopTransition=${hasLoopTransition}, truncated=${segment.isTruncated}, applyEasing=${shouldApplyEasing}`);
+        
+        // Apply easing for first segment transitioning from previous animation
+        if (cycle === 0 && i === 0 && !this.isFirstAnimationEver) {
+          fillSpan.easeInFrameTime = transitionFrames;
+          fillSpan.easingFunction = new BezierCurveEase(
             TransitionSettings.DEFAULT_EASING_CURVE.x1,
             TransitionSettings.DEFAULT_EASING_CURVE.y1,
             TransitionSettings.DEFAULT_EASING_CURVE.x2,
             TransitionSettings.DEFAULT_EASING_CURVE.y2
           );
+          console.log(`[AnimationManager] Applied ease-in to first segment (transitioning from previous animation)`);
+        }
+        
+        // Apply easing for segment-to-segment transitions
+        if (i > 0 && shouldApplyEasing) {
+          fillSpan.easeInFrameTime = transitionFrames;
+          fillSpan.easingFunction = new BezierCurveEase(
+            TransitionSettings.DEFAULT_EASING_CURVE.x1,
+            TransitionSettings.DEFAULT_EASING_CURVE.y1,
+            TransitionSettings.DEFAULT_EASING_CURVE.x2,
+            TransitionSettings.DEFAULT_EASING_CURVE.y2
+          );
+          
+          // CRITICAL: Also apply ease-out to previous segment for smooth blend
+          if (prevSegment && fillSpans[i - 1]) {
+            fillSpans[i - 1].easeOutFrameTime = transitionFrames;
+            fillSpans[i - 1].easingFunction = new BezierCurveEase(
+              TransitionSettings.DEFAULT_EASING_CURVE.x1,
+              TransitionSettings.DEFAULT_EASING_CURVE.y1,
+              TransitionSettings.DEFAULT_EASING_CURVE.x2,
+              TransitionSettings.DEFAULT_EASING_CURVE.y2
+            );
+          }
+          
+          console.log(`[AnimationManager] Applied ease-in to segment ${i} and ease-out to segment ${i-1} (different animations or truncated)`);
+        } else if (i > 0 && !shouldApplyEasing) {
+          console.log(`[AnimationManager] Skipped easing for segment ${i} (same perfect-loop animation, not truncated)`);
+        }
+        
+        this.compositeAnimation.addSpan(fillSpan);
+        fillSpans.push(fillSpan);
+        
+        // Advance actual offset for next segment
+        // If easing was applied, segments overlap by transitionFrames
+        // Otherwise, they're sequential
+        if (i < this.compositeStitchedFillSpans.length - 1) {
+          const nextSegment = this.compositeStitchedFillSpans[i + 1];
+          const nextIsSame = segment.config.id === nextSegment.config.id;
+          const nextHasLoopTransition = nextSegment.config.loopTransition !== false;
+          // CRITICAL: Truncated segments ALWAYS need easing to prevent jumps
+          const nextNeedsEasing = !nextIsSame || nextHasLoopTransition || nextSegment.isTruncated;
+          
+          if (nextNeedsEasing) {
+            // Next segment will overlap, so advance less
+            actualOffset += (segment.duration - transitionFrames);
+          } else {
+            // Next segment is sequential (perfect loop)
+            actualOffset += segment.duration;
+          }
         }
       }
+      
+      // Now add mouth animation with morphs ONLY (inject morphs into first segment's animation)
+      // Create a morph-only span that overlays the entire composite duration
+      // CRITICAL: Extend duration to allow for smooth ease-out transition to next animation
+      const mouthAnim = this.compositePrimaryLoaded;
+      const transitionBuffer = transitionFrames; // Extra frames for transition overlap
+      
+      // Create merged animation: clone first fill segment and inject mouth morphs
+      const baseAnim = this.compositeStitchedFillSpans[0].animation;
+      const mergedWithMorphs = this._createMorphOnlyAnimation(baseAnim, mouthAnim);
+      
+      // CRITICAL: Extend the morph animation's endFrame to provide transition buffer
+      // This ensures the morph overlay is still playing when transitioning to next animation
+      const extendedMorphEndFrame = this.compositeTargetDuration + transitionBuffer;
+      mergedWithMorphs.endFrame = extendedMorphEndFrame;
+      
+      const morphSpan = new MmdAnimationSpan(
+        mergedWithMorphs,
+        undefined,
+        undefined,
+        cycleStartTime,
+        1.0 // Full weight for morphs (no bone conflicts since we removed bone tracks)
+      );
+      
+      // Apply ease-in to morph span for first cycle
+      if (cycle === 0 && !this.isFirstAnimationEver) {
+        morphSpan.easeInFrameTime = transitionFrames;
+        morphSpan.easingFunction = new BezierCurveEase(
+          TransitionSettings.DEFAULT_EASING_CURVE.x1,
+          TransitionSettings.DEFAULT_EASING_CURVE.y1,
+          TransitionSettings.DEFAULT_EASING_CURVE.x2,
+          TransitionSettings.DEFAULT_EASING_CURVE.y2
+        );
+      }
+      
+      this.compositeAnimation.addSpan(morphSpan);
+      spans.push(...fillSpans, morphSpan);
+      
+      console.log(`[AnimationManager] Added ${fillSpans.length} body segments + 1 morph overlay (extended by ${transitionBuffer}f for transition buffer)`);
+      
     } else {
-      console.log(`[AnimationManager] No easing applied to cycle ${cycle} (cycle=${cycle}, isFirst=${this.isFirstAnimationEver}, loopTransition=${loopTransition})`);
+      // Regular single animation - create one span
+      const span = new MmdAnimationSpan(
+        this.currentLoadedAnimation,
+        undefined,
+        undefined,
+        cycleStartTime,
+        1
+      );
+
+      // Apply easing based on context
+      if (cycle === 0 && !this.isFirstAnimationEver) {
+        console.log(`[AnimationManager] Applying ease-in to cycle 0 (animation switch transition)`);
+        span.easeInFrameTime = transitionFrames;
+        span.easingFunction = new BezierCurveEase(
+          TransitionSettings.DEFAULT_EASING_CURVE.x1,
+          TransitionSettings.DEFAULT_EASING_CURVE.y1,
+          TransitionSettings.DEFAULT_EASING_CURVE.x2,
+          TransitionSettings.DEFAULT_EASING_CURVE.y2
+        );
+      } else if (loopTransition && cycle > 0) {
+        console.log(`[AnimationManager] Applying ease-in to cycle ${cycle} (loop transition)`);
+        span.easeInFrameTime = transitionFrames;
+        span.easingFunction = new BezierCurveEase(
+          TransitionSettings.DEFAULT_EASING_CURVE.x1,
+          TransitionSettings.DEFAULT_EASING_CURVE.y1,
+          TransitionSettings.DEFAULT_EASING_CURVE.x2,
+          TransitionSettings.DEFAULT_EASING_CURVE.y2
+        );
+        
+        const previousCycle = cycle - 1;
+        if (this.spanMap.has(previousCycle)) {
+          const previousSpans = this.spanMap.get(previousCycle);
+          console.log(`[AnimationManager] Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
+          for (const prevSpan of previousSpans) {
+            prevSpan.easeOutFrameTime = transitionFrames;
+            prevSpan.easingFunction = new BezierCurveEase(
+              TransitionSettings.DEFAULT_EASING_CURVE.x1,
+              TransitionSettings.DEFAULT_EASING_CURVE.y1,
+              TransitionSettings.DEFAULT_EASING_CURVE.x2,
+              TransitionSettings.DEFAULT_EASING_CURVE.y2
+            );
+          }
+        }
+      }
+
+      this.compositeAnimation.addSpan(span);
+      spans.push(span);
     }
 
-    // Add span to composite animation
-    this.compositeAnimation.addSpan(span);
-
-    // Track span for this cycle
-    this.spanMap.set(cycle, [span]);
-
+    this.spanMap.set(cycle, spans);
     this.lastAddedCycle = cycle;
     
-    // CRITICAL: Extend MMD runtime duration to cover the new cycle
-    // The runtime duration is set to a large value in MmdCompositeScene.jsx (108000 frames = 1 hour)
-    // This is sufficient for continuous looping animations managed by AnimationManager
-    // If needed for very long sessions, we could dynamically extend it here:
+    // Extend runtime duration
     const cycleEndTime = cycleStartTime + duration;
-    const requiredDuration = cycleEndTime + (duration * 2); // Add buffer for next 2 cycles
+    const requiredDuration = cycleEndTime + (duration * 2);
     
     if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
       this.mmdRuntime.setManualAnimationDuration(requiredDuration);
-      console.log(`[AnimationManager] Extended runtime duration to ${requiredDuration} frames (cycle ${cycle} ends at ${cycleEndTime})`);
+      console.log(`[AnimationManager] Extended runtime duration to ${requiredDuration} frames (cycle ${cycle})`);
     }
 
     console.log(`[AnimationManager] Cycle ${cycle} added. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
@@ -506,30 +671,65 @@ export class AnimationManager {
     // Calculate which cycle we're in (based on relative frame time)
     this.currentCycle = Math.floor(currentFrame / cycleDuration);
     
-    // DYNAMIC DURATION EXTENSION: Check if we're approaching the runtime duration limit
-    // Extend by another 10 cycles if we're within 5 cycles of the limit
-    const currentAbsoluteFrame = this.mmdRuntime.currentFrameTime;
-    const remainingFrames = this.mmdRuntime.animationFrameTimeDuration - currentAbsoluteFrame;
-    const cyclesRemaining = Math.floor(remainingFrames / cycleDuration);
+    // Check if animation should loop or auto-return to IDLE
+    const shouldLoop = this.currentAnimationConfig.loop !== false; // Default true unless explicitly false
     
-    if (cyclesRemaining < 5) {
-      // Extend duration by another 10 cycles
-      const extensionCycles = 10;
-      const newDuration = this.mmdRuntime.animationFrameTimeDuration + (cycleDuration * extensionCycles);
-      this.mmdRuntime.setManualAnimationDuration(newDuration);
-      console.log(`[AnimationManager] Extended runtime duration to ${newDuration} frames (+${extensionCycles} cycles, was approaching limit)`);
+    // For non-looping animations (one-shot), check if we've completed
+    // CRITICAL: Start transition BEFORE animation ends to allow smooth ease-out
+    // Trigger when we're within transition frames of the end
+    const transitionBuffer = transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+    const transitionStartFrame = duration - transitionBuffer;
+    
+    if (!shouldLoop && currentFrame >= transitionStartFrame) {
+      // For non-looping animations, ALWAYS return to IDLE regardless of current state
+      // This handles cases where playAnimation() was called directly without state transition
+      if (!this._isTransitioning) {
+        console.log(`[AnimationManager] [AUTO-RETURN CHECK] Non-loop animation near end: frame=${currentFrame.toFixed(2)}/${duration}, starting transition at ${transitionStartFrame.toFixed(2)}, state=${this.currentState}, animName=${this.currentAnimationConfig.name}`);
+        console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+        
+        // Set flag to prevent re-entry
+        this._isTransitioning = true;
+        
+        // Transition to IDLE state
+        this.transitionToState(AssistantState.IDLE).finally(() => {
+          console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
+          this._isTransitioning = false;
+        });
+      }
+      
+      // DON'T return early - let the animation keep playing its last cycle
+      // until the new animation loads and takes over smoothly
+    }
+    
+    // DYNAMIC DURATION EXTENSION: Check if we're approaching the runtime duration limit
+    // Only extend for looping animations
+    if (shouldLoop) {
+      const currentAbsoluteFrame = this.mmdRuntime.currentFrameTime;
+      const remainingFrames = this.mmdRuntime.animationFrameTimeDuration - currentAbsoluteFrame;
+      const cyclesRemaining = Math.floor(remainingFrames / cycleDuration);
+      
+      if (cyclesRemaining < 5) {
+        // Extend duration by another 10 cycles
+        const extensionCycles = 10;
+        const newDuration = this.mmdRuntime.animationFrameTimeDuration + (cycleDuration * extensionCycles);
+        this.mmdRuntime.setManualAnimationDuration(newDuration);
+        console.log(`[AnimationManager] Extended runtime duration to ${newDuration} frames (+${extensionCycles} cycles, was approaching limit)`);
+      }
     }
     
     // EXACT original logic: if we've entered a NEW cycle past the last added one, add the next
     // Use > not >= because we already added the initial cycle in playAnimation()
-    if (this.currentCycle > this.lastAddedCycle) {
+    // Only add next cycle if animation should loop
+    if (shouldLoop && this.currentCycle > this.lastAddedCycle) {
       console.log(`[AnimationManager] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
       this.addNextCycle();
     }
 
     // Cleanup old cycles
+    // CRITICAL: For non-looping animations that have completed, DON'T cleanup cycle 0
+    // Keep it alive for smooth transition blending
     const cycleToRemove = this.currentCycle - this.maxCachedCycles;
-    if (cycleToRemove >= this.firstActiveCycle && this.spanMap.has(cycleToRemove)) {
+    if (shouldLoop && cycleToRemove >= this.firstActiveCycle && this.spanMap.has(cycleToRemove)) {
       const spansToRemove = this.spanMap.get(cycleToRemove);
       for (const span of spansToRemove) {
         this.compositeAnimation.removeSpan(span);
@@ -549,6 +749,7 @@ export class AnimationManager {
   handleIdleAutoSwitch() {
     const behavior = StateBehavior[this.currentState];
     
+    // Only auto-switch when in IDLE state
     if (this.currentState === AssistantState.IDLE && behavior.autoSwitch) {
       // Don't switch if we just switched on this frame (prevent infinite loop)
       const currentFrame = this.mmdRuntime.currentFrameTime;
@@ -559,6 +760,19 @@ export class AnimationManager {
       this.idleSwitchTimer += this.scene.getEngine().getDeltaTime();
 
       if (this.idleSwitchTimer >= this.idleSwitchInterval) {
+        // CRITICAL: Only switch at animation boundaries, not mid-cycle!
+        // Calculate where we are in the current animation
+        const animationFrame = currentFrame - this.animationStartFrame;
+        const duration = this.currentAnimationDuration;
+        const currentCycleFrame = animationFrame % duration;
+        
+        // Only switch if we're near the end of a cycle (within 5 frames)
+        // This prevents jarring mid-animation switches
+        if (currentCycleFrame > 5 && currentCycleFrame < duration - 5) {
+          // We're mid-cycle, wait for next cycle
+          return;
+        }
+        
         // Get all idle animations
         const idleAnimations = getAnimationsByCategory('idle');
         
@@ -586,6 +800,7 @@ export class AnimationManager {
         if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
           console.log(`[AnimationManager] Auto-switching idle animation: ${this.currentAnimationConfig?.name} -> ${newAnimation.name}`);
           this.idleSwitchTimer = 0;
+          this.lastSwitchFrame = currentFrame;
           
           // Play the new animation directly (already in IDLE state)
           this.playAnimation(newAnimation, behavior);
@@ -607,13 +822,17 @@ export class AnimationManager {
   registerVisibilityHandler() {
     this.visibilityChangeHandler = () => {
       if (document.hidden) {
-        // Tab is hidden - pause MMD runtime
+        // Tab is hidden - pause by setting playAnimation to false
         console.log('[AnimationManager] Tab hidden - pausing animation');
-        this.mmdRuntime.pause();
+        if (this.mmdRuntime.playAnimation !== undefined) {
+          this.mmdRuntime.playAnimation = false;
+        }
       } else {
-        // Tab is visible - resume MMD runtime
+        // Tab is visible - resume by setting playAnimation to true
         console.log('[AnimationManager] Tab visible - resuming animation');
-        this.mmdRuntime.resume();
+        if (this.mmdRuntime.playAnimation !== undefined) {
+          this.mmdRuntime.playAnimation = true;
+        }
       }
     };
 
@@ -684,6 +903,213 @@ export class AnimationManager {
       default:
         console.warn(`[AnimationManager] Unknown action: ${action}`);
     }
+  }
+
+  /**
+   * Play composite animation with dynamic stitching
+   * Primary animation (e.g., mouth/lip-sync) sets the duration
+   * Fill animations (e.g., speaking body motions) are stitched together to match duration
+   * 
+   * @param {string} primaryAnimName - Primary animation name (sets duration, overlaid on top)
+   * @param {string} fillCategory - Category of animations to stitch for body movement ('talking', 'idle', etc.)
+   * @param {Object} options - { primaryWeight: 1.0, fillWeight: 0.5 }
+   */
+  async playComposite(primaryAnimName, fillCategory = 'talking', options = {}) {
+    const primaryWeight = options.primaryWeight ?? 1.0;
+    const fillWeight = options.fillWeight ?? 0.5;
+
+    console.log(`[AnimationManager] playComposite: Primary="${primaryAnimName}", Fill="${fillCategory}", primaryWeight=${primaryWeight}, fillWeight=${fillWeight}`);
+
+    // CRITICAL: Set state to COMPOSITE immediately to prevent auto-switch interruption
+    this.previousState = this.currentState;
+    this.currentState = AssistantState.COMPOSITE;
+    
+    // Get primary animation (mouth/lip-sync)
+    const primaryAnim = getAnimationsByName(primaryAnimName);
+    if (!primaryAnim) {
+      console.error(`[AnimationManager] Cannot find primary animation: ${primaryAnimName}`);
+      // Restore previous state on error
+      this.currentState = this.previousState;
+      return;
+    }
+
+    // Get fill animations pool (body motions)
+    const fillAnimations = getAnimationsByCategory(fillCategory);
+    if (!fillAnimations || fillAnimations.length === 0) {
+      console.error(`[AnimationManager] No fill animations found in category: ${fillCategory}`);
+      // Restore previous state on error
+      this.currentState = this.previousState;
+      return;
+    }
+
+    console.log(`[AnimationManager] Found ${fillAnimations.length} fill animations in category "${fillCategory}"`);
+
+    // Load primary animation to get its duration
+    const primaryLoaded = await this.loadAnimation(primaryAnim);
+    const targetDuration = primaryLoaded.endFrame; // babylon-mmd animation has endFrame directly
+    
+    console.log(`[AnimationManager] Primary animation duration: ${targetDuration} frames`);
+
+    // Build stitched fill timeline to match target duration
+    const stitchedFillSpans = await this._buildStitchedTimeline(fillAnimations, targetDuration);
+    
+    console.log(`[AnimationManager] Built stitched timeline with ${stitchedFillSpans.length} fill segments`);
+
+    // Store composite info for addNextCycle
+    this.compositePrimaryLoaded = primaryLoaded; // Primary has the morph tracks
+    this.compositePrimaryWeight = primaryWeight;
+    this.compositeStitchedFillSpans = stitchedFillSpans;
+    this.compositeFillWeight = fillWeight;
+    this.compositeTargetDuration = targetDuration;
+    
+    // Use primary animation config but override for composite behavior
+    const compositeConfig = {
+      ...primaryAnim,
+      loop: false, // CRITICAL: Composite plays once then auto-returns to IDLE
+      loopTransition: false, // No loop transition needed
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES
+    };
+    
+    // Store for playAnimation
+    this.currentAnimationConfig = compositeConfig;
+    this.currentLoadedAnimation = primaryLoaded;
+    this.currentAnimationDuration = targetDuration;
+    
+    // Start playback (will call addNextCycle which handles composite)
+    await this.playAnimation(compositeConfig);
+  }
+
+  /**
+   * Build stitched timeline of fill animations to match target duration
+   * Returns array of {animation, config, startFrame, duration, previousConfig} segments
+   * Randomly selects fill animations and tracks previous animation for smart transitions
+   * 
+   * CRITICAL: Plays FULL animations, only truncates the LAST one if it exceeds target duration
+   */
+  async _buildStitchedTimeline(fillAnimations, targetDuration) {
+    const segments = [];
+    let currentFrame = 0;
+    let previousConfig = null; // Track previous animation for smart transitions
+    const transitionFrames = TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+    
+    console.log(`[AnimationManager] Building stitched timeline for ${targetDuration} frames with ${fillAnimations.length} fill animations`);
+
+    while (currentFrame < targetDuration) {
+      // RANDOMLY pick fill animation from the pool
+      const fillAnim = fillAnimations[Math.floor(Math.random() * fillAnimations.length)];
+      
+      // Load it
+      const loaded = await this.loadAnimation(fillAnim);
+      
+      // Get full animation duration
+      const animDuration = loaded.endFrame;
+      const remainingFrames = targetDuration - currentFrame;
+      
+      // CRITICAL: Determine if we need to truncate this segment
+      // We need to check if playing the full animation would go beyond the target
+      // This depends on whether the NEXT segment would have overlap or not
+      let segmentDuration;
+      let wouldExceed = false;
+      
+      // Check if this would be the last segment by seeing if remaining space is too small
+      // for another full animation after this one
+      if (animDuration > remainingFrames) {
+        // Animation is longer than remaining space - this MUST be the last segment
+        // Truncate to fit exactly
+        wouldExceed = true;
+        segmentDuration = remainingFrames;
+        console.log(`[AnimationManager] Last segment (too long): ${animDuration}f → ${segmentDuration}f (remaining: ${remainingFrames}f)`);
+      } else if (animDuration === remainingFrames) {
+        // Perfect fit - this is the last segment
+        wouldExceed = false;
+        segmentDuration = animDuration;
+        console.log(`[AnimationManager] Last segment (perfect fit): ${segmentDuration}f`);
+      } else {
+        // Not last segment - use full animation duration
+        segmentDuration = animDuration;
+      }
+      
+      segments.push({
+        animation: loaded,
+        config: fillAnim,
+        previousConfig: previousConfig, // Store previous for transition detection
+        startFrame: currentFrame,
+        duration: segmentDuration,
+        actualDuration: animDuration,
+        isTruncated: wouldExceed // Track if this segment is truncated
+      });
+      
+      console.log(`[AnimationManager] Segment ${segments.length}: ${fillAnim.name} (full=${animDuration}f) at frame ${currentFrame}, using ${segmentDuration}f, sameAsPrevious: ${previousConfig?.id === fillAnim.id}, truncated: ${wouldExceed}`);
+      
+      // Determine if we need transition overlap for next segment
+      // CRITICAL: First segment NEVER has overlap (starts at frame 0)
+      // For subsequent segments:
+      // - Different animations → ALWAYS overlap for smooth blend (regardless of loopTransition)
+      // - Same animation + loopTransition=false → NO overlap (perfect loop)
+      // - Same animation + loopTransition=true → Overlap for smooth blend
+      const isFirstSegment = previousConfig === null;
+      const isSameAnimation = previousConfig && previousConfig.id === fillAnim.id;
+      
+      let needsOverlap;
+      if (isFirstSegment) {
+        needsOverlap = false; // First segment never overlaps
+      } else if (!isSameAnimation) {
+        needsOverlap = true; // Different animations ALWAYS overlap for smooth transition
+      } else {
+        // Same animation - check loopTransition setting
+        const hasLoopTransition = fillAnim.loopTransition !== false;
+        needsOverlap = hasLoopTransition; // Only overlap if loopTransition is enabled
+      }
+      
+      // Update previous for next iteration
+      previousConfig = fillAnim;
+      
+      // Advance timeline
+      if (needsOverlap) {
+        // Apply transition overlap for smooth blending
+        currentFrame += (segmentDuration - transitionFrames);
+        console.log(`[AnimationManager] Advanced with overlap: ${currentFrame}f (next segment will blend)`);
+      } else {
+        // No overlap - either first segment or perfect loop
+        currentFrame += segmentDuration;
+        if (isFirstSegment) {
+          console.log(`[AnimationManager] Advanced without overlap: ${currentFrame}f (first segment)`);
+        } else {
+          console.log(`[AnimationManager] Advanced without overlap: ${currentFrame}f (same animation, perfect loop)`);
+        }
+      }
+    }
+    
+    console.log(`[AnimationManager] Built stitched timeline with ${segments.length} segments, total duration: ${targetDuration} frames`);
+    
+    return segments;
+  }
+
+  /**
+   * Create a morph-only animation by removing bone tracks
+   * @param {Animation} baseAnimation - Base animation to clone structure from
+   * @param {Animation} morphAnimation - Animation with morphTracks to inject
+   * @returns {Animation} Animation with morphs only (no bone tracks)
+   */
+  _createMorphOnlyAnimation(baseAnimation, morphAnimation) {
+    // Clone the base animation to preserve babylon-mmd internal structure
+    const morphOnly = Object.assign(Object.create(Object.getPrototypeOf(baseAnimation)), baseAnimation);
+    
+    // Override properties
+    morphOnly.name = `morphonly_${morphAnimation.name}`;
+    morphOnly.endFrame = morphAnimation.endFrame;
+    
+    // CRITICAL: Remove ALL bone tracks to prevent conflicts with body animations
+    morphOnly.boneTracks = [];
+    morphOnly.movableBoneTracks = [];
+    
+    // Inject morph tracks from mouth animation
+    if (morphAnimation.morphTracks && morphAnimation.morphTracks.length > 0) {
+      morphOnly.morphTracks = morphAnimation.morphTracks;
+      console.log(`[AnimationManager] Created morph-only animation: 0 bone tracks + ${morphAnimation.morphTracks.length} morph tracks`);
+    }
+    
+    return morphOnly;
   }
 
   /**

@@ -83,6 +83,21 @@ const ControlPanel = ({
     assistantRef.current.setPosition(preset);
   };
 
+  /**
+   * Play composite animation with stitched fill
+   */
+  const playComposite = async (primaryAnimName, fillCategory = 'talking', options = {}) => {
+    if (!assistantRef.current || !assistantRef.current.isReady()) {
+      console.warn('[ControlPanel] VirtualAssistant not ready');
+      return;
+    }
+
+    // Use the new playComposite API from VirtualAssistant
+    await assistantRef.current.playComposite(primaryAnimName, fillCategory, options);
+    
+    onStateChange(assistantRef.current.getState());
+  };
+
   if (!isAssistantReady) return null;
 
   // Toggle button when panel is hidden
@@ -98,7 +113,7 @@ const ControlPanel = ({
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm max-w-[320px]">
+    <div className="fixed bottom-5 right-5 z-[1000] pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm max-w-[420px]">
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-white/20">
         <div className="flex items-center gap-2">
@@ -146,6 +161,16 @@ const ControlPanel = ({
           }`}
         >
           😊 Emotions
+        </button>
+        <button
+          onClick={() => setActiveTab('composite')}
+          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
+            activeTab === 'composite' 
+              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          🔀 Composite
         </button>
         <button
           onClick={() => setActiveTab('debug')}
@@ -293,6 +318,63 @@ const ControlPanel = ({
             >
               🔧 Invalid (test fallback)
             </button>
+          </div>
+        )}
+
+        {/* Composite Tab */}
+        {activeTab === 'composite' && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-400 mb-3">Primary animation + stitched fill animations</p>
+            
+            {/* Preset Composites */}
+            <div className="space-y-2">
+              <p className="text-xs text-white font-semibold">Stitched Timeline Presets</p>
+              <button
+                onClick={() => playComposite('Audio Idle', 'talking', { 
+                  primaryWeight: 0.0,
+                  fillWeight: 1.0
+                })}
+                className="w-full px-3 py-2 bg-indigo-500 text-white border-none rounded cursor-pointer text-xs hover:bg-indigo-600 transition-colors"
+              >
+                💬 Lip Sync + Body (morphs only)
+              </button>
+              <button
+                onClick={() => playComposite('Audio Idle', 'talking', { 
+                  primaryWeight: 0.1,
+                  fillWeight: 1.0
+                })}
+                className="w-full px-3 py-2 bg-purple-500 text-white border-none rounded cursor-pointer text-xs hover:bg-purple-600 transition-colors"
+              >
+                💬 Lip Sync + Body (10% blend)
+              </button>
+              <button
+                onClick={() => playComposite('Audio Idle', 'talking', { 
+                  primaryWeight: 0.2,
+                  fillWeight: 1.0
+                })}
+                className="w-full px-3 py-2 bg-pink-500 text-white border-none rounded cursor-pointer text-xs hover:bg-pink-600 transition-colors"
+              >
+                💬 Lip Sync + Body (20% blend)
+              </button>
+              <button
+                onClick={() => playComposite('Audio Idle', 'idle', { 
+                  primaryWeight: 0.0,
+                  fillWeight: 1.0
+                })}
+                className="w-full px-3 py-2 bg-teal-500 text-white border-none rounded cursor-pointer text-xs hover:bg-teal-600 transition-colors"
+              >
+                🧘 Mouth + Idle Mix (morphs only)
+              </button>
+              <button
+                onClick={() => playComposite('Audio Idle', 'talking', { 
+                  primaryWeight: 0.3,
+                  fillWeight: 1.0
+                })}
+                className="w-full px-3 py-2 bg-orange-500 text-white border-none rounded cursor-pointer text-xs hover:bg-orange-600 transition-colors"
+              >
+                ⚖️ Lip Sync + Body (30% blend)
+              </button>
+            </div>
           </div>
         )}
 

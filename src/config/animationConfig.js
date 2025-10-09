@@ -32,6 +32,7 @@ export const AssistantState = {
   BUSY: 'BUSY',           // Doing something - can play thinking, walking, etc.
   SPEAKING: 'SPEAKING',   // Talking to user - plays talking + current animation
   CELEBRATING: 'CELEBRATING', // Special one-shot state for celebrations
+  COMPOSITE: 'COMPOSITE', // Playing blended composite of two animations
 };
 
 /**
@@ -134,7 +135,7 @@ export const AnimationRegistry = {
       id: 'celebrating_1',
       name: 'Celebrating',
       filePath: 'res/private_test/motion/2.bvmd', // TODO: Replace with actual celebration
-      transitionFrames: TransitionSettings.SLOW_TRANSITION_FRAMES,
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       weight: 1.0,
       metadata: {
@@ -167,18 +168,46 @@ export const AnimationRegistry = {
     {
       id: 'talking_1',
       name: 'Talking',
-      filePath: 'res/private_test/motion/1.bvmd', // TODO: Replace or use morphs
+      filePath: 'res/private_test/motion/2.bvmd',
       transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
+      loopTransition: false, // Perfect loop - no transition needed when same animation repeats
       weight: 1.0,
       metadata: {
-        description: 'Lip sync animation for talking',
-        tags: ['talking', 'speaking', 'lip-sync'],
-        note: 'May need morph targets instead of full body animation',
+        description: 'Body gestures while talking',
+        tags: ['talking', 'gestures', 'body'],
       },
     },
-    // TODO: Add more talking variants
+    {
+      id: 'talking_gesture_2',
+      name: 'Talking Gesture 2',
+      filePath: 'res/private_test/motion/1.bvmd',
+      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: false, // Perfect loop - no transition needed when same animation repeats
+      weight: 1.0,
+      metadata: {
+        description: 'Body gestures while talking',
+        tags: ['talking', 'gestures', 'body'],
+      },
+    },
   ],
+
+  lipSync: [
+    {
+      id: 'audio_1',
+      name: 'Audio Idle',
+      filePath: 'res/private_test/motion/audio.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Lip sync from TTS audio',
+        tags: ['lip-sync', 'mouth', 'facial'],
+      },
+    },
+  ]
   
   // TODO: Add more animation types as needed:
   // waving: [...],
@@ -283,6 +312,13 @@ export const StateBehavior = {
     loop: false,
     autoReturn: AssistantState.IDLE,
   },
+  
+  [AssistantState.COMPOSITE]: {
+    allowedAnimations: [],        // Animations provided dynamically via playComposite
+    randomSelection: false,       // Don't pick random - use provided animations
+    loop: false,                  // Don't loop composite (play once)
+    autoReturn: AssistantState.IDLE, // Auto-return to IDLE when done
+  },
 };
 
 /**
@@ -295,20 +331,31 @@ export const StateTransitions = {
     AssistantState.BUSY,
     AssistantState.SPEAKING,
     AssistantState.CELEBRATING,
+    AssistantState.COMPOSITE,
   ],
   
   [AssistantState.BUSY]: [
     AssistantState.IDLE,
     AssistantState.SPEAKING,
+    AssistantState.COMPOSITE,
   ],
   
   [AssistantState.SPEAKING]: [
     AssistantState.IDLE,
     AssistantState.BUSY,
+    AssistantState.COMPOSITE,
   ],
   
   [AssistantState.CELEBRATING]: [
     AssistantState.IDLE,
+    AssistantState.COMPOSITE,
+  ],
+  
+  [AssistantState.COMPOSITE]: [
+    AssistantState.IDLE,
+    AssistantState.BUSY,
+    AssistantState.SPEAKING,
+    AssistantState.CELEBRATING,
   ],
 };
 
@@ -487,6 +534,16 @@ export function isValidTransition(fromState, toState) {
   return StateTransitions[fromState].includes(toState);
 }
 
+/**
+ * Get animation config by name
+ * @param {string} name - Animation name
+ * @returns {Object|null} Animation config or null if not found
+ */
+export function getAnimationsByName(name) {
+  const allAnimations = getAllAnimations();
+  return allAnimations.find(anim => anim.name === name) || null;
+}
+
 export default {
   AnimationCategory,
   AssistantState,
@@ -506,4 +563,5 @@ export default {
   isValidEmotion,
   sanitizeEmotion,
   isValidTransition,
+  getAnimationsByName,
 };
