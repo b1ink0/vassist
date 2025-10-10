@@ -20,7 +20,7 @@
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef } from 'react';
 import BabylonScene from './babylon/BabylonScene';
 import { buildMmdCompositeScene } from './babylon/MmdCompositeScene';
-import { AssistantState, getAnimationForEmotion, sanitizeEmotion } from '../config/animationConfig';
+import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
 
 const VirtualAssistant = forwardRef((props, ref) => {
   const { onReady } = props;
@@ -75,48 +75,42 @@ const VirtualAssistant = forwardRef((props, ref) => {
    */
   useImperativeHandle(ref, () => ({
     /**
-     * Make the assistant speak
+     * Make the assistant speak with lip sync and emotion-based body animation
+     * 
      * @param {string} text - Text to speak
-     * @param {string} emotion - Emotion/mood: 'neutral', 'happy', 'thinking', etc.
+     * @param {string} mouthAnimationBlobUrl - Blob URL to BVMD file with lip-sync animation
+     *                                         Generate this from TTS audio using VMD generation
+     * @param {string} emotionCategory - Animation category for body language
+     *                                   Options: 'talking', 'idle', 'thinking', 'celebrating', 'walking'
+     *                                   LLM should determine this based on text sentiment/context
+     * @param {Object} options - Optional settings { primaryWeight: 0.0, fillWeight: 1.0 }
      * 
-     * FUTURE: This will trigger:
-     * 1. Generate TTS audio from text
-     * 2. Generate VMD lip-sync from audio
-     * 3. Load and play VMD animation
-     * 4. Set base animation according to emotion
+     * WORKFLOW:
+     * 1. LLM analyzes text and determines emotion category ('talking', 'idle', 'thinking', etc.)
+     * 2. Generate TTS audio from text
+     * 3. Generate VMD lip-sync from audio
+     * 4. Create blob URL from VMD
+     * 5. Call this method with text, blob URL, and emotion category
+     * 6. Assistant plays lip-sync + emotion-appropriate body animation
+     * 7. Auto-returns to idle when done
      * 
-     * CURRENT: Sets base animation based on emotion, then speaks
+     * EXAMPLES:
+     *   speak("Hello!", vmdBlobUrl, "talking")         // Normal conversation
+     *   speak("Hmm...", vmdBlobUrl, "thinking")        // Thoughtful response
+     *   speak("Great!", vmdBlobUrl, "celebrating")     // Excited announcement
+     *   speak("...", vmdBlobUrl, "idle")               // Calm speech
      */
-    speak: async (text, emotion = 'neutral') => {
+    speak: async (text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) => {
       if (!animationManager) {
         console.warn('[VirtualAssistant] AnimationManager not ready, cannot speak');
         return;
       }
 
-      console.log(`[VirtualAssistant] speak("${text}", "${emotion}")`);
+      console.log(`[VirtualAssistant] speak("${text}", emotionCategory="${emotionCategory}")`);
       
-      // Sanitize emotion (handles invalid LLM output gracefully)
-      const validEmotion = sanitizeEmotion(emotion);
+      // Simple pass-through to AnimationManager.speak()
+      await animationManager.speak(text, mouthAnimationBlobUrl, emotionCategory, options);
       
-      // Get animation for the validated emotion
-      const emotionAnimation = getAnimationForEmotion(validEmotion);
-      
-      if (emotionAnimation) {
-        console.log(`[VirtualAssistant] Setting base animation for emotion "${validEmotion}": ${emotionAnimation.name}`);
-        
-        // Play the emotion-appropriate base animation
-        // This will be the body animation while mouth does lip sync (future)
-        await animationManager.playAnimation(emotionAnimation);
-      }
-      
-      // TODO: Integrate TTS→VMD pipeline here
-      // 1. Generate TTS audio from text
-      // 2. Generate VMD from audio (lip sync)
-      // 3. Load VMD as animation
-      // 4. Play VMD (mouth moves) + base emotion animation (body expression)
-      // 5. Auto-return to idle when done
-      
-      // For now, just update state
       setCurrentState(animationManager.getCurrentState());
     },
 
@@ -252,6 +246,77 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     getPositionManager: () => {
       return positionManager;
+    },
+
+    // ========================================
+    // ANIMATION QUEUE API
+    // ========================================
+
+    /**
+     * Queue a simple animation to play after current animation finishes
+     * @param {string} animationName - Animation name from registry
+     * @param {boolean} force - If true, interrupt current animation and play immediately
+     */
+    queueAnimation: (animationName, force = false) => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready');
+        return;
+      }
+      animationManager.queueSimpleAnimation(animationName, force);
+    },
+
+    /**
+     * Queue a composite animation
+     * @param {string} primaryAnimName - Primary animation name
+     * @param {string} fillCategory - Fill animation category
+     * @param {Object} options - Composite options
+     * @param {boolean} force - If true, interrupt current animation
+     */
+    queueComposite: (primaryAnimName, fillCategory = 'talking', options = {}, force = false) => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready');
+        return;
+      }
+      animationManager.queueCompositeAnimation(primaryAnimName, fillCategory, options, force);
+    },
+
+    /**
+     * Queue a speak animation
+     * @param {string} text - Text to speak
+     * @param {string} mouthBlobUrl - Mouth animation blob URL
+     * @param {string} emotionCategory - Emotion category
+     * @param {Object} options - Speak options
+     * @param {boolean} force - If true, interrupt current animation
+     */
+    queueSpeak: (text, mouthBlobUrl, emotionCategory = 'talking', options = {}, force = false) => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready');
+        return;
+      }
+      animationManager.queueSpeak(text, mouthBlobUrl, emotionCategory, options, force);
+    },
+
+    /**
+     * Clear all queued animations
+     */
+    clearQueue: () => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready');
+        return;
+      }
+      animationManager.clearQueue();
+    },
+
+    /**
+     * Get queue status
+     * @returns {Object} Queue information { length, isEmpty, items }
+     */
+    getQueueStatus: () => {
+      if (!animationManager) {
+        console.warn('[VirtualAssistant] AnimationManager not ready');
+        return { length: 0, isEmpty: true, items: [] };
+      }
+      return animationManager.getQueueStatus();
     },
   }), [animationManager, positionManager, currentState, isReady]);
 

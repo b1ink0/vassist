@@ -167,9 +167,9 @@ const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
         )}
 
         {/* Camera Movement Controls */}
-        <div className="mb-4">
-          <div className="text-xs mb-2 text-gray-400">Camera Movement</div>
-          <div className="grid grid-cols-3 gap-1.5 w-[190px]">
+        <div className="mb-4 grid grid-cols-1">
+          <div className="text-xs mb-2 text-gray-400 justify-self-start">Camera Movement</div>
+          <div className="grid grid-cols-3 gap-1.5 w-[190px] justify-self-center">
             <div></div>
             <button
               onClick={() => moveCamera('up')}

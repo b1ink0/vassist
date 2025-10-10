@@ -86,7 +86,7 @@ export const AnimationRegistry = {
     {
       id: 'idle_breathing',
       name: 'Idle Breathing',
-      filePath: 'res/private_test/motion/test.bvmd',
+      filePath: 'res/private_test/motion/breathing-idle-1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       loopTransition: true,
@@ -99,7 +99,46 @@ export const AnimationRegistry = {
     {
       id: 'idle_looking',
       name: 'Idle Looking Around',
-      filePath: 'res/private_test/motion/2.bvmd',
+      filePath: 'res/private_test/motion/breathing-idle-2.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: true,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Idle with occasional head movements',
+        tags: ['looking', 'curious', 'attentive'],
+      },
+    },
+    {
+      id: 'waving_1',
+      name: 'Waving',
+      filePath: 'res/private_test/motion/waving-1.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: true,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Idle with occasional head movements',
+        tags: ['looking', 'curious', 'attentive'],
+      },
+    },
+    {
+      id: 'waving_2',
+      name: 'Waving',
+      filePath: 'res/private_test/motion/waving-2.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: true,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Idle with occasional head movements',
+        tags: ['looking', 'curious', 'attentive'],
+      },
+    },
+    {
+      id: 'yawn',
+      name: 'Yawn',
+      filePath: 'res/private_test/motion/yawn.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       loopTransition: false,
@@ -117,7 +156,7 @@ export const AnimationRegistry = {
     {
       id: 'thinking_1',
       name: 'Thinking',
-      filePath: 'res/private_test/motion/1.bvmd', // TODO: Replace with actual thinking animation
+      filePath: 'res/private_test/motion/thinking.bvmd', // TODO: Replace with actual thinking animation
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       weight: 1.0,
@@ -134,7 +173,19 @@ export const AnimationRegistry = {
     {
       id: 'celebrating_1',
       name: 'Celebrating',
-      filePath: 'res/private_test/motion/2.bvmd', // TODO: Replace with actual celebration
+      filePath: 'res/private_test/motion/excited.bvmd', // TODO: Replace with actual celebration
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Happy celebration with arms raised',
+        tags: ['happy', 'celebrating', 'excited', 'victory'],
+      },
+    },
+    {
+      id: 'celebrating_2',
+      name: 'Celebrating',
+      filePath: 'res/private_test/motion/victory.bvmd', // TODO: Replace with actual celebration
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       weight: 1.0,
@@ -151,7 +202,7 @@ export const AnimationRegistry = {
     {
       id: 'walking_1',
       name: 'Walking',
-      filePath: 'res/private_test/motion/2.bvmd',
+      filePath: 'res/private_test/motion/walk.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       weight: 1.0,
@@ -168,20 +219,7 @@ export const AnimationRegistry = {
     {
       id: 'talking_1',
       name: 'Talking',
-      filePath: 'res/private_test/motion/2.bvmd',
-      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
-      loop: false,
-      loopTransition: false, // Perfect loop - no transition needed when same animation repeats
-      weight: 1.0,
-      metadata: {
-        description: 'Body gestures while talking',
-        tags: ['talking', 'gestures', 'body'],
-      },
-    },
-    {
-      id: 'talking_gesture_2',
-      name: 'Talking Gesture 2',
-      filePath: 'res/private_test/motion/1.bvmd',
+      filePath: 'res/private_test/motion/talking2.bvmd',
       transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
       loopTransition: false, // Perfect loop - no transition needed when same animation repeats
@@ -192,6 +230,53 @@ export const AnimationRegistry = {
       },
     },
   ],
+
+  happy: [
+    {
+      id: 'happy_1',
+      name: 'Happy',
+      filePath: 'res/private_test/motion/happy.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Lip sync from TTS audio',
+        tags: ['lip-sync', 'mouth', 'facial'],
+      },
+    },
+  ],
+  excited: [
+    {
+      id: 'excited_1',
+      name: 'Excited',
+      filePath: 'res/private_test/motion/excited.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Lip sync from TTS audio',
+        tags: ['lip-sync', 'mouth', 'facial'],
+      },
+    },
+  ],
+  error: [
+    {
+      id: 'error_1',
+      name: 'Error',
+      filePath: 'res/private_test/motion/focus.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: false,
+      weight: 1.0,
+      metadata: {
+        description: 'Lip sync from TTS audio',
+        tags: ['lip-sync', 'mouth', 'facial'],
+      },
+    },
+  ],
+
 
   lipSync: [
     {

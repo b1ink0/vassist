@@ -25,6 +25,19 @@ import {
   isValidTransition,
 } from "../../config/animationConfig";
 
+/**
+ * Helper function to get timestamp for logging
+ * @returns {string} Formatted timestamp (HH:MM:SS.mmm)
+ */
+function getTimestamp() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
 export class AnimationManager {
   /**
    * Create AnimationManager instance
@@ -87,6 +100,21 @@ export class AnimationManager {
     
     // Visibility change handling
     this.visibilityChangeHandler = null;
+
+    // ========================================
+    // ANIMATION QUEUE SYSTEM
+    // ========================================
+    /**
+     * Animation queue for sequential playback
+     * Each entry: { type, animationConfig, compositeConfig, priority }
+     * - type: 'simple' | 'composite' | 'speak'
+     * - animationConfig: For simple animations (from registry or blob)
+     * - compositeConfig: For composite animations { primary, fillCategory, options }
+     * - priority: 'normal' | 'force' (force interrupts current animation)
+     */
+    this.animationQueue = [];
+    this.isProcessingQueue = false; // Prevent re-entry during queue processing
+    this.justStartedFromQueue = false; // Track if we just started an animation from queue (prevent immediate re-check)
 
     console.log('[AnimationManager] Created');
   }
@@ -166,6 +194,44 @@ export class AnimationManager {
     } finally {
       // Clean up promise tracker
       this.loadingPromises.delete(filePath);
+    }
+  }
+
+  /**
+   * Load animation from blob URL (e.g., from TTS-generated VMD)
+   * @param {string} blobUrl - Blob URL to BVMD file
+   * @param {string} animationId - Unique ID for this animation (for caching)
+   * @returns {Promise<Animation>} Loaded animation
+   */
+  async loadAnimationFromBlob(blobUrl, animationId = `blob_${Date.now()}`) {
+    // Check cache first
+    if (this.loadedAnimations.has(blobUrl)) {
+      console.log(`[AnimationManager] Using cached blob animation: ${animationId}`);
+      return this.loadedAnimations.get(blobUrl);
+    }
+
+    // Currently loading?
+    if (this.loadingPromises.has(blobUrl)) {
+      console.log(`[AnimationManager] Waiting for in-flight blob load: ${animationId}`);
+      return await this.loadingPromises.get(blobUrl);
+    }
+
+    // Load from blob URL
+    console.log(`[AnimationManager] Loading animation from blob: ${animationId}`);
+    const loadPromise = this.bvmdLoader.loadAsync(animationId, blobUrl);
+
+    this.loadingPromises.set(blobUrl, loadPromise);
+
+    try {
+      const animation = await loadPromise;
+      this.loadedAnimations.set(blobUrl, animation);
+      console.log(`[AnimationManager] Loaded blob animation: ${animationId}, duration: ${animation.endFrame} frames`);
+      return animation;
+    } catch (error) {
+      console.error(`[AnimationManager] Failed to load blob animation: ${animationId}`, error);
+      throw error;
+    } finally {
+      this.loadingPromises.delete(blobUrl);
     }
   }
 
@@ -415,7 +481,7 @@ export class AnimationManager {
           undefined,
           undefined,
           actualOffset, // Use actual position, not segment.startFrame
-          1.0 // Full weight for body animations
+          this.compositeFillWeight ?? 1.0 // Use configured fill weight
         );
         
         console.log(`[AnimationManager] Segment ${i} (${segment.config.name}): offset=${actualOffset.toFixed(2)}, duration=${segment.duration}f, same=${isSameAnimation}, loopTransition=${hasLoopTransition}, truncated=${segment.isTruncated}, applyEasing=${shouldApplyEasing}`);
@@ -501,7 +567,7 @@ export class AnimationManager {
         undefined,
         undefined,
         cycleStartTime,
-        1.0 // Full weight for morphs (no bone conflicts since we removed bone tracks)
+        this.compositePrimaryWeight ?? 1.0 // Use configured primary weight
       );
       
       // Apply ease-in to morph span for first cycle
@@ -674,17 +740,57 @@ export class AnimationManager {
     // Check if animation should loop or auto-return to IDLE
     const shouldLoop = this.currentAnimationConfig.loop !== false; // Default true unless explicitly false
     
-    // For non-looping animations (one-shot), check if we've completed
+    // For ALL animations (looping or not), check if we've completed at least one cycle
+    // and there's something in the queue that wants to interrupt
     // CRITICAL: Start transition BEFORE animation ends to allow smooth ease-out
     // Trigger when we're within transition frames of the end
     const transitionBuffer = transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
     const transitionStartFrame = duration - transitionBuffer;
     
-    if (!shouldLoop && currentFrame >= transitionStartFrame) {
-      // For non-looping animations, ALWAYS return to IDLE regardless of current state
-      // This handles cases where playAnimation() was called directly without state transition
-      if (!this._isTransitioning) {
-        console.log(`[AnimationManager] [AUTO-RETURN CHECK] Non-loop animation near end: frame=${currentFrame.toFixed(2)}/${duration}, starting transition at ${transitionStartFrame.toFixed(2)}, state=${this.currentState}, animName=${this.currentAnimationConfig.name}`);
+    // For looping animations: check queue at the end of FIRST cycle
+    // For non-looping animations: check queue at the end of animation
+    const isNearCycleEnd = (currentFrame % cycleDuration) >= (cycleDuration - transitionBuffer);
+    const isFirstCycleComplete = shouldLoop ? (this.currentCycle >= 1 && isNearCycleEnd) : false;
+    
+    // CRITICAL: Don't check queue if we just started this animation from the queue
+    // This prevents instant re-processing when the new animation starts
+    if (this.justStartedFromQueue) {
+      // For non-looping animations, reset flag once we're PAST the transition start point
+      // For looping animations, reset after a safe amount of frames
+      const safeFrameThreshold = shouldLoop ? 10 : (transitionStartFrame + 5);
+      
+      if (currentFrame > safeFrameThreshold) {
+        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Resetting justStartedFromQueue flag (frame=${currentFrame.toFixed(2)}, threshold=${safeFrameThreshold.toFixed(2)})`);
+        this.justStartedFromQueue = false;
+        // Continue to queue check below
+      } else {
+        // Still in cooldown period - don't check queue yet
+        return;
+      }
+    }
+    
+    // Check if we should interrupt (either non-looping ending OR looping with queue)
+    const shouldCheckQueue = !shouldLoop 
+      ? (currentFrame >= transitionStartFrame)  // Non-looping: check near end
+      : (isFirstCycleComplete && this.shouldProcessQueue()); // Looping: check after first cycle if queue has items
+    
+    if (shouldCheckQueue && !this._isTransitioning) {
+      const animType = shouldLoop ? 'looping' : 'non-looping';
+      console.log(`[AnimationManager] [AUTO-RETURN CHECK] ${animType} animation near cycle end: frame=${currentFrame.toFixed(2)}/${duration}, cycle=${this.currentCycle}, state=${this.currentState}, animName=${this.currentAnimationConfig.name}`);
+      
+      // Check if queue should be processed
+      if (this.shouldProcessQueue()) {
+        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Animation cycle ending, ${this.animationQueue.length} items in queue - processing next`);
+        
+        // Set flag to prevent re-entry
+        this._isTransitioning = true;
+        
+        // Process queue (plays next animation with smooth transition)
+        this.processQueue().finally(() => {
+          this._isTransitioning = false;
+        });
+      } else if (!shouldLoop) {
+        // No queue items and non-looping - do normal auto-return to IDLE
         console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
         
         // Set flag to prevent re-entry
@@ -696,9 +802,7 @@ export class AnimationManager {
           this._isTransitioning = false;
         });
       }
-      
-      // DON'T return early - let the animation keep playing its last cycle
-      // until the new animation loads and takes over smoothly
+      // For looping animations with no queue: just continue looping (no action needed)
     }
     
     // DYNAMIC DURATION EXTENSION: Check if we're approaching the runtime duration limit
@@ -910,53 +1014,71 @@ export class AnimationManager {
    * Primary animation (e.g., mouth/lip-sync) sets the duration
    * Fill animations (e.g., speaking body motions) are stitched together to match duration
    * 
-   * @param {string} primaryAnimName - Primary animation name (sets duration, overlaid on top)
+   * @param {string|Object} primaryAnimNameOrBlob - Primary animation name OR { blobUrl, id } for blob-based animations
    * @param {string} fillCategory - Category of animations to stitch for body movement ('talking', 'idle', etc.)
    * @param {Object} options - { primaryWeight: 1.0, fillWeight: 0.5 }
    */
-  async playComposite(primaryAnimName, fillCategory = 'talking', options = {}) {
+  async playComposite(primaryAnimNameOrBlob, fillCategory = 'talking', options = {}) {
     const primaryWeight = options.primaryWeight ?? 1.0;
     const fillWeight = options.fillWeight ?? 0.5;
 
-    console.log(`[AnimationManager] playComposite: Primary="${primaryAnimName}", Fill="${fillCategory}", primaryWeight=${primaryWeight}, fillWeight=${fillWeight}`);
+    console.log(`[AnimationManager] playComposite: Primary="${primaryAnimNameOrBlob}", Fill="${fillCategory}", primaryWeight=${primaryWeight}, fillWeight=${fillWeight}`);
 
     // CRITICAL: Set state to COMPOSITE immediately to prevent auto-switch interruption
     this.previousState = this.currentState;
     this.currentState = AssistantState.COMPOSITE;
     
-    // Get primary animation (mouth/lip-sync)
-    const primaryAnim = getAnimationsByName(primaryAnimName);
-    if (!primaryAnim) {
-      console.error(`[AnimationManager] Cannot find primary animation: ${primaryAnimName}`);
-      // Restore previous state on error
-      this.currentState = this.previousState;
-      return;
+    // Determine if primary is a blob URL or animation name
+    let primaryLoaded;
+    let primaryAnimConfig;
+    const isBlobInput = typeof primaryAnimNameOrBlob === 'object' && primaryAnimNameOrBlob.blobUrl;
+    
+    if (isBlobInput) {
+      // Load from blob URL
+      const { blobUrl, id } = primaryAnimNameOrBlob;
+      console.log(`[AnimationManager] Loading primary animation from blob URL: ${id}`);
+      primaryLoaded = await this.loadAnimationFromBlob(blobUrl, id);
+      
+      // Create temporary config for blob animation
+      primaryAnimConfig = {
+        id: id,
+        name: `Blob Animation: ${id}`,
+        filePath: blobUrl,
+        loop: false,
+        loopTransition: false,
+        transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES
+      };
+    } else {
+      // Load from animation registry by name
+      const primaryAnim = getAnimationsByName(primaryAnimNameOrBlob);
+      if (!primaryAnim) {
+        console.error(`[AnimationManager] Cannot find primary animation: ${primaryAnimNameOrBlob}`);
+        this.currentState = this.previousState;
+        return;
+      }
+      primaryLoaded = await this.loadAnimation(primaryAnim);
+      primaryAnimConfig = primaryAnim;
     }
 
     // Get fill animations pool (body motions)
     const fillAnimations = getAnimationsByCategory(fillCategory);
     if (!fillAnimations || fillAnimations.length === 0) {
       console.error(`[AnimationManager] No fill animations found in category: ${fillCategory}`);
-      // Restore previous state on error
       this.currentState = this.previousState;
       return;
     }
 
     console.log(`[AnimationManager] Found ${fillAnimations.length} fill animations in category "${fillCategory}"`);
 
-    // Load primary animation to get its duration
-    const primaryLoaded = await this.loadAnimation(primaryAnim);
-    const targetDuration = primaryLoaded.endFrame; // babylon-mmd animation has endFrame directly
-    
+    const targetDuration = primaryLoaded.endFrame;
     console.log(`[AnimationManager] Primary animation duration: ${targetDuration} frames`);
 
     // Build stitched fill timeline to match target duration
     const stitchedFillSpans = await this._buildStitchedTimeline(fillAnimations, targetDuration);
-    
     console.log(`[AnimationManager] Built stitched timeline with ${stitchedFillSpans.length} fill segments`);
 
     // Store composite info for addNextCycle
-    this.compositePrimaryLoaded = primaryLoaded; // Primary has the morph tracks
+    this.compositePrimaryLoaded = primaryLoaded;
     this.compositePrimaryWeight = primaryWeight;
     this.compositeStitchedFillSpans = stitchedFillSpans;
     this.compositeFillWeight = fillWeight;
@@ -964,9 +1086,9 @@ export class AnimationManager {
     
     // Use primary animation config but override for composite behavior
     const compositeConfig = {
-      ...primaryAnim,
+      ...primaryAnimConfig,
       loop: false, // CRITICAL: Composite plays once then auto-returns to IDLE
-      loopTransition: false, // No loop transition needed
+      loopTransition: false,
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES
     };
     
@@ -977,6 +1099,47 @@ export class AnimationManager {
     
     // Start playback (will call addNextCycle which handles composite)
     await this.playAnimation(compositeConfig);
+  }
+
+  /**
+   * Make the assistant speak with lip sync and emotion-based body animation
+   * Simple wrapper around playComposite() for TTS integration
+   * 
+   * @param {string} text - Text to speak (for future TTS/logging/analytics)
+   * @param {string} mouthAnimationBlobUrl - Blob URL to BVMD file with lip-sync animation
+   * @param {string} emotionCategory - Animation category for body motion ('talking', 'idle', 'thinking', etc.)
+   * @param {Object} options - Optional settings { primaryWeight: 0.0, fillWeight: 1.0 }
+   * 
+   * Future use cases for the text parameter:
+   * - TTS generation (if not pre-generated)
+   * - Speech timing synchronization
+   * - Logging/analytics
+   * - Subtitle display
+   * - Context tracking for conversation flow
+   */
+  async speak(text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) {
+    console.log(`[AnimationManager] speak: text="${text}", emotionCategory="${emotionCategory}"`);
+
+    // Default options for speech: full morphs + full body
+    const speakOptions = {
+      primaryWeight: options.primaryWeight ?? 1.0,  // Full mouth morphs (lip sync visible!)
+      fillWeight: options.fillWeight ?? 1.0,         // Full body animation
+      ...options
+    };
+
+    // Simply call playComposite with blob URL
+    const animationId = `mouth_${Date.now()}`;
+    await this.playComposite(
+      { blobUrl: mouthAnimationBlobUrl, id: animationId },
+      emotionCategory,
+      speakOptions
+    );
+
+    // TODO: Future enhancements using text parameter:
+    // - Display subtitles
+    // - Track conversation history
+    // - Analyze sentiment for auto emotion selection
+    // - Generate TTS if blob URL not provided
   }
 
   /**
@@ -1067,8 +1230,18 @@ export class AnimationManager {
       // Advance timeline
       if (needsOverlap) {
         // Apply transition overlap for smooth blending
-        currentFrame += (segmentDuration - transitionFrames);
-        console.log(`[AnimationManager] Advanced with overlap: ${currentFrame}f (next segment will blend)`);
+        const advancement = segmentDuration - transitionFrames;
+        
+        // CRITICAL: Prevent infinite loop - if advancement would be 0 or negative, force advancement
+        // This happens when segment is truncated to exactly transitionFrames or less
+        if (advancement <= 0) {
+          // Force advance by at least 1 frame to prevent infinite loop
+          currentFrame += Math.max(1, segmentDuration);
+          console.log(`[AnimationManager] Advanced (forced, segment too short for overlap): ${currentFrame}f`);
+        } else {
+          currentFrame += advancement;
+          console.log(`[AnimationManager] Advanced with overlap: ${currentFrame}f (next segment will blend)`);
+        }
       } else {
         // No overlap - either first segment or perfect loop
         currentFrame += segmentDuration;
@@ -1120,11 +1293,242 @@ export class AnimationManager {
     await this.transitionToState(AssistantState.IDLE);
   }
 
+  // ========================================
+  // ANIMATION QUEUE SYSTEM
+  // ========================================
+
+  /**
+   * Add animation to queue
+   * @param {Object} queueEntry - Animation queue entry
+   * @param {string} queueEntry.type - 'simple' | 'composite' | 'speak'
+   * @param {Object} queueEntry.animationConfig - For simple animations
+   * @param {Object} queueEntry.compositeConfig - For composite { primary, fillCategory, options }
+   * @param {boolean} force - If true, interrupt current animation and play immediately
+   */
+  queueAnimation(queueEntry, force = false) {
+    console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Adding to queue (force=${force}):`, queueEntry.type);
+    
+    if (force) {
+      // Force mode: interrupt current animation and play immediately
+      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Force mode - interrupting current animation`);
+      
+      // Clear queue and add this as only item
+      this.animationQueue = [queueEntry];
+      
+      // Immediately start playing
+      this.processQueue();
+    } else {
+      // Normal mode: add to end of queue
+      this.animationQueue.push(queueEntry);
+      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Added to queue. Queue length: ${this.animationQueue.length}`);
+      
+      // If nothing is currently playing AND this is the first item in queue,
+      // start processing to kick off the queue sequence
+      // CRITICAL: Only if we're truly idle (no animation playing at all)
+      if (this.animationQueue.length === 1 && this.currentState === AssistantState.IDLE && !this.isProcessingQueue && !this.currentAnimationConfig) {
+        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Queue was empty and idle, starting first queued animation`);
+        this.processQueue();
+      }
+    }
+  }  
+  
+  /**
+   * Process next animation in queue
+   * Called automatically by onBeforeRender when current animation ends
+   */
+  async processQueue() {
+    // Prevent re-entry
+    if (this.isProcessingQueue) {
+      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Already processing, skipping`);
+      return;
+    }
+
+    // Nothing in queue
+    if (this.animationQueue.length === 0) {
+      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Queue empty, nothing to process`);
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    try {
+      const queueEntry = this.animationQueue.shift(); // Remove first item
+      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Processing queue entry (type: ${queueEntry.type}). Remaining: ${this.animationQueue.length}`);
+
+      // Set flag to prevent immediate queue re-check
+      this.justStartedFromQueue = true;
+
+      // Play based on type
+      switch (queueEntry.type) {
+        case 'simple': {
+          // Simple animation - use playAnimation
+          // CRITICAL: Force non-looping for queued animations
+          // We want queued animations to play once and move to next item
+          const queuedAnimConfig = {
+            ...queueEntry.animationConfig,
+            loop: false  // Override loop setting - queued animations play once
+          };
+          console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Playing queued animation: ${queuedAnimConfig.name} (forced non-looping)`);
+          
+          // CRITICAL: If we're in COMPOSITE state, we need to exit it before playing simple animation
+          // Reset composite state flags and restore previous state
+          if (this.currentState === AssistantState.COMPOSITE) {
+            console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Exiting COMPOSITE state for simple animation`);
+            this.compositePrimaryLoaded = null;
+            this.compositeStitchedFillSpans = [];
+            // Restore to previous state (or IDLE if no previous state)
+            this.currentState = this.previousState || AssistantState.IDLE;
+          }
+          
+          await this.playAnimation(queuedAnimConfig);
+          break;
+        }
+
+        case 'composite': {
+          // Composite animation - use playComposite
+          const { primary, fillCategory, options } = queueEntry.compositeConfig;
+          await this.playComposite(primary, fillCategory, options);
+          break;
+        }
+
+        case 'speak': {
+          // Speak animation - use speak
+          const { text, mouthBlobUrl, emotionCategory, speakOptions } = queueEntry.compositeConfig;
+          await this.speak(text, mouthBlobUrl, emotionCategory, speakOptions);
+          break;
+        }
+
+        default:
+          console.error(`[${getTimestamp()}] [AnimationManager] [QUEUE] Unknown queue type: ${queueEntry.type}`);
+      }
+    } catch (error) {
+      console.error(`[${getTimestamp()}] [AnimationManager] [QUEUE] Error processing queue:`, error);
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
+  /**
+   * Clear all queued animations
+   */
+  clearQueue() {
+    console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Clearing queue (${this.animationQueue.length} items)`);
+    this.animationQueue = [];
+  }
+
+  /**
+   * Get queue status
+   * @returns {Object} Queue information
+   */
+  getQueueStatus() {
+    return {
+      length: this.animationQueue.length,
+      isEmpty: this.animationQueue.length === 0,
+      items: this.animationQueue.map(entry => ({
+        type: entry.type,
+        name: entry.animationConfig?.name || entry.compositeConfig?.primary || 'unknown'
+      }))
+    };
+  }
+
+  /**
+   * Check if queue should be processed
+   * Called from onBeforeRender when animation is near end
+   */
+  shouldProcessQueue() {
+    // Has items in queue
+    if (this.animationQueue.length === 0) {
+      return false;
+    }
+
+    // Not already processing
+    if (this.isProcessingQueue) {
+      return false;
+    }
+
+    // Currently in transition
+    if (this._isTransitioning) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ========================================
+  // CONVENIENCE METHODS FOR QUEUE
+  // ========================================
+
+  /**
+   * Queue a simple animation
+   * @param {Object|string} animationConfigOrName - Animation config or name from registry
+   * @param {boolean} force - Force interrupt current animation
+   */
+  queueSimpleAnimation(animationConfigOrName, force = false) {
+    let animationConfig;
+
+    if (typeof animationConfigOrName === 'string') {
+      // Animation name - look up in registry
+      animationConfig = getAnimationsByName(animationConfigOrName);
+      if (!animationConfig) {
+        console.error(`[AnimationManager] Cannot find animation: ${animationConfigOrName}`);
+        return;
+      }
+    } else {
+      animationConfig = animationConfigOrName;
+    }
+
+    this.queueAnimation({
+      type: 'simple',
+      animationConfig: animationConfig
+    }, force);
+  }
+
+  /**
+   * Queue a composite animation
+   * @param {string|Object} primaryAnimNameOrBlob - Primary animation name or { blobUrl, id }
+   * @param {string} fillCategory - Fill animation category
+   * @param {Object} options - Composite options
+   * @param {boolean} force - Force interrupt current animation
+   */
+  queueCompositeAnimation(primaryAnimNameOrBlob, fillCategory = 'talking', options = {}, force = false) {
+    this.queueAnimation({
+      type: 'composite',
+      compositeConfig: {
+        primary: primaryAnimNameOrBlob,
+        fillCategory: fillCategory,
+        options: options
+      }
+    }, force);
+  }
+
+  /**
+   * Queue a speak animation
+   * @param {string} text - Text to speak
+   * @param {string} mouthBlobUrl - Mouth animation blob URL
+   * @param {string} emotionCategory - Emotion category for body animation
+   * @param {Object} options - Speak options
+   * @param {boolean} force - Force interrupt current animation
+   */
+  queueSpeak(text, mouthBlobUrl, emotionCategory = 'talking', options = {}, force = false) {
+    this.queueAnimation({
+      type: 'speak',
+      compositeConfig: {
+        text: text,
+        mouthBlobUrl: mouthBlobUrl,
+        emotionCategory: emotionCategory,
+        speakOptions: options
+      }
+    }, force);
+  }
+
   /**
    * Dispose and cleanup
    */
   dispose() {
     console.log('[AnimationManager] Disposing...');
+
+    // Clear animation queue
+    this.clearQueue();
 
     // Remove visibility change handler
     if (this.visibilityChangeHandler) {
