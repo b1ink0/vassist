@@ -1,17 +1,9 @@
-/**
- * ControlPanel - Unified control panel for all assistant controls
- * 
- * Combines:
- * - Action controls (idle, think, walk, celebrate, speak)
- * - Position presets (all 7 positions)
- * - Emotion tests (happy, thinking, calm, etc.)
- * - Debug controls (camera movement, zoom, axis, coordinates)
- * 
- * Can be toggled on/off for clean UI
- */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
+import StorageManager from '../managers/StorageManager';
+import AIService from '../services/AIService';
+import { DefaultAIConfig, AIProviders, validateAIConfig } from '../config/aiConfig';
 
 const ControlPanel = ({ 
   isAssistantReady,
@@ -27,6 +19,25 @@ const ControlPanel = ({
   
   // Track blob URLs for cleanup later.
   const blobUrlsRef = useRef([]);
+
+  // AI Config state
+  const [aiConfig, setAiConfig] = useState(DefaultAIConfig);
+  const [configSaved, setConfigSaved] = useState(false);
+  const [configError, setConfigError] = useState('');
+
+  // Load AI config on mount
+  useEffect(() => {
+    const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig);
+    setAiConfig(savedConfig);
+    
+    // Try to configure AI service with saved config
+    try {
+      AIService.configure(savedConfig);
+      console.log('[ControlPanel] AI Service configured from saved config');
+    } catch (error) {
+      console.warn('[ControlPanel] Failed to configure AI Service:', error);
+    }
+  }, []);
 
   /**
    * Trigger action via VirtualAssistant API
@@ -111,6 +122,87 @@ const ControlPanel = ({
     await assistantRef.current.playComposite(primaryAnimName, fillCategory, options);
     
     onStateChange(assistantRef.current.getState());
+  };
+
+  // ========================================
+  // QUEUE FUNCTIONS
+  // ========================================
+
+  /**
+   * Save AI configuration
+   */
+  const handleSaveConfig = () => {
+    // Validate configuration
+    const validation = validateAIConfig(aiConfig);
+    
+    if (!validation.valid) {
+      setConfigError(validation.errors.join(', '));
+      return;
+    }
+    
+    // Save to storage
+    const saved = StorageManager.saveConfig('aiConfig', aiConfig);
+    
+    if (saved) {
+      setConfigSaved(true);
+      setConfigError('');
+      
+      // Configure AI service
+      try {
+        AIService.configure(aiConfig);
+        console.log('[ControlPanel] AI Service configured successfully');
+        
+        // Hide success message after 2 seconds
+        setTimeout(() => setConfigSaved(false), 2000);
+      } catch (error) {
+        setConfigError('Failed to configure AI service: ' + error.message);
+        console.error('[ControlPanel] AI configuration failed:', error);
+      }
+    } else {
+      setConfigError('Failed to save configuration');
+    }
+  };
+
+  /**
+   * Update AI config field
+   */
+  const updateAIConfig = (path, value) => {
+    setAiConfig(prev => {
+      const updated = { ...prev };
+      
+      // Handle nested paths like 'openai.apiKey'
+      const parts = path.split('.');
+      let current = updated;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        current[parts[i]] = { ...current[parts[i]] };
+        current = current[parts[i]];
+      }
+      
+      current[parts[parts.length - 1]] = value;
+      
+      return updated;
+    });
+  };
+
+  /**
+   * Test AI connection
+   */
+  const handleTestConnection = async () => {
+    setConfigError('');
+    
+    try {
+      // First configure with current settings
+      AIService.configure(aiConfig);
+      
+      // Then test connection
+      await AIService.testConnection();
+      
+      setConfigError('✅ Connection successful!');
+      setTimeout(() => setConfigError(''), 3000);
+    } catch (error) {
+      setConfigError('❌ Connection failed: ' + error.message);
+    }
   };
 
   // ========================================
@@ -225,7 +317,7 @@ const ControlPanel = ({
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm max-w-[420px]">
+    <div className="fixed bottom-5 right-5 z-[1000] pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm max-w-[520px]">
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-white/20">
         <div className="flex items-center gap-2">
@@ -303,6 +395,16 @@ const ControlPanel = ({
           }`}
         >
           🔧 Debug
+        </button>
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
+            activeTab === 'config' 
+              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          ⚙️ Config
         </button>
       </div>
 
@@ -644,6 +746,183 @@ const ControlPanel = ({
               positionManager={positionManagerRef.current}
               embedded={true}
             />
+          </div>
+        )}
+
+        {/* Config Tab */}
+        {activeTab === 'config' && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-400 mb-3">AI Provider Configuration</p>
+            
+            {/* Provider Selection */}
+            <div>
+              <label className="block text-xs text-white mb-1">Provider</label>
+              <select
+                value={aiConfig.provider}
+                onChange={(e) => updateAIConfig('provider', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+              >
+                <option value={AIProviders.OPENAI}>OpenAI</option>
+                <option value={AIProviders.OLLAMA}>Ollama (Local)</option>
+              </select>
+            </div>
+
+            {/* OpenAI Settings */}
+            {aiConfig.provider === AIProviders.OPENAI && (
+              <>
+                <div>
+                  <label className="block text-xs text-white mb-1">API Key</label>
+                  <input
+                    type="password"
+                    value={aiConfig.openai.apiKey}
+                    onChange={(e) => updateAIConfig('openai.apiKey', e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={aiConfig.openai.model}
+                    onChange={(e) => updateAIConfig('openai.model', e.target.value)}
+                    placeholder="gpt-4-turbo-preview"
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Temperature: {aiConfig.openai.temperature}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={aiConfig.openai.temperature}
+                    onChange={(e) => updateAIConfig('openai.temperature', parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Max Tokens</label>
+                  <input
+                    type="number"
+                    value={aiConfig.openai.maxTokens}
+                    onChange={(e) => updateAIConfig('openai.maxTokens', parseInt(e.target.value))}
+                    placeholder="2000"
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Ollama Settings */}
+            {aiConfig.provider === AIProviders.OLLAMA && (
+              <>
+                <div>
+                  <label className="block text-xs text-white mb-1">Endpoint URL</label>
+                  <input
+                    type="text"
+                    value={aiConfig.ollama.endpoint}
+                    onChange={(e) => updateAIConfig('ollama.endpoint', e.target.value)}
+                    placeholder="http://localhost:11434"
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Your local Ollama server URL</p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={aiConfig.ollama.model}
+                    onChange={(e) => updateAIConfig('ollama.model', e.target.value)}
+                    placeholder="llama2"
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Model name (e.g., llama2, mistral, codellama)</p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Temperature: {aiConfig.ollama.temperature}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={aiConfig.ollama.temperature}
+                    onChange={(e) => updateAIConfig('ollama.temperature', parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white mb-1">Max Tokens</label>
+                  <input
+                    type="number"
+                    value={aiConfig.ollama.maxTokens}
+                    onChange={(e) => updateAIConfig('ollama.maxTokens', parseInt(e.target.value))}
+                    placeholder="2000"
+                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* System Prompt */}
+            <div>
+              <label className="block text-xs text-white mb-1">System Prompt</label>
+              <textarea
+                value={aiConfig.systemPrompt}
+                onChange={(e) => updateAIConfig('systemPrompt', e.target.value)}
+                placeholder="You are a helpful virtual assistant..."
+                rows={3}
+                className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+
+            {/* Error/Success Messages */}
+            {configError && (
+              <div className={`text-xs p-2 rounded ${configError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                {configError}
+              </div>
+            )}
+            
+            {configSaved && (
+              <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                ✅ Configuration saved successfully!
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2 border-t border-white/20">
+              <button
+                onClick={handleSaveConfig}
+                className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+              >
+                💾 Save Config
+              </button>
+              <button
+                onClick={handleTestConnection}
+                className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
+              >
+                🔌 Test Connection
+              </button>
+            </div>
+
+            {/* Info */}
+            <div className="border-t border-white/20 pt-3">
+              <p className="text-[10px] text-gray-500 mb-2">ℹ️ Configuration Guide:</p>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                <strong>OpenAI:</strong> Get API key from platform.openai.com
+                <br/>
+                <strong>Ollama:</strong> Install from ollama.ai and run locally
+                <br/>
+                All settings are saved to browser localStorage
+              </p>
+            </div>
           </div>
         )}
       </div>

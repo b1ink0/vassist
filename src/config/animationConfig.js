@@ -202,7 +202,7 @@ export const AnimationRegistry = {
     {
       id: 'walking_1',
       name: 'Walking',
-      filePath: 'res/private_test/motion/walk.bvmd',
+      filePath: 'res/private_test/motion/yawn.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       weight: 1.0,

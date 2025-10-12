@@ -286,6 +286,16 @@ export class PositionManager {
     // Convert pixel position to camera frustum
     this.updateCameraFrustum();
     
+    // Emit position change event for UI components (ChatButton, etc.)
+    window.dispatchEvent(new CustomEvent('modelPositionChange', {
+      detail: { 
+        x: this.positionX, 
+        y: this.positionY, 
+        width: this.modelWidthPx, 
+        height: this.modelHeightPx 
+      }
+    }));
+    
     if (!validated.valid) {
       console.warn('[PositionManager] Position adjusted to prevent cutoff', {
         requested: { x, y },

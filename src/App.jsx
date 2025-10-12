@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import VirtualAssistant from './components/VirtualAssistant'
 import ControlPanel from './components/ControlPanel'
+import ChatController from './components/ChatController'
 
 function App() {
   const [currentState, setCurrentState] = useState('IDLE')
@@ -20,7 +21,7 @@ function App() {
     setCurrentState(animationManager.getCurrentState())
     setIsAssistantReady(true)
     
-    // Store refs for debug controls
+    // Store refs for debug controls and chat integration
     sceneRef.current = scene
     positionManagerRef.current = positionManager
   }, [])
@@ -51,6 +52,13 @@ function App() {
         sceneRef={sceneRef}
         positionManagerRef={positionManagerRef}
         onStateChange={setCurrentState}
+      />
+
+      {/* Chat System - handles all chat logic */}
+      <ChatController
+        assistantRef={assistantRef}
+        positionManagerRef={positionManagerRef}
+        isAssistantReady={isAssistantReady}
       />
     </div>
   )
