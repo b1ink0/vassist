@@ -7,7 +7,8 @@ const ChatContainer = ({
   positionManagerRef, 
   messages = [], // Array of { role: 'user' | 'assistant', content: string }
   isVisible = false,
-  isGenerating = false // Whether AI is currently generating a response
+  isGenerating = false, // Whether AI is currently generating a response
+  isSpeaking = false // Whether TTS is currently playing
 }) => {
   const [containerPos, setContainerPos] = useState({ x: 0, y: 0 });
   const scrollRef = useRef(null);
@@ -171,9 +172,9 @@ const ChatContainer = ({
               const event = new CustomEvent('stopGeneration');
               window.dispatchEvent(event);
             }}
-            disabled={!isGenerating}
+            disabled={!isGenerating && !isSpeaking}
             className={`h-8 w-8 rounded-lg transition-all flex items-center justify-center shadow-sm ${
-              isGenerating 
+              isGenerating || isSpeaking
                 ? 'bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 cursor-pointer' 
                 : 'bg-white/5 border border-white/10 cursor-not-allowed opacity-50'
             }`}
@@ -181,10 +182,10 @@ const ChatContainer = ({
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
             }}
-            title={isGenerating ? 'Stop generation' : 'Not generating'}
+            title={isGenerating ? 'Stop generation' : isSpeaking ? 'Stop speaking' : 'Nothing to stop'}
           >
             <span className={`text-lg leading-none flex items-center justify-center ${
-              isGenerating ? 'text-red-300' : 'text-gray-500'
+              isGenerating || isSpeaking ? 'text-red-300' : 'text-gray-500'
             }`}>⏹</span>
           </button>
           

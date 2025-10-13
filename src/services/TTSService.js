@@ -407,6 +407,14 @@ class TTSService {
   }
 
   /**
+   * Check if TTS is currently playing audio
+   * @returns {boolean} True if audio is playing
+   */
+  isCurrentlyPlaying() {
+    return this.isPlaying;
+  }
+
+  /**
    * Test TTS with sample text
    * @param {string} testText - Text to test with
    * @returns {Promise<boolean>} True if successful
