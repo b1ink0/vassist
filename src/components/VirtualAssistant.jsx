@@ -21,6 +21,7 @@ import { forwardRef, useImperativeHandle, useState, useCallback, useRef } from '
 import BabylonScene from './babylon/BabylonScene';
 import { buildMmdCompositeScene } from './babylon/MmdCompositeScene';
 import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
+import TTSService from '../services/TTSService';
 
 const VirtualAssistant = forwardRef((props, ref) => {
   const { onReady } = props;
@@ -55,6 +56,17 @@ const VirtualAssistant = forwardRef((props, ref) => {
       initializedRef.current = true;
       
       console.log('[VirtualAssistant] AnimationManager initialized and ready');
+      
+      // Initialize TTS Service with BVMD converter and animation callback
+      TTSService.initializeBVMDConverter(scene);
+      TTSService.setSpeakCallback((text, bvmdUrl) => {
+        // This will be called when audio starts playing
+        console.log('[VirtualAssistant] TTS triggering speak animation');
+        if (manager && bvmdUrl) {
+          manager.speak(text, bvmdUrl, 'talking');
+        }
+      });
+      console.log('[VirtualAssistant] TTS Service integrated with lip sync');
       
       // Call onReady callback if provided
       if (onReady) {

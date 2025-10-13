@@ -384,8 +384,10 @@ class VoiceConversationService {
         
         activeTTSGenerations++;
         try {
-          console.log(`[VoiceConversation] Generating TTS ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
-          const blob = await TTSService.generateSpeech(chunk);
+          console.log(`[VoiceConversation] Generating TTS+lip sync ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
+          
+          // Generate TTS audio + lip sync (VMD -> BVMD)
+          const { audio, bvmdUrl } = await TTSService.generateSpeech(chunk, true);
           
           // Check if stopped after generation
           if (TTSService.isStopped) {
@@ -393,9 +395,12 @@ class VoiceConversationService {
             return;
           }
           
-          const audioUrl = URL.createObjectURL(blob);
-          TTSService.queueAudio(audioUrl);
-          console.log(`[VoiceConversation] TTS ${index + 1}/${chunks.length} queued`);
+          const audioUrl = URL.createObjectURL(audio);
+          
+          // Queue audio with BVMD for synchronized lip sync
+          TTSService.queueAudio(chunk, audioUrl, bvmdUrl);
+          
+          console.log(`[VoiceConversation] TTS ${index + 1}/${chunks.length} queued${bvmdUrl ? ' with lip sync' : ''}`);
         } catch (error) {
           console.warn(`[VoiceConversation] TTS generation failed for chunk ${index + 1}:`, error);
         } finally {

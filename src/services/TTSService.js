@@ -7,6 +7,8 @@
 
 import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
+import { vmdGenerationService } from './VMDGenerationService.js';
+import { BVMDConverterService } from './BVMDConverterService.js';
 
 class TTSService {
   constructor() {
@@ -28,7 +30,18 @@ class TTSService {
     this.activeRequests = 0;
     this.maxConcurrentRequests = 3;
     
-    console.log('[TTSService] Initialized');
+    // Lip sync generation support (VMD -> BVMD)
+    this.lipSyncEnabled = true; // Enable lip sync generation by default
+    this.vmdService = vmdGenerationService;
+    this.bvmdConverter = null; // Will be initialized when scene is available
+    
+    // Callback for triggering animations (set by VirtualAssistant)
+    this.onSpeakCallback = null; // (text, bvmdBlobUrl) => void
+    
+    // Callback for when audio finishes playing (for sliding window TTS generation)
+    this.onAudioFinishedCallback = null; // () => void
+    
+    console.log('[TTSService] Initialized with lip sync support');
   }
 
   /**
@@ -120,11 +133,50 @@ class TTSService {
   }
 
   /**
-   * Generate speech from text
-   * @param {string} text - Text to convert to speech
-   * @returns {Promise<Blob>} Audio blob
+   * Initialize BVMD converter with scene
+   * @param {Scene} scene - Babylon.js scene
    */
-  async generateSpeech(text) {
+  initializeBVMDConverter(scene) {
+    if (!this.bvmdConverter) {
+      this.bvmdConverter = new BVMDConverterService(scene);
+      console.log('[TTSService] BVMD converter initialized');
+    }
+  }
+
+  /**
+   * Set callback for triggering speak animations
+   * @param {Function} callback - (text, bvmdBlobUrl) => void
+   */
+  setSpeakCallback(callback) {
+    this.onSpeakCallback = callback;
+    console.log('[TTSService] Speak callback registered');
+  }
+
+  /**
+   * Set callback for when audio finishes playing (for sliding window generation)
+   * @param {Function} callback - () => void
+   */
+  setAudioFinishedCallback(callback) {
+    this.onAudioFinishedCallback = callback;
+    console.log('[TTSService] Audio finished callback registered');
+  }
+
+  /**
+   * Enable or disable lip sync generation
+   * @param {boolean} enabled - Enable lip sync generation
+   */
+  setLipSyncEnabled(enabled) {
+    this.lipSyncEnabled = enabled;
+    console.log(`[TTSService] Lip sync generation ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Generate speech from text with optional lip sync (VMD -> BVMD)
+   * @param {string} text - Text to convert to speech
+   * @param {boolean} generateLipSync - Generate lip sync data
+   * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and optional BVMD URL
+   */
+  async generateSpeech(text, generateLipSync = true) {
     if (!this.isConfigured()) {
       throw new Error('TTSService not configured or disabled');
     }
@@ -137,7 +189,7 @@ class TTSService {
     this.activeRequests++;
 
     try {
-      console.log(`[TTSService] Generating speech (${text.length} chars)`);
+      console.log(`[TTSService] Generating speech (${text.length} chars)${generateLipSync && this.lipSyncEnabled ? ' with lip sync' : ''}`);
 
       const response = await this.client.audio.speech.create({
         model: this.currentConfig.model,
@@ -152,7 +204,29 @@ class TTSService {
 
       console.log(`[TTSService] Speech generated (${blob.size} bytes)`);
       
-      return blob;
+      // Generate lip sync if enabled
+      let bvmdUrl = null;
+      if (generateLipSync && this.lipSyncEnabled && this.bvmdConverter) {
+        try {
+          console.log('[TTSService] Generating lip sync (VMD -> BVMD)...');
+          
+          // Step 1: Generate VMD from audio
+          const vmdData = await this.vmdService.generateVMDFromAudio(blob);
+          console.log(`[TTSService] VMD generated (${vmdData.byteLength} bytes)`);
+          
+          // Step 2: Convert VMD to BVMD
+          bvmdUrl = await this.bvmdConverter.convertVMDToBVMD(vmdData);
+          console.log(`[TTSService] BVMD URL created`);
+          
+        } catch (error) {
+          console.error('[TTSService] Lip sync generation failed:', error);
+          // Continue without lip sync
+        }
+      } else if (generateLipSync && this.lipSyncEnabled && !this.bvmdConverter) {
+        console.warn('[TTSService] BVMD converter not initialized, skipping lip sync');
+      }
+      
+      return { audio: blob, bvmdUrl };
       
     } catch (error) {
       console.error('[TTSService] Speech generation failed:', error);
@@ -217,12 +291,12 @@ class TTSService {
   }
 
   /**
-   * Generate and queue audio chunks from text
+   * Generate and queue audio chunks from text with lip sync (VMD -> BVMD)
    * @param {string} text - Full text to convert
-   * @param {Function} onChunkReady - Callback when chunk is ready: (audioUrl: string, index: number, total: number) => void
+   * @param {Function} onChunkReady - Callback when chunk is ready: (text: string, audioUrl: string, bvmdUrl: string|null, index: number, total: number) => void
    * @param {number} maxChunkSize - Maximum chunk size
    * @param {number} minChunkSize - Minimum chunk size
-   * @returns {Promise<string[]>} Array of audio blob URLs
+   * @returns {Promise<Array<{text: string, audioUrl: string, bvmdUrl: string|null}>>} Array of text, audio URLs and BVMD URLs
    */
   async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100) {
     if (!this.isConfigured()) {
@@ -231,25 +305,27 @@ class TTSService {
     }
 
     const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
-    const audioUrls = [];
+    const results = [];
 
-    console.log(`[TTSService] Generating ${chunks.length} audio chunks`);
+    console.log(`[TTSService] Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''}`);
 
     for (let i = 0; i < chunks.length; i++) {
       try {
-        const blob = await this.generateSpeech(chunks[i]);
-        const url = URL.createObjectURL(blob);
+        const { audio, bvmdUrl } = await this.generateSpeech(chunks[i], this.lipSyncEnabled);
+        const audioUrl = URL.createObjectURL(audio);
         
         // Track blob URL for cleanup
-        this.blobUrls.add(url);
-        audioUrls.push(url);
+        this.blobUrls.add(audioUrl);
+        
+        const result = { text: chunks[i], audioUrl, bvmdUrl };
+        results.push(result);
 
         // Notify callback
         if (onChunkReady) {
-          onChunkReady(url, i, chunks.length);
+          onChunkReady(chunks[i], audioUrl, bvmdUrl, i, chunks.length);
         }
 
-        console.log(`[TTSService] Chunk ${i + 1}/${chunks.length} ready`);
+        console.log(`[TTSService] Chunk ${i + 1}/${chunks.length} ready${bvmdUrl ? ' with lip sync' : ''}`);
         
       } catch (error) {
         console.error(`[TTSService] Failed to generate chunk ${i + 1}:`, error);
@@ -257,22 +333,32 @@ class TTSService {
       }
     }
 
-    return audioUrls;
+    return results;
   }
 
   /**
-   * Add audio to playback queue
-   * @param {string} audioUrl - Audio blob URL
+   * Get current audio queue length (for just-in-time generation)
+   * @returns {number} Number of audio items in queue
    */
-  queueAudio(audioUrl) {
+  getQueueLength() {
+    return this.audioQueue.length;
+  }
+
+  /**
+   * Add audio to playback queue with optional BVMD and text
+   * @param {string} text - Text being spoken
+   * @param {string} audioUrl - Audio blob URL
+   * @param {string|null} bvmdUrl - Optional BVMD blob URL for lip sync
+   */
+  queueAudio(text, audioUrl, bvmdUrl = null) {
     // Don't queue if stopped
     if (this.isStopped) {
       console.log('[TTSService] Audio not queued - playback stopped');
       return;
     }
     
-    this.audioQueue.push(audioUrl);
-    console.log(`[TTSService] Audio queued (${this.audioQueue.length} in queue)`);
+    this.audioQueue.push({ text, audioUrl, bvmdUrl });
+    console.log(`[TTSService] Audio queued (${this.audioQueue.length} in queue)${bvmdUrl ? ' with lip sync' : ''}`);
     
     // Start playing if not already playing
     if (!this.isPlaying) {
@@ -298,12 +384,23 @@ class TTSService {
     }
 
     this.isPlaying = true;
-    const audioUrl = this.audioQueue.shift();
+    const item = this.audioQueue.shift();
+    
+    // Handle both old format (string) and new format (object)
+    const text = typeof item === 'object' ? item.text : '';
+    const audioUrl = typeof item === 'string' ? item : item.audioUrl;
+    const bvmdUrl = typeof item === 'object' ? item.bvmdUrl : null;
 
     try {
-      await this.playAudio(audioUrl);
+      await this.playAudio(text, audioUrl, bvmdUrl);
     } catch (error) {
       console.error('[TTSService] Playback error:', error);
+    }
+
+    // Trigger callback when this audio finishes (before playing next)
+    // This is the RIGHT place - audio just finished, next one hasn't started yet
+    if (this.onAudioFinishedCallback) {
+      this.onAudioFinishedCallback();
     }
 
     // Play next in queue (will check isStopped flag)
@@ -311,14 +408,25 @@ class TTSService {
   }
 
   /**
-   * Play a single audio blob URL
+   * Play a single audio blob URL with optional BVMD lip sync
+   * Triggers speak callback for animation synchronization
+   * @param {string} text - Text being spoken
    * @param {string} audioUrl - Audio blob URL
+   * @param {string|null} bvmdUrl - Optional BVMD blob URL for lip sync
    * @returns {Promise<void>} Resolves when audio finishes
    */
-  playAudio(audioUrl) {
+  playAudio(text, audioUrl, bvmdUrl = null) {
     return new Promise((resolve, reject) => {
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
+
+      // Trigger speak callback when audio starts (syncs with animation)
+      if (bvmdUrl && this.onSpeakCallback) {
+        audio.addEventListener('play', () => {
+          console.log('[TTSService] Audio playing, triggering speak animation');
+          this.onSpeakCallback(text, bvmdUrl);
+        }, { once: true });
+      }
 
       audio.onended = () => {
         console.log('[TTSService] Audio playback finished');
@@ -333,21 +441,26 @@ class TTSService {
       };
 
       audio.play().catch(reject);
-      console.log('[TTSService] Audio playback started');
+      console.log('[TTSService] Audio playback started' + (bvmdUrl ? ' with lip sync' : ''));
     });
   }
 
   /**
-   * Play audio chunks sequentially
-   * @param {string[]} audioUrls - Array of audio blob URLs
+   * Play audio chunks sequentially with BVMD lip sync
+   * @param {Array<{text: string, audioUrl: string, bvmdUrl: string|null}>} items - Array of text, audio URLs and BVMD URLs
    * @returns {Promise<void>} Resolves when all audio finishes
    */
-  async playAudioSequence(audioUrls) {
-    console.log(`[TTSService] Playing ${audioUrls.length} audio chunks sequentially`);
+  async playAudioSequence(items) {
+    console.log(`[TTSService] Playing ${items.length} audio chunks sequentially`);
     
-    for (const url of audioUrls) {
+    for (const item of items) {
       try {
-        await this.playAudio(url);
+        // Handle both old format (string) and new format (object)
+        const text = typeof item === 'object' ? item.text : '';
+        const audioUrl = typeof item === 'string' ? item : item.audioUrl;
+        const bvmdUrl = typeof item === 'object' ? item.bvmdUrl : null;
+        
+        await this.playAudio(text, audioUrl, bvmdUrl);
       } catch (error) {
         console.error('[TTSService] Error playing audio chunk:', error);
         // Continue with next chunk
@@ -389,7 +502,7 @@ class TTSService {
   }
 
   /**
-   * Clean up blob URLs
+   * Clean up blob URLs (audio and BVMD)
    * @param {string[]} urls - Optional specific URLs to revoke, or all if not provided
    */
   cleanupBlobUrls(urls = null) {
@@ -403,6 +516,11 @@ class TTSService {
       this.blobUrls.forEach(url => URL.revokeObjectURL(url));
       console.log(`[TTSService] Cleaned up all ${this.blobUrls.size} blob URLs`);
       this.blobUrls.clear();
+    }
+    
+    // Also cleanup BVMD converter URLs
+    if (this.bvmdConverter) {
+      this.bvmdConverter.cleanup();
     }
   }
 
@@ -427,16 +545,19 @@ class TTSService {
     console.log('[TTSService] Testing TTS connection...');
 
     try {
-      const blob = await this.generateSpeech(testText);
-      const url = URL.createObjectURL(blob);
+      const { audio, bvmdUrl } = await this.generateSpeech(testText, this.lipSyncEnabled);
+      const audioUrl = URL.createObjectURL(audio);
       
-      // Play the test audio
-      await this.playAudio(url);
+      // Play the test audio with BVMD if generated
+      await this.playAudio(testText, audioUrl, bvmdUrl);
       
       // Cleanup
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(audioUrl);
+      if (bvmdUrl && this.bvmdConverter) {
+        this.bvmdConverter.cleanup(bvmdUrl);
+      }
       
-      console.log('[TTSService] TTS test successful');
+      console.log('[TTSService] TTS test successful' + (bvmdUrl ? ' with lip sync' : ''));
       return true;
       
     } catch (error) {
