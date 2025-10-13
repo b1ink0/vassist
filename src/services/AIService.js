@@ -13,6 +13,7 @@ class AIService {
     this.client = null;
     this.currentProvider = null;
     this.currentConfig = null;
+    this.abortController = null; // For aborting ongoing requests
     
     console.log('[AIService] Initialized');
   }
@@ -115,14 +116,19 @@ class AIService {
       model: this.currentConfig.model,
     });
 
+    // Create new abort controller for this request
+    this.abortController = new AbortController();
+
     try {
-      // Create streaming request
+      // Create streaming request with abort signal
       const stream = await this.client.chat.completions.create({
         model: this.currentConfig.model,
         messages: messages,
         temperature: this.currentConfig.temperature,
         max_tokens: this.currentConfig.maxTokens,
         stream: true, // Enable streaming
+      }, {
+        signal: this.abortController.signal
       });
 
       let fullResponse = '';
@@ -142,10 +148,19 @@ class AIService {
       }
 
       console.log(`[AIService] Response received (${fullResponse.length} chars)`);
+      this.abortController = null;
       
       return fullResponse;
       
     } catch (error) {
+      this.abortController = null;
+      
+      // Check if error is from abort
+      if (error.name === 'AbortError') {
+        console.log('[AIService] Request aborted by user');
+        throw new Error('Generation stopped by user');
+      }
+      
       console.error('[AIService] Request failed:', error);
       
       // Enhance error message for common issues
@@ -159,6 +174,27 @@ class AIService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Abort the current ongoing request
+   */
+  abortRequest() {
+    if (this.abortController) {
+      console.log('[AIService] Aborting current request');
+      this.abortController.abort();
+      this.abortController = null;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if there's an ongoing request
+   * @returns {boolean} True if request is in progress
+   */
+  isGenerating() {
+    return this.abortController !== null;
   }
 
   /**

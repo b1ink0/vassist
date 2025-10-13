@@ -3,7 +3,9 @@ import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
 import StorageManager from '../managers/StorageManager';
 import AIService from '../services/AIService';
-import { DefaultAIConfig, AIProviders, validateAIConfig } from '../config/aiConfig';
+import TTSService from '../services/TTSService';
+import STTService from '../services/STTService';
+import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig, AIProviders, TTSProviders, STTProviders, OpenAIVoices, validateAIConfig, validateTTSConfig, validateSTTConfig } from '../config/aiConfig';
 
 const ControlPanel = ({ 
   isAssistantReady,
@@ -25,6 +27,20 @@ const ControlPanel = ({
   const [configSaved, setConfigSaved] = useState(false);
   const [configError, setConfigError] = useState('');
 
+  // TTS Config state
+  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
+  const [ttsConfigSaved, setTtsConfigSaved] = useState(false);
+  const [ttsConfigError, setTtsConfigError] = useState('');
+
+  // STT Config state
+  const [sttConfig, setSttConfig] = useState(DefaultSTTConfig);
+  const [sttConfigSaved, setSttConfigSaved] = useState(false);
+  const [sttConfigError, setSttConfigError] = useState('');
+  const [sttTesting, setSttTesting] = useState(false);
+
+  // Config sub-tab state
+  const [configSubTab, setConfigSubTab] = useState('llm');
+
   // Load AI config on mount
   useEffect(() => {
     const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig);
@@ -36,6 +52,30 @@ const ControlPanel = ({
       console.log('[ControlPanel] AI Service configured from saved config');
     } catch (error) {
       console.warn('[ControlPanel] Failed to configure AI Service:', error);
+    }
+
+    // Load TTS config
+    const savedTtsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
+    setTtsConfig(savedTtsConfig);
+    
+    // Try to configure TTS service with saved config
+    try {
+      TTSService.configure(savedTtsConfig);
+      console.log('[ControlPanel] TTS Service configured from saved config');
+    } catch (error) {
+      console.warn('[ControlPanel] Failed to configure TTS Service:', error);
+    }
+
+    // Load STT config
+    const savedSttConfig = StorageManager.getConfig('sttConfig', DefaultSTTConfig);
+    setSttConfig(savedSttConfig);
+    
+    // Try to configure STT service with saved config
+    try {
+      STTService.configure(savedSttConfig);
+      console.log('[ControlPanel] STT Service configured from saved config');
+    } catch (error) {
+      console.warn('[ControlPanel] Failed to configure STT Service:', error);
     }
   }, []);
 
@@ -202,6 +242,165 @@ const ControlPanel = ({
       setTimeout(() => setConfigError(''), 3000);
     } catch (error) {
       setConfigError('❌ Connection failed: ' + error.message);
+    }
+  };
+
+  /**
+   * Save TTS configuration
+   */
+  const handleSaveTTSConfig = () => {
+    // Validate configuration
+    const validation = validateTTSConfig(ttsConfig);
+    
+    if (!validation.valid) {
+      setTtsConfigError(validation.errors.join(', '));
+      return;
+    }
+    
+    // Save to storage
+    const saved = StorageManager.saveConfig('ttsConfig', ttsConfig);
+    
+    if (saved) {
+      setTtsConfigSaved(true);
+      setTtsConfigError('');
+      
+      // Configure TTS service
+      try {
+        TTSService.configure(ttsConfig);
+        console.log('[ControlPanel] TTS Service configured successfully');
+        
+        // Hide success message after 2 seconds
+        setTimeout(() => setTtsConfigSaved(false), 2000);
+      } catch (error) {
+        setTtsConfigError('Failed to configure TTS service: ' + error.message);
+        console.error('[ControlPanel] TTS configuration failed:', error);
+      }
+    } else {
+      setTtsConfigError('Failed to save configuration');
+    }
+  };
+
+  /**
+   * Update TTS config field
+   */
+  const updateTTSConfig = (path, value) => {
+    setTtsConfig(prev => {
+      const updated = { ...prev };
+      
+      // Handle nested paths like 'openai.apiKey'
+      const parts = path.split('.');
+      let current = updated;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        current[parts[i]] = { ...current[parts[i]] };
+        current = current[parts[i]];
+      }
+      
+      current[parts[parts.length - 1]] = value;
+      
+      return updated;
+    });
+  };
+
+  /**
+   * Test TTS connection
+   */
+  const handleTestTTSConnection = async () => {
+    setTtsConfigError('');
+    
+    try {
+      // First configure with current settings
+      TTSService.configure(ttsConfig);
+      
+      // Then test connection with sample text
+      await TTSService.testConnection('Hello, this is a test of the text to speech system.');
+      
+      setTtsConfigError('✅ TTS test successful!');
+      setTimeout(() => setTtsConfigError(''), 3000);
+    } catch (error) {
+      setTtsConfigError('❌ TTS test failed: ' + error.message);
+    }
+  };
+
+  /**
+   * Save STT configuration
+   */
+  const handleSaveSTTConfig = () => {
+    // Validate configuration
+    const validation = validateSTTConfig(sttConfig);
+    
+    if (!validation.valid) {
+      setSttConfigError(validation.errors.join(', '));
+      return;
+    }
+    
+    // Save to storage
+    const saved = StorageManager.saveConfig('sttConfig', sttConfig);
+    
+    if (saved) {
+      setSttConfigSaved(true);
+      setSttConfigError('');
+      
+      // Configure STT service
+      try {
+        STTService.configure(sttConfig);
+        console.log('[ControlPanel] STT Service configured successfully');
+        
+        // Hide success message after 2 seconds
+        setTimeout(() => setSttConfigSaved(false), 2000);
+      } catch (error) {
+        setSttConfigError('Failed to configure STT service: ' + error.message);
+        console.error('[ControlPanel] STT configuration failed:', error);
+      }
+    } else {
+      setSttConfigError('Failed to save configuration');
+    }
+  };
+
+  /**
+   * Update STT config field
+   */
+  const updateSTTConfig = (path, value) => {
+    setSttConfig(prev => {
+      const updated = { ...prev };
+      
+      // Handle nested paths like 'openai.apiKey'
+      const parts = path.split('.');
+      let current = updated;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        current[parts[i]] = { ...current[parts[i]] };
+        current = current[parts[i]];
+      }
+      
+      current[parts[parts.length - 1]] = value;
+      
+      return updated;
+    });
+  };
+
+  /**
+   * Test STT recording
+   */
+  const handleTestSTTRecording = async () => {
+    setSttConfigError('');
+    setSttTesting(true);
+    
+    try {
+      // First configure with current settings
+      STTService.configure(sttConfig);
+      
+      setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
+      
+      // Test with 3-second recording
+      const transcription = await STTService.testRecording(3);
+      
+      setSttConfigError(`✅ Transcription: "${transcription}"`);
+      setTimeout(() => setSttConfigError(''), 5000);
+    } catch (error) {
+      setSttConfigError('❌ STT test failed: ' + error.message);
+    } finally {
+      setSttTesting(false);
     }
   };
 
@@ -752,7 +951,44 @@ const ControlPanel = ({
         {/* Config Tab */}
         {activeTab === 'config' && (
           <div className="space-y-3">
-            <p className="text-xs text-gray-400 mb-3">AI Provider Configuration</p>
+            {/* Config Sub-Tabs */}
+            <div className="flex border-b border-white/20 bg-black/30 rounded-t-lg overflow-hidden -mx-4 -mt-3 mb-3">
+              <button
+                onClick={() => setConfigSubTab('llm')}
+                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
+                  configSubTab === 'llm'
+                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                🤖 LLM
+              </button>
+              <button
+                onClick={() => setConfigSubTab('tts')}
+                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
+                  configSubTab === 'tts'
+                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                🔊 TTS
+              </button>
+              <button
+                onClick={() => setConfigSubTab('stt')}
+                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
+                  configSubTab === 'stt'
+                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                🎤 STT
+              </button>
+            </div>
+
+            {/* LLM Sub-Tab */}
+            {configSubTab === 'llm' && (
+              <>
+                <p className="text-xs text-gray-400 mb-3">Language Model Configuration</p>
             
             {/* Provider Selection */}
             <div>
@@ -923,6 +1159,432 @@ const ControlPanel = ({
                 All settings are saved to browser localStorage
               </p>
             </div>
+          </>
+        )}
+
+        {/* TTS Sub-Tab */}
+        {configSubTab === 'tts' && (
+          <>
+            <p className="text-xs text-gray-400 mb-3">Text-to-Speech Configuration</p>
+              
+              {/* Enable/Disable Toggle */}
+              <div className="mb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ttsConfig.enabled}
+                    onChange={(e) => updateTTSConfig('enabled', e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-xs text-white">Enable Text-to-Speech</span>
+                </label>
+              </div>
+
+              {/* TTS Settings (only show if enabled) */}
+              {ttsConfig.enabled && (
+                <>
+                  {/* Provider Selection */}
+                  <div>
+                    <label className="block text-xs text-white mb-1">TTS Provider</label>
+                    <select
+                      value={ttsConfig.provider}
+                      onChange={(e) => updateTTSConfig('provider', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value={TTSProviders.OPENAI}>OpenAI TTS</option>
+                      <option value={TTSProviders.OPENAI_COMPATIBLE}>Generic (OpenAI-Compatible API)</option>
+                    </select>
+                  </div>
+
+                  {/* OpenAI TTS Settings */}
+                  {ttsConfig.provider === TTSProviders.OPENAI && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-white mb-1">API Key</label>
+                        <input
+                          type="password"
+                          value={ttsConfig.openai.apiKey}
+                          onChange={(e) => updateTTSConfig('openai.apiKey', e.target.value)}
+                          placeholder="sk-... (can use same as AI)"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Model</label>
+                        <select
+                          value={ttsConfig.openai.model}
+                          onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="tts-1">TTS-1 (Faster)</option>
+                          <option value="tts-1-hd">TTS-1-HD (Higher Quality)</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Voice</label>
+                        <select
+                          value={ttsConfig.openai.voice}
+                          onChange={(e) => updateTTSConfig('openai.voice', e.target.value)}
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value={OpenAIVoices.ALLOY}>Alloy (Neutral)</option>
+                          <option value={OpenAIVoices.ECHO}>Echo (Male)</option>
+                          <option value={OpenAIVoices.FABLE}>Fable (British Male)</option>
+                          <option value={OpenAIVoices.ONYX}>Onyx (Deep Male)</option>
+                          <option value={OpenAIVoices.NOVA}>Nova (Female)</option>
+                          <option value={OpenAIVoices.SHIMMER}>Shimmer (Soft Female)</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Speed: {ttsConfig.openai.speed}</label>
+                        <input
+                          type="range"
+                          min="0.25"
+                          max="4"
+                          step="0.25"
+                          value={ttsConfig.openai.speed}
+                          onChange={(e) => updateTTSConfig('openai.speed', parseFloat(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Generic OpenAI-Compatible TTS Settings */}
+                  {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-white mb-1">Base URL</label>
+                        <input
+                          type="text"
+                          value={ttsConfig['openai-compatible'].endpoint}
+                          onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
+                          placeholder="http://localhost:8000"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">Base URL only (e.g., http://localhost:8000)</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">API Key (Optional)</label>
+                        <input
+                          type="password"
+                          value={ttsConfig['openai-compatible'].apiKey}
+                          onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
+                          placeholder="Leave empty if not required"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Model</label>
+                        <input
+                          type="text"
+                          value={ttsConfig['openai-compatible'].model}
+                          onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
+                          placeholder="tts"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">TTS model name</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Voice</label>
+                        <input
+                          type="text"
+                          value={ttsConfig['openai-compatible'].voice}
+                          onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
+                          placeholder="default"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Speed: {ttsConfig['openai-compatible'].speed}</label>
+                        <input
+                          type="range"
+                          min="0.25"
+                          max="4"
+                          step="0.25"
+                          value={ttsConfig['openai-compatible'].speed}
+                          onChange={(e) => updateTTSConfig('openai-compatible.speed', parseFloat(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Chunking Settings */}
+                  <div className="border-t border-white/20 pt-3 mt-3">
+                    <p className="text-xs text-white font-semibold mb-2">Chunking Settings</p>
+                    
+                    <div>
+                      <label className="block text-xs text-white mb-1">Chunk Size: {ttsConfig.chunkSize} chars</label>
+                      <input
+                        type="range"
+                        min="100"
+                        max="1000"
+                        step="50"
+                        value={ttsConfig.chunkSize}
+                        onChange={(e) => updateTTSConfig('chunkSize', parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-gray-500 mt-1">Target characters per TTS chunk</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs text-white mb-1">Min Chunk Size: {ttsConfig.minChunkSize} chars</label>
+                      <input
+                        type="range"
+                        min="50"
+                        max="300"
+                        step="25"
+                        value={ttsConfig.minChunkSize}
+                        onChange={(e) => updateTTSConfig('minChunkSize', parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-gray-500 mt-1">Minimum chunk size before forced split</p>
+                    </div>
+                  </div>
+
+                  {/* TTS Error/Success Messages */}
+                  {ttsConfigError && (
+                    <div className={`text-xs p-2 rounded ${ttsConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {ttsConfigError}
+                    </div>
+                  )}
+                  
+                  {ttsConfigSaved && (
+                    <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                      ✅ TTS Configuration saved successfully!
+                    </div>
+                  )}
+
+                  {/* TTS Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveTTSConfig}
+                      className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                    >
+                      💾 Save TTS Config
+                    </button>
+                    <button
+                      onClick={handleTestTTSConnection}
+                      className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
+                    >
+                      🔊 Test TTS
+                    </button>
+                  </div>
+
+                  {/* TTS Info */}
+                  <div className="border-t border-white/20 pt-3 mt-3">
+                    <p className="text-[10px] text-gray-500 mb-2">ℹ️ TTS Guide:</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">
+                      • Enable TTS to hear assistant responses
+                      <br/>• OpenAI TTS requires API key (can be same as AI)
+                      <br/>• Chunking splits long text for natural speech
+                      <br/>• Test button speaks sample text to verify setup
+                    </p>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* STT Sub-Tab */}
+          {configSubTab === 'stt' && (
+            <>
+              <p className="text-xs text-gray-400 mb-3">Speech-to-Text Configuration</p>
+              
+              {/* Enable/Disable Toggle */}
+              <div className="mb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sttConfig.enabled}
+                    onChange={(e) => updateSTTConfig('enabled', e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-xs text-white">Enable Speech-to-Text</span>
+                </label>
+              </div>
+
+              {/* STT Settings (only show if enabled) */}
+              {sttConfig.enabled && (
+                <>
+                  {/* Provider Selection */}
+                  <div>
+                    <label className="block text-xs text-white mb-1">STT Provider</label>
+                    <select
+                      value={sttConfig.provider}
+                      onChange={(e) => updateSTTConfig('provider', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value={STTProviders.OPENAI}>OpenAI Whisper</option>
+                      <option value={STTProviders.OPENAI_COMPATIBLE}>Generic (OpenAI-Compatible API)</option>
+                    </select>
+                  </div>
+
+                  {/* OpenAI Whisper Settings */}
+                  {sttConfig.provider === STTProviders.OPENAI && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-white mb-1">API Key</label>
+                        <input
+                          type="password"
+                          value={sttConfig.openai.apiKey}
+                          onChange={(e) => updateSTTConfig('openai.apiKey', e.target.value)}
+                          placeholder="sk-... (can use same as AI)"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Model</label>
+                        <input
+                          type="text"
+                          value={sttConfig.openai.model}
+                          onChange={(e) => updateSTTConfig('openai.model', e.target.value)}
+                          placeholder="whisper-1"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                          disabled
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">Currently only whisper-1 is available</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Language (Optional)</label>
+                        <input
+                          type="text"
+                          value={sttConfig.openai.language}
+                          onChange={(e) => updateSTTConfig('openai.language', e.target.value)}
+                          placeholder="en (leave empty for auto-detect)"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">ISO-639-1 code (en, es, fr, etc.)</p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Generic OpenAI-Compatible STT Settings */}
+                  {sttConfig.provider === STTProviders.OPENAI_COMPATIBLE && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-white mb-1">Base URL</label>
+                        <input
+                          type="text"
+                          value={sttConfig['openai-compatible'].endpoint}
+                          onChange={(e) => updateSTTConfig('openai-compatible.endpoint', e.target.value)}
+                          placeholder="http://localhost:8000"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">Base URL only (e.g., http://localhost:8000)</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">API Key (Optional)</label>
+                        <input
+                          type="password"
+                          value={sttConfig['openai-compatible'].apiKey}
+                          onChange={(e) => updateSTTConfig('openai-compatible.apiKey', e.target.value)}
+                          placeholder="Leave empty if not required"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Model</label>
+                        <input
+                          type="text"
+                          value={sttConfig['openai-compatible'].model}
+                          onChange={(e) => updateSTTConfig('openai-compatible.model', e.target.value)}
+                          placeholder="whisper"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">STT model name</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-white mb-1">Language (Optional)</label>
+                        <input
+                          type="text"
+                          value={sttConfig['openai-compatible'].language}
+                          onChange={(e) => updateSTTConfig('openai-compatible.language', e.target.value)}
+                          placeholder="en (leave empty for auto-detect)"
+                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* STT Error/Success Messages */}
+                  {sttConfigError && (
+                    <div className={`text-xs p-2 rounded ${sttConfigError.includes('✅') || sttConfigError.includes('🎤') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {sttConfigError}
+                    </div>
+                  )}
+                  
+                  {sttConfigSaved && (
+                    <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                      ✅ STT Configuration saved successfully!
+                    </div>
+                  )}
+                  
+                  {/* Audio Device Delay Setting */}
+                  <div className="border-t border-white/20 pt-3 mt-3">
+                    <label className="block text-xs text-white mb-1">
+                      🎧 Audio Device Switch Delay: {sttConfig.audioDeviceSwitchDelay || 300}ms
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1000"
+                      step="50"
+                      value={sttConfig.audioDeviceSwitchDelay || 300}
+                      onChange={(e) => updateSTTConfig('audioDeviceSwitchDelay', parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Delay after recording before TTS plays. Increase if audio is distorted (Windows headset issue). 
+                      Recommended: 300ms for headsets, 0ms for separate mic/speakers.
+                    </p>
+                  </div>
+
+                  {/* STT Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveSTTConfig}
+                      className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                    >
+                      💾 Save STT Config
+                    </button>
+                    <button
+                      onClick={handleTestSTTRecording}
+                      disabled={sttTesting}
+                      className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sttTesting ? '⏺️ Recording...' : '🎤 Test Recording'}
+                    </button>
+                  </div>
+
+                  {/* STT Info */}
+                  <div className="border-t border-white/20 pt-3 mt-3">
+                    <p className="text-[10px] text-gray-500 mb-2">ℹ️ STT Guide:</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">
+                      • Enable STT for voice input in chat
+                      <br/>• OpenAI Whisper requires API key (can be same as AI)
+                      <br/>• Test button records 3 seconds and transcribes
+                      <br/>• Grant microphone permission when prompted
+                      <br/>• Adjust delay if audio sounds distorted after recording
+                    </p>
+                  </div>
+                </>
+              )}
+            </>
+          )}
           </div>
         )}
       </div>

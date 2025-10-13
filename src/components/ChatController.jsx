@@ -4,8 +4,9 @@ import ChatInput from './babylon/ChatInput'
 import ChatContainer from './babylon/ChatContainer'
 import ChatManager from '../managers/ChatManager'
 import AIService from '../services/AIService'
+import TTSService from '../services/TTSService'
 import StorageManager from '../managers/StorageManager'
-import { DefaultAIConfig } from '../config/aiConfig'
+import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 
 const ChatController = ({ 
   assistantRef, 
@@ -26,22 +27,60 @@ const ChatController = ({
       console.log('[ChatController] Close chat event received')
       setIsChatInputVisible(false)
       setIsChatContainerVisible(false)
+      // Stop any playing TTS
+      TTSService.stopPlayback()
     }
 
     const handleClearChat = () => {
-      console.log('[ChatController] Clear chat event received')
+      console.log('[ChatController] Clear chat event received - stopping all generation')
+      
+      // Stop AI generation
+      AIService.abortRequest()
+      
+      // Stop TTS
+      TTSService.stopPlayback()
+      
+      // Return assistant to idle
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle()
+      }
+      
+      // Clear messages
       ChatManager.clearMessages()
       setChatMessages([])
+      
+      // Reset processing state
+      setIsProcessing(false)
+    }
+    
+    const handleStopGeneration = () => {
+      console.log('[ChatController] Stop generation event received')
+      
+      // Abort AI generation
+      AIService.abortRequest()
+      
+      // Stop TTS
+      TTSService.stopPlayback()
+      
+      // Return assistant to idle
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle()
+      }
+      
+      // Reset processing state
+      setIsProcessing(false)
     }
 
     window.addEventListener('closeChat', handleCloseChat)
     window.addEventListener('clearChat', handleClearChat)
+    window.addEventListener('stopGeneration', handleStopGeneration)
 
     return () => {
       window.removeEventListener('closeChat', handleCloseChat)
       window.removeEventListener('clearChat', handleClearChat)
+      window.removeEventListener('stopGeneration', handleStopGeneration)
     }
-  }, [])
+  }, [assistantRef])
 
   /**
    * Handle chat button click - show input and chat container
@@ -64,6 +103,7 @@ const ChatController = ({
   /**
    * Handle message send with AI integration
    * Flow: User message → Think → AI Stream → Speak → Idle
+   * Now includes TTS generation with chunking
    */
   const handleMessageSend = async (message) => {
     console.log('[ChatController] Message sent:', message)
@@ -73,6 +113,9 @@ const ChatController = ({
     setChatMessages(ChatManager.getMessages())
 
     setIsProcessing(true)
+
+    // Stop any ongoing TTS playback
+    TTSService.stopPlayback()
 
     try {
       // Check AI configuration
@@ -99,12 +142,24 @@ const ChatController = ({
       const messages = ChatManager.getFormattedMessages(systemPrompt)
       console.log('[ChatController] Messages to AI:', messages)
 
+      // Load TTS config
+      const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig)
+      const ttsEnabled = ttsConfig.enabled && TTSService.isConfigured()
+
+      // Resume TTS playback for new generation
+      if (ttsEnabled) {
+        TTSService.resumePlayback()
+      }
+
       // Stream AI response
       let fullResponse = ''
       let hasSwitchedToSpeaking = false
+      let textBuffer = '' // Buffer for TTS chunking
+      let ttsChunksToGenerate = [] // Queue of text chunks to generate TTS for
 
-      await AIService.sendMessage(messages, (chunk) => {
+      await AIService.sendMessage(messages, async (chunk) => {
         fullResponse += chunk
+        textBuffer += chunk
 
         // Update streaming response in real-time
         const currentMessages = ChatManager.getMessages()
@@ -123,11 +178,63 @@ const ChatController = ({
           assistantRef.current.triggerAction('speak')
           hasSwitchedToSpeaking = true
         }
+
+        // TTS Generation: Look for complete sentences to chunk
+        if (ttsEnabled) {
+          // Look for sentence boundaries FIRST, regardless of buffer size
+          // Match patterns:
+          // 1. Punctuation + space: "Hello. " or "Really? " or "Haha! "
+          // 2. Punctuation + newline: "Haha!\n"
+          // 3. Just newline: paragraph breaks
+          const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer)
+          
+          if (sentenceEnd) {
+            // Found a sentence boundary
+            const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim()
+            textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length) // Keep rest in buffer
+            
+            // Add chunk if it has any meaningful content
+            // Even very short exclamations like "Haha!" (5 chars) should be spoken
+            if (chunkToSpeak && chunkToSpeak.length >= 3) { // Minimum 3 chars (e.g., "Ok!")
+              ttsChunksToGenerate.push(chunkToSpeak)
+              console.log(`[ChatController] Queued TTS chunk ${ttsChunksToGenerate.length}: "${chunkToSpeak.substring(0, 50)}..."`)
+            }
+          }
+        }
       })
 
       console.log('[ChatController] AI response complete:', fullResponse)
 
-      // Return to idle after response
+      // Add any remaining text in buffer to TTS queue
+      if (ttsEnabled && textBuffer.trim().length > 0) {
+        ttsChunksToGenerate.push(textBuffer.trim())
+        console.log(`[ChatController] Queued final TTS chunk: "${textBuffer.trim().substring(0, 50)}..."`)
+      }
+
+      // Generate TTS for all chunks sequentially to maintain order
+      if (ttsEnabled && ttsChunksToGenerate.length > 0) {
+        console.log(`[ChatController] Generating TTS for ${ttsChunksToGenerate.length} chunks in sequence`)
+        
+        for (let i = 0; i < ttsChunksToGenerate.length; i++) {
+          const chunkText = ttsChunksToGenerate[i]
+          try {
+            console.log(`[ChatController] Generating TTS ${i + 1}/${ttsChunksToGenerate.length}: "${chunkText.substring(0, 50)}..."`)
+            const blob = await TTSService.generateSpeech(chunkText)
+            const audioUrl = URL.createObjectURL(blob)
+            
+            // Queue audio for playback - this maintains order
+            TTSService.queueAudio(audioUrl)
+            console.log(`[ChatController] TTS ${i + 1}/${ttsChunksToGenerate.length} queued successfully`)
+          } catch (ttsError) {
+            console.warn(`[ChatController] TTS generation failed for chunk ${i + 1}:`, ttsError)
+            // Continue with next chunk
+          }
+        }
+        
+        console.log('[ChatController] All TTS chunks generated and queued')
+      }
+
+      // Return to idle after response (and after TTS queue finishes)
       if (assistantRef.current?.isReady()) {
         console.log('[ChatController] Returning to idle')
         setTimeout(() => {
@@ -138,7 +245,8 @@ const ChatController = ({
     } catch (error) {
       console.error('[ChatController] Chat error:', error)
 
-      // Return to idle on error
+      // Stop TTS and return to idle on error
+      TTSService.stopPlayback()
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
       }
@@ -173,6 +281,7 @@ const ChatController = ({
         positionManagerRef={positionManagerRef}
         messages={chatMessages}
         isVisible={isChatContainerVisible}
+        isGenerating={isProcessing}
       />
     </>
   )

@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
+import TTSService from '../../services/TTSService';
+import StorageManager from '../../managers/StorageManager';
+import { DefaultTTSConfig } from '../../config/aiConfig';
 
 const ChatContainer = ({ 
   positionManagerRef, 
   messages = [], // Array of { role: 'user' | 'assistant', content: string }
-  isVisible = false
+  isVisible = false,
+  isGenerating = false // Whether AI is currently generating a response
 }) => {
   const [containerPos, setContainerPos] = useState({ x: 0, y: 0 });
   const scrollRef = useRef(null);
+  const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
 
   /**
    * Smooth scroll to bottom with proper offset for fade area
@@ -86,6 +92,63 @@ const ChatContainer = ({
     scrollToBottom();
   }, [messages]);
 
+  /**
+   * Handle playing TTS for a message
+   */
+  const handlePlayTTS = async (messageIndex, messageContent) => {
+    // Check if TTS is enabled and configured
+    const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
+    if (!ttsConfig.enabled || !TTSService.isConfigured()) {
+      console.warn('[ChatContainer] TTS not enabled or configured');
+      return;
+    }
+
+    // If this message is already playing, stop it
+    if (playingMessageIndex === messageIndex) {
+      TTSService.stopPlayback();
+      setPlayingMessageIndex(null);
+      return;
+    }
+
+    // Stop any currently playing audio
+    TTSService.stopPlayback();
+    setPlayingMessageIndex(null);
+    setLoadingMessageIndex(messageIndex);
+
+    try {
+      console.log(`[ChatContainer] Generating TTS for message ${messageIndex}`);
+      
+      // Generate chunked speech for the message
+      const audioUrls = await TTSService.generateChunkedSpeech(
+        messageContent,
+        null, // No chunk callback needed here
+        ttsConfig.chunkSize,
+        ttsConfig.minChunkSize
+      );
+
+      if (audioUrls.length === 0) {
+        console.warn('[ChatContainer] No audio generated');
+        setLoadingMessageIndex(null);
+        return;
+      }
+
+      setLoadingMessageIndex(null);
+      setPlayingMessageIndex(messageIndex);
+
+      // Play audio sequence
+      await TTSService.playAudioSequence(audioUrls);
+
+      // Clean up after playback
+      TTSService.cleanupBlobUrls(audioUrls);
+      setPlayingMessageIndex(null);
+
+    } catch (error) {
+      console.error('[ChatContainer] TTS playback failed:', error);
+      setLoadingMessageIndex(null);
+      setPlayingMessageIndex(null);
+    }
+  };
+
   if (!isVisible) return null;
 
   return (
@@ -103,6 +166,28 @@ const ChatContainer = ({
       {/* Action buttons at BOTTOM - closer to container */}
       {messages.length > 0 && (
         <div className="flex items-center justify-end gap-2 px-6 pb-1">
+          <button
+            onClick={() => {
+              const event = new CustomEvent('stopGeneration');
+              window.dispatchEvent(event);
+            }}
+            disabled={!isGenerating}
+            className={`h-8 w-8 rounded-lg transition-all flex items-center justify-center shadow-sm ${
+              isGenerating 
+                ? 'bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 cursor-pointer' 
+                : 'bg-white/5 border border-white/10 cursor-not-allowed opacity-50'
+            }`}
+            style={{
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}
+            title={isGenerating ? 'Stop generation' : 'Not generating'}
+          >
+            <span className={`text-lg leading-none flex items-center justify-center ${
+              isGenerating ? 'text-red-300' : 'text-gray-500'
+            }`}>⏹</span>
+          </button>
+          
           <button
             onClick={() => {
               const event = new CustomEvent('clearChat');
@@ -158,28 +243,56 @@ const ChatContainer = ({
             messages.slice().reverse().map((msg, index) => {
               const isUser = msg.role === 'user';
               const isError = msg.content.toLowerCase().startsWith('error:');
+              const messageIndex = messages.length - 1 - index;
+              const isPlaying = playingMessageIndex === messageIndex;
+              const isLoading = loadingMessageIndex === messageIndex;
               
               return (
                 <div
-                  key={messages.length - 1 - index}
+                  key={messageIndex}
                   className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div
-                    className={`max-w-[80%] px-4 py-3 border ${
-                      isError
-                        ? 'bg-red-500/10 border-red-400/20 rounded-3xl'
-                        : isUser
-                        ? 'bg-white/8 border-white/15 rounded-[20px] rounded-tr-md'
-                        : 'bg-white/5 border-white/10 rounded-[20px] rounded-tl-md'
-                    }`}
-                    style={{
-                      backdropFilter: 'blur(20px)',
-                      WebkitBackdropFilter: 'blur(20px)',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-                    }}
-                  >
-                    <div className="text-white text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                      {msg.content}
+                  <div className="flex items-start gap-2 max-w-[80%]">
+                    {/* Speaker icon for assistant messages (before bubble on left) */}
+                    {!isUser && !isError && (
+                      <button
+                        onClick={() => handlePlayTTS(messageIndex, msg.content)}
+                        className="mt-2 w-7 h-7 rounded-full bg-white/10 border border-white/15 hover:bg-white/20 transition-all flex items-center justify-center shadow-sm flex-shrink-0"
+                        style={{
+                          backdropFilter: 'blur(12px)',
+                          WebkitBackdropFilter: 'blur(12px)',
+                        }}
+                        title={isPlaying ? 'Stop audio' : 'Play audio'}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <span className="text-white text-xs animate-spin">⏳</span>
+                        ) : isPlaying ? (
+                          <span className="text-white text-xs">⏸</span>
+                        ) : (
+                          <span className="text-white text-xs">🔊</span>
+                        )}
+                      </button>
+                    )}
+                    
+                    {/* Message bubble */}
+                    <div
+                      className={`px-4 py-3 border ${
+                        isError
+                          ? 'bg-red-500/10 border-red-400/20 rounded-3xl'
+                          : isUser
+                          ? 'bg-white/8 border-white/15 rounded-[20px] rounded-tr-md'
+                          : 'bg-white/5 border-white/10 rounded-[20px] rounded-tl-md'
+                      }`}
+                      style={{
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                      }}
+                    >
+                      <div className="text-white text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                        {msg.content}
+                      </div>
                     </div>
                   </div>
                 </div>
