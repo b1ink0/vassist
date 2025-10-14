@@ -231,10 +231,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   let mmdModel = null;
   
   try {
-    // Show loading screen
-    engine.displayLoadingUI();
-    
-    // Load model with progress tracking
+    // Load model with progress tracking (no built-in loading UI)
     const result = await LoadAssetContainerAsync(
       finalConfig.modelUrl,
       scene,
@@ -276,7 +273,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     
   } catch (error) {
     console.error('[MmdModelScene] Failed to load model:', error);
-    engine.hideLoadingUI();
     throw new Error(`Failed to load MMD model: ${error.message}`);
   }
 
@@ -450,9 +446,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     positionManager.dispose();
     interactionManager.dispose();
   });
-
-  // Hide loading screen
-  engine.hideLoadingUI();
 
   console.log('[MmdModelScene] Scene build complete');
   console.log('[MmdModelScene] - AnimationManager accessible via scene.metadata.animationManager');

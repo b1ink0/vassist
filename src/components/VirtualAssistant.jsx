@@ -20,6 +20,7 @@
 
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef } from 'react';
 import BabylonScene from './BabylonScene';
+import LoadingIndicator from './LoadingIndicator';
 import { buildMmdModelScene } from '../babylon/scenes/MmdModelScene';
 import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
 import TTSService from '../services/TTSService';
@@ -31,7 +32,15 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const [positionManager, setPositionManager] = useState(null);
   const [currentState, setCurrentState] = useState(AssistantState.IDLE);
   const [isReady, setIsReady] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const initializedRef = useRef(false);
+
+  /**
+   * Handle model loading progress
+   */
+  const handleLoadProgress = useCallback((progress) => {
+    setLoadingProgress(progress);
+  }, []);
 
   /**
    * Handle scene initialization
@@ -341,10 +350,17 @@ const VirtualAssistant = forwardRef((props, ref) => {
   }), [animationManager, positionManager, currentState, isReady]);
 
   return (
-    <BabylonScene 
-      sceneBuilder={buildMmdModelScene} 
-      onSceneReady={handleSceneReady}
-    />
+    <>
+      {/* Custom loading indicator - shown while model loads */}
+      <LoadingIndicator isVisible={!isReady} progress={loadingProgress} />
+      
+      {/* Babylon scene with fade-in transition */}
+      <BabylonScene 
+        sceneBuilder={buildMmdModelScene} 
+        onSceneReady={handleSceneReady}
+        onLoadProgress={handleLoadProgress}
+      />
+    </>
   );
 });
 

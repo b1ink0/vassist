@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { createSceneConfig } from '../config/sceneConfig';
 
-const BabylonScene = ({ sceneBuilder, onSceneReady, sceneConfig = {} }) => {
+const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {} }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -25,7 +26,11 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, sceneConfig = {} }) => {
       // If a scene builder is provided, use it, otherwise create default scene
       if (sceneBuilder) {
         // Merge user config with defaults from sceneConfig.js
-        const finalConfig = createSceneConfig(sceneConfig);
+        const finalConfig = createSceneConfig({
+          ...sceneConfig,
+          // Pass progress callback to scene builder
+          onLoadProgress: onLoadProgress,
+        });
         scene = await sceneBuilder(canvasRef.current, engine, finalConfig);
       } else {
         // Create the default scene
@@ -64,6 +69,9 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, sceneConfig = {} }) => {
 
       sceneRef.current = scene;
 
+      // Mark as ready
+      setIsReady(true);
+
       // Notify parent component that scene is ready
       if (onSceneReady) {
         onSceneReady(scene);
@@ -92,13 +100,16 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, sceneConfig = {} }) => {
     return () => {
       cleanup.then(cleanupFn => cleanupFn && cleanupFn());
     };
-  }, [sceneBuilder, onSceneReady, sceneConfig]);
+  }, [sceneBuilder, onSceneReady, onLoadProgress, sceneConfig]);
 
   // Use portal to render canvas directly to document.body
+  // Start with opacity 0, transition to opacity 100 when ready
   return createPortal(
     <canvas
       ref={canvasRef}
-      className="w-full h-screen block outline-none bg-transparent absolute top-0 left-0 pointer-events-none z-[9999]"
+      className={`w-full h-screen block outline-none bg-transparent absolute top-0 left-0 pointer-events-none z-[9999] transition-opacity duration-700 ${
+        isReady ? 'opacity-100' : 'opacity-0'
+      }`}
     />,
     document.body
   );

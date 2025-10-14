@@ -82,22 +82,50 @@ const ChatContainer = ({
         const containerWidth = 400;
         const containerHeight = 500;
         const offsetX = 15;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
         
         // Calculate potential positions
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - containerWidth - offsetX;
         
-        // Check boundaries
-        const windowWidth = window.innerWidth;
-        const windowHeight = window.innerHeight;
+        // Check if right position would go off-screen
         const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
         
-        // Decide which side
-        const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
+        // Check if left position would go off-screen
+        const wouldOverflowLeft = leftX < 10;
         
-        // Calculate final position - align with model top
-        const containerX = shouldBeOnLeft ? leftX : rightX;
-        const containerY = Math.max(10, Math.min(modelPos.y, windowHeight - containerHeight - 10));
+        // Check if model would overlap container on right side
+        const modelRightEdge = modelPos.x + modelPos.width;
+        const wouldOverlapRight = modelRightEdge > rightX; // Model extends into where container would be
+        
+        // Decide which side to prefer
+        // Priority:
+        // 1. Avoid going off-screen (critical)
+        // 2. Avoid overlap with model (important)
+        // 3. Prefer right side (default)
+        let shouldBeOnLeft = false;
+        
+        if (wouldOverflowRight) {
+          // Right side would go off-screen, must use left
+          shouldBeOnLeft = true;
+        } else if (wouldOverlapRight && !wouldOverflowLeft) {
+          // Right side would overlap AND left side is available
+          shouldBeOnLeft = true;
+        } else if (modelPos.x > windowWidth * 0.7) {
+          // Model is far right, use left side
+          shouldBeOnLeft = true;
+        }
+        
+        // Calculate final position
+        let containerX = shouldBeOnLeft ? leftX : rightX;
+        
+        // Ensure container stays within horizontal bounds (CRITICAL - never go off-screen)
+        containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+        
+        // Align with model top, but ensure it stays within vertical bounds
+        let containerY = modelPos.y;
+        containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
         
         setContainerPos({ x: containerX, y: containerY });
       } catch (error) {
