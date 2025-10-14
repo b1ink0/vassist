@@ -332,14 +332,6 @@ const ChatController = ({
         console.log('[ChatController] All TTS chunks generated')
       }
 
-      // Return to idle after response (and after TTS queue finishes)
-      if (assistantRef.current?.isReady()) {
-        console.log('[ChatController] Returning to idle')
-        setTimeout(() => {
-          assistantRef.current.idle()
-        }, 1000)
-      }
-
     } catch (error) {
       console.error('[ChatController] Chat error:', error)
 
@@ -554,13 +546,6 @@ const ChatController = ({
         // No TTS, return to listening immediately
         console.warn('[ChatController] [Voice] No TTS generated, returning to listening')
         VoiceConversationService.changeState(ConversationStates.LISTENING)
-      }
-
-      // Return to idle
-      if (assistantRef.current?.isReady()) {
-        setTimeout(() => {
-          assistantRef.current.idle()
-        }, 1000)
       }
 
     } catch (error) {

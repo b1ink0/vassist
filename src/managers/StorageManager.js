@@ -41,12 +41,10 @@ class StorageManager {
       const item = localStorage.getItem(fullKey);
       
       if (item === null) {
-        console.log(`[StorageManager] Config not found: ${key}, using default`);
         return defaultValue;
       }
       
       const parsed = JSON.parse(item);
-      console.log(`[StorageManager] Loaded config: ${key}`);
       return parsed;
     } catch (error) {
       console.error(`[StorageManager] Failed to load config: ${key}`, error);

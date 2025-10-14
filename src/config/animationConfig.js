@@ -31,6 +31,7 @@ export const AssistantState = {
   IDLE: 'IDLE',           // Default state - plays idle animations on loop
   BUSY: 'BUSY',           // Doing something - can play thinking, walking, etc.
   SPEAKING: 'SPEAKING',   // Talking to user - plays talking + current animation
+  SPEAKING_HOLD: 'SPEAKING_HOLD', // Holding between TTS chunks - subtle looping motion
   CELEBRATING: 'CELEBRATING', // Special one-shot state for celebrations
   COMPOSITE: 'COMPOSITE', // Playing blended composite of two animations
 };
@@ -391,6 +392,14 @@ export const StateBehavior = {
     autoReturn: AssistantState.IDLE,
   },
   
+  [AssistantState.SPEAKING_HOLD]: {
+    allowedAnimations: ['talking'], // Use talking animations as hold (temporary - will replace with bridge animations)
+    randomSelection: true,          // Randomly pick talking animation
+    loop: true,                     // Loop while waiting for next TTS chunk
+    autoSwitch: false,              // Don't auto-switch animations
+    autoReturn: AssistantState.IDLE, // Fallback to IDLE if no TTS comes
+  },
+  
   [AssistantState.CELEBRATING]: {
     allowedAnimations: ['celebrating'], // Celebration animations
     randomSelection: true,
@@ -415,6 +424,7 @@ export const StateTransitions = {
   [AssistantState.IDLE]: [
     AssistantState.BUSY,
     AssistantState.SPEAKING,
+    AssistantState.SPEAKING_HOLD,
     AssistantState.CELEBRATING,
     AssistantState.COMPOSITE,
   ],
@@ -422,12 +432,19 @@ export const StateTransitions = {
   [AssistantState.BUSY]: [
     AssistantState.IDLE,
     AssistantState.SPEAKING,
+    AssistantState.SPEAKING_HOLD,
     AssistantState.COMPOSITE,
   ],
   
   [AssistantState.SPEAKING]: [
     AssistantState.IDLE,
     AssistantState.BUSY,
+    AssistantState.SPEAKING_HOLD,
+    AssistantState.COMPOSITE,
+  ],
+  
+  [AssistantState.SPEAKING_HOLD]: [
+    AssistantState.IDLE,
     AssistantState.COMPOSITE,
   ],
   
@@ -438,6 +455,7 @@ export const StateTransitions = {
   
   [AssistantState.COMPOSITE]: [
     AssistantState.IDLE,
+    AssistantState.SPEAKING_HOLD,
     AssistantState.BUSY,
     AssistantState.SPEAKING,
     AssistantState.CELEBRATING,

@@ -41,6 +41,9 @@ class TTSService {
     // Callback for when audio finishes playing (for sliding window TTS generation)
     this.onAudioFinishedCallback = null; // () => void
     
+    // Callback for when TTS is stopped/interrupted (to return animation to idle)
+    this.onStopCallback = null; // () => void
+    
     console.log('[TTSService] Initialized with lip sync support');
   }
 
@@ -162,6 +165,15 @@ class TTSService {
   }
 
   /**
+   * Set callback for when TTS is stopped/interrupted
+   * @param {Function} callback - () => void
+   */
+  setStopCallback(callback) {
+    this.onStopCallback = callback;
+    console.log('[TTSService] Stop callback registered');
+  }
+
+  /**
    * Enable or disable lip sync generation
    * @param {boolean} enabled - Enable lip sync generation
    */
@@ -181,9 +193,19 @@ class TTSService {
       throw new Error('TTSService not configured or disabled');
     }
 
+    // Silently skip if stopped (don't throw)
+    if (this.isStopped) {
+      return null;
+    }
+
     // Throttle concurrent requests
     while (this.activeRequests >= this.maxConcurrentRequests) {
       await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Silently skip if stopped while waiting
+      if (this.isStopped) {
+        return null;
+      }
     }
 
     this.activeRequests++;
@@ -198,6 +220,11 @@ class TTSService {
         speed: this.currentConfig.speed,
       });
 
+      // Silently skip if stopped after API call
+      if (this.isStopped) {
+        return null;
+      }
+
       // Convert response to blob
       const arrayBuffer = await response.arrayBuffer();
       const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
@@ -208,11 +235,21 @@ class TTSService {
       let bvmdUrl = null;
       if (generateLipSync && this.lipSyncEnabled && this.bvmdConverter) {
         try {
+          // Silently skip if stopped before lip sync
+          if (this.isStopped) {
+            return null;
+          }
+          
           console.log('[TTSService] Generating lip sync (VMD -> BVMD)...');
           
           // Step 1: Generate VMD from audio
           const vmdData = await this.vmdService.generateVMDFromAudio(blob);
           console.log(`[TTSService] VMD generated (${vmdData.byteLength} bytes)`);
+          
+          // Silently skip if stopped after VMD generation
+          if (this.isStopped) {
+            return null;
+          }
           
           // Step 2: Convert VMD to BVMD
           bvmdUrl = await this.bvmdConverter.convertVMDToBVMD(vmdData);
@@ -311,14 +348,22 @@ class TTSService {
 
     for (let i = 0; i < chunks.length; i++) {
       try {
-        const { audio, bvmdUrl } = await this.generateSpeech(chunks[i], this.lipSyncEnabled);
+        const result = await this.generateSpeech(chunks[i], this.lipSyncEnabled);
+        
+        // Skip if generation was cancelled (returns null when stopped)
+        if (!result) {
+          console.log(`[TTSService] Chunk ${i + 1} generation cancelled`);
+          continue;
+        }
+        
+        const { audio, bvmdUrl } = result;
         const audioUrl = URL.createObjectURL(audio);
         
         // Track blob URL for cleanup
         this.blobUrls.add(audioUrl);
         
-        const result = { text: chunks[i], audioUrl, bvmdUrl };
-        results.push(result);
+        const chunkResult = { text: chunks[i], audioUrl, bvmdUrl };
+        results.push(chunkResult);
 
         // Notify callback
         if (onChunkReady) {
@@ -342,6 +387,14 @@ class TTSService {
    */
   getQueueLength() {
     return this.audioQueue.length;
+  }
+
+  /**
+   * Check if audio is currently playing or queued
+   * @returns {boolean} True if audio is playing or in queue
+   */
+  isAudioActive() {
+    return this.isPlaying || this.audioQueue.length > 0;
   }
 
   /**
@@ -490,6 +543,11 @@ class TTSService {
     this.isPlaying = false;
     
     console.log('[TTSService] Playback stopped and queue cleared');
+    
+    // Trigger stop callback to notify animation manager
+    if (this.onStopCallback) {
+      this.onStopCallback();
+    }
   }
   
   /**

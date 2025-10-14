@@ -67,6 +67,13 @@ const VirtualAssistant = forwardRef((props, ref) => {
           manager.speak(text, bvmdUrl, 'talking');
         }
       });
+      TTSService.setStopCallback(() => {
+        // This will be called when TTS is stopped/interrupted
+        console.log('[VirtualAssistant] TTS stopped, returning to idle');
+        if (manager) {
+          manager.returnToIdle();
+        }
+      });
       console.log('[VirtualAssistant] TTS Service integrated with lip sync');
       
       // Call onReady callback if provided

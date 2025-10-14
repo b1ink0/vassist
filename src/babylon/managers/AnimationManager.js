@@ -24,6 +24,7 @@ import {
   getAnimationsByName,
   isValidTransition,
 } from "../../config/animationConfig";
+import TTSService from "../../services/TTSService";
 
 /**
  * Helper function to get timestamp for logging
@@ -723,6 +724,19 @@ export class AnimationManager {
       this.oldSpansRemovalFrame = null;
     }
     
+    // IMMEDIATE CHECK: If in SPEAKING_HOLD and no audio active, return to IDLE immediately
+    if (this.currentState === AssistantState.SPEAKING_HOLD && !this._isTransitioning) {
+      const audioActive = TTSService.isAudioActive();
+      if (!audioActive) {
+        console.log('[AnimationManager] SPEAKING_HOLD detected with no active audio - returning to IDLE immediately');
+        this._isTransitioning = true;
+        this.transitionToState(AssistantState.IDLE).finally(() => {
+          this._isTransitioning = false;
+        });
+        return; // Exit early, transition will handle the rest
+      }
+    }
+    
     // CRITICAL: Calculate frame RELATIVE to when this animation started!
     const currentFrame = absoluteFrame - this.animationStartFrame;
     const duration = this.currentAnimationDuration;
@@ -790,17 +804,43 @@ export class AnimationManager {
           this._isTransitioning = false;
         });
       } else if (!shouldLoop) {
-        // No queue items and non-looping - do normal auto-return to IDLE
-        console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+        // No queue items and non-looping animation ending
+        // Check if this was a COMPOSITE (speak) animation and if more TTS is in the audio queue
+        const wasSpeak = this.currentState === AssistantState.COMPOSITE;
         
-        // Set flag to prevent re-entry
-        this._isTransitioning = true;
-        
-        // Transition to IDLE state
-        this.transitionToState(AssistantState.IDLE).finally(() => {
-          console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
-          this._isTransitioning = false;
-        });
+        if (wasSpeak) {
+          // Check if audio is still playing or queued (singleton instance)
+          const audioActive = TTSService.isAudioActive();
+          
+          if (audioActive) {
+            // Audio still playing or more chunks in queue - transition to SPEAKING_HOLD
+            console.log(`[${getTimestamp()}] [AnimationManager] [SPEAKING_HOLD] Speak animation ending, audio still active - transitioning to SPEAKING_HOLD`);
+            
+            this._isTransitioning = true;
+            this.transitionToState(AssistantState.SPEAKING_HOLD).finally(() => {
+              console.log('[AnimationManager] [SPEAKING_HOLD] Transition complete');
+              this._isTransitioning = false;
+            });
+          } else {
+            // No more audio - return to IDLE
+            console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] No active audio, transitioning to IDLE`);
+            
+            this._isTransitioning = true;
+            this.transitionToState(AssistantState.IDLE).finally(() => {
+              console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
+              this._isTransitioning = false;
+            });
+          }
+        } else {
+          // Not a speak animation - normal auto-return to IDLE
+          console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+          
+          this._isTransitioning = true;
+          this.transitionToState(AssistantState.IDLE).finally(() => {
+            console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
+            this._isTransitioning = false;
+          });
+        }
       }
       // For looping animations with no queue: just continue looping (no action needed)
     }

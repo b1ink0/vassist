@@ -177,6 +177,9 @@ const ChatContainer = ({
     try {
       console.log(`[ChatContainer] Generating TTS for message ${messageIndex}`);
       
+      // Clear stopped flag before starting new generation
+      TTSService.resumePlayback();
+      
       // Generate chunked speech for the message
       const audioUrls = await TTSService.generateChunkedSpeech(
         messageContent,

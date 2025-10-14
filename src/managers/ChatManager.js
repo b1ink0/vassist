@@ -38,7 +38,9 @@ class ChatManager {
     // Trim old messages if needed (but keep system messages)
     this.trimMessages();
     
-    console.log(`[ChatManager] Added ${role} message (${this.messages.length} total)`);
+    if (role === 'user') {
+      console.log(`[ChatManager] Added ${role} message (${this.messages.length} total)`);
+    }
   }
 
   /**
