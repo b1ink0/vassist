@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import STTService from '../../services/STTService';
-import TTSService from '../../services/TTSService';
-import VoiceConversationService, { ConversationStates } from '../../services/VoiceConversationService';
+import STTService from '../services/STTService';
+import TTSService from '../services/TTSService';
+import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 
 const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }) => {
   const [message, setMessage] = useState('');

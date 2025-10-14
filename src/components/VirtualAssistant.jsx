@@ -7,19 +7,20 @@
  * - setState(state) - Change assistant state (IDLE, BUSY, CELEBRATING, SPEAKING)
  * 
  * This component:
- * 1. Wraps BabylonScene + MmdCompositeScene internally
+ * 1. Wraps BabylonScene + MmdModelScene internally
  * 2. Manages AnimationManager initialization
  * 3. Exposes imperative API via ref forwarding
  * 4. Keeps all animation logic in AnimationManager (no duplication)
  * 
- * Future integration points:
- * - speak() will trigger TTS→VMD generation pipeline
+ * Integration points:
+ * - speak() triggers TTS→VMD generation pipeline
  * - Audio playback synchronized with lip-sync animations
+ * - Model loading with async blob URL support
  */
 
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef } from 'react';
-import BabylonScene from './babylon/BabylonScene';
-import { buildMmdCompositeScene } from './babylon/MmdCompositeScene';
+import BabylonScene from './BabylonScene';
+import { buildMmdModelScene } from '../babylon/scenes/MmdModelScene';
 import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
 import TTSService from '../services/TTSService';
 
@@ -334,7 +335,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
   return (
     <BabylonScene 
-      sceneBuilder={buildMmdCompositeScene} 
+      sceneBuilder={buildMmdModelScene} 
       onSceneReady={handleSceneReady}
     />
   );

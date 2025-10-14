@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { createSceneConfig } from '../../config/sceneConfig';
+import { createSceneConfig } from '../config/sceneConfig';
 
 const BabylonScene = ({ sceneBuilder, onSceneReady, sceneConfig = {} }) => {
   const canvasRef = useRef(null);

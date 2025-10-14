@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import TTSService from '../../services/TTSService';
-import StorageManager from '../../managers/StorageManager';
-import { DefaultTTSConfig } from '../../config/aiConfig';
+import TTSService from '../services/TTSService';
+import StorageManager from '../managers/StorageManager';
+import { DefaultTTSConfig } from '../config/aiConfig';
 
 const ChatContainer = ({ 
   positionManagerRef, 
