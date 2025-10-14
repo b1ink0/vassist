@@ -1,17 +1,32 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import VirtualAssistant from './components/VirtualAssistant'
 import ControlPanel from './components/ControlPanel'
 import ChatController from './components/ChatController'
+import StorageManager from './managers/StorageManager'
 
 function App() {
   const [currentState, setCurrentState] = useState('IDLE')
   const [isAssistantReady, setIsAssistantReady] = useState(false)
+  // Initialize from localStorage IMMEDIATELY - don't wait for useEffect
+  const [enableModelLoading, setEnableModelLoading] = useState(() => {
+    const generalConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true })
+    console.log('[App] Initial model loading state:', generalConfig.enableModelLoading)
+    return generalConfig.enableModelLoading
+  })
   
   // Refs for accessing internal APIs
   const assistantRef = useRef(null)
   const sceneRef = useRef(null)
   const positionManagerRef = useRef(null)
-
+  
+  // Set assistant ready if model is disabled
+  useEffect(() => {
+    if (!enableModelLoading) {
+      setIsAssistantReady(true)
+      console.log('[App] Running in chat-only mode (no 3D model)')
+    }
+  }, [enableModelLoading])
+  
   /**
    * Handle VirtualAssistant ready
    * Wrapped in useCallback to prevent infinite re-renders
@@ -39,10 +54,12 @@ function App() {
       </div>
 
       {/* Transparent 3D canvas overlay */}
-      <VirtualAssistant 
-        ref={assistantRef}
-        onReady={handleAssistantReady}
-      />
+      {enableModelLoading && (
+        <VirtualAssistant 
+          ref={assistantRef}
+          onReady={handleAssistantReady}
+        />
+      )}
 
       {/* Unified Control Panel */}
       <ControlPanel
@@ -59,6 +76,7 @@ function App() {
         assistantRef={assistantRef}
         positionManagerRef={positionManagerRef}
         isAssistantReady={isAssistantReady}
+        modelDisabled={!enableModelLoading}
       />
     </div>
   )

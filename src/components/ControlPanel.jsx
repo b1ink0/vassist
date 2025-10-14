@@ -39,10 +39,20 @@ const ControlPanel = ({
   const [sttTesting, setSttTesting] = useState(false);
 
   // Config sub-tab state
-  const [configSubTab, setConfigSubTab] = useState('llm');
+  const [configSubTab, setConfigSubTab] = useState('general');
+  
+  // General Config state
+  const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
+  const [generalConfigSaved, setGeneralConfigSaved] = useState(false);
+  const [generalConfigError, setGeneralConfigError] = useState('');
 
   // Load AI config on mount
   useEffect(() => {
+    // Load General config
+    const savedGeneralConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true });
+    setGeneralConfig(savedGeneralConfig);
+    console.log('[ControlPanel] General config loaded:', savedGeneralConfig);
+    
     const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig);
     setAiConfig(savedConfig);
     
@@ -320,6 +330,53 @@ const ControlPanel = ({
     } catch (error) {
       setTtsConfigError('❌ TTS test failed: ' + error.message);
     }
+  };
+
+  /**
+   * Save General configuration
+   */
+  const handleSaveGeneralConfig = () => {
+    // Save to storage
+    const saved = StorageManager.saveConfig('generalConfig', generalConfig);
+    
+    if (saved) {
+      setGeneralConfigSaved(true);
+      setGeneralConfigError('');
+      
+      console.log('[ControlPanel] General config saved successfully');
+      
+      // Hide success message after 2 seconds
+      setTimeout(() => setGeneralConfigSaved(false), 2000);
+      
+      // If model loading setting changed, inform user to reload
+      if (generalConfig.enableModelLoading !== StorageManager.getConfig('generalConfig', { enableModelLoading: true }).enableModelLoading) {
+        setGeneralConfigError('⚠️ Please reload the page for changes to take effect');
+      }
+    } else {
+      setGeneralConfigError('Failed to save configuration');
+    }
+  };
+
+  /**
+   * Update General config field
+   */
+  const updateGeneralConfig = (path, value) => {
+    setGeneralConfig(prev => {
+      const updated = { ...prev };
+      
+      // Handle nested paths if needed
+      const parts = path.split('.');
+      let current = updated;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        current[parts[i]] = { ...current[parts[i]] };
+        current = current[parts[i]];
+      }
+      
+      current[parts[parts.length - 1]] = value;
+      
+      return updated;
+    });
   };
 
   /**
@@ -954,6 +1011,16 @@ const ControlPanel = ({
             {/* Config Sub-Tabs */}
             <div className="flex border-b border-white/20 bg-black/30 rounded-t-lg overflow-hidden -mx-4 -mt-3 mb-3">
               <button
+                onClick={() => setConfigSubTab('general')}
+                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
+                  configSubTab === 'general'
+                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                ⚙️ General
+              </button>
+              <button
                 onClick={() => setConfigSubTab('llm')}
                 className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
                   configSubTab === 'llm'
@@ -984,6 +1051,64 @@ const ControlPanel = ({
                 🎤 STT
               </button>
             </div>
+
+            {/* General Sub-Tab */}
+            {configSubTab === 'general' && (
+              <>
+                <p className="text-xs text-gray-400 mb-3">General Application Settings</p>
+                
+                {/* Enable/Disable 3D Model */}
+                <div className="mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={generalConfig.enableModelLoading}
+                      onChange={(e) => updateGeneralConfig('enableModelLoading', e.target.checked)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-xs text-white">Enable 3D Model Loading</span>
+                  </label>
+                  <p className="text-[10px] text-gray-400 mt-1 ml-6">
+                    Uncheck to use chat-only mode without 3D avatar. Requires page reload.
+                  </p>
+                </div>
+
+                {/* General Error/Success Messages */}
+                {generalConfigError && (
+                  <div className={`text-xs p-2 rounded ${generalConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : generalConfigError.includes('⚠️') ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {generalConfigError}
+                  </div>
+                )}
+                
+                {generalConfigSaved && (
+                  <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                    ✅ Configuration saved successfully!
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 pt-2 border-t border-white/20 mt-3">
+                  <button
+                    onClick={handleSaveGeneralConfig}
+                    className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                  >
+                    💾 Save Settings
+                  </button>
+                </div>
+
+                {/* Info */}
+                <div className="border-t border-white/20 pt-3 mt-3">
+                  <p className="text-[10px] text-gray-500 mb-2">ℹ️ General Settings Guide:</p>
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
+                    <strong>3D Model Loading:</strong> Disable to use chat-only mode
+                    <br/>• Reduces resource usage (no 3D rendering)
+                    <br/>• Chat button becomes draggable anywhere
+                    <br/>• All chat features remain available
+                    <br/>• Requires page reload to apply changes
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* LLM Sub-Tab */}
             {configSubTab === 'llm' && (
@@ -1350,35 +1475,6 @@ const ControlPanel = ({
                     </div>
                   </div>
 
-                  {/* TTS Error/Success Messages */}
-                  {ttsConfigError && (
-                    <div className={`text-xs p-2 rounded ${ttsConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {ttsConfigError}
-                    </div>
-                  )}
-                  
-                  {ttsConfigSaved && (
-                    <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                      ✅ TTS Configuration saved successfully!
-                    </div>
-                  )}
-
-                  {/* TTS Action Buttons */}
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      onClick={handleSaveTTSConfig}
-                      className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-                    >
-                      💾 Save TTS Config
-                    </button>
-                    <button
-                      onClick={handleTestTTSConnection}
-                      className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
-                    >
-                      🔊 Test TTS
-                    </button>
-                  </div>
-
                   {/* TTS Info */}
                   <div className="border-t border-white/20 pt-3 mt-3">
                     <p className="text-[10px] text-gray-500 mb-2">ℹ️ TTS Guide:</p>
@@ -1391,6 +1487,37 @@ const ControlPanel = ({
                   </div>
                 </>
               )}
+
+              {/* TTS Error/Success Messages - Always visible */}
+              {ttsConfigError && (
+                <div className={`text-xs p-2 rounded ${ttsConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {ttsConfigError}
+                </div>
+              )}
+              
+              {ttsConfigSaved && (
+                <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                  ✅ TTS Configuration saved successfully!
+                </div>
+              )}
+
+              {/* TTS Action Buttons - Always visible */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleSaveTTSConfig}
+                  className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                >
+                  💾 Save TTS Config
+                </button>
+                {ttsConfig.enabled && (
+                  <button
+                    onClick={handleTestTTSConnection}
+                    className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
+                  >
+                    🔊 Test TTS
+                  </button>
+                )}
+              </div>
             </>
           )}
 
@@ -1553,23 +1680,6 @@ const ControlPanel = ({
                     </p>
                   </div>
 
-                  {/* STT Action Buttons */}
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      onClick={handleSaveSTTConfig}
-                      className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-                    >
-                      💾 Save STT Config
-                    </button>
-                    <button
-                      onClick={handleTestSTTRecording}
-                      disabled={sttTesting}
-                      className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {sttTesting ? '⏺️ Recording...' : '🎤 Test Recording'}
-                    </button>
-                  </div>
-
                   {/* STT Info */}
                   <div className="border-t border-white/20 pt-3 mt-3">
                     <p className="text-[10px] text-gray-500 mb-2">ℹ️ STT Guide:</p>
@@ -1583,6 +1693,38 @@ const ControlPanel = ({
                   </div>
                 </>
               )}
+
+              {/* STT Error/Success Messages - Always visible */}
+              {sttConfigError && (
+                <div className={`text-xs p-2 rounded ${sttConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {sttConfigError}
+                </div>
+              )}
+              
+              {sttConfigSaved && (
+                <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
+                  ✅ STT Configuration saved successfully!
+                </div>
+              )}
+
+              {/* STT Action Buttons - Always visible */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleSaveSTTConfig}
+                  className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                >
+                  💾 Save STT Config
+                </button>
+                {sttConfig.enabled && (
+                  <button
+                    onClick={handleTestSTTRecording}
+                    disabled={sttTesting}
+                    className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {sttTesting ? '⏺️ Recording...' : '🎤 Test Recording'}
+                  </button>
+                )}
+              </div>
             </>
           )}
           </div>

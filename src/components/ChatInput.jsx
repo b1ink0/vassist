@@ -125,9 +125,18 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
    * Toggle voice conversation mode
    */
   const handleVoiceModeToggle = async () => {
+    // Check if STT is configured
+    if (!STTService.isConfigured()) {
+      setRecordingError('STT not configured. Please configure in Control Panel.');
+      // Auto-remove error after 3 seconds
+      setTimeout(() => setRecordingError(''), 3000);
+      return;
+    }
+
     // Don't allow toggling if recording is active
     if (isRecording || isProcessingRecording) {
       setRecordingError('Please stop recording first');
+      setTimeout(() => setRecordingError(''), 3000);
       return;
     }
 
@@ -158,6 +167,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     } catch (error) {
       console.error('[ChatInput] Voice mode toggle error:', error);
       setRecordingError(error.message || 'Failed to start voice mode');
+      setTimeout(() => setRecordingError(''), 3000);
       setIsVoiceMode(false);
     }
   };
@@ -176,12 +186,15 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   const handleMicClick = async () => {
     if (!STTService.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
+      // Auto-remove error after 3 seconds
+      setTimeout(() => setRecordingError(''), 3000);
       return;
     }
 
     // Don't allow recording if voice mode is active
     if (isVoiceMode) {
       setRecordingError('Voice call is active. Stop voice call first.');
+      setTimeout(() => setRecordingError(''), 3000);
       return;
     }
 
@@ -211,6 +224,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     } catch (error) {
       console.error('[ChatInput] Microphone error:', error);
       setRecordingError(error.message || 'Microphone access denied');
+      setTimeout(() => setRecordingError(''), 3000);
       setIsRecording(false);
       setIsProcessingRecording(false);
     }
@@ -253,10 +267,17 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
       
       {/* Input form - on top of blur */}
       <div className="relative p-4">
-        {/* Error message */}
+        {/* Error message with close button */}
         {recordingError && (
-          <div className="max-w-3xl mx-auto mb-2 px-4 py-2 bg-red-500/20 border border-red-500/40 rounded-lg text-red-300 text-sm">
-            {recordingError}
+          <div className="max-w-3xl mx-auto mb-2 px-4 py-2 bg-red-500/20 border border-red-500/40 rounded-lg text-red-300 text-sm flex items-center justify-between gap-2">
+            <span>{recordingError}</span>
+            <button
+              onClick={() => setRecordingError('')}
+              className="text-red-300 hover:text-red-100 transition-colors flex-shrink-0"
+              title="Close"
+            >
+              ✕
+            </button>
           </div>
         )}
 

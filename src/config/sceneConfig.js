@@ -11,6 +11,9 @@
  * Default scene configuration
  */
 const SceneConfig = {
+  // General configuration
+  enableModelLoading: true,  // Set to false to disable 3D model loading (chat-only mode)
+  
   // Model configuration
   modelUrl: "res/private_test/model/1.bpmx", // Default model path or blob URL
   

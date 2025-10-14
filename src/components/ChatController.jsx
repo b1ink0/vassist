@@ -12,7 +12,8 @@ import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 const ChatController = ({ 
   assistantRef, 
   positionManagerRef, 
-  isAssistantReady 
+  isAssistantReady,
+  modelDisabled = false
 }) => {
   // Chat UI state
   const [isChatInputVisible, setIsChatInputVisible] = useState(false)
@@ -123,12 +124,22 @@ const ChatController = ({
   }, [assistantRef, isVoiceMode])
 
   /**
-   * Handle chat button click - show input and chat container
+   * Handle chat button click - toggle chat visibility
    */
   const handleChatButtonClick = () => {
     console.log('[ChatController] Chat button clicked')
-    setIsChatInputVisible(true)
-    setIsChatContainerVisible(true)
+    
+    // If chat is open, close it
+    if (isChatContainerVisible || isChatInputVisible) {
+      console.log('[ChatController] Closing chat')
+      setIsChatInputVisible(false)
+      setIsChatContainerVisible(false)
+    } else {
+      // Otherwise, open it
+      console.log('[ChatController] Opening chat')
+      setIsChatInputVisible(true)
+      setIsChatContainerVisible(true)
+    }
   }
 
   /**
@@ -583,11 +594,15 @@ const ChatController = ({
 
   return (
     <>
-      {/* Chat Button - follows model */}
+      {/* Chat Button visibility logic:
+          - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
+          - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
       <ChatButton
         positionManagerRef={positionManagerRef}
         onClick={handleChatButtonClick}
-        isVisible={isAssistantReady && !isChatContainerVisible && !isProcessing}
+        isVisible={modelDisabled ? true : (isAssistantReady && !(isChatContainerVisible || isChatInputVisible))}
+        modelDisabled={modelDisabled}
+        isChatOpen={isChatContainerVisible || isChatInputVisible}
       />
 
       {/* Chat Input - bottom screen */}
@@ -606,6 +621,7 @@ const ChatController = ({
         isVisible={isChatContainerVisible}
         isGenerating={isProcessing}
         isSpeaking={isSpeaking}
+        modelDisabled={modelDisabled}
       />
     </>
   )
