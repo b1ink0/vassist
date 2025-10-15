@@ -8,9 +8,9 @@
  * - Smooth state transitions
  */
 
-import STTService from './STTService';
-import TTSService from './TTSService';
-import AIService from './AIService';
+import { STTServiceProxy, TTSServiceProxy, AIServiceProxy } from './proxies';
+
+
 
 /**
  * Conversation States
@@ -109,8 +109,8 @@ class VoiceConversationService {
     
     // Stop any ongoing processes
     this.stopRecording();
-    TTSService.stopPlayback();
-    AIService.abortRequest();
+    TTSServiceProxy.stopPlayback();
+    AIServiceProxy.abortRequest();
     
     // Stop VAD monitoring
     this.stopVADMonitoring();
@@ -199,7 +199,7 @@ class VoiceConversationService {
     // If AI is speaking, interrupt it AND stop TTS playback
     if (this.currentState === ConversationStates.SPEAKING) {
       console.log('[VoiceConversation] Speech detected while AI speaking - interrupting and stopping TTS');
-      TTSService.stopPlayback(); // Stop TTS immediately when user starts speaking
+      TTSServiceProxy.stopPlayback(); // Stop TTS immediately when user starts speaking
       this.interrupt();
     }
     
@@ -235,8 +235,8 @@ class VoiceConversationService {
     console.log('[VoiceConversation] Manual interrupt');
     
     // Stop TTS and AI generation
-    TTSService.stopPlayback();
-    AIService.abortRequest();
+    TTSServiceProxy.stopPlayback();
+    AIServiceProxy.abortRequest();
     
     // Change to listening state
     this.changeState(ConversationStates.INTERRUPTED);
@@ -310,7 +310,7 @@ class VoiceConversationService {
       }
       
       // Check if STT is configured
-      if (!STTService.isConfigured()) {
+      if (!STTServiceProxy.isConfigured()) {
         console.error('[VoiceConversation] STT not configured!');
         if (this.onError) {
           this.onError(new Error('STT not configured. Please configure in Control Panel.'));
@@ -322,9 +322,9 @@ class VoiceConversationService {
       // Change to thinking state
       this.changeState(ConversationStates.THINKING);
       
-      console.log('[VoiceConversation] Calling STTService.transcribeAudio...');
+      console.log('[VoiceConversation] Calling STTServiceProxy.transcribeAudio...');
       // Transcribe audio
-      const transcription = await STTService.transcribeAudio(audioBlob);
+      const transcription = await STTServiceProxy.transcribeAudio(audioBlob);
       console.log(`[VoiceConversation] Transcription received: "${transcription}"`);
       
       if (this.onTranscription) {
@@ -357,7 +357,7 @@ class VoiceConversationService {
       this.changeState(ConversationStates.SPEAKING);
       
       // Resume TTS if it was stopped
-      TTSService.resumePlayback();
+      TTSServiceProxy.resumePlayback();
       
       // Chunk the text for better TTS generation
       const chunks = this.chunkTextForSpeech(text);
@@ -377,7 +377,7 @@ class VoiceConversationService {
         }
         
         // Check if stopped
-        if (TTSService.isStopped) {
+        if (TTSServiceProxy.isStopped) {
           console.log(`[VoiceConversation] Stopped, skipping TTS chunk ${index}`);
           return;
         }
@@ -387,10 +387,10 @@ class VoiceConversationService {
           console.log(`[VoiceConversation] Generating TTS+lip sync ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
           
           // Generate TTS audio + lip sync (VMD -> BVMD)
-          const { audio, bvmdUrl } = await TTSService.generateSpeech(chunk, true);
+          const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunk, true);
           
           // Check if stopped after generation
-          if (TTSService.isStopped) {
+          if (TTSServiceProxy.isStopped) {
             console.log(`[VoiceConversation] Stopped after generation, discarding chunk ${index}`);
             return;
           }
@@ -398,7 +398,7 @@ class VoiceConversationService {
           const audioUrl = URL.createObjectURL(audio);
           
           // Queue audio with BVMD for synchronized lip sync
-          TTSService.queueAudio(chunk, audioUrl, bvmdUrl);
+          TTSServiceProxy.queueAudio(chunk, audioUrl, bvmdUrl);
           
           console.log(`[VoiceConversation] TTS ${index + 1}/${chunks.length} queued${bvmdUrl ? ' with lip sync' : ''}`);
         } catch (error) {
@@ -436,7 +436,7 @@ class VoiceConversationService {
     const checkPlayback = () => {
       if (!this.isActive) return;
       
-      const isPlaying = TTSService.isCurrentlyPlaying();
+      const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
       
       if (!isPlaying && this.currentState === ConversationStates.SPEAKING) {
         console.log('[VoiceConversation] TTS finished, returning to listening');

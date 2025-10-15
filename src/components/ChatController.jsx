@@ -3,8 +3,7 @@ import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
 import ChatManager from '../managers/ChatManager'
-import AIService from '../services/AIService'
-import TTSService from '../services/TTSService'
+import { AIServiceProxy, TTSServiceProxy } from '../services/proxies'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import StorageManager from '../managers/StorageManager'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
@@ -47,7 +46,7 @@ const ChatController = ({
       // Only track TTS playback in non-voice mode
       // (voice mode uses VoiceConversationService state)
       if (!isVoiceMode) {
-        const isPlaying = TTSService.isCurrentlyPlaying();
+        const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
         setIsSpeaking(isPlaying);
       }
     }, 100); // Check every 100ms
@@ -64,17 +63,17 @@ const ChatController = ({
       setIsChatInputVisible(false)
       setIsChatContainerVisible(false)
       // Stop any playing TTS
-      TTSService.stopPlayback()
+      TTSServiceProxy.stopPlayback()
     }
 
     const handleClearChat = () => {
       console.log('[ChatController] Clear chat event received - stopping all generation')
       
       // Stop AI generation
-      AIService.abortRequest()
+      AIServiceProxy.abortRequest()
       
       // Stop TTS
-      TTSService.stopPlayback()
+      TTSServiceProxy.stopPlayback()
       
       // Return assistant to idle
       if (assistantRef.current?.isReady()) {
@@ -93,10 +92,10 @@ const ChatController = ({
       console.log('[ChatController] Stop generation event received')
       
       // Abort AI generation
-      AIService.abortRequest()
+      AIServiceProxy.abortRequest()
       
       // Stop TTS
-      TTSService.stopPlayback()
+      TTSServiceProxy.stopPlayback()
       
       // If in voice mode, interrupt
       if (isVoiceMode) {
@@ -166,11 +165,11 @@ const ChatController = ({
     setIsProcessing(true)
 
     // Stop any ongoing TTS playback
-    TTSService.stopPlayback()
+    TTSServiceProxy.stopPlayback()
 
     try {
       // Check AI configuration
-      if (!AIService.isConfigured()) {
+      if (!AIServiceProxy.isConfigured()) {
         throw new Error('AI not configured. Please configure in Config tab.')
       }
 
@@ -195,11 +194,11 @@ const ChatController = ({
 
       // Load TTS config
       const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig)
-      const ttsEnabled = ttsConfig.enabled && TTSService.isConfigured()
+      const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured()
 
       // Resume TTS playback for new generation
       if (ttsEnabled) {
-        TTSService.resumePlayback()
+        TTSServiceProxy.resumePlayback()
       }
 
       // Stream AI response with just-in-time TTS generation
@@ -219,30 +218,32 @@ const ChatController = ({
         const chunkText = allChunks[chunkIndex]
         
         // Check if stopped
-        if (TTSService.isStopped) {
+        if (TTSServiceProxy.isStopped) {
           console.log(`[ChatController] TTS generation stopped, skipping chunk ${chunkIndex}`)
           return
         }
 
         try {
-          const queueLength = TTSService.getQueueLength()
+          const queueLength = TTSServiceProxy.getQueueLength()
           console.log(`[ChatController] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
           
           // Generate TTS audio + lip sync (VMD -> BVMD)
-          const { audio, bvmdUrl } = await TTSService.generateSpeech(chunkText, true)
+          const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunkText, true)
           
           // Check again if stopped after generation
-          if (TTSService.isStopped) {
+          if (TTSServiceProxy.isStopped) {
             console.log(`[ChatController] TTS stopped after generation, discarding chunk ${chunkIndex}`)
             return
           }
 
-          const audioUrl = URL.createObjectURL(audio)
+          // Convert ArrayBuffer to Blob if needed (extension mode)
+          const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
+          const audioUrl = URL.createObjectURL(audioBlob)
           
           // Queue audio with BVMD for synchronized lip sync
-          TTSService.queueAudio(chunkText, audioUrl, bvmdUrl)
+          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl)
           
-          console.log(`[ChatController] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSService.getQueueLength()})`)
+          console.log(`[ChatController] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
         } catch (ttsError) {
           console.warn(`[ChatController] TTS generation failed for chunk ${chunkIndex}:`, ttsError)
         }
@@ -250,7 +251,7 @@ const ChatController = ({
 
       // Generate next chunk if queue has space
       const tryGenerateNextChunk = () => {
-        const queueLength = TTSService.getQueueLength()
+        const queueLength = TTSServiceProxy.getQueueLength()
         console.log(`[ChatController] tryGenerateNextChunk: queue=${queueLength}, next=${nextChunkToGenerate}, total=${allChunks.length}`)
         
         // Only generate if queue has room AND we have more chunks
@@ -261,12 +262,12 @@ const ChatController = ({
       }
 
       // Register callback to generate next chunk when audio finishes playing
-      TTSService.setAudioFinishedCallback(() => {
+      TTSServiceProxy.setAudioFinishedCallback(() => {
         console.log('[ChatController] Audio finished callback triggered')
         tryGenerateNextChunk()
       })
 
-      await AIService.sendMessage(messages, async (chunk) => {
+      await AIServiceProxy.sendMessage(messages, async (chunk) => {
         fullResponse += chunk
         textBuffer += chunk
 
@@ -336,7 +337,7 @@ const ChatController = ({
       console.error('[ChatController] Chat error:', error)
 
       // Stop TTS and return to idle on error
-      TTSService.stopPlayback()
+      TTSServiceProxy.stopPlayback()
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
       }
@@ -386,7 +387,7 @@ const ChatController = ({
 
     try {
       // Check AI configuration
-      if (!AIService.isConfigured()) {
+      if (!AIServiceProxy.isConfigured()) {
         throw new Error('AI not configured. Please configure in Config tab.')
       }
 
@@ -401,14 +402,14 @@ const ChatController = ({
       const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt
       
       const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig)
-      const ttsEnabled = ttsConfig.enabled && TTSService.isConfigured()
+      const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured()
 
       // Get formatted messages
       const messages = ChatManager.getFormattedMessages(systemPrompt)
 
       // Resume TTS playback for new generation
       if (ttsEnabled) {
-        TTSService.resumePlayback()
+        TTSServiceProxy.resumePlayback()
       }
 
       // Streaming state with just-in-time TTS generation
@@ -426,18 +427,20 @@ const ChatController = ({
         const chunkText = allChunks[chunkIndex]
         
         try {
-          const queueLength = TTSService.getQueueLength()
+          const queueLength = TTSServiceProxy.getQueueLength()
           console.log(`[ChatController] [Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
           
           // Generate TTS audio + lip sync (VMD -> BVMD)
-          const { audio, bvmdUrl } = await TTSService.generateSpeech(chunkText, true)
+          const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunkText, true)
           
-          const audioUrl = URL.createObjectURL(audio)
+          // Convert ArrayBuffer to Blob if needed (extension mode)
+          const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
+          const audioUrl = URL.createObjectURL(audioBlob)
           
           // Queue audio with BVMD for synchronized lip sync
-          TTSService.queueAudio(chunkText, audioUrl, bvmdUrl)
+          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl)
           
-          console.log(`[ChatController] [Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSService.getQueueLength()})`)
+          console.log(`[ChatController] [Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
         } catch (error) {
           console.error(`[ChatController] [Voice] TTS chunk ${chunkIndex} failed:`, error)
         }
@@ -445,7 +448,7 @@ const ChatController = ({
 
       // Generate next chunk if queue has space
       const tryGenerateNextChunk = () => {
-        const queueLength = TTSService.getQueueLength()
+        const queueLength = TTSServiceProxy.getQueueLength()
         console.log(`[ChatController] [Voice] tryGenerateNextChunk: queue=${queueLength}, next=${nextChunkToGenerate}, total=${allChunks.length}`)
         
         // Only generate if queue has room AND we have more chunks
@@ -456,7 +459,7 @@ const ChatController = ({
       }
 
       // Register callback to generate next chunk when audio finishes playing
-      TTSService.setAudioFinishedCallback(() => {
+      TTSServiceProxy.setAudioFinishedCallback(() => {
         console.log('[ChatController] [Voice] Audio finished callback triggered')
         tryGenerateNextChunk()
       })
@@ -464,7 +467,7 @@ const ChatController = ({
       // Change to speaking state immediately when we start generating TTS
       let hasChangedToSpeaking = false
 
-      await AIService.sendMessage(messages, async (chunk) => {
+      await AIServiceProxy.sendMessage(messages, async (chunk) => {
         fullResponse += chunk
         textBuffer += chunk
 

@@ -7,6 +7,8 @@
  * Follows the same pattern as animationConfig.js with getter functions.
  */
 
+import { resourceLoader } from '../utils/ResourceLoader.js';
+
 /**
  * Default scene configuration
  */
@@ -14,11 +16,10 @@ const SceneConfig = {
   // General configuration
   enableModelLoading: true,  // Set to false to disable 3D model loading (chat-only mode)
   
-  // Model configuration
-  modelUrl: "res/private_test/model/1.bpmx", // Default model path or blob URL
-  
-  // Camera animation (optional)
-  cameraAnimationUrl: "res/private_test/motion/2.bvmd", // Optional camera animation
+  // Model configuration - these will be resolved at runtime
+  // In extension mode, URLs are fetched via ExtensionBridge.getResourceURL()
+  modelUrl: "res/private_test/model/1.bpmx",
+  cameraAnimationUrl: "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   
   // Camera settings
@@ -44,6 +45,41 @@ const SceneConfig = {
 };
 
 /**
+ * Resolve resource URLs for extension mode
+ * In extension mode, URLs must be fetched via ExtensionBridge
+ * @param {Object} config - Configuration object
+ * @returns {Promise<Object>} Configuration with resolved URLs
+ */
+export async function resolveResourceURLs(config) {
+  console.log('[sceneConfig] resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
+  
+  if (!resourceLoader.isExtensionMode()) {
+    // Dev mode - URLs are already correct
+    console.log('[sceneConfig] Dev mode - returning config as-is');
+    return config;
+  }
+
+  // Extension mode - resolve URLs via ExtensionBridge
+  console.log('[sceneConfig] Extension mode - resolving URLs...');
+  const resolvedConfig = { ...config };
+  
+  if (config.modelUrl) {
+    console.log('[sceneConfig] Resolving modelUrl:', config.modelUrl);
+    resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
+    console.log('[sceneConfig] Resolved modelUrl:', resolvedConfig.modelUrl);
+  }
+  
+  if (config.cameraAnimationUrl) {
+    console.log('[sceneConfig] Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
+    resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
+    console.log('[sceneConfig] Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
+  }
+  
+  console.log('[sceneConfig] Final resolved config:', resolvedConfig);
+  return resolvedConfig;
+}
+
+/**
  * Get scene configuration
  * Returns a copy to prevent mutations
  * 
@@ -51,6 +87,17 @@ const SceneConfig = {
  */
 export function getSceneConfig() {
   return { ...SceneConfig };
+}
+
+/**
+ * Get scene configuration with resolved URLs (async)
+ * Use this in extension mode to ensure URLs are properly resolved
+ * 
+ * @returns {Promise<Object>} Scene configuration with resolved URLs
+ */
+export async function getSceneConfigAsync() {
+  const config = getSceneConfig();
+  return resolveResourceURLs(config);
 }
 
 /**

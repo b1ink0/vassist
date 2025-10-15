@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import STTService from '../services/STTService';
-import TTSService from '../services/TTSService';
+import { STTServiceProxy } from '../services/proxies';
+; import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 
 const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }) => {
@@ -25,7 +25,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   // Setup STT callbacks (for manual voice input)
   useEffect(() => {
     // Transcription callback - fill input with transcribed text
-    STTService.setTranscriptionCallback((text) => {
+    STTServiceProxy.setTranscriptionCallback((text) => {
       console.log('[ChatInput] Transcription received:', text);
       setMessage(text);
       setRecordingError('');
@@ -37,7 +37,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     });
 
     // Error callback
-    STTService.setErrorCallback((error) => {
+    STTServiceProxy.setErrorCallback((error) => {
       console.error('[ChatInput] STT error:', error);
       setRecordingError(error.message || 'Recording failed');
       setIsRecording(false);
@@ -45,7 +45,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     });
 
     // Recording start callback
-    STTService.setRecordingStartCallback(() => {
+    STTServiceProxy.setRecordingStartCallback(() => {
       console.log('[ChatInput] Recording started');
       setIsRecording(true);
       setIsProcessingRecording(false); // Started successfully
@@ -53,7 +53,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     });
 
     // Recording stop callback
-    STTService.setRecordingStopCallback(() => {
+    STTServiceProxy.setRecordingStopCallback(() => {
       console.log('[ChatInput] Recording stopped - transcription complete');
       setIsRecording(false);
       setIsProcessingRecording(false); // Done processing (transcription is complete)
@@ -61,10 +61,10 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
 
     // Cleanup
     return () => {
-      STTService.setTranscriptionCallback(null);
-      STTService.setErrorCallback(null);
-      STTService.setRecordingStartCallback(null);
-      STTService.setRecordingStopCallback(null);
+      STTServiceProxy.setTranscriptionCallback(null);
+      STTServiceProxy.setErrorCallback(null);
+      STTServiceProxy.setRecordingStartCallback(null);
+      STTServiceProxy.setRecordingStopCallback(null);
     };
   }, []);
 
@@ -126,7 +126,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
    */
   const handleVoiceModeToggle = async () => {
     // Check if STT is configured
-    if (!STTService.isConfigured()) {
+    if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
       // Auto-remove error after 3 seconds
       setTimeout(() => setRecordingError(''), 3000);
@@ -154,7 +154,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
       } else {
         // Start voice mode - stop any playing TTS first
         console.log('[ChatInput] Starting voice conversation mode - stopping TTS');
-        TTSService.stopPlayback();
+        TTSServiceProxy.stopPlayback();
         
         setRecordingError('');
         await VoiceConversationService.start();
@@ -184,7 +184,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
    * Handle microphone button click (manual voice input)
    */
   const handleMicClick = async () => {
-    if (!STTService.isConfigured()) {
+    if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
       // Auto-remove error after 3 seconds
       setTimeout(() => setRecordingError(''), 3000);
@@ -209,16 +209,16 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
         // Stop recording - show processing immediately
         console.log('[ChatInput] Stopping recording');
         setIsProcessingRecording(true); // Show processing state while transcribing
-        STTService.stopRecording();
+        STTServiceProxy.stopRecording();
         // Note: Processing state will be cleared by onRecordingStop or onTranscription callback
       } else {
         // Start recording
         console.log('[ChatInput] Starting recording - stopping TTS playback');
         setIsProcessingRecording(true); // Show processing state while starting
-        TTSService.stopPlayback();
+        TTSServiceProxy.stopPlayback();
         
         setRecordingError('');
-        await STTService.startRecording();
+        await STTServiceProxy.startRecording();
         // Note: Processing state will be cleared by onRecordingStart callback
       }
     } catch (error) {

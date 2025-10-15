@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Virtual Assistant",
+  "version": "1.0.0",
+  "description": "AI-powered 3D virtual assistant with chat, voice, and animation capabilities",
+  
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "offscreen",
+    "activeTab"
+  ],
+  
+  "host_permissions": [
+    "https://api.openai.com/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "chunks/*",
+        "res/*",
+        "content-module.js",
+        "content-app.js",
+        "content-styles.css",
+        "offscreen.html",
+        "offscreen.js",
+        "offscreen-html.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "Toggle Virtual Assistant"
+  },
+  
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

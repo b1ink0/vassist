@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:extension": "vite build --config vite.config.extension.js",
+    "build:extension:prod": "NODE_ENV=production vite build --config vite.config.extension.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

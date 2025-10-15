@@ -16,7 +16,7 @@ const LoadingIndicator = ({ isVisible = false, progress = null }) => {
 
   return (
     <div
-      className="fixed bottom-5 right-5 z-[10000] flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl animate-fade-in"
+      className="fixed bottom-5 right-5 z-[10000] pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl"
       style={{
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',

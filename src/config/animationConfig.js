@@ -6,6 +6,9 @@
  * 
  * IMPORTANT: Smooth transitions require proper easing configuration.
  * The transition settings here are based on working composite animation code.
+ * 
+ * NOTE: Animation file paths are stored as plain strings and resolved at runtime
+ * via ResourceLoader.getURLAsync() to ensure compatibility with both dev and extension modes.
  */
 
 /**
@@ -72,7 +75,7 @@ export const TransitionSettings = {
  * Each animation entry contains:
  * - id: Unique identifier
  * - name: Human-readable name
- * - filePath: Path to .bvmd file
+ * - filePath: Path to .bvmd file (as string, will be resolved at runtime)
  * - transitionFrames: How long to blend when entering/exiting (default: 30)
  * - loop: Whether animation should loop (default: false)
  * - loopTransition: If true, creates smooth blend between loop cycles (default: false)
@@ -80,6 +83,9 @@ export const TransitionSettings = {
  *   creating an overlap that smoothly blends mismatched start/end frames.
  * - weight: Default weight for blending (default: 1.0)
  * - metadata: Additional info (description, tags, etc.)
+ * 
+ * NOTE: filePath is stored as a plain string and resolved at runtime via ResourceLoader.getURLAsync()
+ * This ensures compatibility with both dev mode and extension mode.
  */
 export const AnimationRegistry = {
   // ===== IDLE =====

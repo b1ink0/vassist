@@ -2,9 +2,10 @@
 import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
 import StorageManager from '../managers/StorageManager';
-import AIService from '../services/AIService';
-import TTSService from '../services/TTSService';
-import STTService from '../services/STTService';
+import { AIServiceProxy, TTSServiceProxy, STTServiceProxy } from '../services/proxies';
+import ResourceLoader from '../utils/ResourceLoader';
+
+
 import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig, AIProviders, TTSProviders, STTProviders, OpenAIVoices, validateAIConfig, validateTTSConfig, validateSTTConfig } from '../config/aiConfig';
 
 const ControlPanel = ({ 
@@ -15,7 +16,7 @@ const ControlPanel = ({
   positionManagerRef,
   onStateChange
 }) => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
   const [queueStatus, setQueueStatus] = useState({ length: 0, isEmpty: true, items: [] });
   
@@ -58,7 +59,7 @@ const ControlPanel = ({
     
     // Try to configure AI service with saved config
     try {
-      AIService.configure(savedConfig);
+      AIServiceProxy.configure(savedConfig);
       console.log('[ControlPanel] AI Service configured from saved config');
     } catch (error) {
       console.warn('[ControlPanel] Failed to configure AI Service:', error);
@@ -70,7 +71,7 @@ const ControlPanel = ({
     
     // Try to configure TTS service with saved config
     try {
-      TTSService.configure(savedTtsConfig);
+      TTSServiceProxy.configure(savedTtsConfig);
       console.log('[ControlPanel] TTS Service configured from saved config');
     } catch (error) {
       console.warn('[ControlPanel] Failed to configure TTS Service:', error);
@@ -82,7 +83,7 @@ const ControlPanel = ({
     
     // Try to configure STT service with saved config
     try {
-      STTService.configure(savedSttConfig);
+      STTServiceProxy.configure(savedSttConfig);
       console.log('[ControlPanel] STT Service configured from saved config');
     } catch (error) {
       console.warn('[ControlPanel] Failed to configure STT Service:', error);
@@ -125,7 +126,7 @@ const ControlPanel = ({
     // TODO: Replace with actual TTS→VMD generation
     // For now, use the existing audio.bvmd as placeholder mouth animation
     // This demonstrates the API structure before TTS integration
-    const placeholderMouthAnimationUrl = 'res/private_test/motion/audio.bvmd';
+    const placeholderMouthAnimationUrl = await ResourceLoader.getURLAsync('res/private_test/motion/audio.bvmd');
     
     // Convert file path to blob URL for testing
     // In production, this will be a blob URL from TTS→VMD generation
@@ -199,7 +200,7 @@ const ControlPanel = ({
       
       // Configure AI service
       try {
-        AIService.configure(aiConfig);
+        AIServiceProxy.configure(aiConfig);
         console.log('[ControlPanel] AI Service configured successfully');
         
         // Hide success message after 2 seconds
@@ -243,10 +244,10 @@ const ControlPanel = ({
     
     try {
       // First configure with current settings
-      AIService.configure(aiConfig);
+      AIServiceProxy.configure(aiConfig);
       
       // Then test connection
-      await AIService.testConnection();
+      await AIServiceProxy.testConnection();
       
       setConfigError('✅ Connection successful!');
       setTimeout(() => setConfigError(''), 3000);
@@ -276,7 +277,7 @@ const ControlPanel = ({
       
       // Configure TTS service
       try {
-        TTSService.configure(ttsConfig);
+        TTSServiceProxy.configure(ttsConfig);
         console.log('[ControlPanel] TTS Service configured successfully');
         
         // Hide success message after 2 seconds
@@ -320,10 +321,10 @@ const ControlPanel = ({
     
     try {
       // First configure with current settings
-      TTSService.configure(ttsConfig);
+      TTSServiceProxy.configure(ttsConfig);
       
       // Then test connection with sample text
-      await TTSService.testConnection('Hello, this is a test of the text to speech system.');
+      await TTSServiceProxy.testConnection('Hello, this is a test of the text to speech system.');
       
       setTtsConfigError('✅ TTS test successful!');
       setTimeout(() => setTtsConfigError(''), 3000);
@@ -400,7 +401,7 @@ const ControlPanel = ({
       
       // Configure STT service
       try {
-        STTService.configure(sttConfig);
+        STTServiceProxy.configure(sttConfig);
         console.log('[ControlPanel] STT Service configured successfully');
         
         // Hide success message after 2 seconds
@@ -445,12 +446,12 @@ const ControlPanel = ({
     
     try {
       // First configure with current settings
-      STTService.configure(sttConfig);
+      STTServiceProxy.configure(sttConfig);
       
       setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
       
       // Test with 3-second recording
-      const transcription = await STTService.testRecording(3);
+      const transcription = await STTServiceProxy.testRecording(3);
       
       setSttConfigError(`✅ Transcription: "${transcription}"`);
       setTimeout(() => setSttConfigError(''), 5000);
@@ -505,7 +506,8 @@ const ControlPanel = ({
     }
     
     try {
-      const response = await fetch('res/private_test/motion/audio.bvmd');
+      const animationUrl = await ResourceLoader.getURLAsync('res/private_test/motion/audio.bvmd');
+      const response = await fetch(animationUrl);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrlsRef.current.push(blobUrl);

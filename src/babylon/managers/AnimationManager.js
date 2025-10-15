@@ -25,6 +25,7 @@ import {
   isValidTransition,
 } from "../../config/animationConfig";
 import TTSService from "../../services/TTSService";
+import { resourceLoader } from "../../utils/ResourceLoader";
 
 /**
  * Helper function to get timestamp for logging
@@ -175,7 +176,12 @@ export class AnimationManager {
 
     // 3. Load for first time
     console.log(`[AnimationManager] Loading animation: ${name} (${filePath})`);
-    const loadPromise = this.bvmdLoader.loadAsync(id, filePath);
+    
+    // Resolve URL for extension mode
+    const resolvedPath = await resourceLoader.getURLAsync(filePath);
+    console.log(`[AnimationManager] Resolved path: ${resolvedPath}`);
+    
+    const loadPromise = this.bvmdLoader.loadAsync(id, resolvedPath);
 
     // Store promise to prevent duplicate loads
     this.loadingPromises.set(filePath, loadPromise);

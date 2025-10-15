@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import TTSService from '../services/TTSService';
+import { TTSServiceProxy } from '../services/proxies';
 import StorageManager from '../managers/StorageManager';
 import { DefaultTTSConfig } from '../config/aiConfig';
 
@@ -185,20 +185,20 @@ const ChatContainer = ({
   const handlePlayTTS = async (messageIndex, messageContent) => {
     // Check if TTS is enabled and configured
     const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
-    if (!ttsConfig.enabled || !TTSService.isConfigured()) {
+    if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
       console.warn('[ChatContainer] TTS not enabled or configured');
       return;
     }
 
     // If this message is already playing, stop it
     if (playingMessageIndex === messageIndex) {
-      TTSService.stopPlayback();
+      TTSServiceProxy.stopPlayback();
       setPlayingMessageIndex(null);
       return;
     }
 
     // Stop any currently playing audio
-    TTSService.stopPlayback();
+    TTSServiceProxy.stopPlayback();
     setPlayingMessageIndex(null);
     setLoadingMessageIndex(messageIndex);
 
@@ -206,10 +206,10 @@ const ChatContainer = ({
       console.log(`[ChatContainer] Generating TTS for message ${messageIndex}`);
       
       // Clear stopped flag before starting new generation
-      TTSService.resumePlayback();
+      TTSServiceProxy.resumePlayback();
       
       // Generate chunked speech for the message
-      const audioUrls = await TTSService.generateChunkedSpeech(
+      const audioUrls = await TTSServiceProxy.generateChunkedSpeech(
         messageContent,
         null, // No chunk callback needed here
         ttsConfig.chunkSize,
@@ -226,10 +226,10 @@ const ChatContainer = ({
       setPlayingMessageIndex(messageIndex);
 
       // Play audio sequence
-      await TTSService.playAudioSequence(audioUrls);
+      await TTSServiceProxy.playAudioSequence(audioUrls);
 
       // Clean up after playback
-      TTSService.cleanupBlobUrls(audioUrls);
+      TTSServiceProxy.cleanupBlobUrls(audioUrls);
       setPlayingMessageIndex(null);
 
     } catch (error) {

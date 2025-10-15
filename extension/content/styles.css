@@ -1,0 +1,35 @@
+/**
+ * Content Script Styles
+ * Injected into Shadow DOM for complete isolation
+ * Includes Tailwind CSS and app-specific styles
+ */
+
+@import '../../src/index.css';
+
+/* Shadow DOM specific resets */
+:host {
+  all: initial;
+  display: block;
+}
+
+/* Ensure proper box-sizing */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Root container */
+#react-root {
+  width: 100%;
+  height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure all UI elements are visible in shadow DOM */
+.virtual-assistant-container {
+  isolation: isolate;
+}
