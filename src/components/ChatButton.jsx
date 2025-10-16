@@ -239,15 +239,14 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
         zIndex: 9999, // Maximum z-index to always be on top
         width: '48px',
         height: '48px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.25)',
         cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
       }}
-      className={`rounded-full flex items-center justify-center border border-white/30 backdrop-blur-2xl bg-white/20 hover:bg-white/30 ${
+      className={`glass-button rounded-full flex items-center justify-center ${
         modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
       }`}
       title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
     >
-      <span className="text-white text-2xl drop-shadow-lg">{isChatOpen ? '✕' : '💬'}</span>
+      <span className="glass-text text-2xl drop-shadow-lg">{isChatOpen ? '✕' : '💬'}</span>
     </button>
   );
 };

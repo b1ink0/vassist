@@ -7,6 +7,7 @@ import ResourceLoader from '../utils/ResourceLoader';
 
 
 import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig, AIProviders, TTSProviders, STTProviders, OpenAIVoices, validateAIConfig, validateTTSConfig, validateSTTConfig } from '../config/aiConfig';
+import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
 
 const ControlPanel = ({ 
   isAssistantReady,
@@ -40,16 +41,26 @@ const ControlPanel = ({
   const [sttTesting, setSttTesting] = useState(false);
 
   // Config sub-tab state
-  const [configSubTab, setConfigSubTab] = useState('general');
+  const [configSubTab, setConfigSubTab] = useState('ui');
   
-  // General Config state
+  // UI Config state
+  const [uiConfig, setUiConfig] = useState(DefaultUIConfig);
+  const [uiConfigSaved, setUiConfigSaved] = useState(false);
+  const [uiConfigError, setUiConfigError] = useState('');
+  
+  // Legacy general config (for model loading)
   const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
   const [generalConfigSaved, setGeneralConfigSaved] = useState(false);
   const [generalConfigError, setGeneralConfigError] = useState('');
 
   // Load AI config on mount
   useEffect(() => {
-    // Load General config
+    // Load UI config
+    const savedUiConfig = StorageManager.getConfig('uiConfig', DefaultUIConfig);
+    setUiConfig(savedUiConfig);
+    console.log('[ControlPanel] UI config loaded:', savedUiConfig);
+    
+    // Load General config (legacy - for model loading only)
     const savedGeneralConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true });
     setGeneralConfig(savedGeneralConfig);
     console.log('[ControlPanel] General config loaded:', savedGeneralConfig);
@@ -359,6 +370,26 @@ const ControlPanel = ({
   };
 
   /**
+   * Save UI Config
+   */
+  const handleSaveUIConfig = () => {
+    // Save to storage
+    const saved = StorageManager.saveConfig('uiConfig', uiConfig);
+    
+    if (saved) {
+      setUiConfigSaved(true);
+      setUiConfigError('');
+      
+      console.log('[ControlPanel] UI config saved successfully');
+      
+      // Hide success message after 2 seconds
+      setTimeout(() => setUiConfigSaved(false), 2000);
+    } else {
+      setUiConfigError('Failed to save configuration');
+    }
+  };
+
+  /**
    * Update General config field
    */
   const updateGeneralConfig = (path, value) => {
@@ -376,6 +407,33 @@ const ControlPanel = ({
       
       current[parts[parts.length - 1]] = value;
       
+      return updated;
+    });
+  };
+
+  /**
+   * Update UI config field
+   */
+  const updateUIConfig = (path, value) => {
+    setUiConfig(prev => {
+      const updated = { ...prev };
+      
+      // Handle nested paths like 'backgroundDetection.enabled'
+      const parts = path.split('.');
+      let current = updated;
+      
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!current[part]) {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+      
+      const lastPart = parts[parts.length - 1];
+      current[lastPart] = value;
+      
+      console.log('[ControlPanel] UI Config updated:', path, '=', value);
       return updated;
     });
   };
@@ -1013,14 +1071,14 @@ const ControlPanel = ({
             {/* Config Sub-Tabs */}
             <div className="flex border-b border-white/20 bg-black/30 rounded-t-lg overflow-hidden -mx-4 -mt-3 mb-3">
               <button
-                onClick={() => setConfigSubTab('general')}
+                onClick={() => setConfigSubTab('ui')}
                 className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
-                  configSubTab === 'general'
+                  configSubTab === 'ui'
                     ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                ⚙️ General
+                🎨 UI
               </button>
               <button
                 onClick={() => setConfigSubTab('llm')}
@@ -1055,12 +1113,13 @@ const ControlPanel = ({
             </div>
 
             {/* General Sub-Tab */}
-            {configSubTab === 'general' && (
+            {/* UI Sub-Tab */}
+            {configSubTab === 'ui' && (
               <>
-                <p className="text-xs text-gray-400 mb-3">General Application Settings</p>
+                <p className="text-xs text-gray-400 mb-3">User Interface Settings</p>
                 
                 {/* Enable/Disable 3D Model */}
-                <div className="mb-3">
+                <div className="mb-4 pb-3 border-b border-white/10">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1075,38 +1134,128 @@ const ControlPanel = ({
                   </p>
                 </div>
 
-                {/* General Error/Success Messages */}
-                {generalConfigError && (
-                  <div className={`text-xs p-2 rounded ${generalConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : generalConfigError.includes('⚠️') ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {generalConfigError}
+                {/* Background Detection Settings */}
+                <div className="mb-4">
+                  <p className="text-xs text-white font-semibold mb-2">🎨 Background Detection & Theming</p>
+                  
+                  {/* Enable Background Detection */}
+                  <div className="mb-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={uiConfig.backgroundDetection?.enabled ?? true}
+                        onChange={(e) => updateUIConfig('backgroundDetection.enabled', e.target.checked)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-xs text-white">Enable Adaptive Background Detection</span>
+                    </label>
+                    <p className="text-[10px] text-gray-400 mt-1 ml-6">
+                      Automatically adjust chat theme based on page background color.
+                    </p>
+                  </div>
+
+                  {/* Theme Mode */}
+                  {uiConfig.backgroundDetection?.enabled && (
+                    <div className="mb-3 ml-6">
+                      <label className="block text-xs text-white mb-1">Theme Mode</label>
+                      <select
+                        value={uiConfig.backgroundDetection?.mode ?? BackgroundThemeModes.ADAPTIVE}
+                        onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
+                        className="w-full px-2 py-1.5 bg-black/40 border border-white/20 rounded text-xs text-white"
+                      >
+                        <option value={BackgroundThemeModes.ADAPTIVE}>Adaptive (Auto-detect)</option>
+                        <option value={BackgroundThemeModes.LIGHT}>Light (Force dark chat)</option>
+                        <option value={BackgroundThemeModes.DARK}>Dark (Force light chat)</option>
+                      </select>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && 'Auto-detect background brightness'}
+                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.LIGHT && 'Use dark chat on all backgrounds'}
+                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.DARK && 'Use light chat on all backgrounds'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Sample Grid Size */}
+                  {uiConfig.backgroundDetection?.enabled && uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
+                    <div className="mb-3 ml-6">
+                      <label className="block text-xs text-white mb-1">
+                        Sample Grid Size: {uiConfig.backgroundDetection?.sampleGridSize ?? 5}×{uiConfig.backgroundDetection?.sampleGridSize ?? 5}
+                      </label>
+                      <input
+                        type="range"
+                        min="3"
+                        max="7"
+                        step="1"
+                        value={uiConfig.backgroundDetection?.sampleGridSize ?? 5}
+                        onChange={(e) => updateUIConfig('backgroundDetection.sampleGridSize', parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {uiConfig.backgroundDetection?.sampleGridSize ?? 5}×{uiConfig.backgroundDetection?.sampleGridSize ?? 5} = {(uiConfig.backgroundDetection?.sampleGridSize ?? 5) * (uiConfig.backgroundDetection?.sampleGridSize ?? 5)} sample points. Higher = more accurate, slightly slower.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Show Debug */}
+                  {uiConfig.backgroundDetection?.enabled && uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
+                    <div className="mb-3 ml-6">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={uiConfig.backgroundDetection?.showDebug ?? false}
+                          onChange={(e) => updateUIConfig('backgroundDetection.showDebug', e.target.checked)}
+                          className="w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs text-white">Show Debug Markers</span>
+                      </label>
+                      <p className="text-[10px] text-gray-400 mt-1 ml-6">
+                        Display colored dots at sample points (red=dark, green=light).
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* UI Error/Success Messages */}
+                {uiConfigError && (
+                  <div className="text-xs p-2 rounded bg-red-500/20 text-red-400 mb-3">
+                    {uiConfigError}
                   </div>
                 )}
                 
-                {generalConfigSaved && (
-                  <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                    ✅ Configuration saved successfully!
+                {uiConfigSaved && (
+                  <div className="text-xs p-2 rounded bg-green-500/20 text-green-400 mb-3">
+                    ✅ UI settings saved successfully!
+                  </div>
+                )}
+
+                {/* Also save General config for model loading */}
+                {generalConfigError && (
+                  <div className={`text-xs p-2 rounded mb-3 ${generalConfigError.includes('⚠️') ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {generalConfigError}
                   </div>
                 )}
 
                 {/* Action Buttons */}
                 <div className="flex gap-2 pt-2 border-t border-white/20 mt-3">
                   <button
-                    onClick={handleSaveGeneralConfig}
+                    onClick={() => {
+                      handleSaveUIConfig();
+                      handleSaveGeneralConfig(); // Save model loading setting too
+                    }}
                     className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
                   >
-                    💾 Save Settings
+                    💾 Save UI Settings
                   </button>
                 </div>
 
                 {/* Info */}
                 <div className="border-t border-white/20 pt-3 mt-3">
-                  <p className="text-[10px] text-gray-500 mb-2">ℹ️ General Settings Guide:</p>
+                  <p className="text-[10px] text-gray-500 mb-2">ℹ️ UI Settings Guide:</p>
                   <p className="text-[10px] text-gray-400 leading-relaxed">
-                    <strong>3D Model Loading:</strong> Disable to use chat-only mode
-                    <br/>• Reduces resource usage (no 3D rendering)
-                    <br/>• Chat button becomes draggable anywhere
-                    <br/>• All chat features remain available
-                    <br/>• Requires page reload to apply changes
+                    <strong>3D Model:</strong> Disable for chat-only mode
+                    <br/><strong>Adaptive Detection:</strong> Auto-adjusts chat theme
+                    <br/><strong>Grid Size:</strong> 3×3 (fast) to 7×7 (accurate)
+                    <br/><strong>Debug Markers:</strong> Visualize detection points
                   </p>
                 </div>
               </>

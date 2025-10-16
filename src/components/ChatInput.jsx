@@ -256,24 +256,17 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[1001]">
       {/* Fade blur overlay - behind the input */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      />
+      <div className="glass-fade-overlay absolute inset-0 pointer-events-none" />
       
       {/* Input form - on top of blur */}
       <div className="relative p-4">
         {/* Error message with close button */}
         {recordingError && (
-          <div className="max-w-3xl mx-auto mb-2 px-4 py-2 bg-red-500/20 border border-red-500/40 rounded-lg text-red-300 text-sm flex items-center justify-between gap-2">
-            <span>{recordingError}</span>
+          <div className="glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2">
+            <span className="glass-text text-sm">{recordingError}</span>
             <button
               onClick={() => setRecordingError('')}
-              className="text-red-300 hover:text-red-100 transition-colors flex-shrink-0"
+              className="glass-text hover:opacity-80 transition-opacity flex-shrink-0"
               title="Close"
             >
               ✕
@@ -287,16 +280,13 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
             type="button"
             onClick={handleVoiceModeToggle}
             disabled={isRecording || isProcessingRecording}
-            className={`px-4 py-3 backdrop-blur-md rounded-xl transition-all border shadow-lg ${
+            className={`glass-button px-4 py-3 rounded-xl transition-all ${
               isRecording || isProcessingRecording
-                ? 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed opacity-50'
+                ? 'opacity-50 cursor-not-allowed'
                 : isVoiceMode
-                ? 'bg-green-500/20 border-green-500/40 text-green-300 hover:bg-green-500/30'
-                : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
+                ? 'glass-success'
+                : ''
             }`}
-            style={{
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1)'
-            }}
             title={
               isRecording || isProcessingRecording
                 ? 'Stop recording first'
@@ -305,18 +295,18 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                 : 'Start Voice Mode'
             }
           >
-            📞
+            <span className="glass-text">📞</span>
           </button>
 
           {isVoiceMode ? (
             /* Voice Mode UI - Replace text input with state indicators */
             <>
-              <div className="flex-1 px-5 py-3 backdrop-blur-md bg-white/5 text-white border border-white/15 rounded-xl shadow-lg flex items-center justify-between">
+              <div className="glass-input flex-1 px-5 py-3 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className={`text-2xl ${voiceStateDisplay.class === 'listening' ? 'animate-pulse' : ''}`}>
                     {voiceStateDisplay.icon}
                   </span>
-                  <span className="text-white/90">{voiceStateDisplay.label}</span>
+                  <span className="glass-text">{voiceStateDisplay.label}</span>
                 </div>
                 
                 {/* Interrupt button when AI is speaking */}
@@ -324,9 +314,9 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                   <button
                     type="button"
                     onClick={handleInterrupt}
-                    className="px-4 py-2 bg-orange-500/20 border border-orange-500/40 text-orange-300 rounded-lg hover:bg-orange-500/30 transition-all text-sm font-medium"
+                    className="glass-warning px-4 py-2 rounded-lg transition-all text-sm font-medium"
                   >
-                    ✋ Interrupt
+                    <span className="glass-text">✋ Interrupt</span>
                   </button>
                 )}
               </div>
@@ -339,18 +329,15 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                 type="button"
                 onClick={handleMicClick}
                 disabled={isProcessingRecording || isVoiceMode}
-                className={`px-4 py-3 backdrop-blur-md rounded-xl transition-all border shadow-lg ${
+                className={`glass-button px-4 py-3 rounded-xl transition-all ${
                   isVoiceMode
-                    ? 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed opacity-50'
+                    ? 'opacity-50 cursor-not-allowed'
                     : isProcessingRecording
-                    ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300 cursor-wait'
+                    ? 'glass-warning cursor-wait'
                     : isRecording
-                    ? 'bg-red-500/20 border-red-500/40 text-red-300 hover:bg-red-500/30 animate-pulse'
-                    : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
+                    ? 'glass-error animate-pulse'
+                    : ''
                 }`}
-                style={{
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1)'
-                }}
                 title={
                   isVoiceMode
                     ? 'Voice call is active'
@@ -361,7 +348,9 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                     : 'Start Voice Input'
                 }
               >
-                {isProcessingRecording ? '⏳' : isRecording ? '⏺️' : '🎤'}
+                <span className="glass-text">
+                  {isProcessingRecording ? '⏳' : isRecording ? '⏺️' : '🎤'}
+                </span>
               </button>
 
               <input
@@ -377,20 +366,14 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                     ? 'Recording... Click mic to stop' 
                     : 'Type your message... (Esc to close)'
                 }
-                className="flex-1 px-5 py-3 backdrop-blur-md bg-white/5 text-white border border-white/15 rounded-xl focus:outline-none focus:border-white/25 focus:bg-white/8 placeholder-gray-500 shadow-lg transition-all"
-                style={{
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.05)'
-                }}
+                className="glass-input glass-placeholder glass-text flex-1 px-5 py-3 rounded-xl focus:outline-none transition-all"
               />
               <button
                 type="submit"
                 disabled={!message.trim()}
-                className="px-6 py-3 backdrop-blur-md bg-white/10 text-white rounded-xl hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed transition-all border border-white/15 shadow-lg font-medium"
-                style={{
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1)'
-                }}
+                className="glass-button px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
               >
-                Send
+                <span className="glass-text">Send</span>
               </button>
             </>
           )}
@@ -398,13 +381,10 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-3 backdrop-blur-md bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/15 shadow-lg"
-            style={{
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1)'
-            }}
+            className="glass-button px-4 py-3 rounded-xl transition-all"
             title="Close (Esc)"
           >
-            ✕
+            <span className="glass-text">✕</span>
           </button>
         </form>
       </div>

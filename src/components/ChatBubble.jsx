@@ -141,16 +141,16 @@ const ChatBubble = ({
 
   // Different styles for user vs assistant vs error messages
   const bubbleClasses = isError
-    ? 'backdrop-blur-md bg-gradient-to-br from-red-500/80 to-orange-600/80 border-red-400/30'
+    ? 'glass-error'
     : isUser
-    ? 'backdrop-blur-md bg-gradient-to-br from-green-500/80 to-teal-600/80 border-green-400/30'
-    : 'backdrop-blur-md bg-gradient-to-br from-blue-500/80 to-purple-600/80 border-blue-400/30';
+    ? 'glass-success'
+    : 'glass-message';
 
   const triangleColor = isError
-    ? 'rgba(239, 68, 68, 0.8)'
+    ? 'rgba(239, 68, 68, 0.3)'
     : isUser
-    ? 'rgba(16, 185, 129, 0.8)'
-    : 'rgba(59, 130, 246, 0.8)';
+    ? 'rgba(34, 197, 94, 0.3)'
+    : 'rgba(255, 255, 255, 0.25)';
 
   return (
     <div
@@ -161,14 +161,11 @@ const ChatBubble = ({
         zIndex: 998,
         maxWidth: '350px',
         minWidth: '200px',
-        boxShadow: isOnLeft
-          ? '4px 4px 20px rgba(0,0,0,0.4), inset -1px -1px 2px rgba(255,255,255,0.2)'
-          : '-4px 4px 20px rgba(0,0,0,0.4), inset 1px -1px 2px rgba(255,255,255,0.2)',
       }}
-      className={`${bubbleClasses} rounded-2xl p-4 border shadow-2xl`}
+      className={`${bubbleClasses} glass-accelerated rounded-2xl p-4 shadow-2xl`}
     >
       {/* Message text */}
-      <div className="text-white text-sm leading-relaxed">
+      <div className="glass-text text-sm leading-relaxed">
         {displayText}
         {isTyping && (
           <span className="inline-block w-1 h-4 ml-1 bg-white animate-pulse" />
@@ -193,10 +190,10 @@ const ChatBubble = ({
       {type === 'assistant' && (
         <button
           onClick={onHide}
-          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+          className="glass-button absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors"
           title="Close"
         >
-          <span className="text-white text-xs">✕</span>
+          <span className="glass-text text-xs">✕</span>
         </button>
       )}
     </div>
