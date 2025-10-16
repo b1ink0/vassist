@@ -71,10 +71,8 @@ class TTSServiceProxy extends ServiceProxy {
    * @param {Function} callback - (text, bvmdBlobUrl) => void
    */
   setSpeakCallback(callback) {
-    if (!this.isExtension) {
-      this.directService.setSpeakCallback(callback);
-    }
-    // In extension mode, we'll handle this differently via messages
+    // Always set on direct service since playback happens in main world for both modes
+    this.directService.setSpeakCallback(callback);
     this.speakCallback = callback;
   }
 
@@ -83,9 +81,8 @@ class TTSServiceProxy extends ServiceProxy {
    * @param {Function} callback - () => void
    */
   setAudioFinishedCallback(callback) {
-    if (!this.isExtension) {
-      this.directService.setAudioFinishedCallback(callback);
-    }
+    // Always set on direct service since playback happens in main world for both modes
+    this.directService.setAudioFinishedCallback(callback);
     this.audioFinishedCallback = callback;
   }
 
@@ -94,10 +91,27 @@ class TTSServiceProxy extends ServiceProxy {
    * @param {Function} callback - () => void
    */
   setStopCallback(callback) {
-    if (!this.isExtension) {
-      this.directService.setStopCallback(callback);
-    }
+    // Always set on direct service since playback happens in main world for both modes
+    this.directService.setStopCallback(callback);
     this.stopCallback = callback;
+  }
+
+  /**
+   * Set callback for when audio playback starts
+   * @param {Function} callback - (sessionId) => void
+   */
+  setAudioStartCallback(callback) {
+    // Always use direct service for playback callbacks
+    this.directService.onAudioStartCallback = callback;
+  }
+
+  /**
+   * Set callback for when audio playback ends
+   * @param {Function} callback - (sessionId) => void
+   */
+  setAudioEndCallback(callback) {
+    // Always use direct service for playback callbacks
+    this.directService.onAudioEndCallback = callback;
   }
 
   /**
@@ -113,24 +127,106 @@ class TTSServiceProxy extends ServiceProxy {
 
   /**
    * Generate speech from text with optional lip sync
+   * Dev mode: Direct TTS API with VMD/BVMD generation in main world
+   * Extension mode: 
+   *   1. Background generates TTS audio (ArrayBuffer)
+   *   2. Offscreen generates VMD from audio (heavy processing)
+   *   3. Main world converts VMD to BVMD (needs Babylon scene)
    * @param {string} text - Text to convert to speech
    * @param {boolean} generateLipSync - Generate lip sync data
-   * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and BVMD URL
+   * @returns {Promise<{audio: Blob|ArrayBuffer, bvmdUrl: string|null}>} Audio and BVMD URL
    */
   async generateSpeech(text, generateLipSync = true) {
     if (this.isExtension) {
+      // Extension mode flow:
+      // 1. Background generates TTS audio (returns ArrayBuffer)
       const response = await this.bridge.sendMessage(
         MessageTypes.TTS_GENERATE_SPEECH,
-        { text, generateLipSync },
-        { timeout: 60000 } // 1 minute for TTS generation
+        { text, generateLipSync: false }, // Don't generate in background
+        { timeout: 60000 }
       );
       
-      // Response contains audioUrl and bvmdUrl (blob URLs created in background)
+      // Check if audio generation was cancelled or failed
+      if (!response || !response.audioBuffer) {
+        console.log('[TTSServiceProxy] TTS generation cancelled or failed');
+        return null;
+      }
+      
+      // Convert plain Array back to ArrayBuffer
+      let audioBuffer;
+      if (Array.isArray(response.audioBuffer)) {
+        // Check if array is empty (stopped during generation)
+        if (response.audioBuffer.length === 0) {
+          console.log('[TTSServiceProxy] TTS generation returned empty audio (likely stopped)');
+          return null;
+        }
+        const uint8Array = new Uint8Array(response.audioBuffer);
+        audioBuffer = uint8Array.buffer;
+      } else if (response.audioBuffer instanceof Uint8Array) {
+        audioBuffer = response.audioBuffer.buffer.slice(
+          response.audioBuffer.byteOffset,
+          response.audioBuffer.byteOffset + response.audioBuffer.byteLength
+        );
+      } else {
+        audioBuffer = response.audioBuffer;
+      }
+      
+      // Validate audio buffer is not empty
+      if (!audioBuffer || audioBuffer.byteLength === 0) {
+        console.log('[TTSServiceProxy] Audio buffer is empty, skipping');
+        return null;
+      }
+      
+      // 2. If lip sync needed, process through offscreen (includes VMD→BVMD conversion)
+      if (generateLipSync) {
+        try {
+          // IMPORTANT: Convert ArrayBuffer to Array before sending
+          // Chrome's structured clone transfers ArrayBuffers but copies Arrays
+          const audioArray = Array.from(new Uint8Array(audioBuffer));
+          
+          // Offscreen will: Generate VMD → Convert to BVMD → Return both as Arrays
+          const lipSyncResponse = await this.bridge.sendMessage(
+            MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC,
+            { 
+              audioBuffer: audioArray,
+              mimeType: response.mimeType // Pass through MIME type from TTS service
+            },
+            { timeout: 120000 } // 2 minutes for heavy processing
+          );
+          
+          // Convert bvmdData from Array to BVMD blob URL
+          let bvmdUrl = null;
+          if (lipSyncResponse.bvmdData && Array.isArray(lipSyncResponse.bvmdData) && lipSyncResponse.bvmdData.length > 0) {
+            const bvmdUint8 = new Uint8Array(lipSyncResponse.bvmdData);
+            const bvmdBlob = new Blob([bvmdUint8], { type: 'application/octet-stream' });
+            bvmdUrl = URL.createObjectURL(bvmdBlob);
+          }
+          
+          return {
+            audio: audioBuffer,
+            bvmdUrl,
+            mimeType: response.mimeType
+          };
+        } catch (error) {
+          console.error('[TTSServiceProxy] Lip sync processing failed:', error);
+          // Return audio without lip sync
+          return {
+            audio: audioBuffer,
+            bvmdUrl: null,
+            mimeType: response.mimeType
+          };
+        }
+      }
+      
+      // No lip sync needed, just return audio
       return {
-        audio: response.audioBlob, // May need to fetch and convert
-        bvmdUrl: response.bvmdUrl
+        audio: audioBuffer,
+        bvmdUrl: null,
+        mimeType: response.mimeType
       };
+      
     } else {
+      // Dev mode: Direct service handles everything
       return await this.directService.generateSpeech(text, generateLipSync);
     }
   }
@@ -153,9 +249,10 @@ class TTSServiceProxy extends ServiceProxy {
    * @param {Function} onChunkReady - Callback when chunk ready
    * @param {number} maxChunkSize - Maximum chunk size
    * @param {number} minChunkSize - Minimum chunk size
+   * @param {string} sessionId - Optional session ID for this playback
    * @returns {Promise<Array>} Array of audio chunks
    */
-  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100) {
+  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100, sessionId = null) {
     if (this.isExtension) {
       // In extension mode, chunking might be handled differently
       // For now, use simple approach
@@ -164,10 +261,39 @@ class TTSServiceProxy extends ServiceProxy {
       
       for (let i = 0; i < chunks.length; i++) {
         const result = await this.generateSpeech(chunks[i], true);
-        results.push(result);
+        
+        // Skip if generation was cancelled (null result or empty audio)
+        if (!result || !result.audio) {
+          console.log(`[TTSServiceProxy] Chunk ${i + 1} generation cancelled or failed`);
+          continue;
+        }
+        
+        // Validate audio data is not empty
+        const audioSize = result.audio instanceof ArrayBuffer 
+          ? result.audio.byteLength 
+          : (Array.isArray(result.audio) ? result.audio.length : 0);
+          
+        if (audioSize === 0) {
+          console.log(`[TTSServiceProxy] Chunk ${i + 1} has empty audio data, skipping`);
+          continue;
+        }
+        
+        // Convert ArrayBuffer to blob URL for playback
+        const audioBlob = new Blob([result.audio], { type: result.mimeType || 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        console.log('[TTSServiceProxy] Created audio blob URL:', audioUrl, 'MIME:', result.mimeType);
+        
+        // Push item in format expected by playAudioSequence
+        results.push({
+          text: chunks[i],
+          audioUrl: audioUrl,
+          bvmdUrl: result.bvmdUrl,
+          sessionId: sessionId // Attach session ID to each chunk
+        });
         
         if (onChunkReady) {
-          onChunkReady(chunks[i], result.audioUrl, result.bvmdUrl, i, chunks.length);
+          onChunkReady(chunks[i], audioUrl, result.bvmdUrl, i, chunks.length);
         }
       }
       
@@ -177,139 +303,124 @@ class TTSServiceProxy extends ServiceProxy {
         text,
         onChunkReady,
         maxChunkSize,
-        minChunkSize
+        minChunkSize,
+        sessionId
       );
     }
   }
 
   /**
    * Get current audio queue length
+   * Always use direct service in main world
    * @returns {number} Number of audio items in queue
    */
   getQueueLength() {
-    if (this.isExtension) {
-      // Could send message to check, but for performance return cached value
-      return 0;
-    } else {
-      return this.directService.getQueueLength();
-    }
+    return this.directService.getQueueLength();
   }
 
   /**
    * Check if audio is currently playing or queued
+   * Always use direct service in main world
    * @returns {boolean} True if audio is active
    */
   isAudioActive() {
-    if (this.isExtension) {
-      return false; // Could add message to check
-    } else {
-      return this.directService.isAudioActive();
-    }
+    return this.directService.isAudioActive();
   }
 
   /**
    * Add audio to playback queue
+   * In both dev and extension mode, queue and playback happens in main world using direct service
    * @param {string} text - Text being spoken
    * @param {string} audioUrl - Audio blob URL
    * @param {string|null} bvmdUrl - BVMD blob URL for lip sync
+   * @param {string|null} sessionId - Session ID for this audio
    */
-  queueAudio(text, audioUrl, bvmdUrl = null) {
-    if (this.isExtension) {
-      this.bridge.sendMessage(MessageTypes.TTS_QUEUE_AUDIO, {
-        text,
-        audioUrl,
-        bvmdUrl
-      }).catch(error => {
-        console.error('[TTSServiceProxy] Queue audio failed:', error);
-      });
-    } else {
-      this.directService.queueAudio(text, audioUrl, bvmdUrl);
-    }
+  queueAudio(text, audioUrl, bvmdUrl = null, sessionId = null) {
+    // Always use direct service for queue management and playback
+    // Extension mode has already processed audio and lip sync, just needs to play
+    this.directService.queueAudio(text, audioUrl, bvmdUrl, sessionId);
   }
 
   /**
    * Play audio blob URL
+   * Always use direct service in main world
    * @param {string} text - Text being spoken
    * @param {string} audioUrl - Audio blob URL
    * @param {string|null} bvmdUrl - BVMD blob URL
    * @returns {Promise<void>} Resolves when audio finishes
    */
   async playAudio(text, audioUrl, bvmdUrl = null) {
-    if (!this.isExtension) {
-      return await this.directService.playAudio(text, audioUrl, bvmdUrl);
-    }
-    // In extension mode, playback happens in offscreen via queue
+    return await this.directService.playAudio(text, audioUrl, bvmdUrl);
   }
 
   /**
    * Play audio chunks sequentially
+   * Always use direct service in main world
    * @param {Array} items - Array of audio items
+   * @param {string} sessionId - Session ID for this playback sequence
    * @returns {Promise<void>} Resolves when all audio finishes
    */
-  async playAudioSequence(items) {
-    if (!this.isExtension) {
-      return await this.directService.playAudioSequence(items);
-    }
-    // In extension mode, use queue
-    for (const item of items) {
-      this.queueAudio(item.text, item.audioUrl, item.bvmdUrl);
-    }
+  async playAudioSequence(items, sessionId = null) {
+    return await this.directService.playAudioSequence(items, sessionId);
   }
 
   /**
    * Stop current playback and clear queue
+   * Extension mode: Notify background, also stop local queue
+   * Dev mode: Just stop local service
    */
   stopPlayback() {
+    // Always stop local direct service (handles queue in main world)
+    this.directService.stopPlayback();
+    
     if (this.isExtension) {
+      // Also notify background to stop TTS generation
       this.bridge.sendMessage(MessageTypes.TTS_STOP_PLAYBACK, {})
         .catch(error => {
           console.error('[TTSServiceProxy] Stop playback failed:', error);
         });
-      
-      // Trigger local callback
-      if (this.stopCallback) {
-        this.stopCallback();
-      }
-    } else {
-      this.directService.stopPlayback();
+    }
+    
+    // Trigger local callback
+    if (this.stopCallback) {
+      this.stopCallback();
     }
   }
 
   /**
    * Resume playback (clear stopped flag)
+   * Extension mode: Notify background, also resume local queue
+   * Dev mode: Just resume local service
    */
   resumePlayback() {
+    // Always resume local direct service
+    this.directService.resumePlayback();
+    
     if (this.isExtension) {
+      // Also notify background to resume TTS generation
       this.bridge.sendMessage(MessageTypes.TTS_RESUME_PLAYBACK, {})
         .catch(error => {
           console.error('[TTSServiceProxy] Resume playback failed:', error);
         });
-    } else {
-      this.directService.resumePlayback();
     }
   }
 
   /**
    * Clean up blob URLs
+   * Always use direct service in main world
    * @param {string[]} urls - URLs to revoke
    */
   cleanupBlobUrls(urls = null) {
-    if (!this.isExtension) {
-      this.directService.cleanupBlobUrls(urls);
-    }
-    // In extension mode, background handles cleanup
+    this.directService.cleanupBlobUrls(urls);
   }
 
   /**
    * Check if TTS is currently playing audio
+   * Always use direct service in main world
    * @returns {boolean} True if audio is playing
    */
   isCurrentlyPlaying() {
-    if (this.isExtension) {
-      return false; // Could add message to check
-    } else {
-      return this.directService.isCurrentlyPlaying();
-    }
+    return this.directService.isCurrentlyPlaying();
   }
 
   /**

@@ -21,12 +21,20 @@ class ExtensionBridge {
       // Only accept messages from same window
       if (event.source !== window) return;
       
+      console.log('[ExtensionBridge] Message event received:', {
+        hasData: !!event.data,
+        isResponse: event.data?.__VASSIST_RESPONSE__,
+        isStreamToken: event.data?.__VASSIST_STREAM_TOKEN__,
+        source: event.source === window ? 'same-window' : 'different-window'
+      });
+      
       // Check for regular response format
       if (event.data && event.data.__VASSIST_RESPONSE__) {
         const { requestId, payload, error } = event.data;
         
         const pending = this.pending.get(requestId);
         if (pending) {
+          console.log('[ExtensionBridge] ✅ Found pending promise, resolving for requestId:', requestId);
           this.pending.delete(requestId);
           
           if (error) {
@@ -34,14 +42,14 @@ class ExtensionBridge {
           } else {
             pending.resolve(payload);
           }
+        } else {
+          console.warn('[ExtensionBridge] ❌ No pending promise found for requestId:', requestId);
         }
       }
       
       // Check for streaming token
       if (event.data && event.data.__VASSIST_STREAM_TOKEN__) {
         const { requestId, token } = event.data;
-        
-        console.log('[ExtensionBridge] Received stream token, requestId:', requestId, 'token:', token);
         
         const pending = this.pending.get(requestId);
         if (pending && pending.onChunk) {

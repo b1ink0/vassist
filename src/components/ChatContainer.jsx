@@ -16,6 +16,55 @@ const ChatContainer = ({
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false); // Track if button is being dragged
+  const currentSessionRef = useRef(null); // Track current TTS session
+
+  /**
+   * Set up audio start callback for updating UI when audio starts playing
+   */
+  useEffect(() => {
+    TTSServiceProxy.setAudioStartCallback((sessionId) => {
+      console.log('[ChatContainer] Audio started playing for session:', sessionId);
+      
+      // Extract message index from session ID if it's a manual session
+      if (sessionId?.startsWith('manual_')) {
+        const parts = sessionId.split('_');
+        const messageIndex = parseInt(parts[1]);
+        if (!isNaN(messageIndex)) {
+          setLoadingMessageIndex(null); // Clear loading state
+          setPlayingMessageIndex(messageIndex); // Set to playing state
+          currentSessionRef.current = sessionId;
+        }
+      }
+      // For auto-TTS sessions, find the last assistant message
+      else if (sessionId?.startsWith('auto_')) {
+        // Find the last assistant message index
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') {
+            setLoadingMessageIndex(null);
+            setPlayingMessageIndex(i);
+            currentSessionRef.current = sessionId;
+            break;
+          }
+        }
+      }
+    });
+
+    // Set up audio end callback for resetting UI when audio finishes
+    TTSServiceProxy.setAudioEndCallback((sessionId) => {
+      console.log('[ChatContainer] Audio finished playing for session:', sessionId);
+      
+      // Only clear if this is still the current session
+      if (currentSessionRef.current === sessionId) {
+        setPlayingMessageIndex(null);
+        currentSessionRef.current = null;
+      }
+    });
+
+    return () => {
+      TTSServiceProxy.setAudioStartCallback(null);
+      TTSServiceProxy.setAudioEndCallback(null);
+    };
+  }, [messages]);
 
   /**
    * Smooth scroll to bottom with proper offset for fade area
@@ -194,26 +243,30 @@ const ChatContainer = ({
     if (playingMessageIndex === messageIndex) {
       TTSServiceProxy.stopPlayback();
       setPlayingMessageIndex(null);
+      setLoadingMessageIndex(null);
+      currentSessionRef.current = null;
       return;
     }
 
-    // Stop any currently playing audio
-    TTSServiceProxy.stopPlayback();
+    // Generate unique session ID for this playback request
+    const sessionId = `manual_${messageIndex}_${Date.now()}`;
+
+    // Clear UI state
     setPlayingMessageIndex(null);
     setLoadingMessageIndex(messageIndex);
 
+    // Resume TTS playback (clears stopped flag in both background and main world)
+    TTSServiceProxy.resumePlayback();
+
     try {
-      console.log(`[ChatContainer] Generating TTS for message ${messageIndex}`);
-      
-      // Clear stopped flag before starting new generation
-      TTSServiceProxy.resumePlayback();
-      
-      // Generate chunked speech for the message
+      // Generate chunked speech for the message with session ID
+      // This will automatically stop any current playback
       const audioUrls = await TTSServiceProxy.generateChunkedSpeech(
         messageContent,
         null, // No chunk callback needed here
         ttsConfig.chunkSize,
-        ttsConfig.minChunkSize
+        ttsConfig.minChunkSize,
+        sessionId // Pass session ID
       );
 
       if (audioUrls.length === 0) {
@@ -222,20 +275,23 @@ const ChatContainer = ({
         return;
       }
 
-      setLoadingMessageIndex(null);
-      setPlayingMessageIndex(messageIndex);
+      // Don't set playing state here - let the audio start callback handle it
+      // This ensures UI updates when audio ACTUALLY starts playing
 
       // Play audio sequence
-      await TTSServiceProxy.playAudioSequence(audioUrls);
+      await TTSServiceProxy.playAudioSequence(audioUrls, sessionId);
 
-      // Clean up after playback
+      // Clean up blob URLs after playback
       TTSServiceProxy.cleanupBlobUrls(audioUrls);
-      setPlayingMessageIndex(null);
+      
+      // Don't manually clear state here - let audio end callback handle it
+      // This ensures proper cleanup even if playback is interrupted
 
     } catch (error) {
-      console.error('[ChatContainer] TTS playback failed:', error);
+      console.error('[ChatController] TTS playback failed:', error);
       setLoadingMessageIndex(null);
       setPlayingMessageIndex(null);
+      currentSessionRef.current = null;
     }
   };
 

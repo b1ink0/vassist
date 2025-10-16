@@ -22,6 +22,7 @@ class TTSService {
     this.isPlaying = false;
     this.isStopped = false; // Flag to prevent new audio from starting after stop
     this.currentAudio = null;
+    this.currentPlaybackSession = null; // Track current playback session ID
     
     // Blob URL tracking for cleanup
     this.blobUrls = new Set();
@@ -43,6 +44,12 @@ class TTSService {
     
     // Callback for when TTS is stopped/interrupted (to return animation to idle)
     this.onStopCallback = null; // () => void
+    
+    // Callback for when audio playback starts (for UI updates)
+    this.onAudioStartCallback = null; // (sessionId) => void
+    
+    // Callback for when audio playback ends (for UI updates)
+    this.onAudioEndCallback = null; // (sessionId) => void
     
     console.log('[TTSService] Initialized with lip sync support');
   }
@@ -333,9 +340,10 @@ class TTSService {
    * @param {Function} onChunkReady - Callback when chunk is ready: (text: string, audioUrl: string, bvmdUrl: string|null, index: number, total: number) => void
    * @param {number} maxChunkSize - Maximum chunk size
    * @param {number} minChunkSize - Minimum chunk size
-   * @returns {Promise<Array<{text: string, audioUrl: string, bvmdUrl: string|null}>>} Array of text, audio URLs and BVMD URLs
+   * @param {string} sessionId - Optional session ID for this generation request
+   * @returns {Promise<Array<{text: string, audioUrl: string, bvmdUrl: string|null, sessionId: string|null}>>} Array of text, audio URLs and BVMD URLs
    */
-  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100) {
+  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100, sessionId = null) {
     if (!this.isConfigured()) {
       console.warn('[TTSService] TTS not configured, skipping speech generation');
       return [];
@@ -344,7 +352,7 @@ class TTSService {
     const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
     const results = [];
 
-    console.log(`[TTSService] Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''}`);
+    console.log(`[TTSService] Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''} [Session: ${sessionId}]`);
 
     for (let i = 0; i < chunks.length; i++) {
       try {
@@ -362,7 +370,7 @@ class TTSService {
         // Track blob URL for cleanup
         this.blobUrls.add(audioUrl);
         
-        const chunkResult = { text: chunks[i], audioUrl, bvmdUrl };
+        const chunkResult = { text: chunks[i], audioUrl, bvmdUrl, sessionId };
         results.push(chunkResult);
 
         // Notify callback
@@ -402,16 +410,32 @@ class TTSService {
    * @param {string} text - Text being spoken
    * @param {string} audioUrl - Audio blob URL
    * @param {string|null} bvmdUrl - Optional BVMD blob URL for lip sync
+   * @param {string} sessionId - Unique session ID for this playback request
    */
-  queueAudio(text, audioUrl, bvmdUrl = null) {
-    // Don't queue if stopped
-    if (this.isStopped) {
+  queueAudio(text, audioUrl, bvmdUrl = null, sessionId = null) {
+    // Generate session ID if not provided (for new playback requests)
+    const effectiveSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // If this is a NEW session (different from current), stop the current one
+    if (sessionId && this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
+      console.log(`[TTSService] New session ${sessionId} requested, stopping current session ${this.currentPlaybackSession}`);
+      this.stopPlayback();
+    }
+    
+    // Don't queue if stopped AND it's not a new session starting
+    if (this.isStopped && !sessionId) {
       console.log('[TTSService] Audio not queued - playback stopped');
       return;
     }
     
-    this.audioQueue.push({ text, audioUrl, bvmdUrl });
-    console.log(`[TTSService] Audio queued (${this.audioQueue.length} in queue)${bvmdUrl ? ' with lip sync' : ''}`);
+    // If starting a new session, clear the stopped flag
+    if (sessionId) {
+      this.isStopped = false;
+      this.currentPlaybackSession = sessionId;
+    }
+    
+    this.audioQueue.push({ text, audioUrl, bvmdUrl, sessionId: effectiveSessionId });
+    console.log(`[TTSService] Audio queued (${this.audioQueue.length} in queue)${bvmdUrl ? ' with lip sync' : ''} [Session: ${effectiveSessionId}]`);
     
     // Start playing if not already playing
     if (!this.isPlaying) {
@@ -432,6 +456,7 @@ class TTSService {
     
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
+      this.currentPlaybackSession = null; // Clear session when queue is empty
       console.log('[TTSService] Queue empty, playback stopped');
       return;
     }
@@ -443,11 +468,19 @@ class TTSService {
     const text = typeof item === 'object' ? item.text : '';
     const audioUrl = typeof item === 'string' ? item : item.audioUrl;
     const bvmdUrl = typeof item === 'object' ? item.bvmdUrl : null;
+    const sessionId = typeof item === 'object' ? item.sessionId : null;
 
     try {
-      await this.playAudio(text, audioUrl, bvmdUrl);
+      await this.playAudio(text, audioUrl, bvmdUrl, sessionId);
     } catch (error) {
       console.error('[TTSService] Playback error:', error);
+    }
+
+    // Check again if stopped (in case stop was called while playing)
+    if (this.isStopped) {
+      this.isPlaying = false;
+      console.log('[TTSService] Playback stopped, not playing next');
+      return;
     }
 
     // Trigger callback when this audio finishes (before playing next)
@@ -456,7 +489,7 @@ class TTSService {
       this.onAudioFinishedCallback();
     }
 
-    // Play next in queue (will check isStopped flag)
+    // Play next in queue (will check isStopped flag again)
     this.playNextInQueue();
   }
 
@@ -466,30 +499,57 @@ class TTSService {
    * @param {string} text - Text being spoken
    * @param {string} audioUrl - Audio blob URL
    * @param {string|null} bvmdUrl - Optional BVMD blob URL for lip sync
+   * @param {string|null} sessionId - Session ID for this audio
    * @returns {Promise<void>} Resolves when audio finishes
    */
-  playAudio(text, audioUrl, bvmdUrl = null) {
+  playAudio(text, audioUrl, bvmdUrl = null, sessionId = null) {
     return new Promise((resolve, reject) => {
+      // Check if this audio belongs to the current session
+      if (sessionId && this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
+        console.log(`[TTSService] Skipping audio from old session ${sessionId} (current: ${this.currentPlaybackSession})`);
+        resolve(); // Don't reject, just skip
+        return;
+      }
+      
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
 
-      // Trigger speak callback when audio starts (syncs with animation)
-      if (bvmdUrl && this.onSpeakCallback) {
-        audio.addEventListener('play', () => {
-          console.log('[TTSService] Audio playing, triggering speak animation');
+      // Trigger callbacks when audio starts playing
+      audio.addEventListener('play', () => {
+        console.log('[TTSService] Audio playing, triggering callbacks');
+        
+        // Trigger speak callback for animation synchronization
+        if (bvmdUrl && this.onSpeakCallback) {
           this.onSpeakCallback(text, bvmdUrl);
-        }, { once: true });
-      }
+        }
+        
+        // Trigger audio start callback for UI updates (e.g., show pause icon)
+        if (this.onAudioStartCallback) {
+          this.onAudioStartCallback(sessionId);
+        }
+      }, { once: true });
 
       audio.onended = () => {
         console.log('[TTSService] Audio playback finished');
         this.currentAudio = null;
+        
+        // Trigger audio end callback for UI updates
+        if (this.onAudioEndCallback) {
+          this.onAudioEndCallback(sessionId);
+        }
+        
         resolve();
       };
 
       audio.onerror = (error) => {
         console.error('[TTSService] Audio playback error:', error);
         this.currentAudio = null;
+        
+        // Trigger audio end callback for UI cleanup on error
+        if (this.onAudioEndCallback) {
+          this.onAudioEndCallback(sessionId);
+        }
+        
         reject(error);
       };
 
@@ -500,11 +560,23 @@ class TTSService {
 
   /**
    * Play audio chunks sequentially with BVMD lip sync
-   * @param {Array<{text: string, audioUrl: string, bvmdUrl: string|null}>} items - Array of text, audio URLs and BVMD URLs
+   * @param {Array<{text: string, audioUrl: string, bvmdUrl: string|null, sessionId: string|null}>} items - Array of text, audio URLs and BVMD URLs
+   * @param {string} sessionId - Session ID for this playback sequence
    * @returns {Promise<void>} Resolves when all audio finishes
    */
-  async playAudioSequence(items) {
-    console.log(`[TTSService] Playing ${items.length} audio chunks sequentially`);
+  async playAudioSequence(items, sessionId = null) {
+    console.log(`[TTSService] Playing ${items.length} audio chunks sequentially [Session: ${sessionId}]`);
+    
+    // Set current session if provided
+    if (sessionId) {
+      // If there's a different session playing, stop it first
+      if (this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
+        console.log(`[TTSService] Stopping current session ${this.currentPlaybackSession} for new session ${sessionId}`);
+        this.stopPlayback();
+      }
+      this.currentPlaybackSession = sessionId;
+      this.isStopped = false; // Clear stopped flag for new session
+    }
     
     for (const item of items) {
       try {
@@ -512,8 +584,9 @@ class TTSService {
         const text = typeof item === 'object' ? item.text : '';
         const audioUrl = typeof item === 'string' ? item : item.audioUrl;
         const bvmdUrl = typeof item === 'object' ? item.bvmdUrl : null;
+        const itemSessionId = typeof item === 'object' ? item.sessionId : sessionId;
         
-        await this.playAudio(text, audioUrl, bvmdUrl);
+        await this.playAudio(text, audioUrl, bvmdUrl, itemSessionId);
       } catch (error) {
         console.error('[TTSService] Error playing audio chunk:', error);
         // Continue with next chunk
@@ -521,32 +594,51 @@ class TTSService {
     }
     
     console.log('[TTSService] Sequence playback complete');
+    
+    // Clear session when sequence is complete
+    if (sessionId === this.currentPlaybackSession) {
+      this.currentPlaybackSession = null;
+    }
   }
 
   /**
    * Stop current playback and clear queue
+   * Returns a Promise that resolves when stop is complete
    */
   stopPlayback() {
     console.log('[TTSService] Stopping playback...');
     
+    // Save current session ID before clearing
+    const stoppedSessionId = this.currentPlaybackSession;
+    
     // Set stopped flag to prevent new audio from starting
     this.isStopped = true;
     
-    // Stop current audio
+    // Stop current audio and clean up
     if (this.currentAudio) {
       this.currentAudio.pause();
+      // Force the audio to end to resolve any pending Promise
+      this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
     
-    // Clear queue
+    // Clear queue completely
     this.audioQueue = [];
     this.isPlaying = false;
+    
+    // Clear current session
+    this.currentPlaybackSession = null;
     
     console.log('[TTSService] Playback stopped and queue cleared');
     
     // Trigger stop callback to notify animation manager
     if (this.onStopCallback) {
       this.onStopCallback();
+    }
+    
+    // Trigger audio end callback for UI cleanup (important for resetting speaker icon)
+    if (this.onAudioEndCallback && stoppedSessionId) {
+      this.onAudioEndCallback(stoppedSessionId);
     }
   }
   

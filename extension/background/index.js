@@ -119,14 +119,18 @@ function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text } = message.data;
-    const audioBuffer = await ttsService.generateSpeech(tabId, text);
+    const result = await ttsService.generateSpeech(tabId, text);
     
-    if (!audioBuffer) {
-      return { audioBuffer: null }; // Generation was stopped
+    if (!result) {
+      return { audioBuffer: null, mimeType: null }; // Generation was stopped
     }
     
-    // Return ArrayBuffer (will be transferred)
-    return { audioBuffer };
+    // Convert ArrayBuffer to plain Array to survive structured cloning
+    // Chrome's sendMessage transfers both ArrayBuffers AND Uint8Arrays (detaches them)
+    // Only plain arrays are guaranteed to be copied, not transferred
+    const audioData = Array.from(new Uint8Array(result.audioBuffer));
+    console.log('[Background] Converted ArrayBuffer to Array:', audioData.length, 'bytes');
+    return { audioBuffer: audioData, mimeType: result.mimeType };
   });
 
   backgroundBridge.registerHandler(MessageTypes.TTS_STOP_GENERATION, async (_message, _sender, tabId) => {
@@ -156,6 +160,46 @@ function registerHandlers() {
     return { resumed: true };
   });
 
+  // TTS Audio Processing with Lip Sync (via offscreen)
+  backgroundBridge.registerHandler(MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC, async (message) => {
+    console.log('[Background] TTS_PROCESS_AUDIO_WITH_LIPSYNC');
+    
+    // DON'T convert to ArrayBuffer! Keep as Array for offscreen message passing
+    // Chrome's sendMessage transfers ArrayBuffers but copies Arrays
+    // Offscreen will convert Array back to ArrayBuffer when it receives it
+    const { audioBuffer, mimeType } = message.data;
+    
+    if (!Array.isArray(audioBuffer)) {
+      throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
+    }
+    
+    console.log('[Background] Forwarding Array to offscreen:', audioBuffer.length, 'bytes');
+    
+    // Send as Array directly to offscreen
+    const offscreenMessage = {
+      ...message,
+      data: {
+        audioBuffer: audioBuffer, // Keep as Array!
+        mimeType: mimeType
+      }
+    };
+    
+    // sendToOffscreen now handles startJob/endJob internally
+    const result = await offscreenManager.sendToOffscreen(offscreenMessage);
+    
+    // Convert ArrayBuffer in result back to Array for sending to main world
+    if (result.data.audioBuffer instanceof ArrayBuffer) {
+      result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
+      console.log('[Background] Converted result audioBuffer to Array');
+    }
+    if (result.data.bvmdData instanceof ArrayBuffer) {
+      result.data.bvmdData = Array.from(new Uint8Array(result.data.bvmdData));
+      console.log('[Background] Converted result bvmdData to Array');
+    }
+    
+    return result.data; // Contains { audioBuffer: Array, bvmdData: Array|null }
+  });
+
   // STT Service handlers
   backgroundBridge.registerHandler(MessageTypes.STT_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
@@ -167,7 +211,16 @@ function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.STT_TRANSCRIBE_AUDIO, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { audioBuffer, mimeType } = message.data;
-    const text = await sttService.transcribeAudio(tabId, audioBuffer, mimeType);
+    
+    // Convert Array back to ArrayBuffer (received as Array from content script)
+    if (!Array.isArray(audioBuffer)) {
+      throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
+    }
+    
+    const arrayBuffer = new Uint8Array(audioBuffer).buffer;
+    console.log(`[Background] STT_TRANSCRIBE_AUDIO: converted Array (${audioBuffer.length} bytes) to ArrayBuffer`);
+    
+    const text = await sttService.transcribeAudio(tabId, arrayBuffer, mimeType);
     return { text };
   });
 

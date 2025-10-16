@@ -18,8 +18,17 @@ export class AudioProcessor {
         // Read blob as array buffer
         const arrayBuffer = await blob.arrayBuffer();
         
+        console.log('[AudioProcessor] Blob converted to ArrayBuffer:', arrayBuffer.byteLength, 'bytes');
+        
         // Decode audio data
-        this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        try {
+            this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            console.log('[AudioProcessor] Audio decoded successfully:', this.audioBuffer.duration, 'seconds');
+        } catch (error) {
+            console.error('[AudioProcessor] Decode failed:', error);
+            console.error('[AudioProcessor] First 16 bytes:', new Uint8Array(arrayBuffer.slice(0, 16)));
+            throw error;
+        }
         
         return this.audioBuffer;
     }

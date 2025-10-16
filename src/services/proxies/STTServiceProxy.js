@@ -96,13 +96,20 @@ class STTServiceProxy extends ServiceProxy {
             // Create audio blob
             const audioBlob = new Blob(this.audioChunks, { type: mimeType });
             
+            // Convert blob to ArrayBuffer, then to plain Array (like TTS does)
+            // This is necessary because Chrome's postMessage/sendMessage cannot handle Blobs
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioData = Array.from(new Uint8Array(arrayBuffer));
+            
+            console.log(`[STTServiceProxy] Converted audio to Array: ${audioData.length} bytes`);
+            
             // Cleanup local resources
             this.cleanup();
             
             // Send to background for transcription
             const response = await this.bridge.sendMessage(
               MessageTypes.STT_TRANSCRIBE_AUDIO,
-              { audioBlob },
+              { audioBuffer: audioData, mimeType },
               { timeout: 60000 }
             );
             
@@ -177,9 +184,16 @@ class STTServiceProxy extends ServiceProxy {
    */
   async transcribeAudio(audioBlob) {
     if (this.isExtension) {
+      // Convert blob to ArrayBuffer, then to plain Array (like TTS does)
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioData = Array.from(new Uint8Array(arrayBuffer));
+      const mimeType = audioBlob.type || 'audio/webm';
+      
+      console.log(`[STTServiceProxy] Transcribing audio: ${audioData.length} bytes, type: ${mimeType}`);
+      
       const response = await this.bridge.sendMessage(
         MessageTypes.STT_TRANSCRIBE_AUDIO,
-        { audioBlob },
+        { audioBuffer: audioData, mimeType },
         { timeout: 60000 }
       );
       return response.text || '';

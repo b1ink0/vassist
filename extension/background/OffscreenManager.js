@@ -41,6 +41,7 @@ export class OffscreenManager {
     } catch (error) {
       // Document might already exist
       if (error.message.includes('Only a single offscreen')) {
+        console.log('[OffscreenManager] Offscreen already exists');
         this.isOffscreenOpen = true;
         this.resetCloseTimer();
       } else {
@@ -62,7 +63,13 @@ export class OffscreenManager {
       this.isOffscreenOpen = false;
       console.log('[OffscreenManager] Offscreen document closed');
     } catch (error) {
-      console.error('[OffscreenManager] Failed to close offscreen:', error);
+      // If no current document, it's already closed - not an error
+      if (error.message.includes('No current offscreen')) {
+        console.log('[OffscreenManager] Offscreen already closed');
+        this.isOffscreenOpen = false;
+      } else {
+        console.error('[OffscreenManager] Failed to close offscreen:', error);
+      }
     }
   }
 
@@ -70,14 +77,47 @@ export class OffscreenManager {
    * Send message to offscreen document
    */
   async sendToOffscreen(message) {
-    await this.ensureOffscreen();
+    // Mark as active job BEFORE ensuring offscreen
+    this.startJob();
     
     try {
-      const response = await chrome.runtime.sendMessage(message);
+      await this.ensureOffscreen();
+      
+      // CRITICAL: Mark message as targeted to offscreen
+      // This prevents background handlers from processing it
+      const offscreenMessage = {
+        ...message,
+        target: 'offscreen'
+      };
+      
+      const response = await chrome.runtime.sendMessage(offscreenMessage);
       return response;
     } catch (error) {
       console.error('[OffscreenManager] Failed to send message:', error);
+      
+      // If receiving end doesn't exist, offscreen was closed
+      if (error.message.includes('Receiving end does not exist')) {
+        this.isOffscreenOpen = false;
+        await this.ensureOffscreen();
+        
+        // Retry the message
+        try {
+          const offscreenMessage = {
+            ...message,
+            target: 'offscreen'
+          };
+          const response = await chrome.runtime.sendMessage(offscreenMessage);
+          return response;
+        } catch (retryError) {
+          console.error('[OffscreenManager] Retry failed:', retryError);
+          throw retryError;
+        }
+      }
+      
       throw error;
+    } finally {
+      // Always end job when done
+      this.endJob();
     }
   }
 

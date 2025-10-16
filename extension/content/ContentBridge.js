@@ -15,15 +15,11 @@ export class ContentBridge extends MessageBridge {
   }
 
   /**
-   * Set up listeners for responses from background
+   * Set up listeners for push messages from background (streaming only)
    */
   setupListeners() {
-    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-      // Handle responses and streaming chunks
-      this.handleResponse(message);
-      sendResponse({ received: true });
-      return true;
-    });
+    // Streaming is handled in content/index.js via chrome.runtime.onMessage
+    // This ContentBridge doesn't need a listener - responses come via await
   }
 
   /**
@@ -33,8 +29,10 @@ export class ContentBridge extends MessageBridge {
    */
   async _sendMessageImpl(message) {
     try {
+      console.log(`[${this.name}] Sending message to background:`, message.type, message.requestId);
       const response = await chrome.runtime.sendMessage(message);
-      // Handle the response directly
+      console.log(`[${this.name}] Received response from background:`, response?.type, response?.requestId);
+      // Handle the response to resolve the pending promise
       if (response) {
         this.handleResponse(response);
       }

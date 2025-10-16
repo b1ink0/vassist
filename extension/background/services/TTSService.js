@@ -184,10 +184,23 @@ class TTSService {
       // Convert response to ArrayBuffer for transfer
       const arrayBuffer = await response.arrayBuffer();
       
-      console.log(`[TTSService] Tab ${tabId} - Speech generated (${arrayBuffer.byteLength} bytes)`);
+      // Get content type from response headers or default to audio/mpeg for OpenAI TTS
+      let contentType = null;
+      if (response.headers) {
+        contentType = response.headers.get('content-type');
+      }
+      if (!contentType && response.type) {
+        contentType = response.type;
+      }
+      // OpenAI TTS returns MP3 by default
+      if (!contentType) {
+        contentType = 'audio/mpeg';
+      }
+      
+      console.log(`[TTSService] Tab ${tabId} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`);
       
       state.isGenerating = false;
-      return arrayBuffer;
+      return { audioBuffer: arrayBuffer, mimeType: contentType };
       
     } catch (error) {
       console.error(`[TTSService] Tab ${tabId} - Speech generation failed:`, error);

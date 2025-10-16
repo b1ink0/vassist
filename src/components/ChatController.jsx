@@ -167,6 +167,9 @@ const ChatController = ({
     // Stop any ongoing TTS playback
     TTSServiceProxy.stopPlayback()
 
+    // Generate unique session ID for this auto-TTS request
+    const autoTTSSessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
     try {
       // Check AI configuration
       if (!AIServiceProxy.isConfigured()) {
@@ -219,31 +222,25 @@ const ChatController = ({
         
         // Check if stopped
         if (TTSServiceProxy.isStopped) {
-          console.log(`[ChatController] TTS generation stopped, skipping chunk ${chunkIndex}`)
           return
         }
 
         try {
-          const queueLength = TTSServiceProxy.getQueueLength()
-          console.log(`[ChatController] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
-          
           // Generate TTS audio + lip sync (VMD -> BVMD)
           const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunkText, true)
           
           // Check again if stopped after generation
           if (TTSServiceProxy.isStopped) {
-            console.log(`[ChatController] TTS stopped after generation, discarding chunk ${chunkIndex}`)
             return
           }
 
-          // Convert ArrayBuffer to Blob if needed (extension mode)
+          // Create audio URL from the returned audio (Blob or ArrayBuffer)
           const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
           const audioUrl = URL.createObjectURL(audioBlob)
           
           // Queue audio with BVMD for synchronized lip sync
-          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl)
-          
-          console.log(`[ChatController] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
+          // In both dev and extension mode, queuing happens in main world
+          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, autoTTSSessionId)
         } catch (ttsError) {
           console.warn(`[ChatController] TTS generation failed for chunk ${chunkIndex}:`, ttsError)
         }
@@ -252,18 +249,15 @@ const ChatController = ({
       // Generate next chunk if queue has space
       const tryGenerateNextChunk = () => {
         const queueLength = TTSServiceProxy.getQueueLength()
-        console.log(`[ChatController] tryGenerateNextChunk: queue=${queueLength}, next=${nextChunkToGenerate}, total=${allChunks.length}`)
         
         // Only generate if queue has room AND we have more chunks
         if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-          console.log(`[ChatController] Queue has space (${queueLength}/${MAX_QUEUED_AUDIO}), generating chunk ${nextChunkToGenerate}`)
           generateTTSChunk(nextChunkToGenerate++)
         }
       }
 
       // Register callback to generate next chunk when audio finishes playing
       TTSServiceProxy.setAudioFinishedCallback(() => {
-        console.log('[ChatController] Audio finished callback triggered')
         tryGenerateNextChunk()
       })
 
@@ -284,7 +278,6 @@ const ChatController = ({
         if (!hasSwitchedToSpeaking && 
             fullResponse.length > 10 && 
             assistantRef.current?.isReady()) {
-          console.log('[ChatController] Starting speaking animation')
           assistantRef.current.triggerAction('speak')
           hasSwitchedToSpeaking = true
         }
@@ -301,7 +294,6 @@ const ChatController = ({
             
             // Store chunk (don't generate yet, just store)
             if (chunkToSpeak && chunkToSpeak.length >= 3) {
-              console.log(`[ChatController] Found sentence chunk ${allChunks.length}: "${chunkToSpeak.substring(0, 50)}..."`)
               allChunks.push(chunkToSpeak)
               
               // Start generating first 3 chunks
@@ -311,26 +303,19 @@ const ChatController = ({
         }
       })
 
-      console.log('[ChatController] AI response complete:', fullResponse)
-
       // Add any remaining text in buffer
       if (ttsEnabled && textBuffer.trim().length > 0) {
         const finalChunk = textBuffer.trim()
-        console.log(`[ChatController] Adding final TTS chunk: "${finalChunk.substring(0, 50)}..."`)
         allChunks.push(finalChunk)
         tryGenerateNextChunk()
       }
 
       // Wait for all chunks to be generated
       if (ttsEnabled && allChunks.length > 0) {
-        console.log(`[ChatController] Waiting for all ${allChunks.length} TTS chunks to be generated...`)
-        
         // Wait until all chunks are generated
         while (nextChunkToGenerate < allChunks.length) {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
-        
-        console.log('[ChatController] All TTS chunks generated')
       }
 
     } catch (error) {

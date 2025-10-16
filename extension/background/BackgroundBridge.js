@@ -25,6 +25,13 @@ export class BackgroundBridge {
   setupListeners() {
     // Listen for messages from content scripts and offscreen
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      // CRITICAL: Only handle messages targeted to background or without target
+      // Ignore messages for offscreen or other contexts
+      if (message.target && message.target !== 'background') {
+        // Not for us, ignore silently (no response)
+        return false;
+      }
+      
       this.handleMessage(message, sender)
         .then(sendResponse)
         .catch(error => {

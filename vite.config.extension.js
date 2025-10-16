@@ -93,12 +93,10 @@ function copyAssetsPlugin() {
       const resDir = path.join(publicDir, 'res');
       const iconsDir = path.join(rootDir, 'extension', 'icons');
       const manifestFile = path.join(rootDir, 'extension', 'manifest.json');
-      const rulesFile = path.join(rootDir, 'extension', 'rules.json');
       const distDir = path.join(rootDir, 'dist-extension');
       const distResDir = path.join(distDir, 'res');
       const distIconsDir = path.join(distDir, 'icons');
       const distManifestFile = path.join(distDir, 'manifest.json');
-      const distRulesFile = path.join(distDir, 'rules.json');
       
       console.log('[copy-assets] Copying assets to dist-extension...');
       
@@ -117,9 +115,16 @@ function copyAssetsPlugin() {
         fs.copyFileSync(manifestFile, distManifestFile);
       }
       
-      if (fs.existsSync(rulesFile)) {
-        console.log(`[copy-assets] Copying ${rulesFile} to ${distRulesFile}`);
-        fs.copyFileSync(rulesFile, distRulesFile);
+      // Move offscreen.html from extension/offscreen/ to root
+      const nestedOffscreenHtml = path.join(distDir, 'extension', 'offscreen', 'offscreen.html');
+      const rootOffscreenHtml = path.join(distDir, 'offscreen.html');
+      
+      if (fs.existsSync(nestedOffscreenHtml)) {
+        console.log('[copy-assets] Moving offscreen.html to root...');
+        fs.copyFileSync(nestedOffscreenHtml, rootOffscreenHtml);
+        // Remove the nested directory structure
+        fs.rmSync(path.join(distDir, 'extension'), { recursive: true, force: true });
+        console.log('[copy-assets] offscreen.html moved to root');
       }
       
       console.log('[copy-assets] Asset copying complete!');
@@ -153,9 +158,8 @@ export default defineConfig({
         // Content script styles (for shadow DOM)
         'content-styles': resolve(__dirname, 'extension/content/styles.css'),
         
-        // Offscreen document
-        offscreen: resolve(__dirname, 'extension/offscreen/offscreen.js'),
-        'offscreen-html': resolve(__dirname, 'extension/offscreen/offscreen.html'),
+        // Offscreen document HTML (will automatically bundle the referenced offscreen.js)
+        'offscreen': resolve(__dirname, 'extension/offscreen/offscreen.html'),
       },
       
       output: {

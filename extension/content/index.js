@@ -275,8 +275,10 @@ class VirtualAssistantInjector {
             }
           } else {
             // NON-STREAMING REQUEST
+            console.log('[Content Script Bridge] Sending non-streaming request to background:', type);
             const { promise } = this.bridge.sendMessage(type, payload);
             response = await promise;
+            console.log('[Content Script Bridge] Received response from background for', type, ':', response);
             
             // Send response back to main world
             window.postMessage({
@@ -284,6 +286,7 @@ class VirtualAssistantInjector {
               requestId,
               payload: response
             }, '*');
+            console.log('[Content Script Bridge] Forwarded response to main world for request:', requestId);
           }
         } catch (error) {
           // Send error back to main world
