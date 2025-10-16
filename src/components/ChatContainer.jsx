@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TTSServiceProxy } from '../services/proxies';
 import StorageManager from '../managers/StorageManager';
 import { DefaultTTSConfig } from '../config/aiConfig';
-import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
+import BackgroundDetector from '../utils/BackgroundDetector';
 
 const ChatContainer = ({ 
   positionManagerRef, 
@@ -29,192 +29,74 @@ const ChatContainer = ({
    */
   useEffect(() => {
     if (!isVisible) return;
-
+    
     const detectBackgroundBrightness = () => {
-      try {
-        // Get UI config
-        const uiConfig = StorageManager.getConfig('uiConfig', DefaultUIConfig);
-        const bgConfig = uiConfig.backgroundDetection || DefaultUIConfig.backgroundDetection;
-        
-        // Check if detection is disabled
-        if (!bgConfig.enabled) return;
-        
-        // If forced mode, skip detection
-        if (bgConfig.mode === BackgroundThemeModes.LIGHT) {
-          setIsLightBackground(true);
-          return;
-        }
-        if (bgConfig.mode === BackgroundThemeModes.DARK) {
-          setIsLightBackground(false);
-          return;
-        }
-        
-        const showDebug = bgConfig.showDebug || false;
-        const gridSize = bgConfig.sampleGridSize || 5;
-        
-        // Temporarily disable pointer events on canvas and container to sample page behind
-        const canvas = document.getElementById('vassist-babylon-canvas');
-        const container = containerRef.current;
-        
-        const canvasPointerEvents = canvas?.style.pointerEvents;
-        const containerPointerEvents = container?.style.pointerEvents;
-        
-        if (canvas) canvas.style.pointerEvents = 'none';
-        if (container) container.style.pointerEvents = 'none';
-        
-        // Sample a grid of points
-        const containerWidth = 400;
-        const containerHeight = 500;
-        const cols = gridSize;
-        const rows = gridSize;
-        const padding = 60; // Sample inward from edges
-        
-        const samplePoints = [];
-        const markers = [];
-        
-        // Generate grid of sample points
-        for (let row = 0; row < rows; row++) {
-          for (let col = 0; col < cols; col++) {
-            const x = containerPos.x + padding + (col * (containerWidth - 2 * padding) / (cols - 1));
-            const y = containerPos.y + padding + (row * (containerHeight - 2 * padding) / (rows - 1));
-            samplePoints.push({ x, y });
-          }
-        }
-        
-        const allBrightness = []; // Collect all brightness values
-        
-        for (const point of samplePoints) {
-          let elementBehind = document.elementFromPoint(point.x, point.y);
-          if (!elementBehind) continue;
-          
-          // Traverse up DOM tree to find first element with non-transparent background
-          let bgColor = '';
-          let attempts = 0;
-          const maxAttempts = 10; // Prevent infinite loop
-          
-          while (elementBehind && attempts < maxAttempts) {
-            bgColor = window.getComputedStyle(elementBehind).backgroundColor;
-            
-            // Check if we got a valid color
-            const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-            if (rgbMatch) {
-              const a = rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1;
-              // If we found a non-transparent color, use it
-              if (a > 0) {
-                break;
-              }
-            }
-            
-            // Move to parent element
-            elementBehind = elementBehind.parentElement;
-            attempts++;
-          }
-          
-          const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-          if (!rgbMatch) {
-            console.log('[ChatContainer] No valid color found at point', point.x, point.y, 'after', attempts, 'attempts. Last color:', bgColor);
-            continue;
-          }
-          
-          const r = parseInt(rgbMatch[1]);
-          const g = parseInt(rgbMatch[2]);
-          const b = parseInt(rgbMatch[3]);
-          const a = rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1;
-          
-          // Calculate perceived brightness using luminance formula
-          const brightness = (0.299 * r + 0.587 * g + 0.114 * b);
-          
-          // Collect all brightness values for median calculation
-          allBrightness.push(brightness);
-          
-          // Create debug marker if debug mode is enabled
-          if (showDebug) {
-            // Color based on brightness: red (dark) -> yellow (medium) -> green (light)
-            const hue = (brightness / 255) * 120; // 0 (red) to 120 (green)
-            const color = `hsl(${hue}, 100%, 50%)`;
-            markers.push({
-              x: point.x,
-              y: point.y,
-              color,
-              brightness: Math.round(brightness),
-              alpha: a.toFixed(2),
-              element: elementBehind?.tagName || 'unknown',
-            });
-          }
-        }
-        
-        // Update debug markers
-        if (showDebug) {
-          setDebugMarkers(markers);
-        } else {
-          setDebugMarkers([]);
-        }
-        
-        // Restore pointer events
-        if (canvas) canvas.style.pointerEvents = canvasPointerEvents || 'auto';
-        if (container) container.style.pointerEvents = containerPointerEvents || 'auto';
-        
-        if (allBrightness.length === 0) return; // No valid samples
-        
-        // Calculate median brightness (more robust than average or max)
-        const sortedBrightness = [...allBrightness].sort((a, b) => a - b);
-        const medianIndex = Math.floor(sortedBrightness.length / 2);
-        const medianBrightness = sortedBrightness.length % 2 === 0
-          ? (sortedBrightness[medianIndex - 1] + sortedBrightness[medianIndex]) / 2
-          : sortedBrightness[medianIndex];
-        
-        const minBrightness = Math.min(...allBrightness);
-        const maxBrightness = Math.max(...allBrightness);
-        const avgBrightness = allBrightness.reduce((sum, b) => sum + b, 0) / allBrightness.length;
-        
-        console.log(
-          '[ChatContainer] Background detection:',
-          allBrightness.length, 'samples |',
-          'Median:', medianBrightness.toFixed(0),
-          '| Min:', minBrightness.toFixed(0),
-          '| Max:', maxBrightness.toFixed(0),
-          '| Avg:', avgBrightness.toFixed(0)
-        );
-        
-        // Use dark theme if median brightness is above threshold (light background)
-        const brightnessThreshold = 127.5;
-        const isLight = medianBrightness > brightnessThreshold;
-        
-        // Only update state if changed to avoid unnecessary re-renders
-        setIsLightBackground(prevState => {
-          if (prevState !== isLight) {
-            // Update classes on messages container
-            if (messagesContainerRef.current) {
-              if (isLight) {
-                messagesContainerRef.current.classList.add('light-bg');
-              } else {
-                messagesContainerRef.current.classList.remove('light-bg');
-              }
-            }
-            return isLight;
-          }
-          return prevState;
+      const canvas = document.getElementById('vassist-babylon-canvas');
+      const container = containerRef.current;
+      
+      const elementsToDisable = [canvas, container].filter(Boolean);
+      
+      const result = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
+        return BackgroundDetector.detectBrightness({
+          sampleArea: {
+            type: 'grid',
+            x: containerPos.x,
+            y: containerPos.y,
+            width: 400,
+            height: 500,
+            padding: 60,
+          },
+          elementsToIgnore: [
+            canvas,
+            container,
+          ],
+          logPrefix: '[ChatContainer]',
+          // Don't override enableDebug - let it use the config setting
         });
-      } catch (error) {
-        console.error('[ChatContainer] Background detection failed:', error);
-        // Fallback: assume dark background if detection fails
-        setIsLightBackground(false);
-      }
+      });
+      
+      // Update debug markers if available
+      setDebugMarkers(result.debugMarkers || []);
+      
+      // Update state if brightness changed
+      setIsLightBackground(prevState => {
+        if (prevState !== result.isLight) {
+          // Update classes on messages container
+          if (messagesContainerRef.current) {
+            if (result.isLight) {
+              messagesContainerRef.current.classList.add('light-bg');
+            } else {
+              messagesContainerRef.current.classList.remove('light-bg');
+            }
+          }
+          return result.isLight;
+        }
+        return prevState;
+      });
     };
-
-    console.log('[ChatContainer] Background detection effect triggered. isVisible:', isVisible, 'pos:', containerPos);
     
     // Initial detection
     detectBackgroundBrightness();
     
     // Re-check on position change (debounced)
-    const timeoutId = setTimeout(detectBackgroundBrightness, 100);
+    const timeoutId = setTimeout(detectBackgroundBrightness, 400);
+    
+    // Re-check on scroll (debounced)
+    let scrollTimeout;
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(detectBackgroundBrightness, 200);
+    };
+    
+    window.addEventListener('scroll', handleScroll, true);
     
     // Also re-check periodically in case background changes
-    const intervalId = setInterval(detectBackgroundBrightness, 2000); // Every 2 seconds
+    const intervalId = setInterval(detectBackgroundBrightness, 4000);
 
     return () => {
       clearTimeout(timeoutId);
+      clearTimeout(scrollTimeout);
+      window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
   }, [isVisible, containerPos]);
@@ -558,7 +440,7 @@ const ChatContainer = ({
             }`}
             title={isGenerating ? 'Stop generation' : isSpeaking ? 'Stop speaking' : 'Nothing to stop'}
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-lg leading-none flex items-center justify-center ${
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
               isGenerating || isSpeaking ? '' : 'opacity-50'
             }`}>⏹</span>
           </button>
@@ -571,7 +453,7 @@ const ChatContainer = ({
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
             title="Start new chat"
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-lg leading-none flex items-center justify-center`}>+</span>
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>+</span>
           </button>
           
           {/* Close button only shown when model is loaded (no chat button available) */}
@@ -584,7 +466,7 @@ const ChatContainer = ({
               className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
               title="Close chat"
             >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-sm leading-none flex items-center justify-center`}>✕</span>
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
             </button>
           )}
         </div>
@@ -593,17 +475,7 @@ const ChatContainer = ({
       {/* Messages container with MASK for fade */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 relative overflow-hidden"
-        style={{
-          // Use dark mask on light backgrounds, light mask on dark backgrounds
-          WebkitMaskImage: isLightBackground 
-            ? 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%)'
-            : 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%)',
-          maskImage: isLightBackground
-            ? 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%)'
-            : 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%)',
-          transition: 'mask-image 0.3s ease, -webkit-mask-image 0.3s ease',
-        }}
+        className={`flex-1 relative overflow-hidden ${isLightBackground ? 'glass-messages-mask-dark' : 'glass-messages-mask'}`}
       >
         {/* Scrollable messages */}
         <div 
@@ -620,7 +492,7 @@ const ChatContainer = ({
             /* Placeholder message when empty */
             <div className="flex items-center justify-center h-full">
               <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-6 py-4 rounded-3xl`}>
-                <div className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-center text-sm`}>
+                <div className="text-center text-sm">
                   💬 Type a message to start chatting...
                 </div>
               </div>
@@ -652,11 +524,11 @@ const ChatContainer = ({
                         disabled={isLoading}
                       >
                         {isLoading ? (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-xs animate-spin`}>⏳</span>
+                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs animate-spin`}>⏳</span>
                         ) : isPlaying ? (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-xs`}>⏸</span>
+                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs`}>⏸</span>
                         ) : (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-xs`}>🔊</span>
+                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs`}>🔊</span>
                         )}
                       </button>
                     )}
@@ -677,7 +549,7 @@ const ChatContainer = ({
                           : 'rounded-[20px] rounded-tl-md'
                       }`}
                     >
-                      <div className={`${isLightBackground ? 'glass-text' : 'glass-text-dark'} text-[15px] leading-relaxed whitespace-pre-wrap break-words`}>
+                      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
                         {msg.content}
                       </div>
                     </div>

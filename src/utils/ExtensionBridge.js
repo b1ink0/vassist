@@ -21,13 +21,6 @@ class ExtensionBridge {
       // Only accept messages from same window
       if (event.source !== window) return;
       
-      console.log('[ExtensionBridge] Message event received:', {
-        hasData: !!event.data,
-        isResponse: event.data?.__VASSIST_RESPONSE__,
-        isStreamToken: event.data?.__VASSIST_STREAM_TOKEN__,
-        source: event.source === window ? 'same-window' : 'different-window'
-      });
-      
       // Check for regular response format
       if (event.data && event.data.__VASSIST_RESPONSE__) {
         const { requestId, payload, error } = event.data;

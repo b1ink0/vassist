@@ -22,7 +22,6 @@ export const DefaultUIConfig = {
   
   // Background detection and theming
   backgroundDetection: {
-    enabled: true,
     mode: BackgroundThemeModes.ADAPTIVE,
     sampleGridSize: 5, // 5x5 grid = 25 sample points
     showDebug: false,

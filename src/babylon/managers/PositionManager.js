@@ -343,26 +343,6 @@ export class PositionManager {
     this.camera.orthoBottom = frustumCenterY - orthoHeight;
     this.camera.orthoLeft = frustumCenterX - (orthoHeight * aspectRatio);
     this.camera.orthoRight = frustumCenterX + (orthoHeight * aspectRatio);
-    
-    console.log('[PositionManager] Camera frustum updated', {
-      canvas: { width: this.canvasWidth, height: this.canvasHeight },
-      modelPixels: { x: this.positionX, y: this.positionY, width: this.modelWidthPx, height: this.modelHeightPx },
-      modelCenterPixels: { x: modelCenterPixelX.toFixed(1), y: modelCenterPixelY.toFixed(1) },
-      canvasCenterPixels: { x: canvasCenterX.toFixed(1), y: canvasCenterY.toFixed(1) },
-      offsetPixels: { x: offsetPixelX.toFixed(1), y: offsetPixelY.toFixed(1) },
-      cameraOffset: { x: offset.x.toFixed(2), y: offset.y.toFixed(2) },
-      orthoHeight: orthoHeight.toFixed(6),
-      offsetWorld: { x: worldOffsetX.toFixed(2), y: worldOffsetY.toFixed(2) },
-      frustumCenter: { x: frustumCenterX.toFixed(2), y: frustumCenterY.toFixed(2) },
-      frustum: {
-        left: this.camera.orthoLeft.toFixed(2),
-        right: this.camera.orthoRight.toFixed(2),
-        top: this.camera.orthoTop.toFixed(2),
-        bottom: this.camera.orthoBottom.toFixed(2),
-        width: (this.camera.orthoRight - this.camera.orthoLeft).toFixed(2),
-        height: (this.camera.orthoTop - this.camera.orthoBottom).toFixed(2)
-      }
-    });
   }
   
   /**

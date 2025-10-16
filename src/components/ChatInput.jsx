@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { STTServiceProxy } from '../services/proxies';
 ; import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
+import BackgroundDetector from '../utils/BackgroundDetector';
 
 const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }) => {
   const [message, setMessage] = useState('');
@@ -9,10 +10,80 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   const [isProcessingRecording, setIsProcessingRecording] = useState(false); // New state for processing
   const [recordingError, setRecordingError] = useState('');
   const inputRef = useRef(null);
+  const [isLightBackground, setIsLightBackground] = useState(false); // Track background brightness
+  const containerRef = useRef(null);
   
   // Voice conversation mode
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
+
+  /**
+   * Detect background color brightness behind the input area
+   * Samples the bottom center of the screen
+   */
+  useEffect(() => {
+    if (!isVisible) return;
+    
+    const detectBackgroundBrightness = () => {
+      const container = containerRef.current;
+      
+      const elementsToDisable = [container].filter(Boolean);
+      
+      const result = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
+        return BackgroundDetector.detectBrightness({
+          sampleArea: {
+            type: 'horizontal',
+            centerX: window.innerWidth / 2,
+            centerY: window.innerHeight - 60, // 60px from bottom
+            width: 600,
+            padding: 20,
+          },
+          elementsToIgnore: [
+            '.glass-fade-overlay',
+            '.glass-fade-overlay-dark',
+            'form',
+            container,
+            '#vassist-babylon-canvas',
+          ],
+          logPrefix: '[ChatInput]',
+        });
+      });
+      
+      // Update state if brightness changed
+      setIsLightBackground(prevState => {
+        if (prevState !== result.isLight) {
+          console.log('[ChatInput] Background brightness changed:', {
+            median: result.brightness.toFixed(1),
+            isLight: result.isLight,
+            samples: result.sampleCount,
+          });
+          return result.isLight;
+        }
+        return prevState;
+      });
+    };
+    
+    // Initial detection
+    detectBackgroundBrightness();
+    
+    // Re-check on scroll (debounced)
+    let scrollTimeout;
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(detectBackgroundBrightness, 200);
+    };
+    
+    window.addEventListener('scroll', handleScroll, true);
+    
+    // Re-check periodically in case background changes
+    const intervalId = setInterval(detectBackgroundBrightness, 4000);
+
+    return () => {
+      clearTimeout(scrollTimeout);
+      window.removeEventListener('scroll', handleScroll, true);
+      clearInterval(intervalId);
+    };
+  }, [isVisible]);
 
   // Auto-focus when visible
   useEffect(() => {
@@ -254,19 +325,19 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   const voiceStateDisplay = getVoiceStateDisplay();
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[1001]">
+    <div ref={containerRef} className="fixed bottom-0 left-0 right-0 z-[1001]">
       {/* Fade blur overlay - behind the input */}
-      <div className="glass-fade-overlay absolute inset-0 pointer-events-none" />
+      <div className={`${isLightBackground ? 'glass-fade-overlay-dark' : 'glass-fade-overlay'} absolute inset-0 pointer-events-none`} />
       
       {/* Input form - on top of blur */}
       <div className="relative p-4">
         {/* Error message with close button */}
         {recordingError && (
           <div className="glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2">
-            <span className="glass-text text-sm">{recordingError}</span>
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm`}>{recordingError}</span>
             <button
               onClick={() => setRecordingError('')}
-              className="glass-text hover:opacity-80 transition-opacity flex-shrink-0"
+              className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} hover:opacity-80 transition-opacity flex-shrink-0`}
               title="Close"
             >
               ✕
@@ -280,7 +351,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
             type="button"
             onClick={handleVoiceModeToggle}
             disabled={isRecording || isProcessingRecording}
-            className={`glass-button px-4 py-3 rounded-xl transition-all ${
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-3 rounded-xl transition-all ${
               isRecording || isProcessingRecording
                 ? 'opacity-50 cursor-not-allowed'
                 : isVoiceMode
@@ -295,18 +366,18 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                 : 'Start Voice Mode'
             }
           >
-            <span className="glass-text">📞</span>
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>📞</span>
           </button>
 
           {isVoiceMode ? (
             /* Voice Mode UI - Replace text input with state indicators */
             <>
-              <div className="glass-input flex-1 px-5 py-3 rounded-xl flex items-center justify-between">
+              <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between`}>
                 <div className="flex items-center gap-3">
                   <span className={`text-2xl ${voiceStateDisplay.class === 'listening' ? 'animate-pulse' : ''}`}>
                     {voiceStateDisplay.icon}
                   </span>
-                  <span className="glass-text">{voiceStateDisplay.label}</span>
+                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>{voiceStateDisplay.label}</span>
                 </div>
                 
                 {/* Interrupt button when AI is speaking */}
@@ -316,7 +387,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                     onClick={handleInterrupt}
                     className="glass-warning px-4 py-2 rounded-lg transition-all text-sm font-medium"
                   >
-                    <span className="glass-text">✋ Interrupt</span>
+                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>✋ Interrupt</span>
                   </button>
                 )}
               </div>
@@ -329,7 +400,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                 type="button"
                 onClick={handleMicClick}
                 disabled={isProcessingRecording || isVoiceMode}
-                className={`glass-button px-4 py-3 rounded-xl transition-all ${
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-3 rounded-xl transition-all ${
                   isVoiceMode
                     ? 'opacity-50 cursor-not-allowed'
                     : isProcessingRecording
@@ -348,7 +419,7 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                     : 'Start Voice Input'
                 }
               >
-                <span className="glass-text">
+                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>
                   {isProcessingRecording ? '⏳' : isRecording ? '⏺️' : '🎤'}
                 </span>
               </button>
@@ -366,14 +437,14 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                     ? 'Recording... Click mic to stop' 
                     : 'Type your message... (Esc to close)'
                 }
-                className="glass-input glass-placeholder glass-text flex-1 px-5 py-3 rounded-xl focus:outline-none transition-all"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark glass-placeholder-dark' : 'glass-placeholder'} flex-1 px-5 py-3 rounded-xl focus:outline-none transition-all`}
               />
               <button
                 type="submit"
                 disabled={!message.trim()}
-                className="glass-button px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium`}
               >
-                <span className="glass-text">Send</span>
+                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>Send</span>
               </button>
             </>
           )}
@@ -381,10 +452,10 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
           <button
             type="button"
             onClick={onClose}
-            className="glass-button px-4 py-3 rounded-xl transition-all"
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-3 rounded-xl transition-all`}
             title="Close (Esc)"
           >
-            <span className="glass-text">✕</span>
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>✕</span>
           </button>
         </form>
       </div>

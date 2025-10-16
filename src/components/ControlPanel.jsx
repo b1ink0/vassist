@@ -50,7 +50,6 @@ const ControlPanel = ({
   
   // Legacy general config (for model loading)
   const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
-  const [generalConfigSaved, setGeneralConfigSaved] = useState(false);
   const [generalConfigError, setGeneralConfigError] = useState('');
 
   // Load AI config on mount
@@ -352,13 +351,9 @@ const ControlPanel = ({
     const saved = StorageManager.saveConfig('generalConfig', generalConfig);
     
     if (saved) {
-      setGeneralConfigSaved(true);
       setGeneralConfigError('');
       
       console.log('[ControlPanel] General config saved successfully');
-      
-      // Hide success message after 2 seconds
-      setTimeout(() => setGeneralConfigSaved(false), 2000);
       
       // If model loading setting changed, inform user to reload
       if (generalConfig.enableModelLoading !== StorageManager.getConfig('generalConfig', { enableModelLoading: true }).enableModelLoading) {
@@ -1137,46 +1132,26 @@ const ControlPanel = ({
                 {/* Background Detection Settings */}
                 <div className="mb-4">
                   <p className="text-xs text-white font-semibold mb-2">🎨 Background Detection & Theming</p>
-                  
-                  {/* Enable Background Detection */}
+                  {/* Theme Mode */}
                   <div className="mb-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={uiConfig.backgroundDetection?.enabled ?? true}
-                        onChange={(e) => updateUIConfig('backgroundDetection.enabled', e.target.checked)}
-                        className="w-4 h-4 cursor-pointer"
-                      />
-                      <span className="text-xs text-white">Enable Adaptive Background Detection</span>
-                    </label>
-                    <p className="text-[10px] text-gray-400 mt-1 ml-6">
-                      Automatically adjust chat theme based on page background color.
+                    <label className="block text-xs text-white mb-1">Theme Mode</label>
+                    <select
+                      value={uiConfig.backgroundDetection?.mode ?? BackgroundThemeModes.ADAPTIVE}
+                      onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
+                      className="w-full px-2 py-1.5 bg-black/40 border border-white/20 rounded text-xs text-white"
+                    >
+                      <option value={BackgroundThemeModes.ADAPTIVE}>Adaptive (Auto-detect)</option>
+                      <option value={BackgroundThemeModes.DARK}>Light</option>
+                      <option value={BackgroundThemeModes.LIGHT}>Dark</option>
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && 'Auto-detect background brightness'}
+                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.LIGHT && 'Use dark chat on all backgrounds'}
+                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.DARK && 'Use light chat on all backgrounds'}
                     </p>
                   </div>
-
-                  {/* Theme Mode */}
-                  {uiConfig.backgroundDetection?.enabled && (
-                    <div className="mb-3 ml-6">
-                      <label className="block text-xs text-white mb-1">Theme Mode</label>
-                      <select
-                        value={uiConfig.backgroundDetection?.mode ?? BackgroundThemeModes.ADAPTIVE}
-                        onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
-                        className="w-full px-2 py-1.5 bg-black/40 border border-white/20 rounded text-xs text-white"
-                      >
-                        <option value={BackgroundThemeModes.ADAPTIVE}>Adaptive (Auto-detect)</option>
-                        <option value={BackgroundThemeModes.LIGHT}>Light (Force dark chat)</option>
-                        <option value={BackgroundThemeModes.DARK}>Dark (Force light chat)</option>
-                      </select>
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && 'Auto-detect background brightness'}
-                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.LIGHT && 'Use dark chat on all backgrounds'}
-                        {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.DARK && 'Use light chat on all backgrounds'}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Sample Grid Size */}
-                  {uiConfig.backgroundDetection?.enabled && uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
+                  {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
                     <div className="mb-3 ml-6">
                       <label className="block text-xs text-white mb-1">
                         Sample Grid Size: {uiConfig.backgroundDetection?.sampleGridSize ?? 5}×{uiConfig.backgroundDetection?.sampleGridSize ?? 5}
@@ -1197,7 +1172,7 @@ const ControlPanel = ({
                   )}
 
                   {/* Show Debug */}
-                  {uiConfig.backgroundDetection?.enabled && uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
+                  {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
                     <div className="mb-3 ml-6">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
