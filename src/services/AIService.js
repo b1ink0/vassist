@@ -1,19 +1,23 @@
 /**
  * AIService - Multi-provider AI service
  * 
- * Unified interface for OpenAI and Ollama (via OpenAI-compatible API).
+ * Unified interface for Chrome AI, OpenAI, and Ollama.
  * Supports streaming responses for real-time chat bubbles.
  */
 
 import OpenAI from 'openai';
 import { AIProviders } from '../config/aiConfig';
+import ChromeAIValidator from './ChromeAIValidator';
 
 class AIService {
   constructor() {
     this.client = null;
     this.currentProvider = null;
     this.currentConfig = null;
-    this.abortController = null; // For aborting ongoing requests
+    this.abortController = null;
+    
+    // Chrome AI session
+    this.chromeAISession = null;
     
     console.log('[AIService] Initialized');
   }
@@ -28,7 +32,20 @@ class AIService {
     console.log(`[AIService] Configuring provider: ${provider}`);
     
     try {
-      if (provider === AIProviders.OPENAI) {
+      if (provider === AIProviders.CHROME_AI) {
+        // Validate Chrome AI availability
+        if (!ChromeAIValidator.isSupported()) {
+          throw new Error('Chrome AI not supported. Chrome 138+ required.');
+        }
+        
+        this.currentConfig = {
+          temperature: config.chromeAi.temperature,
+          topK: config.chromeAi.topK,
+        };
+        
+        console.log('[AIService] Chrome AI configured:', this.currentConfig);
+      }
+      else if (provider === AIProviders.OPENAI) {
         // Configure OpenAI client
         this.client = new OpenAI({
           apiKey: config.openai.apiKey,
@@ -88,7 +105,16 @@ class AIService {
    * @returns {boolean} True if ready
    */
   isConfigured() {
-    return this.client !== null && this.currentConfig !== null;
+    // Chrome AI doesn't use client, just config and provider
+    if (!this.currentConfig || !this.currentProvider) {
+      return false;
+    }
+    // For Chrome AI, just having config is enough
+    if (this.currentProvider === 'chrome-ai') {
+      return true;
+    }
+    // For other providers, check for client
+    return this.client !== null;
   }
 
   /**
@@ -102,7 +128,7 @@ class AIService {
   /**
    * Send message with streaming support
    * 
-   * @param {Array} messages - Array of message objects (OpenAI format)
+   * @param {Array} messages - Array of message objects
    * @param {Function} onStream - Callback for streaming tokens: (token: string) => void
    * @returns {Promise<string>} Full response text
    */
@@ -113,8 +139,13 @@ class AIService {
 
     console.log(`[AIService] Sending message to ${this.currentProvider}:`, {
       messageCount: messages.length,
-      model: this.currentConfig.model,
+      model: this.currentConfig.model || 'chrome-ai',
     });
+
+    // Chrome AI implementation
+    if (this.currentProvider === AIProviders.CHROME_AI) {
+      return await this.sendMessageChromeAI(messages, onStream);
+    }
 
     // Create new abort controller for this request
     this.abortController = new AbortController();
@@ -177,9 +208,100 @@ class AIService {
   }
 
   /**
+   * Send message using Chrome AI LanguageModel
+   * @param {Array} messages - Message array {role, content}
+   * @param {Function} onStream - Streaming callback
+   * @returns {Promise<string>} Full response
+   */
+  async sendMessageChromeAI(messages, onStream = null) {
+    try {
+      // Create session with initial context if first time
+      if (!this.chromeAISession) {
+        console.log('[AIService] Creating Chrome AI session...');
+        
+        // Separate system prompt from conversation
+        const systemPrompts = messages.filter(m => m.role === 'system');
+        const conversationMsgs = messages.filter(m => m.role !== 'system');
+        
+        this.chromeAISession = await self.LanguageModel.create({
+          temperature: this.currentConfig.temperature,
+          topK: this.currentConfig.topK,
+          language: this.currentConfig.outputLanguage || 'en',
+          initialPrompts: systemPrompts.length > 0 ? systemPrompts : undefined,
+        });
+        console.log('[AIService] Chrome AI session created');
+        
+        // Use conversation messages for prompt
+        messages = conversationMsgs;
+      }
+
+      // Get the last user message for prompting
+      const lastMessage = messages[messages.length - 1];
+      console.log(`[AIService] Chrome AI prompting with ${messages.length} message(s)`);
+
+      let fullResponse = '';
+
+      if (onStream) {
+        // Streaming mode
+        const stream = this.chromeAISession.promptStreaming(lastMessage.content);
+        
+        for await (const chunk of stream) {
+          fullResponse = chunk;
+          // Calculate new content by comparing with previous full response
+          const previousLength = fullResponse.length - chunk.length;
+          const newContent = chunk.slice(previousLength > 0 ? previousLength : 0);
+          if (newContent) {
+            onStream(newContent);
+          }
+        }
+      } else {
+        // Non-streaming mode
+        fullResponse = await this.chromeAISession.prompt(lastMessage.content);
+      }
+
+      console.log(`[AIService] Chrome AI response (${fullResponse.length} chars)`);
+      return fullResponse;
+
+    } catch (error) {
+      console.error('[AIService] Chrome AI error:', error);
+      
+      // Cleanup session on error
+      if (this.chromeAISession) {
+        try {
+          this.chromeAISession.destroy();
+        } catch {
+          // Ignore destroy errors
+        }
+        this.chromeAISession = null;
+      }
+
+      if (error.name === 'NotSupportedError') {
+        throw new Error('Chrome AI not available. Enable required flags at chrome://flags');
+      } else if (error.name === 'QuotaExceededError') {
+        throw new Error('Chrome AI context limit exceeded (1028 tokens). Start a new conversation.');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Abort the current ongoing request
    */
   abortRequest() {
+    // Chrome AI abort
+    if (this.currentProvider === AIProviders.CHROME_AI && this.chromeAISession) {
+      console.log('[AIService] Destroying Chrome AI session');
+      try {
+        this.chromeAISession.destroy();
+      } catch {
+        // Ignore destroy errors
+      }
+      this.chromeAISession = null;
+      return true;
+    }
+
+    // OpenAI/Ollama abort
     if (this.abortController) {
       console.log('[AIService] Aborting current request');
       this.abortController.abort();
@@ -242,6 +364,16 @@ class AIService {
 
     console.log(`[AIService] Testing connection to ${this.currentProvider}...`);
 
+    // Chrome AI test
+    if (this.currentProvider === AIProviders.CHROME_AI) {
+      const result = await ChromeAIValidator.testConnection();
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return true;
+    }
+
+    // OpenAI/Ollama test
     try {
       const testMessages = [
         { role: 'user', content: 'Say "OK" if you can hear me.' }

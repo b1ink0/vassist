@@ -5,7 +5,7 @@
  * Uses ConfigContext for state management
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useConfig } from '../contexts/ConfigContext';
 import { AIProviders, TTSProviders, STTProviders, OpenAIVoices } from '../config/aiConfig';
 import { BackgroundThemeModes } from '../config/uiConfig';
@@ -51,7 +51,19 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
     generalConfigError,
     updateGeneralConfig,
     saveGeneralConfig,
+    
+    // Chrome AI Status
+    chromeAiStatus,
+    checkChromeAIAvailability,
+    startChromeAIDownload,
   } = useConfig();
+
+  // Auto-check Chrome AI availability when Chrome AI provider is selected
+  useEffect(() => {
+    if (aiConfig.provider === AIProviders.CHROME_AI || sttConfig.provider === STTProviders.CHROME_AI_MULTIMODAL) {
+      checkChromeAIAvailability();
+    }
+  }, [aiConfig.provider, sttConfig.provider, checkChromeAIAvailability]);
 
   return (
     <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden`}>
@@ -335,6 +347,160 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </>
             )}
 
+            {/* Chrome AI Configuration */}
+            {aiConfig.provider === AIProviders.CHROME_AI && (
+              <>
+                {/* Info Banner */}
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-xs text-blue-300">
+                    <span className="font-semibold">Chrome Built-in AI (Gemini Nano)</span>
+                  </p>
+                </div>
+
+                {/* Availability Status */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Status</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    {chromeAiStatus.checking ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                        <span className="text-xs text-white/70">Checking availability...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            chromeAiStatus.available ? 'bg-green-400' :
+                            chromeAiStatus.downloading ? 'bg-yellow-400 animate-pulse' :
+                            'bg-red-400'
+                          }`}></div>
+                          <span className="text-sm font-semibold text-white/90">{chromeAiStatus.message}</span>
+                        </div>
+                        <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
+                        
+                        {/* Download Progress */}
+                        {chromeAiStatus.downloading && (
+                          <div className="mt-3">
+                            <div className="flex justify-between text-xs text-white/70 mb-1">
+                              <span>Downloading Gemini Nano...</span>
+                              <span>{chromeAiStatus.progress.toFixed(1)}%</span>
+                            </div>
+                            <div className="w-full bg-white/10 rounded-full h-2">
+                              <div 
+                                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${chromeAiStatus.progress}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Download Button */}
+                        {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
+                          <button
+                            onClick={startChromeAIDownload}
+                            className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                          >
+                            Start Model Download
+                          </button>
+                        )}
+                        
+                        {/* Refresh Status Button */}
+                        <button
+                          onClick={checkChromeAIAvailability}
+                          className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          ↻ Refresh Status
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Temperature Slider */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">
+                    Temperature: {aiConfig.chromeAi?.temperature || 1.0}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={aiConfig.chromeAi?.temperature || 1.0}
+                    onChange={(e) => updateAIConfig('chromeAi.temperature', parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-white/50">
+                    Controls randomness (0 = deterministic, 2 = very creative)
+                  </p>
+                </div>
+
+                {/* Top-K Slider */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">
+                    Top-K: {aiConfig.chromeAi?.topK || 3}
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={aiConfig.chromeAi?.topK || 3}
+                    onChange={(e) => updateAIConfig('chromeAi.topK', parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-white/50">
+                    Limits token choices for more focused responses
+                  </p>
+                </div>
+
+                {/* Output Language */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Output Language</label>
+                  <select
+                    value={aiConfig.chromeAi?.outputLanguage || 'en'}
+                    onChange={(e) => updateAIConfig('chromeAi.outputLanguage', e.target.value)}
+                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                  >
+                    <option value="en" className="bg-gray-900">English (en)</option>
+                    <option value="es" className="bg-gray-900">Spanish (es)</option>
+                    <option value="ja" className="bg-gray-900">Japanese (ja)</option>
+                  </select>
+                  <p className="text-xs text-white/50">
+                    Specifies the output language for optimal quality and safety
+                  </p>
+                </div>
+
+                {/* Required Flags */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Required Chrome Flags</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70">optimization-guide-on-device-model</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('chrome://flags/#optimization-guide-on-device-model')}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70">prompt-api-for-gemini-nano</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('chrome://flags/#prompt-api-for-gemini-nano')}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-white/50 mt-2">
+                      Enable these flags and restart Chrome, then visit <code className="text-blue-300">chrome://components</code> to download Gemini Nano
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Actions */}
             <div className="flex items-center gap-3 pt-4">
               <button 
@@ -365,6 +531,20 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
           <div className="space-y-6">
             <h3 className="text-base font-semibold text-white mb-4">TTS Configuration</h3>
             
+            {/* Enable TTS Checkbox */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="enable-tts"
+                checked={ttsConfig.enabled}
+                onChange={(e) => updateTTSConfig('enabled', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="enable-tts" className="text-sm font-medium text-white/90 cursor-pointer">
+                Enable Text-to-Speech
+              </label>
+            </div>
+
             {/* Provider Selection */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-white/90">Provider</label>
@@ -372,6 +552,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                 value={ttsConfig.provider}
                 onChange={(e) => updateTTSConfig('provider', e.target.value)}
                 className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                disabled={!ttsConfig.enabled}
               >
                 {Object.entries(TTSProviders).map(([key, value]) => (
                   <option key={value} value={value} className="bg-gray-900">{key}</option>
@@ -379,117 +560,122 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </select>
             </div>
 
-            {/* OpenAI TTS Configuration */}
-            {ttsConfig.provider === TTSProviders.OPENAI && (
+            {/* Configuration sections - only show when enabled */}
+            {ttsConfig.enabled && (
               <>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">API Key</label>
-                  <input
-                    type="password"
-                    value={ttsConfig.openai.apiKey}
-                    onChange={(e) => updateTTSConfig('openai.apiKey', e.target.value)}
-                    placeholder="sk-..."
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Model</label>
-                  <select
-                    value={ttsConfig.openai.model}
-                    onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  >
-                    <option value="tts-1" className="bg-gray-900">tts-1 (Standard)</option>
-                    <option value="tts-1-hd" className="bg-gray-900">tts-1-hd (HD)</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Voice</label>
-                  <select
-                    value={ttsConfig.openai.voice}
-                    onChange={(e) => updateTTSConfig('openai.voice', e.target.value)}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  >
-                    {Object.entries(OpenAIVoices).map(([key, value]) => (
-                      <option key={value} value={value} className="bg-gray-900">
-                        {key.charAt(0) + key.slice(1).toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
+                {/* OpenAI TTS Configuration */}
+                {ttsConfig.provider === TTSProviders.OPENAI && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">API Key</label>
+                      <input
+                        type="password"
+                        value={ttsConfig.openai.apiKey}
+                        onChange={(e) => updateTTSConfig('openai.apiKey', e.target.value)}
+                        placeholder="sk-..."
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Model</label>
+                      <select
+                        value={ttsConfig.openai.model}
+                        onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      >
+                        <option value="tts-1" className="bg-gray-900">tts-1 (Standard)</option>
+                        <option value="tts-1-hd" className="bg-gray-900">tts-1-hd (HD)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Voice</label>
+                      <select
+                        value={ttsConfig.openai.voice}
+                        onChange={(e) => updateTTSConfig('openai.voice', e.target.value)}
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      >
+                        {Object.entries(OpenAIVoices).map(([key, value]) => (
+                          <option key={value} value={value} className="bg-gray-900">
+                            {key.charAt(0) + key.slice(1).toLowerCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
 
-            {/* ElevenLabs Configuration */}
-            {ttsConfig.provider === TTSProviders.ELEVENLABS && (
-              <>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">API Key</label>
-                  <input
-                    type="password"
-                    value={ttsConfig.elevenlabs?.apiKey || ''}
-                    onChange={(e) => updateTTSConfig('elevenlabs.apiKey', e.target.value)}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Voice ID</label>
-                  <input
-                    type="text"
-                    value={ttsConfig.elevenlabs?.voiceId || ''}
-                    onChange={(e) => updateTTSConfig('elevenlabs.voiceId', e.target.value)}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
-              </>
-            )}
+                {/* ElevenLabs Configuration */}
+                {ttsConfig.provider === TTSProviders.ELEVENLABS && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">API Key</label>
+                      <input
+                        type="password"
+                        value={ttsConfig.elevenlabs?.apiKey || ''}
+                        onChange={(e) => updateTTSConfig('elevenlabs.apiKey', e.target.value)}
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Voice ID</label>
+                      <input
+                        type="text"
+                        value={ttsConfig.elevenlabs?.voiceId || ''}
+                        onChange={(e) => updateTTSConfig('elevenlabs.voiceId', e.target.value)}
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                  </>
+                )}
 
-            {/* OpenAI-Compatible TTS Configuration */}
-            {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
-              <>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
-                  <input
-                    type="text"
-                    value={ttsConfig['openai-compatible']?.endpoint || 'http://localhost:8000'}
-                    onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
-                    placeholder="http://localhost:8000"
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                  <p className="text-xs text-white/50">
-                    Base URL (will append /v1/audio/speech)
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
-                  <input
-                    type="password"
-                    value={ttsConfig['openai-compatible']?.apiKey || ''}
-                    onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
-                    placeholder="Leave empty if not required"
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Model</label>
-                  <input
-                    type="text"
-                    value={ttsConfig['openai-compatible']?.model || 'tts'}
-                    onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
-                    placeholder="tts"
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">Voice</label>
-                  <input
-                    type="text"
-                    value={ttsConfig['openai-compatible']?.voice || 'default'}
-                    onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
-                    placeholder="default"
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                  />
-                </div>
+                {/* OpenAI-Compatible TTS Configuration */}
+                {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
+                      <input
+                        type="text"
+                        value={ttsConfig['openai-compatible']?.endpoint || 'http://localhost:8000'}
+                        onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
+                        placeholder="http://localhost:8000"
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                      <p className="text-xs text-white/50">
+                        Base URL (will append /v1/audio/speech)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
+                      <input
+                        type="password"
+                        value={ttsConfig['openai-compatible']?.apiKey || ''}
+                        onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
+                        placeholder="Leave empty if not required"
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Model</label>
+                      <input
+                        type="text"
+                        value={ttsConfig['openai-compatible']?.model || 'tts'}
+                        onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
+                        placeholder="tts"
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/90">Voice</label>
+                      <input
+                        type="text"
+                        value={ttsConfig['openai-compatible']?.voice || 'default'}
+                        onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
+                        placeholder="default"
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -498,6 +684,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               <button 
                 onClick={testTTSConnection} 
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
+                disabled={!ttsConfig.enabled}
               >
                 Test TTS
               </button>
@@ -523,6 +710,20 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
           <div className="space-y-6">
             <h3 className="text-base font-semibold text-white mb-4">STT Configuration</h3>
             
+            {/* Enable STT Checkbox */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="enable-stt"
+                checked={sttConfig.enabled}
+                onChange={(e) => updateSTTConfig('enabled', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="enable-stt" className="text-sm font-medium text-white/90 cursor-pointer">
+                Enable Speech-to-Text
+              </label>
+            </div>
+
             {/* Provider Selection */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-white/90">Provider</label>
@@ -530,6 +731,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                 value={sttConfig.provider}
                 onChange={(e) => updateSTTConfig('provider', e.target.value)}
                 className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                disabled={!sttConfig.enabled}
               >
                 {Object.entries(STTProviders).map(([key, value]) => (
                   <option key={value} value={value} className="bg-gray-900">{key}</option>
@@ -537,8 +739,11 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </select>
             </div>
 
-            {/* OpenAI Whisper Configuration */}
-            {sttConfig.provider === STTProviders.OPENAI && (
+            {/* Configuration sections - only show when enabled */}
+            {sttConfig.enabled && (
+              <>
+                {/* OpenAI Whisper Configuration */}
+                {sttConfig.provider === STTProviders.OPENAI && (
               <>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-white/90">API Key</label>
@@ -602,12 +807,146 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </>
             )}
 
+            {/* Chrome AI Multimodal STT Configuration */}
+            {sttConfig.provider === STTProviders.CHROME_AI_MULTIMODAL && (
+              <>
+                {/* Info Banner */}
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-xs text-blue-300">
+                    <span className="font-semibold">Chrome Built-in AI Multimodal</span> - On-device audio transcription using Gemini Nano
+                  </p>
+                </div>
+
+                {/* Availability Status */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Status</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    {chromeAiStatus.checking ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                        <span className="text-xs text-white/70">Checking availability...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            chromeAiStatus.available ? 'bg-green-400' :
+                            chromeAiStatus.downloading ? 'bg-yellow-400 animate-pulse' :
+                            'bg-red-400'
+                          }`}></div>
+                          <span className="text-sm font-semibold text-white/90">{chromeAiStatus.message}</span>
+                        </div>
+                        <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
+                        
+                        {/* Download Progress */}
+                        {chromeAiStatus.downloading && (
+                          <div className="mt-3">
+                            <div className="flex justify-between text-xs text-white/70 mb-1">
+                              <span>Downloading Gemini Nano...</span>
+                              <span>{chromeAiStatus.progress.toFixed(1)}%</span>
+                            </div>
+                            <div className="w-full bg-white/10 rounded-full h-2">
+                              <div 
+                                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${chromeAiStatus.progress}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Download Button */}
+                        {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
+                          <button
+                            onClick={startChromeAIDownload}
+                            className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                          >
+                            Start Model Download
+                          </button>
+                        )}
+                        
+                        {/* Refresh Status Button */}
+                        <button
+                          onClick={checkChromeAIAvailability}
+                          className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          ↻ Refresh Status
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Output Language */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Output Language</label>
+                  <select
+                    value={sttConfig['chrome-ai-multimodal']?.outputLanguage || 'en'}
+                    onChange={(e) => updateSTTConfig('chrome-ai-multimodal.outputLanguage', e.target.value)}
+                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                  >
+                    <option value="en" className="bg-gray-900">English (en)</option>
+                    <option value="es" className="bg-gray-900">Spanish (es)</option>
+                    <option value="ja" className="bg-gray-900">Japanese (ja)</option>
+                  </select>
+                  <p className="text-xs text-white/50">
+                    Specifies the output language for transcription
+                  </p>
+                </div>
+
+                {/* Required Flags */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Required Chrome Flags</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70">optimization-guide-on-device-model</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('chrome://flags/#optimization-guide-on-device-model')}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70">prompt-api-for-gemini-nano</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('chrome://flags/#prompt-api-for-gemini-nano')}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70">multimodal-input</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('chrome://flags/#multimodal-input')}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-white/50 mt-2">
+                      Enable these flags and restart Chrome, then visit <code className="text-blue-300">chrome://components</code> to download Gemini Nano
+                    </p>
+                  </div>
+                </div>
+
+                {/* Model Info */}
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <p className="text-xs text-white/70">
+                    <span className="font-semibold">Model:</span> Gemini Nano with multimodal audio support
+                  </p>
+                </div>
+              </>
+            )}
+              </>
+            )}
+
             {/* Actions */}
             <div className="flex items-center gap-3 pt-4">
               <button 
                 onClick={testSTTRecording} 
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
-                disabled={sttTesting}
+                disabled={!sttConfig.enabled || sttTesting}
               >
                 {sttTesting ? 'Testing...' : 'Test Recording (3s)'}
               </button>

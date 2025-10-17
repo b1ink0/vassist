@@ -27,6 +27,7 @@ class STTService {
         config: null,
         provider: null,
         enabled: false,
+        chromeAISession: null,
       });
       console.log(`[STTService] Tab ${tabId} initialized`);
     }
@@ -73,7 +74,21 @@ class STTService {
     console.log(`[STTService] Tab ${tabId} - Configuring provider: ${provider}`);
     
     try {
-      if (provider === 'openai') {
+      if (provider === 'chrome-ai-multimodal') {
+        // Configure Chrome AI Multimodal
+        if (!('LanguageModel' in self)) {
+          throw new Error('Chrome AI not supported. Chrome 138+ required.');
+        }
+        
+        state.config = {
+          temperature: config['chrome-ai-multimodal'].temperature,
+          topK: config['chrome-ai-multimodal'].topK,
+        };
+        state.chromeAISession = null;
+        
+        console.log(`[STTService] Tab ${tabId} - Chrome AI Multimodal configured:`, state.config);
+      }
+      else if (provider === 'openai') {
         // Configure OpenAI Whisper client
         state.client = new OpenAI({
           apiKey: config.openai.apiKey,
@@ -132,7 +147,17 @@ class STTService {
    */
   isConfigured(tabId) {
     const state = this.tabStates.get(tabId);
-    return state && state.enabled && state.client !== null && state.config !== null;
+    if (!state || !state.enabled || !state.config) {
+      return false;
+    }
+    
+    // Chrome AI doesn't use client, just config and provider
+    if (state.provider === 'chrome-ai-multimodal') {
+      return true;
+    }
+    
+    // Other providers need client
+    return state.client !== null;
   }
 
   /**
@@ -150,7 +175,15 @@ class STTService {
     }
 
     const state = this.getTabState(tabId);
+    
+    console.log(`[STTService] Tab ${tabId} - Transcribing audio (${audioBuffer.byteLength} bytes) with ${state.provider}...`);
 
+    // Chrome AI Multimodal implementation
+    if (state.provider === 'chrome-ai-multimodal') {
+      return await this.transcribeAudioChromeAI(tabId, audioBuffer);
+    }
+
+    // OpenAI/Compatible implementation
     try {
       // Convert ArrayBuffer to Blob then to File object (required by OpenAI API)
       const audioBlob = new Blob([audioBuffer], { type: mimeType });
@@ -190,6 +223,77 @@ class STTService {
         throw new Error('STT rate limit exceeded. Please try again later.');
       } else if (error.message?.includes('fetch')) {
         throw new Error('STT network error. Please check your connection and endpoint URL.');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Transcribe audio using Chrome AI Multimodal for a specific tab
+   * @param {number} tabId - Tab ID
+   * @param {ArrayBuffer} audioBuffer - Audio data to transcribe
+   * @returns {Promise<string>} Transcribed text
+   */
+  async transcribeAudioChromeAI(tabId, audioBuffer) {
+    const state = this.getTabState(tabId);
+    
+    try {
+      console.log(`[STTService] Tab ${tabId} - Audio ArrayBuffer (${audioBuffer.byteLength} bytes)`);
+
+      // Get default parameters
+      const params = await self.LanguageModel.params();
+      
+      // Create or reuse session with audio input support
+      if (!state.chromeAISession) {
+        console.log(`[STTService] Tab ${tabId} - Creating Chrome AI multimodal session...`);
+        state.chromeAISession = await self.LanguageModel.create({
+          expectedInputs: [{ type: 'audio' }],
+          temperature: 0.1,
+          topK: params.defaultTopK,
+        });
+        console.log(`[STTService] Tab ${tabId} - Chrome AI multimodal session created`);
+      }
+
+      // Create prompt with audio content - exactly like Google example
+      const stream = state.chromeAISession.promptStreaming([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', value: 'transcribe this audio' },
+            { type: 'audio', value: audioBuffer }
+          ]
+        }
+      ]);
+
+      // Collect streamed response
+      let fullResponse = '';
+      for await (const chunk of stream) {
+        fullResponse += chunk;
+      }
+
+      const text = fullResponse.trim();
+      console.log(`[STTService] Tab ${tabId} - Chrome AI transcription complete: "${text}"`);
+      
+      return text;
+
+    } catch (error) {
+      console.error(`[STTService] Tab ${tabId} - Chrome AI transcription error:`, error);
+      
+      // Cleanup session on error
+      if (state.chromeAISession) {
+        try {
+          state.chromeAISession.destroy();
+        } catch {
+          // Ignore destroy errors
+        }
+        state.chromeAISession = null;
+      }
+
+      if (error.name === 'NotSupportedError') {
+        throw new Error('Chrome AI multimodal not available. Enable multimodal-input flag at chrome://flags');
+      } else if (error.name === 'QuotaExceededError') {
+        throw new Error('Chrome AI context limit exceeded. Start a new conversation.');
       } else {
         throw error;
       }

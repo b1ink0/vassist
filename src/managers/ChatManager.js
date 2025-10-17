@@ -2,7 +2,7 @@
  * ChatManager - Conversation management
  * 
  * Manages the current chat conversation in memory.
- * Handles message history, context window limits, and formatting for AI APIs.
+ * Handles message history, context window limits, and formatting for AI providers.
  */
 
 class ChatManager {
@@ -94,9 +94,9 @@ class ChatManager {
   }
 
   /**
-   * Format messages for OpenAI API
+   * Format messages for AI providers
    * @param {string} systemPrompt - System prompt to use (if no system message exists)
-   * @returns {Array} Array of formatted messages for API
+   * @returns {Array} Array of formatted messages
    */
   getFormattedMessages(systemPrompt) {
     const formatted = [];
@@ -109,7 +109,7 @@ class ChatManager {
       });
     }
 
-    // Add all conversation messages (formatted for API)
+    // Add all conversation messages
     formatted.push(...this.messages.map(m => ({
       role: m.role,
       content: m.content,

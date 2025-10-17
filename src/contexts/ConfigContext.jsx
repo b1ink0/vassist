@@ -7,6 +7,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import StorageManager from '../managers/StorageManager';
 import { AIServiceProxy, TTSServiceProxy, STTServiceProxy } from '../services/proxies';
+import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
   DefaultAIConfig, 
   DefaultTTSConfig, 
@@ -52,6 +53,17 @@ export const ConfigProvider = ({ children }) => {
   // General Config (model loading)
   const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
   const [generalConfigError, setGeneralConfigError] = useState('');
+
+  // Chrome AI Status
+  const [chromeAiStatus, setChromeAiStatus] = useState({
+    checking: false,
+    available: false,
+    state: null,
+    message: '',
+    details: '',
+    progress: 0,
+    downloading: false,
+  });
 
   // Load all configs on mount
   useEffect(() => {
@@ -326,6 +338,66 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [generalConfig]);
 
+  // Chrome AI Status handlers
+  const checkChromeAIAvailability = useCallback(async () => {
+    setChromeAiStatus(prev => ({ ...prev, checking: true }));
+    
+    try {
+      const status = await ChromeAIValidator.checkAvailability();
+      
+      setChromeAiStatus({
+        checking: false,
+        available: status.available,
+        state: status.state,
+        message: status.message,
+        details: status.details,
+        progress: status.progress || 0,
+        downloading: status.state === 'downloading',
+        requiresFlags: status.requiresFlags,
+        flags: status.flags,
+      });
+      
+      console.log('[ConfigContext] Chrome AI status:', status);
+      
+      return status;
+    } catch (error) {
+      console.log('[ConfigContext] Chrome AI check failed:', error);
+      setChromeAiStatus({
+        checking: false,
+        available: false,
+        state: 'unavailable',
+        message: 'Failed to check availability',
+        details: error.message,
+        progress: 0,
+        downloading: false,
+      });
+      throw error;
+    }
+  }, []);
+
+  const startChromeAIDownload = useCallback(async () => {
+    setChromeAiStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
+    
+    try {
+      await ChromeAIValidator.monitorDownload((progress) => {
+        setChromeAiStatus(prev => ({ ...prev, progress }));
+      });
+      
+      // Recheck availability after download
+      await checkChromeAIAvailability();
+      
+    } catch (error) {
+      console.error('[ConfigContext] Chrome AI download failed:', error);
+      setChromeAiStatus(prev => ({ 
+        ...prev, 
+        downloading: false,
+        message: 'Download monitoring failed',
+        details: error.message,
+      }));
+      throw error;
+    }
+  }, [checkChromeAIAvailability]);
+
   const value = {
     // UI Config
     uiConfig,
@@ -364,6 +436,11 @@ export const ConfigProvider = ({ children }) => {
     generalConfigError,
     updateGeneralConfig,
     saveGeneralConfig,
+    
+    // Chrome AI Status
+    chromeAiStatus,
+    checkChromeAIAvailability,
+    startChromeAIDownload,
   };
 
   return (

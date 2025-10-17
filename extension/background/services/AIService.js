@@ -5,7 +5,6 @@
  * Each tab gets independent streaming state and abort controllers.
  */
 
-/* global chrome */
 import OpenAI from 'openai';
 
 class AIService {
@@ -28,6 +27,7 @@ class AIService {
         config: null,
         provider: null,
         abortController: null,
+        chromeAISession: null,
       });
       console.log(`[AIService] Tab ${tabId} initialized`);
     }
@@ -66,13 +66,27 @@ class AIService {
    * @returns {Promise<boolean>} Success status
    */
   async configure(tabId, config) {
-    const { provider, openai, ollama } = config;
+    const { provider, chromeAi, openai, ollama } = config;
     const state = this.getTabState(tabId);
     
     console.log(`[AIService] Configuring tab ${tabId} with provider: ${provider}`);
     
     try {
-      if (provider === 'openai') {
+      if (provider === 'chrome-ai') {
+        // Configure Chrome AI
+        if (!('LanguageModel' in self)) {
+          throw new Error('Chrome AI not supported. Chrome 138+ required.');
+        }
+        
+        state.config = {
+          temperature: chromeAi.temperature,
+          topK: chromeAi.topK,
+        };
+        state.chromeAISession = null;
+        
+        console.log(`[AIService] Tab ${tabId} - Chrome AI configured:`, state.config);
+      }
+      else if (provider === 'openai') {
         // Configure OpenAI client
         state.client = new OpenAI({
           apiKey: openai.apiKey,
@@ -132,14 +146,23 @@ class AIService {
    */
   isConfigured(tabId) {
     const state = this.tabStates.get(tabId);
-    return state && state.client !== null && state.config !== null;
+    // Chrome AI doesn't use client, just config and provider
+    if (!state || !state.config || !state.provider) {
+      return false;
+    }
+    // For Chrome AI, just having config is enough
+    if (state.provider === 'chrome-ai') {
+      return true;
+    }
+    // For other providers, check for client
+    return state.client !== null;
   }
 
   /**
    * Send message with streaming support for a specific tab
    * 
    * @param {number} tabId - Tab ID
-   * @param {Array} messages - Array of message objects (OpenAI format)
+   * @param {Array} messages - Array of message objects
    * @param {Function} onStream - Callback for streaming tokens: (token: string) => void
    * @returns {Promise<string>} Full response text
    */
@@ -152,8 +175,13 @@ class AIService {
     
     console.log(`[AIService] Tab ${tabId} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
-      model: state.config.model,
+      model: state.config.model || 'chrome-ai',
     });
+
+    // Chrome AI implementation
+    if (state.provider === 'chrome-ai') {
+      return await this.sendMessageChromeAI(tabId, messages, onStream);
+    }
 
     // Create new abort controller for this request
     state.abortController = new AbortController();
@@ -216,12 +244,106 @@ class AIService {
   }
 
   /**
+   * Send message using Chrome AI LanguageModel for a specific tab
+   * @param {number} tabId - Tab ID
+   * @param {Array} messages - Message array {role, content}
+   * @param {Function} onStream - Streaming callback
+   * @returns {Promise<string>} Full response
+   */
+  async sendMessageChromeAI(tabId, messages, onStream = null) {
+    const state = this.getTabState(tabId);
+    
+    try {
+      // Create session with initial context if first time
+      if (!state.chromeAISession) {
+        console.log(`[AIService] Tab ${tabId} - Creating Chrome AI session...`);
+        
+        // Separate system prompt from conversation
+        const systemPrompts = messages.filter(m => m.role === 'system');
+        const conversationMsgs = messages.filter(m => m.role !== 'system');
+        
+        state.chromeAISession = await self.LanguageModel.create({
+          temperature: state.config.temperature,
+          topK: state.config.topK,
+          language: state.config.outputLanguage || 'en',
+          initialPrompts: systemPrompts.length > 0 ? systemPrompts : undefined,
+        });
+        console.log(`[AIService] Tab ${tabId} - Chrome AI session created`);
+        
+        // Use conversation messages for prompt
+        messages = conversationMsgs;
+      }
+
+      // Get the last user message for prompting
+      const lastMessage = messages[messages.length - 1];
+      console.log(`[AIService] Tab ${tabId} - Chrome AI prompting with ${messages.length} message(s)`);
+
+      let fullResponse = '';
+
+      if (onStream) {
+        // Streaming mode
+        const stream = state.chromeAISession.promptStreaming(lastMessage.content);
+        
+        for await (const chunk of stream) {
+          fullResponse = chunk;
+          const previousLength = fullResponse.length - chunk.length;
+          const newContent = chunk.slice(previousLength > 0 ? previousLength : 0);
+          if (newContent) {
+            onStream(newContent);
+          }
+        }
+      } else {
+        // Non-streaming mode
+        fullResponse = await state.chromeAISession.prompt(lastMessage.content);
+      }
+
+      console.log(`[AIService] Tab ${tabId} - Chrome AI response (${fullResponse.length} chars)`);
+      return fullResponse;
+
+    } catch (error) {
+      console.error(`[AIService] Tab ${tabId} - Chrome AI error:`, error);
+      
+      // Cleanup session on error
+      if (state.chromeAISession) {
+        try {
+          state.chromeAISession.destroy();
+        } catch {
+          // Ignore destroy errors
+        }
+        state.chromeAISession = null;
+      }
+
+      if (error.name === 'NotSupportedError') {
+        throw new Error('Chrome AI not available. Enable required flags at chrome://flags');
+      } else if (error.name === 'QuotaExceededError') {
+        throw new Error('Chrome AI context limit exceeded (1028 tokens). Start a new conversation.');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Abort the current ongoing request for a tab
    * @param {number} tabId - Tab ID
    * @returns {boolean} True if aborted
    */
   abortRequest(tabId) {
     const state = this.tabStates.get(tabId);
+    
+    // Chrome AI abort
+    if (state && state.provider === 'chrome-ai' && state.chromeAISession) {
+      console.log(`[AIService] Tab ${tabId} - Destroying Chrome AI session`);
+      try {
+        state.chromeAISession.destroy();
+      } catch {
+        // Ignore destroy errors
+      }
+      state.chromeAISession = null;
+      return true;
+    }
+    
+    // OpenAI/Ollama abort
     if (state && state.abortController) {
       console.log(`[AIService] Tab ${tabId} - Aborting current request`);
       state.abortController.abort();

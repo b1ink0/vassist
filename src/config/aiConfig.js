@@ -9,6 +9,7 @@
  * Available AI Providers
  */
 export const AIProviders = {
+  CHROME_AI: 'chrome-ai',
   OPENAI: 'openai',
   OLLAMA: 'ollama',
 };
@@ -25,8 +26,9 @@ export const TTSProviders = {
  * Available STT (Speech-to-Text) Providers
  */
 export const STTProviders = {
-  OPENAI: 'openai', // OpenAI Whisper
-  OPENAI_COMPATIBLE: 'openai-compatible', // Generic OpenAI-compatible STT API
+  CHROME_AI_MULTIMODAL: 'chrome-ai-multimodal',
+  OPENAI: 'openai',
+  OPENAI_COMPATIBLE: 'openai-compatible',
 };
 
 /**
@@ -42,32 +44,76 @@ export const OpenAIVoices = {
 };
 
 /**
+ * Chrome AI Required Flags
+ * User must enable these at chrome://flags for Chrome AI to work
+ */
+export const ChromeAIFlags = {
+  OPTIMIZATION_GUIDE: {
+    flag: 'optimization-guide-on-device-model',
+    value: 'Enabled BypassPerfRequirement',
+    url: 'chrome://flags/#optimization-guide-on-device-model',
+    description: 'Enable on-device AI model'
+  },
+  PROMPT_API: {
+    flag: 'prompt-api-for-gemini-nano',
+    value: 'Enabled',
+    url: 'chrome://flags/#prompt-api-for-gemini-nano',
+    description: 'Enable Prompt API (LanguageModel)'
+  },
+  MULTIMODAL_INPUT: {
+    flag: 'multimodal-input',
+    value: 'Enabled',
+    url: 'chrome://flags/#multimodal-input',
+    description: 'Enable multimodal input (required for audio/image)'
+  }
+};
+
+/**
+ * Chrome AI Availability States
+ */
+export const ChromeAIAvailability = {
+  UNAVAILABLE: 'no',               // Not supported on this device (actual API value)
+  DOWNLOADABLE: 'after-download',  // Can be downloaded (actual API value)
+  DOWNLOADING: 'downloading',      // Currently downloading (not in spec but used)
+  READILY: 'readily',              // Ready to use immediately
+  AVAILABLE: 'available',          // Model available (may need download trigger)
+};
+
+/**
+ * Chrome AI Supported Output Languages
+ */
+export const ChromeAILanguages = {
+  ENGLISH: 'en',
+  SPANISH: 'es',
+  JAPANESE: 'ja',
+};
+
+/**
  * Default AI Configuration
- * 
- * These are the default values - users can override via Control Panel.
- * All Ollama settings (endpoint, model, temperature, maxTokens) are editable.
  */
 export const DefaultAIConfig = {
-  // Active provider
-  provider: AIProviders.OPENAI,
+  provider: AIProviders.CHROME_AI,
   
-  // OpenAI Settings (all editable in UI)
+  chromeAi: {
+    temperature: 1.0,
+    topK: 3,
+    outputLanguage: 'en', // Supported: en, es, ja
+  },
+  
   openai: {
-    apiKey: '', // User must provide
+    apiKey: '',
     model: 'gpt-4-turbo-preview',
     temperature: 0.7,
     maxTokens: 2000,
   },
   
-  // Ollama Settings (all editable in UI)
   ollama: {
-    endpoint: 'http://localhost:11434', // Fully editable - user can change host/port
-    model: 'llama2', // Editable - user can use any model
-    temperature: 0.7, // Editable
-    maxTokens: 2000, // Editable
+    endpoint: 'http://localhost:11434',
+    model: 'llama2',
+    temperature: 0.7,
+    maxTokens: 2000,
   },
   
-  // Shared Settings
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
 };
 
@@ -108,41 +154,35 @@ export const DefaultTTSConfig = {
 
 /**
  * Default STT (Speech-to-Text) Configuration
- * 
- * Speech recognition settings for voice input.
  */
 export const DefaultSTTConfig = {
-  // Enable/disable STT
   enabled: false,
+  provider: STTProviders.CHROME_AI_MULTIMODAL,
   
-  // Active STT provider
-  provider: STTProviders.OPENAI,
-  
-  // OpenAI Whisper Settings
-  openai: {
-    apiKey: '', // Can share with AI or be separate
-    model: 'whisper-1',
-    language: 'en', // ISO-639-1 language code (optional, leave empty for auto-detect)
-    temperature: 0, // 0-1, lower is more consistent
+  'chrome-ai-multimodal': {
+    temperature: 0.1,
+    topK: 3,
+    outputLanguage: 'en', // Supported: en, es, ja
   },
   
-  // Generic OpenAI-Compatible STT Settings
-  'openai-compatible': {
-    endpoint: 'http://localhost:8000', // Base URL only, service will append /v1/audio/transcriptions
-    apiKey: '', // Optional API key
-    model: 'whisper', // Model name
+  openai: {
+    apiKey: '',
+    model: 'whisper-1',
     language: 'en',
     temperature: 0,
   },
   
-  // Recording settings
-  recordingFormat: 'webm', // Format for MediaRecorder
-  maxRecordingDuration: 60, // Maximum recording duration in seconds
+  'openai-compatible': {
+    endpoint: 'http://localhost:8000',
+    apiKey: '',
+    model: 'whisper',
+    language: 'en',
+    temperature: 0,
+  },
   
-  // Audio device switching delay (Windows headset issue)
-  // Some audio devices (especially headsets) need time to switch between input/output
-  // Increase if you hear distorted audio after recording
-  audioDeviceSwitchDelay: 300, // milliseconds (0-1000)
+  recordingFormat: 'webm',
+  maxRecordingDuration: 60,
+  audioDeviceSwitchDelay: 300,
 };
 
 /**
@@ -155,6 +195,24 @@ export function validateAIConfig(config) {
   
   if (!config.provider) {
     errors.push('Provider not selected');
+  }
+
+  if (config.provider === AIProviders.CHROME_AI) {
+    if (!('LanguageModel' in self)) {
+      errors.push('Chrome AI not available. Chrome 138+ required with flags enabled.');
+    }
+    
+    if (config.chromeAi?.temperature !== undefined) {
+      if (config.chromeAi.temperature < 0 || config.chromeAi.temperature > 2) {
+        errors.push('Temperature must be between 0 and 2');
+      }
+    }
+    
+    if (config.chromeAi?.topK !== undefined) {
+      if (config.chromeAi.topK < 1 || config.chromeAi.topK > 128) {
+        errors.push('TopK must be between 1 and 128');
+      }
+    }
   }
   
   if (config.provider === AIProviders.OPENAI) {
@@ -241,6 +299,24 @@ export function validateSTTConfig(config) {
   if (!config.provider) {
     errors.push('STT Provider not selected');
   }
+
+  if (config.provider === STTProviders.CHROME_AI_MULTIMODAL) {
+    if (!('LanguageModel' in self)) {
+      errors.push('Chrome AI not available. Chrome 138+ required with flags enabled.');
+    }
+    
+    if (config['chrome-ai-multimodal']?.temperature !== undefined) {
+      if (config['chrome-ai-multimodal'].temperature < 0 || config['chrome-ai-multimodal'].temperature > 2) {
+        errors.push('Temperature must be between 0 and 2');
+      }
+    }
+    
+    if (config['chrome-ai-multimodal']?.topK !== undefined) {
+      if (config['chrome-ai-multimodal'].topK < 1 || config['chrome-ai-multimodal'].topK > 128) {
+        errors.push('TopK must be between 1 and 128');
+      }
+    }
+  }
   
   if (config.provider === STTProviders.OPENAI) {
     if (!config.openai?.apiKey || config.openai.apiKey.trim() === '') {
@@ -286,6 +362,8 @@ export default {
   AIProviders,
   TTSProviders,
   STTProviders,
+  ChromeAIFlags,
+  ChromeAIAvailability,
   OpenAIVoices,
   DefaultAIConfig,
   DefaultTTSConfig,
