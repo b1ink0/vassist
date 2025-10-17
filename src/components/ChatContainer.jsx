@@ -3,6 +3,7 @@ import { TTSServiceProxy } from '../services/proxies';
 import StorageManager from '../managers/StorageManager';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
+import SettingsPanel from './SettingsPanel';
 
 const ChatContainer = ({ 
   positionManagerRef, 
@@ -22,6 +23,7 @@ const ChatContainer = ({
   const containerRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [debugMarkers, setDebugMarkers] = useState([]); // Debug markers for sample points
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false); // Settings panel visibility
 
   /**
    * Detect background color brightness behind the container
@@ -425,52 +427,64 @@ const ChatContainer = ({
         className={`flex flex-col-reverse gap-3 ${isDragging ? 'border-2 border-white/40 rounded-3xl' : ''}`}
       >
       {/* Action buttons at BOTTOM - closer to container */}
-      {messages.length > 0 && (
-        <div className="relative flex items-center justify-end gap-2 px-6 pb-1">
-          <button
-            onClick={() => {
-              const event = new CustomEvent('stopGeneration');
-              window.dispatchEvent(event);
-            }}
-            disabled={!isGenerating && !isSpeaking}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
-              isGenerating || isSpeaking
-                ? 'glass-error' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-            title={isGenerating ? 'Stop generation' : isSpeaking ? 'Stop speaking' : 'Nothing to stop'}
-          >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
-              isGenerating || isSpeaking ? '' : 'opacity-50'
-            }`}>⏹</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              const event = new CustomEvent('clearChat');
-              window.dispatchEvent(event);
-            }}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-            title="Start new chat"
-          >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>+</span>
-          </button>
-          
-          {/* Close button only shown when model is loaded (no chat button available) */}
-          {!modelDisabled && (
+      <div className="relative flex items-center justify-end gap-2 px-6 pb-1">
+        {/* Stop, Clear, and Close buttons - only shown when there are messages */}
+        {messages.length > 0 && (
+          <>
             <button
               onClick={() => {
-                const event = new CustomEvent('closeChat');
+                const event = new CustomEvent('stopGeneration');
+                window.dispatchEvent(event);
+              }}
+              disabled={!isGenerating && !isSpeaking}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
+                isGenerating || isSpeaking
+                  ? 'glass-error' 
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+              title={isGenerating ? 'Stop generation' : isSpeaking ? 'Stop speaking' : 'Nothing to stop'}
+            >
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
+                isGenerating || isSpeaking ? '' : 'opacity-50'
+              }`}>⏹</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                const event = new CustomEvent('clearChat');
                 window.dispatchEvent(event);
               }}
               className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-              title="Close chat"
+              title="Start new chat"
             >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>+</span>
             </button>
-          )}
-        </div>
-      )}
+            
+            {/* Settings button - only shown when there are messages */}
+            <button
+              onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+              title="Settings"
+            >
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
+            </button>
+            
+            {/* Close button only shown when model is loaded (no chat button available) */}
+            {!modelDisabled && (
+              <button
+                onClick={() => {
+                  const event = new CustomEvent('closeChat');
+                  window.dispatchEvent(event);
+                }}
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+                title="Close chat"
+              >
+                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Messages container with MASK for fade */}
       <div 
@@ -489,13 +503,21 @@ const ChatContainer = ({
           }}
         >
           {messages.length === 0 ? (
-            /* Placeholder message when empty */
-            <div className="flex items-center justify-center h-full">
+            /* Placeholder message when empty with settings button */
+            <div className="flex flex-col items-center justify-center h-full gap-3">
               <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-6 py-4 rounded-3xl`}>
                 <div className="text-center text-sm">
                   💬 Type a message to start chatting...
                 </div>
               </div>
+              {/* Settings button when no messages */}
+              <button
+                onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+                title="Settings"
+              >
+                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
+              </button>
             </div>
           ) : (
             messages.slice().reverse().map((msg, index) => {
@@ -560,6 +582,16 @@ const ChatContainer = ({
           )}
         </div>
       </div>
+
+      {/* Settings Panel - renders inside ChatContainer */}
+      {isSettingsPanelOpen && (
+        <div className="absolute inset-0 z-10">
+          <SettingsPanel 
+            onClose={() => setIsSettingsPanelOpen(false)} 
+            isLightBackground={isLightBackground}
+          />
+        </div>
+      )}
     </div>
     </>
   );

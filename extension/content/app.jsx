@@ -6,6 +6,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AppContent from '../../src/components/AppContent.jsx';
+import { ConfigProvider } from '../../src/contexts/ConfigContext.jsx';
 
 console.log('[Content App] Module loaded');
 
@@ -55,7 +56,9 @@ const initReactApp = () => {
     // Render the AppContent component (shared with dev mode)
     reactRoot.render(
       <React.StrictMode>
-        <AppContent mode="extension" />
+        <ConfigProvider>
+          <AppContent mode="extension" />
+        </ConfigProvider>
       </React.StrictMode>
     );
     

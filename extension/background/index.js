@@ -108,6 +108,12 @@ function registerHandlers() {
     return { isGenerating };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.AI_TEST_CONNECTION, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const success = await aiService.testConnection(tabId);
+    return { success };
+  });
+
   // TTS Service handlers
   backgroundBridge.registerHandler(MessageTypes.TTS_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');

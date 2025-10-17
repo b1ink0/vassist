@@ -1,13 +1,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
-import StorageManager from '../managers/StorageManager';
-import { AIServiceProxy, TTSServiceProxy, STTServiceProxy } from '../services/proxies';
 import ResourceLoader from '../utils/ResourceLoader';
-
-
-import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig, AIProviders, TTSProviders, STTProviders, OpenAIVoices, validateAIConfig, validateTTSConfig, validateSTTConfig } from '../config/aiConfig';
-import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
+import StorageManager from '../managers/StorageManager';
+import { useConfig } from '../contexts/ConfigContext';
 
 const ControlPanel = ({ 
   isAssistantReady,
@@ -17,92 +13,116 @@ const ControlPanel = ({
   positionManagerRef,
   onStateChange
 }) => {
+  const { generalConfig } = useConfig();
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
   const [queueStatus, setQueueStatus] = useState({ length: 0, isEmpty: true, items: [] });
+  const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasDragged, setHasDragged] = useState(false);
+  const dragStartPos = useRef({ x: 0, y: 0 });
+  const dragStartButtonPos = useRef({ x: 0, y: 0 });
   
   // Track blob URLs for cleanup later.
   const blobUrlsRef = useRef([]);
 
-  // AI Config state
-  const [aiConfig, setAiConfig] = useState(DefaultAIConfig);
-  const [configSaved, setConfigSaved] = useState(false);
-  const [configError, setConfigError] = useState('');
-
-  // TTS Config state
-  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
-  const [ttsConfigSaved, setTtsConfigSaved] = useState(false);
-  const [ttsConfigError, setTtsConfigError] = useState('');
-
-  // STT Config state
-  const [sttConfig, setSttConfig] = useState(DefaultSTTConfig);
-  const [sttConfigSaved, setSttConfigSaved] = useState(false);
-  const [sttConfigError, setSttConfigError] = useState('');
-  const [sttTesting, setSttTesting] = useState(false);
-
-  // Config sub-tab state
-  const [configSubTab, setConfigSubTab] = useState('ui');
-  
-  // UI Config state
-  const [uiConfig, setUiConfig] = useState(DefaultUIConfig);
-  const [uiConfigSaved, setUiConfigSaved] = useState(false);
-  const [uiConfigError, setUiConfigError] = useState('');
-  
-  // Legacy general config (for model loading)
-  const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
-  const [generalConfigError, setGeneralConfigError] = useState('');
-
-  // Load AI config on mount
+  // Load saved button position or use default
   useEffect(() => {
-    // Load UI config
-    const savedUiConfig = StorageManager.getConfig('uiConfig', DefaultUIConfig);
-    setUiConfig(savedUiConfig);
-    console.log('[ControlPanel] UI config loaded:', savedUiConfig);
+    const defaultPos = { x: window.innerWidth - 180, y: 20 }; // Top-right by default
+    const savedPos = StorageManager.getConfig('devControlPanelButtonPosition', defaultPos);
     
-    // Load General config (legacy - for model loading only)
-    const savedGeneralConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true });
-    setGeneralConfig(savedGeneralConfig);
-    console.log('[ControlPanel] General config loaded:', savedGeneralConfig);
+    // Ensure button is within viewport bounds
+    const buttonSize = 48;
+    const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
+    const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
     
-    const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig);
-    setAiConfig(savedConfig);
+    const validPos = { x: boundedX, y: boundedY };
+    setButtonPos(validPos);
     
-    // Try to configure AI service with saved config
-    try {
-      AIServiceProxy.configure(savedConfig);
-      console.log('[ControlPanel] AI Service configured from saved config');
-    } catch (error) {
-      console.warn('[ControlPanel] Failed to configure AI Service:', error);
-    }
-
-    // Load TTS config
-    const savedTtsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
-    setTtsConfig(savedTtsConfig);
-    
-    // Try to configure TTS service with saved config
-    try {
-      TTSServiceProxy.configure(savedTtsConfig);
-      console.log('[ControlPanel] TTS Service configured from saved config');
-    } catch (error) {
-      console.warn('[ControlPanel] Failed to configure TTS Service:', error);
-    }
-
-    // Load STT config
-    const savedSttConfig = StorageManager.getConfig('sttConfig', DefaultSTTConfig);
-    setSttConfig(savedSttConfig);
-    
-    // Try to configure STT service with saved config
-    try {
-      STTServiceProxy.configure(savedSttConfig);
-      console.log('[ControlPanel] STT Service configured from saved config');
-    } catch (error) {
-      console.warn('[ControlPanel] Failed to configure STT Service:', error);
+    if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
+      StorageManager.saveConfig('devControlPanelButtonPosition', validPos);
     }
   }, []);
 
-  /**
-   * Trigger action via VirtualAssistant API
-   */
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const buttonSize = 48;
+      const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
+      const boundedY = Math.max(10, Math.min(buttonPos.y, window.innerHeight - buttonSize - 10));
+      
+      if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
+        const newPos = { x: boundedX, y: boundedY };
+        setButtonPos(newPos);
+        StorageManager.saveConfig('devControlPanelButtonPosition', newPos);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [buttonPos]);
+
+  // Drag handlers for button
+  const handleButtonMouseDown = (e) => {
+    if (e.button !== 0) return; // Only left click
+    
+    setIsDragging(true);
+    setHasDragged(false);
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
+    dragStartButtonPos.current = { ...buttonPos };
+    
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e) => {
+      setHasDragged(true);
+      
+      const deltaX = e.clientX - dragStartPos.current.x;
+      const deltaY = e.clientY - dragStartPos.current.y;
+      
+      const newX = dragStartButtonPos.current.x + deltaX;
+      const newY = dragStartButtonPos.current.y + deltaY;
+      
+      // Keep button within viewport bounds
+      const buttonSize = 48;
+      const boundedX = Math.max(10, Math.min(newX, window.innerWidth - buttonSize - 10));
+      const boundedY = Math.max(10, Math.min(newY, window.innerHeight - buttonSize - 10));
+      
+      setButtonPos({ x: boundedX, y: boundedY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      
+      if (hasDragged) {
+        // Save position after drag
+        StorageManager.saveConfig('devControlPanelButtonPosition', buttonPos);
+        
+        // Reset hasDragged after a short delay to prevent click from firing
+        setTimeout(() => setHasDragged(false), 100);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, hasDragged, buttonPos]);
+
+  const handleButtonClick = () => {
+    if (!hasDragged) {
+      setIsVisible(!isVisible);
+    }
+  };
+
+  // Load AI config on mount
   const triggerAction = async (action) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       console.warn('[ControlPanel] VirtualAssistant not ready');
@@ -186,335 +206,6 @@ const ControlPanel = ({
   };
 
   // ========================================
-  // QUEUE FUNCTIONS
-  // ========================================
-
-  /**
-   * Save AI configuration
-   */
-  const handleSaveConfig = () => {
-    // Validate configuration
-    const validation = validateAIConfig(aiConfig);
-    
-    if (!validation.valid) {
-      setConfigError(validation.errors.join(', '));
-      return;
-    }
-    
-    // Save to storage
-    const saved = StorageManager.saveConfig('aiConfig', aiConfig);
-    
-    if (saved) {
-      setConfigSaved(true);
-      setConfigError('');
-      
-      // Configure AI service
-      try {
-        AIServiceProxy.configure(aiConfig);
-        console.log('[ControlPanel] AI Service configured successfully');
-        
-        // Hide success message after 2 seconds
-        setTimeout(() => setConfigSaved(false), 2000);
-      } catch (error) {
-        setConfigError('Failed to configure AI service: ' + error.message);
-        console.error('[ControlPanel] AI configuration failed:', error);
-      }
-    } else {
-      setConfigError('Failed to save configuration');
-    }
-  };
-
-  /**
-   * Update AI config field
-   */
-  const updateAIConfig = (path, value) => {
-    setAiConfig(prev => {
-      const updated = { ...prev };
-      
-      // Handle nested paths like 'openai.apiKey'
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      
-      return updated;
-    });
-  };
-
-  /**
-   * Test AI connection
-   */
-  const handleTestConnection = async () => {
-    setConfigError('');
-    
-    try {
-      // First configure with current settings
-      AIServiceProxy.configure(aiConfig);
-      
-      // Then test connection
-      await AIServiceProxy.testConnection();
-      
-      setConfigError('✅ Connection successful!');
-      setTimeout(() => setConfigError(''), 3000);
-    } catch (error) {
-      setConfigError('❌ Connection failed: ' + error.message);
-    }
-  };
-
-  /**
-   * Save TTS configuration
-   */
-  const handleSaveTTSConfig = () => {
-    // Validate configuration
-    const validation = validateTTSConfig(ttsConfig);
-    
-    if (!validation.valid) {
-      setTtsConfigError(validation.errors.join(', '));
-      return;
-    }
-    
-    // Save to storage
-    const saved = StorageManager.saveConfig('ttsConfig', ttsConfig);
-    
-    if (saved) {
-      setTtsConfigSaved(true);
-      setTtsConfigError('');
-      
-      // Configure TTS service
-      try {
-        TTSServiceProxy.configure(ttsConfig);
-        console.log('[ControlPanel] TTS Service configured successfully');
-        
-        // Hide success message after 2 seconds
-        setTimeout(() => setTtsConfigSaved(false), 2000);
-      } catch (error) {
-        setTtsConfigError('Failed to configure TTS service: ' + error.message);
-        console.error('[ControlPanel] TTS configuration failed:', error);
-      }
-    } else {
-      setTtsConfigError('Failed to save configuration');
-    }
-  };
-
-  /**
-   * Update TTS config field
-   */
-  const updateTTSConfig = (path, value) => {
-    setTtsConfig(prev => {
-      const updated = { ...prev };
-      
-      // Handle nested paths like 'openai.apiKey'
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      
-      return updated;
-    });
-  };
-
-  /**
-   * Test TTS connection
-   */
-  const handleTestTTSConnection = async () => {
-    setTtsConfigError('');
-    
-    try {
-      // First configure with current settings
-      TTSServiceProxy.configure(ttsConfig);
-      
-      // Then test connection with sample text
-      await TTSServiceProxy.testConnection('Hello, this is a test of the text to speech system.');
-      
-      setTtsConfigError('✅ TTS test successful!');
-      setTimeout(() => setTtsConfigError(''), 3000);
-    } catch (error) {
-      setTtsConfigError('❌ TTS test failed: ' + error.message);
-    }
-  };
-
-  /**
-   * Save General configuration
-   */
-  const handleSaveGeneralConfig = () => {
-    // Save to storage
-    const saved = StorageManager.saveConfig('generalConfig', generalConfig);
-    
-    if (saved) {
-      setGeneralConfigError('');
-      
-      console.log('[ControlPanel] General config saved successfully');
-      
-      // If model loading setting changed, inform user to reload
-      if (generalConfig.enableModelLoading !== StorageManager.getConfig('generalConfig', { enableModelLoading: true }).enableModelLoading) {
-        setGeneralConfigError('⚠️ Please reload the page for changes to take effect');
-      }
-    } else {
-      setGeneralConfigError('Failed to save configuration');
-    }
-  };
-
-  /**
-   * Save UI Config
-   */
-  const handleSaveUIConfig = () => {
-    // Save to storage
-    const saved = StorageManager.saveConfig('uiConfig', uiConfig);
-    
-    if (saved) {
-      setUiConfigSaved(true);
-      setUiConfigError('');
-      
-      console.log('[ControlPanel] UI config saved successfully');
-      
-      // Hide success message after 2 seconds
-      setTimeout(() => setUiConfigSaved(false), 2000);
-    } else {
-      setUiConfigError('Failed to save configuration');
-    }
-  };
-
-  /**
-   * Update General config field
-   */
-  const updateGeneralConfig = (path, value) => {
-    setGeneralConfig(prev => {
-      const updated = { ...prev };
-      
-      // Handle nested paths if needed
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      
-      return updated;
-    });
-  };
-
-  /**
-   * Update UI config field
-   */
-  const updateUIConfig = (path, value) => {
-    setUiConfig(prev => {
-      const updated = { ...prev };
-      
-      // Handle nested paths like 'backgroundDetection.enabled'
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (!current[part]) {
-          current[part] = {};
-        }
-        current = current[part];
-      }
-      
-      const lastPart = parts[parts.length - 1];
-      current[lastPart] = value;
-      
-      console.log('[ControlPanel] UI Config updated:', path, '=', value);
-      return updated;
-    });
-  };
-
-  /**
-   * Save STT configuration
-   */
-  const handleSaveSTTConfig = () => {
-    // Validate configuration
-    const validation = validateSTTConfig(sttConfig);
-    
-    if (!validation.valid) {
-      setSttConfigError(validation.errors.join(', '));
-      return;
-    }
-    
-    // Save to storage
-    const saved = StorageManager.saveConfig('sttConfig', sttConfig);
-    
-    if (saved) {
-      setSttConfigSaved(true);
-      setSttConfigError('');
-      
-      // Configure STT service
-      try {
-        STTServiceProxy.configure(sttConfig);
-        console.log('[ControlPanel] STT Service configured successfully');
-        
-        // Hide success message after 2 seconds
-        setTimeout(() => setSttConfigSaved(false), 2000);
-      } catch (error) {
-        setSttConfigError('Failed to configure STT service: ' + error.message);
-        console.error('[ControlPanel] STT configuration failed:', error);
-      }
-    } else {
-      setSttConfigError('Failed to save configuration');
-    }
-  };
-
-  /**
-   * Update STT config field
-   */
-  const updateSTTConfig = (path, value) => {
-    setSttConfig(prev => {
-      const updated = { ...prev };
-      
-      // Handle nested paths like 'openai.apiKey'
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      
-      return updated;
-    });
-  };
-
-  /**
-   * Test STT recording
-   */
-  const handleTestSTTRecording = async () => {
-    setSttConfigError('');
-    setSttTesting(true);
-    
-    try {
-      // First configure with current settings
-      STTServiceProxy.configure(sttConfig);
-      
-      setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
-      
-      // Test with 3-second recording
-      const transcription = await STTServiceProxy.testRecording(3);
-      
-      setSttConfigError(`✅ Transcription: "${transcription}"`);
-      setTimeout(() => setSttConfigError(''), 5000);
-    } catch (error) {
-      setSttConfigError('❌ STT test failed: ' + error.message);
-    } finally {
-      setSttTesting(false);
-    }
-  };
-
   // ========================================
   // QUEUE FUNCTIONS
   // ========================================
@@ -615,24 +306,50 @@ const ControlPanel = ({
 
   if (!isAssistantReady) return null;
 
-  // Toggle button when panel is hidden
-  if (!isVisible) {
-    return (
-      <button
-        onClick={() => setIsVisible(true)}
-        className="fixed bottom-5 right-5 px-5 py-3 bg-black/90 text-white border border-white/20 rounded-lg cursor-pointer z-[1000] text-sm hover:bg-black shadow-lg backdrop-blur-sm"
-      >
-        ⚙️ Show Controls
-      </button>
-    );
+  // Calculate panel position (below and to the left of button)
+  const panelX = Math.max(10, Math.min(buttonPos.x - 450, window.innerWidth - 530)); // Panel width ~520px
+  const panelY = Math.min(buttonPos.y + 60, window.innerHeight - 600); // Panel height ~600px
+
+  // Don't render if developer tools are disabled
+  if (!generalConfig.enableDebugPanel) {
+    return null;
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm max-w-[520px]">
+    <>
+      {/* Draggable Button */}
+      <button
+        onMouseDown={handleButtonMouseDown}
+        onClick={handleButtonClick}
+        style={{
+          position: 'fixed',
+          left: `${buttonPos.x}px`,
+          top: `${buttonPos.y}px`,
+          zIndex: 9998,
+        }}
+        className={`w-12 h-12 bg-black/90 text-white border border-white/20 rounded-lg cursor-move shadow-lg backdrop-blur-sm flex items-center justify-center text-xl hover:bg-black transition-colors ${
+          isDragging ? 'border-white/40' : ''
+        }`}
+        title="Drag to reposition | Click to toggle panel"
+      >
+        🛠️
+      </button>
+
+      {/* Control Panel */}
+      {isVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            left: `${panelX}px`,
+            top: `${panelY}px`,
+            zIndex: 9997,
+          }}
+          className="pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm w-[520px]"
+        >
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-white/20">
         <div className="flex items-center gap-2">
-          <h3 className="m-0 text-base font-semibold text-white">Control Panel</h3>
+          <h3 className="m-0 text-base font-semibold text-white">Dev Control Panel</h3>
           <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
             {currentState}
           </span>
@@ -706,16 +423,6 @@ const ControlPanel = ({
           }`}
         >
           🔧 Debug
-        </button>
-        <button
-          onClick={() => setActiveTab('config')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'config' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          ⚙️ Config
         </button>
       </div>
 
@@ -1059,804 +766,10 @@ const ControlPanel = ({
             />
           </div>
         )}
-
-        {/* Config Tab */}
-        {activeTab === 'config' && (
-          <div className="space-y-3">
-            {/* Config Sub-Tabs */}
-            <div className="flex border-b border-white/20 bg-black/30 rounded-t-lg overflow-hidden -mx-4 -mt-3 mb-3">
-              <button
-                onClick={() => setConfigSubTab('ui')}
-                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
-                  configSubTab === 'ui'
-                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                🎨 UI
-              </button>
-              <button
-                onClick={() => setConfigSubTab('llm')}
-                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
-                  configSubTab === 'llm'
-                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                🤖 LLM
-              </button>
-              <button
-                onClick={() => setConfigSubTab('tts')}
-                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
-                  configSubTab === 'tts'
-                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                🔊 TTS
-              </button>
-              <button
-                onClick={() => setConfigSubTab('stt')}
-                className={`flex-1 px-3 py-2 text-[11px] border-none cursor-pointer transition-colors ${
-                  configSubTab === 'stt'
-                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                🎤 STT
-              </button>
-            </div>
-
-            {/* General Sub-Tab */}
-            {/* UI Sub-Tab */}
-            {configSubTab === 'ui' && (
-              <>
-                <p className="text-xs text-gray-400 mb-3">User Interface Settings</p>
-                
-                {/* Enable/Disable 3D Model */}
-                <div className="mb-4 pb-3 border-b border-white/10">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={generalConfig.enableModelLoading}
-                      onChange={(e) => updateGeneralConfig('enableModelLoading', e.target.checked)}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                    <span className="text-xs text-white">Enable 3D Model Loading</span>
-                  </label>
-                  <p className="text-[10px] text-gray-400 mt-1 ml-6">
-                    Uncheck to use chat-only mode without 3D avatar. Requires page reload.
-                  </p>
-                </div>
-
-                {/* Background Detection Settings */}
-                <div className="mb-4">
-                  <p className="text-xs text-white font-semibold mb-2">🎨 Background Detection & Theming</p>
-                  {/* Theme Mode */}
-                  <div className="mb-3">
-                    <label className="block text-xs text-white mb-1">Theme Mode</label>
-                    <select
-                      value={uiConfig.backgroundDetection?.mode ?? BackgroundThemeModes.ADAPTIVE}
-                      onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
-                      className="w-full px-2 py-1.5 bg-black/40 border border-white/20 rounded text-xs text-white"
-                    >
-                      <option value={BackgroundThemeModes.ADAPTIVE}>Adaptive (Auto-detect)</option>
-                      <option value={BackgroundThemeModes.DARK}>Light</option>
-                      <option value={BackgroundThemeModes.LIGHT}>Dark</option>
-                    </select>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && 'Auto-detect background brightness'}
-                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.LIGHT && 'Use dark chat on all backgrounds'}
-                      {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.DARK && 'Use light chat on all backgrounds'}
-                    </p>
-                  </div>
-                  {/* Sample Grid Size */}
-                  {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
-                    <div className="mb-3 ml-6">
-                      <label className="block text-xs text-white mb-1">
-                        Sample Grid Size: {uiConfig.backgroundDetection?.sampleGridSize ?? 5}×{uiConfig.backgroundDetection?.sampleGridSize ?? 5}
-                      </label>
-                      <input
-                        type="range"
-                        min="3"
-                        max="7"
-                        step="1"
-                        value={uiConfig.backgroundDetection?.sampleGridSize ?? 5}
-                        onChange={(e) => updateUIConfig('backgroundDetection.sampleGridSize', parseInt(e.target.value))}
-                        className="w-full"
-                      />
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {uiConfig.backgroundDetection?.sampleGridSize ?? 5}×{uiConfig.backgroundDetection?.sampleGridSize ?? 5} = {(uiConfig.backgroundDetection?.sampleGridSize ?? 5) * (uiConfig.backgroundDetection?.sampleGridSize ?? 5)} sample points. Higher = more accurate, slightly slower.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Show Debug */}
-                  {uiConfig.backgroundDetection?.mode === BackgroundThemeModes.ADAPTIVE && (
-                    <div className="mb-3 ml-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={uiConfig.backgroundDetection?.showDebug ?? false}
-                          onChange={(e) => updateUIConfig('backgroundDetection.showDebug', e.target.checked)}
-                          className="w-4 h-4 cursor-pointer"
-                        />
-                        <span className="text-xs text-white">Show Debug Markers</span>
-                      </label>
-                      <p className="text-[10px] text-gray-400 mt-1 ml-6">
-                        Display colored dots at sample points (red=dark, green=light).
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* UI Error/Success Messages */}
-                {uiConfigError && (
-                  <div className="text-xs p-2 rounded bg-red-500/20 text-red-400 mb-3">
-                    {uiConfigError}
-                  </div>
-                )}
-                
-                {uiConfigSaved && (
-                  <div className="text-xs p-2 rounded bg-green-500/20 text-green-400 mb-3">
-                    ✅ UI settings saved successfully!
-                  </div>
-                )}
-
-                {/* Also save General config for model loading */}
-                {generalConfigError && (
-                  <div className={`text-xs p-2 rounded mb-3 ${generalConfigError.includes('⚠️') ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {generalConfigError}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-2 pt-2 border-t border-white/20 mt-3">
-                  <button
-                    onClick={() => {
-                      handleSaveUIConfig();
-                      handleSaveGeneralConfig(); // Save model loading setting too
-                    }}
-                    className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-                  >
-                    💾 Save UI Settings
-                  </button>
-                </div>
-
-                {/* Info */}
-                <div className="border-t border-white/20 pt-3 mt-3">
-                  <p className="text-[10px] text-gray-500 mb-2">ℹ️ UI Settings Guide:</p>
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    <strong>3D Model:</strong> Disable for chat-only mode
-                    <br/><strong>Adaptive Detection:</strong> Auto-adjusts chat theme
-                    <br/><strong>Grid Size:</strong> 3×3 (fast) to 7×7 (accurate)
-                    <br/><strong>Debug Markers:</strong> Visualize detection points
-                  </p>
-                </div>
-              </>
-            )}
-
-            {/* LLM Sub-Tab */}
-            {configSubTab === 'llm' && (
-              <>
-                <p className="text-xs text-gray-400 mb-3">Language Model Configuration</p>
-            
-            {/* Provider Selection */}
-            <div>
-              <label className="block text-xs text-white mb-1">Provider</label>
-              <select
-                value={aiConfig.provider}
-                onChange={(e) => updateAIConfig('provider', e.target.value)}
-                className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-              >
-                <option value={AIProviders.OPENAI}>OpenAI</option>
-                <option value={AIProviders.OLLAMA}>Ollama (Local)</option>
-              </select>
-            </div>
-
-            {/* OpenAI Settings */}
-            {aiConfig.provider === AIProviders.OPENAI && (
-              <>
-                <div>
-                  <label className="block text-xs text-white mb-1">API Key</label>
-                  <input
-                    type="password"
-                    value={aiConfig.openai.apiKey}
-                    onChange={(e) => updateAIConfig('openai.apiKey', e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Model</label>
-                  <input
-                    type="text"
-                    value={aiConfig.openai.model}
-                    onChange={(e) => updateAIConfig('openai.model', e.target.value)}
-                    placeholder="gpt-4-turbo-preview"
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Temperature: {aiConfig.openai.temperature}</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    value={aiConfig.openai.temperature}
-                    onChange={(e) => updateAIConfig('openai.temperature', parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Max Tokens</label>
-                  <input
-                    type="number"
-                    value={aiConfig.openai.maxTokens}
-                    onChange={(e) => updateAIConfig('openai.maxTokens', parseInt(e.target.value))}
-                    placeholder="2000"
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Ollama Settings */}
-            {aiConfig.provider === AIProviders.OLLAMA && (
-              <>
-                <div>
-                  <label className="block text-xs text-white mb-1">Endpoint URL</label>
-                  <input
-                    type="text"
-                    value={aiConfig.ollama.endpoint}
-                    onChange={(e) => updateAIConfig('ollama.endpoint', e.target.value)}
-                    placeholder="http://localhost:11434"
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1">Your local Ollama server URL</p>
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Model</label>
-                  <input
-                    type="text"
-                    value={aiConfig.ollama.model}
-                    onChange={(e) => updateAIConfig('ollama.model', e.target.value)}
-                    placeholder="llama2"
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1">Model name (e.g., llama2, mistral, codellama)</p>
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Temperature: {aiConfig.ollama.temperature}</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    value={aiConfig.ollama.temperature}
-                    onChange={(e) => updateAIConfig('ollama.temperature', parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white mb-1">Max Tokens</label>
-                  <input
-                    type="number"
-                    value={aiConfig.ollama.maxTokens}
-                    onChange={(e) => updateAIConfig('ollama.maxTokens', parseInt(e.target.value))}
-                    placeholder="2000"
-                    className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* System Prompt */}
-            <div>
-              <label className="block text-xs text-white mb-1">System Prompt</label>
-              <textarea
-                value={aiConfig.systemPrompt}
-                onChange={(e) => updateAIConfig('systemPrompt', e.target.value)}
-                placeholder="You are a helpful virtual assistant..."
-                rows={3}
-                className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500 resize-none"
-              />
-            </div>
-
-            {/* Error/Success Messages */}
-            {configError && (
-              <div className={`text-xs p-2 rounded ${configError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                {configError}
-              </div>
-            )}
-            
-            {configSaved && (
-              <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                ✅ Configuration saved successfully!
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-2 border-t border-white/20">
-              <button
-                onClick={handleSaveConfig}
-                className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-              >
-                💾 Save Config
-              </button>
-              <button
-                onClick={handleTestConnection}
-                className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
-              >
-                🔌 Test Connection
-              </button>
-            </div>
-
-            {/* Info */}
-            <div className="border-t border-white/20 pt-3">
-              <p className="text-[10px] text-gray-500 mb-2">ℹ️ Configuration Guide:</p>
-              <p className="text-[10px] text-gray-400 leading-relaxed">
-                <strong>OpenAI:</strong> Get API key from platform.openai.com
-                <br/>
-                <strong>Ollama:</strong> Install from ollama.ai and run locally
-                <br/>
-                All settings are saved to browser localStorage
-              </p>
-            </div>
-          </>
-        )}
-
-        {/* TTS Sub-Tab */}
-        {configSubTab === 'tts' && (
-          <>
-            <p className="text-xs text-gray-400 mb-3">Text-to-Speech Configuration</p>
-              
-              {/* Enable/Disable Toggle */}
-              <div className="mb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={ttsConfig.enabled}
-                    onChange={(e) => updateTTSConfig('enabled', e.target.checked)}
-                    className="w-4 h-4 cursor-pointer"
-                  />
-                  <span className="text-xs text-white">Enable Text-to-Speech</span>
-                </label>
-              </div>
-
-              {/* TTS Settings (only show if enabled) */}
-              {ttsConfig.enabled && (
-                <>
-                  {/* Provider Selection */}
-                  <div>
-                    <label className="block text-xs text-white mb-1">TTS Provider</label>
-                    <select
-                      value={ttsConfig.provider}
-                      onChange={(e) => updateTTSConfig('provider', e.target.value)}
-                      className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                    >
-                      <option value={TTSProviders.OPENAI}>OpenAI TTS</option>
-                      <option value={TTSProviders.OPENAI_COMPATIBLE}>Generic (OpenAI-Compatible API)</option>
-                    </select>
-                  </div>
-
-                  {/* OpenAI TTS Settings */}
-                  {ttsConfig.provider === TTSProviders.OPENAI && (
-                    <>
-                      <div>
-                        <label className="block text-xs text-white mb-1">API Key</label>
-                        <input
-                          type="password"
-                          value={ttsConfig.openai.apiKey}
-                          onChange={(e) => updateTTSConfig('openai.apiKey', e.target.value)}
-                          placeholder="sk-... (can use same as AI)"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Model</label>
-                        <select
-                          value={ttsConfig.openai.model}
-                          onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="tts-1">TTS-1 (Faster)</option>
-                          <option value="tts-1-hd">TTS-1-HD (Higher Quality)</option>
-                        </select>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Voice</label>
-                        <select
-                          value={ttsConfig.openai.voice}
-                          onChange={(e) => updateTTSConfig('openai.voice', e.target.value)}
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        >
-                          <option value={OpenAIVoices.ALLOY}>Alloy (Neutral)</option>
-                          <option value={OpenAIVoices.ECHO}>Echo (Male)</option>
-                          <option value={OpenAIVoices.FABLE}>Fable (British Male)</option>
-                          <option value={OpenAIVoices.ONYX}>Onyx (Deep Male)</option>
-                          <option value={OpenAIVoices.NOVA}>Nova (Female)</option>
-                          <option value={OpenAIVoices.SHIMMER}>Shimmer (Soft Female)</option>
-                        </select>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Speed: {ttsConfig.openai.speed}</label>
-                        <input
-                          type="range"
-                          min="0.25"
-                          max="4"
-                          step="0.25"
-                          value={ttsConfig.openai.speed}
-                          onChange={(e) => updateTTSConfig('openai.speed', parseFloat(e.target.value))}
-                          className="w-full"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Generic OpenAI-Compatible TTS Settings */}
-                  {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
-                    <>
-                      <div>
-                        <label className="block text-xs text-white mb-1">Base URL</label>
-                        <input
-                          type="text"
-                          value={ttsConfig['openai-compatible'].endpoint}
-                          onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
-                          placeholder="http://localhost:8000"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">Base URL only (e.g., http://localhost:8000)</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">API Key (Optional)</label>
-                        <input
-                          type="password"
-                          value={ttsConfig['openai-compatible'].apiKey}
-                          onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
-                          placeholder="Leave empty if not required"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Model</label>
-                        <input
-                          type="text"
-                          value={ttsConfig['openai-compatible'].model}
-                          onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
-                          placeholder="tts"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">TTS model name</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Voice</label>
-                        <input
-                          type="text"
-                          value={ttsConfig['openai-compatible'].voice}
-                          onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
-                          placeholder="default"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Speed: {ttsConfig['openai-compatible'].speed}</label>
-                        <input
-                          type="range"
-                          min="0.25"
-                          max="4"
-                          step="0.25"
-                          value={ttsConfig['openai-compatible'].speed}
-                          onChange={(e) => updateTTSConfig('openai-compatible.speed', parseFloat(e.target.value))}
-                          className="w-full"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Chunking Settings */}
-                  <div className="border-t border-white/20 pt-3 mt-3">
-                    <p className="text-xs text-white font-semibold mb-2">Chunking Settings</p>
-                    
-                    <div>
-                      <label className="block text-xs text-white mb-1">Chunk Size: {ttsConfig.chunkSize} chars</label>
-                      <input
-                        type="range"
-                        min="100"
-                        max="1000"
-                        step="50"
-                        value={ttsConfig.chunkSize}
-                        onChange={(e) => updateTTSConfig('chunkSize', parseInt(e.target.value))}
-                        className="w-full"
-                      />
-                      <p className="text-[10px] text-gray-500 mt-1">Target characters per TTS chunk</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs text-white mb-1">Min Chunk Size: {ttsConfig.minChunkSize} chars</label>
-                      <input
-                        type="range"
-                        min="50"
-                        max="300"
-                        step="25"
-                        value={ttsConfig.minChunkSize}
-                        onChange={(e) => updateTTSConfig('minChunkSize', parseInt(e.target.value))}
-                        className="w-full"
-                      />
-                      <p className="text-[10px] text-gray-500 mt-1">Minimum chunk size before forced split</p>
-                    </div>
-                  </div>
-
-                  {/* TTS Info */}
-                  <div className="border-t border-white/20 pt-3 mt-3">
-                    <p className="text-[10px] text-gray-500 mb-2">ℹ️ TTS Guide:</p>
-                    <p className="text-[10px] text-gray-400 leading-relaxed">
-                      • Enable TTS to hear assistant responses
-                      <br/>• OpenAI TTS requires API key (can be same as AI)
-                      <br/>• Chunking splits long text for natural speech
-                      <br/>• Test button speaks sample text to verify setup
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {/* TTS Error/Success Messages - Always visible */}
-              {ttsConfigError && (
-                <div className={`text-xs p-2 rounded ${ttsConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {ttsConfigError}
-                </div>
-              )}
-              
-              {ttsConfigSaved && (
-                <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                  ✅ TTS Configuration saved successfully!
-                </div>
-              )}
-
-              {/* TTS Action Buttons - Always visible */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSaveTTSConfig}
-                  className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-                >
-                  💾 Save TTS Config
-                </button>
-                {ttsConfig.enabled && (
-                  <button
-                    onClick={handleTestTTSConnection}
-                    className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
-                  >
-                    🔊 Test TTS
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* STT Sub-Tab */}
-          {configSubTab === 'stt' && (
-            <>
-              <p className="text-xs text-gray-400 mb-3">Speech-to-Text Configuration</p>
-              
-              {/* Enable/Disable Toggle */}
-              <div className="mb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={sttConfig.enabled}
-                    onChange={(e) => updateSTTConfig('enabled', e.target.checked)}
-                    className="w-4 h-4 cursor-pointer"
-                  />
-                  <span className="text-xs text-white">Enable Speech-to-Text</span>
-                </label>
-              </div>
-
-              {/* STT Settings (only show if enabled) */}
-              {sttConfig.enabled && (
-                <>
-                  {/* Provider Selection */}
-                  <div>
-                    <label className="block text-xs text-white mb-1">STT Provider</label>
-                    <select
-                      value={sttConfig.provider}
-                      onChange={(e) => updateSTTConfig('provider', e.target.value)}
-                      className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                    >
-                      <option value={STTProviders.OPENAI}>OpenAI Whisper</option>
-                      <option value={STTProviders.OPENAI_COMPATIBLE}>Generic (OpenAI-Compatible API)</option>
-                    </select>
-                  </div>
-
-                  {/* OpenAI Whisper Settings */}
-                  {sttConfig.provider === STTProviders.OPENAI && (
-                    <>
-                      <div>
-                        <label className="block text-xs text-white mb-1">API Key</label>
-                        <input
-                          type="password"
-                          value={sttConfig.openai.apiKey}
-                          onChange={(e) => updateSTTConfig('openai.apiKey', e.target.value)}
-                          placeholder="sk-... (can use same as AI)"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Model</label>
-                        <input
-                          type="text"
-                          value={sttConfig.openai.model}
-                          onChange={(e) => updateSTTConfig('openai.model', e.target.value)}
-                          placeholder="whisper-1"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                          disabled
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">Currently only whisper-1 is available</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Language (Optional)</label>
-                        <input
-                          type="text"
-                          value={sttConfig.openai.language}
-                          onChange={(e) => updateSTTConfig('openai.language', e.target.value)}
-                          placeholder="en (leave empty for auto-detect)"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">ISO-639-1 code (en, es, fr, etc.)</p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Generic OpenAI-Compatible STT Settings */}
-                  {sttConfig.provider === STTProviders.OPENAI_COMPATIBLE && (
-                    <>
-                      <div>
-                        <label className="block text-xs text-white mb-1">Base URL</label>
-                        <input
-                          type="text"
-                          value={sttConfig['openai-compatible'].endpoint}
-                          onChange={(e) => updateSTTConfig('openai-compatible.endpoint', e.target.value)}
-                          placeholder="http://localhost:8000"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">Base URL only (e.g., http://localhost:8000)</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">API Key (Optional)</label>
-                        <input
-                          type="password"
-                          value={sttConfig['openai-compatible'].apiKey}
-                          onChange={(e) => updateSTTConfig('openai-compatible.apiKey', e.target.value)}
-                          placeholder="Leave empty if not required"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Model</label>
-                        <input
-                          type="text"
-                          value={sttConfig['openai-compatible'].model}
-                          onChange={(e) => updateSTTConfig('openai-compatible.model', e.target.value)}
-                          placeholder="whisper"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">STT model name</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-white mb-1">Language (Optional)</label>
-                        <input
-                          type="text"
-                          value={sttConfig['openai-compatible'].language}
-                          onChange={(e) => updateSTTConfig('openai-compatible.language', e.target.value)}
-                          placeholder="en (leave empty for auto-detect)"
-                          className="w-full px-3 py-2 bg-white/10 text-white border border-white/20 rounded text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* STT Error/Success Messages */}
-                  {sttConfigError && (
-                    <div className={`text-xs p-2 rounded ${sttConfigError.includes('✅') || sttConfigError.includes('🎤') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {sttConfigError}
-                    </div>
-                  )}
-                  
-                  {sttConfigSaved && (
-                    <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                      ✅ STT Configuration saved successfully!
-                    </div>
-                  )}
-                  
-                  {/* Audio Device Delay Setting */}
-                  <div className="border-t border-white/20 pt-3 mt-3">
-                    <label className="block text-xs text-white mb-1">
-                      🎧 Audio Device Switch Delay: {sttConfig.audioDeviceSwitchDelay || 300}ms
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1000"
-                      step="50"
-                      value={sttConfig.audioDeviceSwitchDelay || 300}
-                      onChange={(e) => updateSTTConfig('audioDeviceSwitchDelay', parseInt(e.target.value))}
-                      className="w-full"
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Delay after recording before TTS plays. Increase if audio is distorted (Windows headset issue). 
-                      Recommended: 300ms for headsets, 0ms for separate mic/speakers.
-                    </p>
-                  </div>
-
-                  {/* STT Info */}
-                  <div className="border-t border-white/20 pt-3 mt-3">
-                    <p className="text-[10px] text-gray-500 mb-2">ℹ️ STT Guide:</p>
-                    <p className="text-[10px] text-gray-400 leading-relaxed">
-                      • Enable STT for voice input in chat
-                      <br/>• OpenAI Whisper requires API key (can be same as AI)
-                      <br/>• Test button records 3 seconds and transcribes
-                      <br/>• Grant microphone permission when prompted
-                      <br/>• Adjust delay if audio sounds distorted after recording
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {/* STT Error/Success Messages - Always visible */}
-              {sttConfigError && (
-                <div className={`text-xs p-2 rounded ${sttConfigError.includes('✅') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {sttConfigError}
-                </div>
-              )}
-              
-              {sttConfigSaved && (
-                <div className="text-xs p-2 rounded bg-green-500/20 text-green-400">
-                  ✅ STT Configuration saved successfully!
-                </div>
-              )}
-
-              {/* STT Action Buttons - Always visible */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSaveSTTConfig}
-                  className="flex-1 px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
-                >
-                  💾 Save STT Config
-                </button>
-                {sttConfig.enabled && (
-                  <button
-                    onClick={handleTestSTTRecording}
-                    disabled={sttTesting}
-                    className="flex-1 px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {sttTesting ? '⏺️ Recording...' : '🎤 Test Recording'}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-          </div>
-        )}
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };
 

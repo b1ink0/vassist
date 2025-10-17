@@ -285,6 +285,22 @@ class TTSService {
     const state = this.tabStates.get(tabId);
     return state && state.isGenerating;
   }
+
+  /**
+   * Test TTS connection with sample text
+   * @param {number} tabId - Tab ID
+   * @param {string} testText - Text to test with
+   * @returns {Promise<boolean>} True if successful
+   */
+  async testConnection(tabId, testText = 'Hello, this is a test.') {
+    try {
+      const result = await this.generateSpeech(tabId, testText);
+      return result && result.audioBuffer && result.audioBuffer.byteLength > 0;
+    } catch (error) {
+      console.error(`[TTSService] Tab ${tabId} - Test connection failed:`, error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

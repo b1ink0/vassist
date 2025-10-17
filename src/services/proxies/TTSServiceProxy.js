@@ -429,15 +429,20 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} True if successful
    */
   async testConnection(testText = 'Hello, this is a test.') {
-    if (this.isExtension) {
-      const response = await this.bridge.sendMessage(
-        MessageTypes.TTS_TEST_CONNECTION,
-        { testText },
-        { timeout: 30000 }
-      );
-      return response.success || false;
-    } else {
-      return await this.directService.testConnection(testText);
+    try {
+      const audioUrls = await this.generateChunkedSpeech(testText);
+      
+      if (audioUrls.length === 0) {
+        throw new Error('No audio generated');
+      }
+      
+      await this.playAudioSequence(audioUrls, 'test_connection');
+      this.cleanupBlobUrls(audioUrls);
+      
+      return true;
+    } catch (error) {
+      console.error('[TTSServiceProxy] Test connection failed:', error);
+      throw error;
     }
   }
 
