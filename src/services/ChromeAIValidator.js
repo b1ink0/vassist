@@ -15,6 +15,25 @@ class ChromeAIValidator {
   }
 
   /**
+   * Get Chrome version
+   * @returns {number|null} Chrome version number or null if not Chrome
+   */
+  getChromeVersion() {
+    const userAgent = navigator.userAgent;
+    const match = userAgent.match(/Chrome\/(\d+)/);
+    return match ? parseInt(match[1]) : null;
+  }
+
+  /**
+   * Check if Chrome version meets minimum requirement
+   * @returns {boolean} True if Chrome 138+
+   */
+  hasMinimumChromeVersion() {
+    const version = this.getChromeVersion();
+    return version !== null && version >= 138;
+  }
+
+  /**
    * Check if Chrome AI (LanguageModel API) is available
    * @returns {boolean} True if LanguageModel exists in global scope
    */
@@ -69,14 +88,16 @@ class ChromeAIValidator {
           
         case ChromeAIAvailability.DOWNLOADABLE:
         case 'after-download':
+        case 'downloadable':
           status.message = 'Gemini Nano model needs to be downloaded';
-          status.details = 'Click "Start Model Download" below or visit chrome://components and download "Optimization Guide On Device Model" (22GB)';
+          status.details = 'Click "Start Model Download" below or visit chrome://components';
           status.requiresFlags = false;
           break;
           
         case ChromeAIAvailability.DOWNLOADING:
+        case 'downloading':
           status.message = 'Gemini Nano model is downloading...';
-          status.details = `Download in progress. This may take a while (22GB download).`;
+          status.details = 'Download in progress. This may take a while.';
           status.requiresFlags = false;
           status.progress = this.downloadProgress;
           break;
@@ -120,6 +141,9 @@ class ChromeAIValidator {
 
   /**
    * Monitor download progress
+   * NOTE: downloadprogress events only fire when LanguageModel.create() 
+   * actually initiates the download. If download is already in progress
+   * (from chrome://components or another call), events won't fire.
    * @param {Function} onProgress - Callback (progress: number) => void
    * @returns {Promise<void>}
    */
@@ -131,23 +155,28 @@ class ChromeAIValidator {
     console.log('[ChromeAIValidator] Starting download monitor...');
 
     try {
+      const validator = this;
+      
       const session = await self.LanguageModel.create({
+        language: 'en',
         monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
+          console.log('[ChromeAIValidator] Monitor callback called');
+          
+          m.ondownloadprogress = (e) => {
             const progress = e.loaded * 100;
             
             console.log(`[ChromeAIValidator] Download progress: ${progress.toFixed(1)}%`);
             
-            this.downloadProgress = progress;
+            validator.downloadProgress = progress;
             
             if (onProgress) {
               onProgress(progress);
             }
-          });
+          };
         }
       });
 
-      console.log('[ChromeAIValidator] Model download complete');
+      console.log('[ChromeAIValidator] Session created, download complete or in progress');
       session.destroy();
       
     } catch (error) {

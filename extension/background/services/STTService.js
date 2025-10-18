@@ -255,7 +255,6 @@ class STTService {
         console.log(`[STTService] Tab ${tabId} - Chrome AI multimodal session created`);
       }
 
-      // Create prompt with audio content - exactly like Google example
       const stream = state.chromeAISession.promptStreaming([
         {
           role: 'user',

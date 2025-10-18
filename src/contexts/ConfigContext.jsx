@@ -376,14 +376,24 @@ export const ConfigProvider = ({ children }) => {
   }, []);
 
   const startChromeAIDownload = useCallback(async () => {
-    setChromeAiStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
-    
     try {
+      // First check availability to ensure we're in downloadable state
+      const status = await checkChromeAIAvailability();
+      
+      if (status.state !== 'downloadable' && status.state !== 'after-download') {
+        console.log('[ConfigContext] Model not in downloadable state:', status.state);
+        return;
+      }
+      
+      // Now start monitoring the download
+      setChromeAiStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
+      
       await ChromeAIValidator.monitorDownload((progress) => {
+        console.log(`[ConfigContext] Chrome AI download progress: ${progress.toFixed(1)}%`);
         setChromeAiStatus(prev => ({ ...prev, progress }));
       });
       
-      // Recheck availability after download
+      // Recheck availability after download completes
       await checkChromeAIAvailability();
       
     } catch (error) {

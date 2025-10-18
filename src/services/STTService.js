@@ -353,12 +353,10 @@ class STTService {
           expectedInputs: [{ type: 'audio' }],
           temperature: 0.1,
           topK: params.defaultTopK,
-          // Note: language parameter is NOT used in multimodal audio API
         });
         console.log('[STTService] Chrome AI multimodal session created');
       }
 
-      // Create prompt with audio content - exactly like Google example
       console.log('[STTService] Sending prompt to Chrome AI...');
       const stream = this.chromeAISession.promptStreaming([
         {
@@ -377,7 +375,7 @@ class STTService {
       for await (const chunk of stream) {
         chunkCount++;
         console.log(`[STTService] Chunk ${chunkCount}:`, chunk);
-        fullResponse += chunk; // APPEND, not replace!
+        fullResponse += chunk;
       }
 
       const text = fullResponse.trim();

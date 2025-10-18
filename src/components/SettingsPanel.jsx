@@ -9,9 +9,23 @@ import { useState, useEffect } from 'react';
 import { useConfig } from '../contexts/ConfigContext';
 import { AIProviders, TTSProviders, STTProviders, OpenAIVoices } from '../config/aiConfig';
 import { BackgroundThemeModes } from '../config/uiConfig';
+import ChromeAIValidator from '../services/ChromeAIValidator';
 
 const SettingsPanel = ({ onClose, isLightBackground }) => {
   const [activeTab, setActiveTab] = useState('ui');
+  const [hasChromeAI, setHasChromeAI] = useState(false);
+  
+  // Check Chrome version on mount
+  useEffect(() => {
+    const validator = ChromeAIValidator;
+    const hasMinVersion = validator.hasMinimumChromeVersion();
+    setHasChromeAI(hasMinVersion);
+    
+    if (!hasMinVersion) {
+      const version = validator.getChromeVersion();
+      console.log(`[SettingsPanel] Chrome ${version} detected - Chrome AI requires Chrome 138+`);
+    }
+  }, []);
   
   const {
     // UI Config
@@ -57,13 +71,6 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
-
-  // Auto-check Chrome AI availability when Chrome AI provider is selected
-  useEffect(() => {
-    if (aiConfig.provider === AIProviders.CHROME_AI || sttConfig.provider === STTProviders.CHROME_AI_MULTIMODAL) {
-      checkChromeAIAvailability();
-    }
-  }, [aiConfig.provider, sttConfig.provider, checkChromeAIAvailability]);
 
   return (
     <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden`}>
@@ -289,6 +296,14 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </select>
             </div>
 
+            {aiConfig.provider === 'chrome-ai' && !hasChromeAI && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-xs text-red-300">
+                  Chrome AI requires Chrome 138 or later. Please update your browser.
+                </p>
+              </div>
+            )}
+
             {/* OpenAI Configuration */}
             {aiConfig.provider === AIProviders.OPENAI && (
               <>
@@ -353,7 +368,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                 {/* Info Banner */}
                 <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                   <p className="text-xs text-blue-300">
-                    <span className="font-semibold">Chrome Built-in AI (Gemini Nano)</span>
+                    <span className="font-semibold">Chrome Built-in AI (Gemini Nano)</span> - On-device AI running locally
                   </p>
                 </div>
 
@@ -366,7 +381,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                         <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                         <span className="text-xs text-white/70">Checking availability...</span>
                       </div>
-                    ) : (
+                    ) : chromeAiStatus.state ? (
                       <>
                         <div className="flex items-center gap-2 mb-2">
                           <div className={`w-2 h-2 rounded-full ${
@@ -380,16 +395,19 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                         
                         {/* Download Progress */}
                         {chromeAiStatus.downloading && (
-                          <div className="mt-3">
-                            <div className="flex justify-between text-xs text-white/70 mb-1">
-                              <span>Downloading Gemini Nano...</span>
-                              <span>{chromeAiStatus.progress.toFixed(1)}%</span>
-                            </div>
-                            <div className="w-full bg-white/10 rounded-full h-2">
-                              <div 
-                                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${chromeAiStatus.progress}%` }}
-                              ></div>
+                          <div className="mt-3 space-y-2">
+                            <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
+                              <p className="text-xs text-yellow-300">
+                                Download in progress. For real-time progress, visit{' '}
+                                <a 
+                                  href="chrome://on-device-internals/" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-yellow-200"
+                                >
+                                  chrome://on-device-internals/
+                                </a>
+                              </p>
                             </div>
                           </div>
                         )}
@@ -412,6 +430,13 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                           ↻ Refresh Status
                         </button>
                       </>
+                    ) : (
+                      <button
+                        onClick={checkChromeAIAvailability}
+                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                      >
+                        Check Status
+                      </button>
                     )}
                   </div>
                 </div>
@@ -739,6 +764,14 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               </select>
             </div>
 
+            {sttConfig.provider === 'chrome-ai-multimodal' && !hasChromeAI && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-xs text-red-300">
+                  Chrome AI requires Chrome 138 or later. Please update your browser.
+                </p>
+              </div>
+            )}
+
             {/* Configuration sections - only show when enabled */}
             {sttConfig.enabled && (
               <>
@@ -826,7 +859,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                         <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                         <span className="text-xs text-white/70">Checking availability...</span>
                       </div>
-                    ) : (
+                    ) : chromeAiStatus.state ? (
                       <>
                         <div className="flex items-center gap-2 mb-2">
                           <div className={`w-2 h-2 rounded-full ${
@@ -840,16 +873,19 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                         
                         {/* Download Progress */}
                         {chromeAiStatus.downloading && (
-                          <div className="mt-3">
-                            <div className="flex justify-between text-xs text-white/70 mb-1">
-                              <span>Downloading Gemini Nano...</span>
-                              <span>{chromeAiStatus.progress.toFixed(1)}%</span>
-                            </div>
-                            <div className="w-full bg-white/10 rounded-full h-2">
-                              <div 
-                                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${chromeAiStatus.progress}%` }}
-                              ></div>
+                          <div className="mt-3 space-y-2">
+                            <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
+                              <p className="text-xs text-yellow-300">
+                                Download in progress. For real-time progress, visit{' '}
+                                <a 
+                                  href="chrome://on-device-internals/" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-yellow-200"
+                                >
+                                  chrome://on-device-internals/
+                                </a>
+                              </p>
                             </div>
                           </div>
                         )}
@@ -872,6 +908,13 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                           ↻ Refresh Status
                         </button>
                       </>
+                    ) : (
+                      <button
+                        onClick={checkChromeAIAvailability}
+                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                      >
+                        Check Status
+                      </button>
                     )}
                   </div>
                 </div>
@@ -928,13 +971,6 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                       Enable these flags and restart Chrome, then visit <code className="text-blue-300">chrome://components</code> to download Gemini Nano
                     </p>
                   </div>
-                </div>
-
-                {/* Model Info */}
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-xs text-white/70">
-                    <span className="font-semibold">Model:</span> Gemini Nano with multimodal audio support
-                  </p>
                 </div>
               </>
             )}
