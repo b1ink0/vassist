@@ -1,66 +1,21 @@
 /**
- * Audio Processing Module
- * Handles audio analysis and spectrogram generation for VMD lip sync
+ * Audio Processing Core
+ * Pure algorithmic audio processing functions that work without AudioContext
+ * Used by both offscreen worker and SharedWorker
  */
 
-export class AudioProcessor {
-    constructor() {
-        this.audioContext = null;
-        this.audioBuffer = null;
-    }
-
-    async loadAudioFromBlob(blob) {
-        // Create audio context if not exists
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
-        // Read blob as array buffer
-        const arrayBuffer = await blob.arrayBuffer();
-        
-        console.log('[AudioProcessor] Blob converted to ArrayBuffer:', arrayBuffer.byteLength, 'bytes');
-        
-        // Decode audio data
-        try {
-            this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-            console.log('[AudioProcessor] Audio decoded successfully:', this.audioBuffer.duration, 'seconds');
-        } catch (error) {
-            console.error('[AudioProcessor] Decode failed:', error);
-            console.error('[AudioProcessor] First 16 bytes:', new Uint8Array(arrayBuffer.slice(0, 16)));
-            throw error;
-        }
-        
-        return this.audioBuffer;
-    }
-
-    async loadAudioFromArrayBuffer(arrayBuffer) {
-        // Create audio context if not exists
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        
-        // Decode audio data
-        this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        
-        return this.audioBuffer;
-    }
-
-    getAudioDuration() {
-        if (!this.audioBuffer) return 0;
-        return this.audioBuffer.duration;
-    }
-
+export class AudioProcessingCore {
     /**
      * Compute spectrogram using FFT
      * @param {Float32Array} audioData - Audio samples
      * @param {number} sampleRate - Sample rate
      * @param {number} frameRate - Target frame rate (30 fps for VMD)
-     * @returns {Object} Spectrogram data
+     * @returns {Promise<Object>} Spectrogram data
      */
-    async computeSpectrogram(audioData, sampleRate, frameRate = 30) {
+    static async computeSpectrogram(audioData, sampleRate, frameRate = 30) {
         const windowSize = Math.floor(sampleRate / frameRate);
         const numFrames = Math.floor(audioData.length / windowSize);
-        const fftSize = this.nextPowerOf2(windowSize);
+        const fftSize = AudioProcessingCore.nextPowerOf2(windowSize);
         
         // Prepare output arrays
         const frequencies = [];
@@ -75,7 +30,7 @@ export class AudioProcessor {
         // Process each frame
         // Yield to main thread every 50 frames to prevent blocking
         for (let frame = 0; frame < numFrames; frame++) {
-            // Yield to main thread periodically
+            // Yield to event loop periodically
             if (frame % 50 === 0 && frame > 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
@@ -85,10 +40,10 @@ export class AudioProcessor {
             const frameData = audioData.slice(startIdx, endIdx);
             
             // Apply Hanning window
-            const windowedData = this.applyHanningWindow(frameData, windowSize);
+            const windowedData = AudioProcessingCore.applyHanningWindow(frameData, windowSize);
             
             // Compute FFT
-            const magnitudes = this.computeFFT(windowedData, fftSize);
+            const magnitudes = AudioProcessingCore.computeFFT(windowedData, fftSize);
             
             spectrogramData.push(magnitudes);
             times.push(frame / frameRate);
@@ -104,7 +59,7 @@ export class AudioProcessor {
     /**
      * Apply Hanning window to reduce spectral leakage
      */
-    applyHanningWindow(data, size) {
+    static applyHanningWindow(data, size) {
         const windowed = new Float32Array(size);
         for (let i = 0; i < data.length; i++) {
             const windowValue = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (size - 1)));
@@ -116,14 +71,14 @@ export class AudioProcessor {
     /**
      * Compute FFT (simplified implementation)
      */
-    computeFFT(data, fftSize) {
+    static computeFFT(data, fftSize) {
         const paddedData = new Float32Array(fftSize * 2);
         for (let i = 0; i < data.length; i++) {
             paddedData[i * 2] = data[i];
             paddedData[i * 2 + 1] = 0;
         }
         
-        const fftResult = this.fft(paddedData, fftSize);
+        const fftResult = AudioProcessingCore.fft(paddedData, fftSize);
         
         const magnitudes = [];
         for (let i = 0; i < fftSize / 2; i++) {
@@ -135,7 +90,7 @@ export class AudioProcessor {
         return magnitudes;
     }
 
-    fft(data, size) {
+    static fft(data, size) {
         // Simplified FFT implementation
         if (size === 1) return data;
         
@@ -150,8 +105,8 @@ export class AudioProcessor {
             odd[i * 2 + 1] = data[i * 4 + 3];
         }
         
-        const fftEven = this.fft(even, halfSize);
-        const fftOdd = this.fft(odd, halfSize);
+        const fftEven = AudioProcessingCore.fft(even, halfSize);
+        const fftOdd = AudioProcessingCore.fft(odd, halfSize);
         
         const result = new Float32Array(size * 2);
         for (let i = 0; i < halfSize; i++) {
@@ -175,7 +130,7 @@ export class AudioProcessor {
         return result;
     }
 
-    nextPowerOf2(n) {
+    static nextPowerOf2(n) {
         return Math.pow(2, Math.ceil(Math.log2(n)));
     }
 
@@ -185,7 +140,7 @@ export class AudioProcessor {
      * @param {Object} vowelRanges - Frequency ranges for each vowel
      * @returns {Array} Vowel weights for each frame
      */
-    analyzeVowelFrequencies(spectrogram, vowelRanges) {
+    static analyzeVowelFrequencies(spectrogram, vowelRanges) {
         const { frequencies, data } = spectrogram;
         const vowelWeights = [];
         
@@ -195,8 +150,8 @@ export class AudioProcessor {
             
             // Calculate weight for each vowel
             for (const [vowel, [lowFreq, highFreq]] of Object.entries(vowelRanges)) {
-                const lowIdx = this.findFrequencyIndex(frequencies, lowFreq);
-                const highIdx = this.findFrequencyIndex(frequencies, highFreq);
+                const lowIdx = AudioProcessingCore.findFrequencyIndex(frequencies, lowFreq);
+                const highIdx = AudioProcessingCore.findFrequencyIndex(frequencies, highFreq);
                 
                 let sum = 0;
                 let count = 0;
@@ -222,7 +177,7 @@ export class AudioProcessor {
         return vowelWeights;
     }
 
-    findFrequencyIndex(frequencies, targetFreq) {
+    static findFrequencyIndex(frequencies, targetFreq) {
         let closestIdx = 0;
         let minDiff = Math.abs(frequencies[0] - targetFreq);
         
@@ -243,7 +198,7 @@ export class AudioProcessor {
      * @param {number} windowSize - Smoothing window size
      * @returns {Array} Smoothed vowel weights
      */
-    smoothVowelWeights(vowelWeights, windowSize = 15) {
+    static smoothVowelWeights(vowelWeights, windowSize = 15) {
         const smoothed = [];
         
         // First pass: Moving average smoothing
@@ -294,17 +249,17 @@ export class AudioProcessor {
     /**
      * Calculate total energy for a single frame
      */
-    getFrameEnergy(frameData) {
+    static getFrameEnergy(frameData) {
         return frameData.reduce((sum, val) => sum + val, 0);
     }
 
     /**
      * Calculate maximum energy across all frames
      */
-    getMaxEnergy(spectrogramData) {
+    static getMaxEnergy(spectrogramData) {
         let maxEnergy = 0;
         for (const frameData of spectrogramData) {
-            const energy = this.getFrameEnergy(frameData);
+            const energy = AudioProcessingCore.getFrameEnergy(frameData);
             if (energy > maxEnergy) {
                 maxEnergy = energy;
             }
@@ -315,7 +270,7 @@ export class AudioProcessor {
     /**
      * Adjust vowel weights based on configuration
      */
-    adjustVowelWeights(weights, config) {
+    static adjustVowelWeights(weights, config) {
         const adjusted = { ...weights };
         
         adjusted['あ'] *= (adjusted['あ'] > 0.3 ? config.a_weight_multiplier : 1);

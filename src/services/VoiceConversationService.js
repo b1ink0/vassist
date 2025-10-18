@@ -238,11 +238,16 @@ class VoiceConversationService {
     TTSServiceProxy.stopPlayback();
     AIServiceProxy.abortRequest();
     
-    // Change to listening state
-    this.changeState(ConversationStates.INTERRUPTED);
-    setTimeout(() => {
+    // If we were speaking, transition back to listening
+    if (this.currentState === ConversationStates.SPEAKING) {
+      this.changeState(ConversationStates.INTERRUPTED);
+      setTimeout(() => {
+        this.changeState(ConversationStates.LISTENING);
+      }, 300); // Brief pause before listening again
+    } else {
+      // Otherwise just go back to listening
       this.changeState(ConversationStates.LISTENING);
-    }, 300); // Brief pause before listening again
+    }
   }
 
   /**
@@ -433,15 +438,34 @@ class VoiceConversationService {
    * Monitor TTS playback and return to listening when done
    */
   monitorTTSPlayback() {
+    // Change to SPEAKING state if we're in THINKING
+    if (this.currentState === ConversationStates.THINKING) {
+      console.log('[VoiceConversation] Transitioning THINKING → SPEAKING (audio started)');
+      this.changeState(ConversationStates.SPEAKING);
+    }
+    
+    // Don't start monitoring if not in speaking state
+    if (this.currentState !== ConversationStates.SPEAKING) {
+      console.log('[VoiceConversation] Not in SPEAKING state, skipping playback monitoring');
+      return;
+    }
+    
     const checkPlayback = () => {
       if (!this.isActive) return;
       
-      const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
+      // Only monitor if we're still in speaking state
+      if (this.currentState !== ConversationStates.SPEAKING) {
+        console.log('[VoiceConversation] No longer in SPEAKING state, stopping monitoring');
+        return;
+      }
       
-      if (!isPlaying && this.currentState === ConversationStates.SPEAKING) {
-        console.log('[VoiceConversation] TTS finished, returning to listening');
+      // Check if any audio is playing OR queued (not just generating)
+      const isAudioActive = TTSServiceProxy.isAudioActive();
+      
+      if (!isAudioActive) {
+        console.log('[VoiceConversation] TTS finished (no audio playing or queued), returning to listening');
         this.changeState(ConversationStates.LISTENING);
-      } else if (isPlaying) {
+      } else {
         // Check again in 100ms
         setTimeout(checkPlayback, 100);
       }

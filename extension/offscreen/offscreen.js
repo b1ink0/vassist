@@ -7,9 +7,8 @@
 /* global chrome */
 
 import { MessageTypes } from '../shared/MessageTypes.js';
-import { AudioProcessor } from '../../src/services/AudioProcessor.js';
-import { VMDGenerationService } from '../../src/services/VMDGenerationService.js';
-import { BVMDConverterService } from '../../src/services/BVMDConverterService.js';
+import { VMDGenerationCore } from '../../src/workers/shared/VMDGenerationCore.js';
+import { BVMDConversionCore } from '../../src/workers/shared/BVMDConversionCore.js';
 import { Scene } from '@babylonjs/core/scene';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 
@@ -19,12 +18,8 @@ class OffscreenWorker {
     this.audioContext = null;
     this.messageHandlers = new Map();
     
-    // Initialize heavy processing services
-    this.audioProcessor = new AudioProcessor();
-    this.vmdService = new VMDGenerationService();
-    
-    // BVMD converter (will be initialized with scene)
-    this.bvmdConverter = null;
+    // Babylon scene for BVMD conversion (using shared core)
+    this.scene = null;
     
     this.init();
   }
@@ -32,19 +27,15 @@ class OffscreenWorker {
   async init() {
     console.log('[OffscreenWorker] Initializing...');
     
-    // Initialize AudioContext
+    // Initialize AudioContext (offscreen has access to AudioContext for best performance)
     this.audioContext = new AudioContext();
-    
-    // Share AudioContext with services (so they don't create their own)
-    this.audioProcessor.audioContext = this.audioContext;
-    this.vmdService.audioProcessor.audioContext = this.audioContext;
+    console.log('[OffscreenWorker] AudioContext initialized');
     
     // Initialize minimal Babylon scene for BVMD conversion
     try {
       console.log('[OffscreenWorker] Creating NullEngine for BVMD conversion...');
       const engine = new NullEngine();
-      const scene = new Scene(engine);
-      this.bvmdConverter = new BVMDConverterService(scene);
+      this.scene = new Scene(engine);
       console.log('[OffscreenWorker] BVMD converter initialized');
     } catch (error) {
       console.error('[OffscreenWorker] Failed to initialize BVMD converter:', error);
@@ -121,11 +112,13 @@ class OffscreenWorker {
   /**
    * Handle audio processing with lip sync generation
    * This is the main handler for TTS audio processing in extension mode
-   * Input: { audioBuffer: Array, mimeType: string }
+   * Input: { audioBuffer: Array }
    * Output: { audioBuffer: Array, bvmdData: Array }
+   * 
+   * Uses shared cores for processing while keeping AudioContext decoding in offscreen for best performance
    */
   async handleProcessAudioWithLipSync(message) {
-    const { audioBuffer, mimeType } = message.data;
+    const { audioBuffer } = message.data;
     
     try {
       // Convert Array to ArrayBuffer
@@ -140,30 +133,25 @@ class OffscreenWorker {
         throw new Error('Invalid audioBuffer type: ' + typeof audioBuffer);
       }
       
-      // CRITICAL: Clone ArrayBuffer before creating Blob
-      // new Blob([arrayBuffer]) detaches the ArrayBuffer in Chrome
+      // CRITICAL: Clone ArrayBuffer before decoding
+      // decodeAudioData may detach the ArrayBuffer in some browsers
       // We need to keep the original for returning, so we clone it first
       const audioBufferClone = actualArrayBuffer.slice(0);
       
-      // Step 1: Convert cloned ArrayBuffer to Blob
-      // Use the MIME type provided by the TTS service
-      const audioBlob = new Blob([audioBufferClone], { type: mimeType });
+      // Step 1: Decode audio using AudioContext (offscreen has access to AudioContext)
+      const decodedAudio = await this.audioContext.decodeAudioData(audioBufferClone);
+      const audioData = decodedAudio.getChannelData(0); // Use first channel (mono)
+      const sampleRate = decodedAudio.sampleRate;
       
-      // Step 2: Generate VMD from audio
-      const vmdData = await this.vmdService.generateVMDFromAudio(audioBlob);
+      console.log(`[OffscreenWorker] Audio decoded: ${decodedAudio.duration.toFixed(2)}s @ ${sampleRate}Hz`);
       
-      // Step 3: Convert VMD to BVMD in offscreen (using BVMDConverterService)
-      const bvmdUrl = await this.bvmdConverter.convertVMDToBVMD(vmdData);
+      // Step 2: Generate VMD from PCM using shared core
+      const vmdData = await VMDGenerationCore.generateVMDFromPCM(audioData, sampleRate);
       
-      // Step 4: Convert blob URL to ArrayBuffer for message passing
-      // (blob URLs don't work across contexts)
-      const bvmdBlob = await fetch(bvmdUrl).then(r => r.blob());
-      const bvmdArrayBuffer = await bvmdBlob.arrayBuffer();
+      // Step 3: Convert VMD to BVMD using shared core
+      const bvmdArrayBuffer = await BVMDConversionCore.convertVMDToBVMD(vmdData, this.scene);
       
-      // Clean up blob URL
-      URL.revokeObjectURL(bvmdUrl);
-      
-      // Step 5: Return both audio and BVMD as Arrays (survive message passing)
+      // Step 4: Return both audio and BVMD as Arrays (survive message passing)
       return {
         audioBuffer: Array.from(new Uint8Array(actualArrayBuffer)),
         bvmdData: Array.from(new Uint8Array(bvmdArrayBuffer))
@@ -191,17 +179,19 @@ class OffscreenWorker {
     const { audioBlob } = message.data;
     
     try {
-      // Load audio into AudioProcessor
-      const audioBuffer = await this.audioProcessor.loadAudioFromBlob(audioBlob);
+      // Decode audio using AudioContext
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const decodedAudio = await this.audioContext.decodeAudioData(arrayBuffer);
       
       // Extract audio data
-      const audioData = audioBuffer.getChannelData(0);
-      const sampleRate = audioBuffer.sampleRate;
-      const duration = this.audioProcessor.getAudioDuration();
+      const audioData = decodedAudio.getChannelData(0);
+      const sampleRate = decodedAudio.sampleRate;
+      const duration = decodedAudio.duration;
       
-      // Compute spectrogram if requested
+      // Compute spectrogram using shared core
       const frameRate = 30; // VMD uses 30 fps
-      const spectrogram = await this.audioProcessor.computeSpectrogram(audioData, sampleRate, frameRate);
+      const { AudioProcessingCore } = await import('../../src/workers/shared/AudioProcessingCore.js');
+      const spectrogram = await AudioProcessingCore.computeSpectrogram(audioData, sampleRate, frameRate);
       
       return {
         sampleRate,
@@ -224,11 +214,13 @@ class OffscreenWorker {
     console.log('[OffscreenWorker] Generating VMD from audio...');
     
     try {
-      // Convert ArrayBuffer to Blob
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+      // Decode audio using AudioContext
+      const decodedAudio = await this.audioContext.decodeAudioData(audioBuffer);
+      const audioData = decodedAudio.getChannelData(0);
+      const sampleRate = decodedAudio.sampleRate;
       
-      // Generate VMD using VMDGenerationService
-      const vmdData = await this.vmdService.generateVMDFromAudio(audioBlob);
+      // Generate VMD using shared core
+      const vmdData = await VMDGenerationCore.generateVMDFromPCM(audioData, sampleRate, modelName);
       
       console.log(`[OffscreenWorker] VMD generated: ${vmdData.byteLength} bytes`);
       

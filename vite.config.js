@@ -20,4 +20,8 @@ export default defineConfig({
   build: {
     sourcemap: true,
   },
+  worker: {
+    format: 'es', // Use ES modules for workers
+    plugins: () => [],
+  },
 })
