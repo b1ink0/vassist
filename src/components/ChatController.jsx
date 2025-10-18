@@ -399,11 +399,14 @@ const ChatController = ({
 
       // Streaming state with just-in-time TTS generation
       let fullResponse = ''
-      let hasSwitchedToSpeaking = false
+      let hasSwitchedToSpeaking = false // For animation only
       let textBuffer = ''
       const allChunks = [] // All text chunks (stored, not generated yet)
       let nextChunkToGenerate = 0 // Index of next chunk to generate
       const MAX_QUEUED_AUDIO = 3 // Only queue up to 3 audio chunks ahead
+
+      // Generate unique session ID for this voice response
+      const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
       // Helper function to generate TTS chunk with lip sync
       const generateTTSChunk = async (chunkIndex) => {
@@ -422,8 +425,8 @@ const ChatController = ({
           const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
           const audioUrl = URL.createObjectURL(audioBlob)
           
-          // Queue audio with BVMD for synchronized lip sync
-          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl)
+          // Queue audio with BVMD for synchronized lip sync AND voice session ID
+          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, voiceTTSSessionId)
           
           console.log(`[ChatController] [Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
         } catch (error) {
@@ -434,23 +437,15 @@ const ChatController = ({
       // Generate next chunk if queue has space
       const tryGenerateNextChunk = () => {
         const queueLength = TTSServiceProxy.getQueueLength()
-        console.log(`[ChatController] [Voice] tryGenerateNextChunk: queue=${queueLength}, next=${nextChunkToGenerate}, total=${allChunks.length}`)
-        
-        // Only generate if queue has room AND we have more chunks
         if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-          console.log(`[ChatController] [Voice] Queue has space (${queueLength}/${MAX_QUEUED_AUDIO}), generating chunk ${nextChunkToGenerate}`)
           generateTTSChunk(nextChunkToGenerate++)
         }
       }
 
-      // Register callback to generate next chunk when audio finishes playing
+      // Register callback to generate next chunk when audio finishes
       TTSServiceProxy.setAudioFinishedCallback(() => {
-        console.log('[ChatController] [Voice] Audio finished callback triggered')
         tryGenerateNextChunk()
       })
-
-      // Change to speaking state immediately when we start generating TTS
-      let hasChangedToSpeaking = false
 
       await AIServiceProxy.sendMessage(messages, async (chunk) => {
         fullResponse += chunk
@@ -469,12 +464,12 @@ const ChatController = ({
         if (!hasSwitchedToSpeaking && 
             fullResponse.length > 10 && 
             assistantRef.current?.isReady()) {
-          console.log('[ChatController] Starting speaking animation')
+          console.log('[ChatController] [Voice] Starting speaking animation')
           assistantRef.current.triggerAction('speak')
           hasSwitchedToSpeaking = true
         }
 
-        // TTS Generation: Look for complete sentences and generate immediately (same as regular chat)
+        // TTS: Look for complete sentences and generate immediately
         if (ttsEnabled) {
           const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer)
           
@@ -485,53 +480,32 @@ const ChatController = ({
             
             // Store chunk for just-in-time generation
             if (chunkToSpeak && chunkToSpeak.length >= 3) {
-              // Change to speaking state when we store first TTS chunk
-              if (!hasChangedToSpeaking) {
-                console.log('[ChatController] [Voice] Changing to SPEAKING state (first TTS chunk)')
-                VoiceConversationService.changeState(ConversationStates.SPEAKING)
-                hasChangedToSpeaking = true
-              }
-              
-              console.log(`[ChatController] [Voice] Storing sentence chunk ${allChunks.length}: "${chunkToSpeak.substring(0, 50)}..."`)
               allChunks.push(chunkToSpeak)
-              tryGenerateNextChunk() // Generate if under limit
+              tryGenerateNextChunk()
             }
           }
         }
       })
 
-      console.log('[ChatController] Voice AI response complete:', fullResponse)
+      console.log('[ChatController] [Voice] AI response complete:', fullResponse)
 
-      // Store any remaining text in buffer
+      // Handle remaining text in buffer
       if (ttsEnabled && textBuffer.trim().length > 0) {
         const finalChunk = textBuffer.trim()
-        console.log(`[ChatController] [Voice] Storing final TTS chunk: "${finalChunk.substring(0, 50)}..."`)
-        
-        if (!hasChangedToSpeaking) {
-          console.log('[ChatController] [Voice] Changing to SPEAKING state (final chunk)')
-          VoiceConversationService.changeState(ConversationStates.SPEAKING)
-          hasChangedToSpeaking = true
-        }
-        
         allChunks.push(finalChunk)
-        tryGenerateNextChunk() // Generate if under limit
+        tryGenerateNextChunk()
       }
 
-      // Wait for all chunks to be generated
+      // Wait for all chunks to be generated (they're generating in parallel)
       if (ttsEnabled && allChunks.length > 0) {
-        console.log(`[ChatController] [Voice] Waiting for all ${allChunks.length} TTS chunks to be generated...`)
+        console.log(`[ChatController] [Voice] Waiting for ${allChunks.length} TTS chunks...`)
         
-        // Wait until all chunks have been generated
         while (nextChunkToGenerate < allChunks.length) {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         
         console.log('[ChatController] [Voice] All TTS generations complete')
-        
-        // Start monitoring TTS playback to return to listening when done
-        VoiceConversationService.monitorTTSPlayback()
       } else {
-        // No TTS, return to listening immediately
         console.warn('[ChatController] [Voice] No TTS generated, returning to listening')
         VoiceConversationService.changeState(ConversationStates.LISTENING)
       }

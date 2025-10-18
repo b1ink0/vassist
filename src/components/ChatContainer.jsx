@@ -107,6 +107,9 @@ const ChatContainer = ({
    * Set up audio start callback for updating UI when audio starts playing
    */
   useEffect(() => {
+    // Track if monitoring has started for voice mode
+    let voiceMonitoringStarted = false;
+    
     TTSServiceProxy.setAudioStartCallback((sessionId) => {
       console.log('[ChatContainer] Audio started playing for session:', sessionId);
       
@@ -132,6 +135,28 @@ const ChatContainer = ({
           }
         }
       }
+      // For voice mode sessions, find the last assistant message AND start monitoring
+      else if (sessionId?.startsWith('voice_')) {
+        // Find the last assistant message index
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') {
+            setLoadingMessageIndex(null);
+            setPlayingMessageIndex(i);
+            currentSessionRef.current = sessionId;
+            break;
+          }
+        }
+        
+        // Start TTS playback monitoring for voice conversation mode
+        if (!voiceMonitoringStarted) {
+          voiceMonitoringStarted = true;
+          console.log('[ChatContainer] Starting TTS playback monitoring for voice mode');
+          // Import VoiceConversationService dynamically to avoid circular deps
+          import('../services/VoiceConversationService').then(({ default: VoiceConversationService }) => {
+            VoiceConversationService.monitorTTSPlayback();
+          });
+        }
+      }
     });
 
     // Set up audio end callback for resetting UI when audio finishes
@@ -145,9 +170,32 @@ const ChatContainer = ({
       }
     });
 
+    // Listen for custom events from ChatController (voice mode)
+    const handleTTSAudioStart = (event) => {
+      const { messageIndex, sessionId } = event.detail
+      console.log('[ChatContainer] Custom TTS audio start event:', messageIndex, sessionId)
+      setLoadingMessageIndex(null)
+      setPlayingMessageIndex(messageIndex)
+      currentSessionRef.current = sessionId
+    }
+
+    const handleTTSAudioEnd = (event) => {
+      const { sessionId } = event.detail
+      console.log('[ChatContainer] Custom TTS audio end event:', sessionId)
+      if (currentSessionRef.current === sessionId) {
+        setPlayingMessageIndex(null)
+        currentSessionRef.current = null
+      }
+    }
+
+    window.addEventListener('ttsAudioStart', handleTTSAudioStart)
+    window.addEventListener('ttsAudioEnd', handleTTSAudioEnd)
+
     return () => {
       TTSServiceProxy.setAudioStartCallback(null);
       TTSServiceProxy.setAudioEndCallback(null);
+      window.removeEventListener('ttsAudioStart', handleTTSAudioStart)
+      window.removeEventListener('ttsAudioEnd', handleTTSAudioEnd)
     };
   }, [messages]);
 

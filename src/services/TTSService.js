@@ -7,8 +7,7 @@
 
 import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
-import { vmdGenerationService } from './VMDGenerationService.js';
-import { BVMDConverterService } from './BVMDConverterService.js';
+import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
 
 class TTSService {
   constructor() {
@@ -35,8 +34,7 @@ class TTSService {
       this.maxConcurrentRequests = 3;
 
       this.lipSyncEnabled = true;
-      this.vmdService = vmdGenerationService;
-      this.bvmdConverter = null;
+      // Worker handles VMD/BVMD in dev mode, no need for these services
 
       this.onSpeakCallback = null;
       this.onAudioFinishedCallback = null;
@@ -152,13 +150,13 @@ class TTSService {
 
   /**
    * Initialize BVMD converter with scene
-   * @param {Scene} scene - Babylon.js scene
+   * Dev mode: Worker handles BVMD conversion
+   * This method is kept for compatibility
    */
-  initializeBVMDConverter(scene) {
-    if (!this.bvmdConverter) {
-      this.bvmdConverter = new BVMDConverterService(scene);
-      console.log('[TTSService] BVMD converter initialized');
-    }
+  initializeBVMDConverter() {
+    // In dev mode, worker handles BVMD conversion
+    // This method is kept for compatibility but does nothing
+    console.log('[TTSService] BVMD conversion handled by SharedWorker');
   }
 
   /**
@@ -266,11 +264,29 @@ class TTSService {
       const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
 
       let bvmdUrl = null;
-      if (generateLipSync && state.lipSyncEnabled && state.bvmdConverter) {
+      if (generateLipSync && state.lipSyncEnabled) {
         try {
           if (state.isStopped) return null;
-          const vmdData = await state.vmdService.generateVMDFromAudio(blob);
-          bvmdUrl = await state.bvmdConverter.convertVMDToBVMD(vmdData);
+          
+          // Use SharedWorker for audio processing in dev mode
+          console.log(`${logPrefix} - Processing audio with lip sync via SharedWorker...`);
+          
+          // Initialize worker client if needed
+          if (!audioWorkerClient.isReady) {
+            await audioWorkerClient.init();
+          }
+          
+          // Process audio in worker (AudioContext on main thread, heavy work in worker)
+          const result = await audioWorkerClient.processAudioWithLipSync(arrayBuffer);
+          
+          // Convert bvmdData array to blob URL
+          if (result.bvmdData && Array.isArray(result.bvmdData) && result.bvmdData.length > 0) {
+            const bvmdUint8 = new Uint8Array(result.bvmdData);
+            const bvmdBlob = new Blob([bvmdUint8], { type: 'application/octet-stream' });
+            bvmdUrl = URL.createObjectURL(bvmdBlob);
+            console.log(`${logPrefix} - BVMD generated via SharedWorker:`, bvmdUrl);
+          }
+          
         } catch (e) {
           console.error(`${logPrefix} - Lip sync generation failed:`, e);
         }
@@ -463,8 +479,15 @@ class TTSService {
     
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
+      const finishedSessionId = this.currentPlaybackSession; // Save before clearing
       this.currentPlaybackSession = null; // Clear session when queue is empty
       console.log('[TTSService] Queue empty, playback stopped');
+      
+      // Trigger audio end callback when entire session finishes
+      if (this.onAudioEndCallback && finishedSessionId) {
+        this.onAudioEndCallback(finishedSessionId);
+      }
+      
       return;
     }
 
@@ -540,22 +563,12 @@ class TTSService {
         console.log('[TTSService] Audio playback finished');
         this.currentAudio = null;
         
-        // Trigger audio end callback for UI updates
-        if (this.onAudioEndCallback) {
-          this.onAudioEndCallback(sessionId);
-        }
-        
         resolve();
       };
 
       audio.onerror = (error) => {
         console.error('[TTSService] Audio playback error:', error);
         this.currentAudio = null;
-        
-        // Trigger audio end callback for UI cleanup on error
-        if (this.onAudioEndCallback) {
-          this.onAudioEndCallback(sessionId);
-        }
         
         reject(error);
       };
@@ -638,14 +651,15 @@ class TTSService {
     
     console.log('[TTSService] Playback stopped and queue cleared');
     
+    // Trigger audio end callback for UI cleanup (important for resetting speaker icon)
+    // Do this BEFORE stop callback so UI updates happen in right order
+    if (this.onAudioEndCallback && stoppedSessionId) {
+      this.onAudioEndCallback(stoppedSessionId);
+    }
+    
     // Trigger stop callback to notify animation manager
     if (this.onStopCallback) {
       this.onStopCallback();
-    }
-    
-    // Trigger audio end callback for UI cleanup (important for resetting speaker icon)
-    if (this.onAudioEndCallback && stoppedSessionId) {
-      this.onAudioEndCallback(stoppedSessionId);
     }
   }
   
@@ -693,11 +707,7 @@ class TTSService {
       console.log(`[TTSService] Cleaned up all ${this.blobUrls.size} blob URLs`);
       this.blobUrls.clear();
     }
-    
-    // Also cleanup BVMD converter URLs
-    if (this.bvmdConverter) {
-      this.bvmdConverter.cleanup();
-    }
+    // Worker handles its own cleanup in dev mode
   }
 
   /**
@@ -731,7 +741,7 @@ class TTSService {
       const audioUrl = URL.createObjectURL(audio);
       await this.playAudio(testText, audioUrl, bvmdUrl);
       URL.revokeObjectURL(audioUrl);
-      if (bvmdUrl && this.bvmdConverter) this.bvmdConverter.cleanup(bvmdUrl);
+      if (bvmdUrl) URL.revokeObjectURL(bvmdUrl); // Clean up BVMD URL
       console.log('[TTSService] TTS test successful' + (bvmdUrl ? ' with lip sync' : ''));
       return true;
     } catch (error) {
