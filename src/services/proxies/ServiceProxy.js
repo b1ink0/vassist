@@ -10,24 +10,9 @@ import { extensionBridge } from '../../utils/ExtensionBridge.js';
 export class ServiceProxy {
   constructor(name) {
     this.name = name;
-    this.isExtension = this.detectExtensionMode();
+    this.isExtension = __EXTENSION_MODE__;
     
     console.log(`[${this.name}Proxy] Mode: ${this.isExtension ? 'Extension' : 'Dev'}`);
-  }
-
-  /**
-   * Detect if running in extension mode
-   * @returns {boolean} True if extension mode
-   */
-  detectExtensionMode() {
-    // Check if the current script was loaded from a chrome-extension:// URL
-    // When running as extension, import.meta.url will be chrome-extension://...
-    // In dev mode with Vite, it will be http://localhost:5173/...
-    if (typeof import.meta !== 'undefined' && import.meta.url) {
-      return import.meta.url.startsWith('chrome-extension://');
-    }
-    
-    return false;
   }
 
   /**

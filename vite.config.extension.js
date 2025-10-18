@@ -140,6 +140,12 @@ export default defineConfig({
     copyAssetsPlugin(), // Copy assets and manifest to dist-extension
   ],
   
+  define: {
+    // Build-time constants for mode detection
+    __EXTENSION_MODE__: JSON.stringify(true),
+    __DEV_MODE__: JSON.stringify(false),
+  },
+  
   build: {
     outDir: 'dist-extension',
     emptyOutDir: true,
@@ -152,8 +158,8 @@ export default defineConfig({
         // Content script
         content: resolve(__dirname, 'extension/content/index.js'),
         
-        // Content script React app
-        'content-app': resolve(__dirname, 'extension/content/app.jsx'),
+        // Content script React app (main entry point)
+        'content-app': resolve(__dirname, 'extension/content/main.jsx'),
         
         // Content script styles (for shadow DOM)
         'content-styles': resolve(__dirname, 'extension/content/styles.css'),

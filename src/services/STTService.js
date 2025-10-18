@@ -12,108 +12,132 @@ import ChromeAIValidator from './ChromeAIValidator';
 
 class STTService {
   constructor() {
-    this.client = null;
-    this.currentProvider = null;
-    this.currentConfig = null;
-    this.isEnabled = false;
-    
-    // Chrome AI session
-    this.chromeAISession = null;
-    
-    // Recording state
-    this.mediaRecorder = null;
-    this.audioStream = null;
-    this.audioChunks = [];
-    this.isRecording = false;
-    
-    // Callbacks
-    this.onTranscription = null;
-    this.onError = null;
-    this.onRecordingStart = null;
-    this.onRecordingStop = null;
-    
-    console.log('[STTService] Initialized');
+    this.isExtensionMode = __EXTENSION_MODE__;
+
+    if (this.isExtensionMode) {
+      this.tabStates = new Map();
+      console.log('[STTService] Initialized (Extension mode - multi-tab)');
+    } else {
+      this.client = null;
+      this.provider = null;
+      this.config = null;
+      this.enabled = false;
+
+      this.chromeAISession = null;
+
+      this.mediaRecorder = null;
+      this.audioStream = null;
+      this.audioChunks = [];
+      this.isRecording = false;
+
+      this.onTranscription = null;
+      this.onError = null;
+      this.onRecordingStart = null;
+      this.onRecordingStop = null;
+
+      console.log('[STTService] Initialized');
+    }
+  }
+
+  initTab(tabId) {
+    if (!this.tabStates.has(tabId)) {
+      this.tabStates.set(tabId, {
+        client: null,
+        config: null,
+        provider: null,
+        enabled: false,
+        chromeAISession: null,
+      });
+      console.log(`[STTService] Tab ${tabId} initialized`);
+    }
+  }
+
+  cleanupTab(tabId) {
+    if (this.tabStates.has(tabId)) {
+      this.tabStates.delete(tabId);
+      console.log(`[STTService] Tab ${tabId} cleaned up`);
+    }
+  }
+
+  _getState(tabId = null) {
+    if (this.isExtensionMode) {
+      this.initTab(tabId);
+      return this.tabStates.get(tabId);
+    }
+    return this; // dev uses instance
   }
 
   /**
    * Configure STT client with provider settings
    * @param {Object} config - STT configuration from aiConfig
+   * @param {number|null} tabId - Tab ID (extension mode only)
    */
-  configure(config) {
+  configure(config, tabId = null) {
+    const state = this._getState(tabId);
     const { provider, enabled } = config;
+    const logPrefix = this.isExtensionMode ? `[STTService] Tab ${tabId}` : '[STTService]';
     
-    this.isEnabled = enabled;
+    state.enabled = enabled;
     
     if (!enabled) {
-      console.log('[STTService] STT is disabled');
+      console.log(`${logPrefix} - STT is disabled`);
       return true;
     }
     
-    console.log(`[STTService] Configuring provider: ${provider}`);
-    
+    console.log(`${logPrefix} - Configuring provider: ${provider}`);
+
     try {
       if (provider === STTProviders.CHROME_AI_MULTIMODAL) {
-        // Validate Chrome AI availability
         if (!ChromeAIValidator.isSupported()) {
           throw new Error('Chrome AI not supported. Chrome 138+ required.');
         }
-        
-        this.currentConfig = {
+
+        state.config = {
           temperature: config['chrome-ai-multimodal'].temperature,
           topK: config['chrome-ai-multimodal'].topK,
         };
-        
-        console.log('[STTService] Chrome AI Multimodal configured:', this.currentConfig);
-      }
-      else if (provider === STTProviders.OPENAI) {
-        // Configure OpenAI Whisper client
-        this.client = new OpenAI({
+        state.provider = provider;
+
+        console.log(`${logPrefix} - Chrome AI Multimodal configured:`, state.config);
+      } else if (provider === STTProviders.OPENAI) {
+        state.client = new OpenAI({
           apiKey: config.openai.apiKey,
-          dangerouslyAllowBrowser: true,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
-        this.currentConfig = {
+
+        state.config = {
           model: config.openai.model,
           language: config.openai.language,
           temperature: config.openai.temperature,
         };
-        
-        console.log('[STTService] OpenAI Whisper configured:', {
-          model: this.currentConfig.model,
-          language: this.currentConfig.language,
-        });
-      } 
-      else if (provider === STTProviders.OPENAI_COMPATIBLE) {
-        // Configure Generic OpenAI-compatible STT client
-        // User provides complete base URL - we don't modify it
-        this.client = new OpenAI({
+        state.provider = provider;
+
+        console.log(`${logPrefix} - OpenAI Whisper configured:`, state.config);
+      } else if (provider === STTProviders.OPENAI_COMPATIBLE) {
+        state.client = new OpenAI({
           apiKey: config['openai-compatible'].apiKey || 'default',
           baseURL: config['openai-compatible'].endpoint,
-          dangerouslyAllowBrowser: true,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
-        this.currentConfig = {
+
+        state.config = {
           model: config['openai-compatible'].model,
           language: config['openai-compatible'].language,
           temperature: config['openai-compatible'].temperature,
         };
-        
-        console.log('[STTService] Generic STT configured:', {
-          baseURL: config['openai-compatible'].endpoint,
-          model: this.currentConfig.model,
-        });
+        state.provider = provider;
+
+        console.log(`${logPrefix} - Generic STT configured:`, { baseURL: config['openai-compatible'].endpoint });
       } else {
         throw new Error(`Unknown STT provider: ${provider}`);
       }
-      
-      this.currentProvider = provider;
+
       return true;
-      
     } catch (error) {
-      console.error('[STTService] Configuration failed:', error);
-      this.client = null;
-      this.currentProvider = null;
-      this.currentConfig = null;
+      console.error(`${logPrefix} - Configuration failed:`, error);
+      state.client = null;
+      state.config = null;
+      state.provider = null;
       throw error;
     }
   }
@@ -122,18 +146,11 @@ class STTService {
    * Check if service is configured and ready
    * @returns {boolean} True if ready
    */
-  isConfigured() {
-    if (!this.isEnabled || !this.currentConfig) {
-      return false;
-    }
-    
-    // Chrome AI doesn't use client, just config and provider
-    if (this.currentProvider === 'chrome-ai-multimodal') {
-      return true;
-    }
-    
-    // Other providers need client
-    return this.client !== null;
+  isConfigured(tabId = null) {
+    const state = this._getState(tabId);
+    if (!state || !state.enabled || !state.config) return false;
+    if (state.provider === 'chrome-ai-multimodal') return true;
+    return state.client !== null;
   }
 
   /**
@@ -270,86 +287,94 @@ class STTService {
 
   /**
    * Transcribe audio blob to text
-   * @param {Blob} audioBlob - Audio data to transcribe
+   * @param {Blob|ArrayBuffer} input - Audio data to transcribe (Blob in dev, ArrayBuffer in extension)
+   * @param {string|number|null} maybeMimeOrTabId - MIME type (dev) or Tab ID (extension)
+   * @param {number|null} maybeTabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Transcribed text
    */
-  async transcribeAudio(audioBlob) {
-    if (!this.isConfigured()) {
+  async transcribeAudio(input, maybeMimeOrTabId = null, maybeTabId = null) {
+    const tabId = this.isExtensionMode ? maybeTabId : null;
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[STTService] Tab ${tabId}` : '[STTService]';
+    
+    if (!this.isConfigured(tabId)) {
       throw new Error('STTService not configured');
     }
 
-    console.log(`[STTService] Transcribing audio (${audioBlob.size} bytes) with ${this.currentProvider}...`);
-
-    // Chrome AI Multimodal implementation
-    if (this.currentProvider === STTProviders.CHROME_AI_MULTIMODAL) {
-      return await this.transcribeAudioChromeAI(audioBlob);
+    let audioBlob;
+    if (this.isExtensionMode) {
+      const arrayBuffer = input;
+      const mimeType = maybeMimeOrTabId;
+      audioBlob = new Blob([arrayBuffer], { type: mimeType });
+      console.log(`${logPrefix} - Transcribing audio (${arrayBuffer.byteLength} bytes) with ${state.provider}...`);
+    } else {
+      audioBlob = input;
+      console.log(`${logPrefix} - Transcribing audio (${audioBlob.size} bytes) with ${state.provider}...`);
     }
 
-    // OpenAI/Compatible implementation
+    if (state.provider === STTProviders.CHROME_AI_MULTIMODAL || state.provider === 'chrome-ai-multimodal') {
+      return await this.transcribeAudioChromeAI(this.isExtensionMode ? input : audioBlob, tabId);
+    }
+
     try {
-      // Convert blob to File object (required by OpenAI API)
       const audioFile = new File([audioBlob], 'recording.webm', { type: audioBlob.type });
-      
-      console.log(`[STTService] Transcribing audio (${audioFile.size} bytes)...`);
-
-      // Prepare transcription parameters
-      const params = {
-        file: audioFile,
-        model: this.currentConfig.model,
+      const params = { 
+        file: audioFile, 
+        model: state.config.model 
       };
-
-      // Add optional parameters
-      if (this.currentConfig.language) {
-        params.language = this.currentConfig.language;
-      }
-      if (this.currentConfig.temperature !== undefined) {
-        params.temperature = this.currentConfig.temperature;
-      }
-
-      // Call API
-      const transcription = await this.client.audio.transcriptions.create(params);
       
+      if (state.config.language) {
+        params.language = state.config.language;
+      }
+      if (state.config.temperature !== undefined) {
+        params.temperature = state.config.temperature;
+      }
+      
+      const transcription = await state.client.audio.transcriptions.create(params);
       const text = transcription.text.trim();
-      console.log(`[STTService] Transcription complete: "${text}"`);
       
+      console.log(`${logPrefix} - Transcription complete: "${text}"`);
       return text;
-      
     } catch (error) {
-      console.error('[STTService] Transcription API error:', error);
+      console.error(`${logPrefix} - Transcription API error:`, error);
       
-      // Enhance error messages
       if (error.message?.includes('401')) {
         throw new Error('Invalid STT API key. Please check your configuration.');
-      } else if (error.message?.includes('429')) {
-        throw new Error('STT rate limit exceeded. Please try again later.');
-      } else if (error.message?.includes('fetch')) {
-        throw new Error('STT network error. Please check your connection and endpoint URL.');
-      } else {
-        throw error;
       }
+      if (error.message?.includes('429')) {
+        throw new Error('STT rate limit exceeded. Please try again later.');
+      }
+      if (error.message?.includes('fetch')) {
+        throw new Error('STT network error. Please check your connection and endpoint URL.');
+      }
+      throw error;
     }
   }
 
   /**
    * Transcribe audio using Chrome AI Multimodal
    * @param {Blob} audioBlob - Audio data to transcribe
+   * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Transcribed text
    */
-  async transcribeAudioChromeAI(audioBlob) {
+  async transcribeAudioChromeAI(input, tabId = null) {
     try {
-      // Convert blob to ArrayBuffer first
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      console.log(`[STTService] Audio converted to ArrayBuffer (${arrayBuffer.byteLength} bytes)`);
-      console.log(`[STTService] Audio blob type: ${audioBlob.type}`);
+      let arrayBuffer;
+      if (this.isExtensionMode) {
+        // input is ArrayBuffer
+        arrayBuffer = input;
+      } else {
+        arrayBuffer = await input.arrayBuffer();
+        console.log(`[STTService] Audio converted to ArrayBuffer (${arrayBuffer.byteLength} bytes)`);
+        console.log(`[STTService] Audio blob type: ${input.type}`);
+      }
 
-      // Get default parameters
       const params = await self.LanguageModel.params();
-      console.log(`[STTService] LanguageModel params:`, params);
-      
-      // Create or reuse session with audio input support
-      if (!this.chromeAISession) {
+
+      const state = this.isExtensionMode ? this._getState(tabId) : this;
+      if (!state.chromeAISession) {
         console.log('[STTService] Creating Chrome AI multimodal session...');
-        this.chromeAISession = await self.LanguageModel.create({
+        state.chromeAISession = await self.LanguageModel.create({
           expectedInputs: [{ type: 'audio' }],
           temperature: 0.1,
           topK: params.defaultTopK,
@@ -358,7 +383,7 @@ class STTService {
       }
 
       console.log('[STTService] Sending prompt to Chrome AI...');
-      const stream = this.chromeAISession.promptStreaming([
+      const stream = state.chromeAISession.promptStreaming([
         {
           role: 'user',
           content: [
@@ -368,34 +393,25 @@ class STTService {
         }
       ]);
 
-      // Collect streamed response
-      console.log('[STTService] Streaming response...');
       let fullResponse = '';
-      let chunkCount = 0;
       for await (const chunk of stream) {
-        chunkCount++;
-        console.log(`[STTService] Chunk ${chunkCount}:`, chunk);
         fullResponse += chunk;
       }
 
       const text = fullResponse.trim();
-      console.log(`[STTService] Chrome AI transcription complete (${chunkCount} chunks): "${text}"`);
-      
+      console.log(`[STTService] Chrome AI transcription complete: "${text}"`);
       return text;
-
     } catch (error) {
       console.error('[STTService] Chrome AI transcription error:', error);
-      
-      // Cleanup session on error
-      if (this.chromeAISession) {
+      const state = this.isExtensionMode ? this._getState(tabId) : this;
+      if (state.chromeAISession) {
         try {
-          this.chromeAISession.destroy();
+          state.chromeAISession.destroy();
         } catch {
-          // Ignore destroy errors
+          // ignore destroy errors
         }
-        this.chromeAISession = null;
+        state.chromeAISession = null;
       }
-
       if (error.name === 'NotSupportedError') {
         throw new Error('Chrome AI multimodal not available. Enable multimodal-input flag at chrome://flags');
       } else if (error.name === 'QuotaExceededError') {

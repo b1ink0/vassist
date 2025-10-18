@@ -2,7 +2,6 @@
  * AIService - Multi-provider AI service
  * 
  * Unified interface for Chrome AI, OpenAI, and Ollama.
- * Supports streaming responses for real-time chat bubbles.
  */
 
 import OpenAI from 'openai';
@@ -11,155 +10,218 @@ import ChromeAIValidator from './ChromeAIValidator';
 
 class AIService {
   constructor() {
-    this.client = null;
-    this.currentProvider = null;
-    this.currentConfig = null;
-    this.abortController = null;
+    this.isExtensionMode = __EXTENSION_MODE__;
     
-    // Chrome AI session
-    this.chromeAISession = null;
+    if (this.isExtensionMode) {
+      this.tabStates = new Map();
+      console.log('[AIService] Initialized (Extension mode - multi-tab)');
+    } else {
+      this.client = null;
+      this.provider = null;
+      this.config = null;
+      this.abortController = null;
+      this.chromeAISession = null;
+      console.log('[AIService] Initialized (Dev mode - single instance)');
+    }
+  }
+
+  /**
+   * Initialize state for a tab (extension mode only)
+   * @param {number} tabId - Tab ID
+   */
+  initTab(tabId) {
+    if (!this.isExtensionMode) return;
     
-    console.log('[AIService] Initialized');
+    if (!this.tabStates.has(tabId)) {
+      this.tabStates.set(tabId, {
+        client: null,
+        config: null,
+        provider: null,
+        abortController: null,
+        chromeAISession: null,
+      });
+      console.log(`[AIService] Tab ${tabId} initialized`);
+    }
+  }
+
+  /**
+   * Cleanup tab state (extension mode only)
+   * @param {number} tabId - Tab ID
+   */
+  cleanupTab(tabId) {
+    if (!this.isExtensionMode) return;
+    
+    const state = this.tabStates.get(tabId);
+    if (state) {
+      if (state.abortController) {
+        state.abortController.abort();
+      }
+      this.tabStates.delete(tabId);
+      console.log(`[AIService] Tab ${tabId} cleaned up`);
+    }
+  }
+
+  /**
+   * Get state object for current context
+   * @param {number} tabId - Tab ID (extension mode only)
+   * @returns {Object} State object
+   */
+  _getState(tabId = null) {
+    if (this.isExtensionMode) {
+      this.initTab(tabId);
+      return this.tabStates.get(tabId);
+    }
+    return this; // In dev mode, state is on the instance itself
   }
 
   /**
    * Configure AI client with provider settings
-   * @param {Object} config - AI configuration from aiConfig
+   * Dev mode: configure(config)
+   * Extension mode: configure(config, tabId)
+   * @param {Object} config - Config object
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<boolean>} Success status
    */
-  configure(config) {
+  configure(config, tabId = null) {
+    const state = this._getState(tabId);
     const { provider } = config;
-    
-    console.log(`[AIService] Configuring provider: ${provider}`);
+    const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    console.log(`${logPrefix} - Configuring provider: ${provider}`);
     
     try {
-      if (provider === AIProviders.CHROME_AI) {
-        // Validate Chrome AI availability
+      if (provider === AIProviders.CHROME_AI || provider === 'chrome-ai') {
         if (!ChromeAIValidator.isSupported()) {
           throw new Error('Chrome AI not supported. Chrome 138+ required.');
         }
         
-        this.currentConfig = {
-          temperature: config.chromeAi.temperature,
-          topK: config.chromeAi.topK,
+        const chromeAiConfig = config.chromeAi || config;
+        state.config = {
+          temperature: chromeAiConfig.temperature,
+          topK: chromeAiConfig.topK,
         };
+        state.chromeAISession = null;
         
-        console.log('[AIService] Chrome AI configured:', this.currentConfig);
+        console.log(`${logPrefix} - Chrome AI configured:`, state.config);
       }
-      else if (provider === AIProviders.OPENAI) {
-        // Configure OpenAI client
-        this.client = new OpenAI({
-          apiKey: config.openai.apiKey,
-          dangerouslyAllowBrowser: true, // Required for browser usage
+      else if (provider === AIProviders.OPENAI || provider === 'openai') {
+        const openaiConfig = config.openai || config;
+        state.client = new OpenAI({
+          apiKey: openaiConfig.apiKey,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
         
-        this.currentConfig = {
-          model: config.openai.model,
-          temperature: config.openai.temperature,
-          maxTokens: config.openai.maxTokens,
+        state.config = {
+          model: openaiConfig.model,
+          temperature: openaiConfig.temperature,
+          maxTokens: openaiConfig.maxTokens,
         };
         
-        console.log('[AIService] OpenAI configured:', {
-          model: this.currentConfig.model,
-          temperature: this.currentConfig.temperature,
-          maxTokens: this.currentConfig.maxTokens,
+        console.log(`${logPrefix} - OpenAI configured:`, {
+          model: state.config.model,
+          temperature: state.config.temperature,
+          maxTokens: state.config.maxTokens,
         });
       } 
-      else if (provider === AIProviders.OLLAMA) {
-        // Configure Ollama client (uses OpenAI-compatible API)
-        this.client = new OpenAI({
-          apiKey: 'ollama', // Dummy key - Ollama doesn't need auth
-          baseURL: config.ollama.endpoint + '/v1', // User-editable endpoint!
-          dangerouslyAllowBrowser: true,
+      else if (provider === AIProviders.OLLAMA || provider === 'ollama') {
+        const ollamaConfig = config.ollama || config;
+        state.client = new OpenAI({
+          apiKey: 'ollama',
+          baseURL: ollamaConfig.endpoint + '/v1',
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
         
-        this.currentConfig = {
-          model: config.ollama.model,
-          temperature: config.ollama.temperature,
-          maxTokens: config.ollama.maxTokens,
+        state.config = {
+          model: ollamaConfig.model,
+          temperature: ollamaConfig.temperature,
+          maxTokens: ollamaConfig.maxTokens,
         };
         
-        console.log('[AIService] Ollama configured:', {
-          endpoint: config.ollama.endpoint,
-          model: this.currentConfig.model,
-          temperature: this.currentConfig.temperature,
-          maxTokens: this.currentConfig.maxTokens,
+        console.log(`${logPrefix} - Ollama configured:`, {
+          endpoint: ollamaConfig.endpoint,
+          model: state.config.model,
         });
       } else {
         throw new Error(`Unknown provider: ${provider}`);
       }
       
-      this.currentProvider = provider;
+      state.provider = provider;
       return true;
       
     } catch (error) {
-      console.error('[AIService] Configuration failed:', error);
-      this.client = null;
-      this.currentProvider = null;
-      this.currentConfig = null;
+      console.error(`${logPrefix} - Configuration failed:`, error);
+      state.client = null;
+      state.config = null;
+      state.provider = null;
       throw error;
     }
   }
 
   /**
    * Check if service is configured and ready
+   * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if ready
    */
-  isConfigured() {
-    // Chrome AI doesn't use client, just config and provider
-    if (!this.currentConfig || !this.currentProvider) {
+  isConfigured(tabId = null) {
+    const state = this._getState(tabId);
+    
+    if (!state || !state.config || !state.provider) {
       return false;
     }
-    // For Chrome AI, just having config is enough
-    if (this.currentProvider === 'chrome-ai') {
+    if (state.provider === 'chrome-ai' || state.provider === AIProviders.CHROME_AI) {
       return true;
     }
-    // For other providers, check for client
-    return this.client !== null;
+    return state.client !== null;
   }
 
   /**
    * Get current provider name
+   * @param {number} tabId - Tab ID (extension mode only)
    * @returns {string|null} Provider name or null
    */
-  getCurrentProvider() {
-    return this.currentProvider;
+  getCurrentProvider(tabId = null) {
+    const state = this._getState(tabId);
+    return state?.provider || null;
   }
 
   /**
    * Send message with streaming support
    * 
    * @param {Array} messages - Array of message objects
-   * @param {Function} onStream - Callback for streaming tokens: (token: string) => void
+   * @param {Function|null} onStream - Callback for streaming tokens
+   * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Full response text
    */
-  async sendMessage(messages, onStream = null) {
-    if (!this.isConfigured()) {
+  async sendMessage(messages, onStream = null, tabId = null) {
+    const state = this._getState(tabId);
+    
+    if (!this.isConfigured(tabId)) {
       throw new Error('AIService not configured. Call configure() first.');
     }
 
-    console.log(`[AIService] Sending message to ${this.currentProvider}:`, {
+    const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    console.log(`${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
-      model: this.currentConfig.model || 'chrome-ai',
+      model: state.config.model || 'chrome-ai',
     });
 
     // Chrome AI implementation
-    if (this.currentProvider === AIProviders.CHROME_AI) {
-      return await this.sendMessageChromeAI(messages, onStream);
+    if (state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') {
+      return await this._sendMessageChromeAI(state, messages, onStream, logPrefix);
     }
 
     // Create new abort controller for this request
-    this.abortController = new AbortController();
+    state.abortController = new AbortController();
 
     try {
       // Create streaming request with abort signal
-      const stream = await this.client.chat.completions.create({
-        model: this.currentConfig.model,
+      const stream = await state.client.chat.completions.create({
+        model: state.config.model,
         messages: messages,
-        temperature: this.currentConfig.temperature,
-        max_tokens: this.currentConfig.maxTokens,
-        stream: true, // Enable streaming
+        temperature: state.config.temperature,
+        max_tokens: state.config.maxTokens,
+        stream: true,
       }, {
-        signal: this.abortController.signal
+        signal: state.abortController.signal
       });
 
       let fullResponse = '';
@@ -178,21 +240,21 @@ class AIService {
         }
       }
 
-      console.log(`[AIService] Response received (${fullResponse.length} chars)`);
-      this.abortController = null;
+      console.log(`${logPrefix} - Response received (${fullResponse.length} chars)`);
+      state.abortController = null;
       
       return fullResponse;
       
     } catch (error) {
-      this.abortController = null;
+      state.abortController = null;
       
       // Check if error is from abort
       if (error.name === 'AbortError') {
-        console.log('[AIService] Request aborted by user');
+        console.log(`${logPrefix} - Request aborted by user`);
         throw new Error('Generation stopped by user');
       }
       
-      console.error('[AIService] Request failed:', error);
+      console.error(`${logPrefix} - Request failed:`, error);
       
       // Enhance error message for common issues
       if (error.message?.includes('401')) {
@@ -208,46 +270,46 @@ class AIService {
   }
 
   /**
-   * Send message using Chrome AI LanguageModel
+   * Send message using Chrome AI LanguageModel (internal method)
+   * @param {Object} state - State object
    * @param {Array} messages - Message array {role, content}
    * @param {Function} onStream - Streaming callback
+   * @param {string} logPrefix - Log prefix
    * @returns {Promise<string>} Full response
    */
-  async sendMessageChromeAI(messages, onStream = null) {
+  async _sendMessageChromeAI(state, messages, onStream, logPrefix) {
     try {
-      // Create session with initial context if first time
-      if (!this.chromeAISession) {
-        console.log('[AIService] Creating Chrome AI session...');
+      if (!state.chromeAISession) {
+        console.log(`${logPrefix} - Creating Chrome AI session...`);
         
-        // Separate system prompt from conversation
         const systemPrompts = messages.filter(m => m.role === 'system');
         const conversationMsgs = messages.filter(m => m.role !== 'system');
         
-        this.chromeAISession = await self.LanguageModel.create({
-          temperature: this.currentConfig.temperature,
-          topK: this.currentConfig.topK,
-          language: this.currentConfig.outputLanguage || 'en',
+        if (!self.LanguageModel) {
+          throw new Error('Chrome AI LanguageModel not available');
+        }
+        
+        state.chromeAISession = await self.LanguageModel.create({
+          temperature: state.config.temperature,
+          topK: state.config.topK,
+          language: state.config.outputLanguage || 'en',
           initialPrompts: systemPrompts.length > 0 ? systemPrompts : undefined,
         });
-        console.log('[AIService] Chrome AI session created');
+        console.log(`${logPrefix} - Chrome AI session created`);
         
-        // Use conversation messages for prompt
         messages = conversationMsgs;
       }
 
-      // Get the last user message for prompting
       const lastMessage = messages[messages.length - 1];
-      console.log(`[AIService] Chrome AI prompting with ${messages.length} message(s)`);
+      console.log(`${logPrefix} - Chrome AI prompting with ${messages.length} message(s)`);
 
       let fullResponse = '';
 
       if (onStream) {
-        // Streaming mode
-        const stream = this.chromeAISession.promptStreaming(lastMessage.content);
+        const stream = state.chromeAISession.promptStreaming(lastMessage.content);
         
         for await (const chunk of stream) {
           fullResponse = chunk;
-          // Calculate new content by comparing with previous full response
           const previousLength = fullResponse.length - chunk.length;
           const newContent = chunk.slice(previousLength > 0 ? previousLength : 0);
           if (newContent) {
@@ -255,24 +317,22 @@ class AIService {
           }
         }
       } else {
-        // Non-streaming mode
-        fullResponse = await this.chromeAISession.prompt(lastMessage.content);
+        fullResponse = await state.chromeAISession.prompt(lastMessage.content);
       }
 
-      console.log(`[AIService] Chrome AI response (${fullResponse.length} chars)`);
+      console.log(`${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);
       return fullResponse;
 
     } catch (error) {
-      console.error('[AIService] Chrome AI error:', error);
+      console.error(`${logPrefix} - Chrome AI error:`, error);
       
-      // Cleanup session on error
-      if (this.chromeAISession) {
+      if (state.chromeAISession) {
         try {
-          this.chromeAISession.destroy();
-        } catch {
-          // Ignore destroy errors
+          state.chromeAISession.destroy();
+        } catch (destroyError) {
+          console.warn('Failed to destroy session:', destroyError);
         }
-        this.chromeAISession = null;
+        state.chromeAISession = null;
       }
 
       if (error.name === 'NotSupportedError') {
@@ -287,85 +347,62 @@ class AIService {
 
   /**
    * Abort the current ongoing request
+   * @param {number} tabId - Tab ID (extension mode only)
+   * @returns {boolean} True if aborted
    */
-  abortRequest() {
-    // Chrome AI abort
-    if (this.currentProvider === AIProviders.CHROME_AI && this.chromeAISession) {
-      console.log('[AIService] Destroying Chrome AI session');
+  abortRequest(tabId = null) {
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    
+    if (state && (state.provider === 'chrome-ai' || state.provider === AIProviders.CHROME_AI) && state.chromeAISession) {
+      console.log(`${logPrefix} - Destroying Chrome AI session`);
       try {
-        this.chromeAISession.destroy();
-      } catch {
-        // Ignore destroy errors
+        state.chromeAISession.destroy();
+      } catch (destroyError) {
+        console.warn('Failed to destroy session:', destroyError);
       }
-      this.chromeAISession = null;
+      state.chromeAISession = null;
       return true;
     }
-
-    // OpenAI/Ollama abort
-    if (this.abortController) {
-      console.log('[AIService] Aborting current request');
-      this.abortController.abort();
-      this.abortController = null;
+    
+    if (state && state.abortController) {
+      console.log(`${logPrefix} - Aborting current request`);
+      state.abortController.abort();
+      state.abortController = null;
       return true;
     }
     return false;
   }
 
-  /**
-   * Check if there's an ongoing request
-   * @returns {boolean} True if request is in progress
-   */
-  isGenerating() {
-    return this.abortController !== null;
+  isGenerating(tabId = null) {
+    const state = this._getState(tabId);
+    return state && state.abortController !== null;
   }
 
   /**
    * Send message without streaming (simpler interface)
-   * 
-   * @param {Array} messages - Array of message objects
+   * @param {Array|number} messagesOrTabId - Messages (dev) or tabId (extension)
+   * @param {Array} messages - Messages (extension mode only)
    * @returns {Promise<string>} Full response text
    */
-  async sendMessageSync(messages) {
-    if (!this.isConfigured()) {
-      throw new Error('AIService not configured. Call configure() first.');
-    }
-
-    try {
-      const completion = await this.client.chat.completions.create({
-        model: this.currentConfig.model,
-        messages: messages,
-        temperature: this.currentConfig.temperature,
-        max_tokens: this.currentConfig.maxTokens,
-        stream: false,
-      });
-
-      const response = completion.choices[0]?.message?.content || '';
-      
-      console.log(`[AIService] Response received (${response.length} chars)`);
-      
-      return response;
-      
-    } catch (error) {
-      console.error('[AIService] Request failed:', error);
-      throw error;
+  async sendMessageSync(messagesOrTabId, messages = null) {
+    if (this.isExtensionMode) {
+      return await this.sendMessage(messages, null, messagesOrTabId);
+    } else {
+      return await this.sendMessage(messagesOrTabId, null, null);
     }
   }
 
-  /**
-   * Test connection to configured provider
-   * Sends a simple test message to verify configuration
-   * 
-   * @returns {Promise<boolean>} True if connection successful
-   */
-  async testConnection() {
-    if (!this.isConfigured()) {
+  async testConnection(tabId = null) {
+    if (!this.isConfigured(tabId)) {
       throw new Error('AIService not configured');
     }
 
-    console.log(`[AIService] Testing connection to ${this.currentProvider}...`);
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    console.log(`${logPrefix} - Testing connection to ${state.provider}...`);
 
-    // Chrome AI test
-    if (this.currentProvider === AIProviders.CHROME_AI) {
+    if ((state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') && !this.isExtensionMode) {
       const result = await ChromeAIValidator.testConnection();
       if (!result.success) {
         throw new Error(result.message);
@@ -373,19 +410,18 @@ class AIService {
       return true;
     }
 
-    // OpenAI/Ollama test
     try {
       const testMessages = [
         { role: 'user', content: 'Say "OK" if you can hear me.' }
       ];
 
-      const response = await this.sendMessageSync(testMessages);
+      const response = await this.sendMessage(testMessages, null, tabId);
       
-      console.log('[AIService] Connection test successful:', response);
+      console.log(`${logPrefix} - Connection test successful:`, response);
       return true;
       
     } catch (error) {
-      console.error('[AIService] Connection test failed:', error);
+      console.error(`${logPrefix} - Connection test failed:`, error);
       throw error;
     }
   }

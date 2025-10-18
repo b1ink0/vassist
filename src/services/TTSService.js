@@ -12,134 +12,142 @@ import { BVMDConverterService } from './BVMDConverterService.js';
 
 class TTSService {
   constructor() {
-    this.client = null;
-    this.currentProvider = null;
-    this.currentConfig = null;
-    this.isEnabled = false;
-    
-    // Audio queue for sequential playback
-    this.audioQueue = [];
-    this.isPlaying = false;
-    this.isStopped = false; // Flag to prevent new audio from starting after stop
-    this.currentAudio = null;
-    this.currentPlaybackSession = null; // Track current playback session ID
-    
-    // Blob URL tracking for cleanup
-    this.blobUrls = new Set();
-    
-    // Request throttling
-    this.activeRequests = 0;
-    this.maxConcurrentRequests = 3;
-    
-    // Lip sync generation support (VMD -> BVMD)
-    this.lipSyncEnabled = true; // Enable lip sync generation by default
-    this.vmdService = vmdGenerationService;
-    this.bvmdConverter = null; // Will be initialized when scene is available
-    
-    // Callback for triggering animations (set by VirtualAssistant)
-    this.onSpeakCallback = null; // (text, bvmdBlobUrl) => void
-    
-    // Callback for when audio finishes playing (for sliding window TTS generation)
-    this.onAudioFinishedCallback = null; // () => void
-    
-    // Callback for when TTS is stopped/interrupted (to return animation to idle)
-    this.onStopCallback = null; // () => void
-    
-    // Callback for when audio playback starts (for UI updates)
-    this.onAudioStartCallback = null; // (sessionId) => void
-    
-    // Callback for when audio playback ends (for UI updates)
-    this.onAudioEndCallback = null; // (sessionId) => void
-    
-    console.log('[TTSService] Initialized with lip sync support');
+    this.isExtensionMode = __EXTENSION_MODE__;
+
+    if (this.isExtensionMode) {
+      this.tabStates = new Map();
+      console.log('[TTSService] Initialized (Extension mode - multi-tab)');
+    } else {
+      this.client = null;
+      this.provider = null;
+      this.config = null;
+      this.enabled = false;
+
+      this.audioQueue = [];
+      this.isPlaying = false;
+      this.isStopped = false;
+      this.currentAudio = null;
+      this.currentPlaybackSession = null;
+
+      this.blobUrls = new Set();
+
+      this.activeRequests = 0;
+      this.maxConcurrentRequests = 3;
+
+      this.lipSyncEnabled = true;
+      this.vmdService = vmdGenerationService;
+      this.bvmdConverter = null;
+
+      this.onSpeakCallback = null;
+      this.onAudioFinishedCallback = null;
+      this.onStopCallback = null;
+      this.onAudioStartCallback = null;
+      this.onAudioEndCallback = null;
+
+      console.log('[TTSService] Initialized with lip sync support');
+    }
+  }
+
+  initTab(tabId) {
+    if (!this.tabStates.has(tabId)) {
+      this.tabStates.set(tabId, {
+        client: null,
+        provider: null,
+        config: null,
+        enabled: false,
+        isGenerating: false,
+        isStopped: false,
+      });
+      console.log(`[TTSService] Tab ${tabId} initialized`);
+    }
+  }
+
+  cleanupTab(tabId) {
+    if (this.tabStates.has(tabId)) {
+      this.tabStates.delete(tabId);
+      console.log(`[TTSService] Tab ${tabId} cleaned up`);
+    }
+  }
+
+  _getState(tabId = null) {
+    if (this.isExtensionMode) {
+      this.initTab(tabId);
+      return this.tabStates.get(tabId);
+    }
+    return this; // dev mode uses instance fields
   }
 
   /**
    * Configure TTS client with provider settings
    * @param {Object} config - TTS configuration from aiConfig
+   * @param {number|null} tabId - Tab ID (extension mode only)
    */
-  configure(config) {
+  configure(config, tabId = null) {
+    const state = this._getState(tabId);
     const { provider, enabled } = config;
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
     
-    this.isEnabled = enabled;
+    state.enabled = enabled;
     
     if (!enabled) {
-      console.log('[TTSService] TTS is disabled');
+      console.log(`${logPrefix} - TTS is disabled`);
       return true;
     }
     
-    console.log(`[TTSService] Configuring provider: ${provider}`);
-    
+    console.log(`${logPrefix} - Configuring provider: ${provider}`);
+
     try {
       if (provider === TTSProviders.OPENAI) {
-        // Configure OpenAI TTS client
-        this.client = new OpenAI({
+        state.client = new OpenAI({
           apiKey: config.openai.apiKey,
-          dangerouslyAllowBrowser: true,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
-        this.currentConfig = {
+
+        state.config = {
           model: config.openai.model,
           voice: config.openai.voice,
           speed: config.openai.speed,
         };
-        
-        console.log('[TTSService] OpenAI TTS configured:', {
-          model: this.currentConfig.model,
-          voice: this.currentConfig.voice,
-          speed: this.currentConfig.speed,
-        });
-      } 
-      else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
-        // Configure Generic OpenAI-compatible TTS client
-        // User provides complete base URL - we don't modify it
-        this.client = new OpenAI({
+        state.provider = provider;
+
+        console.log(`${logPrefix} - OpenAI TTS configured:`, state.config);
+      } else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
+        state.client = new OpenAI({
           apiKey: config['openai-compatible'].apiKey || 'default',
           baseURL: config['openai-compatible'].endpoint,
-          dangerouslyAllowBrowser: true,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
-        this.currentConfig = {
+
+        state.config = {
           model: config['openai-compatible'].model,
           voice: config['openai-compatible'].voice,
           speed: config['openai-compatible'].speed,
         };
-        
-        console.log('[TTSService] Generic TTS configured:', {
-          baseURL: config['openai-compatible'].endpoint,
-          model: this.currentConfig.model,
-          voice: this.currentConfig.voice,
-        });
+        state.provider = provider;
+
+        console.log(`${logPrefix} - Generic TTS configured:`, { baseURL: config['openai-compatible'].endpoint });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }
-      
-      this.currentProvider = provider;
+
       return true;
-      
     } catch (error) {
-      console.error('[TTSService] Configuration failed:', error);
-      this.client = null;
-      this.currentProvider = null;
-      this.currentConfig = null;
+      console.error(`${logPrefix} - Configuration failed:`, error);
+      state.client = null;
+      state.config = null;
+      state.provider = null;
       throw error;
     }
   }
 
-  /**
-   * Check if service is configured and enabled
-   * @returns {boolean} True if ready
-   */
-  isConfigured() {
-    return this.isEnabled && this.client !== null && this.currentConfig !== null;
+  isConfigured(tabId = null) {
+    const state = this._getState(tabId);
+    return state && state.enabled && state.client !== null && state.config !== null;
   }
 
-  /**
-   * Get current provider name
-   * @returns {string|null} Provider name or null
-   */
-  getCurrentProvider() {
-    return this.currentProvider;
+  getCurrentProvider(tabId = null) {
+    const state = this._getState(tabId);
+    return state?.provider || null;
   }
 
   /**
@@ -193,90 +201,87 @@ class TTSService {
    * Generate speech from text with optional lip sync (VMD -> BVMD)
    * @param {string} text - Text to convert to speech
    * @param {boolean} generateLipSync - Generate lip sync data
+   * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and optional BVMD URL
    */
-  async generateSpeech(text, generateLipSync = true) {
-    if (!this.isConfigured()) {
+  async generateSpeech(text, generateLipSync = true, tabId = null) {
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+    
+    if (!this.isConfigured(tabId)) {
       throw new Error('TTSService not configured or disabled');
     }
 
-    // Silently skip if stopped (don't throw)
-    if (this.isStopped) {
-      return null;
-    }
+    if (state.isStopped) return null;
 
-    // Throttle concurrent requests
-    while (this.activeRequests >= this.maxConcurrentRequests) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Silently skip if stopped while waiting
-      if (this.isStopped) {
-        return null;
+    if (this.isExtensionMode) {
+      state.isGenerating = true;
+
+      try {
+        console.log(`${logPrefix} - Generating speech (${text.length} chars)`);
+        const response = await state.client.audio.speech.create({
+          model: state.config.model,
+          voice: state.config.voice,
+          input: text,
+          speed: state.config.speed,
+        });
+
+        if (state.isStopped) {
+          state.isGenerating = false;
+          return null;
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        let contentType = response.headers?.get('content-type') || response.type || 'audio/mpeg';
+
+        state.isGenerating = false;
+        console.log(`${logPrefix} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`);
+        return { audioBuffer: arrayBuffer, mimeType: contentType };
+      } catch (error) {
+        state.isGenerating = false;
+        console.error(`${logPrefix} - Speech generation failed:`, error);
+        throw error;
       }
     }
 
-    this.activeRequests++;
+    while (state.activeRequests >= state.maxConcurrentRequests) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (state.isStopped) return null;
+    }
 
+    state.activeRequests++;
     try {
-      console.log(`[TTSService] Generating speech (${text.length} chars)${generateLipSync && this.lipSyncEnabled ? ' with lip sync' : ''}`);
+      console.log(`${logPrefix} - Generating speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
 
-      const response = await this.client.audio.speech.create({
-        model: this.currentConfig.model,
-        voice: this.currentConfig.voice,
+      const response = await state.client.audio.speech.create({
+        model: state.config.model,
+        voice: state.config.voice,
         input: text,
-        speed: this.currentConfig.speed,
+        speed: state.config.speed,
       });
 
-      // Silently skip if stopped after API call
-      if (this.isStopped) {
-        return null;
-      }
+      if (state.isStopped) return null;
 
-      // Convert response to blob
       const arrayBuffer = await response.arrayBuffer();
       const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
 
-      console.log(`[TTSService] Speech generated (${blob.size} bytes)`);
-      
-      // Generate lip sync if enabled
       let bvmdUrl = null;
-      if (generateLipSync && this.lipSyncEnabled && this.bvmdConverter) {
+      if (generateLipSync && state.lipSyncEnabled && state.bvmdConverter) {
         try {
-          // Silently skip if stopped before lip sync
-          if (this.isStopped) {
-            return null;
-          }
-          
-          console.log('[TTSService] Generating lip sync (VMD -> BVMD)...');
-          
-          // Step 1: Generate VMD from audio
-          const vmdData = await this.vmdService.generateVMDFromAudio(blob);
-          console.log(`[TTSService] VMD generated (${vmdData.byteLength} bytes)`);
-          
-          // Silently skip if stopped after VMD generation
-          if (this.isStopped) {
-            return null;
-          }
-          
-          // Step 2: Convert VMD to BVMD
-          bvmdUrl = await this.bvmdConverter.convertVMDToBVMD(vmdData);
-          console.log(`[TTSService] BVMD URL created`);
-          
-        } catch (error) {
-          console.error('[TTSService] Lip sync generation failed:', error);
-          // Continue without lip sync
+          if (state.isStopped) return null;
+          const vmdData = await state.vmdService.generateVMDFromAudio(blob);
+          bvmdUrl = await state.bvmdConverter.convertVMDToBVMD(vmdData);
+        } catch (e) {
+          console.error(`${logPrefix} - Lip sync generation failed:`, e);
         }
-      } else if (generateLipSync && this.lipSyncEnabled && !this.bvmdConverter) {
-        console.warn('[TTSService] BVMD converter not initialized, skipping lip sync');
       }
-      
+
       return { audio: blob, bvmdUrl };
-      
     } catch (error) {
-      console.error('[TTSService] Speech generation failed:', error);
+      console.error(`${logPrefix} - Speech generation failed:`, error);
       throw error;
     } finally {
-      this.activeRequests--;
+      state.activeRequests--;
     }
   }
 
@@ -341,9 +346,28 @@ class TTSService {
    * @param {number} maxChunkSize - Maximum chunk size
    * @param {number} minChunkSize - Minimum chunk size
    * @param {string} sessionId - Optional session ID for this generation request
+   * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<Array<{text: string, audioUrl: string, bvmdUrl: string|null, sessionId: string|null}>>} Array of text, audio URLs and BVMD URLs
    */
-  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100, sessionId = null) {
+  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100, sessionId = null, tabId = null) {
+    // In extension mode, generateChunkedSpeech will not create Blob URLs; background will return arrays
+    if (this.isExtensionMode) {
+      const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
+      let generatedCount = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          const result = await this.generateSpeech(chunks[i], false, tabId);
+          if (!result) continue;
+          if (onChunkReady) await onChunkReady(result.audioBuffer, i);
+          generatedCount++;
+        } catch (error) {
+          console.error(`[TTSService] Tab ${tabId} - Failed to generate chunk ${i + 1}:`, error);
+        }
+      }
+      return generatedCount;
+    }
+
+    // Dev mode: existing behavior
     if (!this.isConfigured()) {
       console.warn('[TTSService] TTS not configured, skipping speech generation');
       return [];
@@ -357,32 +381,15 @@ class TTSService {
     for (let i = 0; i < chunks.length; i++) {
       try {
         const result = await this.generateSpeech(chunks[i], this.lipSyncEnabled);
-        
-        // Skip if generation was cancelled (returns null when stopped)
-        if (!result) {
-          console.log(`[TTSService] Chunk ${i + 1} generation cancelled`);
-          continue;
-        }
-        
+        if (!result) continue;
         const { audio, bvmdUrl } = result;
         const audioUrl = URL.createObjectURL(audio);
-        
-        // Track blob URL for cleanup
         this.blobUrls.add(audioUrl);
-        
         const chunkResult = { text: chunks[i], audioUrl, bvmdUrl, sessionId };
         results.push(chunkResult);
-
-        // Notify callback
-        if (onChunkReady) {
-          onChunkReady(chunks[i], audioUrl, bvmdUrl, i, chunks.length);
-        }
-
-        console.log(`[TTSService] Chunk ${i + 1}/${chunks.length} ready${bvmdUrl ? ' with lip sync' : ''}`);
-        
+        if (onChunkReady) onChunkReady(chunks[i], audioUrl, bvmdUrl, i, chunks.length);
       } catch (error) {
         console.error(`[TTSService] Failed to generate chunk ${i + 1}:`, error);
-        // Continue with remaining chunks
       }
     }
 
@@ -651,6 +658,25 @@ class TTSService {
     this.isStopped = false;
   }
 
+  // Extension-only controls (stop/resume generation)
+  stopGeneration(tabId = null) {
+    if (this.isExtensionMode) {
+      const state = this._getState(tabId);
+      state.isStopped = true;
+      return;
+    }
+    this.isStopped = true;
+  }
+
+  resumeGeneration(tabId = null) {
+    if (this.isExtensionMode) {
+      const state = this._getState(tabId);
+      state.isStopped = false;
+      return;
+    }
+    this.isStopped = false;
+  }
+
   /**
    * Clean up blob URLs (audio and BVMD)
    * @param {string[]} urls - Optional specific URLs to revoke, or all if not provided
@@ -678,7 +704,11 @@ class TTSService {
    * Check if TTS is currently playing audio
    * @returns {boolean} True if audio is playing
    */
-  isCurrentlyPlaying() {
+  isCurrentlyPlaying(tabId = null) {
+    if (this.isExtensionMode) {
+      const state = this.tabStates.get(tabId);
+      return state && state.isGenerating;
+    }
     return this.isPlaying;
   }
 
@@ -687,29 +717,23 @@ class TTSService {
    * @param {string} testText - Text to test with
    * @returns {Promise<boolean>} True if successful
    */
-  async testConnection(testText = 'Hello, this is a test of the text to speech system.') {
-    if (!this.isConfigured()) {
-      throw new Error('TTSService not configured or disabled');
+  async testConnection(testText = 'Hello, this is a test of the text to speech system.', tabId = null) {
+    if (this.isExtensionMode) {
+      if (!this.isConfigured(tabId)) throw new Error('TTSService not configured for this tab');
+      const result = await this.generateSpeech(testText, false, tabId);
+      return result && result.audioBuffer && result.audioBuffer.byteLength > 0;
     }
 
+    if (!this.isConfigured()) throw new Error('TTSService not configured or disabled');
     console.log('[TTSService] Testing TTS connection...');
-
     try {
       const { audio, bvmdUrl } = await this.generateSpeech(testText, this.lipSyncEnabled);
       const audioUrl = URL.createObjectURL(audio);
-      
-      // Play the test audio with BVMD if generated
       await this.playAudio(testText, audioUrl, bvmdUrl);
-      
-      // Cleanup
       URL.revokeObjectURL(audioUrl);
-      if (bvmdUrl && this.bvmdConverter) {
-        this.bvmdConverter.cleanup(bvmdUrl);
-      }
-      
+      if (bvmdUrl && this.bvmdConverter) this.bvmdConverter.cleanup(bvmdUrl);
       console.log('[TTSService] TTS test successful' + (bvmdUrl ? ' with lip sync' : ''));
       return true;
-      
     } catch (error) {
       console.error('[TTSService] TTS test failed:', error);
       throw error;

@@ -12,6 +12,11 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  define: {
+    // Build-time constants for mode detection
+    __EXTENSION_MODE__: JSON.stringify(false),
+    __DEV_MODE__: JSON.stringify(true),
+  },
   build: {
     sourcemap: true,
   },

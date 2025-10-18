@@ -12,10 +12,10 @@ import { offscreenManager } from './OffscreenManager.js';
 import { storageService } from './StorageService.js';
 import { MessageTypes } from '../shared/MessageTypes.js';
 
-// Import services
-import aiService from './services/AIService.js';
-import ttsService from './services/TTSService.js';
-import sttService from './services/STTService.js';
+// Import services directly from src (unified implementation)
+import aiService from '../../src/services/AIService.js';
+import ttsService from '../../src/services/TTSService.js';
+import sttService from '../../src/services/STTService.js';
 
 console.log('[Background] Service worker starting...');
 
@@ -71,7 +71,7 @@ function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.AI_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { config } = message.data;
-    await aiService.configure(tabId, config);
+    await aiService.configure(config, tabId);
     return { configured: true };
   });
 
@@ -81,8 +81,8 @@ function registerHandlers() {
     const { messages } = message.data;
     let fullResponse = '';
     
-    // Stream response back to content script
-    await aiService.sendMessage(tabId, messages, (token) => {
+    // Stream response back to content script (messages, onStream, tabId)
+    await aiService.sendMessage(messages, (token) => {
       // Send streaming token back to content script
       chrome.tabs.sendMessage(sender.tab.id, {
         type: MessageTypes.AI_STREAM_TOKEN,
@@ -91,7 +91,7 @@ function registerHandlers() {
       }).catch(err => console.error('[Background] Failed to send stream token:', err));
       
       fullResponse += token;
-    });
+    }, tabId);
     
     return { response: fullResponse };
   });
@@ -118,14 +118,14 @@ function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TTS_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { config } = message.data;
-    await ttsService.configure(tabId, config);
+    await ttsService.configure(config, tabId);
     return { configured: true };
   });
 
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text } = message.data;
-    const result = await ttsService.generateSpeech(tabId, text);
+  const { text } = message.data;
+  const result = await ttsService.generateSpeech(text, /*generateLipSync*/ false, tabId);
     
     if (!result) {
       return { audioBuffer: null, mimeType: null }; // Generation was stopped
@@ -210,7 +210,7 @@ function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.STT_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { config } = message.data;
-    await sttService.configure(tabId, config);
+    await sttService.configure(config, tabId);
     return { configured: true };
   });
 
@@ -226,7 +226,7 @@ function registerHandlers() {
     const arrayBuffer = new Uint8Array(audioBuffer).buffer;
     console.log(`[Background] STT_TRANSCRIBE_AUDIO: converted Array (${audioBuffer.length} bytes) to ArrayBuffer`);
     
-    const text = await sttService.transcribeAudio(tabId, arrayBuffer, mimeType);
+    const text = await sttService.transcribeAudio(arrayBuffer, mimeType, tabId);
     return { text };
   });
 
