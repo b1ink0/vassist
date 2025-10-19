@@ -96,14 +96,17 @@ class AIService {
         
         const chromeAiConfig = config.chromeAi || config;
         const newImageSupport = chromeAiConfig.enableImageSupport !== false;
+        const newAudioSupport = chromeAiConfig.enableAudioSupport !== false;
         
-        // Check if image support setting changed
+        // Check if image or audio support settings changed
         const imageSupportChanged = state.config && 
           (state.config.enableImageSupport !== newImageSupport);
+        const audioSupportChanged = state.config && 
+          (state.config.enableAudioSupport !== newAudioSupport);
         
-        // If image support changed, destroy existing session to force recreation
-        if (imageSupportChanged && state.chromeAISession) {
-          console.log(`${logPrefix} - Image support changed, destroying existing session`);
+        // If image or audio support changed, destroy existing session to force recreation
+        if ((imageSupportChanged || audioSupportChanged) && state.chromeAISession) {
+          console.log(`${logPrefix} - Multi-modal support changed, destroying existing session`);
           try {
             state.chromeAISession.destroy();
           } catch (error) {
@@ -116,6 +119,7 @@ class AIService {
           temperature: chromeAiConfig.temperature,
           topK: chromeAiConfig.topK,
           enableImageSupport: newImageSupport,
+          enableAudioSupport: newAudioSupport,
         };
         
         console.log(`${logPrefix} - Chrome AI configured:`, state.config);
@@ -131,6 +135,8 @@ class AIService {
           model: openaiConfig.model,
           temperature: openaiConfig.temperature,
           maxTokens: openaiConfig.maxTokens,
+          enableImageSupport: openaiConfig.enableImageSupport !== false,
+          enableAudioSupport: openaiConfig.enableAudioSupport !== false,
         };
         
         console.log(`${logPrefix} - OpenAI configured:`, {
@@ -151,6 +157,8 @@ class AIService {
           model: ollamaConfig.model,
           temperature: ollamaConfig.temperature,
           maxTokens: ollamaConfig.maxTokens,
+          enableImageSupport: ollamaConfig.enableImageSupport !== false,
+          enableAudioSupport: ollamaConfig.enableAudioSupport !== false,
         };
         
         console.log(`${logPrefix} - Ollama configured:`, {
@@ -226,12 +234,16 @@ class AIService {
    */
   _formatMultiModalMessages(messages, provider) {
     return messages.map(msg => {
-      // If no images, return as-is
-      if (!msg.images || msg.images.length === 0) {
+      // Check if multi-modal (has images or audios)
+      const hasImages = msg.images && msg.images.length > 0;
+      const hasAudios = msg.audios && msg.audios.length > 0;
+      
+      // If no attachments, return as-is
+      if (!hasImages && !hasAudios) {
         return { role: msg.role, content: msg.content };
       }
 
-      // Multi-modal message with images
+      // Multi-modal message with images and/or audios
       if (provider === AIProviders.CHROME_AI || provider === 'chrome-ai') {
         // Chrome AI format: content is array of {type, value}
         const content = [
@@ -239,26 +251,55 @@ class AIService {
         ];
         
         // Add images
-        for (const imageDataUrl of msg.images) {
-          content.push({
-            type: 'image',
-            value: this._dataUrlToBlob(imageDataUrl)
-          });
+        if (hasImages) {
+          for (const imageDataUrl of msg.images) {
+            content.push({
+              type: 'image',
+              value: this._dataUrlToBlob(imageDataUrl)
+            });
+          }
+        }
+        
+        // Add audios
+        if (hasAudios) {
+          for (const audioDataUrl of msg.audios) {
+            content.push({
+              type: 'audio',
+              value: this._dataUrlToBlob(audioDataUrl)
+            });
+          }
         }
         
         return { role: msg.role, content };
       } else {
-        // OpenAI/Ollama format: content is array of {type, text/image_url}
+        // OpenAI/Ollama format: content is array of {type, text/image_url/input_audio}
         const content = [
           { type: 'text', text: msg.content }
         ];
         
         // Add images
-        for (const imageDataUrl of msg.images) {
-          content.push({
-            type: 'image_url',
-            image_url: { url: imageDataUrl }
-          });
+        if (hasImages) {
+          for (const imageDataUrl of msg.images) {
+            content.push({
+              type: 'image_url',
+              image_url: { url: imageDataUrl }
+            });
+          }
+        }
+        
+        // Add audios (OpenAI format for audio input)
+        if (hasAudios) {
+          for (const audioDataUrl of msg.audios) {
+            // Extract base64 data from data URL
+            const base64Data = audioDataUrl.split(',')[1];
+            content.push({
+              type: 'input_audio',
+              input_audio: { 
+                data: base64Data,
+                format: 'wav' // Default to wav, can be made dynamic
+              }
+            });
+          }
         }
         
         return { role: msg.role, content };
@@ -267,18 +308,34 @@ class AIService {
   }
 
   /**
+   * Prepare request body for API call based on provider
+   * @param {Object} state - State object
+   * @param {Array} formattedMessages - Formatted messages
+   * @returns {Object} Request body for API call
+   */
+  _prepareRequestBody(state, formattedMessages) {
+    return {
+      model: state.config.model,
+      messages: formattedMessages,
+      temperature: state.config.temperature,
+      max_tokens: state.config.maxTokens,
+      stream: true,
+    };
+  }
+
+  /**
    * Send message with streaming support
    * 
    * @param {Array} messages - Array of message objects
    * @param {Function|null} onStream - Callback for streaming tokens
    * @param {number|null} tabId - Tab ID (extension mode only)
-   * @returns {Promise<string>} Full response text
+   * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
   async sendMessage(messages, onStream = null, tabId = null) {
     const state = this._getState(tabId);
     
     if (!this.isConfigured(tabId)) {
-      throw new Error('AIService not configured. Call configure() first.');
+      return { success: false, response: null, cancelled: false, error: new Error('AIService not configured. Call configure() first.') };
     }
 
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
@@ -306,14 +363,11 @@ class AIService {
     state.abortController = new AbortController();
 
     try {
+      // Prepare request body
+      const requestBody = this._prepareRequestBody(state, formattedMessages);
+      
       // Create streaming request with abort signal
-      const stream = await state.client.chat.completions.create({
-        model: state.config.model,
-        messages: formattedMessages,
-        temperature: state.config.temperature,
-        max_tokens: state.config.maxTokens,
-        stream: true,
-      }, {
+      const stream = await state.client.chat.completions.create(requestBody, {
         signal: state.abortController.signal
       });
 
@@ -321,10 +375,11 @@ class AIService {
       
       // Process streaming chunks
       for await (const chunk of stream) {
-        // Check if request was aborted
+        // Check if request was aborted - return cancelled, don't throw
         if (!state.abortController) {
-          console.log(`${logPrefix} - Streaming aborted`);
-          throw new Error('Generation stopped by user');
+          console.log(`${logPrefix} - Streaming aborted by user`);
+          state.abortController = null;
+          return { success: false, response: fullResponse, cancelled: true, error: null };
         }
         
         const content = chunk.choices[0]?.delta?.content || '';
@@ -342,29 +397,35 @@ class AIService {
       console.log(`${logPrefix} - Response received (${fullResponse.length} chars)`);
       state.abortController = null;
       
-      return fullResponse;
+      return { success: true, response: fullResponse, cancelled: false, error: null };
       
     } catch (error) {
       state.abortController = null;
       
-      // Check if error is from abort
-      if (error.name === 'AbortError') {
+      // Check if error is from abort - check name AND message
+      const errorMsg = error.message?.toLowerCase() || '';
+      const isAbort = error.name === 'AbortError' || 
+                      errorMsg.includes('abort') || 
+                      errorMsg.includes('cancel');
+      
+      if (isAbort) {
         console.log(`${logPrefix} - Request aborted by user`);
-        throw new Error('Generation stopped by user');
+        return { success: false, response: null, cancelled: true, error: null };
       }
       
       console.error(`${logPrefix} - Request failed:`, error);
       
-      // Enhance error message for common issues
+      // Return error result with enhanced message
+      let errorMessage = error.message;
       if (error.message?.includes('401')) {
-        throw new Error('Invalid API key. Please check your configuration.');
+        errorMessage = 'Invalid API key. Please check your configuration.';
       } else if (error.message?.includes('429')) {
-        throw new Error('Rate limit exceeded. Please try again later.');
+        errorMessage = 'Rate limit exceeded. Please try again later.';
       } else if (error.message?.includes('fetch')) {
-        throw new Error('Network error. Please check your connection and endpoint URL.');
-      } else {
-        throw error;
+        errorMessage = 'Network error. Please check your connection and endpoint URL.';
       }
+      
+      return { success: false, response: null, cancelled: false, error: new Error(errorMessage) };
     }
   }
 
@@ -374,7 +435,7 @@ class AIService {
    * @param {Array} messages - Message array {role, content}
    * @param {Function} onStream - Streaming callback
    * @param {string} logPrefix - Log prefix
-   * @returns {Promise<string>} Full response
+   * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
   async _sendMessageChromeAI(state, messages, onStream, logPrefix) {
     try {
@@ -398,11 +459,20 @@ class AIService {
         
         // Add multi-modal support if enabled in config (default: true)
         const imageSupport = state.config.enableImageSupport !== false;
-        if (imageSupport) {
+        const audioSupport = state.config.enableAudioSupport !== false;
+        
+        if (imageSupport || audioSupport) {
           sessionConfig.expectedInputs = [
-            { type: 'text' },
-            { type: 'image' }
+            { type: 'text' }
           ];
+          
+          if (imageSupport) {
+            sessionConfig.expectedInputs.push({ type: 'image' });
+          }
+          
+          if (audioSupport) {
+            sessionConfig.expectedInputs.push({ type: 'audio' });
+          }
         }
         
         state.chromeAISession = await self.LanguageModel.create(sessionConfig);
@@ -425,10 +495,10 @@ class AIService {
         const stream = state.chromeAISession.promptStreaming(promptInput);
         
         for await (const chunk of stream) {
-          // Check if session was destroyed (aborted)
+          // Check if session was destroyed (aborted) - return cancelled
           if (!state.chromeAISession) {
-            console.log(`${logPrefix} - Chrome AI streaming aborted`);
-            throw new Error('Generation stopped by user');
+            console.log(`${logPrefix} - Chrome AI streaming aborted by user`);
+            return { success: false, response: fullResponse, cancelled: true, error: null };
           }
           
           fullResponse = chunk;
@@ -443,7 +513,7 @@ class AIService {
       }
 
       console.log(`${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);
-      return fullResponse;
+      return { success: true, response: fullResponse, cancelled: false, error: null };
 
     } catch (error) {
       console.error(`${logPrefix} - Chrome AI error:`, error);
@@ -457,13 +527,14 @@ class AIService {
         state.chromeAISession = null;
       }
 
+      let errorMessage = error.message;
       if (error.name === 'NotSupportedError') {
-        throw new Error('Chrome AI not available. Enable required flags at chrome://flags');
+        errorMessage = 'Chrome AI not available. Enable required flags at chrome://flags';
       } else if (error.name === 'QuotaExceededError') {
-        throw new Error('Chrome AI context limit exceeded (1028 tokens). Start a new conversation.');
-      } else {
-        throw error;
+        errorMessage = 'Chrome AI context limit exceeded (1028 tokens). Start a new conversation.';
       }
+      
+      return { success: false, response: null, cancelled: false, error: new Error(errorMessage) };
     }
   }
 

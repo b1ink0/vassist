@@ -72,6 +72,44 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
             />
           </div>
+
+          {/* Image Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="openai-image-support"
+                checked={aiConfig.openai?.enableImageSupport !== false}
+                onChange={(e) => updateAIConfig('openai.enableImageSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="openai-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Image Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending images with text prompts. Enabled by default.
+            </p>
+          </div>
+
+          {/* Audio Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="openai-audio-support"
+                checked={aiConfig.openai?.enableAudioSupport !== false}
+                onChange={(e) => updateAIConfig('openai.enableAudioSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="openai-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Audio Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending audio files with text prompts. Enabled by default.
+            </p>
+          </div>
         </>
       )}
 
@@ -102,6 +140,44 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             />
             <p className="text-xs text-white/50">
               Model name (e.g., llama2, mistral, codellama)
+            </p>
+          </div>
+
+          {/* Image Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="ollama-image-support"
+                checked={aiConfig.ollama?.enableImageSupport !== false}
+                onChange={(e) => updateAIConfig('ollama.enableImageSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="ollama-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Image Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending images with text prompts. Enabled by default. Requires multi-modal capable model.
+            </p>
+          </div>
+
+          {/* Audio Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="ollama-audio-support"
+                checked={aiConfig.ollama?.enableAudioSupport !== false}
+                onChange={(e) => updateAIConfig('ollama.enableAudioSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="ollama-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Audio Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending audio files with text prompts. Enabled by default. Requires multi-modal capable model.
             </p>
           </div>
         </>
@@ -257,6 +333,25 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             </div>
             <p className="text-xs text-white/50">
               Allows sending images with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
+            </p>
+          </div>
+
+          {/* Audio Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="chrome-ai-audio-support"
+                checked={aiConfig.chromeAi?.enableAudioSupport !== false}
+                onChange={(e) => updateAIConfig('chromeAi.enableAudioSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="chrome-ai-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Audio Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending audio files with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
             </p>
           </div>
 

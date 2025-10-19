@@ -3,6 +3,7 @@ import { TTSServiceProxy } from '../services/proxies';
 import StorageManager from '../managers/StorageManager';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
+import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 
 const ChatContainer = ({ 
@@ -579,12 +580,15 @@ const ChatContainer = ({
               const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
               const ttsEnabled = ttsConfig.enabled;
               
+              // Check if message has audio attachments
+              const hasAudio = isUser && msg.audios && msg.audios.length > 0;
+              
               return (
                 <div
                   key={messageIndex}
                   className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="flex items-start gap-2 max-w-[80%]">
+                  <div className={`flex items-start gap-2 ${hasAudio ? 'w-[80%]' : 'max-w-[80%]'}`}>
                     {/* Speaker icon for assistant messages (only show if TTS is enabled) */}
                     {!isUser && !isError && ttsEnabled && (
                       <button
@@ -617,7 +621,7 @@ const ChatContainer = ({
                           : isUser
                           ? 'rounded-[20px] rounded-tr-md'
                           : 'rounded-[20px] rounded-tl-md'
-                      }`}
+                      } ${hasAudio ? 'w-full' : ''}`}
                     >
                       {/* Image attachments (for user messages) */}
                       {isUser && msg.images && msg.images.length > 0 && (
@@ -627,8 +631,24 @@ const ChatContainer = ({
                               key={imgIndex}
                               src={imgUrl}
                               alt={`Attachment ${imgIndex + 1}`}
-                              className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30"
+                              className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30 cursor-pointer hover:border-blue-400/50 transition-all"
+                              onClick={() => window.open(imgUrl, '_blank')}
+                              title="Click to view full size"
                             />
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Audio attachments (for user messages) */}
+                      {isUser && msg.audios && msg.audios.length > 0 && (
+                        <div className="mb-3 space-y-2">
+                          {msg.audios.map((audioUrl, audioIndex) => (
+                            <div key={audioIndex} className="w-full">
+                              <AudioPlayer 
+                                audioUrl={audioUrl} 
+                                isLightBackground={isLightBackground}
+                              />
+                            </div>
                           ))}
                         </div>
                       )}

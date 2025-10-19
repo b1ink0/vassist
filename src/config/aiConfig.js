@@ -99,6 +99,7 @@ export const DefaultAIConfig = {
     topK: 3,
     outputLanguage: 'en', // Supported: en, es, ja
     enableImageSupport: true, // Enable multi-modal image support
+    enableAudioSupport: true, // Enable multi-modal audio support
   },
   
   openai: {
@@ -106,6 +107,8 @@ export const DefaultAIConfig = {
     model: 'gpt-4-turbo-preview',
     temperature: 0.7,
     maxTokens: 2000,
+    enableImageSupport: true, // Enable multi-modal image support
+    enableAudioSupport: true, // Enable multi-modal audio support
   },
   
   ollama: {
@@ -113,6 +116,8 @@ export const DefaultAIConfig = {
     model: 'llama2',
     temperature: 0.7,
     maxTokens: 2000,
+    enableImageSupport: true, // Enable multi-modal image support
+    enableAudioSupport: true, // Enable multi-modal audio support
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',

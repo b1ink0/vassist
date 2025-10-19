@@ -21,9 +21,10 @@ class ChatManager {
    * Add a message to the conversation
    * @param {string} role - Message role: 'system', 'user', or 'assistant'
    * @param {string|Array} content - Message content (string or array for multi-modal)
-   * @param {Array} images - Optional array of image data URLs (for backward compatibility)
+   * @param {Array} images - Optional array of image data URLs
+   * @param {Array} audios - Optional array of audio data URLs
    */
-  addMessage(role, content, images = null) {
+  addMessage(role, content, images = null, audios = null) {
     const message = {
       role,
       content,
@@ -33,6 +34,11 @@ class ChatManager {
     // Support for multi-modal: add images if provided
     if (images && images.length > 0) {
       message.images = images;
+    }
+    
+    // Support for audio attachments
+    if (audios && audios.length > 0) {
+      message.audios = audios;
     }
     
     this.messages.push(message);
@@ -45,8 +51,9 @@ class ChatManager {
     this.trimMessages();
     
     if (role === 'user') {
-      const imageInfo = images ? ` with ${images.length} image(s)` : '';
-      console.log(`[ChatManager] Added ${role} message${imageInfo} (${this.messages.length} total)`);
+      const imageInfo = images && images.length > 0 ? ` with ${images.length} image(s)` : '';
+      const audioInfo = audios && audios.length > 0 ? ` with ${audios.length} audio(s)` : '';
+      console.log(`[ChatManager] Added ${role} message${imageInfo}${audioInfo} (${this.messages.length} total)`);
     }
   }
 
@@ -126,6 +133,11 @@ class ChatManager {
       // Include images if present
       if (m.images && m.images.length > 0) {
         msg.images = m.images;
+      }
+      
+      // Include audios if present
+      if (m.audios && m.audios.length > 0) {
+        msg.audios = m.audios;
       }
       
       return msg;
