@@ -30,4 +30,22 @@ export default defineConfig({
     format: 'es', // Use ES modules for workers
     plugins: () => [],
   },
+  server: {
+    // Configure MIME types for WASM files
+    middlewares: [
+      {
+        apply: 'pre',
+        handle(req, res, next) {
+          if (req.url?.endsWith('.wasm')) {
+            res.setHeader('Content-Type', 'application/wasm');
+          }
+          next();
+        },
+      },
+    ],
+  },
+  optimizeDeps: {
+    // Exclude WASM files from dependency optimization
+    exclude: ['@babylonjs/havok'],
+  },
 })

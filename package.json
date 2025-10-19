@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:extension": "vite build --config vite.config.extension.js --watch",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:extension\"",
+    "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --watch\"",
     "build": "vite build",
     "build:extension": "vite build --config vite.config.extension.js",
-    "build:all": "concurrently \"npm run build\" \"npm run build:extension\"",
+    "build:all": "concurrently \"vite build\" \"vite build --config vite.config.extension.js\"",
     "build:extension:prod": "NODE_ENV=production vite build --config vite.config.extension.js",
     "lint": "eslint .",
     "preview": "vite preview"
