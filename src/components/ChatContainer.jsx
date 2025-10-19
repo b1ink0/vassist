@@ -619,6 +619,20 @@ const ChatContainer = ({
                           : 'rounded-[20px] rounded-tl-md'
                       }`}
                     >
+                      {/* Image attachments (for user messages) */}
+                      {isUser && msg.images && msg.images.length > 0 && (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {msg.images.map((imgUrl, imgIndex) => (
+                            <img 
+                              key={imgIndex}
+                              src={imgUrl}
+                              alt={`Attachment ${imgIndex + 1}`}
+                              className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30"
+                            />
+                          ))}
+                        </div>
+                      )}
+                      
                       <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
                         {msg.content}
                       </div>

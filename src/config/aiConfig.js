@@ -98,6 +98,7 @@ export const DefaultAIConfig = {
     temperature: 1.0,
     topK: 3,
     outputLanguage: 'en', // Supported: en, es, ja
+    enableImageSupport: true, // Enable multi-modal image support
   },
   
   openai: {

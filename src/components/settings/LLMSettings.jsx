@@ -82,7 +82,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
             <input
               type="text"
-              value={aiConfig.ollama?.endpoint || 'http://localhost:11434'}
+              value={aiConfig.ollama?.endpoint ?? ''}
               onChange={(e) => updateAIConfig('ollama.endpoint', e.target.value)}
               placeholder="http://localhost:11434"
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -95,7 +95,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             <label className="block text-sm font-medium text-white/90">Model</label>
             <input
               type="text"
-              value={aiConfig.ollama?.model || 'llama2'}
+              value={aiConfig.ollama?.model ?? ''}
               onChange={(e) => updateAIConfig('ollama.model', e.target.value)}
               placeholder="llama2"
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -238,6 +238,25 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             </select>
             <p className="text-xs text-white/50">
               Specifies the output language for optimal quality and safety
+            </p>
+          </div>
+
+          {/* Image Support */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="chrome-ai-image-support"
+                checked={aiConfig.chromeAi?.enableImageSupport !== false}
+                onChange={(e) => updateAIConfig('chromeAi.enableImageSupport', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+              />
+              <label htmlFor="chrome-ai-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+                Enable Image Support (Multi-modal)
+              </label>
+            </div>
+            <p className="text-xs text-white/50">
+              Allows sending images with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
             </p>
           </div>
 

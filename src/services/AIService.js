@@ -95,11 +95,28 @@ class AIService {
         }
         
         const chromeAiConfig = config.chromeAi || config;
+        const newImageSupport = chromeAiConfig.enableImageSupport !== false;
+        
+        // Check if image support setting changed
+        const imageSupportChanged = state.config && 
+          (state.config.enableImageSupport !== newImageSupport);
+        
+        // If image support changed, destroy existing session to force recreation
+        if (imageSupportChanged && state.chromeAISession) {
+          console.log(`${logPrefix} - Image support changed, destroying existing session`);
+          try {
+            state.chromeAISession.destroy();
+          } catch (error) {
+            console.warn(`${logPrefix} - Error destroying session:`, error);
+          }
+          state.chromeAISession = null;
+        }
+        
         state.config = {
           temperature: chromeAiConfig.temperature,
           topK: chromeAiConfig.topK,
+          enableImageSupport: newImageSupport,
         };
-        state.chromeAISession = null;
         
         console.log(`${logPrefix} - Chrome AI configured:`, state.config);
       }
@@ -184,6 +201,72 @@ class AIService {
   }
 
   /**
+   * Convert data URL to Blob
+   * @param {string} dataUrl - Data URL (e.g., data:image/jpeg;base64,...)
+   * @returns {Blob} Image blob
+   */
+  _dataUrlToBlob(dataUrl) {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  }
+
+  /**
+   * Format messages for multi-modal support
+   * Converts ChatManager format to provider-specific format
+   * @param {Array} messages - Messages from ChatManager
+   * @param {string} provider - Provider name
+   * @returns {Array} Formatted messages
+   */
+  _formatMultiModalMessages(messages, provider) {
+    return messages.map(msg => {
+      // If no images, return as-is
+      if (!msg.images || msg.images.length === 0) {
+        return { role: msg.role, content: msg.content };
+      }
+
+      // Multi-modal message with images
+      if (provider === AIProviders.CHROME_AI || provider === 'chrome-ai') {
+        // Chrome AI format: content is array of {type, value}
+        const content = [
+          { type: 'text', value: msg.content }
+        ];
+        
+        // Add images
+        for (const imageDataUrl of msg.images) {
+          content.push({
+            type: 'image',
+            value: this._dataUrlToBlob(imageDataUrl)
+          });
+        }
+        
+        return { role: msg.role, content };
+      } else {
+        // OpenAI/Ollama format: content is array of {type, text/image_url}
+        const content = [
+          { type: 'text', text: msg.content }
+        ];
+        
+        // Add images
+        for (const imageDataUrl of msg.images) {
+          content.push({
+            type: 'image_url',
+            image_url: { url: imageDataUrl }
+          });
+        }
+        
+        return { role: msg.role, content };
+      }
+    });
+  }
+
+  /**
    * Send message with streaming support
    * 
    * @param {Array} messages - Array of message objects
@@ -199,14 +282,24 @@ class AIService {
     }
 
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    
+    // Check if any message contains images
+    const hasImages = messages.some(m => m.images && m.images.length > 0);
+    
     console.log(`${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
       model: state.config.model || 'chrome-ai',
+      hasImages,
     });
+
+    // Format messages for multi-modal if needed
+    const formattedMessages = hasImages 
+      ? this._formatMultiModalMessages(messages, state.provider)
+      : messages;
 
     // Chrome AI implementation
     if (state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') {
-      return await this._sendMessageChromeAI(state, messages, onStream, logPrefix);
+      return await this._sendMessageChromeAI(state, formattedMessages, onStream, logPrefix);
     }
 
     // Create new abort controller for this request
@@ -216,7 +309,7 @@ class AIService {
       // Create streaming request with abort signal
       const stream = await state.client.chat.completions.create({
         model: state.config.model,
-        messages: messages,
+        messages: formattedMessages,
         temperature: state.config.temperature,
         max_tokens: state.config.maxTokens,
         stream: true,
@@ -228,6 +321,12 @@ class AIService {
       
       // Process streaming chunks
       for await (const chunk of stream) {
+        // Check if request was aborted
+        if (!state.abortController) {
+          console.log(`${logPrefix} - Streaming aborted`);
+          throw new Error('Generation stopped by user');
+        }
+        
         const content = chunk.choices[0]?.delta?.content || '';
         
         if (content) {
@@ -289,13 +388,25 @@ class AIService {
           throw new Error('Chrome AI LanguageModel not available');
         }
         
-        state.chromeAISession = await self.LanguageModel.create({
+        // Session config
+        const sessionConfig = {
           temperature: state.config.temperature,
           topK: state.config.topK,
           language: state.config.outputLanguage || 'en',
           initialPrompts: systemPrompts.length > 0 ? systemPrompts : undefined,
-        });
-        console.log(`${logPrefix} - Chrome AI session created`);
+        };
+        
+        // Add multi-modal support if enabled in config (default: true)
+        const imageSupport = state.config.enableImageSupport !== false;
+        if (imageSupport) {
+          sessionConfig.expectedInputs = [
+            { type: 'text' },
+            { type: 'image' }
+          ];
+        }
+        
+        state.chromeAISession = await self.LanguageModel.create(sessionConfig);
+        console.log(`${logPrefix} - Chrome AI session created ${imageSupport ? 'with image support' : ''}`);
         
         messages = conversationMsgs;
       }
@@ -303,12 +414,23 @@ class AIService {
       const lastMessage = messages[messages.length - 1];
       console.log(`${logPrefix} - Chrome AI prompting with ${messages.length} message(s)`);
 
+      // For multi-modal messages (content is array), pass as message object with role
+      // For text-only messages (content is string), pass just the string
+      const isMultiModal = Array.isArray(lastMessage.content);
+      const promptInput = isMultiModal ? [lastMessage] : lastMessage.content;
+      
       let fullResponse = '';
 
       if (onStream) {
-        const stream = state.chromeAISession.promptStreaming(lastMessage.content);
+        const stream = state.chromeAISession.promptStreaming(promptInput);
         
         for await (const chunk of stream) {
+          // Check if session was destroyed (aborted)
+          if (!state.chromeAISession) {
+            console.log(`${logPrefix} - Chrome AI streaming aborted`);
+            throw new Error('Generation stopped by user');
+          }
+          
           fullResponse = chunk;
           const previousLength = fullResponse.length - chunk.length;
           const newContent = chunk.slice(previousLength > 0 ? previousLength : 0);
@@ -317,7 +439,7 @@ class AIService {
           }
         }
       } else {
-        fullResponse = await state.chromeAISession.prompt(lastMessage.content);
+        fullResponse = await state.chromeAISession.prompt(promptInput);
       }
 
       console.log(`${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);

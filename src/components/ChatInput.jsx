@@ -16,6 +16,10 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   // Voice conversation mode
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
+  
+  // Multi-modal support
+  const [attachedImages, setAttachedImages] = useState([]);
+  const fileInputRef = useRef(null);
 
   /**
    * Detect background color brightness behind the input area
@@ -85,11 +89,14 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     };
   }, [isVisible]);
 
-  // Auto-focus when visible
+  // Auto-focus when visible and clear images when hidden
   useEffect(() => {
     if (isVisible && inputRef.current) {
       inputRef.current.focus();
       console.log('[ChatInput] Focused input');
+    } else if (!isVisible) {
+      // Clear images when input is closed
+      setAttachedImages([]);
     }
   }, [isVisible]);
 
@@ -167,6 +174,72 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   }, [onVoiceTranscription]);
 
   /**
+   * Handle image file selection
+   */
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    const MAX_IMAGES = 5;
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per image
+    
+    // Check if adding these files would exceed limit
+    if (attachedImages.length + files.length > MAX_IMAGES) {
+      setRecordingError(`Maximum ${MAX_IMAGES} images allowed`);
+      setTimeout(() => setRecordingError(''), 3000);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+    
+    files.forEach(file => {
+      if (!file.type.startsWith('image/')) {
+        setRecordingError('Please select only image files');
+        setTimeout(() => setRecordingError(''), 3000);
+        return;
+      }
+      
+      if (file.size > MAX_FILE_SIZE) {
+        setRecordingError(`Image "${file.name}" is too large (max 10MB)`);
+        setTimeout(() => setRecordingError(''), 3000);
+        return;
+      }
+      
+      // Read file as data URL
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachedImages(prev => {
+          // Double-check limit
+          if (prev.length >= MAX_IMAGES) {
+            return prev;
+          }
+          return [...prev, {
+            dataUrl: event.target.result,
+            name: file.name,
+            size: file.size
+          }];
+        });
+      };
+      reader.onerror = () => {
+        setRecordingError(`Failed to read image "${file.name}"`);
+        setTimeout(() => setRecordingError(''), 3000);
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  /**
+   * Remove attached image
+   */
+  const handleRemoveImage = (index) => {
+    setAttachedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  /**
    * Handle form submission
    */
   const handleSubmit = (e) => {
@@ -174,11 +247,19 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
     
     const trimmedMessage = message.trim();
     
-    if (trimmedMessage) {
-      console.log('[ChatInput] Sending message:', trimmedMessage);
-      onSend(trimmedMessage);
-      setMessage(''); // Clear input after sending
+    // Require either text or images
+    if (!trimmedMessage && attachedImages.length === 0) {
+      return;
     }
+    
+    console.log('[ChatInput] Sending message:', trimmedMessage, `with ${attachedImages.length} image(s)`);
+    
+    // Send message with images
+    onSend(trimmedMessage || 'What is in this image?', attachedImages.map(img => img.dataUrl));
+    
+    // Clear input and images after sending
+    setMessage('');
+    setAttachedImages([]);
   };
 
   /**
@@ -190,6 +271,55 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
       console.log('[ChatInput] Escape pressed - closing');
       onClose();
     }
+  };
+
+  /**
+   * Handle paste events for image support
+   */
+  const handlePaste = (e) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith('image/'));
+    
+    if (imageItems.length === 0) return;
+    
+    e.preventDefault(); // Prevent default paste behavior for images
+    
+    const MAX_IMAGES = 5;
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    
+    if (attachedImages.length + imageItems.length > MAX_IMAGES) {
+      setRecordingError(`Maximum ${MAX_IMAGES} images allowed`);
+      setTimeout(() => setRecordingError(''), 3000);
+      return;
+    }
+    
+    imageItems.forEach(item => {
+      const file = item.getAsFile();
+      if (!file) return;
+      
+      if (file.size > MAX_FILE_SIZE) {
+        setRecordingError(`Pasted image is too large (max 10MB)`);
+        setTimeout(() => setRecordingError(''), 3000);
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachedImages(prev => {
+          if (prev.length >= MAX_IMAGES) return prev;
+          return [...prev, {
+            dataUrl: event.target.result,
+            name: `pasted-${Date.now()}.png`,
+            size: file.size
+          }];
+        });
+      };
+      reader.onerror = () => {
+        setRecordingError('Failed to read pasted image');
+        setTimeout(() => setRecordingError(''), 3000);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   /**
@@ -226,6 +356,9 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
         // Start voice mode - stop any playing TTS first
         console.log('[ChatInput] Starting voice conversation mode - stopping TTS');
         TTSServiceProxy.stopPlayback();
+        
+        // Clear any attached images (voice mode doesn't support images)
+        setAttachedImages([]);
         
         setRecordingError('');
         await VoiceConversationService.start();
@@ -331,6 +464,36 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
       
       {/* Input form - on top of blur */}
       <div className="relative p-4">
+        {/* Image preview thumbnails */}
+        {attachedImages.length > 0 && (
+          <div className="max-w-3xl mx-auto mb-2">
+            <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                {attachedImages.map((img, index) => (
+                  <div key={index} className="relative group">
+                    <img 
+                      src={img.dataUrl} 
+                      alt={img.name}
+                      className="w-16 h-16 object-cover rounded-lg border-2 border-opacity-30 border-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      title="Remove image"
+                    >
+                      ✕
+                    </button>
+                    <div className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs mt-1 text-center truncate w-16`} title={img.name}>
+                      {img.name.split('.')[0].substring(0, 8)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Error message with close button */}
         {recordingError && (
           <div className="glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2">
@@ -424,24 +587,52 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
                 </span>
               </button>
 
+              {/* Image Upload Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isVoiceMode || isRecording || isProcessingRecording}
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-3 rounded-xl transition-all ${
+                  attachedImages.length > 0 ? 'glass-success' : ''
+                } ${isVoiceMode || isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={attachedImages.length > 0 ? `${attachedImages.length} image(s) attached` : 'Attach Image'}
+              >
+                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>
+                  {attachedImages.length > 0 ? `📎 ${attachedImages.length}` : '🖼️'}
+                </span>
+              </button>
+              
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
               <input
                 ref={inputRef}
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={
                   isProcessingRecording 
                     ? 'Processing audio...' 
                     : isRecording 
                     ? 'Recording... Click mic to stop' 
+                    : attachedImages.length > 0
+                    ? `${attachedImages.length} image(s) attached - Type message or send...`
                     : 'Type your message... (Esc to close)'
                 }
                 className={`glass-input ${isLightBackground ? 'glass-input-dark glass-placeholder-dark' : 'glass-placeholder'} flex-1 px-5 py-3 rounded-xl focus:outline-none transition-all`}
               />
               <button
                 type="submit"
-                disabled={!message.trim()}
+                disabled={!message.trim() && attachedImages.length === 0}
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium`}
               >
                 <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>Send</span>

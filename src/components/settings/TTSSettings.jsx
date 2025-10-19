@@ -126,7 +126,7 @@ const TTSSettings = ({ isLightBackground }) => {
                 <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
                 <input
                   type="text"
-                  value={ttsConfig['openai-compatible']?.endpoint || 'http://localhost:8000'}
+                  value={ttsConfig['openai-compatible']?.endpoint ?? ''}
                   onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
                   placeholder="http://localhost:8000"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -139,7 +139,7 @@ const TTSSettings = ({ isLightBackground }) => {
                 <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
                 <input
                   type="password"
-                  value={ttsConfig['openai-compatible']?.apiKey || ''}
+                  value={ttsConfig['openai-compatible']?.apiKey ?? ''}
                   onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
                   placeholder="Leave empty if not required"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -149,7 +149,7 @@ const TTSSettings = ({ isLightBackground }) => {
                 <label className="block text-sm font-medium text-white/90">Model</label>
                 <input
                   type="text"
-                  value={ttsConfig['openai-compatible']?.model || 'tts'}
+                  value={ttsConfig['openai-compatible']?.model ?? ''}
                   onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
                   placeholder="tts"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -159,7 +159,7 @@ const TTSSettings = ({ isLightBackground }) => {
                 <label className="block text-sm font-medium text-white/90">Voice</label>
                 <input
                   type="text"
-                  value={ttsConfig['openai-compatible']?.voice || 'default'}
+                  value={ttsConfig['openai-compatible']?.voice ?? ''}
                   onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
                   placeholder="default"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}

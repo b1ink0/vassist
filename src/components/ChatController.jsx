@@ -151,15 +151,15 @@ const ChatController = ({
   }
 
   /**
-   * Handle message send with AI integration
+   * Handle text message submission
    * Flow: User message → Think → AI Stream → Speak → Idle
-   * Now includes TTS generation with chunking
+   * Now includes TTS generation with chunking and multi-modal support
    */
-  const handleMessageSend = async (message) => {
-    console.log('[ChatController] Message sent:', message)
+  const handleMessageSend = async (message, images = null) => {
+    console.log('[ChatController] Message sent:', message, images ? `with ${images.length} image(s)` : '')
 
-    // Add user message to chat
-    ChatManager.addMessage('user', message)
+    // Add user message to chat (with images if provided)
+    ChatManager.addMessage('user', message, images)
     setChatMessages(ChatManager.getMessages())
 
     setIsProcessing(true)
@@ -327,9 +327,14 @@ const ChatController = ({
         assistantRef.current.idle()
       }
 
-      // Show error message
-      ChatManager.addMessage('assistant', `Error: ${error.message}`)
-      setChatMessages([...ChatManager.getMessages()])
+      // Only show error message if not user-initiated abort
+      if (error.message !== 'Generation stopped by user') {
+        // Show error message
+        ChatManager.addMessage('assistant', `Error: ${error.message}`)
+        setChatMessages([...ChatManager.getMessages()])
+      } else {
+        console.log('[ChatController] Generation stopped by user - no error message shown')
+      }
 
     } finally {
       setIsProcessing(false)
@@ -513,9 +518,14 @@ const ChatController = ({
     } catch (error) {
       console.error('[ChatController] Voice AI error:', error)
       
-      // Show error message
-      ChatManager.addMessage('assistant', `Error: ${error.message}`)
-      setChatMessages([...ChatManager.getMessages()])
+      // Only show error message if not user-initiated abort
+      if (error.message !== 'Generation stopped by user') {
+        // Show error message
+        ChatManager.addMessage('assistant', `Error: ${error.message}`)
+        setChatMessages([...ChatManager.getMessages()])
+      } else {
+        console.log('[ChatController] Voice generation stopped by user - no error message shown')
+      }
 
       // Return to listening state on error
       if (VoiceConversationService.isConversationActive()) {

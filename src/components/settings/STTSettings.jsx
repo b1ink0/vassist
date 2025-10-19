@@ -101,7 +101,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
                 <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
                 <input
                   type="text"
-                  value={sttConfig['openai-compatible']?.endpoint || 'http://localhost:8000'}
+                  value={sttConfig['openai-compatible']?.endpoint ?? ''}
                   onChange={(e) => updateSTTConfig('openai-compatible.endpoint', e.target.value)}
                   placeholder="http://localhost:8000"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -114,7 +114,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
                 <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
                 <input
                   type="password"
-                  value={sttConfig['openai-compatible']?.apiKey || ''}
+                  value={sttConfig['openai-compatible']?.apiKey ?? ''}
                   onChange={(e) => updateSTTConfig('openai-compatible.apiKey', e.target.value)}
                   placeholder="Leave empty if not required"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
@@ -124,7 +124,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
                 <label className="block text-sm font-medium text-white/90">Model</label>
                 <input
                   type="text"
-                  value={sttConfig['openai-compatible']?.model || 'whisper'}
+                  value={sttConfig['openai-compatible']?.model ?? ''}
                   onChange={(e) => updateSTTConfig('openai-compatible.model', e.target.value)}
                   placeholder="whisper"
                   className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}

@@ -20,14 +20,20 @@ class ChatManager {
   /**
    * Add a message to the conversation
    * @param {string} role - Message role: 'system', 'user', or 'assistant'
-   * @param {string} content - Message content
+   * @param {string|Array} content - Message content (string or array for multi-modal)
+   * @param {Array} images - Optional array of image data URLs (for backward compatibility)
    */
-  addMessage(role, content) {
+  addMessage(role, content, images = null) {
     const message = {
       role,
       content,
       timestamp: Date.now(),
     };
+    
+    // Support for multi-modal: add images if provided
+    if (images && images.length > 0) {
+      message.images = images;
+    }
     
     this.messages.push(message);
     
@@ -39,7 +45,8 @@ class ChatManager {
     this.trimMessages();
     
     if (role === 'user') {
-      console.log(`[ChatManager] Added ${role} message (${this.messages.length} total)`);
+      const imageInfo = images ? ` with ${images.length} image(s)` : '';
+      console.log(`[ChatManager] Added ${role} message${imageInfo} (${this.messages.length} total)`);
     }
   }
 
@@ -109,11 +116,20 @@ class ChatManager {
       });
     }
 
-    // Add all conversation messages
-    formatted.push(...this.messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    })));
+    // Add all conversation messages with multi-modal support
+    formatted.push(...this.messages.map(m => {
+      const msg = {
+        role: m.role,
+        content: m.content,
+      };
+      
+      // Include images if present
+      if (m.images && m.images.length > 0) {
+        msg.images = m.images;
+      }
+      
+      return msg;
+    }));
 
     return formatted;
   }
