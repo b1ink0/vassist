@@ -1,4 +1,4 @@
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
 
 /**
@@ -11,6 +11,21 @@ class BackgroundDetector {
       return BackgroundDetector.instance;
     }
     BackgroundDetector.instance = this;
+    this.cachedUIConfig = DefaultUIConfig; // Cache config for sync access
+    this._loadConfig(); // Load async in background
+  }
+
+  /**
+   * Load and cache UI config from storage
+   */
+  async _loadConfig() {
+    try {
+      const config = await storageManager.config.load('uiConfig', DefaultUIConfig);
+      this.cachedUIConfig = config;
+    } catch (error) {
+      console.error('[BackgroundDetector] Failed to load UI config:', error);
+      this.cachedUIConfig = DefaultUIConfig;
+    }
   }
 
   /**
@@ -31,8 +46,8 @@ class BackgroundDetector {
     } = options;
 
     try {
-      // Get UI config
-      const uiConfig = StorageManager.getConfig('uiConfig', DefaultUIConfig);
+      // Get UI config from cache (loads async in background)
+      const uiConfig = this.cachedUIConfig;
       const bgConfig = uiConfig.backgroundDetection || DefaultUIConfig.backgroundDetection;
       
       // If forced mode, skip detection

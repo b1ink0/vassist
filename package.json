@@ -20,6 +20,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "babylon-mmd": "^0.68.0",
     "concurrently": "^9.2.1",
+    "dexie": "^4.2.1",
     "openai": "^6.3.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

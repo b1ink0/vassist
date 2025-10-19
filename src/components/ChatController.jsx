@@ -5,7 +5,7 @@ import ChatContainer from './ChatContainer'
 import ChatManager from '../managers/ChatManager'
 import { AIServiceProxy, TTSServiceProxy } from '../services/proxies'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
-import StorageManager from '../managers/StorageManager'
+import storageManager from '../storage'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 
 const ChatController = ({ 
@@ -192,7 +192,17 @@ const ChatController = ({
     await new Promise(resolve => setTimeout(resolve, 500))
 
     // Load system prompt from config
-    const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig)
+    let savedConfig;
+    let ttsConfig;
+    try {
+      savedConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
+      ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+    } catch (error) {
+      console.error('[ChatController] Failed to load configs:', error);
+      savedConfig = DefaultAIConfig;
+      ttsConfig = DefaultTTSConfig;
+    }
+    
     const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt
 
     console.log('[ChatController] System prompt:', systemPrompt)
@@ -201,8 +211,7 @@ const ChatController = ({
     const messages = ChatManager.getFormattedMessages(systemPrompt)
     console.log('[ChatController] Messages to AI:', messages)
 
-    // Load TTS config
-    const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig)
+    // Check if TTS is enabled
     const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured()
 
     // Resume TTS playback for new generation
@@ -401,11 +410,19 @@ const ChatController = ({
     }
 
     // Load system prompt and TTS config
-    const savedConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig)
-    const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt
+    let voiceAIConfig;
+    let voiceTTSConfig;
+    try {
+      voiceAIConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
+      voiceTTSConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+    } catch (error) {
+      console.error('[ChatController] Failed to load configs in handleVoiceAIResponse:', error);
+      voiceAIConfig = DefaultAIConfig;
+      voiceTTSConfig = DefaultTTSConfig;
+    }
     
-    const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig)
-    const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured()
+    const systemPrompt = voiceAIConfig.systemPrompt || DefaultAIConfig.systemPrompt
+    const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured()
 
     // Get formatted messages
     const messages = ChatManager.getFormattedMessages(systemPrompt)

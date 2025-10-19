@@ -9,10 +9,10 @@
 import { backgroundBridge } from './BackgroundBridge.js';
 import { tabManager } from './TabManager.js';
 import { offscreenManager } from './OffscreenManager.js';
-import { storageService } from './StorageService.js';
 import { MessageTypes } from '../shared/MessageTypes.js';
 
 // Import services directly from src (unified implementation)
+import storageManager from '../../src/storage/StorageManager.js';
 import aiService from '../../src/services/AIService.js';
 import ttsService from '../../src/services/TTSService.js';
 import sttService from '../../src/services/STTService.js';
@@ -22,25 +22,193 @@ console.log('[Background] Service worker starting...');
 /**
  * Register message handlers
  */
-function registerHandlers() {
-  // Storage handlers
-  backgroundBridge.registerHandler(MessageTypes.STORAGE_GET, async (message) => {
-    const { key, defaultValue } = message.data;
-    return await storageService.get(key, defaultValue);
-  });
-
-  backgroundBridge.registerHandler(MessageTypes.STORAGE_SET, async (message) => {
+async function registerHandlers() {
+  // Storage handlers - CONFIG namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_SAVE, async (message) => {
     const { key, value } = message.data;
-    return await storageService.set(key, value);
+    return await storageManager.config.save(key, value);
   });
 
-  backgroundBridge.registerHandler(MessageTypes.STORAGE_REMOVE, async (message) => {
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_LOAD, async (message) => {
+    const { key, defaultValue } = message.data;
+    return await storageManager.config.load(key, defaultValue);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_EXISTS, async (message) => {
     const { key } = message.data;
-    return await storageService.remove(key);
+    return await storageManager.config.exists(key);
   });
 
-  backgroundBridge.registerHandler(MessageTypes.STORAGE_CLEAR, async () => {
-    return await storageService.clear();
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_REMOVE, async (message) => {
+    const { key } = message.data;
+    return await storageManager.config.remove(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_GET_ALL, async () => {
+    return await storageManager.config.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_CLEAR, async () => {
+    return await storageManager.config.clear();
+  });
+
+  // Storage handlers - SETTINGS namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_SAVE, async (message) => {
+    const { key, value } = message.data;
+    return await storageManager.settings.save(key, value);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_LOAD, async (message) => {
+    const { key, defaultValue } = message.data;
+    return await storageManager.settings.load(key, defaultValue);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_EXISTS, async (message) => {
+    const { key } = message.data;
+    return await storageManager.settings.exists(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_REMOVE, async (message) => {
+    const { key } = message.data;
+    return await storageManager.settings.remove(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_GET_ALL, async () => {
+    return await storageManager.settings.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_CLEAR, async () => {
+    return await storageManager.settings.clear();
+  });
+
+  // Storage handlers - CACHE namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_SAVE, async (message) => {
+    const { key, value, ttlSeconds } = message.data;
+    return await storageManager.cache.save(key, value, ttlSeconds);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_LOAD, async (message) => {
+    const { key } = message.data;
+    return await storageManager.cache.load(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_EXISTS, async (message) => {
+    const { key } = message.data;
+    return await storageManager.cache.exists(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_REMOVE, async (message) => {
+    const { key } = message.data;
+    return await storageManager.cache.remove(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_GET_ALL, async () => {
+    return await storageManager.cache.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_CLEANUP, async () => {
+    return await storageManager.cache.cleanup();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_CLEAR, async () => {
+    return await storageManager.cache.clear();
+  });
+
+  // Storage handlers - CHAT namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_SAVE, async (message) => {
+    const { chatId, data } = message.data;
+    return await storageManager.chat.save(chatId, data);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_LOAD, async (message) => {
+    const { chatId } = message.data;
+    return await storageManager.chat.load(chatId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_EXISTS, async (message) => {
+    const { chatId } = message.data;
+    return await storageManager.chat.exists(chatId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_REMOVE, async (message) => {
+    const { chatId } = message.data;
+    return await storageManager.chat.remove(chatId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_GET_ALL, async () => {
+    return await storageManager.chat.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_CLEAR, async () => {
+    return await storageManager.chat.clear();
+  });
+
+  // Storage handlers - FILES namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_SAVE, async (message) => {
+    const { fileId, data, category } = message.data;
+    return await storageManager.files.save(fileId, data, category);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_LOAD, async (message) => {
+    const { fileId } = message.data;
+    return await storageManager.files.load(fileId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_EXISTS, async (message) => {
+    const { fileId } = message.data;
+    return await storageManager.files.exists(fileId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_REMOVE, async (message) => {
+    const { fileId } = message.data;
+    return await storageManager.files.remove(fileId);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_ALL, async () => {
+    return await storageManager.files.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_BY_CATEGORY, async (message) => {
+    const { category } = message.data;
+    return await storageManager.files.getByCategory(category);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_CLEAR, async () => {
+    return await storageManager.files.clear();
+  });
+
+  // Storage handlers - DATA namespace
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_SAVE, async (message) => {
+    const { key, value, category } = message.data;
+    return await storageManager.data.save(key, value, category);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_LOAD, async (message) => {
+    const { key } = message.data;
+    return await storageManager.data.load(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_EXISTS, async (message) => {
+    const { key } = message.data;
+    return await storageManager.data.exists(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_REMOVE, async (message) => {
+    const { key } = message.data;
+    return await storageManager.data.remove(key);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_GET_ALL, async () => {
+    return await storageManager.data.getAll();
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_GET_BY_CATEGORY, async (message) => {
+    const { category } = message.data;
+    return await storageManager.data.getByCategory(category);
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_CLEAR, async () => {
+    return await storageManager.data.clear();
   });
 
   // Tab management

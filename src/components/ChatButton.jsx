@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 
 const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabled = false, isChatOpen = false }) => {
   const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
@@ -12,22 +12,31 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
   useEffect(() => {
     // If model is disabled, load saved position or use default (bottom-right corner)
     if (modelDisabled) {
-      // Default to bottom-right: 20px from edges, 48px is button size
-      const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
-      const savedPos = StorageManager.getConfig('chatButtonPosition', defaultPos);
+      const loadButtonPosition = async () => {
+        const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
+        try {
+          const savedPos = await storageManager.config.load('chatButtonPosition', defaultPos);
+          
+          // Ensure button is within viewport bounds
+          const buttonSize = 48;
+          const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
+          const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
+          
+          const validPos = { x: boundedX, y: boundedY };
+          setButtonPos(validPos);
+          
+          // Save corrected position if it was out of bounds
+          if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
+            await storageManager.config.save('chatButtonPosition', validPos);
+          }
+        } catch (error) {
+          console.error('[ChatButton] Failed to load button position:', error);
+          const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
+          setButtonPos(defaultPos);
+        }
+      };
       
-      // Ensure button is within viewport bounds
-      const buttonSize = 48;
-      const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
-      const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
-      
-      const validPos = { x: boundedX, y: boundedY };
-      setButtonPos(validPos);
-      
-      // Save corrected position if it was out of bounds
-      if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
-        StorageManager.saveConfig('chatButtonPosition', validPos);
-      }
+      loadButtonPosition();
     }
   }, [modelDisabled]);
 
@@ -35,7 +44,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
   useEffect(() => {
     if (!modelDisabled) return;
 
-    const handleResize = () => {
+    const handleResize = async () => {
       const buttonSize = 48;
       const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
       const boundedY = Math.max(10, Math.min(buttonPos.y, window.innerHeight - buttonSize - 10));
@@ -43,7 +52,11 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
         const newPos = { x: boundedX, y: boundedY };
         setButtonPos(newPos);
-        StorageManager.saveConfig('chatButtonPosition', newPos);
+        try {
+          await storageManager.config.save('chatButtonPosition', newPos);
+        } catch (error) {
+          console.error('[ChatButton] Failed to save position on resize:', error);
+        }
       }
     };
 
@@ -63,7 +76,9 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       const newY = window.innerHeight - minDistanceFromBottom;
       const newPos = { x: buttonPos.x, y: newY };
       setButtonPos(newPos);
-      StorageManager.saveConfig('chatButtonPosition', newPos);
+      storageManager.config.save('chatButtonPosition', newPos).catch(error => {
+        console.error('[ChatButton] Failed to save position when chat opened:', error);
+      });
       
       // Emit event so container follows
       const event = new CustomEvent('chatButtonMoved', { detail: newPos });
@@ -191,8 +206,10 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     
     setIsDragging(false);
     
-    // Save position to localStorage
-    StorageManager.saveConfig('chatButtonPosition', buttonPos);
+    // Save position to storage
+    storageManager.config.save('chatButtonPosition', buttonPos).catch(error => {
+      console.error('[ChatButton] Failed to save button position:', error);
+    });
     
     // Emit drag end event for ChatContainer border
     const event = new CustomEvent('chatButtonDragEnd');

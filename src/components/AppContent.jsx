@@ -9,19 +9,31 @@ import VirtualAssistant from './VirtualAssistant';
 import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 
 function AppContent({ mode = 'development' }) {
   const [currentState, setCurrentState] = useState('IDLE');
   const [isAssistantReady, setIsAssistantReady] = useState(false);
   const [isChatUIReady, setIsChatUIReady] = useState(false);
   
-  // Initialize from localStorage IMMEDIATELY - don't wait for useEffect
-  const [enableModelLoading, setEnableModelLoading] = useState(() => {
-    const generalConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true });
-    console.log(`[AppContent ${mode}] Initial model loading state:`, generalConfig.enableModelLoading);
-    return generalConfig.enableModelLoading;
-  });
+  // Initialize with default, then load from storage
+  const [enableModelLoading, setEnableModelLoading] = useState(true);
+  
+  // Load general config from storage
+  useEffect(() => {
+    const loadGeneralConfig = async () => {
+      try {
+        const generalConfig = await storageManager.config.load('generalConfig', { enableModelLoading: true });
+        console.log(`[AppContent ${mode}] Initial model loading state:`, generalConfig.enableModelLoading);
+        setEnableModelLoading(generalConfig.enableModelLoading);
+      } catch (error) {
+        console.error('[AppContent] Failed to load general config:', error);
+        setEnableModelLoading(true); // Default to true
+      }
+    };
+    
+    loadGeneralConfig();
+  }, [mode]);
   
   // Refs for accessing internal APIs
   const assistantRef = useRef(null);

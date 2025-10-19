@@ -5,7 +5,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 import { AIServiceProxy, TTSServiceProxy, STTServiceProxy } from '../services/proxies';
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
@@ -67,45 +67,53 @@ export const ConfigProvider = ({ children }) => {
 
   // Load all configs on mount
   useEffect(() => {
-    // Load UI config
-    const savedUiConfig = StorageManager.getConfig('uiConfig', DefaultUIConfig);
-    setUiConfig(savedUiConfig);
-    console.log('[ConfigContext] UI config loaded:', savedUiConfig);
+    const loadConfigs = async () => {
+      try {
+        // Load UI config
+        const savedUiConfig = await storageManager.config.load('uiConfig', DefaultUIConfig);
+        setUiConfig(savedUiConfig);
+        console.log('[ConfigContext] UI config loaded:', savedUiConfig);
 
-    // Load General config
-    const savedGeneralConfig = StorageManager.getConfig('generalConfig', { enableModelLoading: true });
-    setGeneralConfig(savedGeneralConfig);
-    console.log('[ConfigContext] General config loaded:', savedGeneralConfig);
+        // Load General config
+        const savedGeneralConfig = await storageManager.config.load('generalConfig', { enableModelLoading: true });
+        setGeneralConfig(savedGeneralConfig);
+        console.log('[ConfigContext] General config loaded:', savedGeneralConfig);
 
-    // Load AI config
-    const savedAiConfig = StorageManager.getConfig('aiConfig', DefaultAIConfig);
-    setAiConfig(savedAiConfig);
-    try {
-      AIServiceProxy.configure(savedAiConfig);
-      console.log('[ConfigContext] AI Service configured');
-    } catch (error) {
-      console.warn('[ConfigContext] Failed to configure AI Service:', error);
-    }
+        // Load AI config
+        const savedAiConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
+        setAiConfig(savedAiConfig);
+        try {
+          AIServiceProxy.configure(savedAiConfig);
+          console.log('[ConfigContext] AI Service configured');
+        } catch (error) {
+          console.warn('[ConfigContext] Failed to configure AI Service:', error);
+        }
 
-    // Load TTS config
-    const savedTtsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
-    setTtsConfig(savedTtsConfig);
-    try {
-      TTSServiceProxy.configure(savedTtsConfig);
-      console.log('[ConfigContext] TTS Service configured');
-    } catch (error) {
-      console.warn('[ConfigContext] Failed to configure TTS Service:', error);
-    }
+        // Load TTS config
+        const savedTtsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+        setTtsConfig(savedTtsConfig);
+        try {
+          TTSServiceProxy.configure(savedTtsConfig);
+          console.log('[ConfigContext] TTS Service configured');
+        } catch (error) {
+          console.warn('[ConfigContext] Failed to configure TTS Service:', error);
+        }
 
-    // Load STT config
-    const savedSttConfig = StorageManager.getConfig('sttConfig', DefaultSTTConfig);
-    setSttConfig(savedSttConfig);
-    try {
-      STTServiceProxy.configure(savedSttConfig);
-      console.log('[ConfigContext] STT Service configured');
-    } catch (error) {
-      console.warn('[ConfigContext] Failed to configure STT Service:', error);
-    }
+        // Load STT config
+        const savedSttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+        setSttConfig(savedSttConfig);
+        try {
+          STTServiceProxy.configure(savedSttConfig);
+          console.log('[ConfigContext] STT Service configured');
+        } catch (error) {
+          console.warn('[ConfigContext] Failed to configure STT Service:', error);
+        }
+      } catch (error) {
+        console.error('[ConfigContext] Failed to load configs:', error);
+      }
+    };
+
+    loadConfigs();
   }, []);
 
   // UI Config handlers
@@ -125,10 +133,9 @@ export const ConfigProvider = ({ children }) => {
     });
   }, []);
 
-  const saveUIConfig = useCallback(() => {
-    const saved = StorageManager.saveConfig('uiConfig', uiConfig);
-    
-    if (saved) {
+  const saveUIConfig = useCallback(async () => {
+    try {
+      await storageManager.config.save('uiConfig', uiConfig);
       setUiConfigSaved(true);
       setUiConfigError('');
       
@@ -137,8 +144,9 @@ export const ConfigProvider = ({ children }) => {
       
       console.log('[ConfigContext] UI config saved successfully');
       setTimeout(() => setUiConfigSaved(false), 2000);
-    } else {
-      setUiConfigError('Failed to save configuration');
+    } catch (error) {
+      setUiConfigError('Failed to save configuration: ' + error.message);
+      console.error('[ConfigContext] UI config save error:', error);
     }
   }, [uiConfig]);
 
@@ -159,7 +167,7 @@ export const ConfigProvider = ({ children }) => {
     });
   }, []);
 
-  const saveAIConfig = useCallback(() => {
+  const saveAIConfig = useCallback(async () => {
     const validation = validateAIConfig(aiConfig);
     
     if (!validation.valid) {
@@ -167,9 +175,8 @@ export const ConfigProvider = ({ children }) => {
       return;
     }
     
-    const saved = StorageManager.saveConfig('aiConfig', aiConfig);
-    
-    if (saved) {
+    try {
+      await storageManager.config.save('aiConfig', aiConfig);
       setAiConfigSaved(true);
       setAiConfigError('');
       
@@ -181,8 +188,9 @@ export const ConfigProvider = ({ children }) => {
         setAiConfigError('Failed to configure AI service: ' + error.message);
         console.error('[ConfigContext] AI configuration failed:', error);
       }
-    } else {
-      setAiConfigError('Failed to save configuration');
+    } catch (error) {
+      setAiConfigError('Failed to save configuration: ' + error.message);
+      console.error('[ConfigContext] AI config save error:', error);
     }
   }, [aiConfig]);
 
@@ -216,7 +224,7 @@ export const ConfigProvider = ({ children }) => {
     });
   }, []);
 
-  const saveTTSConfig = useCallback(() => {
+  const saveTTSConfig = useCallback(async () => {
     const validation = validateTTSConfig(ttsConfig);
     
     if (!validation.valid) {
@@ -224,9 +232,8 @@ export const ConfigProvider = ({ children }) => {
       return;
     }
     
-    const saved = StorageManager.saveConfig('ttsConfig', ttsConfig);
-    
-    if (saved) {
+    try {
+      await storageManager.config.save('ttsConfig', ttsConfig);
       setTtsConfigSaved(true);
       setTtsConfigError('');
       
@@ -238,8 +245,9 @@ export const ConfigProvider = ({ children }) => {
         setTtsConfigError('Failed to configure TTS service: ' + error.message);
         console.error('[ConfigContext] TTS configuration failed:', error);
       }
-    } else {
-      setTtsConfigError('Failed to save configuration');
+    } catch (error) {
+      setTtsConfigError('Failed to save configuration: ' + error.message);
+      console.error('[ConfigContext] TTS config save error:', error);
     }
   }, [ttsConfig]);
 
@@ -273,7 +281,7 @@ export const ConfigProvider = ({ children }) => {
     });
   }, []);
 
-  const saveSTTConfig = useCallback(() => {
+  const saveSTTConfig = useCallback(async () => {
     const validation = validateSTTConfig(sttConfig);
     
     if (!validation.valid) {
@@ -281,9 +289,8 @@ export const ConfigProvider = ({ children }) => {
       return;
     }
     
-    const saved = StorageManager.saveConfig('sttConfig', sttConfig);
-    
-    if (saved) {
+    try {
+      await storageManager.config.save('sttConfig', sttConfig);
       setSttConfigSaved(true);
       setSttConfigError('');
       
@@ -295,8 +302,9 @@ export const ConfigProvider = ({ children }) => {
         setSttConfigError('Failed to configure STT service: ' + error.message);
         console.error('[ConfigContext] STT configuration failed:', error);
       }
-    } else {
-      setSttConfigError('Failed to save configuration');
+    } catch (error) {
+      setSttConfigError('Failed to save configuration: ' + error.message);
+      console.error('[ConfigContext] STT config save error:', error);
     }
   }, [sttConfig]);
 
@@ -327,13 +335,13 @@ export const ConfigProvider = ({ children }) => {
     }));
   }, []);
 
-  const saveGeneralConfig = useCallback(() => {
-    const saved = StorageManager.saveConfig('generalConfig', generalConfig);
-    
-    if (saved) {
+  const saveGeneralConfig = useCallback(async () => {
+    try {
+      await storageManager.config.save('generalConfig', generalConfig);
       console.log('[ConfigContext] General config saved successfully');
-    } else {
-      setGeneralConfigError('Failed to save general configuration');
+    } catch (error) {
+      setGeneralConfigError('Failed to save general configuration: ' + error.message);
+      console.error('[ConfigContext] General config save error:', error);
       setTimeout(() => setGeneralConfigError(''), 3000);
     }
   }, [generalConfig]);

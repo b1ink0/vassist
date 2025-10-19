@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 import { useConfig } from '../contexts/ConfigContext';
 
 const ControlPanel = ({ 
@@ -28,25 +28,35 @@ const ControlPanel = ({
 
   // Load saved button position or use default
   useEffect(() => {
-    const defaultPos = { x: window.innerWidth - 180, y: 20 }; // Top-right by default
-    const savedPos = StorageManager.getConfig('devControlPanelButtonPosition', defaultPos);
+    const loadButtonPosition = async () => {
+      const defaultPos = { x: window.innerWidth - 180, y: 20 }; // Top-right by default
+      try {
+        const savedPos = await storageManager.config.load('devControlPanelButtonPosition', defaultPos);
+        
+        // Ensure button is within viewport bounds
+        const buttonSize = 48;
+        const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
+        const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
+        
+        const validPos = { x: boundedX, y: boundedY };
+        setButtonPos(validPos);
+        
+        if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
+          await storageManager.config.save('devControlPanelButtonPosition', validPos);
+        }
+      } catch (error) {
+        console.error('[ControlPanel] Failed to load button position:', error);
+        const defaultPos = { x: window.innerWidth - 180, y: 20 };
+        setButtonPos(defaultPos);
+      }
+    };
     
-    // Ensure button is within viewport bounds
-    const buttonSize = 48;
-    const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
-    const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
-    
-    const validPos = { x: boundedX, y: boundedY };
-    setButtonPos(validPos);
-    
-    if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
-      StorageManager.saveConfig('devControlPanelButtonPosition', validPos);
-    }
+    loadButtonPosition();
   }, []);
 
   // Handle window resize
   useEffect(() => {
-    const handleResize = () => {
+    const handleResize = async () => {
       const buttonSize = 48;
       const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
       const boundedY = Math.max(10, Math.min(buttonPos.y, window.innerHeight - buttonSize - 10));
@@ -54,7 +64,11 @@ const ControlPanel = ({
       if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
         const newPos = { x: boundedX, y: boundedY };
         setButtonPos(newPos);
-        StorageManager.saveConfig('devControlPanelButtonPosition', newPos);
+        try {
+          await storageManager.config.save('devControlPanelButtonPosition', newPos);
+        } catch (error) {
+          console.error('[ControlPanel] Failed to save button position on resize:', error);
+        }
       }
     };
 
@@ -100,7 +114,9 @@ const ControlPanel = ({
       
       if (hasDragged) {
         // Save position after drag
-        StorageManager.saveConfig('devControlPanelButtonPosition', buttonPos);
+        storageManager.config.save('devControlPanelButtonPosition', buttonPos).catch(error => {
+          console.error('[ControlPanel] Failed to save button position after drag:', error);
+        });
         
         // Reset hasDragged after a short delay to prevent click from firing
         setTimeout(() => setHasDragged(false), 100);

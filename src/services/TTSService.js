@@ -13,6 +13,16 @@ class TTSService {
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
 
+    // Initialize playback state for BOTH modes
+    // In dev mode: used directly by this service
+    // In extension mode: used by main world instance (content script)
+    this.audioQueue = [];
+    this.isPlaying = false;
+    this.isStopped = false;
+    this.currentAudio = null;
+    this.currentPlaybackSession = null;
+    this.blobUrls = new Set();
+
     if (this.isExtensionMode) {
       this.tabStates = new Map();
       console.log('[TTSService] Initialized (Extension mode - multi-tab)');
@@ -21,14 +31,6 @@ class TTSService {
       this.provider = null;
       this.config = null;
       this.enabled = false;
-
-      this.audioQueue = [];
-      this.isPlaying = false;
-      this.isStopped = false;
-      this.currentAudio = null;
-      this.currentPlaybackSession = null;
-
-      this.blobUrls = new Set();
 
       this.activeRequests = 0;
       this.maxConcurrentRequests = 3;
@@ -55,6 +57,7 @@ class TTSService {
         enabled: false,
         isGenerating: false,
         isStopped: false,
+        blobUrls: new Map(),
       });
       console.log(`[TTSService] Tab ${tabId} initialized`);
     }
@@ -696,16 +699,28 @@ class TTSService {
    * @param {string[]} urls - Optional specific URLs to revoke, or all if not provided
    */
   cleanupBlobUrls(urls = null) {
-    if (urls) {
-      urls.forEach(url => {
-        URL.revokeObjectURL(url);
-        this.blobUrls.delete(url);
-      });
-      console.log(`[TTSService] Cleaned up ${urls.length} blob URLs`);
+    if (this.isExtensionMode) {
+      // In extension mode, just revoke the provided URLs
+      // Blob URLs are created in main world (TTSServiceProxy), not tracked here
+      if (urls) {
+        urls.forEach(url => {
+          URL.revokeObjectURL(url);
+        });
+        console.log(`[TTSService] Revoked ${urls.length} blob URLs`);
+      }
     } else {
-      this.blobUrls.forEach(url => URL.revokeObjectURL(url));
-      console.log(`[TTSService] Cleaned up all ${this.blobUrls.size} blob URLs`);
-      this.blobUrls.clear();
+      // Dev mode: track and manage blob URLs
+      if (urls) {
+        urls.forEach(url => {
+          URL.revokeObjectURL(url);
+          this.blobUrls.delete(url);
+        });
+        console.log(`[TTSService] Cleaned up ${urls.length} blob URLs`);
+      } else {
+        this.blobUrls.forEach(url => URL.revokeObjectURL(url));
+        console.log(`[TTSService] Cleaned up all ${this.blobUrls.size} blob URLs`);
+        this.blobUrls.clear();
+      }
     }
     // Worker handles its own cleanup in dev mode
   }

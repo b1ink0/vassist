@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { TTSServiceProxy } from '../services/proxies';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import AudioPlayer from './AudioPlayer';
@@ -21,10 +21,28 @@ const ChatContainer = ({
   const [isDragging, setIsDragging] = useState(false); // Track if button is being dragged
   const currentSessionRef = useRef(null); // Track current TTS session
   const [isLightBackground, setIsLightBackground] = useState(false); // Track background brightness
+  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig); // TTS configuration
   const containerRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [debugMarkers, setDebugMarkers] = useState([]); // Debug markers for sample points
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false); // Settings panel visibility
+
+  /**
+   * Load TTS configuration from storage
+   */
+  useEffect(() => {
+    const loadTtsConfig = async () => {
+      try {
+        const config = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+        setTtsConfig(config);
+      } catch (error) {
+        console.error('[ChatContainer] Failed to load TTS config:', error);
+        setTtsConfig(DefaultTTSConfig);
+      }
+    };
+    
+    loadTtsConfig();
+  }, []);
 
   /**
    * Detect background color brightness behind the container
@@ -221,7 +239,7 @@ const ChatContainer = ({
    * Update container position based on model position or chat button position
    */
   useEffect(() => {
-    const updatePosition = (event) => {
+    const updatePosition = async (event) => {
       // If model is disabled, position relative to chat button
       if (modelDisabled) {
         let buttonPos;
@@ -230,8 +248,13 @@ const ChatContainer = ({
         if (event?.detail) {
           buttonPos = event.detail;
         } else {
-          // Otherwise, get saved position from localStorage
-          buttonPos = StorageManager.getConfig('chatButtonPosition', { x: window.innerWidth - 68, y: window.innerHeight - 68 });
+          // Otherwise, get saved position from storage
+          try {
+            buttonPos = await storageManager.config.load('chatButtonPosition', { x: window.innerWidth - 68, y: window.innerHeight - 68 });
+          } catch (error) {
+            console.error('[ChatContainer] Failed to load button position:', error);
+            buttonPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
+          }
         }
         
         const containerWidth = 400;
@@ -367,9 +390,15 @@ const ChatContainer = ({
    */
   const handlePlayTTS = async (messageIndex, messageContent) => {
     // Check if TTS is enabled and configured
-    const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
-    if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
-      console.warn('[ChatContainer] TTS not enabled or configured');
+    let ttsConfig;
+    try {
+      ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
+        console.warn('[ChatContainer] TTS not enabled or configured');
+        return;
+      }
+    } catch (error) {
+      console.error('[ChatContainer] Failed to load TTS config:', error);
       return;
     }
 
@@ -576,8 +605,7 @@ const ChatContainer = ({
               const isPlaying = playingMessageIndex === messageIndex;
               const isLoading = loadingMessageIndex === messageIndex;
               
-              // Check if TTS is enabled
-              const ttsConfig = StorageManager.getConfig('ttsConfig', DefaultTTSConfig);
+              // Use ttsConfig from state
               const ttsEnabled = ttsConfig.enabled;
               
               // Check if message has audio attachments

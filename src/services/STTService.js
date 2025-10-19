@@ -7,7 +7,7 @@
 
 import OpenAI from 'openai';
 import { STTProviders, DefaultSTTConfig } from '../config/aiConfig';
-import StorageManager from '../managers/StorageManager';
+import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
 
 class STTService {
@@ -213,8 +213,13 @@ class STTService {
           // Windows headset fix: Wait for audio device to switch from input to output
           // This delay allows the hardware to properly release the microphone before
           // TTS tries to use the speakers. Configurable in STT settings.
-          const sttConfig = StorageManager.getConfig('sttConfig', DefaultSTTConfig);
-          const switchDelay = sttConfig.audioDeviceSwitchDelay || 300;
+          let switchDelay = 300; // Default
+          try {
+            const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+            switchDelay = sttConfig.audioDeviceSwitchDelay || 300;
+          } catch (error) {
+            console.error('[STTService] Failed to load STT config:', error);
+          }
           
           console.log(`[STTService] Waiting ${switchDelay}ms for audio device switch...`);
           await new Promise(resolve => setTimeout(resolve, switchDelay));
