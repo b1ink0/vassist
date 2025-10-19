@@ -27,14 +27,10 @@
     {
       "resources": [
         "assets/*",
-        "chunks/*",
         "res/*",
-        "content-module.js",
-        "content-app.js",
-        "content-styles.css",
-        "offscreen.html",
-        "offscreen.js",
-        "offscreen-html.js"
+        "*.js",
+        "*.css",
+        "offscreen.html"
       ],
       "matches": ["<all_urls>"]
     }

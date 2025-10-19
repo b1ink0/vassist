@@ -170,33 +170,19 @@ export default defineConfig({
       
       output: {
         entryFileNames: '[name].js',
-        chunkFileNames: 'chunks/[name]-[hash].js',
+        chunkFileNames: '[name].js', // Same as entry to force inlining
         assetFileNames: (assetInfo) => {
           // Don't hash content-styles.css for easy loading
           if (assetInfo.name === 'content-styles.css') {
             return 'content-styles.css';
           }
-          return 'assets/[name]-[hash][extname]';
+          return 'assets/[name][extname]';
         },
-        format: 'es', // ES modules for tree-shaking and modern browsers
+        format: 'es',
         
-        // Separate chunks for better caching - function format for Vite 7
-        manualChunks(id) {
-          // React and React DOM in one chunk
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-            return 'react-vendor';
-          }
-          // Babylon.js and babylon-mmd in one chunk
-          if (id.includes('node_modules/@babylonjs') || id.includes('node_modules/babylon-mmd')) {
-            return 'babylon-vendor';
-          }
-          // Services in one chunk
-          if (id.includes('src/services/AIService') || 
-              id.includes('src/services/TTSService') || 
-              id.includes('src/services/STTService')) {
-            return 'services';
-          }
-        },
+        // Force all shared code into entry files
+        manualChunks: () => null,
+        inlineDynamicImports: true,
       },
     },
     
@@ -205,6 +191,9 @@ export default defineConfig({
     
     // Minify for production
     minify: isProduction ? 'terser' : false,
+    
+    // Disable code splitting
+    chunkSizeWarningLimit: 50000,
     
     terserOptions: {
       compress: {

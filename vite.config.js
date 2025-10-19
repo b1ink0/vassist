@@ -19,6 +19,12 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: () => null,
+      },
+    },
+    chunkSizeWarningLimit: 50000,
   },
   worker: {
     format: 'es', // Use ES modules for workers
