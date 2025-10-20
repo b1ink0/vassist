@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
-import storageManager from '../storage';
+import { StorageServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 
 const ControlPanel = ({ 
@@ -31,7 +31,7 @@ const ControlPanel = ({
     const loadButtonPosition = async () => {
       const defaultPos = { x: window.innerWidth - 180, y: 20 }; // Top-right by default
       try {
-        const savedPos = await storageManager.config.load('devControlPanelButtonPosition', defaultPos);
+        const savedPos = await StorageServiceProxy.configLoad('devControlPanelButtonPosition', defaultPos);
         
         // Ensure button is within viewport bounds
         const buttonSize = 48;
@@ -42,7 +42,7 @@ const ControlPanel = ({
         setButtonPos(validPos);
         
         if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
-          await storageManager.config.save('devControlPanelButtonPosition', validPos);
+          await StorageServiceProxy.configSave('devControlPanelButtonPosition', validPos);
         }
       } catch (error) {
         console.error('[ControlPanel] Failed to load button position:', error);
@@ -65,7 +65,7 @@ const ControlPanel = ({
         const newPos = { x: boundedX, y: boundedY };
         setButtonPos(newPos);
         try {
-          await storageManager.config.save('devControlPanelButtonPosition', newPos);
+          await StorageServiceProxy.configSave('devControlPanelButtonPosition', newPos);
         } catch (error) {
           console.error('[ControlPanel] Failed to save button position on resize:', error);
         }
@@ -114,7 +114,7 @@ const ControlPanel = ({
       
       if (hasDragged) {
         // Save position after drag
-        storageManager.config.save('devControlPanelButtonPosition', buttonPos).catch(error => {
+        StorageServiceProxy.configSave('devControlPanelButtonPosition', buttonPos).catch(error => {
           console.error('[ControlPanel] Failed to save button position after drag:', error);
         });
         

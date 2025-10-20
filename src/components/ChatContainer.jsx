@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { TTSServiceProxy } from '../services/proxies';
-import storageManager from '../storage';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
+import ChatHistoryPanel from './ChatHistoryPanel';
 
 const ChatContainer = ({ 
   positionManagerRef, 
@@ -26,6 +26,21 @@ const ChatContainer = ({
   const messagesContainerRef = useRef(null);
   const [debugMarkers, setDebugMarkers] = useState([]); // Debug markers for sample points
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false); // Settings panel visibility
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false); // Chat history panel visibility
+  const [isTempChat, setIsTempChat] = useState(false); // Temporary chat mode
+
+  // Memoized callbacks for ChatHistoryPanel to prevent unnecessary re-renders
+  const handleHistoryClose = useCallback(() => {
+    setIsHistoryPanelOpen(false);
+  }, []);
+
+  const handleSelectChat = useCallback((chat) => {
+    // Dispatch event to load selected chat
+    window.dispatchEvent(new CustomEvent('loadChatFromHistory', {
+      detail: { chatData: chat }
+    }));
+    setIsHistoryPanelOpen(false);
+  }, []);
 
   /**
    * Load TTS configuration from storage
@@ -33,7 +48,7 @@ const ChatContainer = ({
   useEffect(() => {
     const loadTtsConfig = async () => {
       try {
-        const config = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+        const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
         setTtsConfig(config);
       } catch (error) {
         console.error('[ChatContainer] Failed to load TTS config:', error);
@@ -250,7 +265,7 @@ const ChatContainer = ({
         } else {
           // Otherwise, get saved position from storage
           try {
-            buttonPos = await storageManager.config.load('chatButtonPosition', { x: window.innerWidth - 68, y: window.innerHeight - 68 });
+            buttonPos = await StorageServiceProxy.configLoad('chatButtonPosition', { x: window.innerWidth - 68, y: window.innerHeight - 68 });
           } catch (error) {
             console.error('[ChatContainer] Failed to load button position:', error);
             buttonPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
@@ -277,66 +292,77 @@ const ChatContainer = ({
         containerY = Math.min(containerY, maxY);
         
         setContainerPos({ x: containerX, y: containerY });
+        console.log('[ChatContainer] Updated position based on button:', { buttonPos, containerPos: { x: containerX, y: containerY } });
         return;
       }
-      
-      if (!positionManagerRef?.current) return;
 
-      try {
-        const modelPos = positionManagerRef.current.getPositionPixels();
-        
-        const containerWidth = 400;
-        const containerHeight = 500;
-        const offsetX = 15;
-        const windowWidth = window.innerWidth;
-        const windowHeight = window.innerHeight;
-        
-        // Calculate potential positions
-        const rightX = modelPos.x + modelPos.width + offsetX;
-        const leftX = modelPos.x - containerWidth - offsetX;
-        
-        // Check if right position would go off-screen
-        const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-        
-        // Check if left position would go off-screen
-        const wouldOverflowLeft = leftX < 10;
-        
-        // Check if model would overlap container on right side
-        const modelRightEdge = modelPos.x + modelPos.width;
-        const wouldOverlapRight = modelRightEdge > rightX; // Model extends into where container would be
-        
-        // Decide which side to prefer
-        // Priority:
-        // 1. Avoid going off-screen (critical)
-        // 2. Avoid overlap with model (important)
-        // 3. Prefer right side (default)
-        let shouldBeOnLeft = false;
-        
-        if (wouldOverflowRight) {
-          // Right side would go off-screen, must use left
-          shouldBeOnLeft = true;
-        } else if (wouldOverlapRight && !wouldOverflowLeft) {
-          // Right side would overlap AND left side is available
-          shouldBeOnLeft = true;
-        } else if (modelPos.x > windowWidth * 0.7) {
-          // Model is far right, use left side
-          shouldBeOnLeft = true;
+      // Model is enabled - position relative to model
+      let modelPos;
+      
+      // If event has detail (from modelPositionChange event), use it
+      if (event?.detail) {
+        modelPos = event.detail;
+      } else if (positionManagerRef?.current) {
+        // Otherwise, get from position manager
+        try {
+          modelPos = positionManagerRef.current.getPositionPixels();
+        } catch (error) {
+          console.error('[ChatContainer] Failed to get model position:', error);
+          return;
         }
-        
-        // Calculate final position
-        let containerX = shouldBeOnLeft ? leftX : rightX;
-        
-        // Ensure container stays within horizontal bounds (CRITICAL - never go off-screen)
-        containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
-        
-        // Align with model top, but ensure it stays within vertical bounds
-        let containerY = modelPos.y;
-        containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
-        
-        setContainerPos({ x: containerX, y: containerY });
-      } catch (error) {
-        console.error('[ChatContainer] Failed to update position:', error);
+      } else {
+        return;
       }
+        
+      const containerWidth = 400;
+      const containerHeight = 500;
+      const offsetX = 15;
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Calculate potential positions
+      const rightX = modelPos.x + modelPos.width + offsetX;
+      const leftX = modelPos.x - containerWidth - offsetX;
+      
+      // Check if right position would go off-screen
+      const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
+      
+      // Check if left position would go off-screen
+      const wouldOverflowLeft = leftX < 10;
+      
+      // Check if model would overlap container on right side
+      const modelRightEdge = modelPos.x + modelPos.width;
+      const wouldOverlapRight = modelRightEdge > rightX; // Model extends into where container would be
+      
+      // Decide which side to prefer
+      // Priority:
+      // 1. Avoid going off-screen (critical)
+      // 2. Avoid overlap with model (important)
+      // 3. Prefer right side (default)
+      let shouldBeOnLeft = false;
+      
+      if (wouldOverflowRight) {
+        // Right side would go off-screen, must use left
+        shouldBeOnLeft = true;
+      } else if (wouldOverlapRight && !wouldOverflowLeft) {
+        // Right side would overlap AND left side is available
+        shouldBeOnLeft = true;
+      } else if (modelPos.x > windowWidth * 0.7) {
+        // Model is far right, use left side
+        shouldBeOnLeft = true;
+      }
+      
+      // Calculate final position
+      let containerX = shouldBeOnLeft ? leftX : rightX;
+      
+      // Ensure container stays within horizontal bounds (CRITICAL - never go off-screen)
+      containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+      
+      // Align with model top, but ensure it stays within vertical bounds
+      let containerY = modelPos.y;
+      containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
+      
+      setContainerPos({ x: containerX, y: containerY });
     };
 
     if (isVisible) {
@@ -392,7 +418,7 @@ const ChatContainer = ({
     // Check if TTS is enabled and configured
     let ttsConfig;
     try {
-      ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
       if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
         console.warn('[ChatContainer] TTS not enabled or configured');
         return;
@@ -528,6 +554,22 @@ const ChatContainer = ({
             </button>
             
             <button
+              onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+              title="Chat history"
+            >
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>📋</span>
+            </button>
+            
+            <button
+              onClick={() => setIsTempChat(!isTempChat)}
+              className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center`}
+              title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
+            >
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>{isTempChat ? '💫' : '📌'}</span>
+            </button>
+            
+            <button
               onClick={() => {
                 const event = new CustomEvent('clearChat');
                 window.dispatchEvent(event);
@@ -581,21 +623,37 @@ const ChatContainer = ({
           }}
         >
           {messages.length === 0 ? (
-            /* Placeholder message when empty with settings button */
+            /* Placeholder message when empty with settings and history buttons */
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-6 py-4 rounded-3xl`}>
                 <div className="text-center text-sm">
                   💬 Type a message to start chatting...
                 </div>
               </div>
-              {/* Settings button when no messages */}
-              <button
-                onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-                title="Settings"
-              >
-                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
-              </button>
+              {/* Buttons when no messages: History, Temp, and Settings */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+                  title="Chat history"
+                >
+                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>📋</span>
+                </button>
+                <button
+                  onClick={() => setIsTempChat(!isTempChat)}
+                  className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center`}
+                  title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
+                >
+                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>{isTempChat ? '💫' : '📌'}</span>
+                </button>
+                <button
+                  onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+                  title="Settings"
+                >
+                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
+                </button>
+              </div>
             </div>
           ) : (
             messages.slice().reverse().map((msg, index) => {
@@ -699,6 +757,17 @@ const ChatContainer = ({
           <SettingsPanel 
             onClose={() => setIsSettingsPanelOpen(false)} 
             isLightBackground={isLightBackground}
+          />
+        </div>
+      )}
+
+      {/* Chat History Panel - renders inside ChatContainer */}
+      {isHistoryPanelOpen && (
+        <div className="absolute inset-0 z-10">
+          <ChatHistoryPanel
+            isLightBackground={isLightBackground}
+            onClose={handleHistoryClose}
+            onSelectChat={handleSelectChat}
           />
         </div>
       )}

@@ -5,46 +5,83 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
-import { extensionBridge } from '../../utils/ExtensionBridge.js';
-
 export class ServiceProxy {
   constructor(name) {
     this.name = name;
     this.isExtension = __EXTENSION_MODE__;
+    this._bridge = null;
+    
+    // Pre-load bridge immediately in extension mode (synchronous)
+    if (this.isExtension && typeof window !== 'undefined') {
+      try {
+        // Import ExtensionBridge synchronously (it's already loaded in main.js)
+        import('../../utils/ExtensionBridge.js').then(module => {
+          this._bridge = module.extensionBridge;
+          console.log(`[${this.name}Proxy] Bridge loaded successfully`);
+        }).catch(err => {
+          console.error(`[${this.name}Proxy] Failed to load bridge:`, err);
+        });
+      } catch (e) {
+        console.error(`[${this.name}Proxy] Error loading bridge:`, e);
+      }
+    }
     
     console.log(`[${this.name}Proxy] Mode: ${this.isExtension ? 'Extension' : 'Dev'}`);
   }
 
   /**
    * Get bridge for extension communication
-   * For compatibility with existing proxy code that uses this.bridge
-   */
-  get bridge() {
-    return extensionBridge;
-  }
-
-  /**
-   * Route method call to appropriate implementation
-   * @param {string} method - Method name
-   * @param {Array} args - Method arguments
-   * @returns {Promise<*>} Method result
-   */
-  async route(method, ...args) {
-    if (this.isExtension) {
-      // Extension mode: use window.postMessage bridge
-      return await this.callViaBridge(method, ...args);
-    } else {
-      // Dev mode: call direct service
-      return await this.callDirect(method, ...args);
-    }
-  }
-
-  /**
-   * Get extension bridge for cross-world communication
-   * @returns {Object} ExtensionBridge instance
+   * Waits for bridge to load if needed (with timeout)
+   * @returns {Object|null} ExtensionBridge instance or null if not in extension mode
    */
   getBridge() {
-    return extensionBridge;
+    if (!this.isExtension) {
+      return null;
+    }
+    
+    if (typeof window === 'undefined') {
+      console.error(`[${this.name}Proxy] window is not defined, cannot get bridge`);
+      return null;
+    }
+    
+    // Return bridge if already loaded
+    if (this._bridge) {
+      return this._bridge;
+    }
+    
+    // If bridge not yet loaded, try to get it from ExtensionBridge singleton
+    // The singleton is auto-created when module loads
+    try {
+      // Try direct access to the module's export if it's been imported
+      if (window.__VASSIST_BRIDGE__) {
+        this._bridge = window.__VASSIST_BRIDGE__;
+        return this._bridge;
+      }
+    } catch {
+      // Ignore errors during fallback
+    }
+    
+    console.error(`[${this.name}Proxy] Bridge is null! Make sure ExtensionBridge is loaded in main.js`);
+    return null;
+  }
+
+  /**
+   * Wait for bridge to be available (used when bridge might not be loaded yet)
+   * @param {number} timeout - Timeout in ms
+   * @returns {Promise<Object|null>} Bridge instance
+   */
+  async waitForBridge(timeout = 5000) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+      const bridge = this.getBridge();
+      if (bridge) {
+        return bridge;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    console.error(`[${this.name}Proxy] Bridge not loaded after ${timeout}ms`);
+    return null;
   }
 
   /**

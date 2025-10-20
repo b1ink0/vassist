@@ -9,7 +9,7 @@ import VirtualAssistant from './VirtualAssistant';
 import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
-import storageManager from '../storage';
+import { StorageServiceProxy } from '../services/proxies';
 
 function AppContent({ mode = 'development' }) {
   const [currentState, setCurrentState] = useState('IDLE');
@@ -23,7 +23,7 @@ function AppContent({ mode = 'development' }) {
   useEffect(() => {
     const loadGeneralConfig = async () => {
       try {
-        const generalConfig = await storageManager.config.load('generalConfig', { enableModelLoading: true });
+        const generalConfig = await StorageServiceProxy.configLoad('generalConfig', { enableModelLoading: true });
         console.log(`[AppContent ${mode}] Initial model loading state:`, generalConfig.enableModelLoading);
         setEnableModelLoading(generalConfig.enableModelLoading);
       } catch (error) {
@@ -65,8 +65,11 @@ function AppContent({ mode = 'development' }) {
     setIsChatUIReady(true);
     
     // Store refs for debug controls and chat integration
-    sceneRef.current = scene;
+    // CRITICAL: Set positionManagerRef FIRST before any event listeners
     positionManagerRef.current = positionManager;
+    sceneRef.current = scene;
+    
+    console.log(`[AppContent ${mode}] Position manager ref set, ready for position tracking`);
   }, [mode]);
 
   return (

@@ -21,7 +21,9 @@ class STTServiceProxy extends ServiceProxy {
    */
   async configure(config) {
     if (this.isExtension) {
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('STTServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
         MessageTypes.STT_CONFIGURE,
         { config }
       );
@@ -107,7 +109,10 @@ class STTServiceProxy extends ServiceProxy {
             this.cleanup();
             
             // Send to background for transcription
-            const response = await this.bridge.sendMessage(
+            const bridge = await this.waitForBridge();
+            if (!bridge) throw new Error('STTServiceProxy: Bridge not available');
+            
+            const response = await bridge.sendMessage(
               MessageTypes.STT_TRANSCRIBE_AUDIO,
               { audioBuffer: audioData, mimeType },
               { timeout: 60000 }
@@ -191,7 +196,10 @@ class STTServiceProxy extends ServiceProxy {
       
       console.log(`[STTServiceProxy] Transcribing audio: ${audioData.length} bytes, type: ${mimeType}`);
       
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('STTServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(
         MessageTypes.STT_TRANSCRIBE_AUDIO,
         { audioBuffer: audioData, mimeType },
         { timeout: 60000 }
@@ -332,7 +340,9 @@ class STTServiceProxy extends ServiceProxy {
       throw new Error(`Unknown method: ${method}`);
     }
 
-    const response = await this.bridge.sendMessage(messageType, { args });
+    const bridge = await this.waitForBridge();
+    if (!bridge) throw new Error('STTServiceProxy: Bridge not available');
+    const response = await bridge.sendMessage(messageType, { args });
     return response;
   }
 

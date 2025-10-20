@@ -18,6 +18,18 @@ export class StorageAdapter {
   async get(table, key) {
     try {
       const record = await db.table(table).get(key);
+      
+      // Chat table stores the full chat object, not wrapped in 'value'
+      if (table === 'chat') {
+        return record;  // Return the whole chat record
+      }
+      
+      // Files table stores data in 'value' field
+      if (table === 'files') {
+        return record?.value;
+      }
+      
+      // Other tables also use 'value' field
       return record?.value;
     } catch (error) {
       console.error(`[StorageAdapter] Failed to get ${table}.${key}:`, error);
@@ -50,13 +62,35 @@ export class StorageAdapter {
    */
   async set(table, key, value, metadata = {}) {
     try {
-      const record = {
-        key,
-        value,
-        createdAt: metadata.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        ...metadata,
-      };
+      let record;
+      
+      // Different tables have different primary key field names
+      if (table === 'chat') {
+        // Chat table stores the full chat object directly, no 'value' wrapper
+        record = {
+          ...value,  // Chat data should have chatId, title, messages, etc.
+          chatId: key,  // Ensure chatId is set as primary key
+          updatedAt: new Date().toISOString(),
+        };
+      } else if (table === 'files') {
+        // Files table uses fileId as primary key
+        record = {
+          fileId: key,
+          value,
+          createdAt: metadata.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...metadata,
+        };
+      } else {
+        // Other tables use 'key' as primary key
+        record = {
+          key,
+          value,
+          createdAt: metadata.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...metadata,
+        };
+      }
 
       await db.table(table).put(record);
       return true;
@@ -90,7 +124,18 @@ export class StorageAdapter {
    */
   async exists(table, key) {
     try {
-      const count = await db.table(table).where('key').equals(key).count();
+      // Different tables have different primary key field names
+      let query = db.table(table);
+      
+      if (table === 'chat') {
+        query = query.where('chatId');
+      } else if (table === 'files') {
+        query = query.where('fileId');
+      } else {
+        query = query.where('key');
+      }
+      
+      const count = await query.equals(key).count();
       return count > 0;
     } catch (error) {
       console.error(`[StorageAdapter] Failed to check existence ${table}.${key}:`, error);

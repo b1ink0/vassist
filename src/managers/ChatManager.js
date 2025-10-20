@@ -66,6 +66,16 @@ class ChatManager {
   }
 
   /**
+   * Set messages directly (for loading from history)
+   * @param {Array} newMessages - Array of message objects to set
+   */
+  setMessages(newMessages) {
+    this.messages = newMessages || [];
+    this.systemMessageCount = this.messages.filter(m => m.role === 'system').length;
+    console.log(`[ChatManager] Set ${this.messages.length} messages from history`);
+  }
+
+  /**
    * Get message count
    * @returns {number} Number of messages
    */

@@ -5,9 +5,15 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+// Import ExtensionBridge first to ensure it's initialized before any services
+import { extensionBridge } from '../../src/utils/ExtensionBridge.js';
 import App from '../../src/App.jsx';
 
+// Make bridge globally accessible
+window.__VASSIST_BRIDGE__ = extensionBridge;
+
 console.log('[Extension Content] Module loaded');
+console.log('[Extension Content] ExtensionBridge initialized:', !!extensionBridge);
 
 let isInitialized = false;
 let reactRoot = null;

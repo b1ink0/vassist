@@ -117,7 +117,16 @@ async function registerHandlers() {
   // Storage handlers - CHAT namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_SAVE, async (message) => {
     const { chatId, data } = message.data;
-    return await storageManager.chat.save(chatId, data);
+    console.log('[Background] STORAGE_CHAT_SAVE handler called for:', chatId);
+    console.log('[Background] Chat data keys:', Object.keys(data || {}));
+    try {
+      const result = await storageManager.chat.save(chatId, data);
+      console.log('[Background] STORAGE_CHAT_SAVE success, saved to IndexedDB:', chatId);
+      return result;
+    } catch (error) {
+      console.error('[Background] STORAGE_CHAT_SAVE failed:', error);
+      throw error;
+    }
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_LOAD, async (message) => {
@@ -146,12 +155,45 @@ async function registerHandlers() {
   // Storage handlers - FILES namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_SAVE, async (message) => {
     const { fileId, data, category } = message.data;
-    return await storageManager.files.save(fileId, data, category);
+    console.log('[Background] STORAGE_FILE_SAVE handler called for:', fileId);
+    
+    // Convert serialized data back to Blob if needed
+    let storageData = data;
+    if (data && typeof data === 'object' && Array.isArray(data.data)) {
+      console.log('[Background] Converting Uint8Array back to Blob for storage');
+      const blobType = data._blobType || 'application/octet-stream';
+      const uint8Array = new Uint8Array(data.data);
+      const blob = new Blob([uint8Array], { type: blobType });
+      storageData = {
+        ...data,
+        data: blob, // Now it's a Blob again
+      };
+      delete storageData._blobType;
+    }
+    
+    try {
+      const result = await storageManager.files.save(fileId, storageData, category);
+      console.log('[Background] STORAGE_FILE_SAVE success:', fileId);
+      return result;
+    } catch (error) {
+      console.error('[Background] STORAGE_FILE_SAVE failed:', error);
+      throw error;
+    }
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_LOAD, async (message) => {
     const { fileId } = message.data;
-    return await storageManager.files.load(fileId);
+    const result = await storageManager.files.load(fileId);
+    
+    // Convert Blob to Array for message serialization (structured clone limitation)
+    if (result && typeof result === 'object' && result.data instanceof Blob) {
+      console.log('[Background] Converting Blob to Uint8Array for transfer');
+      const buffer = await result.data.arrayBuffer();
+      result.data = Array.from(new Uint8Array(buffer));
+      result._blobType = result._blobType || 'application/octet-stream';
+    }
+    
+    return result;
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_EXISTS, async (message) => {
@@ -239,7 +281,9 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.AI_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { config } = message.data;
+    console.log('[Background] AI_CONFIGURE called for tab:', tabId);
     await aiService.configure(config, tabId);
+    console.log('[Background] AI_CONFIGURE complete for tab:', tabId);
     return { configured: true };
   });
 
@@ -264,7 +308,7 @@ async function registerHandlers() {
     return { response: fullResponse };
   });
 
-  backgroundBridge.registerHandler(MessageTypes.AI_ABORT_REQUEST, async (_message, _sender, tabId) => {
+  backgroundBridge.registerHandler(MessageTypes.AI_ABORT, async (_message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const aborted = aiService.abortRequest(tabId);
     return { aborted };
@@ -292,16 +336,32 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-  const { text } = message.data;
-  const result = await ttsService.generateSpeech(text, /*generateLipSync*/ false, tabId);
+    const { text } = message.data;
+    console.log('[Background] TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text?.substring(0, 50));
+    
+    // Check if TTS is configured for this tab
+    if (!ttsService.isConfigured(tabId)) {
+      console.error('[Background] TTS not configured for tab:', tabId);
+      const state = ttsService.tabStates?.get(tabId);
+      console.error('[Background] Tab state:', state);
+      throw new Error(`TTS service not configured for tab ${tabId}`);
+    }
+    
+    const result = await ttsService.generateSpeech(text, /*generateLipSync*/ false, tabId);
     
     if (!result) {
+      console.warn('[Background] TTS_GENERATE_SPEECH returned null/undefined - generation failed or stopped');
       return { audioBuffer: null, mimeType: null }; // Generation was stopped
     }
     
     // Convert ArrayBuffer to plain Array to survive structured cloning
     // Chrome's sendMessage transfers both ArrayBuffers AND Uint8Arrays (detaches them)
     // Only plain arrays are guaranteed to be copied, not transferred
+    if (!result.audioBuffer) {
+      console.error('[Background] TTS result has no audioBuffer:', result);
+      return { audioBuffer: null, mimeType: null };
+    }
+    
     const audioData = Array.from(new Uint8Array(result.audioBuffer));
     console.log('[Background] Converted ArrayBuffer to Array:', audioData.length, 'bytes');
     return { audioBuffer: audioData, mimeType: result.mimeType };

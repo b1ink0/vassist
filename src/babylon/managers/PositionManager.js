@@ -159,10 +159,25 @@ export class PositionManager {
     this.setupResizeHandler();
     
     // Apply default position (bottom-right chatbot style)
+    // This will trigger modelPositionChange event
     this.applyPreset('bottom-right');
     
     console.log('[PositionManager] Initialized', {
       canvas: { width: this.canvasWidth, height: this.canvasHeight }
+    });
+    
+    // CRITICAL: Force emit initial position event after a microtask delay
+    // This ensures all listeners are attached before the event fires
+    Promise.resolve().then(() => {
+      console.log('[PositionManager] Emitting initial position change event');
+      window.dispatchEvent(new CustomEvent('modelPositionChange', {
+        detail: {
+          x: this.positionX,
+          y: this.positionY,
+          width: this.modelWidthPx,
+          height: this.modelHeightPx
+        }
+      }));
     });
   }
   

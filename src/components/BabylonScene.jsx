@@ -8,6 +8,18 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
+  
+  // Store callbacks in refs to avoid dependency-related re-initialization
+  const onSceneReadyRef = useRef(onSceneReady);
+  const onLoadProgressRef = useRef(onLoadProgress);
+  const sceneConfigRef = useRef(sceneConfig);
+  
+  // Update refs when callbacks change (but don't trigger re-init)
+  useEffect(() => {
+    onSceneReadyRef.current = onSceneReady;
+    onLoadProgressRef.current = onLoadProgress;
+    sceneConfigRef.current = sceneConfig;
+  }, [onSceneReady, onLoadProgress, sceneConfig]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -30,9 +42,9 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       if (sceneBuilder) {
         // Merge user config with defaults from sceneConfig.js
         let finalConfig = createSceneConfig({
-          ...sceneConfig,
-          // Pass progress callback to scene builder
-          onLoadProgress: onLoadProgress,
+          ...sceneConfigRef.current,
+          // Pass progress callback to scene builder - use ref to avoid dependency changes
+          onLoadProgress: onLoadProgressRef.current,
         });
         // Resolve resource URLs for extension mode
         finalConfig = await resolveResourceURLs(finalConfig);
@@ -74,9 +86,9 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
 
       sceneRef.current = scene;
 
-      // Notify parent component that scene is ready
-      if (onSceneReady) {
-        onSceneReady(scene);
+      // Notify parent component that scene is ready - use ref to avoid dependency changes
+      if (onSceneReadyRef.current) {
+        onSceneReadyRef.current(scene);
       }
 
       // Run the render loop
@@ -119,9 +131,8 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       // Cleanup immediately - fade-out is handled by content script
       cleanup.then(cleanupFn => cleanupFn && cleanupFn());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sceneBuilder, onSceneReady, onLoadProgress]);
-  // Note: sceneConfig intentionally omitted from deps to prevent re-initialization loop
+    // onSceneReady and onLoadProgress stored in refs to prevent re-initialization
+  }, [sceneBuilder]);
 
   // Use portal to render canvas directly to document.body
   // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work

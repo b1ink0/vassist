@@ -239,7 +239,8 @@ export class StorageManager {
     const records = await this.adapter.getAll('chat');
     const result = {};
     records.forEach(record => {
-      result[record.chatId] = record.value;
+      // Chat records are stored as complete objects, not wrapped in 'value'
+      result[record.chatId] = record;
     });
     return result;
   }

@@ -1,4 +1,4 @@
-import storageManager from '../storage';
+import { StorageServiceProxy } from '../services/proxies';
 import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
 
 /**
@@ -20,7 +20,7 @@ class BackgroundDetector {
    */
   async _loadConfig() {
     try {
-      const config = await storageManager.config.load('uiConfig', DefaultUIConfig);
+      const config = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
       this.cachedUIConfig = config;
     } catch (error) {
       console.error('[BackgroundDetector] Failed to load UI config:', error);

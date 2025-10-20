@@ -4,9 +4,8 @@
  * Provides UI, LLM (AI), TTS, and STT configurations to all components
  */
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import storageManager from '../storage';
-import { AIServiceProxy, TTSServiceProxy, STTServiceProxy } from '../services/proxies';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { AIServiceProxy, TTSServiceProxy, STTServiceProxy, StorageServiceProxy } from '../services/proxies';
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
   DefaultAIConfig, 
@@ -70,17 +69,17 @@ export const ConfigProvider = ({ children }) => {
     const loadConfigs = async () => {
       try {
         // Load UI config
-        const savedUiConfig = await storageManager.config.load('uiConfig', DefaultUIConfig);
+        const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
         setUiConfig(savedUiConfig);
         console.log('[ConfigContext] UI config loaded:', savedUiConfig);
 
         // Load General config
-        const savedGeneralConfig = await storageManager.config.load('generalConfig', { enableModelLoading: true });
+        const savedGeneralConfig = await StorageServiceProxy.configLoad('generalConfig', { enableModelLoading: true });
         setGeneralConfig(savedGeneralConfig);
         console.log('[ConfigContext] General config loaded:', savedGeneralConfig);
 
         // Load AI config
-        const savedAiConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
+        const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
         setAiConfig(savedAiConfig);
         try {
           AIServiceProxy.configure(savedAiConfig);
@@ -90,7 +89,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load TTS config
-        const savedTtsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+        const savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
         setTtsConfig(savedTtsConfig);
         try {
           TTSServiceProxy.configure(savedTtsConfig);
@@ -100,7 +99,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load STT config
-        const savedSttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+        const savedSttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
         setSttConfig(savedSttConfig);
         try {
           STTServiceProxy.configure(savedSttConfig);
@@ -135,7 +134,7 @@ export const ConfigProvider = ({ children }) => {
 
   const saveUIConfig = useCallback(async () => {
     try {
-      await storageManager.config.save('uiConfig', uiConfig);
+      await StorageServiceProxy.configSave('uiConfig', uiConfig);
       setUiConfigSaved(true);
       setUiConfigError('');
       
@@ -176,7 +175,7 @@ export const ConfigProvider = ({ children }) => {
     }
     
     try {
-      await storageManager.config.save('aiConfig', aiConfig);
+      await StorageServiceProxy.configSave('aiConfig', aiConfig);
       setAiConfigSaved(true);
       setAiConfigError('');
       
@@ -233,7 +232,7 @@ export const ConfigProvider = ({ children }) => {
     }
     
     try {
-      await storageManager.config.save('ttsConfig', ttsConfig);
+      await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
       setTtsConfigSaved(true);
       setTtsConfigError('');
       
@@ -290,7 +289,7 @@ export const ConfigProvider = ({ children }) => {
     }
     
     try {
-      await storageManager.config.save('sttConfig', sttConfig);
+      await StorageServiceProxy.configSave('sttConfig', sttConfig);
       setSttConfigSaved(true);
       setSttConfigError('');
       
@@ -337,7 +336,7 @@ export const ConfigProvider = ({ children }) => {
 
   const saveGeneralConfig = useCallback(async () => {
     try {
-      await storageManager.config.save('generalConfig', generalConfig);
+      await StorageServiceProxy.configSave('generalConfig', generalConfig);
       console.log('[ConfigContext] General config saved successfully');
     } catch (error) {
       setGeneralConfigError('Failed to save general configuration: ' + error.message);
@@ -416,7 +415,7 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [checkChromeAIAvailability]);
 
-  const value = {
+  const value = useMemo(() => ({
     // UI Config
     uiConfig,
     uiConfigSaved,
@@ -459,7 +458,7 @@ export const ConfigProvider = ({ children }) => {
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
-  };
+  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, updateAIConfig, saveAIConfig, testAIConnection, ttsConfig, ttsConfigSaved, ttsConfigError, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
 
   return (
     <ConfigContext.Provider value={value}>

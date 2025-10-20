@@ -21,7 +21,8 @@ class AIServiceProxy extends ServiceProxy {
    */
   async configure(config) {
     if (this.isExtension) {
-      const bridge = this.getBridge();
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
       return await bridge.sendMessage(MessageTypes.AI_CONFIGURE, { config });
     } else {
       return this.directService.configure(config);
@@ -75,37 +76,49 @@ class AIServiceProxy extends ServiceProxy {
    * Send message via bridge (extension mode) with streaming
    * @param {Array} messages - Message array
    * @param {Function} onStream - Stream callback
-   * @returns {Promise<string>} Full response
+   * @returns {Promise<{success: boolean, response: string, cancelled: boolean, error: Error|null}>} Result object
    */
   async sendMessageViabridge(messages, onStream) {
-    if (!this.bridge) {
-      throw new Error('Bridge not initialized');
+    const bridge = await this.waitForBridge();
+    if (!bridge) {
+      throw new Error('AIServiceProxy: Bridge not available');
     }
 
-    if (onStream) {
-      // Streaming mode - use AI_SEND_MESSAGE (background handler supports streaming)
-      let fullResponse = '';
-      
-      await this.bridge.sendStreamingMessage(
-        MessageTypes.AI_SEND_MESSAGE,
-        { messages },
-        (chunk) => {
-          fullResponse += chunk;
-          onStream(chunk);
-        },
-        { timeout: 120000 } // 2 minutes for AI streaming
-      );
-      
-      return fullResponse;
-    } else {
-      // Non-streaming mode
-      const response = await this.bridge.sendMessage(
-        MessageTypes.AI_SEND_MESSAGE,
-        { messages },
-        { timeout: 60000 } // 1 minute timeout
-      );
-      
-      return response.response || '';
+    try {
+      if (onStream) {
+        // Streaming mode - use AI_SEND_MESSAGE (background handler supports streaming)
+        let fullResponse = '';
+        
+        await bridge.sendStreamingMessage(
+          MessageTypes.AI_SEND_MESSAGE,
+          { messages },
+          (chunk) => {
+            fullResponse += chunk;
+            onStream(chunk);
+          },
+          { timeout: 120000 } // 2 minutes for AI streaming
+        );
+        
+        // Return in same format as AIService.sendMessage()
+        return { success: true, response: fullResponse, cancelled: false, error: null };
+      } else {
+        // Non-streaming mode
+        const response = await bridge.sendMessage(
+          MessageTypes.AI_SEND_MESSAGE,
+          { messages },
+          { timeout: 60000 } // 1 minute timeout
+        );
+        
+        // Return in same format as AIService.sendMessage()
+        if (response?.success === false) {
+          return response; // Already in correct format from background
+        }
+        
+        return { success: true, response: response?.response || '', cancelled: false, error: null };
+      }
+    } catch (error) {
+      // Return error in same format as AIService
+      return { success: false, response: null, cancelled: false, error };
     }
   }
 
@@ -116,7 +129,9 @@ class AIServiceProxy extends ServiceProxy {
    */
   async sendMessageSync(messages) {
     if (this.isExtension) {
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
         MessageTypes.AI_SEND_MESSAGE,
         { messages },
         { timeout: 60000 }
@@ -130,13 +145,16 @@ class AIServiceProxy extends ServiceProxy {
   /**
    * Abort the current ongoing request
    */
-  abortRequest() {
+  async abortRequest() {
     if (this.isExtension) {
       // Send abort message to background
-      this.bridge.sendMessage(MessageTypes.AI_ABORT, {})
-        .catch(error => {
-          console.warn('[AIServiceProxy] Abort failed:', error);
-        });
+      const bridge = await this.waitForBridge();
+      if (bridge) {
+        bridge.sendMessage(MessageTypes.AI_ABORT, {})
+          .catch(error => {
+            console.warn('[AIServiceProxy] Abort failed:', error);
+          });
+      }
       return true;
     } else {
       return this.directService.abortRequest();
@@ -163,7 +181,9 @@ class AIServiceProxy extends ServiceProxy {
    */
   async testConnection() {
     if (this.isExtension) {
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
         MessageTypes.AI_TEST_CONNECTION,
         {},
         { timeout: 30000 }
@@ -192,7 +212,9 @@ class AIServiceProxy extends ServiceProxy {
       throw new Error(`Unknown method: ${method}`);
     }
 
-    const response = await this.bridge.sendMessage(messageType, { args });
+    const bridge = await this.waitForBridge();
+    if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+    const response = await bridge.sendMessage(messageType, { args });
     return response;
   }
 

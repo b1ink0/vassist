@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import storageManager from '../storage';
+import { StorageServiceProxy } from '../services/proxies';
 
 const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabled = false, isChatOpen = false }) => {
   const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
@@ -7,6 +7,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
   const [hasDragged, setHasDragged] = useState(false); // Track if user actually dragged
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
+  const buttonPosRef = useRef({ x: -100, y: -100 }); // Track buttonPos without causing effect dependencies
 
   // Check if model is disabled on mount and set initial position
   useEffect(() => {
@@ -15,7 +16,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       const loadButtonPosition = async () => {
         const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
         try {
-          const savedPos = await storageManager.config.load('chatButtonPosition', defaultPos);
+          const savedPos = await StorageServiceProxy.configLoad('chatButtonPosition', defaultPos);
           
           // Ensure button is within viewport bounds
           const buttonSize = 48;
@@ -24,15 +25,17 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
           
           const validPos = { x: boundedX, y: boundedY };
           setButtonPos(validPos);
+          buttonPosRef.current = validPos; // Keep ref in sync
           
           // Save corrected position if it was out of bounds
           if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
-            await storageManager.config.save('chatButtonPosition', validPos);
+            await StorageServiceProxy.configSave('chatButtonPosition', validPos);
           }
         } catch (error) {
           console.error('[ChatButton] Failed to load button position:', error);
           const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
           setButtonPos(defaultPos);
+          buttonPosRef.current = defaultPos;
         }
       };
       
@@ -40,29 +43,34 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     }
   }, [modelDisabled]);
 
+  // Keep buttonPosRef in sync with buttonPos state for use in effects without dependencies
+  useEffect(() => {
+    buttonPosRef.current = buttonPos;
+  }, [buttonPos]);
+
   // Handle window resize - keep button within bounds
+  const handleResize = useCallback(async () => {
+    const buttonSize = 48;
+    const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
+    const boundedY = Math.max(10, Math.min(buttonPos.y, window.innerHeight - buttonSize - 10));
+    
+    if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
+      const newPos = { x: boundedX, y: boundedY };
+      setButtonPos(newPos);
+      try {
+        await StorageServiceProxy.configSave('chatButtonPosition', newPos);
+      } catch (error) {
+        console.error('[ChatButton] Failed to save position on resize:', error);
+      }
+    }
+  }, [buttonPos.x, buttonPos.y]);
+
   useEffect(() => {
     if (!modelDisabled) return;
 
-    const handleResize = async () => {
-      const buttonSize = 48;
-      const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
-      const boundedY = Math.max(10, Math.min(buttonPos.y, window.innerHeight - buttonSize - 10));
-      
-      if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
-        const newPos = { x: boundedX, y: boundedY };
-        setButtonPos(newPos);
-        try {
-          await storageManager.config.save('chatButtonPosition', newPos);
-        } catch (error) {
-          console.error('[ChatButton] Failed to save position on resize:', error);
-        }
-      }
-    };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [modelDisabled, buttonPos]);
+  }, [modelDisabled, handleResize]);
 
   // Move button up if it's over the input prompt when chat opens
   useEffect(() => {
@@ -72,11 +80,13 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     const minDistanceFromBottom = chatInputHeight + 15; // Input height + gap
 
     // Check if button is too close to bottom (would overlap input)
-    if (buttonPos.y > window.innerHeight - minDistanceFromBottom) {
+    const currentPos = buttonPosRef.current; // Use ref to avoid effect dependency
+    if (currentPos.y > window.innerHeight - minDistanceFromBottom) {
       const newY = window.innerHeight - minDistanceFromBottom;
-      const newPos = { x: buttonPos.x, y: newY };
+      const newPos = { x: currentPos.x, y: newY };
       setButtonPos(newPos);
-      storageManager.config.save('chatButtonPosition', newPos).catch(error => {
+      buttonPosRef.current = newPos;
+      StorageServiceProxy.configSave('chatButtonPosition', newPos).catch(error => {
         console.error('[ChatButton] Failed to save position when chat opened:', error);
       });
       
@@ -84,7 +94,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       const event = new CustomEvent('chatButtonMoved', { detail: newPos });
       window.dispatchEvent(event);
     }
-  }, [modelDisabled, isChatOpen, buttonPos.x, buttonPos.y]);
+  }, [modelDisabled, isChatOpen]);
 
   useEffect(() => {
     /**
@@ -92,21 +102,38 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
      * Intelligently positions on left or right based on screen bounds
      * ONLY when model is enabled
      */
-    const updatePosition = () => {
+    const updatePosition = (eventDetail = null) => {
       // If model is disabled, don't update position automatically - user controls position
       if (modelDisabled) {
         return;
       }
       
-      if (!positionManagerRef?.current) {
-        // Try again in a bit if position manager isn't ready
-        setTimeout(updatePosition, 100);
+      // Try to get position from event detail first, then from ref
+      let modelPos = null;
+      
+      if (eventDetail && eventDetail.detail) {
+        // Event was fired with position data
+        modelPos = {
+          x: eventDetail.detail.x,
+          y: eventDetail.detail.y,
+          width: eventDetail.detail.width,
+          height: eventDetail.detail.height
+        };
+      } else if (positionManagerRef?.current) {
+        // Get from positionManagerRef
+        try {
+          modelPos = positionManagerRef.current.getPositionPixels();
+        } catch (error) {
+          console.error('[ChatButton] Failed to get position from ref:', error);
+          return;
+        }
+      } else {
+        // PositionManager not ready yet
+        console.log('[ChatButton] PositionManager not yet initialized, skipping position update');
         return;
       }
       
       try {
-        const modelPos = positionManagerRef.current.getPositionPixels();
-        
         const buttonSize = 48;
         const offsetX = 15; // Closer horizontal distance
         const offsetY = 25; // Closer vertical distance from bottom
@@ -132,24 +159,26 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       }
     };
 
-    // Initial position update
-    updatePosition();
+    // Only run when model is enabled
+    if (modelDisabled) return;
 
-    // Only listen to events if model is enabled
-    if (!modelDisabled) {
-      // Listen for window resize
-      window.addEventListener('resize', updatePosition);
-      
-      // Listen for model position changes (emitted by PositionManager)
-      window.addEventListener('modelPositionChange', updatePosition);
+    // Wrap handler to accept event objects
+    const eventHandler = (event) => updatePosition(event);
+    
+    // Listen for window resize
+    window.addEventListener('resize', updatePosition);
+    
+    // Listen for model position changes (emitted by PositionManager)
+    // The event detail contains position data
+    window.addEventListener('modelPositionChange', eventHandler);
 
-      // Cleanup listeners
-      return () => {
-        window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('modelPositionChange', updatePosition);
-      };
-    }
-  }, [positionManagerRef, modelDisabled]);
+    // Cleanup listeners
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('modelPositionChange', eventHandler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDisabled]);
 
   // Drag handlers for when model is disabled
   const handleMouseDown = useCallback((e) => {
@@ -207,7 +236,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     setIsDragging(false);
     
     // Save position to storage
-    storageManager.config.save('chatButtonPosition', buttonPos).catch(error => {
+    StorageServiceProxy.configSave('chatButtonPosition', buttonPos).catch(error => {
       console.error('[ChatButton] Failed to save button position:', error);
     });
     

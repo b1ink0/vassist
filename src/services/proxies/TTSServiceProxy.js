@@ -21,7 +21,9 @@ class TTSServiceProxy extends ServiceProxy {
    */
   async configure(config) {
     if (this.isExtension) {
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
         MessageTypes.TTS_CONFIGURE,
         { config }
       );
@@ -140,7 +142,10 @@ class TTSServiceProxy extends ServiceProxy {
     if (this.isExtension) {
       // Extension mode flow:
       // 1. Background generates TTS audio (returns ArrayBuffer)
-      const response = await this.bridge.sendMessage(
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(
         MessageTypes.TTS_GENERATE_SPEECH,
         { text, generateLipSync: false }, // Don't generate in background
         { timeout: 60000 }
@@ -185,7 +190,7 @@ class TTSServiceProxy extends ServiceProxy {
           const audioArray = Array.from(new Uint8Array(audioBuffer));
           
           // Offscreen will: Generate VMD → Convert to BVMD → Return both as Arrays
-          const lipSyncResponse = await this.bridge.sendMessage(
+          const lipSyncResponse = await bridge.sendMessage(
             MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC,
             { 
               audioBuffer: audioArray,
@@ -369,16 +374,19 @@ class TTSServiceProxy extends ServiceProxy {
    * Extension mode: Notify background, also stop local queue
    * Dev mode: Just stop local service
    */
-  stopPlayback() {
+  async stopPlayback() {
     // Always stop local direct service (handles queue in main world)
     this.directService.stopPlayback();
     
     if (this.isExtension) {
       // Also notify background to stop TTS generation
-      this.bridge.sendMessage(MessageTypes.TTS_STOP_PLAYBACK, {})
-        .catch(error => {
-          console.error('[TTSServiceProxy] Stop playback failed:', error);
-        });
+      const bridge = await this.waitForBridge();
+      if (bridge) {
+        bridge.sendMessage(MessageTypes.TTS_STOP_PLAYBACK, {})
+          .catch(error => {
+            console.error('[TTSServiceProxy] Stop playback failed:', error);
+          });
+      }
     }
     
     // Trigger local callback
@@ -392,16 +400,19 @@ class TTSServiceProxy extends ServiceProxy {
    * Extension mode: Notify background, also resume local queue
    * Dev mode: Just resume local service
    */
-  resumePlayback() {
+  async resumePlayback() {
     // Always resume local direct service
     this.directService.resumePlayback();
     
     if (this.isExtension) {
       // Also notify background to resume TTS generation
-      this.bridge.sendMessage(MessageTypes.TTS_RESUME_PLAYBACK, {})
-        .catch(error => {
-          console.error('[TTSServiceProxy] Resume playback failed:', error);
-        });
+      const bridge = await this.waitForBridge();
+      if (bridge) {
+        bridge.sendMessage(MessageTypes.TTS_RESUME_PLAYBACK, {})
+          .catch(error => {
+            console.error('[TTSServiceProxy] Resume playback failed:', error);
+          });
+      }
     }
   }
 
@@ -463,7 +474,9 @@ class TTSServiceProxy extends ServiceProxy {
       throw new Error(`Unknown method: ${method}`);
     }
 
-    const response = await this.bridge.sendMessage(messageType, { args });
+    const bridge = await this.waitForBridge();
+    if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+    const response = await bridge.sendMessage(messageType, { args });
     return response;
   }
 

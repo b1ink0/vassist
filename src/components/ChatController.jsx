@@ -3,10 +3,10 @@ import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
 import ChatManager from '../managers/ChatManager'
-import { AIServiceProxy, TTSServiceProxy } from '../services/proxies'
+import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
-import storageManager from '../storage'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
+import chatHistoryService from '../services/ChatHistoryService'
 
 const ChatController = ({ 
   assistantRef, 
@@ -21,6 +21,8 @@ const ChatController = ({
   const [isProcessing, setIsProcessing] = useState(false)
   const [isVoiceMode, setIsVoiceMode] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false) // Track TTS playback state
+  const [currentChatId, setCurrentChatId] = useState(null) // Track current chat ID
+  const [isTempChat, setIsTempChat] = useState(false) // Temp chat flag
 
   /**
    * Track voice conversation state to update isSpeaking
@@ -66,8 +68,18 @@ const ChatController = ({
       TTSServiceProxy.stopPlayback()
     }
 
-    const handleClearChat = () => {
-      console.log('[ChatController] Clear chat event received - stopping all generation')
+    const handleClearChat = async () => {
+      console.log('[ChatController] Clear chat event received')
+      
+      // If temp, delete from history. Otherwise just clear UI (it was already auto-saved)
+      if (isTempChat && currentChatId) {
+        try {
+          await chatHistoryService.deleteChat(currentChatId)
+          console.log('[ChatController] Temp chat deleted:', currentChatId)
+        } catch (error) {
+          console.error('[ChatController] Failed to delete temp chat:', error)
+        }
+      }
       
       // Stop AI generation
       AIServiceProxy.abortRequest()
@@ -84,8 +96,10 @@ const ChatController = ({
       ChatManager.clearMessages()
       setChatMessages([])
       
-      // Reset processing state
+      // Reset processing state and create new chat
       setIsProcessing(false)
+      setCurrentChatId(null) // Start new chat
+      setIsTempChat(false)
     }
     
     const handleStopGeneration = () => {
@@ -111,16 +125,117 @@ const ChatController = ({
       setIsProcessing(false)
     }
 
+    const handleLoadChatFromHistory = async (event) => {
+      const { chatData } = event.detail
+      console.log('[ChatController] Loading chat from history:', chatData.chatId)
+      
+      try {
+        // Gracefully stop any ongoing operations before loading
+        console.log('[ChatController] Cleaning up ongoing requests')
+        AIServiceProxy.abortRequest() // Stop AI generation
+        TTSServiceProxy.stopPlayback() // Stop TTS playback
+        
+        // Load full chat with media restored
+        const fullChat = await chatHistoryService.loadChat(chatData.chatId)
+        
+        // Set messages
+        ChatManager.setMessages(fullChat.messages)
+        setChatMessages(fullChat.messages)
+        
+        // Set current chat ID
+        setCurrentChatId(fullChat.chatId)
+        setIsTempChat(false)
+        
+        // Mark as not temp since it's loaded from history
+        await chatHistoryService.markAsTempChat(fullChat.chatId, false)
+        
+        // Make sure chat UI is visible
+        if (!isChatContainerVisible) {
+          setIsChatContainerVisible(true)
+          setIsChatInputVisible(true)
+        }
+        
+        // Reset processing state
+        setIsProcessing(false)
+        
+        console.log('[ChatController] Chat loaded successfully')
+      } catch (error) {
+        console.error('[ChatController] Failed to load chat:', error)
+      }
+    }
+
     window.addEventListener('closeChat', handleCloseChat)
     window.addEventListener('clearChat', handleClearChat)
     window.addEventListener('stopGeneration', handleStopGeneration)
+    window.addEventListener('loadChatFromHistory', handleLoadChatFromHistory)
 
     return () => {
       window.removeEventListener('closeChat', handleCloseChat)
       window.removeEventListener('clearChat', handleClearChat)
       window.removeEventListener('stopGeneration', handleStopGeneration)
+      window.removeEventListener('loadChatFromHistory', handleLoadChatFromHistory)
     }
-  }, [assistantRef, isVoiceMode])
+  }, [assistantRef, isVoiceMode, chatMessages, currentChatId, isTempChat, isChatContainerVisible])
+
+  /**
+   * Auto-save chat whenever messages change (debounced after user sends or AI responds)
+   * This ensures chats are persisted to history automatically
+   */
+  useEffect(() => {
+    // Only auto-save if we have messages and it's not temp and we're not currently processing
+    if (chatMessages.length === 0 || isTempChat || isProcessing) {
+      return
+    }
+
+    // Debounce auto-save to avoid too frequent saves
+    const autoSaveTimer = setTimeout(async () => {
+      try {
+        // Don't save if in temp mode
+        if (isTempChat) {
+          console.log('[ChatController] Skipping save - temp mode enabled')
+          return
+        }
+
+        let chatId = currentChatId
+        if (!chatId) {
+          chatId = chatHistoryService.generateChatId()
+          setCurrentChatId(chatId)
+          console.log('[ChatController] New chat created for auto-save:', chatId)
+        }
+
+        // Get current page URL (important for extension mode)
+        const sourceUrl = window.location.href;
+
+        await chatHistoryService.saveChat({
+          chatId,
+          messages: chatMessages,
+          isTemp: false,
+          metadata: {
+            sourceUrl,
+          },
+        })
+
+        console.log('[ChatController] Chat auto-saved (debounced):', chatId)
+      } catch (error) {
+        console.error('[ChatController] Failed to auto-save chat (debounced):', error)
+      }
+    }, 2000) // Wait 2 seconds after last change before saving
+
+    return () => clearTimeout(autoSaveTimer)
+  }, [chatMessages, currentChatId, isTempChat, isProcessing])
+
+  /**
+   * Handle temp mode toggle - delete from history if switching to temp
+   */
+  useEffect(() => {
+    // If user marks chat as temp, don't save anymore
+    // Next time they clear chat, it will be deleted if it's marked as temp
+    if (isTempChat && currentChatId) {
+      chatHistoryService.markAsTempChat(currentChatId, true).catch(error => {
+        console.error('[ChatController] Failed to mark as temp:', error)
+      })
+    }
+  }, [isTempChat, currentChatId])
 
   /**
    * Handle chat button click - toggle chat visibility
@@ -195,8 +310,8 @@ const ChatController = ({
     let savedConfig;
     let ttsConfig;
     try {
-      savedConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
-      ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      savedConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
     } catch (error) {
       console.error('[ChatController] Failed to load configs:', error);
       savedConfig = DefaultAIConfig;
@@ -331,8 +446,9 @@ const ChatController = ({
 
       // Handle actual errors
       if (!result.success) {
+        const errorMessage = result.error?.message || 'Unknown error occurred';
         console.error('[ChatController] AI error:', result.error)
-        ChatManager.addMessage('assistant', `Error: ${result.error.message}`)
+        ChatManager.addMessage('assistant', `Error: ${errorMessage}`)
         setChatMessages([...ChatManager.getMessages()])
         TTSServiceProxy.stopPlayback()
         if (assistantRef.current?.isReady()) {
@@ -358,6 +474,33 @@ const ChatController = ({
       }
 
       setIsProcessing(false)
+
+      // AUTO-SAVE: Save chat after AI finishes responding
+      if (!isTempChat && chatMessages.length > 0) {
+        try {
+          let chatId = currentChatId
+          if (!chatId) {
+            chatId = chatHistoryService.generateChatId()
+            setCurrentChatId(chatId)
+          }
+
+          // Get current page URL (important for extension mode)
+          const sourceUrl = window.location.href;
+
+          await chatHistoryService.saveChat({
+            chatId,
+            messages: ChatManager.getMessages(),
+            isTemp: false,
+            metadata: {
+              sourceUrl,
+            },
+          })
+
+          console.log('[ChatController] Chat auto-saved after AI response:', chatId)
+        } catch (error) {
+          console.error('[ChatController] Failed to auto-save chat:', error)
+        }
+      }
   }
 
   /**
@@ -413,8 +556,8 @@ const ChatController = ({
     let voiceAIConfig;
     let voiceTTSConfig;
     try {
-      voiceAIConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
-      voiceTTSConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      voiceAIConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      voiceTTSConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
     } catch (error) {
       console.error('[ChatController] Failed to load configs in handleVoiceAIResponse:', error);
       voiceAIConfig = DefaultAIConfig;

@@ -66,6 +66,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
       initializedRef.current = true;
       
       console.log('[VirtualAssistant] AnimationManager initialized and ready');
+      console.log('[VirtualAssistant] PositionManager ready with position data');
       
       // Initialize TTS Service with BVMD converter and animation callback
       TTSServiceProxy.initializeBVMDConverter(scene);
@@ -87,6 +88,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
       
       // Call onReady callback if provided
       if (onReady) {
+        console.log('[VirtualAssistant] Calling onReady callback with managers');
         onReady({ 
           animationManager: manager, 
           positionManager: posMgr,
