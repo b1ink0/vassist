@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef } from 'react';
 import { STTServiceProxy } from '../services/proxies';
 import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import BackgroundDetector from '../utils/BackgroundDetector';
 
-const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }) => {
+const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }, ref) => {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
@@ -12,6 +12,16 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
   const textareaRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
+  
+  useEffect(() => {
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref(containerRef.current);
+      } else {
+        ref.current = containerRef.current;
+      }
+    }
+  }, [ref]);
   
   // Voice conversation mode
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -696,6 +706,8 @@ const ChatInput = ({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMo
       </div>
     </div>
   );
-};
+});
+
+ChatInput.displayName = 'ChatInput';
 
 export default ChatInput;

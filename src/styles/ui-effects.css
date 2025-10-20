@@ -463,3 +463,83 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:active {
   background: rgba(255, 255, 255, 0.4);
 }
+
+/* Enhanced Loading Animation - Three Dots */
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  animation: dot-pulse 1.4s infinite;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+/* Alternative: Smooth wave loading */
+@keyframes wave-pulse {
+  0%, 100% {
+    transform: translateY(0px);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+
+.loading-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 16px;
+}
+
+.wave-bar {
+  width: 3px;
+  background: currentColor;
+  border-radius: 2px;
+  animation: wave-pulse 0.8s infinite;
+}
+
+.wave-bar:nth-child(1) {
+  animation-delay: -0.24s;
+  height: 6px;
+}
+
+.wave-bar:nth-child(2) {
+  animation-delay: -0.12s;
+  height: 10px;
+}
+
+.wave-bar:nth-child(3) {
+  animation-delay: 0s;
+  height: 14px;
+}

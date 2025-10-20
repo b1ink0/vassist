@@ -13,6 +13,7 @@ const TTSSettings = ({ isLightBackground }) => {
     ttsConfig,
     ttsConfigSaved,
     ttsConfigError,
+    ttsTesting,
     updateTTSConfig,
     saveTTSConfig,
     testTTSConnection,
@@ -173,11 +174,18 @@ const TTSSettings = ({ isLightBackground }) => {
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4">
         <button 
-          onClick={testTTSConnection} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-          disabled={!ttsConfig.enabled}
+          onClick={testTTSConnection}
+          disabled={!ttsConfig.enabled || ttsTesting}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
         >
-          Test TTS
+          {ttsTesting ? (
+            <>
+              <span className="animate-spin">⏳</span>
+              <span>Testing...</span>
+            </>
+          ) : (
+            'Test TTS'
+          )}
         </button>
         <button 
           onClick={saveTTSConfig} 
@@ -187,12 +195,35 @@ const TTSSettings = ({ isLightBackground }) => {
         </button>
       </div>
       
-      {ttsConfigSaved && (
-        <span className="text-sm text-green-400">✓ Saved successfully!</span>
-      )}
-      {ttsConfigError && (
-        <span className="text-sm text-white/70">{ttsConfigError}</span>
-      )}
+      {/* Status Messages - Glassmorphism Style */}
+      <div className="space-y-2 min-h-[40px]">
+        {ttsConfigSaved && (
+          <div className={`glass-success ${isLightBackground ? '' : ''} rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
+            <span className="text-lg">✅</span>
+            <span className="text-sm text-emerald-100">Saved successfully!</span>
+          </div>
+        )}
+        {ttsConfigError && (
+          <div className={`${
+            ttsConfigError.includes('✅') ? 'glass-success' : 
+            ttsConfigError.includes('⏳') ? 'glass-warning' : 
+            'glass-error'
+          } rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
+            <span className="text-lg">
+              {ttsConfigError.includes('✅') ? '✅' : 
+               ttsConfigError.includes('⏳') ? '⏳' : 
+               '❌'}
+            </span>
+            <span className={`text-sm ${
+              ttsConfigError.includes('✅') ? 'text-emerald-100' : 
+              ttsConfigError.includes('⏳') ? 'text-amber-100' : 
+              'text-red-100'
+            }`}>
+              {ttsConfigError}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -13,6 +13,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
     aiConfig,
     aiConfigSaved,
     aiConfigError,
+    aiTesting,
     updateAIConfig,
     saveAIConfig,
     testAIConnection,
@@ -388,10 +389,18 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4">
         <button 
-          onClick={testAIConnection} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
+          onClick={testAIConnection}
+          disabled={aiTesting}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
         >
-          Test Connection
+          {aiTesting ? (
+            <>
+              <span className="animate-spin">⏳</span>
+              <span>Testing...</span>
+            </>
+          ) : (
+            'Test Connection'
+          )}
         </button>
         <button 
           onClick={saveAIConfig} 
@@ -401,12 +410,35 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
         </button>
       </div>
       
-      {aiConfigSaved && (
-        <span className="text-sm text-green-400">✓ Saved successfully!</span>
-      )}
-      {aiConfigError && (
-        <span className="text-sm text-white/70">{aiConfigError}</span>
-      )}
+      {/* Status Messages - Glassmorphism Style */}
+      <div className="space-y-2 min-h-[40px]">
+        {aiConfigSaved && (
+          <div className={`glass-success ${isLightBackground ? '' : ''} rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
+            <span className="text-lg">✅</span>
+            <span className="text-sm text-emerald-100">Saved successfully!</span>
+          </div>
+        )}
+        {aiConfigError && (
+          <div className={`${
+            aiConfigError.includes('✅') ? 'glass-success' : 
+            aiConfigError.includes('⏳') ? 'glass-warning' : 
+            'glass-error'
+          } rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
+            <span className="text-lg">
+              {aiConfigError.includes('✅') ? '✅' : 
+               aiConfigError.includes('⏳') ? '⏳' : 
+               '❌'}
+            </span>
+            <span className={`text-sm ${
+              aiConfigError.includes('✅') ? 'text-emerald-100' : 
+              aiConfigError.includes('⏳') ? 'text-amber-100' : 
+              'text-red-100'
+            }`}>
+              {aiConfigError}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

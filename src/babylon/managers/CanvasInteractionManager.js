@@ -141,6 +141,9 @@ export class CanvasInteractionManager {
       // Update cursor
       this.canvas.style.cursor = 'grabbing';
       
+      // Emit drag start event for UI components to show drag visual
+      window.dispatchEvent(new CustomEvent('modelDragStart'));
+      
       if (this.onDragStartCallback) {
         this.onDragStartCallback(event.clientX, event.clientY);
       }
@@ -176,6 +179,9 @@ export class CanvasInteractionManager {
     
     // Restore cursor
     this.canvas.style.cursor = this.isOverModel ? 'grab' : 'default';
+    
+    // Emit drag end event for UI components to hide drag visual
+    window.dispatchEvent(new CustomEvent('modelDragEnd'));
     
     if (this.onDragEndCallback) {
       this.onDragEndCallback(event.clientX, event.clientY);

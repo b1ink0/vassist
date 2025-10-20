@@ -37,11 +37,13 @@ export const ConfigProvider = ({ children }) => {
   const [aiConfig, setAiConfig] = useState(DefaultAIConfig);
   const [aiConfigSaved, setAiConfigSaved] = useState(false);
   const [aiConfigError, setAiConfigError] = useState('');
+  const [aiTesting, setAiTesting] = useState(false);
 
   // TTS Config
   const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
   const [ttsConfigSaved, setTtsConfigSaved] = useState(false);
   const [ttsConfigError, setTtsConfigError] = useState('');
+  const [ttsTesting, setTtsTesting] = useState(false);
 
   // STT Config
   const [sttConfig, setSttConfig] = useState(DefaultSTTConfig);
@@ -195,14 +197,18 @@ export const ConfigProvider = ({ children }) => {
 
   const testAIConnection = useCallback(async () => {
     setAiConfigError('');
+    setAiTesting(true);
     
     try {
       AIServiceProxy.configure(aiConfig);
+      setAiConfigError('⏳ Testing connection...');
       await AIServiceProxy.testConnection();
       setAiConfigError('✅ Connection successful!');
       setTimeout(() => setAiConfigError(''), 3000);
     } catch (error) {
       setAiConfigError('❌ Connection failed: ' + error.message);
+    } finally {
+      setAiTesting(false);
     }
   }, [aiConfig]);
 
@@ -252,14 +258,18 @@ export const ConfigProvider = ({ children }) => {
 
   const testTTSConnection = useCallback(async () => {
     setTtsConfigError('');
+    setTtsTesting(true);
     
     try {
       TTSServiceProxy.configure(ttsConfig);
+      setTtsConfigError('⏳ Testing TTS...');
       await TTSServiceProxy.testConnection("Testing text to speech");
       setTtsConfigError('✅ TTS test successful!');
       setTimeout(() => setTtsConfigError(''), 3000);
     } catch (error) {
       setTtsConfigError('❌ TTS test failed: ' + error.message);
+    } finally {
+      setTtsTesting(false);
     }
   }, [ttsConfig]);
 
@@ -427,6 +437,7 @@ export const ConfigProvider = ({ children }) => {
     aiConfig,
     aiConfigSaved,
     aiConfigError,
+    aiTesting,
     updateAIConfig,
     saveAIConfig,
     testAIConnection,
@@ -435,6 +446,7 @@ export const ConfigProvider = ({ children }) => {
     ttsConfig,
     ttsConfigSaved,
     ttsConfigError,
+    ttsTesting,
     updateTTSConfig,
     saveTTSConfig,
     testTTSConnection,
@@ -458,7 +470,7 @@ export const ConfigProvider = ({ children }) => {
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
-  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, updateAIConfig, saveAIConfig, testAIConnection, ttsConfig, ttsConfigSaved, ttsConfigError, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
+  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
 
   return (
     <ConfigContext.Provider value={value}>

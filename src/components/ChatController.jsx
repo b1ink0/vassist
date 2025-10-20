@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
@@ -14,15 +14,17 @@ const ChatController = ({
   isAssistantReady,
   modelDisabled = false
 }) => {
+  const chatInputRef = useRef(null);
+  
   // Chat UI state
   const [isChatInputVisible, setIsChatInputVisible] = useState(false)
   const [isChatContainerVisible, setIsChatContainerVisible] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [isVoiceMode, setIsVoiceMode] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false) // Track TTS playback state
-  const [currentChatId, setCurrentChatId] = useState(null) // Track current chat ID
-  const [isTempChat, setIsTempChat] = useState(false) // Temp chat flag
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [currentChatId, setCurrentChatId] = useState(null)
+  const [isTempChat, setIsTempChat] = useState(false)
 
   /**
    * Track voice conversation state to update isSpeaking
@@ -734,10 +736,12 @@ const ChatController = ({
         isVisible={modelDisabled ? true : (isAssistantReady && !(isChatContainerVisible || isChatInputVisible))}
         modelDisabled={modelDisabled}
         isChatOpen={isChatContainerVisible || isChatInputVisible}
+        chatInputRef={chatInputRef}
       />
 
       {/* Chat Input - bottom screen */}
       <ChatInput
+        ref={chatInputRef}
         isVisible={isChatInputVisible}
         onSend={handleMessageSend}
         onClose={handleChatInputClose}
@@ -753,6 +757,7 @@ const ChatController = ({
         isGenerating={isProcessing}
         isSpeaking={isSpeaking}
         modelDisabled={modelDisabled}
+        chatInputRef={chatInputRef}
       />
     </>
   )

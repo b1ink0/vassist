@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageServiceProxy } from '../services/proxies';
 
-const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabled = false, isChatOpen = false }) => {
-  const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
+const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
+  const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 });
   const [isDragging, setIsDragging] = useState(false);
-  const [hasDragged, setHasDragged] = useState(false); // Track if user actually dragged
+  const [hasDragged, setHasDragged] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
-  const buttonPosRef = useRef({ x: -100, y: -100 }); // Track buttonPos without causing effect dependencies
+  const buttonPosRef = useRef({ x: -100, y: -100 });
 
   // Check if model is disabled on mount and set initial position
   useEffect(() => {
@@ -72,15 +72,13 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     return () => window.removeEventListener('resize', handleResize);
   }, [modelDisabled, handleResize]);
 
-  // Move button up if it's over the input prompt when chat opens
   useEffect(() => {
     if (!modelDisabled || !isChatOpen) return;
 
-    const chatInputHeight = 110; // Actual height of ChatInput bar
-    const minDistanceFromBottom = chatInputHeight + 15; // Input height + gap
+    const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+    const minDistanceFromBottom = chatInputHeight + 15;
 
-    // Check if button is too close to bottom (would overlap input)
-    const currentPos = buttonPosRef.current; // Use ref to avoid effect dependency
+    const currentPos = buttonPosRef.current;
     if (currentPos.y > window.innerHeight - minDistanceFromBottom) {
       const newY = window.innerHeight - minDistanceFromBottom;
       const newPos = { x: currentPos.x, y: newY };
@@ -90,11 +88,10 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
         console.error('[ChatButton] Failed to save position when chat opened:', error);
       });
       
-      // Emit event so container follows
       const event = new CustomEvent('chatButtonMoved', { detail: newPos });
       window.dispatchEvent(event);
     }
-  }, [modelDisabled, isChatOpen]);
+  }, [modelDisabled, isChatOpen, chatInputRef]);
 
   useEffect(() => {
     /**

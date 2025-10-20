@@ -8,43 +8,192 @@ import ChatHistoryPanel from './ChatHistoryPanel';
 
 const ChatContainer = ({ 
   positionManagerRef, 
-  messages = [], // Array of { role: 'user' | 'assistant', content: string }
+  messages = [],
   isVisible = false,
-  isGenerating = false, // Whether AI is currently generating a response
-  isSpeaking = false, // Whether TTS is currently playing
-  modelDisabled = false
+  isGenerating = false,
+  isSpeaking = false,
+  modelDisabled = false,
+  chatInputRef
 }) => {
+  const buttonPosRef = useRef({ x: window.innerWidth - 68, y: window.innerHeight - 68 });
+  const buttonInitializedRef = useRef(false);
   const [containerPos, setContainerPos] = useState({ x: 0, y: 0 });
   const scrollRef = useRef(null);
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
-  const [isDragging, setIsDragging] = useState(false); // Track if button is being dragged
-  const currentSessionRef = useRef(null); // Track current TTS session
-  const [isLightBackground, setIsLightBackground] = useState(false); // Track background brightness
-  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig); // TTS configuration
+  const [isDragging, setIsDragging] = useState(false);
+  const currentSessionRef = useRef(null);
+  const [isLightBackground, setIsLightBackground] = useState(false);
+  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
   const containerRef = useRef(null);
   const messagesContainerRef = useRef(null);
-  const [debugMarkers, setDebugMarkers] = useState([]); // Debug markers for sample points
-  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false); // Settings panel visibility
-  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false); // Chat history panel visibility
-  const [isTempChat, setIsTempChat] = useState(false); // Temporary chat mode
+  const [debugMarkers, setDebugMarkers] = useState([]);
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [isTempChat, setIsTempChat] = useState(false);
 
-  // Memoized callbacks for ChatHistoryPanel to prevent unnecessary re-renders
+  const calculateContainerPosition = useCallback(() => {
+    const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+    
+    if (modelDisabled) {
+      const buttonPos = buttonPosRef.current;
+      const containerWidth = 400;
+      const containerHeight = 500;
+      const offsetY = 15;
+      const buttonSize = 48;
+      
+      const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+      let containerY = buttonPos.y - containerHeight - offsetY - chatInputHeight;
+      containerY = Math.max(10, containerY);
+      const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
+      containerY = Math.min(containerY, maxY);
+      
+      return { x: containerX, y: containerY };
+    } else if (positionManagerRef?.current) {
+      try {
+        const modelPos = positionManagerRef.current.getPositionPixels();
+        const containerWidth = 400;
+        const containerHeight = 500;
+        const offsetX = 15;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        const rightX = modelPos.x + modelPos.width + offsetX;
+        const leftX = modelPos.x - containerWidth - offsetX;
+        const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
+        const wouldOverflowLeft = leftX < 10;
+        const modelRightEdge = modelPos.x + modelPos.width;
+        const wouldOverlapRight = modelRightEdge > rightX;
+        
+        let shouldBeOnLeft = false;
+        if (wouldOverflowRight) {
+          shouldBeOnLeft = true;
+        } else if (wouldOverlapRight && !wouldOverflowLeft) {
+          shouldBeOnLeft = true;
+        } else if (modelPos.x > windowWidth * 0.7) {
+          shouldBeOnLeft = true;
+        }
+        
+        let containerX = shouldBeOnLeft ? leftX : rightX;
+        containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+        let containerY = modelPos.y;
+        containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
+        
+        return { x: containerX, y: containerY };
+      } catch (error) {
+        console.error('[ChatContainer] Failed to calculate model position:', error);
+        return { x: 0, y: 0 };
+      }
+    }
+    
+    return { x: 0, y: 0 };
+  }, [modelDisabled, positionManagerRef, chatInputRef]);
+
+  // Initialize button position from storage in chat-only mode
+  useEffect(() => {
+    if (!modelDisabled || buttonInitializedRef.current) return;
+
+    const initButton = async () => {
+      try {
+        const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
+        const savedPos = await StorageServiceProxy.configLoad('chatButtonPosition', defaultPos);
+        buttonPosRef.current = savedPos;
+        buttonInitializedRef.current = true;
+        setContainerPos(calculateContainerPosition());
+      } catch (error) {
+        console.error('[ChatContainer] Failed to load button position:', error);
+        buttonInitializedRef.current = true;
+      }
+    };
+
+    initButton();
+  }, [modelDisabled, calculateContainerPosition]);
+
+  // Recalculate position when visibility changes in model mode
+  useEffect(() => {
+    if (!isVisible || modelDisabled) return;
+    
+    const newPos = calculateContainerPosition();
+    setContainerPos(newPos);
+  }, [isVisible, modelDisabled, calculateContainerPosition]);
+
+  // Listen to model position changes and calculate container position
+  useEffect(() => {
+    if (!isVisible) return;
+    
+    const handleModelPosition = () => {
+      const newPos = calculateContainerPosition();
+      setContainerPos(newPos);
+    };
+
+    if (!modelDisabled) {
+      handleModelPosition();
+      window.addEventListener('modelPositionChange', handleModelPosition);
+      return () => window.removeEventListener('modelPositionChange', handleModelPosition);
+    }
+  }, [isVisible, modelDisabled, calculateContainerPosition]);
+
+  // Update position on window resize
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const handleResize = () => {
+      const newPos = calculateContainerPosition();
+      setContainerPos(newPos);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isVisible, calculateContainerPosition]);
+
+  // Listen to button movement in chat-only mode
+  useEffect(() => {
+    const handleButtonMoved = (event) => {
+      buttonPosRef.current = event.detail;
+      const newPos = calculateContainerPosition();
+      setContainerPos(newPos);
+    };
+
+    if (modelDisabled) {
+      window.addEventListener('chatButtonMoved', handleButtonMoved);
+      return () => window.removeEventListener('chatButtonMoved', handleButtonMoved);
+    }
+  }, [modelDisabled, calculateContainerPosition]);
+
+  // Listen to drag events to show outline/border around container
+  useEffect(() => {
+    const handleDragStart = () => setIsDragging(true);
+    const handleDragEnd = () => setIsDragging(false);
+
+    if (modelDisabled) {
+      window.addEventListener('chatButtonDragStart', handleDragStart);
+      window.addEventListener('chatButtonDragEnd', handleDragEnd);
+      return () => {
+        window.removeEventListener('chatButtonDragStart', handleDragStart);
+        window.removeEventListener('chatButtonDragEnd', handleDragEnd);
+      };
+    } else {
+      window.addEventListener('modelDragStart', handleDragStart);
+      window.addEventListener('modelDragEnd', handleDragEnd);
+      return () => {
+        window.removeEventListener('modelDragStart', handleDragStart);
+        window.removeEventListener('modelDragEnd', handleDragEnd);
+      };
+    }
+  }, [modelDisabled]);
+
   const handleHistoryClose = useCallback(() => {
     setIsHistoryPanelOpen(false);
   }, []);
 
   const handleSelectChat = useCallback((chat) => {
-    // Dispatch event to load selected chat
     window.dispatchEvent(new CustomEvent('loadChatFromHistory', {
       detail: { chatData: chat }
     }));
     setIsHistoryPanelOpen(false);
   }, []);
 
-  /**
-   * Load TTS configuration from storage
-   */
+  // Load TTS configuration from storage on mount
   useEffect(() => {
     const loadTtsConfig = async () => {
       try {
@@ -242,7 +391,6 @@ const ChatContainer = ({
       const height = scrollRef.current.clientHeight;
       const maxScrollTop = scrollHeight - height;
       
-      // Smooth scroll animation
       scrollRef.current.scrollTo({
         top: maxScrollTop,
         behavior: 'smooth'
@@ -250,163 +398,7 @@ const ChatContainer = ({
     }
   };
 
-  /**
-   * Update container position based on model position or chat button position
-   */
-  useEffect(() => {
-    const updatePosition = async (event) => {
-      // If model is disabled, position relative to chat button
-      if (modelDisabled) {
-        let buttonPos;
-        
-        // If event has detail (real-time drag update), use it
-        if (event?.detail) {
-          buttonPos = event.detail;
-        } else {
-          // Otherwise, get saved position from storage
-          try {
-            buttonPos = await StorageServiceProxy.configLoad('chatButtonPosition', { x: window.innerWidth - 68, y: window.innerHeight - 68 });
-          } catch (error) {
-            console.error('[ChatContainer] Failed to load button position:', error);
-            buttonPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
-          }
-        }
-        
-        const containerWidth = 400;
-        const containerHeight = 500;
-        const offsetY = 15; // Space between container and button
-        const buttonSize = 48;
-        const chatInputHeight = 110; // Actual height of ChatInput bar at bottom
-        
-        // Position container ABOVE the button (centered horizontally with button)
-        const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
-        
-        // Start position above button, but shift up by input bar height by default
-        let containerY = buttonPos.y - containerHeight - offsetY - chatInputHeight;
-        
-        // Make sure it doesn't go off-screen at the top
-        containerY = Math.max(10, containerY);
-        
-        // Make sure it doesn't overlap the input bar at bottom
-        const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
-        containerY = Math.min(containerY, maxY);
-        
-        setContainerPos({ x: containerX, y: containerY });
-        console.log('[ChatContainer] Updated position based on button:', { buttonPos, containerPos: { x: containerX, y: containerY } });
-        return;
-      }
-
-      // Model is enabled - position relative to model
-      let modelPos;
-      
-      // If event has detail (from modelPositionChange event), use it
-      if (event?.detail) {
-        modelPos = event.detail;
-      } else if (positionManagerRef?.current) {
-        // Otherwise, get from position manager
-        try {
-          modelPos = positionManagerRef.current.getPositionPixels();
-        } catch (error) {
-          console.error('[ChatContainer] Failed to get model position:', error);
-          return;
-        }
-      } else {
-        return;
-      }
-        
-      const containerWidth = 400;
-      const containerHeight = 500;
-      const offsetX = 15;
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      
-      // Calculate potential positions
-      const rightX = modelPos.x + modelPos.width + offsetX;
-      const leftX = modelPos.x - containerWidth - offsetX;
-      
-      // Check if right position would go off-screen
-      const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-      
-      // Check if left position would go off-screen
-      const wouldOverflowLeft = leftX < 10;
-      
-      // Check if model would overlap container on right side
-      const modelRightEdge = modelPos.x + modelPos.width;
-      const wouldOverlapRight = modelRightEdge > rightX; // Model extends into where container would be
-      
-      // Decide which side to prefer
-      // Priority:
-      // 1. Avoid going off-screen (critical)
-      // 2. Avoid overlap with model (important)
-      // 3. Prefer right side (default)
-      let shouldBeOnLeft = false;
-      
-      if (wouldOverflowRight) {
-        // Right side would go off-screen, must use left
-        shouldBeOnLeft = true;
-      } else if (wouldOverlapRight && !wouldOverflowLeft) {
-        // Right side would overlap AND left side is available
-        shouldBeOnLeft = true;
-      } else if (modelPos.x > windowWidth * 0.7) {
-        // Model is far right, use left side
-        shouldBeOnLeft = true;
-      }
-      
-      // Calculate final position
-      let containerX = shouldBeOnLeft ? leftX : rightX;
-      
-      // Ensure container stays within horizontal bounds (CRITICAL - never go off-screen)
-      containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
-      
-      // Align with model top, but ensure it stays within vertical bounds
-      let containerY = modelPos.y;
-      containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
-      
-      setContainerPos({ x: containerX, y: containerY });
-    };
-
-    if (isVisible) {
-      updatePosition();
-      window.addEventListener('resize', updatePosition);
-      
-      // Listen to different events based on model state
-      if (modelDisabled) {
-        // In chat-only mode, listen for button position changes
-        window.addEventListener('chatButtonMoved', updatePosition);
-      } else {
-        // In model mode, listen for model position changes
-        window.addEventListener('modelPositionChange', updatePosition);
-      }
-
-      return () => {
-        window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('modelPositionChange', updatePosition);
-        window.removeEventListener('chatButtonMoved', updatePosition);
-      };
-    }
-  }, [positionManagerRef, isVisible, modelDisabled]);
-
-  /**
-   * Listen for drag events to show border
-   */
-  useEffect(() => {
-    if (!modelDisabled) return;
-
-    const handleDragStart = () => setIsDragging(true);
-    const handleDragEnd = () => setIsDragging(false);
-
-    window.addEventListener('chatButtonDragStart', handleDragStart);
-    window.addEventListener('chatButtonDragEnd', handleDragEnd);
-
-    return () => {
-      window.removeEventListener('chatButtonDragStart', handleDragStart);
-      window.removeEventListener('chatButtonDragEnd', handleDragEnd);
-    };
-  }, [modelDisabled]);
-
-  /**
-   * Auto-scroll to bottom when messages change
-   */
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -486,6 +478,10 @@ const ChatContainer = ({
 
   if (!isVisible) return null;
 
+  if (modelDisabled && !buttonInitializedRef.current) return null;
+
+  if (!modelDisabled && (containerPos.x === 0 && containerPos.y === 0)) return null;
+
   return (
     <>
       {/* Debug markers for background detection */}
@@ -532,7 +528,7 @@ const ChatContainer = ({
       >
       {/* Action buttons at BOTTOM - closer to container */}
       <div className="relative flex items-center justify-end gap-2 px-6 pb-1">
-        {/* Stop, Clear, and Close buttons - only shown when there are messages */}
+        {/* Stop, Clear, and Settings buttons - only shown when there are messages */}
         {messages.length > 0 && (
           <>
             <button
@@ -630,7 +626,7 @@ const ChatContainer = ({
                   💬 Type a message to start chatting...
                 </div>
               </div>
-              {/* Buttons when no messages: History, Temp, and Settings */}
+              {/* Buttons when no messages: History, Temp, Settings, and Close */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
@@ -653,28 +649,43 @@ const ChatContainer = ({
                 >
                   <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
                 </button>
+                {/* Close button - always shown when model is loaded (no chat button available) */}
+                {!modelDisabled && (
+                  <button
+                    onClick={() => {
+                      const event = new CustomEvent('closeChat');
+                      window.dispatchEvent(event);
+                    }}
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
+                    title="Close chat"
+                  >
+                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
+                  </button>
+                )}
               </div>
             </div>
           ) : (
-            messages.slice().reverse().map((msg, index) => {
-              const isUser = msg.role === 'user';
-              const isError = msg.content.toLowerCase().startsWith('error:');
-              const messageIndex = messages.length - 1 - index;
-              const isPlaying = playingMessageIndex === messageIndex;
-              const isLoading = loadingMessageIndex === messageIndex;
-              
-              // Use ttsConfig from state
-              const ttsEnabled = ttsConfig.enabled;
-              
-              // Check if message has audio attachments
-              const hasAudio = isUser && msg.audios && msg.audios.length > 0;
-              
-              return (
-                <div
-                  key={messageIndex}
-                  className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`flex items-start gap-2 ${hasAudio ? 'w-[80%]' : 'max-w-[80%]'}`}>
+            <>
+              {messages.slice().reverse().map((msg, index) => {
+                const isUser = msg.role === 'user';
+                const isError = msg.content.toLowerCase().startsWith('error:');
+                const messageIndex = messages.length - 1 - index;
+                const isPlaying = playingMessageIndex === messageIndex;
+                const isLoading = loadingMessageIndex === messageIndex;
+                const isLastMessage = index === 0; // Last message in reversed order = first message
+                
+                // Use ttsConfig from state
+                const ttsEnabled = ttsConfig.enabled;
+                
+                // Check if message has audio attachments
+                const hasAudio = isUser && msg.audios && msg.audios.length > 0;
+                
+                return (
+                  <div key={`message-wrapper-${messageIndex}`} className="flex flex-col gap-3">
+                    <div
+                      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`flex items-start gap-2 ${hasAudio ? 'w-[80%]' : 'max-w-[80%]'}`}>
                     {/* Speaker icon for assistant messages (only show if TTS is enabled) */}
                     {!isUser && !isError && ttsEnabled && (
                       <button
@@ -745,8 +756,25 @@ const ChatContainer = ({
                     </div>
                   </div>
                 </div>
-              );
-            })
+                
+                {/* Loading indicator after last (first when reversed) user message */}
+                {isGenerating && isLastMessage && isUser && (
+                  <div className={`flex ${ttsConfig.enabled ? 'justify-start' : 'justify-start'}`}>
+                    <div className={`flex items-start gap-2 max-w-[80%] ${ttsConfig.enabled ? 'ml-9' : ''}`}>
+                      <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
+                        <div className="loading-dots">
+                          <span className="loading-dot"></span>
+                          <span className="loading-dot"></span>
+                          <span className="loading-dot"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>
