@@ -2,10 +2,19 @@
  * ConfigContext
  * Centralized configuration state management for all settings
  * Provides UI, LLM (AI), TTS, and STT configurations to all components
+ * Auto-saves all config changes after a short delay
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { AIServiceProxy, TTSServiceProxy, STTServiceProxy, StorageServiceProxy } from '../services/proxies';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { 
+  AIServiceProxy, 
+  TTSServiceProxy, 
+  STTServiceProxy, 
+  StorageServiceProxy,
+  TranslatorServiceProxy,
+  LanguageDetectorServiceProxy,
+  SummarizerServiceProxy
+} from '../services/proxies';
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
   DefaultAIConfig, 
@@ -28,6 +37,16 @@ export const useConfig = () => {
 };
 
 export const ConfigProvider = ({ children }) => {
+  // Track if initial load is complete to prevent auto-save during load
+  const initialLoadRef = useRef(true);
+
+  // Auto-save timeout refs for debouncing
+  const aiSaveTimeoutRef = useRef(null);
+  const ttsSaveTimeoutRef = useRef(null);
+  const sttSaveTimeoutRef = useRef(null);
+  const uiSaveTimeoutRef = useRef(null);
+  const generalSaveTimeoutRef = useRef(null);
+
   // UI Config
   const [uiConfig, setUiConfig] = useState(DefaultUIConfig);
   const [uiConfigSaved, setUiConfigSaved] = useState(false);
@@ -86,6 +105,20 @@ export const ConfigProvider = ({ children }) => {
         try {
           AIServiceProxy.configure(savedAiConfig);
           console.log('[ConfigContext] AI Service configured');
+          
+          // Configure AI Features services if enabled
+          if (savedAiConfig.aiFeatures?.translator?.enabled) {
+            TranslatorServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] Translator Service configured');
+          }
+          if (savedAiConfig.aiFeatures?.languageDetector?.enabled) {
+            LanguageDetectorServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] Language Detector Service configured');
+          }
+          if (savedAiConfig.aiFeatures?.summarizer?.enabled) {
+            SummarizerServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] Summarizer Service configured');
+          }
         } catch (error) {
           console.warn('[ConfigContext] Failed to configure AI Service:', error);
         }
@@ -115,6 +148,137 @@ export const ConfigProvider = ({ children }) => {
     };
 
     loadConfigs();
+  }, []);
+
+  // Auto-save AI config when it changes (after initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) return; // Skip during initial load
+    
+    if (aiSaveTimeoutRef.current) {
+      clearTimeout(aiSaveTimeoutRef.current);
+    }
+    
+    aiSaveTimeoutRef.current = setTimeout(async () => {
+      const validation = validateAIConfig(aiConfig);
+      if (!validation.valid) return;
+      
+      try {
+        await StorageServiceProxy.configSave('aiConfig', aiConfig);
+        setAiConfigSaved(true);
+        AIServiceProxy.configure(aiConfig);
+        
+        // Configure AI Features services
+        if (aiConfig.aiFeatures?.translator?.enabled) {
+          TranslatorServiceProxy.configure(aiConfig);
+        }
+        if (aiConfig.aiFeatures?.languageDetector?.enabled) {
+          LanguageDetectorServiceProxy.configure(aiConfig);
+        }
+        if (aiConfig.aiFeatures?.summarizer?.enabled) {
+          SummarizerServiceProxy.configure(aiConfig);
+        }
+        
+        setTimeout(() => setAiConfigSaved(false), 2000);
+        console.log('[ConfigContext] AI config auto-saved');
+      } catch (error) {
+        console.error('[ConfigContext] AI config auto-save failed:', error);
+      }
+    }, 500);
+  }, [aiConfig]);
+
+  // Auto-save TTS config when it changes (after initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) return; // Skip during initial load
+    
+    if (ttsSaveTimeoutRef.current) {
+      clearTimeout(ttsSaveTimeoutRef.current);
+    }
+    
+    ttsSaveTimeoutRef.current = setTimeout(async () => {
+      const validation = validateTTSConfig(ttsConfig);
+      if (!validation.valid) return;
+      
+      try {
+        await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
+        setTtsConfigSaved(true);
+        TTSServiceProxy.configure(ttsConfig);
+        setTimeout(() => setTtsConfigSaved(false), 2000);
+        console.log('[ConfigContext] TTS config auto-saved');
+      } catch (error) {
+        console.error('[ConfigContext] TTS config auto-save failed:', error);
+      }
+    }, 500);
+  }, [ttsConfig]);
+
+  // Auto-save STT config when it changes (after initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) return; // Skip during initial load
+    
+    if (sttSaveTimeoutRef.current) {
+      clearTimeout(sttSaveTimeoutRef.current);
+    }
+    
+    sttSaveTimeoutRef.current = setTimeout(async () => {
+      const validation = validateSTTConfig(sttConfig);
+      if (!validation.valid) return;
+      
+      try {
+        await StorageServiceProxy.configSave('sttConfig', sttConfig);
+        setSttConfigSaved(true);
+        STTServiceProxy.configure(sttConfig);
+        setTimeout(() => setSttConfigSaved(false), 2000);
+        console.log('[ConfigContext] STT config auto-saved');
+      } catch (error) {
+        console.error('[ConfigContext] STT config auto-save failed:', error);
+      }
+    }, 500);
+  }, [sttConfig]);
+
+  // Auto-save UI config when it changes (after initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) return; // Skip during initial load
+    
+    if (uiSaveTimeoutRef.current) {
+      clearTimeout(uiSaveTimeoutRef.current);
+    }
+    
+    uiSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await StorageServiceProxy.configSave('uiConfig', uiConfig);
+        setUiConfigSaved(true);
+        setTimeout(() => setUiConfigSaved(false), 2000);
+        console.log('[ConfigContext] UI config auto-saved');
+      } catch (error) {
+        console.error('[ConfigContext] UI config auto-save failed:', error);
+      }
+    }, 500);
+  }, [uiConfig]);
+
+  // Auto-save General config when it changes (after initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) return; // Skip during initial load
+    
+    if (generalSaveTimeoutRef.current) {
+      clearTimeout(generalSaveTimeoutRef.current);
+    }
+    
+    generalSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await StorageServiceProxy.configSave('generalConfig', generalConfig);
+        console.log('[ConfigContext] General config auto-saved');
+      } catch (error) {
+        console.error('[ConfigContext] General config auto-save failed:', error);
+      }
+    }, 500);
+  }, [generalConfig]);
+
+  // Mark initial load as complete after a short delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      initialLoadRef.current = false;
+      console.log('[ConfigContext] Initial load complete - auto-save enabled');
+    }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   // UI Config handlers
@@ -184,6 +348,21 @@ export const ConfigProvider = ({ children }) => {
       try {
         AIServiceProxy.configure(aiConfig);
         console.log('[ConfigContext] AI Service configured successfully');
+        
+        // Configure AI Features services
+        if (aiConfig.aiFeatures?.translator?.enabled) {
+          TranslatorServiceProxy.configure(aiConfig);
+          console.log('[ConfigContext] Translator Service configured');
+        }
+        if (aiConfig.aiFeatures?.languageDetector?.enabled) {
+          LanguageDetectorServiceProxy.configure(aiConfig);
+          console.log('[ConfigContext] Language Detector Service configured');
+        }
+        if (aiConfig.aiFeatures?.summarizer?.enabled) {
+          SummarizerServiceProxy.configure(aiConfig);
+          console.log('[ConfigContext] Summarizer Service configured');
+        }
+        
         setTimeout(() => setAiConfigSaved(false), 2000);
       } catch (error) {
         setAiConfigError('Failed to configure AI service: ' + error.message);
@@ -425,6 +604,31 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [checkChromeAIAvailability]);
 
+  // AI Features Test Functions
+  const testTranslator = useCallback(async (text, sourceLanguage, targetLanguage) => {
+    if (!aiConfig.aiFeatures?.translator?.enabled) {
+      throw new Error('Translator is disabled in settings');
+    }
+    const result = await TranslatorServiceProxy.translate(text, sourceLanguage, targetLanguage);
+    return result;
+  }, [aiConfig]);
+
+  const testLanguageDetector = useCallback(async (text) => {
+    if (!aiConfig.aiFeatures?.languageDetector?.enabled) {
+      throw new Error('Language Detector is disabled in settings');
+    }
+    const results = await LanguageDetectorServiceProxy.detect(text);
+    return results;
+  }, [aiConfig]);
+
+  const testSummarizer = useCallback(async (text, options = {}) => {
+    if (!aiConfig.aiFeatures?.summarizer?.enabled) {
+      throw new Error('Summarizer is disabled in settings');
+    }
+    const summary = await SummarizerServiceProxy.summarize(text, options);
+    return summary;
+  }, [aiConfig]);
+
   const value = useMemo(() => ({
     // UI Config
     uiConfig,
@@ -441,6 +645,11 @@ export const ConfigProvider = ({ children }) => {
     updateAIConfig,
     saveAIConfig,
     testAIConnection,
+    
+    // AI Features Tests
+    testTranslator,
+    testLanguageDetector,
+    testSummarizer,
     
     // TTS Config
     ttsConfig,
@@ -470,7 +679,7 @@ export const ConfigProvider = ({ children }) => {
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
-  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
+  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
 
   return (
     <ConfigContext.Provider value={value}>

@@ -15,7 +15,6 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
     sttConfigError,
     sttTesting,
     updateSTTConfig,
-    saveSTTConfig,
     testSTTRecording,
     
     // Chrome AI Status
@@ -286,20 +285,13 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
             'Test Recording (3s)'
           )}
         </button>
-        <button 
-          onClick={saveSTTConfig} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-        >
-          Save STT Config
-        </button>
       </div>
       
-      {/* Status Messages - Glassmorphism Style */}
+      {/* Status Messages */}
       <div className="space-y-2 min-h-[40px]">
         {sttConfigSaved && (
-          <div className={`glass-success ${isLightBackground ? '' : ''} rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">✅</span>
-            <span className="text-sm text-emerald-100">Saved successfully!</span>
+          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
+            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
           </div>
         )}
         {sttConfigError && (
@@ -307,19 +299,12 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
             sttConfigError.includes('✅') ? 'glass-success' : 
             sttConfigError.includes('🎤') ? 'glass-warning' : 
             'glass-error'
-          } rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">
-              {sttConfigError.includes('✅') ? '✅' : 
-               sttConfigError.includes('🎤') ? '🎤' : 
-               '❌'}
-            </span>
+          } rounded-2xl p-3 animate-in fade-in`}>
             <span className={`text-sm ${
               sttConfigError.includes('✅') ? 'text-emerald-100' : 
               sttConfigError.includes('🎤') ? 'text-amber-100' : 
               'text-red-100'
-            }`}>
-              {sttConfigError}
-            </span>
+            }`}>{sttConfigError}</span>
           </div>
         )}
       </div>

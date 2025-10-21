@@ -7,4 +7,7 @@ export { default as AIServiceProxy } from './AIServiceProxy.js';
 export { default as TTSServiceProxy } from './TTSServiceProxy.js';
 export { default as STTServiceProxy } from './STTServiceProxy.js';
 export { default as StorageServiceProxy } from './StorageServiceProxy.js';
+export { default as TranslatorServiceProxy } from './TranslatorServiceProxy.js';
+export { default as LanguageDetectorServiceProxy } from './LanguageDetectorServiceProxy.js';
+export { default as SummarizerServiceProxy } from './SummarizerServiceProxy.js';
 export { ServiceProxy } from './ServiceProxy.js';

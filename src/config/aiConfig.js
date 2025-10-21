@@ -121,6 +121,22 @@ export const DefaultAIConfig = {
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
+  
+  // AI Features Configuration (Available for all providers)
+  aiFeatures: {
+    translator: {
+      enabled: true, // Enable translator feature
+    },
+    languageDetector: {
+      enabled: true, // Enable language detector feature
+    },
+    summarizer: {
+      enabled: true, // Enable summarizer feature
+      defaultType: 'tldr', // 'tldr', 'key-points', 'teaser', 'headline'
+      defaultFormat: 'plain-text', // 'plain-text' or 'markdown'
+      defaultLength: 'medium', // 'short', 'medium', 'long'
+    },
+  },
 };
 
 /**
@@ -236,6 +252,27 @@ export function validateAIConfig(config) {
     }
     if (!config.ollama?.model || config.ollama.model.trim() === '') {
       errors.push('Ollama Model is required');
+    }
+  }
+  
+  // Validate AI Features
+  if (config.aiFeatures) {
+    const validTypes = ['tldr', 'key-points', 'teaser', 'headline'];
+    const validFormats = ['plain-text', 'markdown'];
+    const validLengths = ['short', 'medium', 'long'];
+    
+    if (config.aiFeatures.summarizer) {
+      const { defaultType, defaultFormat, defaultLength } = config.aiFeatures.summarizer;
+      
+      if (defaultType && !validTypes.includes(defaultType)) {
+        errors.push(`Invalid summarizer type: ${defaultType}`);
+      }
+      if (defaultFormat && !validFormats.includes(defaultFormat)) {
+        errors.push(`Invalid summarizer format: ${defaultFormat}`);
+      }
+      if (defaultLength && !validLengths.includes(defaultLength)) {
+        errors.push(`Invalid summarizer length: ${defaultLength}`);
+      }
     }
   }
   

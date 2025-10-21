@@ -15,7 +15,6 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
     aiConfigError,
     aiTesting,
     updateAIConfig,
-    saveAIConfig,
     testAIConnection,
     
     // Chrome AI Status
@@ -402,40 +401,26 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             'Test Connection'
           )}
         </button>
-        <button 
-          onClick={saveAIConfig} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-        >
-          Save LLM Config
-        </button>
       </div>
       
-      {/* Status Messages - Glassmorphism Style */}
+      {/* Status Messages */}
       <div className="space-y-2 min-h-[40px]">
         {aiConfigSaved && (
-          <div className={`glass-success ${isLightBackground ? '' : ''} rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">✅</span>
-            <span className="text-sm text-emerald-100">Saved successfully!</span>
+          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
+            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
           </div>
         )}
         {aiConfigError && (
           <div className={`${
-            aiConfigError.includes('✅') ? 'glass-success' : 
-            aiConfigError.includes('⏳') ? 'glass-warning' : 
+            aiConfigError.includes('✅') ? 'glass-success' :
+            aiConfigError.includes('⏳') ? 'glass-warning' :
             'glass-error'
-          } rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">
-              {aiConfigError.includes('✅') ? '✅' : 
-               aiConfigError.includes('⏳') ? '⏳' : 
-               '❌'}
-            </span>
+          } rounded-2xl p-3 animate-in fade-in`}>
             <span className={`text-sm ${
-              aiConfigError.includes('✅') ? 'text-emerald-100' : 
-              aiConfigError.includes('⏳') ? 'text-amber-100' : 
+              aiConfigError.includes('✅') ? 'text-emerald-100' :
+              aiConfigError.includes('⏳') ? 'text-amber-100' :
               'text-red-100'
-            }`}>
-              {aiConfigError}
-            </span>
+            }`}>{aiConfigError}</span>
           </div>
         )}
       </div>

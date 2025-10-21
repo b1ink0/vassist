@@ -14,13 +14,10 @@ const UISettings = ({ isLightBackground }) => {
     uiConfigSaved,
     uiConfigError,
     updateUIConfig,
-    saveUIConfig,
     
     // General Config
     generalConfig,
-    generalConfigError,
     updateGeneralConfig,
-    saveGeneralConfig,
   } = useConfig();
 
   return (
@@ -59,19 +56,6 @@ const UISettings = ({ isLightBackground }) => {
         <p className="text-xs text-white/50 ml-7">
           Show draggable debug panel for testing animations and positions
         </p>
-      </div>
-
-      {/* Save General Config Button */}
-      <div className="flex items-center gap-3 pt-4">
-        <button 
-          onClick={saveGeneralConfig} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-        >
-          Save General Config
-        </button>
-        {generalConfigError && (
-          <span className="text-sm text-red-400">{generalConfigError}</span>
-        )}
       </div>
 
       {/* Theme Mode */}
@@ -143,21 +127,17 @@ const UISettings = ({ isLightBackground }) => {
         </select>
       </div>
 
-      {/* Save Button */}
-      <div className="flex items-center gap-3 pt-4">
-        <button 
-          onClick={saveUIConfig} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-        >
-          Save UI Config
-        </button>
-        {uiConfigSaved && (
-          <span className="text-sm text-green-400">✓ Saved successfully!</span>
-        )}
-        {uiConfigError && (
-          <span className="text-sm text-red-400">{uiConfigError}</span>
-        )}
-      </div>
+      {/* Status Messages - auto-save feedback */}
+      {uiConfigSaved && (
+        <div className="glass-success rounded-2xl p-3 animate-in fade-in">
+          <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
+        </div>
+      )}
+      {uiConfigError && (
+        <div className="glass-error rounded-2xl p-3 animate-in fade-in">
+          <span className="text-sm text-red-100">{uiConfigError}</span>
+        </div>
+      )}
     </div>
   );
 };

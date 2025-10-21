@@ -1,7 +1,7 @@
 /**
  * SettingsPanel Component
  * User-facing settings panel that lives inside ChatContainer
- * Contains UI, LLM, TTS, STT configurations with test buttons
+ * Contains UI, LLM, TTS, STT, and AI Features configurations with test buttons
  * Uses ConfigContext for state management
  */
 
@@ -11,6 +11,7 @@ import UISettings from './settings/UISettings';
 import LLMSettings from './settings/LLMSettings';
 import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
+import AIFeaturesSettings from './settings/AIFeaturesSettings';
 
 const SettingsPanel = ({ onClose, isLightBackground }) => {
   const [activeTab, setActiveTab] = useState('ui');
@@ -84,6 +85,16 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
         >
           STT
         </button>
+        <button
+          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'ai-plus' 
+              ? 'border-white text-white' 
+              : 'border-transparent text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveTab('ai-plus')}
+        >
+          AI+
+        </button>
       </div>
 
       {/* Tab Content - Scrollable with custom scrollbar */}
@@ -105,6 +116,9 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
 
         {/* STT Tab */}
         {activeTab === 'stt' && <STTSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />}
+
+        {/* AI Features Tab */}
+        {activeTab === 'ai-plus' && <AIFeaturesSettings isLightBackground={isLightBackground} />}
       </div>
     </div>
   );

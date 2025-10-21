@@ -15,7 +15,6 @@ const TTSSettings = ({ isLightBackground }) => {
     ttsConfigError,
     ttsTesting,
     updateTTSConfig,
-    saveTTSConfig,
     testTTSConnection,
   } = useConfig();
 
@@ -187,20 +186,13 @@ const TTSSettings = ({ isLightBackground }) => {
             'Test TTS'
           )}
         </button>
-        <button 
-          onClick={saveTTSConfig} 
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg`}
-        >
-          Save TTS Config
-        </button>
       </div>
       
-      {/* Status Messages - Glassmorphism Style */}
+      {/* Status Messages */}
       <div className="space-y-2 min-h-[40px]">
         {ttsConfigSaved && (
-          <div className={`glass-success ${isLightBackground ? '' : ''} rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">✅</span>
-            <span className="text-sm text-emerald-100">Saved successfully!</span>
+          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
+            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
           </div>
         )}
         {ttsConfigError && (
@@ -208,19 +200,12 @@ const TTSSettings = ({ isLightBackground }) => {
             ttsConfigError.includes('✅') ? 'glass-success' : 
             ttsConfigError.includes('⏳') ? 'glass-warning' : 
             'glass-error'
-          } rounded-2xl p-3 animate-in fade-in flex items-center gap-2`}>
-            <span className="text-lg">
-              {ttsConfigError.includes('✅') ? '✅' : 
-               ttsConfigError.includes('⏳') ? '⏳' : 
-               '❌'}
-            </span>
+          } rounded-2xl p-3 animate-in fade-in`}>
             <span className={`text-sm ${
               ttsConfigError.includes('✅') ? 'text-emerald-100' : 
               ttsConfigError.includes('⏳') ? 'text-amber-100' : 
               'text-red-100'
-            }`}>
-              {ttsConfigError}
-            </span>
+            }`}>{ttsConfigError}</span>
           </div>
         )}
       </div>

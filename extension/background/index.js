@@ -16,6 +16,9 @@ import storageManager from '../../src/storage/StorageManager.js';
 import aiService from '../../src/services/AIService.js';
 import ttsService from '../../src/services/TTSService.js';
 import sttService from '../../src/services/STTService.js';
+import translatorService from '../../src/services/TranslatorService.js';
+import languageDetectorService from '../../src/services/LanguageDetectorService.js';
+import summarizerService from '../../src/services/SummarizerService.js';
 
 console.log('[Background] Service worker starting...');
 
@@ -261,6 +264,9 @@ async function registerHandlers() {
       aiService.initTab(tabId);
       ttsService.initTab(tabId);
       sttService.initTab(tabId);
+      translatorService.initTab(tabId);
+      languageDetectorService.initTab(tabId);
+      summarizerService.initTab(tabId);
       return { initialized: true };
     }
     return null;
@@ -273,6 +279,9 @@ async function registerHandlers() {
       aiService.cleanupTab(tabId);
       ttsService.cleanupTab(tabId);
       sttService.cleanupTab(tabId);
+      translatorService.cleanupTab(tabId);
+      languageDetectorService.cleanupTab(tabId);
+      summarizerService.cleanupTab(tabId);
     }
     return { cleaned: true };
   });
@@ -456,6 +465,91 @@ async function registerHandlers() {
     
     const text = await sttService.transcribeAudio(arrayBuffer, mimeType, tabId);
     return { text };
+  });
+
+  // Translator Service handlers
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_CONFIGURE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { config } = message.data;
+    await translatorService.configure(config, tabId);
+    return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_CHECK_AVAILABILITY, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { sourceLanguage, targetLanguage } = message.data;
+    const availability = await translatorService.checkAvailability(sourceLanguage, targetLanguage, tabId);
+    return { availability };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, sourceLanguage, targetLanguage } = message.data;
+    console.log(`[Background] TRANSLATOR_TRANSLATE: ${sourceLanguage}->${targetLanguage}`, text.substring(0, 50));
+    const translatedText = await translatorService.translate(text, sourceLanguage, targetLanguage, tabId);
+    return { translatedText };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_DESTROY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    await translatorService.destroy(tabId);
+    return { destroyed: true };
+  });
+
+  // Language Detector Service handlers
+  backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_CONFIGURE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { config } = message.data;
+    await languageDetectorService.configure(config, tabId);
+    return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const availability = await languageDetectorService.checkAvailability(tabId);
+    return { availability };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_DETECT, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text } = message.data;
+    console.log(`[Background] LANGUAGE_DETECTOR_DETECT:`, text.substring(0, 50));
+    const results = await languageDetectorService.detect(text, tabId);
+    return { results };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_DESTROY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    await languageDetectorService.destroy(tabId);
+    return { destroyed: true };
+  });
+
+  // Summarizer Service handlers
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_CONFIGURE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { config } = message.data;
+    await summarizerService.configure(config, tabId);
+    return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const availability = await summarizerService.checkAvailability(tabId);
+    return { availability };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, options } = message.data;
+    console.log(`[Background] SUMMARIZER_SUMMARIZE (${options?.type || 'tldr'}):`, text.substring(0, 50));
+    const summary = await summarizerService.summarize(text, options, tabId);
+    return { summary };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_DESTROY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    await summarizerService.destroy(tabId);
+    return { destroyed: true };
   });
 
   // Offscreen/Audio handlers
