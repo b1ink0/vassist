@@ -137,6 +137,10 @@ export class PositionManager {
     this.resizeHandler = null;
     this.resizeTimeout = null;
     
+    // Event throttling for position updates
+    this.eventThrottleRAF = null;
+    this.pendingPositionUpdate = null;
+    
     // Constants
     this.RESIZE_DEBOUNCE_MS = 150; // Debounce window resize to prevent 60fps updates
     
@@ -301,15 +305,14 @@ export class PositionManager {
     // Convert pixel position to camera frustum
     this.updateCameraFrustum();
     
-    // Emit position change event for UI components (ChatButton, etc.)
-    window.dispatchEvent(new CustomEvent('modelPositionChange', {
-      detail: { 
-        x: this.positionX, 
-        y: this.positionY, 
-        width: this.modelWidthPx, 
-        height: this.modelHeightPx 
-      }
-    }));
+    // Throttle position change events using RAF to prevent excessive updates
+    // This batches multiple rapid position changes into a single event per frame
+    this.emitPositionChangeThrottled({
+      x: this.positionX, 
+      y: this.positionY, 
+      width: this.modelWidthPx, 
+      height: this.modelHeightPx 
+    });
     
     if (!validated.valid) {
       console.warn('[PositionManager] Position adjusted to prevent cutoff', {
@@ -317,6 +320,32 @@ export class PositionManager {
         adjusted: { x: validated.adjustedX, y: validated.adjustedY }
       });
     }
+  }
+  
+  /**
+   * Emit position change event with RAF throttling
+   * Batches multiple rapid updates into one event per frame
+   */
+  emitPositionChangeThrottled(detail) {
+    // Store the latest position data
+    this.pendingPositionUpdate = detail;
+    
+    // If RAF already scheduled, just update the pending data
+    if (this.eventThrottleRAF !== null) {
+      return;
+    }
+    
+    // Schedule emission for next frame
+    this.eventThrottleRAF = requestAnimationFrame(() => {
+      // Emit the most recent position
+      if (this.pendingPositionUpdate) {
+        window.dispatchEvent(new CustomEvent('modelPositionChange', {
+          detail: this.pendingPositionUpdate
+        }));
+        this.pendingPositionUpdate = null;
+      }
+      this.eventThrottleRAF = null;
+    });
   }
   
   /**
@@ -564,6 +593,13 @@ export class PositionManager {
       clearTimeout(this.resizeTimeout);
       this.resizeTimeout = null;
     }
+    
+    // Cancel pending RAF for position events
+    if (this.eventThrottleRAF !== null) {
+      cancelAnimationFrame(this.eventThrottleRAF);
+      this.eventThrottleRAF = null;
+    }
+    this.pendingPositionUpdate = null;
     
     console.log('[PositionManager] Disposed');
   }

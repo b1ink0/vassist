@@ -87,7 +87,8 @@ const ChatContainer = ({
     }
     
     return { x: 0, y: 0 };
-  }, [modelDisabled, positionManagerRef, chatInputRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDisabled]); // Refs are stable, don't include them in dependencies
 
   // Initialize button position from storage in chat-only mode
   useEffect(() => {

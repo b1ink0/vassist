@@ -4,7 +4,7 @@
  * This component contains all the core UI logic without the background gradient
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import VirtualAssistant from './VirtualAssistant';
 import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
@@ -16,19 +16,19 @@ function AppContent({ mode = 'development' }) {
   const [isAssistantReady, setIsAssistantReady] = useState(false);
   const [isChatUIReady, setIsChatUIReady] = useState(false);
   
-  // Initialize with default, then load from storage
-  const [enableModelLoading, setEnableModelLoading] = useState(true);
+  // Initialize with null to indicate loading, preventing premature rendering
+  const [enableModelLoading, setEnableModelLoading] = useState(null);
   
-  // Load general config from storage
+  // Load general config from storage BEFORE rendering VirtualAssistant
   useEffect(() => {
     const loadGeneralConfig = async () => {
       try {
         const generalConfig = await StorageServiceProxy.configLoad('generalConfig', { enableModelLoading: true });
-        console.log(`[AppContent ${mode}] Initial model loading state:`, generalConfig.enableModelLoading);
+        console.log(`[AppContent ${mode}] Config loaded - model loading enabled:`, generalConfig.enableModelLoading);
         setEnableModelLoading(generalConfig.enableModelLoading);
       } catch (error) {
         console.error('[AppContent] Failed to load general config:', error);
-        setEnableModelLoading(true); // Default to true
+        setEnableModelLoading(true); // Default to true on error
       }
     };
     
@@ -42,7 +42,8 @@ function AppContent({ mode = 'development' }) {
   
   // Set assistant ready if model is disabled
   useEffect(() => {
-    if (!enableModelLoading) {
+    // Only run when config is loaded and model is disabled
+    if (enableModelLoading === false) {
       // Simulate brief loading time for chat-only mode (for smooth UX)
       const timer = setTimeout(() => {
         setIsAssistantReady(true);
@@ -72,40 +73,59 @@ function AppContent({ mode = 'development' }) {
     console.log(`[AppContent ${mode}] Position manager ref set, ready for position tracking`);
   }, [mode]);
 
+  // Memoize VirtualAssistant to prevent unmount on parent re-renders (e.g., ConfigContext updates)
+  // This is CRITICAL - without this, ConfigContext state changes cause VirtualAssistant to unmount/remount
+  const virtualAssistantComponent = useMemo(() => {
+    if (enableModelLoading === null) {
+      return null; // Still loading config
+    }
+    if (!enableModelLoading) {
+      return null; // Model disabled
+    }
+    return (
+      <VirtualAssistant 
+        ref={assistantRef}
+        onReady={handleAssistantReady}
+        mode={mode}
+      />
+    );
+  }, [enableModelLoading, handleAssistantReady, mode]);
+
   return (
     <div className="relative">
-      {/* Transparent 3D canvas overlay */}
-      {enableModelLoading && (
-        <VirtualAssistant 
-          ref={assistantRef}
-          onReady={handleAssistantReady}
-          mode={mode}
-        />
-      )}
-
-      {/* Unified Control Panel */}
-      <ControlPanel
-        isAssistantReady={isAssistantReady}
-        currentState={currentState}
-        assistantRef={assistantRef}
-        sceneRef={sceneRef}
-        positionManagerRef={positionManagerRef}
-        onStateChange={setCurrentState}
-      />
-
-      {/* Chat System - handles all chat logic with fade-in transition */}
-      <div className={`transition-opacity duration-700 ${isChatUIReady ? 'opacity-100' : 'opacity-0'}`}>
-        <ChatController
-          assistantRef={assistantRef}
-          positionManagerRef={positionManagerRef}
-          isAssistantReady={isAssistantReady}
-          modelDisabled={!enableModelLoading}
-        />
-      </div>
-      
-      {/* Loading indicator for chat-only mode */}
-      {!enableModelLoading && !isChatUIReady && (
+      {/* Don't render anything until config is loaded to prevent mount/unmount cycles */}
+      {enableModelLoading === null ? (
         <LoadingIndicator isVisible={true} />
+      ) : (
+        <>
+          {/* Transparent 3D canvas overlay - memoized to survive parent re-renders */}
+          {virtualAssistantComponent}
+
+          {/* Unified Control Panel */}
+          <ControlPanel
+            isAssistantReady={isAssistantReady}
+            currentState={currentState}
+            assistantRef={assistantRef}
+            sceneRef={sceneRef}
+            positionManagerRef={positionManagerRef}
+            onStateChange={setCurrentState}
+          />
+
+          {/* Chat System - handles all chat logic with fade-in transition */}
+          <div className={`transition-opacity duration-700 ${isChatUIReady ? 'opacity-100' : 'opacity-0'}`}>
+            <ChatController
+              assistantRef={assistantRef}
+              positionManagerRef={positionManagerRef}
+              isAssistantReady={isAssistantReady}
+              modelDisabled={!enableModelLoading}
+            />
+          </div>
+          
+          {/* Loading indicator for chat-only mode */}
+          {!enableModelLoading && !isChatUIReady && (
+            <LoadingIndicator isVisible={true} />
+          )}
+        </>
       )}
     </div>
   );

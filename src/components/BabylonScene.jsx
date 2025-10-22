@@ -5,9 +5,11 @@ import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
 
 const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {} }) => {
   const canvasRef = useRef(null);
+  const canvasElementRef = useRef(null); // Track actual canvas DOM element
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
+  const cleanupFnRef = useRef(null); // Store cleanup function
   
   // Store callbacks in refs to avoid dependency-related re-initialization
   const onSceneReadyRef = useRef(onSceneReady);
@@ -22,12 +24,51 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
   }, [onSceneReady, onLoadProgress, sceneConfig]);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    
-    // Capture canvas reference for cleanup
     const canvas = canvasRef.current;
+    if (!canvas) {
+      console.log('[BabylonScene] Canvas ref not ready');
+      return;
+    }
+    
+    console.log('[BabylonScene] Canvas ref ready, checking if in DOM...', canvas.parentNode ? 'YES' : 'NO');
+    
+    // Store canvas element for cleanup
+    canvasElementRef.current = canvas;
+    
+    // Check if this canvas is actually in the DOM (not orphaned from previous mount)
+    if (!canvas.parentNode) {
+      console.log('[BabylonScene] Canvas not in DOM yet, skipping initialization');
+      return;
+    }
+    
+    // Prevent double initialization - check if THIS specific canvas is already initialized
+    // We need to track per-canvas, not globally, because Strict Mode creates multiple canvases
+    if (canvas.dataset.babylonInitialized === 'true') {
+      console.log('[BabylonScene] This canvas already initialized, skipping');
+      return;
+    }
+    
+    // Mark as initializing to prevent race conditions
+    console.log('[BabylonScene] Starting initialization for new canvas...');
+    canvas.dataset.babylonInitializing = 'true';
 
     const initEngine = async () => {
+      // Use double RAF to ensure canvas is fully laid out
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      
+      // Check if canvas was removed during RAF wait
+      if (!canvas.parentNode) {
+        console.log('[BabylonScene] Canvas removed from DOM during initialization, aborting');
+        delete canvas.dataset.babylonInitializing;
+        return null;
+      }
+      
+      console.log('[BabylonScene] Canvas in DOM, creating engine...');
+      
+      // Mark this specific canvas as initialized
+      canvas.dataset.babylonInitialized = 'true';
+      delete canvas.dataset.babylonInitializing;
+      
       // Create the Babylon.js engine
       const engine = new Engine(canvas, true, {
         preserveDrawingBuffer: true,
@@ -85,6 +126,9 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       }
 
       sceneRef.current = scene;
+      
+      // Scene is now fully initialized
+      console.log('[BabylonScene] Initialization complete, scene mounted');
 
       // Notify parent component that scene is ready - use ref to avoid dependency changes
       if (onSceneReadyRef.current) {
@@ -106,13 +150,22 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       };
       window.addEventListener('resize', handleResize);
 
-      // Cleanup function
-      return () => {
-        console.log('[BabylonScene] Cleaning up...');
+      // Cleanup function for Babylon resources
+      const cleanupBabylon = () => {
+        console.log('[BabylonScene] Cleaning up Babylon resources...');
+        
+        // Clear canvas initialization flags
+        if (canvas) {
+          delete canvas.dataset.babylonInitialized;
+          delete canvas.dataset.babylonInitializing;
+        }
+        
         window.removeEventListener('resize', handleResize);
         
         // Stop render loop
-        engine.stopRenderLoop();
+        if (engine) {
+          engine.stopRenderLoop();
+        }
         
         // Dispose scene and engine
         if (scene) {
@@ -122,14 +175,56 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
           engine.dispose();
         }
         
-        console.log('[BabylonScene] Cleanup complete');
+        // Clear refs
+        engineRef.current = null;
+        sceneRef.current = null;
+        
+        console.log('[BabylonScene] Babylon cleanup complete');
       };
+      
+      return cleanupBabylon;
     };
 
-    const cleanup = initEngine();
+    // Start initialization and store cleanup function
+    const cleanupPromise = initEngine();
+    cleanupPromise.then(cleanupFn => {
+      cleanupFnRef.current = cleanupFn;
+    });
+    
+    // Cleanup effect
     return () => {
-      // Cleanup immediately - fade-out is handled by content script
-      cleanup.then(cleanupFn => cleanupFn && cleanupFn());
+      console.log('[BabylonScene] Effect cleanup triggered');
+      
+      // Cancel initialization if still in progress
+      if (canvas.dataset.babylonInitializing === 'true') {
+        console.log('[BabylonScene] Cancelling initialization');
+        delete canvas.dataset.babylonInitializing;
+      }
+      
+      // Execute Babylon cleanup if we have the function
+      if (cleanupFnRef.current) {
+        cleanupFnRef.current();
+        cleanupFnRef.current = null;
+      }
+      
+      // CRITICAL: DON'T remove canvas immediately in Strict Mode
+      // Delay removal to allow second mount to find the canvas
+      // If second mount happens, it will reuse the canvas
+      // If not (true unmount), canvas will be removed after delay
+      const canvasToRemove = canvasElementRef.current;
+      if (canvasToRemove && canvasToRemove.parentNode) {
+        // Use setTimeout(0) to defer removal until after second mount attempt
+        setTimeout(() => {
+          // Only remove if canvas is still orphaned (not reused by second mount)
+          if (canvasToRemove.dataset.babylonInitialized !== 'true' && 
+              canvasToRemove.dataset.babylonInitializing !== 'true' &&
+              canvasToRemove.parentNode) {
+            console.log('[BabylonScene] Removing orphaned canvas from DOM');
+            canvasToRemove.parentNode.removeChild(canvasToRemove);
+          }
+        }, 0);
+        canvasElementRef.current = null;
+      }
     };
     // onSceneReady and onLoadProgress stored in refs to prevent re-initialization
   }, [sceneBuilder]);

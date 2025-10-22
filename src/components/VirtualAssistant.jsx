@@ -33,7 +33,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const [currentState, setCurrentState] = useState(AssistantState.IDLE);
   const [isReady, setIsReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const initializedRef = useRef(false);
+  const initializedSceneRef = useRef(null); // Track which scene we initialized
 
   /**
    * Handle model loading progress
@@ -47,56 +47,61 @@ const VirtualAssistant = forwardRef((props, ref) => {
    * Called when BabylonScene is ready
    */
   const handleSceneReady = useCallback((scene) => {
-    // Prevent multiple initializations
-    if (initializedRef.current) {
-      console.log('[VirtualAssistant] Already initialized, ignoring duplicate scene ready');
+    // Prevent re-initializing the SAME scene (React Strict Mode protection)
+    // But allow initializing a NEW scene (after cleanup + remount)
+    if (initializedSceneRef.current === scene) {
+      console.log('[VirtualAssistant] Same scene already initialized, ignoring duplicate callback');
+      return;
+    }
+    
+    // Validate scene before proceeding
+    if (!scene || !scene.metadata || !scene.metadata.animationManager) {
+      console.error('[VirtualAssistant] Invalid scene or missing metadata, cannot initialize');
       return;
     }
     
     console.log('[VirtualAssistant] Scene ready, initializing...');
     
-    if (scene.metadata && scene.metadata.animationManager) {
-      const manager = scene.metadata.animationManager;
-      const posMgr = scene.metadata.positionManager;
-      
-      setAnimationManager(manager);
-      setPositionManager(posMgr);
-      setCurrentState(manager.getCurrentState());
-      setIsReady(true);
-      initializedRef.current = true;
-      
-      console.log('[VirtualAssistant] AnimationManager initialized and ready');
-      console.log('[VirtualAssistant] PositionManager ready with position data');
-      
-      // Initialize TTS Service with BVMD converter and animation callback
-      TTSServiceProxy.initializeBVMDConverter(scene);
-      TTSServiceProxy.setSpeakCallback((text, bvmdUrl) => {
-        // This will be called when audio starts playing
-        console.log('[VirtualAssistant] TTS triggering speak animation');
-        if (manager && bvmdUrl) {
-          manager.speak(text, bvmdUrl, 'talking');
-        }
-      });
-      TTSServiceProxy.setStopCallback(() => {
-        // This will be called when TTS is stopped/interrupted
-        console.log('[VirtualAssistant] TTS stopped, returning to idle');
-        if (manager) {
-          manager.returnToIdle();
-        }
-      });
-      console.log('[VirtualAssistant] TTS Service integrated with lip sync');
-      
-      // Call onReady callback if provided
-      if (onReady) {
-        console.log('[VirtualAssistant] Calling onReady callback with managers');
-        onReady({ 
-          animationManager: manager, 
-          positionManager: posMgr,
-          scene: scene
-        });
+    // Mark this specific scene as initialized
+    initializedSceneRef.current = scene;
+    
+    const manager = scene.metadata.animationManager;
+    const posMgr = scene.metadata.positionManager;
+    
+    setAnimationManager(manager);
+    setPositionManager(posMgr);
+    setCurrentState(manager.getCurrentState());
+    setIsReady(true);
+    
+    console.log('[VirtualAssistant] AnimationManager initialized and ready');
+    console.log('[VirtualAssistant] PositionManager ready with position data');
+    
+    // Initialize TTS Service with BVMD converter and animation callback
+    TTSServiceProxy.initializeBVMDConverter(scene);
+    TTSServiceProxy.setSpeakCallback((text, bvmdUrl) => {
+      // This will be called when audio starts playing
+      console.log('[VirtualAssistant] TTS triggering speak animation');
+      if (manager && bvmdUrl) {
+        manager.speak(text, bvmdUrl, 'talking');
       }
-    } else {
-      console.error('[VirtualAssistant] AnimationManager not found in scene metadata');
+    });
+    TTSServiceProxy.setStopCallback(() => {
+      // This will be called when TTS is stopped/interrupted
+      console.log('[VirtualAssistant] TTS stopped, returning to idle');
+      if (manager) {
+        manager.returnToIdle();
+      }
+    });
+    console.log('[VirtualAssistant] TTS Service integrated with lip sync');
+    
+    // Call onReady callback if provided
+    if (onReady) {
+      console.log('[VirtualAssistant] Calling onReady callback with managers');
+      onReady({ 
+        animationManager: manager, 
+        positionManager: posMgr,
+        scene: scene
+      });
     }
   }, [onReady]);
 

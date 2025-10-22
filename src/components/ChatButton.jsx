@@ -8,6 +8,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
   const buttonPosRef = useRef({ x: -100, y: -100 });
+  const lastSetPosition = useRef({ x: -100, y: -100 });
 
   // Check if model is disabled on mount and set initial position
   useEffect(() => {
@@ -91,7 +92,8 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       const event = new CustomEvent('chatButtonMoved', { detail: newPos });
       window.dispatchEvent(event);
     }
-  }, [modelDisabled, isChatOpen, chatInputRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDisabled, isChatOpen]); // chatInputRef is stable, don't include in dependencies
 
   useEffect(() => {
     /**
@@ -150,7 +152,33 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
         const buttonX = shouldBeOnLeft ? leftX : rightX;
         const buttonY = modelPos.y + modelPos.height - buttonSize - offsetY;
         
-        setButtonPos({ x: buttonX, y: buttonY });
+        // CRITICAL: Only update if position actually changed
+        // This prevents infinite re-render loops
+        setButtonPos(prev => {
+          // Round to prevent floating point precision issues
+          const newX = Math.round(buttonX);
+          const newY = Math.round(buttonY);
+          const prevX = Math.round(prev.x);
+          const prevY = Math.round(prev.y);
+          
+          // Check against lastSetPosition to prevent duplicate updates
+          if (newX === lastSetPosition.current.x && newY === lastSetPosition.current.y) {
+            console.log('[ChatButton] Skipping - same as last set position');
+            return prev;
+          }
+          
+          // DEBUG: Log when position would change
+          if (newX !== prevX || newY !== prevY) {
+            console.log('[ChatButton] Position changing:', { prev: { x: prevX, y: prevY }, new: { x: newX, y: newY } });
+            lastSetPosition.current = { x: newX, y: newY };
+          }
+          
+          if (newX === prevX && newY === prevY) {
+            return prev; // No change, don't trigger re-render
+          }
+          
+          return { x: newX, y: newY };
+        });
       } catch (error) {
         console.error('[ChatButton] Failed to update position:', error);
       }
@@ -160,7 +188,10 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     if (modelDisabled) return;
 
     // Wrap handler to accept event objects
-    const eventHandler = (event) => updatePosition(event);
+    const eventHandler = (event) => {
+      console.log('[ChatButton] modelPositionChange event received');
+      updatePosition(event);
+    };
     
     // Listen for window resize
     window.addEventListener('resize', updatePosition);
