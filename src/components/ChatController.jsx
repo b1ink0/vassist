@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
@@ -7,28 +7,37 @@ import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../service
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
+import { useApp } from '../contexts/AppContext'
 
 const ChatController = ({ 
-  assistantRef, 
-  positionManagerRef, 
-  isAssistantReady,
   modelDisabled = false
 }) => {
   const chatInputRef = useRef(null);
   
-  // Chat UI state
-  const [isChatInputVisible, setIsChatInputVisible] = useState(false)
-  const [isChatContainerVisible, setIsChatContainerVisible] = useState(false)
-  const [chatMessages, setChatMessages] = useState([])
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [isVoiceMode, setIsVoiceMode] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [currentChatId, setCurrentChatId] = useState(null)
-  const [isTempChat, setIsTempChat] = useState(false)
-  const [pendingDropData, setPendingDropData] = useState(null) // Store drop data until ChatInput mounts
+  // Get shared state and actions from AppContext
+  const {
+    assistantRef,
+    isAssistantReady,
+    isChatInputVisible,
+    isChatContainerVisible,
+    chatMessages,
+    isVoiceMode,
+    currentChatId,
+    isTempChat,
+    setIsChatInputVisible,
+    setIsChatContainerVisible,
+    setChatMessages,
+    setIsProcessing,
+    setIsVoiceMode,
+    setIsSpeaking,
+    setCurrentChatId,
+    setPendingDropData,
+  } = useApp();
 
   /**
    * Track voice conversation state to update isSpeaking
+   * Note: This is now handled in AppContext, but we keep local tracking
+   * for any component-specific logic
    */
   useEffect(() => {
     const handleStateChange = (state) => {
@@ -40,11 +49,12 @@ const ChatController = ({
     return () => {
       VoiceConversationService.setStateChangeCallback(null);
     };
-  }, []);
+  }, [setIsSpeaking]);
 
   /**
    * Poll TTSService to track playback state for non-voice mode
    * This ensures stop button works even in regular chat when TTS is playing
+   * Note: This is now handled in AppContext, but we keep local tracking
    */
   useEffect(() => {
     const interval = setInterval(() => {
@@ -57,175 +67,16 @@ const ChatController = ({
     }, 100); // Check every 100ms
 
     return () => clearInterval(interval);
-  }, [isVoiceMode]);
+  }, [isVoiceMode, setIsSpeaking]);
 
   /**
-   * Setup event listeners for chat actions
+   * Note: Event listeners for closeChat, clearChat, stopGeneration, and loadChatFromHistory
+   * are now handled by AppContext. This component focuses on message handling logic.
    */
-  useEffect(() => {
-    const handleCloseChat = () => {
-      console.log('[ChatController] Close chat event received')
-      setIsChatInputVisible(false)
-      setIsChatContainerVisible(false)
-      // Stop any playing TTS
-      TTSServiceProxy.stopPlayback()
-    }
-
-    const handleClearChat = async () => {
-      console.log('[ChatController] Clear chat event received')
-      
-      // If temp, delete from history. Otherwise just clear UI (it was already auto-saved)
-      if (isTempChat && currentChatId) {
-        try {
-          await chatHistoryService.deleteChat(currentChatId)
-          console.log('[ChatController] Temp chat deleted:', currentChatId)
-        } catch (error) {
-          console.error('[ChatController] Failed to delete temp chat:', error)
-        }
-      }
-      
-      // Stop AI generation
-      AIServiceProxy.abortRequest()
-      
-      // Stop TTS
-      TTSServiceProxy.stopPlayback()
-      
-      // Return assistant to idle
-      if (assistantRef.current?.isReady()) {
-        assistantRef.current.idle()
-      }
-      
-      // Clear messages
-      ChatManager.clearMessages()
-      setChatMessages([])
-      
-      // Reset processing state and create new chat
-      setIsProcessing(false)
-      setCurrentChatId(null) // Start new chat
-      setIsTempChat(false)
-    }
-    
-    const handleStopGeneration = () => {
-      console.log('[ChatController] Stop generation event received')
-      
-      // Abort AI generation
-      AIServiceProxy.abortRequest()
-      
-      // Stop TTS
-      TTSServiceProxy.stopPlayback()
-      
-      // If in voice mode, interrupt
-      if (isVoiceMode) {
-        VoiceConversationService.interrupt()
-      }
-      
-      // Return assistant to idle
-      if (assistantRef.current?.isReady()) {
-        assistantRef.current.idle()
-      }
-      
-      // Reset processing state
-      setIsProcessing(false)
-    }
-
-    const handleLoadChatFromHistory = async (event) => {
-      const { chatData } = event.detail
-      console.log('[ChatController] Loading chat from history:', chatData.chatId)
-      
-      try {
-        // Gracefully stop any ongoing operations before loading
-        console.log('[ChatController] Cleaning up ongoing requests')
-        AIServiceProxy.abortRequest() // Stop AI generation
-        TTSServiceProxy.stopPlayback() // Stop TTS playback
-        
-        // Load full chat with media restored
-        const fullChat = await chatHistoryService.loadChat(chatData.chatId)
-        
-        // Set messages
-        ChatManager.setMessages(fullChat.messages)
-        setChatMessages(fullChat.messages)
-        
-        // Set current chat ID
-        setCurrentChatId(fullChat.chatId)
-        setIsTempChat(false)
-        
-        // Mark as not temp since it's loaded from history
-        await chatHistoryService.markAsTempChat(fullChat.chatId, false)
-        
-        // Make sure chat UI is visible
-        if (!isChatContainerVisible) {
-          setIsChatContainerVisible(true)
-          setIsChatInputVisible(true)
-        }
-        
-        // Reset processing state
-        setIsProcessing(false)
-        
-        console.log('[ChatController] Chat loaded successfully')
-      } catch (error) {
-        console.error('[ChatController] Failed to load chat:', error)
-      }
-    }
-
-    window.addEventListener('closeChat', handleCloseChat)
-    window.addEventListener('clearChat', handleClearChat)
-    window.addEventListener('stopGeneration', handleStopGeneration)
-    window.addEventListener('loadChatFromHistory', handleLoadChatFromHistory)
-
-    return () => {
-      window.removeEventListener('closeChat', handleCloseChat)
-      window.removeEventListener('clearChat', handleClearChat)
-      window.removeEventListener('stopGeneration', handleStopGeneration)
-      window.removeEventListener('loadChatFromHistory', handleLoadChatFromHistory)
-    }
-  }, [assistantRef, isVoiceMode, chatMessages, currentChatId, isTempChat, isChatContainerVisible])
 
   /**
-   * Auto-save chat whenever messages change (debounced after user sends or AI responds)
-   * This ensures chats are persisted to history automatically
+   * Note: Auto-save logic is now handled by AppContext
    */
-  useEffect(() => {
-    // Only auto-save if we have messages and it's not temp and we're not currently processing
-    if (chatMessages.length === 0 || isTempChat || isProcessing) {
-      return
-    }
-
-    // Debounce auto-save to avoid too frequent saves
-    const autoSaveTimer = setTimeout(async () => {
-      try {
-        // Don't save if in temp mode
-        if (isTempChat) {
-          console.log('[ChatController] Skipping save - temp mode enabled')
-          return
-        }
-
-        let chatId = currentChatId
-        if (!chatId) {
-          chatId = chatHistoryService.generateChatId()
-          setCurrentChatId(chatId)
-          console.log('[ChatController] New chat created for auto-save:', chatId)
-        }
-
-        // Get current page URL (important for extension mode)
-        const sourceUrl = window.location.href;
-
-        await chatHistoryService.saveChat({
-          chatId,
-          messages: chatMessages,
-          isTemp: false,
-          metadata: {
-            sourceUrl,
-          },
-        })
-
-        console.log('[ChatController] Chat auto-saved (debounced):', chatId)
-      } catch (error) {
-        console.error('[ChatController] Failed to auto-save chat (debounced):', error)
-      }
-    }, 2000) // Wait 2 seconds after last change before saving
-
-    return () => clearTimeout(autoSaveTimer)
-  }, [chatMessages, currentChatId, isTempChat, isProcessing])
 
   /**
    * Handle temp mode toggle - delete from history if switching to temp
@@ -243,7 +94,7 @@ const ChatController = ({
   /**
    * Handle chat button click - toggle chat visibility
    */
-  const handleChatButtonClick = () => {
+  const handleChatButtonClick = useCallback(() => {
     console.log('[ChatController] Chat button clicked')
     
     // If chat is open, close it
@@ -251,13 +102,14 @@ const ChatController = ({
       console.log('[ChatController] Closing chat')
       setIsChatInputVisible(false)
       setIsChatContainerVisible(false)
+      TTSServiceProxy.stopPlayback()
     } else {
       // Otherwise, open it
       console.log('[ChatController] Opening chat')
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
     }
-  }
+  }, [isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
   /**
    * Handle chat open from drag-drop (just opens, doesn't toggle)
@@ -268,7 +120,7 @@ const ChatController = ({
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
     }
-  }, [isChatInputVisible, isChatContainerVisible])
+  }, [isChatInputVisible, isChatContainerVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
   /**
    * Listen for open chat from drag events
@@ -306,7 +158,7 @@ const ChatController = ({
     return () => {
       window.removeEventListener('chatDragDrop', handleChatDragDropEvent)
     }
-  }, [isChatInputVisible])
+  }, [isChatInputVisible, setPendingDropData])
 
   /**
    * Handle chat input close - hide input and container
@@ -409,7 +261,15 @@ const ChatController = ({
 
         try {
           // Generate TTS audio + lip sync (VMD -> BVMD)
-          const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunkText, true)
+          const result = await TTSServiceProxy.generateSpeech(chunkText, true)
+          
+          // Check if result is null or missing audio
+          if (!result || !result.audio) {
+            console.warn(`[ChatController] TTS generation returned null for chunk ${chunkIndex}`)
+            return
+          }
+          
+          const { audio, bvmdUrl } = result
           
           // Check again if stopped after generation
           if (TTSServiceProxy.isStopped) {
@@ -649,7 +509,15 @@ const ChatController = ({
         console.log(`[ChatController] [Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
         
         // Generate TTS audio + lip sync (VMD -> BVMD)
-        const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunkText, true)
+        const result = await TTSServiceProxy.generateSpeech(chunkText, true)
+        
+        // Check if result is null or missing audio
+        if (!result || !result.audio) {
+          console.warn(`[ChatController] [Voice] TTS generation returned null for chunk ${chunkIndex}`)
+          return
+        }
+        
+        const { audio, bvmdUrl } = result
         
         // Convert ArrayBuffer to Blob if needed (extension mode)
         const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
@@ -803,7 +671,6 @@ const ChatController = ({
           - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
           - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
       <ChatButton
-        positionManagerRef={positionManagerRef}
         onClick={handleChatButtonClick}
         isVisible={modelDisabled ? true : (isAssistantReady && !(isChatContainerVisible || isChatInputVisible))}
         modelDisabled={modelDisabled}
@@ -814,24 +681,15 @@ const ChatController = ({
       {/* Chat Input - bottom screen */}
       <ChatInput
         ref={chatInputRef}
-        isVisible={isChatInputVisible}
         onSend={handleMessageSend}
         onClose={handleChatInputClose}
         onVoiceTranscription={handleVoiceTranscription}
         onVoiceMode={handleVoiceModeChange}
-        pendingDropData={pendingDropData}
-        onClearPendingDropData={() => setPendingDropData(null)}
       />
 
       {/* Chat Container - message bubbles */}
       <ChatContainer
-        positionManagerRef={positionManagerRef}
-        messages={chatMessages}
-        isVisible={isChatContainerVisible}
-        isGenerating={isProcessing}
-        isSpeaking={isSpeaking}
         modelDisabled={modelDisabled}
-        chatInputRef={chatInputRef}
         onDragDrop={handleDragDrop}
       />
     </>

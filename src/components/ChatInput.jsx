@@ -4,16 +4,20 @@ import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
+import { useApp } from '../contexts/AppContext';
 
 const ChatInput = forwardRef(({ 
-  isVisible, 
   onSend, 
   onClose, 
   onVoiceTranscription, 
   onVoiceMode, 
-  pendingDropData, 
-  onClearPendingDropData 
 }, ref) => {
+  // Get shared state from AppContext
+  const {
+    isChatInputVisible: isVisible,
+    pendingDropData,
+    setPendingDropData,
+  } = useApp();
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
@@ -288,10 +292,8 @@ const ChatInput = forwardRef(({
     processDropData(pendingDropData);
 
     // Clear the pending data after processing
-    if (onClearPendingDropData) {
-      onClearPendingDropData();
-    }
-  }, [pendingDropData, isVisible, isVoiceMode, processDropData, onClearPendingDropData]);
+    setPendingDropData(null);
+  }, [pendingDropData, isVisible, isVoiceMode, processDropData, setPendingDropData]);
 
 
   const handleImageSelect = (e) => {

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
+import { useApp } from '../contexts/AppContext';
 
 const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {}, positionManagerRef }) => {
   const canvasRef = useRef(null);
@@ -18,6 +19,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
   const [isDragging, setIsDragging] = useState(false);
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
+  const { setPendingDropData, openChat } = useApp();
   
   // Store callbacks in refs to avoid dependency-related re-initialization
   const onSceneReadyRef = useRef(onSceneReady);
@@ -296,7 +298,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       maxAudios: 1
     });
 
-    dragDropServiceRef.current.attach(overlayRef.current, {
+      dragDropServiceRef.current.attach(overlayRef.current, {
       onSetDragOver: (isDragging) => {
         setIsDragOver(isDragging);
         // DON'T open chat here - only on drop
@@ -307,29 +309,19 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       onAddText: (text) => {
         // Open chat when content is DROPPED (not just dragged over)
         console.log('[BabylonScene] Opening chat from model drop');
-        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
-        // Always dispatch event - ChatController will store as pending if needed
-        window.dispatchEvent(new CustomEvent('chatDragDrop', {
-          detail: { text }
-        }));
+        openChat();
+        // Directly set pending drop data so ChatInput can pick it up
+        setPendingDropData({ text });
       },
       onAddImages: (images) => {
-        // Open chat when content is DROPPED
         console.log('[BabylonScene] Opening chat from model drop');
-        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
-        // Always dispatch event - ChatController will store as pending if needed
-        window.dispatchEvent(new CustomEvent('chatDragDrop', {
-          detail: { images }
-        }));
+        openChat();
+        setPendingDropData({ images });
       },
       onAddAudios: (audios) => {
-        // Open chat when content is DROPPED
         console.log('[BabylonScene] Opening chat from model drop');
-        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
-        // Always dispatch event - ChatController will store as pending if needed
-        window.dispatchEvent(new CustomEvent('chatDragDrop', {
-          detail: { audios }
-        }));
+        openChat();
+        setPendingDropData({ audios });
       }
     });
 
@@ -338,7 +330,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
         dragDropServiceRef.current.detach();
       }
     };
-  }, [isReady]);
+  }, [isReady, openChat, setPendingDropData]);
 
   // Use portal to render canvas AND drag-drop overlay directly to document.body
   // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work
@@ -412,12 +404,12 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
               }}
             >
               <p style={{
-                color: 'rgba(0, 0, 0, 0.9)',
+                color: 'rgba(255, 255, 255, 0.9)',
                 fontSize: '18px',
                 fontWeight: '500',
                 margin: 0
               }}>
-                📎 Drop on model
+                📎 Drop
               </p>
             </div>
           </div>

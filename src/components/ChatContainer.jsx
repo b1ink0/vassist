@@ -6,35 +6,62 @@ import DragDropService from '../services/DragDropService';
 import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
+import { useApp } from '../contexts/AppContext';
 
 const ChatContainer = ({ 
-  positionManagerRef, 
-  messages = [],
-  isVisible = false,
-  isGenerating = false,
-  isSpeaking = false,
   modelDisabled = false,
-  chatInputRef,
   onDragDrop // New prop to handle dropped content
 }) => {
-  const buttonPosRef = useRef({ x: window.innerWidth - 68, y: window.innerHeight - 68 });
+  // Get shared state from AppContext
+  const {
+    positionManagerRef,
+    chatMessages: messages,
+    isChatContainerVisible: isVisible,
+    isProcessing: isGenerating,
+    isSpeaking,
+    playingMessageIndex,
+    loadingMessageIndex,
+    isDragOverChat: isDragOver,
+    isSettingsPanelOpen,
+    isHistoryPanelOpen,
+    isTempChat,
+    buttonPosition,
+    isDraggingButton,
+    isDraggingModel,
+    setPlayingMessageIndex,
+    setLoadingMessageIndex,
+    setIsDragOverChat: setIsDragOver,
+    setIsSettingsPanelOpen,
+    setIsHistoryPanelOpen,
+    setIsTempChat,
+    loadChatFromHistory,
+    clearChat,
+    stopGeneration,
+    closeChat,
+    startButtonDrag,
+    endButtonDrag,
+    startModelDrag,
+    endModelDrag,
+  } = useApp();
+
+  // Local refs and state for internal component logic
+  const buttonPosRef = useRef(buttonPosition);
   const buttonInitializedRef = useRef(false);
   const [containerPos, setContainerPos] = useState({ x: 0, y: 0 });
   const scrollRef = useRef(null);
-  const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false); // For drag-and-drop feedback
-  const dragDropServiceRef = useRef(null); // Drag-drop service instance
+  const dragDropServiceRef = useRef(null);
   const currentSessionRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
   const containerRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [debugMarkers, setDebugMarkers] = useState([]);
-  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
-  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
-  const [isTempChat, setIsTempChat] = useState(false);
+  const chatInputRef = useRef(null); // Get input ref from context when needed
+
+  // Keep button position ref in sync with context
+  useEffect(() => {
+    buttonPosRef.current = buttonPosition;
+  }, [buttonPosition]);
 
   const calculateContainerPosition = useCallback(() => {
     const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
@@ -208,40 +235,35 @@ const ChatContainer = ({
         dragDropServiceRef.current.detach();
       }
     };
-  }, [isVisible, onDragDrop]);
+  }, [isVisible, onDragDrop, setIsDragOver]);
 
   // Listen to drag events to show outline/border around container
   useEffect(() => {
-    const handleDragStart = () => setIsDragging(true);
-    const handleDragEnd = () => setIsDragging(false);
-
     if (modelDisabled) {
-      window.addEventListener('chatButtonDragStart', handleDragStart);
-      window.addEventListener('chatButtonDragEnd', handleDragEnd);
+      window.addEventListener('chatButtonDragStart', startButtonDrag);
+      window.addEventListener('chatButtonDragEnd', endButtonDrag);
       return () => {
-        window.removeEventListener('chatButtonDragStart', handleDragStart);
-        window.removeEventListener('chatButtonDragEnd', handleDragEnd);
+        window.removeEventListener('chatButtonDragStart', startButtonDrag);
+        window.removeEventListener('chatButtonDragEnd', endButtonDrag);
       };
     } else {
-      window.addEventListener('modelDragStart', handleDragStart);
-      window.addEventListener('modelDragEnd', handleDragEnd);
+      window.addEventListener('modelDragStart', startModelDrag);
+      window.addEventListener('modelDragEnd', endModelDrag);
       return () => {
-        window.removeEventListener('modelDragStart', handleDragStart);
-        window.removeEventListener('modelDragEnd', handleDragEnd);
+        window.removeEventListener('modelDragStart', startModelDrag);
+        window.removeEventListener('modelDragEnd', endModelDrag);
       };
     }
-  }, [modelDisabled]);
+  }, [modelDisabled, startButtonDrag, endButtonDrag, startModelDrag, endModelDrag]);
 
   const handleHistoryClose = useCallback(() => {
     setIsHistoryPanelOpen(false);
-  }, []);
+  }, [setIsHistoryPanelOpen]);
 
   const handleSelectChat = useCallback((chat) => {
-    window.dispatchEvent(new CustomEvent('loadChatFromHistory', {
-      detail: { chatData: chat }
-    }));
+    loadChatFromHistory(chat);
     setIsHistoryPanelOpen(false);
-  }, []);
+  }, [loadChatFromHistory, setIsHistoryPanelOpen]);
 
   // Load TTS configuration from storage on mount
   useEffect(() => {
@@ -430,7 +452,7 @@ const ChatContainer = ({
       window.removeEventListener('ttsAudioStart', handleTTSAudioStart)
       window.removeEventListener('ttsAudioEnd', handleTTSAudioEnd)
     };
-  }, [messages]);
+  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex]);
 
   /**
    * Smooth scroll to bottom with proper offset for fade area
@@ -574,7 +596,7 @@ const ChatContainer = ({
           width: '400px',
           height: '500px',
         }}
-        className={`flex flex-col-reverse gap-3 ${isDragging ? 'border-2 border-white/40 rounded-3xl' : ''} ${isDragOver ? 'border-2 border-blue-400/60 rounded-3xl' : ''}`}
+        className={`flex flex-col-reverse gap-3 ${(isDraggingButton || isDraggingModel) ? 'border-2 border-white/40 rounded-3xl' : ''} ${isDragOver ? 'border-2 border-blue-400/60 rounded-3xl' : ''}`}
       >
       {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
       <div 
@@ -607,10 +629,7 @@ const ChatContainer = ({
         {messages.length > 0 && (
           <>
             <button
-              onClick={() => {
-                const event = new CustomEvent('stopGeneration');
-                window.dispatchEvent(event);
-              }}
+              onClick={stopGeneration}
               disabled={!isGenerating && !isSpeaking}
               className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
                 isGenerating || isSpeaking
@@ -641,10 +660,7 @@ const ChatContainer = ({
             </button>
             
             <button
-              onClick={() => {
-                const event = new CustomEvent('clearChat');
-                window.dispatchEvent(event);
-              }}
+              onClick={clearChat}
               className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
               title="Start new chat"
             >
@@ -663,10 +679,7 @@ const ChatContainer = ({
             {/* Close button only shown when model is loaded (no chat button available) */}
             {!modelDisabled && (
               <button
-                onClick={() => {
-                  const event = new CustomEvent('closeChat');
-                  window.dispatchEvent(event);
-                }}
+                onClick={closeChat}
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
                 title="Close chat"
               >
@@ -727,10 +740,7 @@ const ChatContainer = ({
                 {/* Close button - always shown when model is loaded (no chat button available) */}
                 {!modelDisabled && (
                   <button
-                    onClick={() => {
-                      const event = new CustomEvent('closeChat');
-                      window.dispatchEvent(event);
-                    }}
+                    onClick={closeChat}
                     className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
                     title="Close chat"
                   >
