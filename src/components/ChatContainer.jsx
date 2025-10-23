@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
+import DragDropService from '../services/DragDropService';
 import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
@@ -13,7 +14,8 @@ const ChatContainer = ({
   isGenerating = false,
   isSpeaking = false,
   modelDisabled = false,
-  chatInputRef
+  chatInputRef,
+  onDragDrop // New prop to handle dropped content
 }) => {
   const buttonPosRef = useRef({ x: window.innerWidth - 68, y: window.innerHeight - 68 });
   const buttonInitializedRef = useRef(false);
@@ -22,6 +24,8 @@ const ChatContainer = ({
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false); // For drag-and-drop feedback
+  const dragDropServiceRef = useRef(null); // Drag-drop service instance
   const currentSessionRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
@@ -160,6 +164,51 @@ const ChatContainer = ({
       return () => window.removeEventListener('chatButtonMoved', handleButtonMoved);
     }
   }, [modelDisabled, calculateContainerPosition]);
+
+  // Initialize drag-drop service for ChatContainer
+  useEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+
+    // Wait for next tick to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      if (!messagesContainerRef.current) {
+        return;
+      }
+
+      // Create service instance
+      dragDropServiceRef.current = new DragDropService({
+        maxImages: 3,
+        maxAudios: 1
+      });
+
+      // Attach with simple callbacks that forward to ChatInput
+      dragDropServiceRef.current.attach(messagesContainerRef.current, {
+        onSetDragOver: (isDragging) => setIsDragOver(isDragging),
+        onShowError: (error) => console.error('[ChatContainer] Drag-drop error:', error),
+        checkVoiceMode: null,
+        getCurrentCounts: () => ({ images: 0, audios: 0 }),
+        onAddText: (text) => {
+          if (onDragDrop) onDragDrop({ text });
+        },
+        onAddImages: (images) => {
+          if (onDragDrop) onDragDrop({ images });
+        },
+        onAddAudios: (audios) => {
+          if (onDragDrop) onDragDrop({ audios });
+        }
+      });
+    }, 0);
+
+    // Cleanup
+    return () => {
+      clearTimeout(timeoutId);
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+      }
+    };
+  }, [isVisible, onDragDrop]);
 
   // Listen to drag events to show outline/border around container
   useEffect(() => {
@@ -525,8 +574,33 @@ const ChatContainer = ({
           width: '400px',
           height: '500px',
         }}
-        className={`flex flex-col-reverse gap-3 ${isDragging ? 'border-2 border-white/40 rounded-3xl' : ''}`}
+        className={`flex flex-col-reverse gap-3 ${isDragging ? 'border-2 border-white/40 rounded-3xl' : ''} ${isDragOver ? 'border-2 border-blue-400/60 rounded-3xl' : ''}`}
       >
+      {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
+      <div 
+        className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center rounded-3xl"
+        style={{
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          backgroundColor: 'rgba(0, 0, 0, 0.1)',
+          opacity: isDragOver ? 1 : 0,
+          visibility: isDragOver ? 'visible' : 'hidden',
+          transition: 'opacity 200ms ease-in-out, visibility 200ms ease-in-out'
+        }}
+      >
+        <div 
+          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+          style={{
+            transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
+            transition: 'transform 200ms ease-in-out'
+          }}
+        >
+          <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium`}>
+            📎 Drop
+          </p>
+        </div>
+      </div>
+      
       {/* Action buttons at BOTTOM - closer to container */}
       <div className="relative flex items-center justify-end gap-2 px-6 pb-1">
         {/* Stop, Clear, and Settings buttons - only shown when there are messages */}

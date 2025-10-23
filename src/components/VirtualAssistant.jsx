@@ -34,6 +34,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const [isReady, setIsReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const initializedSceneRef = useRef(null); // Track which scene we initialized
+  const positionManagerRef = useRef(null); // Ref to pass to BabylonScene
 
   /**
    * Handle model loading progress
@@ -70,6 +71,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     setAnimationManager(manager);
     setPositionManager(posMgr);
+    positionManagerRef.current = posMgr; // Update ref for BabylonScene
     setCurrentState(manager.getCurrentState());
     setIsReady(true);
     
@@ -366,6 +368,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
         sceneBuilder={buildMmdModelScene} 
         onSceneReady={handleSceneReady}
         onLoadProgress={handleLoadProgress}
+        positionManagerRef={positionManagerRef}
       />
     </>
   );

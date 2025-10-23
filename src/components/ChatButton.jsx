@@ -9,6 +9,9 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
   const buttonPosRef = useRef({ x: -100, y: -100 });
   const lastSetPosition = useRef({ x: -100, y: -100 });
+  const [isDragOverButton, setIsDragOverButton] = useState(false);
+  const dragDropServiceRef = useRef(null);
+  const buttonRef = useRef(null);
 
   // Check if model is disabled on mount and set initial position
   useEffect(() => {
@@ -299,11 +302,86 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
     onClick();
   }, [modelDisabled, hasDragged, onClick]);
 
+  // Setup drag-drop service for chat button (works in both modes)
+  useEffect(() => {
+    if (!buttonRef.current) {
+      console.log('[ChatButton] Button ref not ready');
+      return;
+    }
+
+    // Import DragDropService dynamically to avoid circular dependencies
+    import('../services/DragDropService').then(({ default: DragDropService }) => {
+      const buttonElement = buttonRef.current;
+      
+      if (!buttonElement) {
+        console.log('[ChatButton] Button element not found for drag-drop');
+        return;
+      }
+
+      console.log('[ChatButton] Attaching drag-drop service to button');
+
+      dragDropServiceRef.current = new DragDropService({
+        maxImages: 3,
+        maxAudios: 1
+      });
+
+      dragDropServiceRef.current.attach(buttonElement, {
+        onSetDragOver: (isDragging) => {
+          setIsDragOverButton(isDragging);
+          // DON'T open chat here - only on drop
+        },
+        onShowError: (error) => console.error('[ChatButton] Drag-drop error:', error),
+        checkVoiceMode: null,
+        getCurrentCounts: () => ({ images: 0, audios: 0 }),
+        onAddText: (text) => {
+          // Open chat when content is DROPPED (not just dragged over)
+          if (!isChatOpen) {
+            console.log('[ChatButton] Opening chat from button drop');
+            onClick();
+          }
+          // Always dispatch event - ChatController will store as pending if needed
+          window.dispatchEvent(new CustomEvent('chatDragDrop', {
+            detail: { text }
+          }));
+        },
+        onAddImages: (images) => {
+          // Open chat when content is DROPPED
+          if (!isChatOpen) {
+            console.log('[ChatButton] Opening chat from button drop');
+            onClick();
+          }
+          // Always dispatch event - ChatController will store as pending if needed
+          window.dispatchEvent(new CustomEvent('chatDragDrop', {
+            detail: { images }
+          }));
+        },
+        onAddAudios: (audios) => {
+          // Open chat when content is DROPPED
+          if (!isChatOpen) {
+            console.log('[ChatButton] Opening chat from button drop');
+            onClick();
+          }
+          // Always dispatch event - ChatController will store as pending if needed
+          window.dispatchEvent(new CustomEvent('chatDragDrop', {
+            detail: { audios }
+          }));
+        }
+      });
+    });
+
+    return () => {
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+      }
+    };
+  }, [buttonPos.x, buttonPos.y, isChatOpen, onClick]); // Re-attach when position changes
+
   // Always visible now (even when chat is open, for dragging purposes)
   if (!isVisible) return null;
 
   return (
     <button
+      ref={buttonRef}
       onClick={handleClick}
       onMouseDown={handleMouseDown}
       style={{
@@ -317,7 +395,7 @@ const ChatButton = ({ positionManagerRef, onClick, isVisible = true, modelDisabl
       }}
       className={`glass-button rounded-full flex items-center justify-center ${
         modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
-      }`}
+      } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''}`}
       title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
     >
       <span className="glass-text text-2xl drop-shadow-lg">{isChatOpen ? '✕' : '💬'}</span>

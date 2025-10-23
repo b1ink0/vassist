@@ -1,10 +1,19 @@
-import { useState, useEffect, useRef, forwardRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
 import { STTServiceProxy } from '../services/proxies';
 import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import BackgroundDetector from '../utils/BackgroundDetector';
+import DragDropService from '../services/DragDropService';
 
-const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription, onVoiceMode }, ref) => {
+const ChatInput = forwardRef(({ 
+  isVisible, 
+  onSend, 
+  onClose, 
+  onVoiceTranscription, 
+  onVoiceMode, 
+  pendingDropData, 
+  onClearPendingDropData 
+}, ref) => {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
@@ -32,6 +41,10 @@ const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription
   const [attachedAudios, setAttachedAudios] = useState([]);
   const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
+  
+  // Drag and drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragDropServiceRef = useRef(null);
 
   /**
    * Auto-resize textarea
@@ -189,6 +202,97 @@ const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription
       VoiceConversationService.setErrorCallback(null);
     };
   }, [onVoiceTranscription]);
+
+  /**
+   * Process drop data - shared logic for both event listener and pending data
+   */
+  const processDropData = useCallback((dropData) => {
+    if (!dropData) return;
+
+    const { text, images, audios, errors } = dropData;
+    
+    console.log('[ChatInput] Processing drop data:', { 
+      textLength: text?.length || 0,
+      imageCount: images?.length || 0,
+      audioCount: audios?.length || 0,
+      errorCount: errors?.length || 0
+    });
+
+    // Show errors if any
+    if (errors && errors.length > 0) {
+      setRecordingError(errors[0]);
+      setTimeout(() => setRecordingError(''), 3000);
+    }
+
+    // Add text to message
+    if (text && text.trim()) {
+      setMessage(prev => prev ? prev + '\n' + text : text);
+    }
+
+    // Add images
+    if (images && images.length > 0) {
+      setAttachedImages(prev => {
+        const newImages = [...prev, ...images];
+        const maxImages = 3;
+        if (newImages.length > maxImages) {
+          setRecordingError(`Maximum ${maxImages} images allowed`);
+          setTimeout(() => setRecordingError(''), 3000);
+          return newImages.slice(0, maxImages);
+        }
+        return newImages;
+      });
+    }
+
+    // Add audios
+    if (audios && audios.length > 0) {
+      setAttachedAudios(prev => {
+        const newAudios = [...prev, ...audios];
+        const maxAudios = 1;
+        if (newAudios.length > maxAudios) {
+          setRecordingError(`Maximum ${maxAudios} audio files allowed`);
+          setTimeout(() => setRecordingError(''), 3000);
+          return newAudios.slice(0, maxAudios);
+        }
+        return newAudios;
+      });
+    }
+
+    // Focus textarea after adding content
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        adjustTextareaHeight();
+      }
+    }, 0);
+  }, []);
+
+  // Listen for drag-drop events when chat is already open
+  useEffect(() => {
+    const handleChatDragDrop = (e) => {
+      if (!isVisible || isVoiceMode) return;
+      processDropData(e.detail);
+    };
+
+    window.addEventListener('chatDragDrop', handleChatDragDrop);
+    
+    return () => {
+      window.removeEventListener('chatDragDrop', handleChatDragDrop);
+    };
+  }, [isVisible, isVoiceMode, processDropData]);
+
+  // Process pending drop data when chat opens
+  useEffect(() => {
+    if (!pendingDropData || !isVisible || isVoiceMode) return;
+
+    console.log('[ChatInput] Processing pending drop data');
+    processDropData(pendingDropData);
+
+    // Clear the pending data after processing
+    if (onClearPendingDropData) {
+      onClearPendingDropData();
+    }
+  }, [pendingDropData, isVisible, isVoiceMode, processDropData, onClearPendingDropData]);
+
 
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -372,6 +476,57 @@ const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription
     });
   };
 
+  /**
+   * Initialize drag-drop service
+   */
+  useEffect(() => {
+    if (!isVisible || !containerRef.current) {
+      return;
+    }
+
+    // Create service instance
+    dragDropServiceRef.current = new DragDropService({
+      maxImages: 3,
+      maxAudios: 1
+    });
+
+    // Attach with simple action callbacks
+    dragDropServiceRef.current.attach(containerRef.current, {
+      onSetDragOver: (isDragging) => setIsDragOver(isDragging),
+      onShowError: (error) => {
+        setRecordingError(error);
+        setTimeout(() => setRecordingError(''), 3000);
+      },
+      checkVoiceMode: () => isVoiceMode,
+      getCurrentCounts: () => ({
+        images: attachedImages.length,
+        audios: attachedAudios.length
+      }),
+      onAddText: (text) => {
+        setMessage(prev => prev ? prev + '\n' + text : text);
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            adjustTextareaHeight();
+          }
+        }, 0);
+      },
+      onAddImages: (images) => {
+        setAttachedImages(prev => [...prev, ...images]);
+      },
+      onAddAudios: (audios) => {
+        setAttachedAudios(prev => [...prev, ...audios]);
+      }
+    });
+
+    // Cleanup
+    return () => {
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+      }
+    };
+  }, [isVisible, isVoiceMode, attachedImages.length, attachedAudios.length]);
+
   const handleVoiceModeToggle = async () => {
     if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
@@ -480,8 +635,43 @@ const ChatInput = forwardRef(({ isVisible, onSend, onClose, onVoiceTranscription
   const hasAttachments = attachedImages.length > 0 || attachedAudios.length > 0;
 
   return (
-    <div ref={containerRef} className="fixed bottom-0 left-0 right-0 z-[1001]">
-      <div className="relative p-4">
+    <div 
+      className="fixed bottom-0 left-0 right-0 z-[1001] flex justify-center pointer-events-none"
+    >
+      <div 
+        ref={containerRef}
+        className="relative p-4 w-full max-w-3xl pointer-events-auto"
+      >
+        {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
+        {!isVoiceMode && (
+          <div 
+            className="absolute z-10 pointer-events-none flex items-center justify-center rounded-xl"
+            style={{
+              top: '16px',
+              left: '16px',
+              right: '16px',
+              bottom: '16px',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              opacity: isDragOver ? 1 : 0,
+              visibility: isDragOver ? 'visible' : 'hidden',
+              transition: 'opacity 200ms ease-in-out, visibility 200ms ease-in-out'
+            }}
+          >
+            <div 
+              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+              style={{
+                transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
+                transition: 'transform 200ms ease-in-out'
+              }}
+            >
+              <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium`}>
+                📎 Drop
+              </p>
+            </div>
+          </div>
+        )}
         {hasAttachments && !isVoiceMode && (
           <div className="max-w-3xl mx-auto mb-2">
             <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg`}>

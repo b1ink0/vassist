@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
@@ -25,6 +25,7 @@ const ChatController = ({
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [currentChatId, setCurrentChatId] = useState(null)
   const [isTempChat, setIsTempChat] = useState(false)
+  const [pendingDropData, setPendingDropData] = useState(null) // Store drop data until ChatInput mounts
 
   /**
    * Track voice conversation state to update isSpeaking
@@ -257,6 +258,55 @@ const ChatController = ({
       setIsChatContainerVisible(true)
     }
   }
+
+  /**
+   * Handle chat open from drag-drop (just opens, doesn't toggle)
+   */
+  const handleChatOpen = useCallback(() => {
+    if (!isChatInputVisible || !isChatContainerVisible) {
+      console.log('[ChatController] Opening chat from drag-drop')
+      setIsChatInputVisible(true)
+      setIsChatContainerVisible(true)
+    }
+  }, [isChatInputVisible, isChatContainerVisible])
+
+  /**
+   * Listen for open chat from drag events
+   */
+  useEffect(() => {
+    const handleOpenChatFromDrag = () => {
+      handleChatOpen()
+    }
+
+    window.addEventListener('openChatFromDrag', handleOpenChatFromDrag)
+
+    return () => {
+      window.removeEventListener('openChatFromDrag', handleOpenChatFromDrag)
+    }
+  }, [handleChatOpen])
+
+  /**
+   * Listen for drag-drop events and store as pending if chat isn't open yet
+   */
+  useEffect(() => {
+    const handleChatDragDropEvent = (event) => {
+      console.log('[ChatController] chatDragDrop event received:', event.detail)
+      
+      // If chat is visible, the event will be handled by ChatInput directly
+      // If not visible, store it as pending data
+      if (!isChatInputVisible) {
+        console.log('[ChatController] Storing drop data as pending (chat not open yet)')
+        setPendingDropData(event.detail)
+      }
+      // If chat is visible, ChatInput will handle the event directly
+    }
+
+    window.addEventListener('chatDragDrop', handleChatDragDropEvent)
+
+    return () => {
+      window.removeEventListener('chatDragDrop', handleChatDragDropEvent)
+    }
+  }, [isChatInputVisible])
 
   /**
    * Handle chat input close - hide input and container
@@ -725,6 +775,28 @@ const ChatController = ({
     setIsVoiceMode(active)
   }
 
+  /**
+   * Handle drag-drop onto ChatContainer
+   * This forwards the dropped content to ChatInput
+   */
+  const handleDragDrop = (dropData) => {
+    console.log('[ChatController] Drag drop received:', dropData);
+    
+    // Ensure all fields exist with defaults
+    const normalizedData = {
+      text: dropData.text || '',
+      images: dropData.images || [],
+      audios: dropData.audios || [],
+      errors: dropData.errors || []
+    };
+    
+    // Forward to ChatInput via a custom event
+    const event = new CustomEvent('chatDragDrop', { 
+      detail: normalizedData 
+    });
+    window.dispatchEvent(event);
+  };
+
   return (
     <>
       {/* Chat Button visibility logic:
@@ -747,6 +819,8 @@ const ChatController = ({
         onClose={handleChatInputClose}
         onVoiceTranscription={handleVoiceTranscription}
         onVoiceMode={handleVoiceModeChange}
+        pendingDropData={pendingDropData}
+        onClearPendingDropData={() => setPendingDropData(null)}
       />
 
       {/* Chat Container - message bubbles */}
@@ -758,6 +832,7 @@ const ChatController = ({
         isSpeaking={isSpeaking}
         modelDisabled={modelDisabled}
         chatInputRef={chatInputRef}
+        onDragDrop={handleDragDrop}
       />
     </>
   )

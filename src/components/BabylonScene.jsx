@@ -2,14 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
+import DragDropService from '../services/DragDropService';
 
-const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {} }) => {
+const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {}, positionManagerRef }) => {
   const canvasRef = useRef(null);
   const canvasElementRef = useRef(null); // Track actual canvas DOM element
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
   const cleanupFnRef = useRef(null); // Store cleanup function
+  
+  // Drag-drop overlay state
+  const [overlayPos, setOverlayPos] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const overlayRef = useRef(null);
+  const dragDropServiceRef = useRef(null);
   
   // Store callbacks in refs to avoid dependency-related re-initialization
   const onSceneReadyRef = useRef(onSceneReady);
@@ -229,29 +237,193 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
     // onSceneReady and onLoadProgress stored in refs to prevent re-initialization
   }, [sceneBuilder]);
 
-  // Use portal to render canvas directly to document.body
+  // Detect when user starts dragging content anywhere on the page
+  useEffect(() => {
+    const handleDragStart = () => setIsDragging(true);
+    const handleDragEnd = () => {
+      setIsDragging(false);
+      setIsDragOver(false);
+    };
+
+    window.addEventListener('dragstart', handleDragStart);
+    window.addEventListener('dragend', handleDragEnd);
+    window.addEventListener('drop', handleDragEnd);
+
+    return () => {
+      window.removeEventListener('dragstart', handleDragStart);
+      window.removeEventListener('dragend', handleDragEnd);
+      window.removeEventListener('drop', handleDragEnd);
+    };
+  }, []);
+
+  // Update overlay position to match model position
+  useEffect(() => {
+    if (!positionManagerRef?.current || !isReady) return;
+
+    const updatePosition = () => {
+      try {
+        const modelPos = positionManagerRef.current.getPositionPixels();
+        setOverlayPos({
+          x: modelPos.x,
+          y: modelPos.y,
+          width: modelPos.width,
+          height: modelPos.height
+        });
+      } catch (error) {
+        console.error('[BabylonScene] Failed to get model position:', error);
+      }
+    };
+
+    // Initial update
+    updatePosition();
+
+    // Listen for position changes
+    window.addEventListener('modelPositionChange', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('modelPositionChange', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [positionManagerRef, isReady]);
+
+  // Setup drag-drop service for the overlay
+  useEffect(() => {
+    if (!overlayRef.current || !isReady) return;
+
+    dragDropServiceRef.current = new DragDropService({
+      maxImages: 3,
+      maxAudios: 1
+    });
+
+    dragDropServiceRef.current.attach(overlayRef.current, {
+      onSetDragOver: (isDragging) => {
+        setIsDragOver(isDragging);
+        // DON'T open chat here - only on drop
+      },
+      onShowError: (error) => console.error('[BabylonScene] Drag-drop error:', error),
+      checkVoiceMode: null,
+      getCurrentCounts: () => ({ images: 0, audios: 0 }),
+      onAddText: (text) => {
+        // Open chat when content is DROPPED (not just dragged over)
+        console.log('[BabylonScene] Opening chat from model drop');
+        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
+        // Always dispatch event - ChatController will store as pending if needed
+        window.dispatchEvent(new CustomEvent('chatDragDrop', {
+          detail: { text }
+        }));
+      },
+      onAddImages: (images) => {
+        // Open chat when content is DROPPED
+        console.log('[BabylonScene] Opening chat from model drop');
+        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
+        // Always dispatch event - ChatController will store as pending if needed
+        window.dispatchEvent(new CustomEvent('chatDragDrop', {
+          detail: { images }
+        }));
+      },
+      onAddAudios: (audios) => {
+        // Open chat when content is DROPPED
+        console.log('[BabylonScene] Opening chat from model drop');
+        window.dispatchEvent(new CustomEvent('openChatFromDrag'));
+        // Always dispatch event - ChatController will store as pending if needed
+        window.dispatchEvent(new CustomEvent('chatDragDrop', {
+          detail: { audios }
+        }));
+      }
+    });
+
+    return () => {
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+      }
+    };
+  }, [isReady]);
+
+  // Use portal to render canvas AND drag-drop overlay directly to document.body
   // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work
   // Use inline styles instead of Tailwind (Tailwind is scoped to Shadow DOM)
   // Start with opacity 0, transition to opacity 100 when ready
   return createPortal(
-    <canvas
-      id="vassist-babylon-canvas"
-      ref={canvasRef}
-      style={{
-        width: '100%',
-        height: '100vh',
-        display: 'block',
-        outline: 'none',
-        backgroundColor: 'transparent',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        pointerEvents: 'none',
-        zIndex: 9999,
-        opacity: isReady ? 1 : 0,
-        transition: 'opacity 700ms ease-in-out'
-      }}
-    />,
+    <>
+      <canvas
+        id="vassist-babylon-canvas"
+        ref={canvasRef}
+        style={{
+          width: '100%',
+          height: '100vh',
+          display: 'block',
+          outline: 'none',
+          backgroundColor: 'transparent',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          pointerEvents: 'none',
+          zIndex: 9999,
+          opacity: isReady ? 1 : 0,
+          transition: 'opacity 700ms ease-in-out'
+        }}
+      />
+      
+      {/* Drag-drop overlay positioned over the model */}
+      {isReady && (
+        <div
+          ref={overlayRef}
+          style={{
+            position: 'fixed',
+            left: `${overlayPos.x}px`,
+            top: `${overlayPos.y}px`,
+            width: `${overlayPos.width}px`,
+            height: `${overlayPos.height}px`,
+            zIndex: 10000, // Above canvas (9999) but below chat button (9999+)
+            pointerEvents: isDragging ? 'auto' : 'none',
+            borderRadius: '24px'
+          }}
+        >
+          {/* Visual feedback when dragging over model - always rendered, visibility controlled by opacity */}
+          <div 
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '24px',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+              border: '2px solid rgba(59, 130, 246, 0.6)',
+              opacity: isDragOver ? 1 : 0,
+              visibility: isDragOver ? 'visible' : 'hidden',
+              transition: 'opacity 200ms ease-in-out, visibility 200ms ease-in-out',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none'
+            }}
+          >
+            <div 
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                padding: '16px 24px',
+                borderRadius: '12px',
+                border: '2px dashed rgba(59, 130, 246, 0.5)',
+                transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
+                transition: 'transform 200ms ease-in-out'
+              }}
+            >
+              <p style={{
+                color: 'rgba(0, 0, 0, 0.9)',
+                fontSize: '18px',
+                fontWeight: '500',
+                margin: 0
+              }}>
+                📎 Drop on model
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>,
     document.body
   );
 };
