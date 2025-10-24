@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
+import AIToolbar from './AIToolbar'
 import ChatManager from '../managers/ChatManager'
 import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
@@ -667,6 +668,9 @@ const ChatController = ({
 
   return (
     <>
+      {/* AI Toolbar - appears on text/image selection */}
+      <AIToolbar />
+      
       {/* Chat Button visibility logic:
           - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
           - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}

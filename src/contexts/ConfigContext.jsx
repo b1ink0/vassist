@@ -45,7 +45,6 @@ export const ConfigProvider = ({ children }) => {
   const ttsSaveTimeoutRef = useRef(null);
   const sttSaveTimeoutRef = useRef(null);
   const uiSaveTimeoutRef = useRef(null);
-  const generalSaveTimeoutRef = useRef(null);
 
   // UI Config
   const [uiConfig, setUiConfig] = useState(DefaultUIConfig);
@@ -70,10 +69,6 @@ export const ConfigProvider = ({ children }) => {
   const [sttConfigError, setSttConfigError] = useState('');
   const [sttTesting, setSttTesting] = useState(false);
 
-  // General Config (model loading)
-  const [generalConfig, setGeneralConfig] = useState({ enableModelLoading: true });
-  const [generalConfigError, setGeneralConfigError] = useState('');
-
   // Chrome AI Status
   const [chromeAiStatus, setChromeAiStatus] = useState({
     checking: false,
@@ -93,11 +88,6 @@ export const ConfigProvider = ({ children }) => {
         const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
         setUiConfig(savedUiConfig);
         console.log('[ConfigContext] UI config loaded:', savedUiConfig);
-
-        // Load General config
-        const savedGeneralConfig = await StorageServiceProxy.configLoad('generalConfig', { enableModelLoading: true });
-        setGeneralConfig(savedGeneralConfig);
-        console.log('[ConfigContext] General config loaded:', savedGeneralConfig);
 
         // Load AI config
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
@@ -178,6 +168,11 @@ export const ConfigProvider = ({ children }) => {
           SummarizerServiceProxy.configure(aiConfig);
         }
         
+        // Notify other contexts about config change
+        window.dispatchEvent(new CustomEvent('vassist-config-updated', {
+          detail: { type: 'aiConfig', config: aiConfig }
+        }));
+        
         setTimeout(() => setAiConfigSaved(false), 2000);
         console.log('[ConfigContext] AI config auto-saved');
       } catch (error) {
@@ -246,6 +241,12 @@ export const ConfigProvider = ({ children }) => {
       try {
         await StorageServiceProxy.configSave('uiConfig', uiConfig);
         setUiConfigSaved(true);
+        
+        // Notify other contexts about config change
+        window.dispatchEvent(new CustomEvent('vassist-config-updated', {
+          detail: { type: 'uiConfig', config: uiConfig }
+        }));
+        
         setTimeout(() => setUiConfigSaved(false), 2000);
         console.log('[ConfigContext] UI config auto-saved');
       } catch (error) {
@@ -253,24 +254,6 @@ export const ConfigProvider = ({ children }) => {
       }
     }, 500);
   }, [uiConfig]);
-
-  // Auto-save General config when it changes (after initial load)
-  useEffect(() => {
-    if (initialLoadRef.current) return; // Skip during initial load
-    
-    if (generalSaveTimeoutRef.current) {
-      clearTimeout(generalSaveTimeoutRef.current);
-    }
-    
-    generalSaveTimeoutRef.current = setTimeout(async () => {
-      try {
-        await StorageServiceProxy.configSave('generalConfig', generalConfig);
-        console.log('[ConfigContext] General config auto-saved');
-      } catch (error) {
-        console.error('[ConfigContext] General config auto-save failed:', error);
-      }
-    }, 500);
-  }, [generalConfig]);
 
   // Mark initial load as complete after a short delay
   useEffect(() => {
@@ -515,25 +498,6 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [sttConfig]);
 
-  // General Config handlers
-  const updateGeneralConfig = useCallback((field, value) => {
-    setGeneralConfig(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
-
-  const saveGeneralConfig = useCallback(async () => {
-    try {
-      await StorageServiceProxy.configSave('generalConfig', generalConfig);
-      console.log('[ConfigContext] General config saved successfully');
-    } catch (error) {
-      setGeneralConfigError('Failed to save general configuration: ' + error.message);
-      console.error('[ConfigContext] General config save error:', error);
-      setTimeout(() => setGeneralConfigError(''), 3000);
-    }
-  }, [generalConfig]);
-
   // Chrome AI Status handlers
   const checkChromeAIAvailability = useCallback(async () => {
     setChromeAiStatus(prev => ({ ...prev, checking: true }));
@@ -669,17 +633,11 @@ export const ConfigProvider = ({ children }) => {
     saveSTTConfig,
     testSTTRecording,
     
-    // General Config
-    generalConfig,
-    generalConfigError,
-    updateGeneralConfig,
-    saveGeneralConfig,
-    
     // Chrome AI Status
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
-  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, generalConfig, generalConfigError, updateGeneralConfig, saveGeneralConfig, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
+  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
 
   return (
     <ConfigContext.Provider value={value}>

@@ -14,10 +14,6 @@ const UISettings = ({ isLightBackground }) => {
     uiConfigSaved,
     uiConfigError,
     updateUIConfig,
-    
-    // General Config
-    generalConfig,
-    updateGeneralConfig,
   } = useConfig();
 
   return (
@@ -29,14 +25,14 @@ const UISettings = ({ isLightBackground }) => {
         <label className="flex items-center space-x-3 cursor-pointer">
           <input
             type="checkbox"
-            checked={generalConfig.enableModelLoading}
-            onChange={(e) => updateGeneralConfig('enableModelLoading', e.target.checked)}
+            checked={uiConfig.enableModelLoading}
+            onChange={(e) => updateUIConfig('enableModelLoading', e.target.checked)}
             className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
           />
           <span className="text-sm text-white">Enable 3D Model Loading</span>
         </label>
         <p className="text-xs text-white/50 ml-7">
-          {generalConfig.enableModelLoading 
+          {uiConfig.enableModelLoading 
             ? 'Virtual assistant with 3D avatar' 
             : 'Chat-only mode (no 3D model)'}
         </p>
@@ -47,8 +43,8 @@ const UISettings = ({ isLightBackground }) => {
         <label className="flex items-center space-x-3 cursor-pointer">
           <input
             type="checkbox"
-            checked={generalConfig.enableDebugPanel || false}
-            onChange={(e) => updateGeneralConfig('enableDebugPanel', e.target.checked)}
+            checked={uiConfig.enableDebugPanel || false}
+            onChange={(e) => updateUIConfig('enableDebugPanel', e.target.checked)}
             className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
           />
           <span className="text-sm text-white">Enable Developer Tools</span>
@@ -125,6 +121,22 @@ const UISettings = ({ isLightBackground }) => {
           <option value="top-right" className="bg-gray-900">Top Right</option>
           <option value="top-left" className="bg-gray-900">Top Left</option>
         </select>
+      </div>
+
+      {/* AI Toolbar Settings */}
+      <div className="space-y-2 border-t border-white/10 pt-4">
+        <label className="flex items-center space-x-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={uiConfig.enableAIToolbar !== false}
+            onChange={(e) => updateUIConfig('enableAIToolbar', e.target.checked)}
+            className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+          />
+          <span className="text-sm text-white">Enable AI Toolbar</span>
+        </label>
+        <p className="text-xs text-white/50 ml-7">
+          Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions. Configure default translation language in AI+ tab.
+        </p>
       </div>
 
       {/* Status Messages - auto-save feedback */}

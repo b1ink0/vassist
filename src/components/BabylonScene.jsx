@@ -306,22 +306,12 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       onShowError: (error) => console.error('[BabylonScene] Drag-drop error:', error),
       checkVoiceMode: null,
       getCurrentCounts: () => ({ images: 0, audios: 0 }),
-      onAddText: (text) => {
+      onProcessData: (data) => {
         // Open chat when content is DROPPED (not just dragged over)
-        console.log('[BabylonScene] Opening chat from model drop');
+        console.log('[BabylonScene] Opening chat from model drop with data:', data);
         openChat();
-        // Directly set pending drop data so ChatInput can pick it up
-        setPendingDropData({ text });
-      },
-      onAddImages: (images) => {
-        console.log('[BabylonScene] Opening chat from model drop');
-        openChat();
-        setPendingDropData({ images });
-      },
-      onAddAudios: (audios) => {
-        console.log('[BabylonScene] Opening chat from model drop');
-        openChat();
-        setPendingDropData({ audios });
+        // Pass all data at once so nothing gets lost
+        setPendingDropData(data);
       }
     });
 

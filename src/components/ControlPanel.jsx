@@ -13,7 +13,7 @@ const ControlPanel = ({
   positionManagerRef,
   onStateChange
 }) => {
-  const { generalConfig } = useConfig();
+  const { uiConfig } = useConfig();
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
   const [queueStatus, setQueueStatus] = useState({ length: 0, isEmpty: true, items: [] });
@@ -327,7 +327,7 @@ const ControlPanel = ({
   const panelY = Math.min(buttonPos.y + 60, window.innerHeight - 600); // Panel height ~600px
 
   // Don't render if developer tools are disabled
-  if (!generalConfig.enableDebugPanel) {
+  if (!uiConfig.enableDebugPanel) {
     return null;
   }
 

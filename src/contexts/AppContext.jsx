@@ -5,7 +5,14 @@
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import ChatManager from '../managers/ChatManager';
-import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
+import { 
+  AIServiceProxy, 
+  TTSServiceProxy, 
+  StorageServiceProxy, 
+  SummarizerServiceProxy, 
+  TranslatorServiceProxy, 
+  LanguageDetectorServiceProxy 
+} from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
 
@@ -29,6 +36,12 @@ export const AppProvider = ({ children }) => {
   const assistantRef = useRef(null);
   const sceneRef = useRef(null);
   const positionManagerRef = useRef(null);
+
+  // ========================================
+  // CONFIG STATE
+  // ========================================
+  const [uiConfig, setUIConfig] = useState(null);
+  const [aiConfig, setAIConfig] = useState(null);
 
   // ========================================
   // CHAT UI STATE
@@ -75,20 +88,69 @@ export const AppProvider = ({ children }) => {
   // ASSISTANT INITIALIZATION
   // ========================================
   
-  // Load general config on mount
+  // Load configs on mount
   useEffect(() => {
-    const loadGeneralConfig = async () => {
+    const loadConfigs = async () => {
       try {
-        const generalConfig = await StorageServiceProxy.configLoad('generalConfig', { enableModelLoading: true });
-        console.log('[AppContext] Config loaded - model loading enabled:', generalConfig.enableModelLoading);
-        setEnableModelLoading(generalConfig.enableModelLoading);
+        // Load UI config
+        const loadedUIConfig = await StorageServiceProxy.configLoad('uiConfig', { enableModelLoading: true, enableAIToolbar: true });
+        console.log('[AppContext] UI Config loaded:', loadedUIConfig);
+        setUIConfig(loadedUIConfig);
+        setEnableModelLoading(loadedUIConfig.enableModelLoading);
+        
+        // Load AI config
+        const loadedAIConfig = await StorageServiceProxy.configLoad('aiConfig', {});
+        console.log('[AppContext] AI Config loaded:', loadedAIConfig);
+        setAIConfig(loadedAIConfig);
+        
+        // Configure services
+        try {
+          await AIServiceProxy.configure(loadedAIConfig);
+          console.log('[AppContext] AI Service configured');
+          
+          // Configure AI Features services if enabled
+          if (loadedAIConfig.aiFeatures?.translator?.enabled !== false) {
+            await TranslatorServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] Translator Service configured');
+          }
+          if (loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false) {
+            await LanguageDetectorServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] Language Detector Service configured');
+          }
+          if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
+            await SummarizerServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] Summarizer Service configured');
+          }
+        } catch (error) {
+          console.warn('[AppContext] Failed to configure services:', error);
+        }
       } catch (error) {
-        console.error('[AppContext] Failed to load general config:', error);
+        console.error('[AppContext] Failed to load configs:', error);
         setEnableModelLoading(true);
       }
     };
     
-    loadGeneralConfig();
+    loadConfigs();
+    
+    // Listen for config changes (when saved in ConfigContext)
+    const handleConfigChange = async (event) => {
+      if (event.detail?.type === 'aiConfig') {
+        const updatedConfig = event.detail.config;
+        console.log('[AppContext] AI Config updated from settings:', updatedConfig);
+        setAIConfig(updatedConfig);
+      } else if (event.detail?.type === 'uiConfig') {
+        const updatedConfig = event.detail.config;
+        console.log('[AppContext] UI Config updated from settings:', updatedConfig);
+        setUIConfig(updatedConfig);
+        setEnableModelLoading(updatedConfig.enableModelLoading);
+      }
+    };
+    
+    window.addEventListener('vassist-config-updated', handleConfigChange);
+    
+    return () => {
+      window.removeEventListener('vassist-config-updated', handleConfigChange);
+    };
   }, []);
 
   // Set assistant ready if model is disabled
@@ -147,6 +209,83 @@ export const AppProvider = ({ children }) => {
 
     return () => clearInterval(interval);
   }, [isVoiceMode]);
+
+  // ========================================
+  // AI TOOLBAR ACTIONS
+  // ========================================
+
+  /**
+   * Summarize text using configured AI service
+   */
+  const handleSummarize = useCallback(async (text) => {
+    // Check if explicitly disabled (undefined/null means enabled by default)
+    if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
+      throw new Error('Summarizer is disabled in settings');
+    }
+    
+    const options = {
+      type: aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr',
+      format: aiConfig?.aiFeatures?.summarizer?.defaultFormat || 'plain-text',
+      length: aiConfig?.aiFeatures?.summarizer?.defaultLength || 'medium',
+    };
+    
+    return await SummarizerServiceProxy.summarize(text, options);
+  }, [aiConfig]);
+
+  /**
+   * Translate text using configured AI service
+   */
+  const handleTranslate = useCallback(async (text, sourceLanguage, targetLanguageOverride) => {
+    // Check if explicitly disabled (undefined/null means enabled by default)
+    if (aiConfig?.aiFeatures?.translator?.enabled === false) {
+      throw new Error('Translator is disabled in settings');
+    }
+    
+    const targetLanguage = targetLanguageOverride || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
+    
+    // Auto-detect source language if not provided
+    let sourceLang = sourceLanguage;
+    if (!sourceLang) {
+      try {
+        const detectionResults = await LanguageDetectorServiceProxy.detect(text);
+        if (detectionResults && detectionResults.length > 0) {
+          sourceLang = detectionResults[0].detectedLanguage;
+        }
+      } catch (err) {
+        console.warn('[AppContext] Language detection failed:', err);
+        throw new Error('Could not detect source language');
+      }
+    }
+    
+    // Don't translate if source and target are the same
+    if (sourceLang === targetLanguage) {
+      return text;
+    }
+    
+    return await TranslatorServiceProxy.translate(text, sourceLang, targetLanguage);
+  }, [aiConfig]);
+
+  /**
+   * Add content to chat (using existing drag-drop flow)
+   */
+  const handleAddToChat = useCallback((data) => {
+    console.log('[AppContext] Add to chat:', data);
+    
+    // Open chat if closed
+    if (!isChatContainerVisible || !isChatInputVisible) {
+      setPendingDropData(data);
+      setIsChatInputVisible(true);
+      setIsChatContainerVisible(true);
+    } else {
+      // Dispatch event for ChatInput to handle
+      const event = new CustomEvent('chatDragDrop', { 
+        detail: data,
+        bubbles: true,
+        composed: true,
+      });
+      window.dispatchEvent(event);
+    }
+  }, [isChatContainerVisible, isChatInputVisible]);
 
   // ========================================
   // CHAT ACTIONS
@@ -474,6 +613,15 @@ export const AppProvider = ({ children }) => {
     // Panel actions
     toggleSettingsPanel,
     toggleHistoryPanel,
+
+    // AI Toolbar actions
+    handleSummarize,
+    handleTranslate,
+    handleAddToChat,
+
+    // Config state
+    uiConfig,
+    aiConfig,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

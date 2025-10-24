@@ -6,16 +6,16 @@
  * Components ONLY need to pass element ref and simple action callbacks.
  */
 
+import MediaExtractionService from './MediaExtractionService';
+
 class DragDropService {
   constructor(options = {}) {
     this.element = null;
     this.isDragOver = false;
     this.enabled = true;
     
-    // Simple action callbacks (what component should DO with the data)
-    this.onAddText = null;
-    this.onAddImages = null;
-    this.onAddAudios = null;
+    // Single callback that receives all data at once
+    this.onProcessData = null; // Receives {text, images, audios, errors}
     this.onShowError = null;
     this.onSetDragOver = null;
     this.checkVoiceMode = null;
@@ -44,10 +44,8 @@ class DragDropService {
     
     this.element = element;
     
-    // Store simple action callbacks
-    this.onAddText = callbacks.onAddText || null;
-    this.onAddImages = callbacks.onAddImages || null;
-    this.onAddAudios = callbacks.onAddAudios || null;
+    // Store callbacks - single onProcessData callback receives all data
+    this.onProcessData = callbacks.onProcessData || null;
     this.onShowError = callbacks.onShowError || null;
     this.onSetDragOver = callbacks.onSetDragOver || null;
     this.checkVoiceMode = callbacks.checkVoiceMode || null;
@@ -135,17 +133,9 @@ class DragDropService {
       this._showError(result.errors[0]);
     }
 
-    // Execute callbacks with parsed data
-    if (result.text && this.onAddText) {
-      this.onAddText(result.text);
-    }
-
-    if (result.images.length > 0 && this.onAddImages) {
-      this.onAddImages(result.images);
-    }
-
-    if (result.audios.length > 0 && this.onAddAudios) {
-      this.onAddAudios(result.audios);
+    // Execute single callback with ALL data at once
+    if (this.onProcessData) {
+      this.onProcessData(result);
     }
   }
 
@@ -174,128 +164,38 @@ class DragDropService {
    * Parse dropped data from drag event
    */
   async _parseDrop(e, currentCounts = { images: 0, audios: 0 }) {
-    const result = {
-      text: '',
-      images: [],
-      audios: [],
-      errors: []
-    };
+    console.log('[DragDropService] Processing drop event');
 
-    try {
-      // Handle files from dataTransfer
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        console.log('[DragDropService] Processing dropped files:', e.dataTransfer.files.length);
-        
-        for (const file of e.dataTransfer.files) {
-          if (file.type.startsWith('image/')) {
-            // Check image limit
-            if (currentCounts.images + result.images.length >= this.maxImages) {
-              result.errors.push(`Maximum ${this.maxImages} images allowed`);
-              break;
-            }
-            
-            try {
-              const dataUrl = await this._fileToDataUrl(file);
-              result.images.push({
-                dataUrl: dataUrl,
-                name: file.name,
-                size: file.size,
-                type: 'image'
-              });
-              console.log('[DragDropService] Added image:', file.name);
-            } catch (error) {
-              console.error('[DragDropService] Failed to read image:', error);
-              result.errors.push('Failed to read image file');
-            }
-          } else if (file.type.startsWith('audio/')) {
-            // Check audio limit
-            if (currentCounts.audios + result.audios.length >= this.maxAudios) {
-              result.errors.push(`Maximum ${this.maxAudios} audio file allowed`);
-              break;
-            }
-            
-            try {
-              const dataUrl = await this._fileToDataUrl(file);
-              result.audios.push({
-                dataUrl: dataUrl,
-                name: file.name,
-                size: file.size,
-                type: 'audio'
-              });
-              console.log('[DragDropService] Added audio:', file.name);
-            } catch (error) {
-              console.error('[DragDropService] Failed to read audio:', error);
-              result.errors.push('Failed to read audio file');
-            }
-          }
-        }
-      }
-
-      // Handle text/html from dataTransfer
-      const htmlData = e.dataTransfer.getData('text/html');
-      const textData = e.dataTransfer.getData('text/plain');
-
-      if (htmlData) {
-        console.log('[DragDropService] Processing HTML data');
-        
-        // Parse HTML to extract images and text
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlData, 'text/html');
-        
-        // Extract images from HTML
-        const imgElements = doc.querySelectorAll('img');
-        for (const img of imgElements) {
-          // Check image limit
-          if (currentCounts.images + result.images.length >= this.maxImages) {
-            result.errors.push(`Maximum ${this.maxImages} images allowed`);
-            break;
-          }
-          
-          const src = img.src;
-          if (src && (src.startsWith('data:') || src.startsWith('http'))) {
-            try {
-              // Convert to data URL if it's a regular URL
-              let dataUrl = src;
-              if (src.startsWith('http')) {
-                dataUrl = await this._urlToDataUrl(src);
-              }
-              
-              // Extract filename from src or generate one
-              let filename = 'dropped-image.png';
-              if (src.startsWith('http')) {
-                const urlPath = new URL(src).pathname;
-                filename = urlPath.split('/').pop() || 'dropped-image.png';
-              } else if (img.alt) {
-                filename = img.alt + '.png';
-              }
-              
-              result.images.push({
-                dataUrl: dataUrl,
-                name: filename,
-                size: 0,
-                type: 'image'
-              });
-              console.log('[DragDropService] Added image from HTML');
-            } catch (error) {
-              console.error('[DragDropService] Failed to fetch image:', error);
-            }
-          }
-        }
-        
-        // Extract text content
-        const textContent = doc.body.textContent || doc.body.innerText || '';
-        if (textContent.trim()) {
-          result.text = textContent.trim();
-        }
-      } else if (textData) {
-        console.log('[DragDropService] Processing text data');
-        result.text = textData.trim();
-      }
-
-    } catch (error) {
-      console.error('[DragDropService] Error parsing drop:', error);
-      result.errors.push('Failed to process dropped content');
+    // Prepare input for MediaExtractionService
+    const input = {};
+    
+    // Add files if present
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      input.files = e.dataTransfer.files;
+      console.log('[DragDropService] Drop contains files:', e.dataTransfer.files.length);
     }
+    
+    // Add HTML if present
+    const htmlData = e.dataTransfer.getData('text/html');
+    if (htmlData) {
+      input.htmlString = htmlData;
+      console.log('[DragDropService] Drop contains HTML');
+    }
+    
+    // Add text if present (and no HTML)
+    const textData = e.dataTransfer.getData('text/plain');
+    if (textData && !htmlData) {
+      input.textString = textData;
+      console.log('[DragDropService] Drop contains text');
+    }
+
+    // Call single extraction method with limits
+    const result = await MediaExtractionService.processAndExtract(input, {
+      maxImages: this.maxImages,
+      maxAudios: this.maxAudios,
+      currentImageCount: currentCounts.images,
+      currentAudioCount: currentCounts.audios
+    });
 
     console.log('[DragDropService] Parse result:', {
       textLength: result.text.length,
@@ -305,32 +205,6 @@ class DragDropService {
     });
 
     return result;
-  }
-
-  /**
-   * Convert File to Data URL
-   */
-  _fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  /**
-   * Convert URL to Data URL (fetch and convert)
-   */
-  async _urlToDataUrl(url) {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return await this._fileToDataUrl(blob);
-    } catch (error) {
-      console.error('[DragDropService] Failed to fetch URL:', error);
-      throw error;
-    }
   }
 }
 

@@ -6,6 +6,7 @@
  */
 
 import { useConfig } from '../../contexts/ConfigContext';
+import { TranslationLanguages } from '../../config/aiConfig';
 import ChromeAIValidator from '../../services/ChromeAIValidator';
 import React, { useState } from 'react';
 
@@ -27,6 +28,7 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
   // Local per-feature test states so results show under each section
   const [translatorTest, setTranslatorTest] = useState({ status: 'idle', message: '' });
   const [languageDetectorTest, setLanguageDetectorTest] = useState({ status: 'idle', message: '' });
+  const [languageDetectorInput, setLanguageDetectorInput] = useState('Bonjour, comment allez-vous?');
   const [summarizerTest, setSummarizerTest] = useState({ status: 'idle', message: '' });
 
   const {
@@ -165,13 +167,34 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
           </label>
         </div>
         {aiConfig.aiFeatures?.translator?.enabled !== false && (
-          <div className="ml-7 space-y-2">
+          <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
               Translate text between languages (English ↔ Spanish ↔ Japanese for Chrome AI)
             </p>
+            
+            {/* Default Translation Language */}
+            <div className="space-y-1.5">
+              <label htmlFor="translator-default-lang" className="block text-xs font-medium text-white/70">
+                Default Translation Language
+              </label>
+              <select
+                id="translator-default-lang"
+                value={aiConfig.aiFeatures?.translator?.defaultTargetLanguage || 'en'}
+                onChange={(e) => updateAIConfig('aiFeatures.translator.defaultTargetLanguage', e.target.value)}
+                className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs"
+              >
+                {TranslationLanguages.map(lang => (
+                  <option key={lang.code} value={lang.code} className="bg-gray-900 text-white">{lang.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-white/40">
+                Text will be translated to this language when using the AI Toolbar
+              </p>
+            </div>
+            
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => runTranslatorTest('Hello, how are you?', 'en', 'es')}
+                onClick={() => runTranslatorTest('Hello, how are you?', 'en', aiConfig.aiFeatures?.translator?.defaultTargetLanguage || 'en')}
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
               >
                 {translatorTest.status === 'loading' ? 'Testing...' : 'Test'}
@@ -208,9 +231,25 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
             <p className="text-xs text-white/50">
               Automatically detect the language of text with confidence scores
             </p>
+            
+            {/* Input field for language detector test */}
+            <div className="space-y-1.5">
+              <label htmlFor="language-detector-input" className="block text-xs font-medium text-white/70">
+                Test Text
+              </label>
+              <input
+                id="language-detector-input"
+                type="text"
+                value={languageDetectorInput}
+                onChange={(e) => setLanguageDetectorInput(e.target.value)}
+                placeholder="Enter text to detect language..."
+                className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs"
+              />
+            </div>
+            
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => runLanguageDetectorTest('Bonjour, comment allez-vous?')}
+                onClick={() => runLanguageDetectorTest(languageDetectorInput)}
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
               >
                 {languageDetectorTest.status === 'loading' ? 'Detecting...' : 'Test'}

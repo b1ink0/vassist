@@ -89,6 +89,40 @@ export const ChromeAILanguages = {
 };
 
 /**
+ * Common Translation Languages
+ * Supported by most translation services
+ */
+export const TranslationLanguages = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'it', name: 'Italian' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'pl', name: 'Polish' },
+  { code: 'tr', name: 'Turkish' },
+  { code: 'vi', name: 'Vietnamese' },
+  { code: 'th', name: 'Thai' },
+  { code: 'id', name: 'Indonesian' },
+  { code: 'sv', name: 'Swedish' },
+  { code: 'da', name: 'Danish' },
+  { code: 'fi', name: 'Finnish' },
+  { code: 'no', name: 'Norwegian' },
+  { code: 'el', name: 'Greek' },
+  { code: 'he', name: 'Hebrew' },
+  { code: 'cs', name: 'Czech' },
+  { code: 'ro', name: 'Romanian' },
+  { code: 'hu', name: 'Hungarian' },
+];
+
+/**
  * Default AI Configuration
  */
 export const DefaultAIConfig = {
@@ -126,6 +160,7 @@ export const DefaultAIConfig = {
   aiFeatures: {
     translator: {
       enabled: true, // Enable translator feature
+      defaultTargetLanguage: 'en', // Default language for translations
     },
     languageDetector: {
       enabled: true, // Enable language detector feature
@@ -407,6 +442,8 @@ export default {
   STTProviders,
   ChromeAIFlags,
   ChromeAIAvailability,
+  ChromeAILanguages,
+  TranslationLanguages,
   OpenAIVoices,
   DefaultAIConfig,
   DefaultTTSConfig,

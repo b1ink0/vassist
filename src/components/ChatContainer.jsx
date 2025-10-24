@@ -3,6 +3,7 @@ import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
+import UtilService from '../services/UtilService';
 import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
@@ -57,6 +58,8 @@ const ChatContainer = ({
   const messagesContainerRef = useRef(null);
   const [debugMarkers, setDebugMarkers] = useState([]);
   const chatInputRef = useRef(null); // Get input ref from context when needed
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const [isContainerHovered, setIsContainerHovered] = useState(false);
 
   // Keep button position ref in sync with context
   useEffect(() => {
@@ -216,14 +219,8 @@ const ChatContainer = ({
         onShowError: (error) => console.error('[ChatContainer] Drag-drop error:', error),
         checkVoiceMode: null,
         getCurrentCounts: () => ({ images: 0, audios: 0 }),
-        onAddText: (text) => {
-          if (onDragDrop) onDragDrop({ text });
-        },
-        onAddImages: (images) => {
-          if (onDragDrop) onDragDrop({ images });
-        },
-        onAddAudios: (audios) => {
-          if (onDragDrop) onDragDrop({ audios });
+        onProcessData: (data) => {
+          if (onDragDrop) onDragDrop(data);
         }
       });
     }, 0);
@@ -476,6 +473,31 @@ const ChatContainer = ({
   }, [messages]);
 
   /**
+   * Handle copying message content to clipboard
+   */
+  const handleCopyMessage = async (messageIndex, content) => {
+    const success = await UtilService.copyToClipboard(content);
+    if (success) {
+      setCopiedMessageIndex(messageIndex);
+      setTimeout(() => setCopiedMessageIndex(null), 2000);
+    }
+  };
+
+  /**
+   * Handle rewriting/regenerating AI message
+   */
+  const handleRewriteMessage = async (messageIndex) => {
+    // Find the user message that triggered this AI response
+    // User messages come before AI messages in the array
+    if (messageIndex > 0 && messages[messageIndex - 1]?.role === 'user') {
+      const userMessage = messages[messageIndex - 1];
+      // TODO: Implement regeneration - would need to expose a method in AppContext
+      console.log('[ChatContainer] Rewrite requested for message:', messageIndex, 'user input:', userMessage.content);
+      // For now, just log. Full implementation needs AppContext.regenerateMessage(messageIndex)
+    }
+  };
+
+  /**
    * Handle playing TTS for a message
    */
   const handlePlayTTS = async (messageIndex, messageContent) => {
@@ -588,6 +610,8 @@ const ChatContainer = ({
       
       <div
         ref={containerRef}
+        onMouseEnter={() => setIsContainerHovered(true)}
+        onMouseLeave={() => setIsContainerHovered(false)}
         style={{
           position: 'fixed',
           left: `${containerPos.x}px`,
@@ -595,8 +619,24 @@ const ChatContainer = ({
           zIndex: 998,
           width: '400px',
           height: '500px',
+          borderRadius: '24px',
+          border: '2px solid',
+          borderColor: isDragOver 
+            ? 'rgba(59, 130, 246, 0.6)' 
+            : (isDraggingButton || isDraggingModel)
+            ? 'rgba(255, 255, 255, 0.4)'
+            : isContainerHovered
+            ? 'rgba(255, 255, 255, 0.2)'
+            : 'transparent',
+          boxShadow: isDragOver
+            ? '0 4px 20px rgba(59, 130, 246, 0.3)'
+            : (isDraggingButton || isDraggingModel)
+            ? '0 4px 20px rgba(255, 255, 255, 0.2)'
+            : isContainerHovered
+            ? '0 2px 10px rgba(255, 255, 255, 0.1)'
+            : 'none',
         }}
-        className={`flex flex-col-reverse gap-3 ${(isDraggingButton || isDraggingModel) ? 'border-2 border-white/40 rounded-3xl' : ''} ${isDragOver ? 'border-2 border-blue-400/60 rounded-3xl' : ''}`}
+        className="flex flex-col-reverse gap-3"
       >
       {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
       <div 
@@ -768,79 +808,106 @@ const ChatContainer = ({
                 return (
                   <div key={`message-wrapper-${messageIndex}`} className="flex flex-col gap-3">
                     <div
-                      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                     >
                       <div className={`flex items-start gap-2 ${hasAudio ? 'w-[80%]' : 'max-w-[80%]'}`}>
-                    {/* Speaker icon for assistant messages (only show if TTS is enabled) */}
-                    {!isUser && !isError && ttsEnabled && (
-                      <button
-                        onClick={() => handlePlayTTS(messageIndex, msg.content)}
-                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} mt-2 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0`}
-                        title={isPlaying ? 'Stop audio' : 'Play audio'}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs animate-spin`}>⏳</span>
-                        ) : isPlaying ? (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs`}>⏸</span>
-                        ) : (
-                          <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs`}>🔊</span>
-                        )}
-                      </button>
-                    )}
-                    
-                    {/* Message bubble */}
-                    <div
-                      className={`${
-                        isError
-                          ? 'glass-error'
-                          : isUser
-                          ? `glass-message-user ${isLightBackground ? 'glass-message-user-dark' : ''}`
-                          : `glass-message ${isLightBackground ? 'glass-message-dark' : ''}`
-                      } px-4 py-3 ${
-                        isError
-                          ? 'rounded-3xl'
-                          : isUser
-                          ? 'rounded-[20px] rounded-tr-md'
-                          : 'rounded-[20px] rounded-tl-md'
-                      } ${hasAudio ? 'w-full' : ''}`}
-                    >
-                      {/* Image attachments (for user messages) */}
-                      {isUser && msg.images && msg.images.length > 0 && (
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {msg.images.map((imgUrl, imgIndex) => (
-                            <img 
-                              key={imgIndex}
-                              src={imgUrl}
-                              alt={`Attachment ${imgIndex + 1}`}
-                              className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30 cursor-pointer hover:border-blue-400/50 transition-all"
-                              onClick={() => window.open(imgUrl, '_blank')}
-                              title="Click to view full size"
-                            />
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Audio attachments (for user messages) */}
-                      {isUser && msg.audios && msg.audios.length > 0 && (
-                        <div className="mb-3 space-y-2">
-                          {msg.audios.map((audioUrl, audioIndex) => (
-                            <div key={audioIndex} className="w-full">
-                              <AudioPlayer 
-                                audioUrl={audioUrl} 
-                                isLightBackground={isLightBackground}
-                              />
+                        {/* Message bubble */}
+                        <div className="flex flex-col gap-1.5">
+                          <div
+                            className={`${
+                              isError
+                                ? 'glass-error'
+                                : isUser
+                                ? `glass-message-user ${isLightBackground ? 'glass-message-user-dark' : ''}`
+                                : `glass-message ${isLightBackground ? 'glass-message-dark' : ''}`
+                            } px-4 py-3 ${
+                              isError
+                                ? 'rounded-3xl'
+                                : isUser
+                                ? 'rounded-[20px] rounded-tr-md'
+                                : 'rounded-[20px] rounded-tl-md'
+                            } ${hasAudio ? 'w-full' : ''}`}
+                          >
+                            {/* Image attachments (for user messages) */}
+                            {isUser && msg.images && msg.images.length > 0 && (
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {msg.images.map((imgUrl, imgIndex) => (
+                                  <img 
+                                    key={imgIndex}
+                                    src={imgUrl}
+                                    alt={`Attachment ${imgIndex + 1}`}
+                                    className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30 cursor-pointer hover:border-blue-400/50 transition-all"
+                                    onClick={() => window.open(imgUrl, '_blank')}
+                                    title="Click to view full size"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Audio attachments (for user messages) */}
+                            {isUser && msg.audios && msg.audios.length > 0 && (
+                              <div className="mb-3 space-y-2">
+                                {msg.audios.map((audioUrl, audioIndex) => (
+                                  <div key={audioIndex} className="w-full">
+                                    <AudioPlayer 
+                                      audioUrl={audioUrl} 
+                                      isLightBackground={isLightBackground}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                              {msg.content}
                             </div>
-                          ))}
+                          </div>
+                          
+                          {/* Action buttons below message */}
+                          <div className={`flex items-center gap-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                            {/* Speaker button for AI messages (only show if TTS is enabled) */}
+                            {!isUser && !isError && ttsEnabled && (
+                              <button
+                                onClick={() => handlePlayTTS(messageIndex, msg.content)}
+                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                                title={isPlaying ? 'Stop audio' : 'Play audio'}
+                                disabled={isLoading}
+                              >
+                                {isLoading ? (
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] animate-spin`}>⏳</span>
+                                ) : isPlaying ? (
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>⏸</span>
+                                ) : (
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>🔊</span>
+                                )}
+                              </button>
+                            )}
+                            
+                            {/* Copy button for all messages */}
+                            <button
+                              onClick={() => handleCopyMessage(messageIndex, msg.content)}
+                              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                              title="Copy message"
+                            >
+                              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>
+                                {copiedMessageIndex === messageIndex ? '✓' : '📋'}
+                              </span>
+                            </button>
+                            
+                            {/* Rewrite button for AI messages */}
+                            {!isUser && !isError && (
+                              <button
+                                onClick={() => handleRewriteMessage(messageIndex)}
+                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                                title="Regenerate response"
+                              >
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>🔄</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      
-                      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.content}
                       </div>
                     </div>
-                  </div>
-                </div>
                 
                 {/* Loading indicator after last (first when reversed) user message */}
                 {isGenerating && isLastMessage && isUser && (

@@ -224,9 +224,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         onShowError: (err) => console.error('[ChatButton] DragDrop error', err),
         checkVoiceMode: null,
         getCurrentCounts: () => ({ images: 0, audios: 0 }),
-        onAddText: (text) => { if (!isChatOpen) handleClick(); setPendingDropData({ text }); },
-        onAddImages: (images) => { if (!isChatOpen) handleClick(); setPendingDropData({ images }); },
-        onAddAudios: (audios) => { if (!isChatOpen) handleClick(); setPendingDropData({ audios }); }
+        onProcessData: (data) => {
+          if (!isChatOpen) handleClick();
+          setPendingDropData(data);
+        }
       });
     }).catch(err => console.error('[ChatButton] load DragDropService failed', err));
     return () => { attached = false; if (dragDropServiceRef.current) dragDropServiceRef.current.detach(); };

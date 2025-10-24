@@ -20,6 +20,12 @@ export const DefaultUIConfig = {
   // Model loading behavior
   enableModelLoading: true,
   
+  // AI Toolbar
+  enableAIToolbar: true,
+  
+  // Debug panel
+  enableDebugPanel: true,
+  
   // Background detection and theming
   backgroundDetection: {
     mode: BackgroundThemeModes.ADAPTIVE,

@@ -19,6 +19,7 @@ class SummarizerService {
       this.config = null;
       this.provider = null;
       this.llmClient = null;
+      this.abortController = null;
       console.log('[SummarizerService] Initialized (Dev mode)');
     }
   }
@@ -36,6 +37,7 @@ class SummarizerService {
         config: null,
         provider: null,
         llmClient: null,
+        abortController: null,
       });
       console.log(`[SummarizerService] Tab ${tabId} initialized`);
     }
@@ -50,6 +52,11 @@ class SummarizerService {
     
     const state = this.tabStates.get(tabId);
     if (state) {
+      // Abort ongoing request
+      if (state.abortController) {
+        state.abortController.abort();
+      }
+      
       // Destroy all summarizer sessions
       for (const session of state.summarizerSessions.values()) {
         try {
@@ -158,6 +165,21 @@ class SummarizerService {
   isConfigured(tabId = null) {
     const state = this._getState(tabId);
     return state && state.config && state.provider;
+  }
+
+  /**
+   * Abort ongoing summarization request
+   * @param {number} tabId - Tab ID (extension mode only)
+   */
+  abort(tabId = null) {
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
+    
+    if (state.abortController) {
+      console.log(`${logPrefix} Aborting summarization request`);
+      state.abortController.abort();
+      state.abortController = null;
+    }
   }
 
   /**
@@ -333,13 +355,19 @@ class SummarizerService {
     
     const prompt = this._buildSummaryPrompt(text, type, format, length, context);
     
+    // Create abort controller for this request
+    state.abortController = new AbortController();
+    
     try {
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: state.config.temperature,
+      }, {
+        signal: state.abortController.signal
       });
       
+      state.abortController = null;
       const summary = response.choices[0].message.content.trim();
       console.log(`${logPrefix} ${state.provider} summarization complete`);
       return summary;
@@ -359,21 +387,46 @@ class SummarizerService {
     
     const prompt = this._buildSummaryPrompt(text, type, format, length, context);
     
+    // Create abort controller for this request
+    state.abortController = new AbortController();
+    
     try {
       const stream = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: state.config.temperature,
         stream: true,
+      }, {
+        signal: state.abortController.signal
       });
       
       for await (const chunk of stream) {
+        // Check if aborted
+        if (!state.abortController) {
+          console.log(`${logPrefix} Streaming aborted by user`);
+          return;
+        }
+        
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
           yield content;
         }
       }
+      
+      state.abortController = null;
     } catch (error) {
+      state.abortController = null;
+      
+      // Check if error is from abort
+      const isAbort = error.name === 'AbortError' || 
+                      error.message?.includes('abort') || 
+                      error.message?.includes('cancel');
+      
+      if (isAbort) {
+        console.log(`${logPrefix} Streaming aborted by user`);
+        return;
+      }
+      
       console.error(`${logPrefix} ${state.provider} streaming summarization failed:`, error);
       throw error;
     }

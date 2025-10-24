@@ -221,3 +221,8 @@ class ExtensionBridge {
 // Export singleton instance
 export const extensionBridge = new ExtensionBridge();
 export default extensionBridge;
+
+// Expose on window for extension mode
+if (typeof window !== 'undefined') {
+  window.__VASSIST_BRIDGE__ = extensionBridge;
+}
