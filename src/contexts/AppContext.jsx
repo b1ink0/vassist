@@ -4,7 +4,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import ChatManager from '../managers/ChatManager';
+import ChatService from '../services/ChatService';
 import { 
   AIServiceProxy, 
   TTSServiceProxy, 
@@ -353,8 +353,8 @@ export const AppProvider = ({ children }) => {
       assistantRef.current.idle();
     }
     
-    // Clear messages
-    ChatManager.clearMessages();
+    // Clear messages and tree
+    ChatService.clearMessages();
     setChatMessages([]);
     
     // Reset state
@@ -397,9 +397,18 @@ export const AppProvider = ({ children }) => {
       // Load full chat
       const fullChat = await chatHistoryService.loadChat(chatData.chatId);
       
-      // Set messages
-      ChatManager.setMessages(fullChat.messages);
-      setChatMessages(fullChat.messages);
+      // Load tree if available, otherwise set flat messages
+      if (fullChat.chatServiceData) {
+        ChatService.importTree(fullChat.chatServiceData);
+        const messages = ChatService.getMessages();
+        setChatMessages(messages);
+        console.log('[AppContext] Loaded chat with tree structure');
+      } else if (fullChat.messages) {
+        // Backward compatibility: set flat messages
+        ChatService.setMessages(fullChat.messages);
+        setChatMessages(fullChat.messages);
+        console.log('[AppContext] Loaded flat messages');
+      }
       
       // Set current chat ID
       setCurrentChatId(fullChat.chatId);
@@ -428,6 +437,137 @@ export const AppProvider = ({ children }) => {
    */
   const updateChatMessages = useCallback((messages) => {
     setChatMessages(messages);
+  }, []);
+
+  // Callback refs for streaming regeneration (populated by ChatController)
+  const regenerateWithStreamingRef = useRef(null);
+  const editWithStreamingRef = useRef(null);
+
+  /**
+   * Edit a user message (creates new branch, regenerates AI response with streaming)
+   */
+  const editUserMessage = useCallback(async (messageId, newContent, newImages = null, newAudios = null) => {
+    console.log('[AppContext] Editing user message:', messageId);
+    
+    try {
+      // Edit in tree (creates new branch)
+      const newMessageId = ChatService.editMessage(messageId, newContent, newImages, newAudios);
+      
+      // Update UI with new active path (without AI response yet)
+      const updatedMessages = ChatService.getMessages();
+      setChatMessages(updatedMessages);
+      
+      // Use streaming regeneration if available
+      if (editWithStreamingRef.current) {
+        await editWithStreamingRef.current(newMessageId);
+      } else {
+        console.warn('[AppContext] Streaming handler not available, using fallback');
+        // Fallback to non-streaming
+        const conversationContext = updatedMessages.slice(0, updatedMessages.findIndex(m => m.id === newMessageId) + 1);
+        const aiResponse = await AIServiceProxy.sendMessage(conversationContext);
+        
+        if (aiResponse?.success && aiResponse?.response) {
+          ChatService.addMessage('assistant', aiResponse.response, null, null);
+          setChatMessages(ChatService.getMessages());
+        }
+      }
+      
+      return newMessageId;
+    } catch (error) {
+      console.error('[AppContext] Failed to edit message:', error);
+      setIsProcessing(false);
+      throw error;
+    }
+  }, []);
+
+  /**
+   * Regenerate AI response
+   */
+  const regenerateAIMessage = useCallback(async (messageId) => {
+    console.log('[AppContext] Regenerating AI message:', messageId);
+    
+    try {
+      // Create regeneration point (removes this AI message and everything after)
+      ChatService.createRegenerationBranch(messageId);
+      
+      // Update UI (show conversation up to parent)
+      const updatedMessages = ChatService.getMessages();
+      setChatMessages(updatedMessages);
+      
+      // Use streaming regeneration if available
+      if (regenerateWithStreamingRef.current) {
+        await regenerateWithStreamingRef.current();
+      } else {
+        console.warn('[AppContext] Streaming handler not available, using fallback');
+        // Fallback to non-streaming
+        setIsProcessing(true);
+        const aiResponse = await AIServiceProxy.sendMessage(updatedMessages);
+        
+        if (aiResponse?.success && aiResponse?.response) {
+          ChatService.addMessage('assistant', aiResponse.response, null, null);
+          setChatMessages(ChatService.getMessages());
+        }
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('[AppContext] Failed to regenerate message:', error);
+      setIsProcessing(false);
+      throw error;
+    }
+  }, []);
+
+  /**
+   * Switch to a different branch
+   */
+  const switchToBranch = useCallback((parentId, branchIndex) => {
+    console.log('[AppContext] Switching to branch:', branchIndex, 'at parent:', parentId);
+    
+    try {
+      ChatService.switchBranch(parentId, branchIndex);
+      
+      // Update UI
+      const updatedMessages = ChatService.getMessages();
+      setChatMessages(updatedMessages);
+      
+      console.log('[AppContext] Branch switched successfully');
+    } catch (error) {
+      console.error('[AppContext] Failed to switch branch:', error);
+      throw error;
+    }
+  }, []);
+
+  /**
+   * Navigate to previous branch
+   */
+  const previousBranch = useCallback((messageId) => {
+    console.log('[AppContext] Navigating to previous branch');
+    
+    try {
+      ChatService.previousBranch(messageId);
+      
+      // Update UI
+      const updatedMessages = ChatService.getMessages();
+      setChatMessages(updatedMessages);
+    } catch (error) {
+      console.error('[AppContext] Failed to navigate to previous branch:', error);
+    }
+  }, []);
+
+  /**
+   * Navigate to next branch
+   */
+  const nextBranch = useCallback((messageId) => {
+    console.log('[AppContext] Navigating to next branch');
+    
+    try {
+      ChatService.nextBranch(messageId);
+      
+      // Update UI
+      const updatedMessages = ChatService.getMessages();
+      setChatMessages(updatedMessages);
+    } catch (error) {
+      console.error('[AppContext] Failed to navigate to next branch:', error);
+    }
   }, []);
 
   // ========================================
@@ -514,7 +654,8 @@ export const AppProvider = ({ children }) => {
 
         await chatHistoryService.saveChat({
           chatId,
-          messages: chatMessages,
+          chatService: ChatService, // NEW: Save tree
+          messages: chatMessages, // DEPRECATED: Backward compatibility
           isTemp: false,
           metadata: {
             sourceUrl,
@@ -602,6 +743,17 @@ export const AppProvider = ({ children }) => {
     stopGeneration,
     loadChatFromHistory,
     updateChatMessages,
+
+    // Message branching actions
+    editUserMessage,
+    regenerateAIMessage,
+    switchToBranch,
+    previousBranch,
+    nextBranch,
+    
+    // Branching callback refs (for ChatController to populate)
+    regenerateWithStreamingRef,
+    editWithStreamingRef,
 
     // Drag actions
     startButtonDrag,

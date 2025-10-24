@@ -3,7 +3,7 @@ import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
 import AIToolbar from './AIToolbar'
-import ChatManager from '../managers/ChatManager'
+import ChatService from '../services/ChatService'
 import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
@@ -33,6 +33,8 @@ const ChatController = ({
     setIsSpeaking,
     setCurrentChatId,
     setPendingDropData,
+    regenerateWithStreamingRef,
+    editWithStreamingRef,
   } = useApp();
 
   /**
@@ -171,9 +173,185 @@ const ChatController = ({
   }
 
   /**
+   * Stream AI response with TTS generation
+   */
+  const streamAIResponse = async () => {
+    const autoTTSSessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Load configs
+    let savedConfig, ttsConfig;
+    try {
+      savedConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+    } catch (configError) {
+      console.warn('[ChatController] Failed to load config:', configError);
+      savedConfig = DefaultAIConfig;
+      ttsConfig = DefaultTTSConfig;
+    }
+    
+    const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt;
+    const messages = ChatService.getFormattedMessages(systemPrompt);
+    const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured();
+    
+    console.log('[ChatController] System prompt:', systemPrompt);
+    console.log('[ChatController] Messages to AI:', messages);
+    
+    // Resume TTS playback
+    if (ttsEnabled) {
+      TTSServiceProxy.resumePlayback();
+    }
+    
+    // Stream AI response with just-in-time TTS generation
+    let fullResponse = '';
+    let hasSwitchedToSpeaking = false;
+    let textBuffer = ''; // Buffer for TTS chunking
+    const allChunks = []; // All text chunks (stored, not generated yet)
+    let nextChunkToGenerate = 0; // Index of next chunk to generate
+    const MAX_QUEUED_AUDIO = 3; // Only queue up to 3 audio chunks ahead
+
+    /**
+     * Generate TTS for a text chunk with lip sync
+     */
+    const generateTTSChunk = async (chunkIndex) => {
+      if (chunkIndex >= allChunks.length) return;
+      
+      const chunkText = allChunks[chunkIndex];
+      
+      // Check if stopped
+      if (TTSServiceProxy.isStopped) {
+        return;
+      }
+
+      try {
+        // Generate TTS audio + lip sync (VMD -> BVMD)
+        const result = await TTSServiceProxy.generateSpeech(chunkText, true);
+        
+        // Check if result is null or missing audio
+        if (!result || !result.audio) {
+          console.warn(`[ChatController] TTS generation returned null for chunk ${chunkIndex}`);
+          return;
+        }
+        
+        const { audio, bvmdUrl } = result;
+        
+        // Check again if stopped after generation
+        if (TTSServiceProxy.isStopped) {
+          return;
+        }
+
+        // Create audio URL from the returned audio (Blob or ArrayBuffer)
+        const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Queue audio with BVMD for synchronized lip sync
+        TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, autoTTSSessionId);
+      } catch (ttsError) {
+        console.warn(`[ChatController] TTS generation failed for chunk ${chunkIndex}:`, ttsError);
+      }
+    };
+
+    // Generate next chunk if queue has space
+    const tryGenerateNextChunk = () => {
+      const queueLength = TTSServiceProxy.getQueueLength();
+      
+      // Only generate if queue has room AND we have more chunks
+      if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
+        generateTTSChunk(nextChunkToGenerate++);
+      }
+    };
+
+    // Register callback to generate next chunk when audio finishes playing
+    TTSServiceProxy.setAudioFinishedCallback(() => {
+      tryGenerateNextChunk();
+    });
+
+    const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
+      fullResponse += chunk;
+      textBuffer += chunk;
+
+      // Update streaming response in real-time
+      const currentMessages = ChatService.getMessages();
+      if (currentMessages.length > 0 && 
+          currentMessages[currentMessages.length - 1].role === 'assistant') {
+        ChatService.updateLastMessage(fullResponse);
+      } else {
+        ChatService.addMessage('assistant', fullResponse);
+      }
+      setChatMessages([...ChatService.getMessages()]);
+
+      // Start speaking animation after first chunk
+      if (!hasSwitchedToSpeaking && 
+          fullResponse.length > 10 && 
+          assistantRef.current?.isReady()) {
+        assistantRef.current.triggerAction('speak');
+        hasSwitchedToSpeaking = true;
+      }
+
+      // TTS Generation: Look for complete sentences and generate immediately
+      if (ttsEnabled) {
+        // Look for sentence boundaries
+        const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer);
+        
+        if (sentenceEnd) {
+          // Found a sentence boundary
+          const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim();
+          textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length);
+          
+          // Store chunk (don't generate yet, just store)
+          if (chunkToSpeak && chunkToSpeak.length >= 3) {
+            allChunks.push(chunkToSpeak);
+            
+            // Start generating first 3 chunks
+            tryGenerateNextChunk();
+          }
+        }
+      }
+    });
+
+    // Handle result - cancelled is normal flow, not an error
+    if (result.cancelled) {
+      console.log('[ChatController] Generation cancelled by user');
+      TTSServiceProxy.stopPlayback();
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle();
+      }
+      setIsProcessing(false);
+      return { success: false, cancelled: true };
+    }
+
+    // Handle actual errors
+    if (!result.success) {
+      const errorMessage = result.error?.message || 'Unknown error occurred';
+      console.error('[ChatController] AI error:', result.error);
+      ChatService.addMessage('assistant', `Error: ${errorMessage}`);
+      setChatMessages([...ChatService.getMessages()]);
+      TTSServiceProxy.stopPlayback();
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle();
+      }
+      setIsProcessing(false);
+      return { success: false, error: errorMessage };
+    }
+
+    // Add any remaining text in buffer
+    if (ttsEnabled && textBuffer.trim().length > 0) {
+      const finalChunk = textBuffer.trim();
+      allChunks.push(finalChunk);
+    }
+
+    // Wait for all chunks to finish generating
+    if (ttsEnabled) {
+      while (nextChunkToGenerate < allChunks.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    return { success: true, fullResponse };
+  };
+
+  /**
    * Handle text message submission
    * Flow: User message → Think → AI Stream → Speak → Idle
-   * Now includes TTS generation with chunking and multi-modal support
    */
   const handleMessageSend = async (message, images = null, audios = null) => {
     const attachmentInfo = [];
@@ -183,238 +361,68 @@ const ChatController = ({
     console.log('[ChatController] Message sent:', message, attachmentStr);
 
     // Add user message to chat (with images and audios if provided)
-    ChatManager.addMessage('user', message, images, audios)
-    setChatMessages(ChatManager.getMessages())
+    ChatService.addMessage('user', message, images, audios);
+    setChatMessages(ChatService.getMessages());
 
-    setIsProcessing(true)
+    setIsProcessing(true);
 
     // Stop any ongoing TTS playback
-    TTSServiceProxy.stopPlayback()
-
-    // Generate unique session ID for this auto-TTS request
-    const autoTTSSessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    TTSServiceProxy.stopPlayback();
 
     // Check AI configuration
     if (!AIServiceProxy.isConfigured()) {
-      ChatManager.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.')
-      setChatMessages([...ChatManager.getMessages()])
-      setIsProcessing(false)
-      return
+      ChatService.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.');
+      setChatMessages([...ChatService.getMessages()]);
+      setIsProcessing(false);
+      return;
     }
 
     // Start thinking animation
     if (assistantRef.current?.isReady()) {
-      console.log('[ChatController] Starting thinking animation')
-      await assistantRef.current.triggerAction('think')
+      console.log('[ChatController] Starting thinking animation');
+      await assistantRef.current.triggerAction('think');
     }
 
     // Brief pause to show thinking
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Load system prompt from config
-    let savedConfig;
-    let ttsConfig;
-    try {
-      savedConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
-      ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
-    } catch (error) {
-      console.error('[ChatController] Failed to load configs:', error);
-      savedConfig = DefaultAIConfig;
-      ttsConfig = DefaultTTSConfig;
-    }
-    
-    const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt
+    // Call core streaming function
+    const result = await streamAIResponse();
 
-    console.log('[ChatController] System prompt:', systemPrompt)
-
-    // Get formatted messages for AI
-    const messages = ChatManager.getFormattedMessages(systemPrompt)
-    console.log('[ChatController] Messages to AI:', messages)
-
-    // Check if TTS is enabled
-    const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured()
-
-    // Resume TTS playback for new generation
-    if (ttsEnabled) {
-      TTSServiceProxy.resumePlayback()
+    if (!result.success) {
+      return; // streamAIResponse already handled the error
     }
 
-    // Stream AI response with just-in-time TTS generation
-    let fullResponse = ''
-    let hasSwitchedToSpeaking = false
-    let textBuffer = '' // Buffer for TTS chunking
-      const allChunks = [] // All text chunks (stored, not generated yet)
-      let nextChunkToGenerate = 0 // Index of next chunk to generate
-      const MAX_QUEUED_AUDIO = 3 // Only queue up to 3 audio chunks ahead
+    setIsProcessing(false);
 
-      /**
-       * Generate TTS for a text chunk with lip sync
-       */
-      const generateTTSChunk = async (chunkIndex) => {
-        if (chunkIndex >= allChunks.length) return
-        
-        const chunkText = allChunks[chunkIndex]
-        
-        // Check if stopped
-        if (TTSServiceProxy.isStopped) {
-          return
+    // AUTO-SAVE: Save chat after AI finishes responding
+    if (!isTempChat && chatMessages.length > 0) {
+      try {
+        let chatId = currentChatId;
+        if (!chatId) {
+          chatId = chatHistoryService.generateChatId();
+          setCurrentChatId(chatId);
         }
 
-        try {
-          // Generate TTS audio + lip sync (VMD -> BVMD)
-          const result = await TTSServiceProxy.generateSpeech(chunkText, true)
-          
-          // Check if result is null or missing audio
-          if (!result || !result.audio) {
-            console.warn(`[ChatController] TTS generation returned null for chunk ${chunkIndex}`)
-            return
-          }
-          
-          const { audio, bvmdUrl } = result
-          
-          // Check again if stopped after generation
-          if (TTSServiceProxy.isStopped) {
-            return
-          }
+        // Get current page URL (important for extension mode)
+        const sourceUrl = window.location.href;
 
-          // Create audio URL from the returned audio (Blob or ArrayBuffer)
-          const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
-          const audioUrl = URL.createObjectURL(audioBlob)
-          
-          // Queue audio with BVMD for synchronized lip sync
-          // In both dev and extension mode, queuing happens in main world
-          TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, autoTTSSessionId)
-        } catch (ttsError) {
-          console.warn(`[ChatController] TTS generation failed for chunk ${chunkIndex}:`, ttsError)
-        }
+        await chatHistoryService.saveChat({
+          chatId,
+          chatService: ChatService, // NEW: Save tree
+          messages: ChatService.getMessages(), // DEPRECATED: Backward compatibility
+          isTemp: false,
+          metadata: {
+            sourceUrl,
+          },
+        });
+
+        console.log('[ChatController] Chat auto-saved after AI response:', chatId);
+      } catch (error) {
+        console.error('[ChatController] Failed to auto-save chat:', error);
       }
-
-      // Generate next chunk if queue has space
-      const tryGenerateNextChunk = () => {
-        const queueLength = TTSServiceProxy.getQueueLength()
-        
-        // Only generate if queue has room AND we have more chunks
-        if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-          generateTTSChunk(nextChunkToGenerate++)
-        }
-      }
-
-      // Register callback to generate next chunk when audio finishes playing
-      TTSServiceProxy.setAudioFinishedCallback(() => {
-        tryGenerateNextChunk()
-      })
-
-      const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
-        fullResponse += chunk
-        textBuffer += chunk
-
-        // Update streaming response in real-time
-        const currentMessages = ChatManager.getMessages()
-        if (currentMessages.length > 0 && 
-            currentMessages[currentMessages.length - 1].role === 'assistant') {
-          ChatManager.messages.pop()
-        }
-        ChatManager.addMessage('assistant', fullResponse)
-        setChatMessages([...ChatManager.getMessages()])
-
-        // Start speaking animation after first chunk
-        if (!hasSwitchedToSpeaking && 
-            fullResponse.length > 10 && 
-            assistantRef.current?.isReady()) {
-          assistantRef.current.triggerAction('speak')
-          hasSwitchedToSpeaking = true
-        }
-
-        // TTS Generation: Look for complete sentences and generate immediately
-        if (ttsEnabled) {
-          // Look for sentence boundaries
-          const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer)
-          
-          if (sentenceEnd) {
-            // Found a sentence boundary
-            const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim()
-            textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length)
-            
-            // Store chunk (don't generate yet, just store)
-            if (chunkToSpeak && chunkToSpeak.length >= 3) {
-              allChunks.push(chunkToSpeak)
-              
-              // Start generating first 3 chunks
-              tryGenerateNextChunk()
-            }
-          }
-        }
-      })
-
-      // Handle result - cancelled is normal flow, not an error
-      if (result.cancelled) {
-        console.log('[ChatController] Generation cancelled by user')
-        TTSServiceProxy.stopPlayback()
-        if (assistantRef.current?.isReady()) {
-          assistantRef.current.idle()
-        }
-        setIsProcessing(false)
-        return
-      }
-
-      // Handle actual errors
-      if (!result.success) {
-        const errorMessage = result.error?.message || 'Unknown error occurred';
-        console.error('[ChatController] AI error:', result.error)
-        ChatManager.addMessage('assistant', `Error: ${errorMessage}`)
-        setChatMessages([...ChatManager.getMessages()])
-        TTSServiceProxy.stopPlayback()
-        if (assistantRef.current?.isReady()) {
-          assistantRef.current.idle()
-        }
-        setIsProcessing(false)
-        return
-      }
-
-      // Add any remaining text in buffer
-      if (ttsEnabled && textBuffer.trim().length > 0) {
-        const finalChunk = textBuffer.trim()
-        allChunks.push(finalChunk)
-        tryGenerateNextChunk()
-      }
-
-      // Wait for all chunks to be generated
-      if (ttsEnabled && allChunks.length > 0) {
-        // Wait until all chunks are generated
-        while (nextChunkToGenerate < allChunks.length) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-      }
-
-      setIsProcessing(false)
-
-      // AUTO-SAVE: Save chat after AI finishes responding
-      if (!isTempChat && chatMessages.length > 0) {
-        try {
-          let chatId = currentChatId
-          if (!chatId) {
-            chatId = chatHistoryService.generateChatId()
-            setCurrentChatId(chatId)
-          }
-
-          // Get current page URL (important for extension mode)
-          const sourceUrl = window.location.href;
-
-          await chatHistoryService.saveChat({
-            chatId,
-            messages: ChatManager.getMessages(),
-            isTemp: false,
-            metadata: {
-              sourceUrl,
-            },
-          })
-
-          console.log('[ChatController] Chat auto-saved after AI response:', chatId)
-        } catch (error) {
-          console.error('[ChatController] Failed to auto-save chat:', error)
-        }
-      }
-  }
+    }
+  };
 
   /**
    * Handle voice mode transcription
@@ -435,8 +443,8 @@ const ChatController = ({
     }
     
     // Add user message to chat
-    ChatManager.addMessage('user', text)
-    setChatMessages(ChatManager.getMessages())
+    ChatService.addMessage('user', text);
+    setChatMessages(ChatService.getMessages());
     
     // Get AI response and speak it
     await handleVoiceAIResponse()
@@ -452,11 +460,11 @@ const ChatController = ({
 
     // Check AI configuration
     if (!AIServiceProxy.isConfigured()) {
-      ChatManager.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.')
-      setChatMessages([...ChatManager.getMessages()])
-      setIsProcessing(false)
-      VoiceConversationService.changeState(ConversationStates.LISTENING)
-      return
+      ChatService.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.');
+      setChatMessages([...ChatService.getMessages()]);
+      setIsProcessing(false);
+      VoiceConversationService.changeState(ConversationStates.LISTENING);
+      return;
     }
 
     // Start thinking animation
@@ -481,7 +489,7 @@ const ChatController = ({
     const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured()
 
     // Get formatted messages
-    const messages = ChatManager.getFormattedMessages(systemPrompt)
+    const messages = ChatService.getFormattedMessages(systemPrompt)
 
     // Resume TTS playback for new generation
     if (ttsEnabled) {
@@ -551,13 +559,14 @@ const ChatController = ({
       textBuffer += chunk
 
       // Update chat with streaming response
-      const currentMessages = ChatManager.getMessages()
+      const currentMessages = ChatService.getMessages()
       if (currentMessages.length > 0 && 
           currentMessages[currentMessages.length - 1].role === 'assistant') {
-        ChatManager.messages.pop()
+        ChatService.updateLastMessage(fullResponse)
+      } else {
+        ChatService.addMessage('assistant', fullResponse)
       }
-      ChatManager.addMessage('assistant', fullResponse)
-      setChatMessages([...ChatManager.getMessages()])
+      setChatMessages([...ChatService.getMessages()])
 
       // Start speaking animation
       if (!hasSwitchedToSpeaking && 
@@ -599,9 +608,9 @@ const ChatController = ({
 
     // Handle actual errors
     if (!result.success) {
-      console.error('[ChatController] Voice AI error:', result.error)
-      ChatManager.addMessage('assistant', `Error: ${result.error.message}`)
-      setChatMessages([...ChatManager.getMessages()])
+      console.error('[ChatController] Voice AI error:', result.error);
+      ChatService.addMessage('assistant', `Error: ${result.error.message}`);
+      setChatMessages([...ChatService.getMessages()]);
       VoiceConversationService.changeState(ConversationStates.LISTENING)
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
@@ -633,7 +642,7 @@ const ChatController = ({
       VoiceConversationService.changeState(ConversationStates.LISTENING)
     }
 
-    setIsProcessing(false)
+    setIsProcessing(false);
   }
 
   /**
@@ -665,6 +674,40 @@ const ChatController = ({
     });
     window.dispatchEvent(event);
   };
+
+  /**
+   * Streaming regeneration handler (called by AppContext)
+   * This reuses the core streaming function
+   */
+  const handleRegenerateWithStreaming = async () => {
+    console.log('[ChatController] Regenerating with streaming');
+    
+    setIsProcessing(true);
+    TTSServiceProxy.stopPlayback();
+    
+    // Start thinking animation
+    if (assistantRef.current?.isReady()) {
+      await assistantRef.current.triggerAction('think');
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Call core streaming function
+    await streamAIResponse();
+    
+    setIsProcessing(false);
+  };
+  
+  // Populate streaming callback refs for AppContext
+  useEffect(() => {
+    if (regenerateWithStreamingRef) {
+      regenerateWithStreamingRef.current = handleRegenerateWithStreaming;
+    }
+    if (editWithStreamingRef) {
+      editWithStreamingRef.current = handleRegenerateWithStreaming; // Same logic for edit
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regenerateWithStreamingRef, editWithStreamingRef]);
 
   return (
     <>

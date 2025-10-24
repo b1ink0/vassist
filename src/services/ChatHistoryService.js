@@ -5,7 +5,7 @@
  * Works seamlessly in both dev and extension modes via StorageServiceProxy.
  * 
  * Features:
- * - Save and load chats with full message history
+ * - Save and load chats with message tree structure
  * - Store associated media (images, audio files)
  * - Generate meaningful chat titles using LLM
  * - Search and filter chats
@@ -15,6 +15,7 @@
 
 import storageServiceProxy from './proxies/StorageServiceProxy.js';
 import AIServiceProxy from './proxies/AIServiceProxy.js';
+import ChatService from './ChatService.js';
 
 class ChatHistoryService {
   constructor() {
@@ -38,13 +39,14 @@ class ChatHistoryService {
 
   /**
    * Save a chat with all associated data
-   * @param {Object} chatData - { chatId, messages, title?, isTemp?, metadata? }
+   * @param {Object} chatData - { chatId, chatService?, messages?, title?, isTemp?, metadata? }
    * @returns {Promise<string>} chatId
    */
   async saveChat(chatData) {
     try {
       const {
         chatId = this.generateChatId(),
+        chatService = null,
         messages = [],
         title,
         isTemp = false,
@@ -57,25 +59,42 @@ class ChatHistoryService {
         return chatId;
       }
 
+      let finalMessages = [];
+      let treeData = null;
+
+      // Handle tree structure
+      if (chatService) {
+        console.log('[ChatHistoryService] Saving chat with tree structure');
+        treeData = chatService.exportTree();
+        finalMessages = chatService.getMessages(); // For title generation and backward compatibility
+      } else {
+        // Backward compatibility: flat array
+        console.log('[ChatHistoryService] Saving chat with flat messages (backward compatibility)');
+        finalMessages = messages;
+      }
+
       // Generate title if not provided or is default
       let finalTitle = title;
       if (!finalTitle || finalTitle === 'Untitled Chat') {
         console.log('[ChatHistoryService] Generating title for chat:', chatId);
-        finalTitle = await this._generateTitleFromMessages(messages);
+        finalTitle = await this._generateTitleFromMessages(finalMessages);
       }
 
-      // Process and save media files
-      const processedMessages = await this._processMessagesForSave(messages);
+      // Process and save media files (works with both tree nodes and flat messages)
+      const processedTree = treeData ? await this._processTreeForSave(treeData) : null;
+      const processedMessages = !treeData ? await this._processMessagesForSave(finalMessages) : [];
 
       // Prepare chat data for storage
       const chatRecord = {
         chatId,
         title: finalTitle,
-        messages: processedMessages,
-        messageCount: messages.length,
+        chatService: processedTree, // NEW: Store tree structure
+        messages: processedMessages, // DEPRECATED: For backward compatibility
+        messageCount: finalMessages.length,
         metadata: {
           ...metadata,
-          charCount: messages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0),
+          charCount: finalMessages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0),
+          hasTree: !!processedTree,
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -87,12 +106,81 @@ class ChatHistoryService {
       // Cache it
       this.cache.chats.set(chatId, chatRecord);
 
-      console.log('[ChatHistoryService] Chat saved:', chatId, 'with title:', finalTitle);
+      console.log('[ChatHistoryService] Chat saved:', chatId, 'with title:', finalTitle, 'Tree:', !!processedTree);
       return chatId;
     } catch (error) {
       console.error('[ChatHistoryService] Failed to save chat:', error);
       throw error;
     }
+  }
+
+  /**
+   * Process message tree and save associated media files
+   * @private
+   */
+  async _processTreeForSave(treeData) {
+    if (!treeData || !treeData.tree) return null;
+
+    const processed = {
+      ...treeData,
+      tree: await this._processNodeForSave(treeData.tree),
+    };
+
+    return processed;
+  }
+
+  /**
+   * Recursively process tree nodes and save media
+   * @private
+   */
+  async _processNodeForSave(node) {
+    const processedNode = { ...node };
+
+    // Save images if present
+    if (node.images && node.images.length > 0) {
+      processedNode.imageFileIds = [];
+      for (let i = 0; i < node.images.length; i++) {
+        try {
+          const fileId = await this._saveMediaFile(
+            node.images[i],
+            'image',
+            `${node.id}_img_${i}`
+          );
+          processedNode.imageFileIds.push(fileId);
+        } catch (error) {
+          console.error('[ChatHistoryService] Failed to save image:', error);
+        }
+      }
+      delete processedNode.images;
+    }
+
+    // Save audios if present
+    if (node.audios && node.audios.length > 0) {
+      processedNode.audioFileIds = [];
+      for (let i = 0; i < node.audios.length; i++) {
+        try {
+          const fileId = await this._saveMediaFile(
+            node.audios[i],
+            'audio',
+            `${node.id}_audio_${i}`
+          );
+          processedNode.audioFileIds.push(fileId);
+        } catch (error) {
+          console.error('[ChatHistoryService] Failed to save audio:', error);
+        }
+      }
+      delete processedNode.audios;
+    }
+
+    // Recursively process branches
+    if (node.branches && node.branches.length > 0) {
+      processedNode.branches = [];
+      for (const branch of node.branches) {
+        processedNode.branches.push(await this._processNodeForSave(branch));
+      }
+    }
+
+    return processedNode;
   }
 
   /**
@@ -195,14 +283,14 @@ class ChatHistoryService {
   /**
    * Load a chat by ID
    * @param {string} chatId
-   * @returns {Promise<Object>} chat data with images and audios restored
+   * @returns {Promise<Object>} chat data with tree/messages and media restored
    */
   async loadChat(chatId) {
     try {
       // Check cache first
       if (this.cache.chats.has(chatId)) {
         const cached = this.cache.chats.get(chatId);
-        return await this._restoreMediaInMessages(cached);
+        return await this._restoreMediaInChat(cached);
       }
 
       // Load from storage via proxy
@@ -211,18 +299,169 @@ class ChatHistoryService {
         throw new Error(`Chat not found: ${chatId}`);
       }
 
-      // Restore media files
-      const restoredChat = await this._restoreMediaInMessages(chatData);
+      // Restore media files (works with both tree and flat messages)
+      const restoredChat = await this._restoreMediaInChat(chatData);
 
       // Cache it
       this.cache.chats.set(chatId, chatData);
 
-      console.log('[ChatHistoryService] Chat loaded:', chatId);
+      console.log('[ChatHistoryService] Chat loaded:', chatId, 'Has tree:', !!chatData.chatService);
       return restoredChat;
     } catch (error) {
       console.error('[ChatHistoryService] Failed to load chat:', error);
       throw error;
     }
+  }
+
+  /**
+   * Restore media files in chat (supports both tree and flat messages)
+   * @private
+   */
+  async _restoreMediaInChat(chatData) {
+    const restored = { ...chatData };
+
+    // Restore tree structure if present
+    if (restored.chatService) {
+      restored.chatService = {
+        ...restored.chatService,
+        tree: await this._restoreNodeMedia(restored.chatService.tree),
+      };
+
+      // Import tree into ChatService
+      ChatService.importTree(restored.chatService);
+      restored.chatServiceData = restored.chatService;
+      
+      console.log('[ChatHistoryService] Restored chat service tree');
+    } else if (restored.messageTree) {
+      // Backward compatibility: old format
+      restored.chatService = {
+        ...restored.messageTree,
+        tree: await this._restoreNodeMedia(restored.messageTree.tree),
+      };
+      
+      ChatService.importTree(restored.chatService);
+      restored.chatServiceData = restored.chatService;
+      
+      console.log('[ChatHistoryService] Restored message tree (backward compatibility)');
+    }
+
+    // Restore flat messages (backward compatibility)
+    if (restored.messages && restored.messages.length > 0) {
+      restored.messages = await this._restoreMessagesMedia(restored.messages);
+      console.log('[ChatHistoryService] Restored flat messages');
+    }
+
+    return restored;
+  }
+
+  /**
+   * Recursively restore media in tree nodes
+   * @private
+   */
+  async _restoreNodeMedia(node) {
+    const restored = { ...node };
+
+    // Restore images
+    if (node.imageFileIds && node.imageFileIds.length > 0) {
+      restored.images = [];
+      for (const fileId of node.imageFileIds) {
+        try {
+          const fileData = await this.storageProxy.fileLoad(fileId);
+          if (fileData && fileData.data) {
+            const imageUrl = fileData.data instanceof Blob 
+              ? await this._blobToDataUrl(fileData.data)
+              : fileData.data;
+            restored.images.push(imageUrl);
+          }
+        } catch (error) {
+          console.warn('[ChatHistoryService] Failed to restore image:', fileId, error);
+        }
+      }
+      delete restored.imageFileIds;
+    }
+
+    // Restore audios
+    if (node.audioFileIds && node.audioFileIds.length > 0) {
+      restored.audios = [];
+      for (const fileId of node.audioFileIds) {
+        try {
+          const fileData = await this.storageProxy.fileLoad(fileId);
+          if (fileData && fileData.data) {
+            const audioUrl = fileData.data instanceof Blob 
+              ? await this._blobToDataUrl(fileData.data)
+              : fileData.data;
+            restored.audios.push(audioUrl);
+          }
+        } catch (error) {
+          console.warn('[ChatHistoryService] Failed to restore audio:', fileId, error);
+        }
+      }
+      delete restored.audioFileIds;
+    }
+
+    // Recursively process branches
+    if (node.branches && node.branches.length > 0) {
+      restored.branches = [];
+      for (const branch of node.branches) {
+        restored.branches.push(await this._restoreNodeMedia(branch));
+      }
+    }
+
+    return restored;
+  }
+
+  /**
+   * Restore media files in flat messages array
+   * @private
+   */
+  async _restoreMessagesMedia(messages) {
+    const restored = [];
+
+    for (const msg of messages) {
+      const restoredMsg = { ...msg };
+
+      // Restore images
+      if (msg.imageFileIds && msg.imageFileIds.length > 0) {
+        restoredMsg.images = [];
+        for (const fileId of msg.imageFileIds) {
+          try {
+            const fileData = await this.storageProxy.fileLoad(fileId);
+            if (fileData && fileData.data) {
+              const imageUrl = fileData.data instanceof Blob 
+                ? await this._blobToDataUrl(fileData.data)
+                : fileData.data;
+              restoredMsg.images.push(imageUrl);
+            }
+          } catch (error) {
+            console.warn('[ChatHistoryService] Failed to restore image:', fileId, error);
+          }
+        }
+        delete restoredMsg.imageFileIds;
+      }
+
+      // Restore audios
+      if (msg.audioFileIds && msg.audioFileIds.length > 0) {
+        restoredMsg.audios = [];
+        for (const fileId of msg.audioFileIds) {
+          try {
+            const fileData = await this.storageProxy.fileLoad(fileId);
+            if (fileData && fileData.data) {
+              const audioUrl = fileData.data instanceof Blob 
+                ? await this._blobToDataUrl(fileData.data)
+                : fileData.data;
+              restoredMsg.audios.push(audioUrl);
+            }
+          } catch (error) {
+            console.warn('[ChatHistoryService] Failed to restore audio:', fileId, error);
+          }
+        }
+        delete restoredMsg.audioFileIds;
+      }
+
+      restored.push(restoredMsg);
+    }
+
+    return restored;
   }
 
   /**
@@ -271,66 +510,6 @@ class ChatHistoryService {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  }
-
-  /**
-   * Restore media files from fileIds back into messages
-   * @private
-   */
-  async _restoreMediaInMessages(chatData) {
-    const restored = { ...chatData };
-    const messages = [...(restored.messages || [])];
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      // Restore images
-      if (msg.imageFileIds && msg.imageFileIds.length > 0) {
-        msg.images = [];
-        for (const fileId of msg.imageFileIds) {
-          try {
-            const fileData = await this.storageProxy.fileLoad(fileId);
-            if (fileData && fileData.data) {
-              // Convert Blob to Data URL (persistent across refreshes)
-              const imageUrl = fileData.data instanceof Blob 
-                ? await this._blobToDataUrl(fileData.data)
-                : fileData.data;
-              msg.images.push(imageUrl);
-              console.log('[ChatHistoryService] Restored image:', fileId);
-            }
-          } catch (error) {
-            console.warn('[ChatHistoryService] Failed to restore image:', fileId, error);
-          }
-        }
-        delete msg.imageFileIds;
-      }
-
-      // Restore audios
-      if (msg.audioFileIds && msg.audioFileIds.length > 0) {
-        msg.audios = [];
-        for (const fileId of msg.audioFileIds) {
-          try {
-            const fileData = await this.storageProxy.fileLoad(fileId);
-            if (fileData && fileData.data) {
-              // Convert Blob to Data URL (persistent across refreshes)
-              const audioUrl = fileData.data instanceof Blob 
-                ? await this._blobToDataUrl(fileData.data)
-                : fileData.data;
-              msg.audios.push(audioUrl);
-              console.log('[ChatHistoryService] Restored audio:', fileId);
-            }
-          } catch (error) {
-            console.warn('[ChatHistoryService] Failed to restore audio:', fileId, error);
-          }
-        }
-        delete msg.audioFileIds;
-      }
-
-      messages[i] = msg;
-    }
-
-    restored.messages = messages;
-    return restored;
   }
 
   /**

@@ -43,6 +43,10 @@ const ChatContainer = ({
     endButtonDrag,
     startModelDrag,
     endModelDrag,
+    editUserMessage,
+    regenerateAIMessage,
+    previousBranch,
+    nextBranch,
   } = useApp();
 
   // Local refs and state for internal component logic
@@ -60,6 +64,11 @@ const ChatContainer = ({
   const chatInputRef = useRef(null); // Get input ref from context when needed
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
   const [isContainerHovered, setIsContainerHovered] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [editingImages, setEditingImages] = useState([]);
+  const [editingAudios, setEditingAudios] = useState([]);
+  const editTextareaRef = useRef(null);
 
   // Keep button position ref in sync with context
   useEffect(() => {
@@ -486,16 +495,101 @@ const ChatContainer = ({
   /**
    * Handle rewriting/regenerating AI message
    */
-  const handleRewriteMessage = async (messageIndex) => {
-    // Find the user message that triggered this AI response
-    // User messages come before AI messages in the array
-    if (messageIndex > 0 && messages[messageIndex - 1]?.role === 'user') {
-      const userMessage = messages[messageIndex - 1];
-      // TODO: Implement regeneration - would need to expose a method in AppContext
-      console.log('[ChatContainer] Rewrite requested for message:', messageIndex, 'user input:', userMessage.content);
-      // For now, just log. Full implementation needs AppContext.regenerateMessage(messageIndex)
+  const handleRewriteMessage = async (message) => {
+    if (message?.id && message?.role === 'assistant') {
+      try {
+        console.log('[ChatContainer] Regenerating AI message:', message.id);
+        await regenerateAIMessage(message.id);
+      } catch (error) {
+        console.error('[ChatContainer] Failed to regenerate message:', error);
+      }
     }
   };
+
+  /**
+   * Handle editing user message
+   */
+  const handleEditMessage = (message) => {
+    if (message?.id && message?.role === 'user') {
+      console.log('[ChatContainer] Starting edit for message:', message.id);
+      setEditingMessageId(message.id);
+      setEditingContent(message.content);
+      setEditingImages(message.images || []);
+      setEditingAudios(message.audios || []);
+    }
+  };
+
+  /**
+   * Save edited message
+   */
+  const handleSaveEdit = async (messageId) => {
+    if (!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0) {
+      setEditingMessageId(null);
+      setEditingContent('');
+      setEditingImages([]);
+      setEditingAudios([]);
+      return;
+    }
+
+    try {
+      console.log('[ChatContainer] Saving edited message:', messageId);
+      // TODO: Need to update editUserMessage in AppContext to accept images/audios
+      await editUserMessage(messageId, editingContent.trim(), editingImages, editingAudios);
+      setEditingMessageId(null);
+      setEditingContent('');
+      setEditingImages([]);
+      setEditingAudios([]);
+    } catch (error) {
+      console.error('[ChatContainer] Failed to save edit:', error);
+    }
+  };
+
+  /**
+   * Cancel editing
+   */
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingContent('');
+    setEditingImages([]);
+    setEditingAudios([]);
+  };
+
+  /**
+   * Remove image from editing
+   */
+  const handleRemoveEditingImage = (index) => {
+    setEditingImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  /**
+   * Remove audio from editing
+   */
+  const handleRemoveEditingAudio = (index) => {
+    setEditingAudios(prev => prev.filter((_, i) => i !== index));
+  };
+
+  /**
+   * Handle branch navigation
+   */
+  const handlePreviousBranch = (message) => {
+    if (message?.id && message?.branchInfo?.canGoBack) {
+      previousBranch(message.id);
+    }
+  };
+
+  const handleNextBranch = (message) => {
+    if (message?.id && message?.branchInfo?.canGoForward) {
+      nextBranch(message.id);
+    }
+  };
+
+  // Auto-focus edit textarea when editing starts
+  useEffect(() => {
+    if (editingMessageId && editTextareaRef.current) {
+      editTextareaRef.current.focus();
+      editTextareaRef.current.selectionStart = editTextareaRef.current.value.length;
+    }
+  }, [editingMessageId]);
 
   /**
    * Handle playing TTS for a message
@@ -828,8 +922,8 @@ const ChatContainer = ({
                                 : 'rounded-[20px] rounded-tl-md'
                             } ${hasAudio ? 'w-full' : ''}`}
                           >
-                            {/* Image attachments (for user messages) */}
-                            {isUser && msg.images && msg.images.length > 0 && (
+                            {/* Image attachments (for user messages) - only show when NOT editing */}
+                            {isUser && msg.images && msg.images.length > 0 && editingMessageId !== msg.id && (
                               <div className="mb-3 flex flex-wrap gap-2">
                                 {msg.images.map((imgUrl, imgIndex) => (
                                   <img 
@@ -844,8 +938,8 @@ const ChatContainer = ({
                               </div>
                             )}
                             
-                            {/* Audio attachments (for user messages) */}
-                            {isUser && msg.audios && msg.audios.length > 0 && (
+                            {/* Audio attachments (for user messages) - only show when NOT editing */}
+                            {isUser && msg.audios && msg.audios.length > 0 && editingMessageId !== msg.id && (
                               <div className="mb-3 space-y-2">
                                 {msg.audios.map((audioUrl, audioIndex) => (
                                   <div key={audioIndex} className="w-full">
@@ -858,13 +952,125 @@ const ChatContainer = ({
                               </div>
                             )}
                             
-                            <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                              {msg.content}
-                            </div>
+                            {/* Message content - inline editing for user messages */}
+                            {editingMessageId === msg.id ? (
+                              <div className="relative space-y-2">
+                                {/* Editing images */}
+                                {editingImages.length > 0 && (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {editingImages.map((img, imgIndex) => (
+                                      <div key={imgIndex} className="relative group">
+                                        <img 
+                                          src={img} 
+                                          alt={`Edit ${imgIndex + 1}`}
+                                          className="w-full rounded-lg max-h-[150px] object-cover"
+                                        />
+                                        <button
+                                          onClick={() => handleRemoveEditingImage(imgIndex)}
+                                          className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                          title="Remove image"
+                                        >
+                                          <span className="text-[11px]">✗</span>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                
+                                {/* Editing audios */}
+                                {editingAudios.length > 0 && (
+                                  <div className="space-y-2">
+                                    {editingAudios.map((audioUrl, audioIndex) => (
+                                      <div key={audioIndex} className="relative group">
+                                        <AudioPlayer 
+                                          audioUrl={audioUrl} 
+                                          isLightBackground={isLightBackground}
+                                        />
+                                        <button
+                                          onClick={() => handleRemoveEditingAudio(audioIndex)}
+                                          className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                          title="Remove audio"
+                                        >
+                                          <span className="text-[11px]">✗</span>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                
+                                <textarea
+                                  ref={editTextareaRef}
+                                  value={editingContent}
+                                  onChange={(e) => setEditingContent(e.target.value)}
+                                  className={`w-full min-h-[80px] px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed ${
+                                    isLightBackground
+                                      ? 'bg-transparent text-black placeholder-black/40'
+                                      : 'bg-transparent text-white placeholder-white/40'
+                                  } focus:outline-none`}
+                                  style={{ 
+                                    background: 'transparent',
+                                    border: 'none'
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && e.ctrlKey) {
+                                      handleSaveEdit(msg.id);
+                                    } else if (e.key === 'Escape') {
+                                      handleCancelEdit();
+                                    }
+                                  }}
+                                />
+                                <div className="flex gap-1 justify-end mt-1">
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100`}
+                                    title="Cancel (Esc)"
+                                  >
+                                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}>✗</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveEdit(msg.id)}
+                                    disabled={!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0}
+                                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 disabled:opacity-30`}
+                                    title="Save (Ctrl+Enter)"
+                                  >
+                                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}>✓</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                                {msg.content}
+                              </div>
+                            )}
                           </div>
                           
-                          {/* Action buttons below message */}
-                          <div className={`flex items-center gap-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                          {/* Action buttons and branch navigation on same line */}
+                          <div className={`flex items-center gap-1 ${isUser ? 'justify-end' : 'justify-start'} mt-1`}>
+                            {/* Branch navigation for AI messages */}
+                            {!isUser && msg.branchInfo && msg.branchInfo.totalBranches > 1 && editingMessageId !== msg.id && (
+                              <>
+                                <button
+                                  onClick={() => handlePreviousBranch(msg)}
+                                  disabled={!msg.branchInfo.canGoBack}
+                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                                  title="Previous variant"
+                                >
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
+                                </button>
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
+                                  {msg.branchInfo.currentIndex}/{msg.branchInfo.totalBranches}
+                                </span>
+                                <button
+                                  onClick={() => handleNextBranch(msg)}
+                                  disabled={!msg.branchInfo.canGoForward}
+                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                                  title="Next variant"
+                                >
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>▶</span>
+                                </button>
+                              </>
+                            )}
+                            
                             {/* Speaker button for AI messages (only show if TTS is enabled) */}
                             {!isUser && !isError && ttsEnabled && (
                               <button
@@ -884,24 +1090,62 @@ const ChatContainer = ({
                             )}
                             
                             {/* Copy button for all messages */}
-                            <button
-                              onClick={() => handleCopyMessage(messageIndex, msg.content)}
-                              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                              title="Copy message"
-                            >
-                              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>
-                                {copiedMessageIndex === messageIndex ? '✓' : '📋'}
-                              </span>
-                            </button>
+                            {editingMessageId !== msg.id && (
+                              <button
+                                onClick={() => handleCopyMessage(messageIndex, msg.content)}
+                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                                title="Copy message"
+                              >
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>
+                                  {copiedMessageIndex === messageIndex ? '✓' : '📋'}
+                                </span>
+                              </button>
+                            )}
+                            
+                            {/* Edit button for user messages */}
+                            {isUser && !isError && editingMessageId !== msg.id && (
+                              <button
+                                onClick={() => handleEditMessage(msg)}
+                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                                title="Edit message"
+                              >
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>✏️</span>
+                              </button>
+                            )}
+                            
+                            {/* Branch navigation */}
+                            {isUser && msg.branchInfo && msg.branchInfo.totalBranches > 1 && editingMessageId !== msg.id && (
+                              <>
+                                <button
+                                  onClick={() => handlePreviousBranch(msg)}
+                                  disabled={!msg.branchInfo.canGoBack}
+                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                                  title="Previous variant"
+                                >
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
+                                </button>
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
+                                  {msg.branchInfo.currentIndex}/{msg.branchInfo.totalBranches}
+                                </span>
+                                <button
+                                  onClick={() => handleNextBranch(msg)}
+                                  disabled={!msg.branchInfo.canGoForward}
+                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                                  title="Next variant"
+                                >
+                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>▶</span>
+                                </button>
+                              </>
+                            )}
                             
                             {/* Rewrite button for AI messages */}
-                            {!isUser && !isError && (
+                            {!isUser && !isError && editingMessageId !== msg.id && (
                               <button
-                                onClick={() => handleRewriteMessage(messageIndex)}
+                                onClick={() => handleRewriteMessage(msg)}
                                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
                                 title="Regenerate response"
                               >
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>🔄</span>
+                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>↻</span>
                               </button>
                             )}
                           </div>
@@ -911,8 +1155,8 @@ const ChatContainer = ({
                 
                 {/* Loading indicator after last (first when reversed) user message */}
                 {isGenerating && isLastMessage && isUser && (
-                  <div className={`flex ${ttsConfig.enabled ? 'justify-start' : 'justify-start'}`}>
-                    <div className={`flex items-start gap-2 max-w-[80%] ${ttsConfig.enabled ? 'ml-9' : ''}`}>
+                  <div className="flex justify-start mb-7">
+                    <div className="flex items-start gap-2 max-w-[80%]">
                       <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
                         <div className="loading-dots">
                           <span className="loading-dot"></span>
