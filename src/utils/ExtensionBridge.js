@@ -8,6 +8,7 @@ class ExtensionBridge {
   constructor() {
     this.requestId = 0;
     this.pending = new Map(); // Track pending requests
+    this.messageListeners = new Set(); // Track message listeners
     this._setupMessageListener();
     
     console.log('[ExtensionBridge] Initialized in main world');
@@ -20,6 +21,19 @@ class ExtensionBridge {
     window.addEventListener('message', (event) => {
       // Only accept messages from same window
       if (event.source !== window) return;
+      
+      // Check for broadcast messages (not tied to a specific request)
+      if (event.data && event.data.__VASSIST_BROADCAST__) {
+        // Notify all registered listeners
+        this.messageListeners.forEach(listener => {
+          try {
+            listener(event.data);
+          } catch (error) {
+            console.error('[ExtensionBridge] Listener error:', error);
+          }
+        });
+        return;
+      }
       
       // Check for regular response format
       if (event.data && event.data.__VASSIST_RESPONSE__) {
@@ -136,7 +150,8 @@ class ExtensionBridge {
         __VASSIST_MESSAGE__: true,
         type,
         payload,
-        requestId
+        requestId,
+        timeout // Pass timeout to content script
       }, '*');
       
       console.log('[ExtensionBridge] Sent to content script:', type);
@@ -186,7 +201,8 @@ class ExtensionBridge {
         type,
         payload,
         requestId,
-        streaming: true // Flag for streaming request
+        streaming: true, // Flag for streaming request
+        timeout // Pass timeout to content script
       }, '*');
       
       console.log('[ExtensionBridge] Sent streaming request:', type, 'requestId:', requestId);
@@ -215,6 +231,28 @@ class ExtensionBridge {
       console.error('[ExtensionBridge] Failed to get resource URL:', error);
       return `/${path}`; // Fallback to relative path
     }
+  }
+
+  /**
+   * Add a message listener for broadcast messages
+   * Used for progress updates, notifications, etc.
+   * @param {Function} listener - Callback function (message) => {}
+   */
+  addMessageListener(listener) {
+    if (typeof listener !== 'function') {
+      throw new Error('Listener must be a function');
+    }
+    this.messageListeners.add(listener);
+    console.log('[ExtensionBridge] Added message listener, total:', this.messageListeners.size);
+  }
+
+  /**
+   * Remove a message listener
+   * @param {Function} listener - Callback function to remove
+   */
+  removeMessageListener(listener) {
+    this.messageListeners.delete(listener);
+    console.log('[ExtensionBridge] Removed message listener, total:', this.messageListeners.size);
   }
 }
 

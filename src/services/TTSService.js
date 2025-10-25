@@ -98,7 +98,26 @@ class TTSService {
     console.log(`${logPrefix} - Configuring provider: ${provider}`);
 
     try {
-      if (provider === TTSProviders.OPENAI) {
+      if (provider === TTSProviders.KOKORO) {
+        // Kokoro uses worker-based generation (no client object)
+        // Merge with defaults if kokoro config is missing
+        const kokoroConfig = config.kokoro || {};
+        
+        console.log(`${logPrefix} - Kokoro config received:`, kokoroConfig);
+        
+        state.config = {
+          modelId: kokoroConfig.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+          voice: kokoroConfig.voice || 'af_heart',
+          speed: kokoroConfig.speed !== undefined ? kokoroConfig.speed : 1.0,
+          device: kokoroConfig.device || 'auto',
+          // NOTE: dtype is determined automatically by KokoroTTSCore based on device
+          // webgpu -> fp32, wasm -> q8
+        };
+        state.provider = provider;
+        state.client = 'kokoro'; // Marker to indicate Kokoro is configured
+
+        console.log(`${logPrefix} - Kokoro TTS configured:`, state.config);
+      } else if (provider === TTSProviders.OPENAI) {
         state.client = new OpenAI({
           apiKey: config.openai.apiKey,
           dangerouslyAllowBrowser: !this.isExtensionMode,
@@ -215,6 +234,12 @@ class TTSService {
 
     if (state.isStopped) return null;
 
+    // Handle Kokoro TTS generation
+    if (state.provider === TTSProviders.KOKORO) {
+      return await this.generateKokoroSpeech(text, generateLipSync, tabId);
+    }
+
+    // Handle OpenAI and compatible TTS generation
     if (this.isExtensionMode) {
       state.isGenerating = true;
 
@@ -692,6 +717,213 @@ class TTSService {
       return;
     }
     this.isStopped = false;
+  }
+
+  /**
+   * Generate speech using Kokoro TTS
+   * @param {string} text - Text to synthesize
+   * @param {boolean} generateLipSync - Generate lip sync data
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and optional BVMD URL
+   */
+  async generateKokoroSpeech(text, generateLipSync = true, tabId = null) {
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    try {
+      console.log(`${logPrefix} - Generating Kokoro speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
+
+      if (state.isStopped) return null;
+
+      // Initialize worker client if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      // Generate audio using Kokoro TTS via worker
+      const audioBuffer = await audioWorkerClient.generateKokoroSpeech(text, {
+        voice: state.config.voice,
+        speed: state.config.speed
+      });
+
+      if (state.isStopped) return null;
+
+      // Convert ArrayBuffer to Blob
+      const blob = new Blob([audioBuffer], { type: 'audio/wav' }); // Kokoro outputs WAV
+
+      let bvmdUrl = null;
+      if (generateLipSync && state.lipSyncEnabled) {
+        try {
+          if (state.isStopped) return null;
+          
+          console.log(`${logPrefix} - Processing Kokoro audio with lip sync...`);
+          
+          // Process audio in worker for lip sync
+          const result = await audioWorkerClient.processAudioWithLipSync(audioBuffer);
+          
+          // Convert bvmdData array to blob URL
+          if (result.bvmdData && Array.isArray(result.bvmdData) && result.bvmdData.length > 0) {
+            const bvmdUint8 = new Uint8Array(result.bvmdData);
+            const bvmdBlob = new Blob([bvmdUint8], { type: 'application/octet-stream' });
+            bvmdUrl = URL.createObjectURL(bvmdBlob);
+            
+            if (!this.isExtensionMode) {
+              this.blobUrls.add(bvmdUrl);
+            }
+            
+            console.log(`${logPrefix} - BVMD generated:`, bvmdUrl);
+          }
+        } catch (lipSyncError) {
+          console.error(`${logPrefix} - Lip sync generation failed (continuing without it):`, lipSyncError);
+        }
+      }
+
+      console.log(`${logPrefix} - Kokoro speech generated successfully`);
+      return { audio: blob, bvmdUrl };
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro speech generation failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize Kokoro TTS model
+   * @param {Function} progressCallback - Progress callback (progress) => {}
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<boolean>} Success status
+   */
+  async initializeKokoro(progressCallback = null, tabId = null) {
+    const state = this._getState(tabId);
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    if (!state.enabled) {
+      throw new Error('TTS is not enabled');
+    }
+
+    if (state.provider !== TTSProviders.KOKORO) {
+      throw new Error('Kokoro TTS not configured as provider');
+    }
+
+    try {
+      console.log(`${logPrefix} - Initializing Kokoro TTS...`);
+
+      // Dev mode: Initialize worker client for SharedWorker
+      // Extension mode: This method is NOT called - TTSServiceProxy handles it directly
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      // Initialize Kokoro model via SharedWorker (dev mode only)
+      const result = await audioWorkerClient.initKokoro({
+        modelId: state.config.modelId,
+        device: state.config.device
+        // NOTE: dtype is auto-determined in KokoroTTSCore based on device
+      }, progressCallback);
+
+      console.log(`${logPrefix} - Kokoro TTS initialized:`, result.message);
+      return result.initialized;
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro initialization failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check Kokoro TTS status
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<Object>} Status object
+   */
+  async checkKokoroStatus(tabId = null) {
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    try {
+      // Initialize worker client if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      const status = await audioWorkerClient.checkKokoroStatus();
+      console.log(`${logPrefix} - Kokoro status:`, status);
+      return status;
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro status check failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * List available Kokoro voices
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<string[]>} Array of voice IDs
+   */
+  async listKokoroVoices(tabId = null) {
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    try {
+      // Initialize worker client if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      const voices = await audioWorkerClient.listKokoroVoices();
+      console.log(`${logPrefix} - Kokoro voices:`, voices.length);
+      return voices;
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro list voices failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Kokoro cache size
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<Object>} Cache size information
+   */
+  async getKokoroCacheSize(tabId = null) {
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    try {
+      // Initialize worker client if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      const sizeInfo = await audioWorkerClient.getKokoroCacheSize();
+      console.log(`${logPrefix} - Kokoro cache size:`, sizeInfo);
+      return sizeInfo;
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro cache size check failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear Kokoro cache and reset model
+   * @param {number|null} tabId - Tab ID (extension mode only)
+   * @returns {Promise<boolean>} Success status
+   */
+  async clearKokoroCache(tabId = null) {
+    const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
+
+    try {
+      // Initialize worker client if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      const cleared = await audioWorkerClient.clearKokoroCache();
+      console.log(`${logPrefix} - Kokoro cache cleared:`, cleared);
+      return cleared;
+
+    } catch (error) {
+      console.error(`${logPrefix} - Kokoro cache clear failed:`, error);
+      throw error;
+    }
   }
 
   /**

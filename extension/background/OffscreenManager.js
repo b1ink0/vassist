@@ -11,9 +11,11 @@ export class OffscreenManager {
     this.isOffscreenOpen = false;
     this.activeJobs = 0;
     this.closeTimer = null;
-    this.closeDelay = 30000; // Close after 30s of inactivity
+    this.closeDelay = 600000; // Close after 10 minutes of inactivity (increased for Kokoro model downloads and WebGPU operations)
+    this.keepaliveInterval = null;
+    this.longRunningJobs = new Set(); // Track long-running operations by requestId
     
-    console.log('[OffscreenManager] Initialized');
+    console.log('[OffscreenManager] Initialized with 10-minute idle timeout');
   }
 
   /**
@@ -30,14 +32,18 @@ export class OffscreenManager {
 
       await chrome.offscreen.createDocument({
         url: 'offscreen.html',
-        reasons: ['AUDIO_PLAYBACK'],
-        justification: 'Audio processing and playback for virtual assistant'
+        reasons: [
+          chrome.offscreen.Reason.WORKERS,        // For spawning WebGPU/WASM computation workers (KokoroTTSCore, VMDGenerationCore, etc.)
+          chrome.offscreen.Reason.BLOBS,          // For creating WAV file blobs and audio data
+          chrome.offscreen.Reason.DOM_PARSER      // For AudioContext.decodeAudioData and processing
+        ],
+        justification: 'WebGPU/WASM AI model inference, audio processing (decoding/encoding), and 3D animation generation for virtual assistant'
       });
 
       this.isOffscreenOpen = true;
       this.resetCloseTimer();
       
-      console.log('[OffscreenManager] Offscreen document created');
+      console.log('[OffscreenManager] Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER');
     } catch (error) {
       // Document might already exist
       if (error.message.includes('Only a single offscreen')) {
@@ -55,6 +61,13 @@ export class OffscreenManager {
    * Close offscreen document
    */
   async closeOffscreen() {
+    // Don't close if there are active jobs!
+    if (this.activeJobs > 0) {
+      console.log(`[OffscreenManager] Skipping close - ${this.activeJobs} active jobs`);
+      this.resetCloseTimer(); // Reset timer for later
+      return;
+    }
+    
     if (!this.isOffscreenOpen) return;
 
     try {
@@ -77,8 +90,9 @@ export class OffscreenManager {
    * Send message to offscreen document
    */
   async sendToOffscreen(message) {
-    // Mark as active job BEFORE ensuring offscreen
-    this.startJob();
+    // Don't use startJob/endJob here - let the caller manage job lifecycle
+    // This is because sendToOffscreen returns immediately, but the WORK in offscreen
+    // might still be ongoing (e.g., Kokoro downloading model for 2 minutes)
     
     try {
       await this.ensureOffscreen();
@@ -115,9 +129,6 @@ export class OffscreenManager {
       }
       
       throw error;
-    } finally {
-      // Always end job when done
-      this.endJob();
     }
   }
 
@@ -126,6 +137,8 @@ export class OffscreenManager {
    */
   startJob() {
     this.activeJobs++;
+    console.log(`[OffscreenManager] Job started, active jobs: ${this.activeJobs}`);
+    this.startKeepalive();
     this.resetCloseTimer();
   }
 
@@ -134,18 +147,80 @@ export class OffscreenManager {
    */
   endJob() {
     this.activeJobs = Math.max(0, this.activeJobs - 1);
+    console.log(`[OffscreenManager] Job ended, active jobs: ${this.activeJobs}`);
+    
+    if (this.activeJobs === 0) {
+      this.stopKeepalive();
+    }
+    
     this.resetCloseTimer();
+  }
+
+  /**
+   * Start long-running job tracking
+   * Use this for operations that take >30 seconds (e.g., model downloads)
+   * @param {string} requestId - Unique request ID
+   */
+  startLongRunningJob(requestId) {
+    this.longRunningJobs.add(requestId);
+    this.startJob();
+    console.log(`[OffscreenManager] Long-running job started: ${requestId}`);
+  }
+
+  /**
+   * End long-running job tracking
+   * @param {string} requestId - Unique request ID
+   */
+  endLongRunningJob(requestId) {
+    if (this.longRunningJobs.has(requestId)) {
+      this.longRunningJobs.delete(requestId);
+      this.endJob();
+      console.log(`[OffscreenManager] Long-running job ended: ${requestId}`);
+    }
+  }
+
+  /**
+   * Start keepalive interval to prevent Chrome from closing offscreen doc
+   * Chrome closes offscreen documents after 30 seconds of no activity
+   * We send a ping every 20 seconds to keep it alive during long operations
+   */
+  startKeepalive() {
+    if (this.keepaliveInterval) return; // Already running
+    
+    console.log('[OffscreenManager] Starting keepalive pings (every 20s)');
+    this.keepaliveInterval = setInterval(() => {
+      if (this.activeJobs > 0 || this.longRunningJobs.size > 0) {
+        console.log(`[OffscreenManager] Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running`);
+        this.keepAlive();
+      } else {
+        // No active work, stop keepalive
+        this.stopKeepalive();
+      }
+    }, 20000); // Every 20 seconds (less than Chrome's 30s timeout)
+  }
+
+  /**
+   * Stop keepalive interval
+   */
+  stopKeepalive() {
+    if (this.keepaliveInterval) {
+      console.log('[OffscreenManager] Stopping keepalive pings');
+      clearInterval(this.keepaliveInterval);
+      this.keepaliveInterval = null;
+    }
   }
 
   /**
    * Reset the close timer
    */
   resetCloseTimer() {
+    // ALWAYS clear any existing timer first
     if (this.closeTimer) {
       clearTimeout(this.closeTimer);
+      this.closeTimer = null;
     }
 
-    // Only set timer if no active jobs
+    // Only set NEW timer if no active jobs
     if (this.activeJobs === 0) {
       this.closeTimer = setTimeout(() => {
         this.closeOffscreen();

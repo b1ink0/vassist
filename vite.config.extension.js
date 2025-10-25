@@ -115,6 +115,30 @@ function copyAssetsPlugin() {
         fs.copyFileSync(manifestFile, distManifestFile);
       }
       
+      // Copy ONNX Runtime WASM files from @huggingface/transformers to assets
+      const transformersPath = path.join(rootDir, 'node_modules', '@huggingface', 'transformers', 'dist');
+      const wasmDestDir = path.join(distDir, 'assets');
+      
+      if (fs.existsSync(transformersPath)) {
+        console.log('[copy-assets] Copying ONNX Runtime WASM files to assets...');
+        fs.mkdirSync(wasmDestDir, { recursive: true });
+        
+        // Only copy the 2 files we actually need
+        const wasmFiles = [
+          'ort-wasm-simd-threaded.jsep.wasm',
+          'ort-wasm-simd-threaded.jsep.mjs',
+        ];
+        
+        wasmFiles.forEach(file => {
+          const srcFile = path.join(transformersPath, file);
+          const destFile = path.join(wasmDestDir, file);
+          if (fs.existsSync(srcFile)) {
+            fs.copyFileSync(srcFile, destFile);
+            console.log(`[copy-assets] Copied ${file} to assets/`);
+          }
+        });
+      }
+      
       // Move offscreen.html from extension/offscreen/ to root
       const nestedOffscreenHtml = path.join(distDir, 'extension', 'offscreen', 'offscreen.html');
       const rootOffscreenHtml = path.join(distDir, 'offscreen.html');

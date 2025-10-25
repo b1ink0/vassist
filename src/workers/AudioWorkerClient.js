@@ -97,9 +97,25 @@ export class AudioWorkerClient {
     // Skip ready message (handled in init)
     if (type === 'WORKER_READY') return;
     
+    // Handle progress messages - route to active progress callback
+    if (type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+      if (this._kokoroProgressCallback) {
+        // Safely call the progress callback with the data
+        try {
+          this._kokoroProgressCallback(data || {});
+        } catch (err) {
+          console.warn('[AudioWorkerClient] Progress callback error:', err);
+        }
+      }
+      return;
+    }
+    
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
-      console.warn(`[AudioWorkerClient] No pending request for ${requestId}`);
+      // Don't warn for progress messages that might arrive after cleanup
+      if (type !== MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+        console.warn(`[AudioWorkerClient] No pending request for ${requestId}`);
+      }
       return;
     }
     
@@ -136,6 +152,36 @@ export class AudioWorkerClient {
     const requestId = generateRequestId();
     const timeout = options.timeout || 120000; // 2 minutes default
     
+    // Extension mode: Use chrome.runtime.sendMessage to background (which forwards to offscreen)
+    if (this.mode === 'extension') {
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error(`Request ${requestId} timed out after ${timeout}ms`));
+        }, timeout);
+        
+        chrome.runtime.sendMessage({
+          type,
+          requestId,
+          data,
+          target: 'background' // Route to background script
+        }, (response) => {
+          clearTimeout(timeoutId);
+          
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          
+          if (response && response.error) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response);
+          }
+        });
+      });
+    }
+    
+    // Dev mode: Use SharedWorker port
     return new Promise((resolve, reject) => {
       // Store pending request
       const timeoutId = setTimeout(() => {
@@ -254,6 +300,198 @@ export class AudioWorkerClient {
       
     } catch (error) {
       console.error('[AudioWorkerClient] VMD generation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize Kokoro TTS model
+   * @param {Object} config - Kokoro configuration
+   * @param {string} config.modelId - Model ID
+   * @param {string} config.dtype - Quantization (q8 recommended)
+   * @param {string} config.device - Device backend (auto/webgpu/wasm)
+   * @param {Function} progressCallback - Progress callback (progress) => {}
+   * @returns {Promise<{initialized: boolean, message: string}>}
+   */
+  async initKokoro(config, progressCallback = null) {
+    try {
+      console.log(`[AudioWorkerClient] Initializing Kokoro (${this.mode} mode)...`, config);
+      
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      console.log('[AudioWorkerClient] initKokoro called with config:', JSON.stringify(config, null, 2));
+      
+      // Store progress callback for handleMessage to use
+      if (progressCallback) {
+        this._kokoroProgressCallback = progressCallback;
+      }
+      
+      const messageData = {
+        modelId: config.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+        device: config.device || (this.mode === 'dev' ? 'wasm' : 'auto')
+        // NOTE: dtype is auto-determined in KokoroTTSCore based on device (q8 for wasm, fp32 for webgpu)
+      };
+      
+      console.log('[AudioWorkerClient] Sending KOKORO_INIT message with:', JSON.stringify(messageData, null, 2));
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_INIT,
+        messageData,
+        { timeout: 300000 } // 5 minutes for model download
+      );
+      
+      // Clean up progress callback
+      if (this._kokoroProgressCallback) {
+        delete this._kokoroProgressCallback;
+      }
+      
+      console.log('[AudioWorkerClient] Kokoro initialized:', response);
+      return response;
+      
+    } catch (error) {
+      // Clean up on error too
+      if (this._kokoroProgressCallback) {
+        delete this._kokoroProgressCallback;
+      }
+      console.error('[AudioWorkerClient] Kokoro initialization failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate speech using Kokoro TTS
+   * @param {string} text - Text to synthesize
+   * @param {Object} options - Generation options
+   * @param {string} options.voice - Voice ID
+   * @param {number} options.speed - Speed multiplier
+   * @returns {Promise<ArrayBuffer>} Audio as ArrayBuffer
+   */
+  async generateKokoroSpeech(text, options = {}) {
+    try {
+      console.log(`[AudioWorkerClient] Generating Kokoro speech (${this.mode} mode)...`);
+      
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_GENERATE,
+        {
+          text,
+          voice: options.voice || 'af_heart',
+          speed: options.speed !== undefined ? options.speed : 1.0
+        },
+        { timeout: 60000 }
+      );
+      
+      // Convert Array back to ArrayBuffer
+      if (Array.isArray(response.audioBuffer)) {
+        const audioBuffer = new Uint8Array(response.audioBuffer).buffer;
+        return audioBuffer;
+      }
+      
+      return response.audioBuffer;
+      
+    } catch (error) {
+      console.error('[AudioWorkerClient] Kokoro generation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check Kokoro TTS status
+   * @returns {Promise<Object>} Status object
+   */
+  async checkKokoroStatus() {
+    try {
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_CHECK_STATUS,
+        {},
+        { timeout: 5000 }
+      );
+      
+      return response;
+      
+    } catch (error) {
+      console.error('[AudioWorkerClient] Kokoro status check failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List available Kokoro voices
+   * @returns {Promise<string[]>} Array of voice IDs
+   */
+  async listKokoroVoices() {
+    try {
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_LIST_VOICES,
+        {},
+        { timeout: 5000 }
+      );
+      
+      return response.voices || [];
+      
+    } catch (error) {
+      console.error('[AudioWorkerClient] Kokoro list voices failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Kokoro cache size
+   * @returns {Promise<Object>} Cache size information
+   */
+  async getKokoroCacheSize() {
+    try {
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_GET_CACHE_SIZE,
+        {},
+        { timeout: 5000 }
+      );
+      
+      return response || { usage: 0, quota: 0, databases: [] };
+      
+    } catch (error) {
+      console.error('[AudioWorkerClient] Kokoro cache size check failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear Kokoro cache and reset model
+   * @returns {Promise<boolean>} Success status
+   */
+  async clearKokoroCache() {
+    try {
+      if (!this.isReady) {
+        await this.init();
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_CLEAR_CACHE,
+        {},
+        { timeout: 5000 }
+      );
+      
+      return response.cleared || false;
+      
+    } catch (error) {
+      console.error('[AudioWorkerClient] Kokoro cache clear failed:', error);
       throw error;
     }
   }

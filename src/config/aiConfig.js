@@ -18,6 +18,7 @@ export const AIProviders = {
  * Available TTS Providers
  */
 export const TTSProviders = {
+  KOKORO: 'kokoro', // Kokoro-JS local TTS
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible', // Generic OpenAI-compatible TTS API
 };
@@ -41,6 +42,68 @@ export const OpenAIVoices = {
   ONYX: 'onyx',
   NOVA: 'nova',
   SHIMMER: 'shimmer',
+};
+
+/**
+ * Kokoro TTS Voices
+ * High-quality neural voices supporting multiple languages
+ */
+export const KokoroVoices = {
+  // American English - Female
+  AF_HEART: 'af_heart',
+  AF_ALLOY: 'af_alloy',
+  AF_AOEDE: 'af_aoede',
+  AF_BELLA: 'af_bella',
+  AF_JESSICA: 'af_jessica',
+  AF_KORE: 'af_kore',
+  AF_NICOLE: 'af_nicole',
+  AF_NOVA: 'af_nova',
+  AF_RIVER: 'af_river',
+  AF_SARAH: 'af_sarah',
+  AF_SKY: 'af_sky',
+  
+  // American English - Male
+  AM_ADAM: 'am_adam',
+  AM_ECHO: 'am_echo',
+  AM_ERIC: 'am_eric',
+  AM_FENRIR: 'am_fenrir',
+  AM_LIAM: 'am_liam',
+  AM_MICHAEL: 'am_michael',
+  AM_ONYX: 'am_onyx',
+  AM_PUCK: 'am_puck',
+  AM_SANTA: 'am_santa',
+  
+  // British English - Female
+  BF_ALICE: 'bf_alice',
+  BF_EMMA: 'bf_emma',
+  BF_ISABELLA: 'bf_isabella',
+  BF_LILY: 'bf_lily',
+  
+  // British English - Male
+  BM_DANIEL: 'bm_daniel',
+  BM_FABLE: 'bm_fable',
+  BM_GEORGE: 'bm_george',
+  BM_LEWIS: 'bm_lewis',
+};
+
+/**
+ * Kokoro Model Quantization Options
+ */
+export const KokoroQuantization = {
+  FP32: 'fp32',   // ~300MB - Highest quality, slower - WebGPU only
+  FP16: 'fp16',   // ~163MB - Very high quality
+  Q8: 'q8',       // 86MB - Best balance (recommended) - WASM only
+  Q4: 'q4',       // ~154MB - Good quality, fastest
+  Q4F16: 'q4f16', // ~154MB - Good quality, fastest
+};
+
+/**
+ * Kokoro Device Backend Options
+ */
+export const KokoroDevice = {
+  AUTO: 'auto',     // Auto-detect (WebGPU if available, else WASM)
+  WEBGPU: 'webgpu', // GPU acceleration (2-10x faster)
+  WASM: 'wasm',     // CPU fallback (universal compatibility)
 };
 
 /**
@@ -185,7 +248,15 @@ export const DefaultTTSConfig = {
   enabled: false,
   
   // Active TTS provider
-  provider: TTSProviders.OPENAI,
+  provider: TTSProviders.KOKORO,
+  
+  // Kokoro TTS Settings
+  kokoro: {
+    modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX', // HuggingFace model ID
+    voice: KokoroVoices.AF_HEART, // Default voice
+    speed: 1.0, // 0.5 to 2.0 recommended
+    device: KokoroDevice.AUTO, // Auto-detect best backend (quantization is automatic)
+  },
   
   // OpenAI TTS Settings
   openai: {
@@ -334,6 +405,22 @@ export function validateTTSConfig(config) {
     errors.push('TTS Provider not selected');
   }
   
+  if (config.provider === TTSProviders.KOKORO) {
+    // Kokoro validation - use defaults if not set
+    if (!config.kokoro) {
+      // Kokoro config missing, but that's okay - will use defaults
+      return { valid: true, errors: [] };
+    }
+    if (config.kokoro.modelId && config.kokoro.modelId.trim() === '') {
+      errors.push('Kokoro Model ID cannot be empty');
+    }
+    if (config.kokoro?.speed !== undefined) {
+      if (config.kokoro.speed < 0.5 || config.kokoro.speed > 2.0) {
+        errors.push('Kokoro speed must be between 0.5 and 2.0');
+      }
+    }
+  }
+  
   if (config.provider === TTSProviders.OPENAI) {
     if (!config.openai?.apiKey || config.openai.apiKey.trim() === '') {
       errors.push('OpenAI TTS API Key is required');
@@ -445,6 +532,9 @@ export default {
   ChromeAILanguages,
   TranslationLanguages,
   OpenAIVoices,
+  KokoroVoices,
+  KokoroQuantization,
+  KokoroDevice,
   DefaultAIConfig,
   DefaultTTSConfig,
   DefaultSTTConfig,

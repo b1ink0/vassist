@@ -32,6 +32,13 @@ export class BackgroundBridge {
         return false;
       }
       
+      // Ignore progress messages - they're handled by temporary listeners
+      // These come from offscreen during downloads
+      if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+        // Not an error - just not for the main handler
+        return false;
+      }
+      
       this.handleMessage(message, sender)
         .then(sendResponse)
         .catch(error => {

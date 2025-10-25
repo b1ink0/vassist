@@ -417,6 +417,118 @@ class TTSServiceProxy extends ServiceProxy {
   }
 
   /**
+   * Initialize Kokoro TTS model
+   * @param {Function} progressCallback - Progress callback (progress) => {}
+   * @returns {Promise<boolean>} Success status
+   */
+  async initializeKokoro(progressCallback = null) {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      // Import StorageServiceProxy to load config
+      const { default: StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
+      
+      // Load current TTS config to get modelId and device
+      const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+      
+      // Set up message listener for progress updates via bridge
+      let progressListener = null;
+      if (progressCallback) {
+        progressListener = (message) => {
+          if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS && message.data) {
+            progressCallback(message.data);
+          }
+        };
+        bridge.addMessageListener(progressListener);
+      }
+      
+      try {
+        const response = await bridge.sendMessage(
+          MessageTypes.KOKORO_INIT,
+          {
+            modelId: config.kokoro?.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+            device: config.kokoro?.device || 'auto'
+          },
+          { timeout: 300000 } // 5 minutes for model download
+        );
+        return response.initialized;
+      } finally {
+        if (progressListener) {
+          bridge.removeMessageListener(progressListener);
+        }
+      }
+    } else {
+      return await this.directService.initializeKokoro(progressCallback);
+    }
+  }
+
+  /**
+   * Check Kokoro TTS status
+   * @returns {Promise<Object>} Status object
+   */
+  async checkKokoroStatus() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(MessageTypes.KOKORO_CHECK_STATUS, {});
+      return response;
+    } else {
+      return await this.directService.checkKokoroStatus();
+    }
+  }
+
+  /**
+   * List available Kokoro voices
+   * @returns {Promise<string[]>} Array of voice IDs
+   */
+  async listKokoroVoices() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(MessageTypes.KOKORO_LIST_VOICES, {});
+      return response.voices;
+    } else {
+      return await this.directService.listKokoroVoices();
+    }
+  }
+
+  /**
+   * Get Kokoro cache size
+   * @returns {Promise<Object>} Cache size information
+   */
+  async getKokoroCacheSize() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(MessageTypes.KOKORO_GET_CACHE_SIZE, {});
+      return response;
+    } else {
+      return await this.directService.getKokoroCacheSize();
+    }
+  }
+
+  /**
+   * Clear Kokoro cache and reset model
+   * @returns {Promise<boolean>} Success status
+   */
+  async clearKokoroCache() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
+      
+      const response = await bridge.sendMessage(MessageTypes.KOKORO_CLEAR_CACHE, {});
+      return response.cleared;
+    } else {
+      return await this.directService.clearKokoroCache();
+    }
+  }
+
+  /**
    * Clean up blob URLs
    * Always use direct service in main world
    * @param {string[]} urls - URLs to revoke
@@ -466,7 +578,10 @@ class TTSServiceProxy extends ServiceProxy {
       generateSpeech: MessageTypes.TTS_GENERATE_SPEECH,
       stopPlayback: MessageTypes.TTS_STOP_PLAYBACK,
       resumePlayback: MessageTypes.TTS_RESUME_PLAYBACK,
-      testConnection: MessageTypes.TTS_TEST_CONNECTION
+      testConnection: MessageTypes.TTS_TEST_CONNECTION,
+      initializeKokoro: MessageTypes.KOKORO_INIT,
+      checkKokoroStatus: MessageTypes.KOKORO_CHECK_STATUS,
+      listKokoroVoices: MessageTypes.KOKORO_LIST_VOICES
     };
 
     const messageType = methodMap[method];

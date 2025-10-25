@@ -657,7 +657,7 @@ const ChatContainer = ({
       // This ensures proper cleanup even if playback is interrupted
 
     } catch (error) {
-      console.error('[ChatController] TTS playback failed:', error);
+      console.error('[ChatContainer] TTS playback failed:', error);
       setLoadingMessageIndex(null);
       setPlayingMessageIndex(null);
       currentSessionRef.current = null;

@@ -193,6 +193,7 @@ class VirtualAssistantInjector {
     
     // Global listener for ALL stream tokens from background
     chrome.runtime.onMessage.addListener((message) => {
+      // Forward stream tokens
       if (message.type === 'AI_STREAM_TOKEN') {
         // Find which main world request this belongs to
         for (const [mainRequestId, bgRequestId] of streamingRequests.entries()) {
@@ -208,6 +209,16 @@ class VirtualAssistantInjector {
           }
         }
       }
+      
+      // Forward broadcast messages (like progress updates)
+      if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+        console.log('[Content Script Bridge] ✅ Forwarding Kokoro progress to main world');
+        window.postMessage({
+          __VASSIST_BROADCAST__: true,
+          type: message.type,
+          data: message.data
+        }, '*');
+      }
     });
     
     // Listen for messages from main world
@@ -217,8 +228,8 @@ class VirtualAssistantInjector {
       
       // Check for our message format
       if (event.data && event.data.__VASSIST_MESSAGE__) {
-        const { type, payload, requestId, streaming } = event.data;
-        console.log('[Content Script Bridge] Received from main world:', type, streaming ? '(streaming)' : '');
+        const { type, payload, requestId, streaming, timeout } = event.data;
+        console.log('[Content Script Bridge] Received from main world:', type, streaming ? '(streaming)' : '', timeout ? `(timeout: ${timeout}ms)` : '');
         
         try {
           let response;
@@ -242,7 +253,7 @@ class VirtualAssistantInjector {
             
             try {
               // Send request to background and get the actual background requestId
-              const { requestId: bgRequestId, promise } = this.bridge.sendMessage(type, payload);
+              const { requestId: bgRequestId, promise } = this.bridge.sendMessage(type, payload, { timeout });
               console.log('[Content Script Bridge] Background requestId:', bgRequestId);
               
               // Map main world requestId to background requestId
@@ -275,8 +286,8 @@ class VirtualAssistantInjector {
             }
           } else {
             // NON-STREAMING REQUEST
-            console.log('[Content Script Bridge] Sending non-streaming request to background:', type);
-            const { promise } = this.bridge.sendMessage(type, payload);
+            console.log('[Content Script Bridge] Sending non-streaming request to background:', type, timeout ? `(timeout: ${timeout}ms)` : '');
+            const { promise } = this.bridge.sendMessage(type, payload, { timeout });
             response = await promise;
             console.log('[Content Script Bridge] Received response from background for', type, ':', response);
             

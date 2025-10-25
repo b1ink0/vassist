@@ -8,6 +8,7 @@
 import { MessageTypes } from '../../extension/shared/MessageTypes.js';
 import { VMDGenerationCore } from './shared/VMDGenerationCore.js';
 import { BVMDConversionCore } from './shared/BVMDConversionCore.js';
+import KokoroTTSCore from './shared/KokoroTTSCore.js';
 
 class SharedAudioWorker {
     constructor() {
@@ -78,6 +79,24 @@ class SharedAudioWorker {
         let data;
         
         switch (type) {
+            case MessageTypes.KOKORO_INIT:
+                data = await this.handleKokoroInit(message);
+                break;
+            case MessageTypes.KOKORO_GENERATE:
+                data = await this.handleKokoroGenerate(message);
+                break;
+            case MessageTypes.KOKORO_CHECK_STATUS:
+                data = await this.handleKokoroCheckStatus(message);
+                break;
+            case MessageTypes.KOKORO_LIST_VOICES:
+                data = await this.handleKokoroListVoices(message);
+                break;
+            case MessageTypes.KOKORO_GET_CACHE_SIZE:
+                data = await this.handleKokoroGetCacheSize(message);
+                break;
+            case MessageTypes.KOKORO_CLEAR_CACHE:
+                data = await this.handleKoroClearCache(message);
+                break;
             case MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC:
                 data = await this.handleProcessAudioWithLipSync(message);
                 break;
@@ -177,6 +196,136 @@ class SharedAudioWorker {
         } catch (error) {
             console.error('[SharedAudioWorker] VMD generation failed:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Handle Kokoro TTS initialization
+     * Input: { modelId, device }
+     * Output: { initialized: boolean, message: string }
+     */
+    async handleKokoroInit(message) {
+        const { modelId, device } = message.data;
+        
+        try {
+            console.log('[SharedAudioWorker] Initializing Kokoro TTS...', { modelId, device });
+            
+            // Pass config directly to KokoroTTSCore - it handles device/dtype mapping internally
+            const initialized = await KokoroTTSCore.initialize({
+                modelId: modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+                device: device || 'wasm' // SharedWorker runs in worker context, KokoroTTSCore will force WASM
+            }, (progress) => {
+                // Send progress update to all connected ports
+                const progressMessage = {
+                    type: MessageTypes.KOKORO_DOWNLOAD_PROGRESS,
+                    requestId: message.requestId,
+                    data: {
+                        loaded: progress.loaded,
+                        total: progress.total,
+                        percent: progress.percent,
+                        file: progress.file
+                    }
+                };
+                
+                // Broadcast to all ports
+                for (const port of this.ports) {
+                    port.postMessage(progressMessage);
+                }
+            });
+            
+            return {
+                initialized,
+                message: initialized ? 'Kokoro TTS initialized successfully' : 'Initialization failed'
+            };
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro initialization failed:', error);
+            throw new Error(`Kokoro initialization failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro speech generation
+     * Input: { text, voice, speed }
+     * Output: { audioBuffer: Array, duration: number, sampleRate: number }
+     */
+    async handleKokoroGenerate(message) {
+        const { text, voice, speed } = message.data;
+        
+        try {
+            console.log(`[SharedAudioWorker] Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
+            
+            // Generate audio using KokoroTTSCore
+            const audioBuffer = await KokoroTTSCore.generate(text, {
+                voice: voice || 'af_heart',
+                speed: speed !== undefined ? speed : 1.0
+            });
+            
+            // Return as Array (ArrayBuffer doesn't transfer well via postMessage)
+            return {
+                audioBuffer: Array.from(new Uint8Array(audioBuffer)),
+                duration: audioBuffer.byteLength / (24000 * 2), // Approximate duration (24kHz, 16-bit)
+                sampleRate: 24000
+            };
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro generation failed:', error);
+            throw new Error(`Kokoro generation failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro status check
+     * Output: { initialized, initializing, modelId, config }
+     */
+    async handleKokoroCheckStatus() {
+        try {
+            const status = KokoroTTSCore.getStatus();
+            return status;
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro status check failed:', error);
+            throw new Error(`Kokoro status check failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro voice list
+     * Output: { voices: string[] }
+     */
+    async handleKokoroListVoices() {
+        try {
+            const voices = await KokoroTTSCore.listVoices();
+            return { voices };
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro list voices failed:', error);
+            throw new Error(`Failed to list voices: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro cache size check
+     * Called when user checks cache size from UI
+     * Output: { usage: number, quota: number, databases: string[] }
+     */
+    async handleKokoroGetCacheSize() {
+        try {
+            const cacheInfo = await KokoroTTSCore.getCacheSize();
+            return cacheInfo;
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro cache size check failed:', error);
+            throw new Error(`Failed to get cache size: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro cache clear
+     * Called when user clears cache from UI
+     */
+    async handleKoroClearCache() {
+        try {
+            await KokoroTTSCore.clearCache();
+            return { cleared: true };
+        } catch (error) {
+            console.error('[SharedAudioWorker] Kokoro cache clear failed:', error);
+            throw new Error(`Failed to clear cache: ${error.message}`);
         }
     }
 

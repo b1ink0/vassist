@@ -80,6 +80,17 @@ export const ConfigProvider = ({ children }) => {
     downloading: false,
   });
 
+  // Kokoro TTS Status
+  const [kokoroStatus, setKokoroStatus] = useState({
+    checking: false,
+    initialized: false,
+    state: 'notInitialized', // 'notInitialized' | 'downloading' | 'ready' | 'error'
+    message: '',
+    details: '',
+    progress: 0,
+    downloading: false,
+  });
+
   // Load all configs on mount
   useEffect(() => {
     const loadConfigs = async () => {
@@ -115,6 +126,7 @@ export const ConfigProvider = ({ children }) => {
 
         // Load TTS config
         const savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        console.log('[ConfigContext] TTS config loaded from storage:', JSON.stringify(savedTtsConfig.kokoro, null, 2));
         setTtsConfig(savedTtsConfig);
         try {
           TTSServiceProxy.configure(savedTtsConfig);
@@ -194,11 +206,12 @@ export const ConfigProvider = ({ children }) => {
       if (!validation.valid) return;
       
       try {
+        console.log('[ConfigContext] Auto-saving TTS config, device:', ttsConfig.kokoro?.device);
         await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
         setTtsConfigSaved(true);
         TTSServiceProxy.configure(ttsConfig);
         setTimeout(() => setTtsConfigSaved(false), 2000);
-        console.log('[ConfigContext] TTS config auto-saved');
+        console.log('[ConfigContext] TTS config auto-saved successfully');
       } catch (error) {
         console.error('[ConfigContext] TTS config auto-save failed:', error);
       }
@@ -418,22 +431,152 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [ttsConfig]);
 
+  // Kokoro TTS Status handlers - Define BEFORE testTTSConnection since it depends on this
+  const checkKokoroStatus = useCallback(async () => {
+    setKokoroStatus(prev => ({ ...prev, checking: true }));
+    
+    try {
+      const status = await TTSServiceProxy.checkKokoroStatus();
+      
+      setKokoroStatus({
+        checking: false,
+        initialized: status.initialized,
+        state: status.initialized ? 'ready' : 'notInitialized',
+        message: status.message || (status.initialized ? 'Kokoro TTS is ready' : 'Not initialized'),
+        details: status.details || '',
+        progress: 0,
+        downloading: false,
+      });
+      
+      console.log('[ConfigContext] Kokoro status:', status);
+      
+      return status;
+    } catch (error) {
+      console.log('[ConfigContext] Kokoro status check failed:', error);
+      setKokoroStatus({
+        checking: false,
+        initialized: false,
+        state: 'error',
+        message: 'Failed to check status',
+        details: error.message,
+        progress: 0,
+        downloading: false,
+      });
+      throw error;
+    }
+  }, []);
+
+  const initializeKokoro = useCallback(async () => {
+    try {
+      setKokoroStatus(prev => ({ ...prev, downloading: true, progress: 0, state: 'downloading' }));
+      
+      // Ensure TTS service is configured with current config before initializing
+      console.log('[ConfigContext] Initializing Kokoro with device:', ttsConfig.kokoro?.device, 'Full kokoro config:', ttsConfig.kokoro);
+      await TTSServiceProxy.configure(ttsConfig);
+      
+      // Debounce progress updates to avoid UI thrashing
+      let lastUpdateTime = 0;
+      const progressDebounceMs = 100; // Update UI max every 100ms
+      
+      const initialized = await TTSServiceProxy.initializeKokoro((progress) => {
+        // Handle progress updates with defensive checks for undefined values
+        const percent = typeof progress.percent === 'number' ? progress.percent : 0;
+        const file = progress.file || 'Downloading model...';
+        
+        // Debounce updates - only update if enough time has passed or it's 100%
+        const now = Date.now();
+        const shouldUpdate = (now - lastUpdateTime >= progressDebounceMs) || percent >= 99.9;
+        
+        if (shouldUpdate) {
+          lastUpdateTime = now;
+          
+          console.log(`[ConfigContext] Kokoro download progress:`, { 
+            percent: percent.toFixed(2) + '%', 
+            file 
+          });
+          
+          setKokoroStatus(prev => ({ 
+            ...prev, 
+            progress: percent,
+            details: file
+          }));
+        }
+      });
+      
+      // Check status after initialization
+      await checkKokoroStatus();
+      
+      return initialized;
+    } catch (error) {
+      console.error('[ConfigContext] Kokoro initialization failed:', error);
+      setKokoroStatus(prev => ({ 
+        ...prev, 
+        downloading: false,
+        state: 'error',
+        message: 'Initialization failed',
+        details: error.message,
+      }));
+      throw error;
+    }
+  }, [checkKokoroStatus, ttsConfig]);
+
   const testTTSConnection = useCallback(async () => {
     setTtsConfigError('');
     setTtsTesting(true);
     
     try {
       TTSServiceProxy.configure(ttsConfig);
+      
+      // For Kokoro, check if initialized first and auto-initialize if needed
+      if (ttsConfig.provider === 'kokoro') {
+        setTtsConfigError('⏳ Checking Kokoro status...');
+        
+        // Check current status
+        const status = await TTSServiceProxy.checkKokoroStatus();
+        
+        if (!status.initialized) {
+          // Auto-initialize if not initialized
+          setTtsConfigError('⏳ Initializing Kokoro model (first time may take a moment)...');
+          console.log('[ConfigContext] Auto-initializing Kokoro for test TTS');
+          
+          try {
+            await initializeKokoro();
+            // Check status again after initialization
+            const newStatus = await TTSServiceProxy.checkKokoroStatus();
+            if (!newStatus.initialized) {
+              setTtsConfigError('❌ Failed to initialize Kokoro model');
+              setTtsTesting(false);
+              return;
+            }
+          } catch (initError) {
+            setTtsConfigError('❌ Kokoro initialization failed: ' + initError.message);
+            setTtsTesting(false);
+            return;
+          }
+        }
+      }
+      
       setTtsConfigError('⏳ Testing TTS...');
-      await TTSServiceProxy.testConnection("Testing text to speech");
-      setTtsConfigError('✅ TTS test successful!');
-      setTimeout(() => setTtsConfigError(''), 3000);
+      const startTime = Date.now();
+      
+      await TTSServiceProxy.testConnection("Hello, this is a test of the text to speech system.");
+      
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      
+      if (ttsConfig.provider === 'kokoro') {
+        setTtsConfigError(`✅ TTS test successful! Generated in ${duration}s using voice: ${ttsConfig.kokoro?.voice || 'default'}`);
+      } else {
+        setTtsConfigError(`✅ TTS test successful! (${duration}s)`);
+      }
+      
+      setTimeout(() => setTtsConfigError(''), 5000);
     } catch (error) {
       setTtsConfigError('❌ TTS test failed: ' + error.message);
     } finally {
       setTtsTesting(false);
     }
-  }, [ttsConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ttsConfig, initializeKokoro]);
 
   // STT Config handlers
   const updateSTTConfig = useCallback((path, value) => {
@@ -593,6 +736,32 @@ export const ConfigProvider = ({ children }) => {
     return summary;
   }, [aiConfig]);
 
+  // Auto-check Kokoro status on mount and auto-initialize if model is already downloaded
+  useEffect(() => {
+    const checkAndAutoInit = async () => {
+      // Only proceed if TTS is enabled AND provider is Kokoro
+      if (ttsConfig.enabled && ttsConfig.provider === 'kokoro') {
+        try {
+          console.log('[ConfigContext] Checking Kokoro status on mount...');
+          await checkKokoroStatus();
+          
+          // If model is already downloaded but not initialized, auto-initialize
+          // This happens when the model was downloaded in a previous session
+          const status = await TTSServiceProxy.checkKokoroStatus();
+          if (!status.initialized && !status.initializing) {
+            console.log('[ConfigContext] Model downloaded but not initialized, auto-initializing...');
+            await initializeKokoro();
+          }
+        } catch (error) {
+          console.error('[ConfigContext] Auto-init check failed:', error);
+        }
+      }
+    };
+    
+    checkAndAutoInit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
   const value = useMemo(() => ({
     // UI Config
     uiConfig,
@@ -637,7 +806,12 @@ export const ConfigProvider = ({ children }) => {
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
-  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload]);
+
+    // Kokoro TTS Status
+    kokoroStatus,
+    checkKokoroStatus,
+    initializeKokoro,
+  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
 
   return (
     <ConfigContext.Provider value={value}>

@@ -356,6 +356,84 @@ async function registerHandlers() {
       throw new Error(`TTS service not configured for tab ${tabId}`);
     }
     
+    // Get the configured provider for this tab
+    const tabState = ttsService.tabStates.get(tabId);
+    const provider = tabState?.provider;
+    
+    // For Kokoro provider, bypass TTSService and use offscreen directly
+    if (provider === 'kokoro') {
+      console.log('[Background] Kokoro provider detected, using offscreen directly');
+      
+      // Check if Kokoro is initialized, if not, initialize it automatically
+      try {
+        const statusCheck = await offscreenManager.sendToOffscreen({
+          type: MessageTypes.KOKORO_CHECK_STATUS,
+          requestId: `auto_check_${Date.now()}`
+        });
+        
+        if (!statusCheck.data.initialized) {
+          console.log('[Background] Kokoro not initialized, auto-initializing...');
+          
+          const autoInitId = `auto_init_${Date.now()}`;
+          offscreenManager.startLongRunningJob(autoInitId);
+          
+          try {
+            const initMessage = {
+              type: MessageTypes.KOKORO_INIT,
+              requestId: autoInitId,
+              data: {
+                modelId: tabState.config?.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+                dtype: tabState.config?.dtype || 'q8',
+                device: tabState.config?.device || 'auto'
+              }
+            };
+            
+            const initResult = await offscreenManager.sendToOffscreen(initMessage);
+            
+            if (!initResult.data.initialized) {
+              throw new Error('Failed to auto-initialize Kokoro model');
+            }
+            
+            console.log('[Background] Kokoro auto-initialized successfully');
+          } finally {
+            offscreenManager.endLongRunningJob(autoInitId);
+          }
+        }
+      } catch (initError) {
+        console.error('[Background] Kokoro auto-initialization failed:', initError);
+        throw new Error(`Kokoro initialization failed: ${initError.message}`);
+      }
+      
+      // Forward to KOKORO_GENERATE handler
+      const genRequestId = `gen_${Date.now()}`;
+      offscreenManager.startLongRunningJob(genRequestId);
+      
+      try {
+        const kokoroMessage = {
+          type: MessageTypes.KOKORO_GENERATE,
+          requestId: genRequestId,
+          data: {
+            text,
+            voice: tabState.config?.voice || 'af_heart',
+            speed: tabState.config?.speed !== undefined ? tabState.config.speed : 1.0
+          }
+        };
+        
+        const result = await offscreenManager.sendToOffscreen(kokoroMessage);
+        
+        // Convert ArrayBuffer to Array
+        if (result.data.audioBuffer instanceof ArrayBuffer) {
+          result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
+          console.log('[Background] Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+        }
+        
+        return { audioBuffer: result.data.audioBuffer, mimeType: 'audio/wav' };
+      } finally {
+        offscreenManager.endLongRunningJob(genRequestId);
+      }
+    }
+    
+    // For other providers (OpenAI, etc.), use TTSService
     const result = await ttsService.generateSpeech(text, /*generateLipSync*/ false, tabId);
     
     if (!result) {
@@ -403,44 +481,156 @@ async function registerHandlers() {
     return { resumed: true };
   });
 
+  // Kokoro TTS handlers
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_INIT, async (message, sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    console.log('[Background] KOKORO_INIT called for tab:', tabId);
+    
+    // CRITICAL: Mark as long-running job BEFORE forwarding
+    // Kokoro model download can take 1-2 minutes, needs keepalive
+    const requestId = message.requestId;
+    offscreenManager.startLongRunningJob(requestId);
+    
+    // Forward to offscreen for model initialization
+    const offscreenMessage = {
+      type: MessageTypes.KOKORO_INIT,
+      requestId: requestId,
+      data: message.data
+    };
+    
+    // Set up progress listener to relay progress from offscreen to content script
+    const progressListener = (offscreenResponse) => {
+      // Only handle progress messages
+      if (offscreenResponse.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+        // Relay progress to content script
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: MessageTypes.KOKORO_DOWNLOAD_PROGRESS,
+          data: offscreenResponse.data
+        }).catch(err => console.error('[Background] Failed to send Kokoro progress:', err));
+        
+        // Each progress update keeps the document alive
+        offscreenManager.keepAlive();
+        // Don't return anything for progress messages - they don't need responses
+      }
+      // For all other messages, don't interfere (no return = undefined = doesn't consume the message)
+    };
+    
+    // Register temporary listener for progress updates
+    chrome.runtime.onMessage.addListener(progressListener);
+    
+    try {
+      const result = await offscreenManager.sendToOffscreen(offscreenMessage);
+      console.log('[Background] KOKORO_INIT result from offscreen:', result);
+      console.log('[Background] KOKORO_INIT returning data:', result?.data);
+      return result.data;
+    } finally {
+      // Clean up progress listener and end long-running job
+      chrome.runtime.onMessage.removeListener(progressListener);
+      offscreenManager.endLongRunningJob(requestId);
+    }
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_GENERATE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    console.log('[Background] KOKORO_GENERATE called for tab:', tabId);
+    
+    // Mark as long-running job - generation can take 5-15 seconds for long text
+    const requestId = message.requestId;
+    offscreenManager.startLongRunningJob(requestId);
+    
+    try {
+      // Forward to offscreen for speech generation
+      const result = await offscreenManager.sendToOffscreen(message);
+      
+      // Convert ArrayBuffer in result to Array for sending to main world
+      if (result.data.audioBuffer instanceof ArrayBuffer) {
+        result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
+        console.log('[Background] Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+      }
+      
+      return result.data;
+    } finally {
+      offscreenManager.endLongRunningJob(requestId);
+    }
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_CHECK_STATUS, async (message) => {
+    console.log('[Background] KOKORO_CHECK_STATUS');
+    
+    // Forward to offscreen for status check
+    const result = await offscreenManager.sendToOffscreen(message);
+    return result?.data || { initialized: false, initializing: false };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_LIST_VOICES, async (message) => {
+    console.log('[Background] KOKORO_LIST_VOICES');
+    
+    // Forward to offscreen for voice list
+    const result = await offscreenManager.sendToOffscreen(message);
+    return result?.data || { voices: [] };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_GET_CACHE_SIZE, async (message) => {
+    console.log('[Background] KOKORO_GET_CACHE_SIZE');
+    
+    // Forward to offscreen for cache size check
+    const result = await offscreenManager.sendToOffscreen(message);
+    return result?.data || { usage: 0, quota: 0, databases: [] };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_CLEAR_CACHE, async (message) => {
+    console.log('[Background] KOKORO_CLEAR_CACHE');
+    
+    // Forward to offscreen for cache clearing
+    const result = await offscreenManager.sendToOffscreen(message);
+    return result?.data || { cleared: false };
+  });
+
   // TTS Audio Processing with Lip Sync (via offscreen)
   backgroundBridge.registerHandler(MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC, async (message) => {
     console.log('[Background] TTS_PROCESS_AUDIO_WITH_LIPSYNC');
     
-    // DON'T convert to ArrayBuffer! Keep as Array for offscreen message passing
-    // Chrome's sendMessage transfers ArrayBuffers but copies Arrays
-    // Offscreen will convert Array back to ArrayBuffer when it receives it
-    const { audioBuffer, mimeType } = message.data;
+    // Mark as long-running job - audio processing + VMD generation can take 10-30 seconds
+    const requestId = message.requestId;
+    offscreenManager.startLongRunningJob(requestId);
     
-    if (!Array.isArray(audioBuffer)) {
-      throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
-    }
-    
-    console.log('[Background] Forwarding Array to offscreen:', audioBuffer.length, 'bytes');
-    
-    // Send as Array directly to offscreen
-    const offscreenMessage = {
-      ...message,
-      data: {
-        audioBuffer: audioBuffer, // Keep as Array!
-        mimeType: mimeType
+    try {
+      // DON'T convert to ArrayBuffer! Keep as Array for offscreen message passing
+      // Chrome's sendMessage transfers ArrayBuffers but copies Arrays
+      // Offscreen will convert Array back to ArrayBuffer when it receives it
+      const { audioBuffer, mimeType } = message.data;
+      
+      if (!Array.isArray(audioBuffer)) {
+        throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
       }
-    };
-    
-    // sendToOffscreen now handles startJob/endJob internally
-    const result = await offscreenManager.sendToOffscreen(offscreenMessage);
-    
-    // Convert ArrayBuffer in result back to Array for sending to main world
-    if (result.data.audioBuffer instanceof ArrayBuffer) {
-      result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-      console.log('[Background] Converted result audioBuffer to Array');
+      
+      console.log('[Background] Forwarding Array to offscreen:', audioBuffer.length, 'bytes');
+      
+      // Send as Array directly to offscreen
+      const offscreenMessage = {
+        ...message,
+        data: {
+          audioBuffer: audioBuffer, // Keep as Array!
+          mimeType: mimeType
+        }
+      };
+      
+      const result = await offscreenManager.sendToOffscreen(offscreenMessage);
+      
+      // Convert ArrayBuffer in result back to Array for sending to main world
+      if (result.data.audioBuffer instanceof ArrayBuffer) {
+        result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
+        console.log('[Background] Converted result audioBuffer to Array');
+      }
+      if (result.data.bvmdData instanceof ArrayBuffer) {
+        result.data.bvmdData = Array.from(new Uint8Array(result.data.bvmdData));
+        console.log('[Background] Converted result bvmdData to Array');
+      }
+      
+      return result.data; // Contains { audioBuffer: Array, bvmdData: Array|null }
+    } finally {
+      offscreenManager.endLongRunningJob(requestId);
     }
-    if (result.data.bvmdData instanceof ArrayBuffer) {
-      result.data.bvmdData = Array.from(new Uint8Array(result.data.bvmdData));
-      console.log('[Background] Converted result bvmdData to Array');
-    }
-    
-    return result.data; // Contains { audioBuffer: Array, bvmdData: Array|null }
   });
 
   // STT Service handlers
@@ -555,6 +745,8 @@ async function registerHandlers() {
   // Offscreen/Audio handlers
   backgroundBridge.registerHandler(MessageTypes.OFFSCREEN_AUDIO_PLAY, async (message) => {
     console.log('[Background] OFFSCREEN_AUDIO_PLAY');
+    
+    // Audio playback is usually quick, but mark as job to prevent premature closure
     offscreenManager.startJob();
     
     try {
@@ -573,13 +765,16 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.OFFSCREEN_VMD_GENERATE, async (message) => {
     console.log('[Background] OFFSCREEN_VMD_GENERATE');
-    offscreenManager.startJob();
+    
+    // Mark as long-running job - VMD generation can take 10-20 seconds
+    const requestId = message.requestId;
+    offscreenManager.startLongRunningJob(requestId);
     
     try {
       const result = await offscreenManager.sendToOffscreen(message);
       return result.data;
     } finally {
-      offscreenManager.endJob();
+      offscreenManager.endLongRunningJob(requestId);
     }
   });
 

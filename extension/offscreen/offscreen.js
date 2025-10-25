@@ -12,6 +12,14 @@ import { BVMDConversionCore } from '../../src/workers/shared/BVMDConversionCore.
 import { Scene } from '@babylonjs/core/scene';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 
+// Configure transformers.js to use WASM files from assets BEFORE importing KokoroTTSCore
+import { env } from '@huggingface/transformers';
+env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('assets/');
+console.log('[Offscreen] Configured transformers.js to use WASM files from:', chrome.runtime.getURL('assets/'));
+
+// Now import KokoroTTSCore (it will use the configured paths)
+import KokoroTTSCore from '../../src/workers/shared/KokoroTTSCore.js';
+
 class OffscreenWorker {
   constructor() {
     this.name = 'OffscreenWorker';
@@ -73,6 +81,18 @@ class OffscreenWorker {
    * Register message handlers
    */
   registerHandlers() {
+    this.messageHandlers.set(MessageTypes.KOKORO_INIT,
+      this.handleKokoroInit.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_GENERATE,
+      this.handleKokoroGenerate.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_CHECK_STATUS,
+      this.handleKokoroCheckStatus.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_LIST_VOICES,
+      this.handleKokoroListVoices.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_GET_CACHE_SIZE,
+      this.handleKokoroGetCacheSize.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_CLEAR_CACHE,
+      this.handleKokoroClearCache.bind(this));
     this.messageHandlers.set(MessageTypes.OFFSCREEN_AUDIO_PROCESS, 
       this.handleAudioProcess.bind(this));
     this.messageHandlers.set(MessageTypes.OFFSCREEN_VMD_GENERATE, 
@@ -169,6 +189,130 @@ class OffscreenWorker {
         audioBuffer: errorArray,
         bvmdData: null
       };
+    }
+  }
+
+  /**
+   * Handle Kokoro TTS initialization
+   */
+  async handleKokoroInit(message) {
+    console.log('[OffscreenWorker] handleKokoroInit received message:', JSON.stringify(message, null, 2));
+    
+    const { modelId, device } = message.data || {};
+    
+    try {
+      console.log('[OffscreenWorker] Initializing Kokoro TTS...', { modelId, device });
+      
+      // Pass config directly to KokoroTTSCore - it handles device/dtype mapping internally
+      const initialized = await KokoroTTSCore.initialize({
+        modelId: modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+        device: device || 'auto' // KokoroTTSCore will map device -> dtype automatically
+      }, (progress) => {
+        // Send progress update to background
+        chrome.runtime.sendMessage({
+          type: MessageTypes.KOKORO_DOWNLOAD_PROGRESS,
+          requestId: message.requestId,
+          data: {
+            loaded: progress.loaded,
+            total: progress.total,
+            percent: progress.percent,
+            file: progress.file
+          }
+        });
+      });
+      
+      return {
+        initialized,
+        message: initialized ? 'Kokoro TTS initialized successfully' : 'Initialization failed'
+      };
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro initialization failed:', error);
+      throw new Error(`Kokoro initialization failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro speech generation
+   */
+  async handleKokoroGenerate(message) {
+    const { text, voice, speed } = message.data;
+    
+    try {
+      console.log(`[OffscreenWorker] Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
+      
+      // Generate audio using KokoroTTSCore
+      const audioBuffer = await KokoroTTSCore.generate(text, {
+        voice: voice || 'af_bella', // Try af_bella instead of af_heart
+        speed: speed !== undefined ? speed : 1.0
+      });
+      
+      console.log(`[OffscreenWorker] Generated audio buffer: ${audioBuffer.byteLength} bytes`);
+      
+      // Convert to Array for transfer
+      const audioArray = Array.from(new Uint8Array(audioBuffer));
+      
+      // Return as Array (ArrayBuffer doesn't transfer well via postMessage in Chrome extensions)
+      return {
+        audioBuffer: audioArray,
+        duration: audioBuffer.byteLength / (24000 * 2), // Approximate duration (24kHz, 16-bit)
+        sampleRate: 24000
+      };
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro generation failed:', error);
+      throw new Error(`Kokoro generation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro status check
+   */
+  async handleKokoroCheckStatus() {
+    try {
+      const status = KokoroTTSCore.getStatus();
+      return status;
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro status check failed:', error);
+      throw new Error(`Kokoro status check failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro voice list
+   */
+  async handleKokoroListVoices() {
+    try {
+      const voices = await KokoroTTSCore.listVoices();
+      return { voices };
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro list voices failed:', error);
+      throw new Error(`Failed to list voices: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro cache size check
+   */
+  async handleKokoroGetCacheSize() {
+    try {
+      const sizeInfo = await KokoroTTSCore.getCacheSize();
+      console.log('[OffscreenWorker] Kokoro cache size:', sizeInfo);
+      return sizeInfo;
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro get cache size failed:', error);
+      throw new Error(`Failed to get cache size: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro cache clear
+   */
+  async handleKokoroClearCache() {
+    try {
+      await KokoroTTSCore.clearCache();
+      return { cleared: true };
+    } catch (error) {
+      console.error('[OffscreenWorker] Kokoro clear cache failed:', error);
+      throw new Error(`Failed to clear cache: ${error.message}`);
     }
   }
 
