@@ -93,11 +93,70 @@ class SummarizerServiceProxy extends ServiceProxy {
    */
   async *summarizeStreaming(text, options = {}) {
     if (this.isExtension) {
-      // For extension mode, fall back to batch since streaming via message passing is complex
-      const summary = await this.summarize(text, options);
-      yield summary;
+      // Extension mode: Use streaming message bridge with queue-based async iteration
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
+      
+      // Create a queue to hold chunks as they arrive
+      const chunkQueue = [];
+      let streamComplete = false;
+      let streamError = null;
+      
+      // Start streaming in background (don't await - we yield chunks as they arrive)
+      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+        MessageTypes.SUMMARIZER_SUMMARIZE_STREAMING,
+        { text, options },
+        (chunk) => {
+          chunkQueue.push(chunk);
+        },
+        { timeout: 120000 } // 2 minutes for streaming
+      ).then(() => {
+        streamComplete = true;
+      }).catch((error) => {
+        streamError = error;
+        streamComplete = true;
+      });
+      
+      // Yield chunks as they become available
+      while (!streamComplete || chunkQueue.length > 0) {
+        if (chunkQueue.length > 0) {
+          yield chunkQueue.shift();
+        } else {
+          // Wait a bit before checking again
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+      
+      // If there was an error, throw it now
+      if (streamError) {
+        console.error('[SummarizerServiceProxy] Streaming failed:', streamError);
+        throw streamError;
+      }
     } else {
+      // Dev mode: Use direct service streaming
       yield* this.directService.summarizeStreaming(text, options);
+    }
+  }
+
+  /**
+   * Abort ongoing summarization request
+   */
+  async abort() {
+    if (this.isExtension) {
+      // Extension mode: Send abort message to background
+      const bridge = await this.waitForBridge();
+      if (!bridge) {
+        console.warn('[SummarizerServiceProxy] Bridge not available for abort');
+        return;
+      }
+      try {
+        await bridge.sendMessage(MessageTypes.SUMMARIZER_ABORT, {});
+      } catch (error) {
+        console.error('[SummarizerServiceProxy] Abort failed:', error);
+      }
+    } else {
+      // Dev mode: Call the service's abort method directly
+      this.directService.abort();
     }
   }
 

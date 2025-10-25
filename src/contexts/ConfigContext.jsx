@@ -104,20 +104,20 @@ export const ConfigProvider = ({ children }) => {
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
         setAiConfig(savedAiConfig);
         try {
-          AIServiceProxy.configure(savedAiConfig);
+          await AIServiceProxy.configure(savedAiConfig);
           console.log('[ConfigContext] AI Service configured');
           
           // Configure AI Features services if enabled
           if (savedAiConfig.aiFeatures?.translator?.enabled) {
-            TranslatorServiceProxy.configure(savedAiConfig);
+            await TranslatorServiceProxy.configure(savedAiConfig);
             console.log('[ConfigContext] Translator Service configured');
           }
           if (savedAiConfig.aiFeatures?.languageDetector?.enabled) {
-            LanguageDetectorServiceProxy.configure(savedAiConfig);
+            await LanguageDetectorServiceProxy.configure(savedAiConfig);
             console.log('[ConfigContext] Language Detector Service configured');
           }
           if (savedAiConfig.aiFeatures?.summarizer?.enabled) {
-            SummarizerServiceProxy.configure(savedAiConfig);
+            await SummarizerServiceProxy.configure(savedAiConfig);
             console.log('[ConfigContext] Summarizer Service configured');
           }
         } catch (error) {
@@ -167,17 +167,17 @@ export const ConfigProvider = ({ children }) => {
       try {
         await StorageServiceProxy.configSave('aiConfig', aiConfig);
         setAiConfigSaved(true);
-        AIServiceProxy.configure(aiConfig);
+        await AIServiceProxy.configure(aiConfig);
         
         // Configure AI Features services
         if (aiConfig.aiFeatures?.translator?.enabled) {
-          TranslatorServiceProxy.configure(aiConfig);
+          await TranslatorServiceProxy.configure(aiConfig);
         }
         if (aiConfig.aiFeatures?.languageDetector?.enabled) {
-          LanguageDetectorServiceProxy.configure(aiConfig);
+          await LanguageDetectorServiceProxy.configure(aiConfig);
         }
         if (aiConfig.aiFeatures?.summarizer?.enabled) {
-          SummarizerServiceProxy.configure(aiConfig);
+          await SummarizerServiceProxy.configure(aiConfig);
         }
         
         // Notify other contexts about config change
@@ -347,15 +347,15 @@ export const ConfigProvider = ({ children }) => {
         
         // Configure AI Features services
         if (aiConfig.aiFeatures?.translator?.enabled) {
-          TranslatorServiceProxy.configure(aiConfig);
+          await TranslatorServiceProxy.configure(aiConfig);
           console.log('[ConfigContext] Translator Service configured');
         }
         if (aiConfig.aiFeatures?.languageDetector?.enabled) {
-          LanguageDetectorServiceProxy.configure(aiConfig);
+          await LanguageDetectorServiceProxy.configure(aiConfig);
           console.log('[ConfigContext] Language Detector Service configured');
         }
         if (aiConfig.aiFeatures?.summarizer?.enabled) {
-          SummarizerServiceProxy.configure(aiConfig);
+          await SummarizerServiceProxy.configure(aiConfig);
           console.log('[ConfigContext] Summarizer Service configured');
         }
         
@@ -375,7 +375,7 @@ export const ConfigProvider = ({ children }) => {
     setAiTesting(true);
     
     try {
-      AIServiceProxy.configure(aiConfig);
+      await AIServiceProxy.configure(aiConfig);
       setAiConfigError('⏳ Testing connection...');
       await AIServiceProxy.testConnection();
       setAiConfigError('✅ Connection successful!');

@@ -675,9 +675,37 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, sourceLanguage, targetLanguage } = message.data;
-    console.log(`[Background] TRANSLATOR_TRANSLATE: ${sourceLanguage}->${targetLanguage}`, text.substring(0, 50));
+    console.log(`[Background] TRANSLATOR_TRANSLATE (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     const translatedText = await translatorService.translate(text, sourceLanguage, targetLanguage, tabId);
     return { translatedText };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE_STREAMING, async (message, sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, sourceLanguage, targetLanguage } = message.data;
+    console.log(`[Background] TRANSLATOR_TRANSLATE_STREAMING (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
+    
+    let fullTranslation = '';
+    
+    // Stream translation chunks back to content script
+    for await (const chunk of translatorService.translateStreaming(text, sourceLanguage, targetLanguage, tabId)) {
+      // Send streaming token back to content script
+      chrome.tabs.sendMessage(sender.tab.id, {
+        type: MessageTypes.AI_STREAM_TOKEN,
+        requestId: message.requestId,
+        data: { token: chunk }
+      }).catch(err => console.error('[Background] Failed to send translation stream token:', err));
+      
+      fullTranslation += chunk;
+    }
+    
+    return { translatedText: fullTranslation };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_ABORT, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    translatorService.abort(tabId);
+    return { aborted: true };
   });
 
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_DESTROY, async (_message, _sender, tabId) => {
@@ -734,6 +762,34 @@ async function registerHandlers() {
     console.log(`[Background] SUMMARIZER_SUMMARIZE (${options?.type || 'tldr'}):`, text.substring(0, 50));
     const summary = await summarizerService.summarize(text, options, tabId);
     return { summary };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE_STREAMING, async (message, sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, options } = message.data;
+    console.log(`[Background] SUMMARIZER_SUMMARIZE_STREAMING (${options?.type || 'tldr'}):`, text.substring(0, 50));
+    
+    let fullSummary = '';
+    
+    // Stream summary chunks back to content script
+    for await (const chunk of summarizerService.summarizeStreaming(text, options, tabId)) {
+      // Send streaming token back to content script
+      chrome.tabs.sendMessage(sender.tab.id, {
+        type: MessageTypes.AI_STREAM_TOKEN,
+        requestId: message.requestId,
+        data: { token: chunk }
+      }).catch(err => console.error('[Background] Failed to send summary stream token:', err));
+      
+      fullSummary += chunk;
+    }
+    
+    return { summary: fullSummary };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_ABORT, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    summarizerService.abort(tabId);
+    return { aborted: true };
   });
 
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_DESTROY, async (_message, _sender, tabId) => {

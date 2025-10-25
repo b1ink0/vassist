@@ -7,14 +7,16 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import MediaExtractionService from '../services/MediaExtractionService';
 import UtilService from '../services/UtilService';
-import { SummarizerServiceProxy, TranslatorServiceProxy } from '../services/proxies';
+import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy } from '../services/proxies';
 import { TranslationLanguages } from '../config/aiConfig';
 
 const AIToolbar = () => {
-  const { uiConfig, aiConfig, handleSummarize, handleTranslate, handleAddToChat } = useApp();
+  const { uiConfig, aiConfig, handleAddToChat } = useApp();
+  const { ttsConfig } = useConfig();
   
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -22,24 +24,166 @@ const AIToolbar = () => {
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedAudios, setSelectedAudios] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [action, setAction] = useState(null); // 'summarize', 'translate', or null
+  const [action, setAction] = useState(null); // 'summarize', 'translate', 'image-describe', 'image-extract-text', 'image-analyze', or null
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
-  const [hoveredButton, setHoveredButton] = useState(null); // 'summarize', 'translate', 'chat', or null
+  const [hoveredButton, setHoveredButton] = useState(null); // 'summarize', 'translate', 'chat', 'image-describe', 'image-extract', 'image-analyze', or null
   const [isLightBackgroundToolbar, setIsLightBackgroundToolbar] = useState(false);
   const [isLightBackgroundPanel, setIsLightBackgroundPanel] = useState(false);
   const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null); // For translation override
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
+  const [currentSessionId, setCurrentSessionId] = useState(null); // TTS session ID
   
   const toolbarRef = useRef(null);
   const resultPanelRef = useRef(null);
   const selectionTimeoutRef = useRef(null);
+  const abortControllerRef = useRef(null); // For aborting streaming
 
   /**
    * Check if toolbar is enabled
    */
   const isEnabled = uiConfig?.enableAIToolbar !== false;
+
+  /**
+   * Set up TTS callbacks for speaker icon
+   */
+  useEffect(() => {
+    // Set up TTS playback callbacks
+    TTSServiceProxy.setAudioStartCallback((sessionId) => {
+      console.log('[AIToolbar] TTS audio started:', sessionId);
+      if (sessionId === currentSessionId) {
+        setIsSpeaking(true);
+      }
+    });
+
+    TTSServiceProxy.setAudioEndCallback((sessionId) => {
+      console.log('[AIToolbar] TTS audio ended:', sessionId);
+      if (sessionId === currentSessionId) {
+        setIsSpeaking(false);
+      }
+    });
+
+    return () => {
+      // Cleanup callbacks
+      TTSServiceProxy.setAudioStartCallback(null);
+      TTSServiceProxy.setAudioEndCallback(null);
+    };
+  }, [currentSessionId]);
+
+  /**
+   * Handle TTS speaker button click
+   */
+  const onSpeakerClick = async () => {
+    if (!result || action !== 'summarize') return;
+
+    // Check if TTS is configured and enabled
+    if (!ttsConfig?.enabled) {
+      console.warn('[AIToolbar] TTS is not enabled');
+      setError('Text-to-Speech is disabled in settings');
+      return;
+    }
+
+    // Toggle playback
+    if (isSpeaking) {
+      // Stop playback
+      console.log('[AIToolbar] Stopping TTS');
+      TTSServiceProxy.stopPlayback();
+      setIsSpeaking(false);
+      setCurrentSessionId(null);
+    } else {
+      // Start playback
+      try {
+        console.log('[AIToolbar] Starting TTS for summary');
+        
+        // Generate unique session ID
+        const sessionId = `toolbar_summary_${Date.now()}`;
+        setCurrentSessionId(sessionId);
+        setIsSpeaking(true);
+
+        // Generate and play audio chunks
+        const audioChunks = await TTSServiceProxy.generateChunkedSpeech(
+          result,
+          null, // onChunkReady callback
+          500,  // maxChunkSize
+          100,  // minChunkSize
+          sessionId
+        );
+
+        // Check if generation was stopped
+        if (audioChunks.length === 0) {
+          console.log('[AIToolbar] TTS generation was stopped');
+          setIsSpeaking(false);
+          setCurrentSessionId(null);
+          return;
+        }
+
+        // Play audio sequence
+        await TTSServiceProxy.playAudioSequence(audioChunks, sessionId);
+
+        // Playback complete
+        setIsSpeaking(false);
+        setCurrentSessionId(null);
+      } catch (err) {
+        console.error('[AIToolbar] TTS failed:', err);
+        setError('Text-to-Speech failed: ' + (err.message || 'Unknown error'));
+        setIsSpeaking(false);
+        setCurrentSessionId(null);
+      }
+    }
+  };
+
+  /**
+   * Close result panel
+   */
+  const closeResult = useCallback(async () => {
+    // Clear UI immediately so panel disappears
+    setResult('');
+    setError('');
+    setAction(null);
+    setSelectedTargetLanguage(null);
+    setCopySuccess(false);
+    
+    // Cancel ongoing request if loading
+    if (isLoading) {
+      console.log('[AIToolbar] Aborting ongoing streaming request...');
+      
+      // Abort streaming via abort controller
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Also call service abort methods to stop generation at source
+      try {
+        if (action === 'summarize') {
+          await SummarizerServiceProxy.abort();
+        } else if (action === 'translate') {
+          await TranslatorServiceProxy.abort();
+        } else if (action?.startsWith('image-')) {
+          // Use correct method name: abortRequest() not abort()
+          await AIServiceProxy.abortRequest();
+        }
+      } catch (error) {
+        console.error('[AIToolbar] Service abort failed:', error);
+      }
+      
+      setIsLoading(false);
+      
+      // Clear abort controller after a short delay to allow abort to propagate
+      setTimeout(() => {
+        abortControllerRef.current = null;
+      }, 100);
+    }
+    
+    // Stop TTS if playing
+    if (isSpeaking && currentSessionId) {
+      console.log('[AIToolbar] Stopping TTS playback');
+      TTSServiceProxy.stopPlayback();
+      setIsSpeaking(false);
+      setCurrentSessionId(null);
+    }
+  }, [isLoading, action, isSpeaking, currentSessionId]);
 
   /**
    * Get selection and images from the page
@@ -221,9 +365,14 @@ const AIToolbar = () => {
       }
     }
     
+    // Close result panel if open (this will also abort streaming and stop TTS)
+    if (result || error || isLoading) {
+      closeResult();
+    }
+    
     setIsVisible(false);
     setHoveredButton(null); // Reset hover state when hiding
-  }, []);
+  }, [result, error, isLoading, closeResult]);
 
   /**
    * Set up event listeners
@@ -315,7 +464,7 @@ const AIToolbar = () => {
   }, [isVisible, position, result, error]);
 
   /**
-   * Handle Summarize action
+   * Handle Summarize action with streaming
    */
   const onSummarizeClick = async () => {
     if (!selectedText) {
@@ -328,22 +477,56 @@ const AIToolbar = () => {
     setError('');
     setResult(''); // Clear previous result
     
-    console.log('[AIToolbar] Summarize clicked, action set to:', 'summarize');
+    console.log('[AIToolbar] Summarize clicked (streaming)');
+    
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
     
     try {
-      const summary = await handleSummarize(selectedText);
-      setResult(summary);
-      console.log('[AIToolbar] Summary received, action is:', action);
+      // Check if explicitly disabled
+      if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
+        throw new Error('Summarizer is disabled in settings');
+      }
+      
+      const options = {
+        type: aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr',
+        format: aiConfig?.aiFeatures?.summarizer?.defaultFormat || 'plain-text',
+        length: aiConfig?.aiFeatures?.summarizer?.defaultLength || 'medium',
+      };
+      
+      let fullSummary = '';
+      
+      // Use streaming API
+      for await (const chunk of SummarizerServiceProxy.summarizeStreaming(selectedText, options)) {
+        // Check if aborted before processing chunk
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log('[AIToolbar] Summarize streaming aborted');
+          break;
+        }
+        
+        fullSummary += chunk;
+        
+        // Only update result if not aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResult(fullSummary);
+        }
+      }
+      
+      console.log('[AIToolbar] Summary streaming complete');
     } catch (err) {
-      console.error('[AIToolbar] Summarize failed:', err);
-      setError('Summarization failed: ' + (err.message || 'Unknown error'));
+      // Don't show error if user aborted
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error('[AIToolbar] Summarize failed:', err);
+        setError('Summarization failed: ' + (err.message || 'Unknown error'));
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
   /**
-   * Handle Translate action
+   * Handle Translate action with streaming
    */
   const onTranslateClick = async (targetLang = null) => {
     if (!selectedText) {
@@ -356,16 +539,181 @@ const AIToolbar = () => {
     setError('');
     setResult(''); // Clear previous result
     
-    const targetLanguage = targetLang || selectedTargetLanguage;
+    const targetLanguage = targetLang || selectedTargetLanguage || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
+    
+    console.log('[AIToolbar] Translate clicked (streaming)');
+    
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
     
     try {
-      const translation = await handleTranslate(selectedText, null, targetLanguage);
-      setResult(translation);
+      // Check if explicitly disabled
+      if (aiConfig?.aiFeatures?.translator?.enabled === false) {
+        throw new Error('Translator is disabled in settings');
+      }
+      
+      // Auto-detect source language
+      let sourceLang = null;
+      try {
+        const { LanguageDetectorServiceProxy } = await import('../services/proxies');
+        const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
+        if (detectionResults && detectionResults.length > 0) {
+          sourceLang = detectionResults[0].detectedLanguage;
+        }
+      } catch (err) {
+        console.warn('[AIToolbar] Language detection failed:', err);
+        throw new Error('Could not detect source language');
+      }
+      
+      // Don't translate if source and target are the same
+      if (sourceLang === targetLanguage) {
+        setResult(selectedText);
+        setIsLoading(false);
+        return;
+      }
+      
+      let fullTranslation = '';
+      
+      // Use streaming API
+      for await (const chunk of TranslatorServiceProxy.translateStreaming(selectedText, sourceLang, targetLanguage)) {
+        // Check if aborted before processing chunk
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log('[AIToolbar] Translate streaming aborted');
+          break;
+        }
+        
+        fullTranslation += chunk;
+        
+        // Only update result if not aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResult(fullTranslation);
+        }
+      }
+      
+      console.log('[AIToolbar] Translation streaming complete');
     } catch (err) {
-      console.error('[AIToolbar] Translate failed:', err);
-      setError('Translation failed: ' + (err.message || 'Unknown error'));
+      // Don't show error if user aborted
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error('[AIToolbar] Translate failed:', err);
+        setError('Translation failed: ' + (err.message || 'Unknown error'));
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  /**
+   * Handle Image Analysis action with streaming
+   * @param {string} analysisType - 'describe', 'extract-text', or 'analyze'
+   */
+  const onImageAnalysisClick = async (analysisType) => {
+    if (!selectedImages || selectedImages.length === 0) {
+      setError('No images selected');
+      return;
+    }
+    
+    setIsLoading(true);
+    setAction(`image-${analysisType}`);
+    setError('');
+    setResult(''); // Clear previous result
+    
+    console.log(`[AIToolbar] Image Analysis clicked (${analysisType}, streaming)`);
+    
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      // Use existing getSelection method to get container and selection
+      const { selection } = getSelection();
+      
+      if (!selection || selection.rangeCount === 0) {
+        setError('No selection available');
+        setIsLoading(false);
+        return;
+      }
+      
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const containerEl = container.nodeType === 3 ? container.parentElement : container;
+      
+      // Convert image URLs to data URLs using MediaExtractionService
+      const processedMedia = await MediaExtractionService.processAndExtract({
+        container: containerEl,
+        selection: selection
+      });
+      
+      if (!processedMedia.images || processedMedia.images.length === 0) {
+        setError('Failed to process images');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Build prompt based on analysis type
+      let prompt;
+      switch (analysisType) {
+        case 'describe':
+          prompt = processedMedia.images.length === 1 
+            ? 'Describe this image in detail.'
+            : `Describe these ${processedMedia.images.length} images in detail.`;
+          break;
+        case 'extract-text':
+          prompt = processedMedia.images.length === 1
+            ? 'Extract all text from this image. If there is no text, say "No text found".'
+            : `Extract all text from these ${processedMedia.images.length} images. If there is no text, say "No text found".`;
+          break;
+        case 'analyze':
+          prompt = processedMedia.images.length === 1
+            ? 'Analyze this image and provide insights about what you see.'
+            : `Analyze these ${processedMedia.images.length} images and provide insights about what you see.`;
+          break;
+        default:
+          prompt = 'Describe this image.';
+      }
+
+      // Format message with images for AIService
+      // Use simple format that AIService will convert based on provider
+      const messages = [
+        {
+          role: 'user',
+          content: prompt,
+          images: processedMedia.images.map(img => img.dataUrl) // Array of data URLs
+        }
+      ];
+      
+      let fullResponse = '';
+      
+      // Use AIServiceProxy sendMessage with streaming callback
+      const response = await AIServiceProxy.sendMessage(messages, (chunk) => {
+        // Check if aborted before processing chunk
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log('[AIToolbar] Image analysis streaming aborted');
+          return;
+        }
+        
+        fullResponse += chunk;
+        
+        // Only update result if not aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResult(fullResponse);
+        }
+      });
+      
+      // Handle final response if not streaming
+      if (!abortControllerRef.current?.signal.aborted && response.response) {
+        setResult(response.response);
+      }
+      
+      console.log('[AIToolbar] Image analysis streaming complete');
+    } catch (err) {
+      // Don't show error if user aborted
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error('[AIToolbar] Image analysis failed:', err);
+        setError('Image analysis failed: ' + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -379,6 +727,9 @@ const AIToolbar = () => {
       await onSummarizeClick();
     } else if (action === 'translate') {
       await onTranslateClick(selectedTargetLanguage);
+    } else if (action?.startsWith('image-')) {
+      const analysisType = action.replace('image-', '');
+      await onImageAnalysisClick(analysisType);
     }
     
     setIsRegenerating(false);
@@ -439,29 +790,6 @@ const AIToolbar = () => {
     }
   };
 
-  /**
-   * Close result panel
-   */
-  const closeResult = () => {
-    // Cancel ongoing request if loading
-    if (isLoading) {
-      console.log('[AIToolbar] Aborting ongoing request...');
-      
-      if (action === 'summarize') {
-        SummarizerServiceProxy.abort();
-      } else if (action === 'translate') {
-        TranslatorServiceProxy.abort();
-      }
-    }
-    
-    setResult('');
-    setError('');
-    setAction(null);
-    setIsLoading(false);
-    setSelectedTargetLanguage(null);
-    setCopySuccess(false);
-  };
-
   if (!isEnabled || !isVisible) {
     return null;
   }
@@ -520,9 +848,7 @@ const AIToolbar = () => {
             >
               Summarize
             </span>
-          </button>
-          
-          <button
+          </button>          <button
             onClick={() => onTranslateClick()}
             disabled={isLoading || !selectedText}
             onMouseEnter={() => setHoveredButton('translate')}
@@ -554,6 +880,116 @@ const AIToolbar = () => {
               Translate
             </span>
           </button>
+          
+          {/* Image Analysis buttons - only show when images are selected */}
+          {selectedImages.length > 0 && (
+            <>
+              {/* Visual separator before image buttons */}
+              <div className="w-px h-6 bg-white/20 mx-1"></div>
+              
+              <button
+                onClick={() => onImageAnalysisClick('describe')}
+                disabled={isLoading}
+                onMouseEnter={() => setHoveredButton('image-describe')}
+                className={`
+                  min-w-8 h-8 flex items-center justify-center gap-1.5
+                  rounded-2xl border-none text-base
+                  whitespace-nowrap overflow-hidden
+                  transition-all duration-300 ease-in-out
+                  ${hoveredButton === 'image-describe' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
+                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
+                `}
+                style={{
+                  padding: hoveredButton === 'image-describe' ? '0 12px 0 8px' : '0',
+                }}
+                title="Describe image"
+              >
+                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-describe' ? 'animate-spin' : ''}`}>
+                  {isLoading && action === 'image-describe' ? '⏳' : '🖼️'}
+                </span>
+                <span 
+                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
+                  style={{
+                    opacity: hoveredButton === 'image-describe' ? 1 : 0,
+                    maxWidth: hoveredButton === 'image-describe' ? '120px' : '0',
+                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
+                  }}
+                >
+                  Describe Image
+                </span>
+              </button>
+              
+              <button
+                onClick={() => onImageAnalysisClick('extract-text')}
+                disabled={isLoading}
+                onMouseEnter={() => setHoveredButton('image-extract')}
+                className={`
+                  min-w-8 h-8 flex items-center justify-center gap-1.5
+                  rounded-2xl border-none text-base
+                  whitespace-nowrap overflow-hidden
+                  transition-all duration-300 ease-in-out
+                  ${hoveredButton === 'image-extract' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
+                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
+                `}
+                style={{
+                  padding: hoveredButton === 'image-extract' ? '0 12px 0 8px' : '0',
+                }}
+                title="Extract text from image"
+              >
+                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-extract-text' ? 'animate-spin' : ''}`}>
+                  {isLoading && action === 'image-extract-text' ? '⏳' : '📄'}
+                </span>
+                <span 
+                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
+                  style={{
+                    opacity: hoveredButton === 'image-extract' ? 1 : 0,
+                    maxWidth: hoveredButton === 'image-extract' ? '100px' : '0',
+                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
+                  }}
+                >
+                  Extract Text
+                </span>
+              </button>
+              
+              <button
+                onClick={() => onImageAnalysisClick('analyze')}
+                disabled={isLoading}
+                onMouseEnter={() => setHoveredButton('image-analyze')}
+                className={`
+                  min-w-8 h-8 flex items-center justify-center gap-1.5
+                  rounded-2xl border-none text-base
+                  whitespace-nowrap overflow-hidden
+                  transition-all duration-300 ease-in-out
+                  ${hoveredButton === 'image-analyze' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
+                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
+                `}
+                style={{
+                  padding: hoveredButton === 'image-analyze' ? '0 12px 0 8px' : '0',
+                }}
+                title="Analyze image content"
+              >
+                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-analyze' ? 'animate-spin' : ''}`}>
+                  {isLoading && action === 'image-analyze' ? '⏳' : '🔍'}
+                </span>
+                <span 
+                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
+                  style={{
+                    opacity: hoveredButton === 'image-analyze' ? 1 : 0,
+                    maxWidth: hoveredButton === 'image-analyze' ? '120px' : '0',
+                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
+                  }}
+                >
+                  Analyze Content
+                </span>
+              </button>
+              
+              {/* Visual separator after image buttons */}
+              <div className="w-px h-6 bg-white/20 mx-1"></div>
+            </>
+          )}
           
           <button
             onClick={onAddToChatClick}
@@ -588,7 +1024,7 @@ const AIToolbar = () => {
         </div>
       )}
       
-      {/* Result panel (shown below toolbar) */}
+      {/* Result panel (shown below toolbar) - only show after first chunk arrives */}
       {(result || error) && (
         <div
           ref={resultPanelRef}
@@ -607,7 +1043,12 @@ const AIToolbar = () => {
           <div className="flex justify-between items-start mb-2">
             <div className="flex items-center gap-2 flex-1">
               <div className={`text-[11px] font-semibold uppercase opacity-70 ${isLightBackgroundPanel ? 'text-white' : 'text-white'}`}>
-                {action === 'summarize' ? '📝 Summary' : (action === 'translate' ? '🌐 Translation' : '❓ Result')}
+                {action === 'summarize' ? '📝 Summary' : 
+                 action === 'translate' ? '🌐 Translation' : 
+                 action === 'image-describe' ? '📸 Image Description' :
+                 action === 'image-extract-text' ? '📄 Extracted Text' :
+                 action === 'image-analyze' ? '🔍 Image Analysis' :
+                 '❓ Result'}
               </div>
               
               {/* Language selector for translation */}
@@ -661,6 +1102,23 @@ const AIToolbar = () => {
                   {copySuccess ? '✓' : '📋'}
                 </button>
               )}
+              
+              {/* Speaker button - for summarizer and image analysis */}
+              {!isLoading && !error && result && (action === 'summarize' || action?.startsWith('image-')) && ttsConfig?.enabled && (
+                <button
+                  onClick={onSpeakerClick}
+                  disabled={isLoading}
+                  className={`
+                    w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
+                    bg-transparent opacity-60 cursor-pointer transition-all duration-200 
+                    hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
+                    ${isLightBackgroundPanel ? 'text-white' : 'text-white'}
+                  `}
+                  title={isSpeaking ? 'Pause speaking' : 'Speak summary'}
+                >
+                  {isSpeaking ? '⏸️' : '🔊'}
+                </button>
+              )}
             </div>
             
             <button
@@ -676,25 +1134,26 @@ const AIToolbar = () => {
             </button>
           </div>
           
-          {/* Loading indicator */}
-          {isLoading && (
-            <div className="flex items-center gap-2 py-4">
-              <span className="animate-spin text-lg">⏳</span>
-              <span className="text-[13px] text-white/70">
-                {action === 'summarize' ? 'Summarizing...' : 'Translating...'}
-              </span>
-            </div>
-          )}
-          
+          {/* Error display */}
           {error && !isLoading && (
             <div className={`text-[13px] leading-6 text-[#ff6b6b]`}>
               {error}
             </div>
           )}
           
-          {result && !isLoading && (
-            <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackgroundPanel ? 'text-white' : 'text-white'}`}>
-              {result}
+          {/* Show result with streaming indicator */}
+          {result && (
+            <div>
+              <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackgroundPanel ? 'text-white' : 'text-white'}`}>
+                {result}
+              </div>
+              {/* Show streaming indicator while loading */}
+              {isLoading && (
+                <div className="flex items-center gap-1 mt-2 text-white/50">
+                  <span className="animate-pulse text-xs">●</span>
+                  <span className="text-[11px]">streaming...</span>
+                </div>
+              )}
             </div>
           )}
         </div>

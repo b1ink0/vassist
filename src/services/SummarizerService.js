@@ -316,6 +316,14 @@ class SummarizerService {
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
     if (!state.provider) {
+      console.error(`${logPrefix} Service not configured! State:`, {
+        hasState: !!state,
+        provider: state?.provider,
+        config: state?.config,
+        isExtensionMode: this.isExtensionMode,
+        tabId,
+        totalTabs: this.isExtensionMode ? this.tabStates.size : 'N/A'
+      });
       throw new Error('SummarizerService not configured');
     }
     

@@ -97,11 +97,70 @@ class TranslatorServiceProxy extends ServiceProxy {
    */
   async *translateStreaming(text, sourceLanguage, targetLanguage) {
     if (this.isExtension) {
-      // For extension mode, fall back to batch since streaming via message passing is complex
-      const translated = await this.translate(text, sourceLanguage, targetLanguage);
-      yield translated;
+      // Extension mode: Use streaming message bridge with queue-based async iteration
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
+      
+      // Create a queue to hold chunks as they arrive
+      const chunkQueue = [];
+      let streamComplete = false;
+      let streamError = null;
+      
+      // Start streaming in background (don't await - we yield chunks as they arrive)
+      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+        MessageTypes.TRANSLATOR_TRANSLATE_STREAMING,
+        { text, sourceLanguage, targetLanguage },
+        (chunk) => {
+          chunkQueue.push(chunk);
+        },
+        { timeout: 120000 } // 2 minutes for streaming
+      ).then(() => {
+        streamComplete = true;
+      }).catch((error) => {
+        streamError = error;
+        streamComplete = true;
+      });
+      
+      // Yield chunks as they become available
+      while (!streamComplete || chunkQueue.length > 0) {
+        if (chunkQueue.length > 0) {
+          yield chunkQueue.shift();
+        } else {
+          // Wait a bit before checking again
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+      
+      // If there was an error, throw it now
+      if (streamError) {
+        console.error('[TranslatorServiceProxy] Streaming failed:', streamError);
+        throw streamError;
+      }
     } else {
+      // Dev mode: Use direct service streaming
       yield* this.directService.translateStreaming(text, sourceLanguage, targetLanguage);
+    }
+  }
+
+  /**
+   * Abort ongoing translation request
+   */
+  async abort() {
+    if (this.isExtension) {
+      // Extension mode: Send abort message to background
+      const bridge = await this.waitForBridge();
+      if (!bridge) {
+        console.warn('[TranslatorServiceProxy] Bridge not available for abort');
+        return;
+      }
+      try {
+        await bridge.sendMessage(MessageTypes.TRANSLATOR_ABORT, {});
+      } catch (error) {
+        console.error('[TranslatorServiceProxy] Abort failed:', error);
+      }
+    } else {
+      // Dev mode: Call the service's abort method directly
+      this.directService.abort();
     }
   }
 
