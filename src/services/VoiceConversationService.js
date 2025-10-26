@@ -2,13 +2,14 @@
  * VoiceConversationService - Natural voice conversation mode
  * 
  * Manages continuous voice conversation with:
- * - Voice Activity Detection (VAD) for auto-interrupt
+ * - Voice Activity Detection (VAD) for auto-interrupt (via VoiceRecordingService)
  * - Manual interrupt capability
  * - Continuous listening mode
  * - Smooth state transitions
  */
 
-import { STTServiceProxy, TTSServiceProxy, AIServiceProxy } from './proxies';
+import { TTSServiceProxy, AIServiceProxy } from './proxies';
+import VoiceRecordingService from './VoiceRecordingService';
 
 
 
@@ -27,23 +28,6 @@ class VoiceConversationService {
   constructor() {
     this.isActive = false;
     this.currentState = ConversationStates.IDLE;
-    
-    // Audio context for VAD
-    this.audioContext = null;
-    this.analyser = null;
-    this.microphone = null;
-    this.audioStream = null;
-    
-    // VAD settings
-    this.vadThreshold = 5; // Volume threshold for speech detection (0-100) - lowered for typical mic levels
-    this.silenceThreshold = 1500; // ms of silence before auto-stop
-    this.silenceTimer = null;
-    this.isSpeechDetected = false;
-    
-    // Recording state
-    this.mediaRecorder = null;
-    this.audioChunks = [];
-    this.isRecording = false;
     
     // Callbacks
     this.onStateChange = null; // (state) => void
@@ -66,29 +50,50 @@ class VoiceConversationService {
     try {
       console.log('[VoiceConversation] Starting conversation mode...');
       
-      // Initialize audio context for VAD
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Request microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+      // Start VoiceRecordingService with callbacks
+      await VoiceRecordingService.start({
+        onTranscription: (transcription) => {
+          console.log(`[VoiceConversation] Transcription received: "${transcription}"`);
+          
+          if (this.onTranscription) {
+            console.log('[VoiceConversation] Calling onTranscription callback...');
+            this.onTranscription(transcription);
+          } else {
+            console.warn('[VoiceConversation] No onTranscription callback set!');
+            // Return to listening if no callback
+            this.changeState(ConversationStates.LISTENING);
+          }
+        },
+        onError: (error) => {
+          console.error('[VoiceConversation] Recording error:', error);
+          if (this.onError) {
+            this.onError(error);
+          }
+          // Return to listening
+          this.changeState(ConversationStates.LISTENING);
+        },
+        onRecordingStart: () => {
+          console.log('[VoiceConversation] Recording started (VAD detected speech)');
+          // We're already in LISTENING state, no need to change
+        },
+        onRecordingStop: () => {
+          console.log('[VoiceConversation] Recording stopped (VAD detected silence)');
+          // Transition to THINKING state while transcription is being processed
+          this.changeState(ConversationStates.THINKING);
+        },
+        onVolumeChange: (volume) => {
+          // Optional: Could use for UI feedback
+          // Check if speech detected while AI is speaking (for interrupt)
+          if (volume > VoiceRecordingService.vadThreshold && this.currentState === ConversationStates.SPEAKING) {
+            console.log('[VoiceConversation] Speech detected while AI speaking - interrupting and stopping TTS');
+            TTSServiceProxy.stopPlayback();
+            this.interrupt();
+          }
         }
       });
 
-      // Setup analyser for VAD
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.microphone = this.audioContext.createMediaStreamSource(this.audioStream);
-      this.microphone.connect(this.analyser);
-
       this.isActive = true;
       this.changeState(ConversationStates.LISTENING);
-      
-      // Start VAD monitoring
-      this.startVADMonitoring();
       
       console.log('[VoiceConversation] Started successfully');
       
@@ -107,125 +112,17 @@ class VoiceConversationService {
   stop() {
     console.log('[VoiceConversation] Stopping conversation mode...');
     
+    // Stop VoiceRecordingService
+    VoiceRecordingService.stop();
+    
     // Stop any ongoing processes
-    this.stopRecording();
     TTSServiceProxy.stopPlayback();
     AIServiceProxy.abortRequest();
     
-    // Stop VAD monitoring
-    this.stopVADMonitoring();
-    
-    // Cleanup audio resources
-    if (this.microphone) {
-      this.microphone.disconnect();
-      this.microphone = null;
-    }
-    
-    if (this.audioStream) {
-      this.audioStream.getTracks().forEach(track => track.stop());
-      this.audioStream = null;
-    }
-    
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-    
-    this.analyser = null;
     this.isActive = false;
     this.changeState(ConversationStates.IDLE);
     
     console.log('[VoiceConversation] Stopped');
-  }
-
-  /**
-   * Start VAD monitoring
-   */
-  startVADMonitoring() {
-    if (!this.analyser) return;
-    
-    const bufferLength = this.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const checkVoiceActivity = () => {
-      if (!this.isActive) return;
-      
-      this.analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate average volume
-      const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-      const volume = Math.min(100, (average / 255) * 100);
-      
-      // Debug: Log volume occasionally
-      if (Math.random() < 0.01) { // Log ~1% of the time
-        console.log(`[VoiceConversation] Volume: ${volume.toFixed(1)}, Threshold: ${this.vadThreshold}, Recording: ${this.isRecording}`);
-      }
-      
-      // Speech detected
-      if (volume > this.vadThreshold) {
-        this.handleSpeechDetected();
-      } else {
-        this.handleSilenceDetected();
-      }
-      
-      // Continue monitoring
-      requestAnimationFrame(checkVoiceActivity);
-    };
-    
-    checkVoiceActivity();
-    console.log('[VoiceConversation] VAD monitoring started');
-  }
-
-  /**
-   * Stop VAD monitoring
-   */
-  stopVADMonitoring() {
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
-    }
-  }
-
-  /**
-   * Handle speech detected by VAD
-   */
-  handleSpeechDetected() {
-    // Clear silence timer
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
-    }
-    
-    // If AI is speaking, interrupt it AND stop TTS playback
-    if (this.currentState === ConversationStates.SPEAKING) {
-      console.log('[VoiceConversation] Speech detected while AI speaking - interrupting and stopping TTS');
-      TTSServiceProxy.stopPlayback(); // Stop TTS immediately when user starts speaking
-      this.interrupt();
-    }
-    
-    // Start recording if not already
-    if (!this.isRecording && this.currentState === ConversationStates.LISTENING) {
-      console.log('[VoiceConversation] Speech detected - starting recording');
-      this.startRecording();
-    }
-    
-    this.isSpeechDetected = true;
-  }
-
-  /**
-   * Handle silence detected by VAD
-   */
-  handleSilenceDetected() {
-    if (!this.isSpeechDetected) return;
-    
-    // Start silence timer if recording
-    if (this.isRecording && !this.silenceTimer) {
-      this.silenceTimer = setTimeout(() => {
-        console.log('[VoiceConversation] Silence detected, stopping recording');
-        this.stopRecording();
-        this.isSpeechDetected = false;
-      }, this.silenceThreshold);
-    }
   }
 
   /**
@@ -246,107 +143,6 @@ class VoiceConversationService {
       }, 300); // Brief pause before listening again
     } else {
       // Otherwise just go back to listening
-      this.changeState(ConversationStates.LISTENING);
-    }
-  }
-
-  /**
-   * Start recording user speech
-   */
-  startRecording() {
-    if (this.isRecording) return;
-    
-    try {
-      const mimeType = this.getSupportedMimeType();
-      this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
-      this.audioChunks = [];
-      
-      this.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          this.audioChunks.push(event.data);
-        }
-      };
-      
-      this.mediaRecorder.onstop = async () => {
-        await this.processRecording();
-      };
-      
-      this.mediaRecorder.start();
-      this.isRecording = true;
-      
-      console.log('[VoiceConversation] Recording started');
-      
-    } catch (error) {
-      console.error('[VoiceConversation] Failed to start recording:', error);
-      if (this.onError) {
-        this.onError(error);
-      }
-    }
-  }
-
-  /**
-   * Stop recording user speech
-   */
-  stopRecording() {
-    if (!this.isRecording || !this.mediaRecorder) return;
-    
-    console.log('[VoiceConversation] Stopping recording...');
-    this.mediaRecorder.stop();
-    this.isRecording = false;
-  }
-
-  /**
-   * Process recorded audio
-   */
-  async processRecording() {
-    try {
-      // Create audio blob
-      const mimeType = this.getSupportedMimeType();
-      const audioBlob = new Blob(this.audioChunks, { type: mimeType });
-      this.audioChunks = [];
-      
-      console.log(`[VoiceConversation] Processing audio (${audioBlob.size} bytes)...`);
-      
-      // Check if blob has content
-      if (audioBlob.size === 0) {
-        console.warn('[VoiceConversation] Empty audio blob, returning to listening');
-        this.changeState(ConversationStates.LISTENING);
-        return;
-      }
-      
-      // Check if STT is configured
-      if (!STTServiceProxy.isConfigured()) {
-        console.error('[VoiceConversation] STT not configured!');
-        if (this.onError) {
-          this.onError(new Error('STT not configured. Please configure in Control Panel.'));
-        }
-        this.changeState(ConversationStates.LISTENING);
-        return;
-      }
-      
-      // Change to thinking state
-      this.changeState(ConversationStates.THINKING);
-      
-      console.log('[VoiceConversation] Calling STTServiceProxy.transcribeAudio...');
-      // Transcribe audio
-      const transcription = await STTServiceProxy.transcribeAudio(audioBlob);
-      console.log(`[VoiceConversation] Transcription received: "${transcription}"`);
-      
-      if (this.onTranscription) {
-        console.log('[VoiceConversation] Calling onTranscription callback...');
-        this.onTranscription(transcription);
-      } else {
-        console.warn('[VoiceConversation] No onTranscription callback set!');
-        // Return to listening if no callback
-        this.changeState(ConversationStates.LISTENING);
-      }
-      
-    } catch (error) {
-      console.error('[VoiceConversation] Processing failed:', error);
-      if (this.onError) {
-        this.onError(error);
-      }
-      // Return to listening
       this.changeState(ConversationStates.LISTENING);
     }
   }
@@ -521,19 +317,6 @@ class VoiceConversationService {
     if (this.onStateChange) {
       this.onStateChange(newState);
     }
-  }
-
-  /**
-   * Get supported MIME type for recording
-   */
-  getSupportedMimeType() {
-    const types = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'];
-    for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        return type;
-      }
-    }
-    return '';
   }
 
   /**

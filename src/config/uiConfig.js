@@ -23,6 +23,12 @@ export const DefaultUIConfig = {
   // AI Toolbar
   enableAIToolbar: true,
   
+  // AI Toolbar Advanced Settings
+  aiToolbar: {
+    showOnInputFocus: true, // Auto-show toolbar when focusing input fields (for dictation)
+    showOnImageHover: true, // Show toolbar when hovering over images
+  },
+  
   // Debug panel
   enableDebugPanel: true,
   

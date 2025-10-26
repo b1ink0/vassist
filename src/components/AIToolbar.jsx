@@ -12,7 +12,12 @@ import BackgroundDetector from '../utils/BackgroundDetector';
 import MediaExtractionService from '../services/MediaExtractionService';
 import UtilService from '../services/UtilService';
 import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy } from '../services/proxies';
+import VoiceRecordingService from '../services/VoiceRecordingService';
 import { TranslationLanguages } from '../config/aiConfig';
+import { PromptConfig } from '../config/promptConfig';
+import ToolbarButton from './toolbar/ToolbarButton';
+import ToolbarSection from './toolbar/ToolbarSection';
+import ToolbarResultPanel from './toolbar/ToolbarResultPanel';
 
 const AIToolbar = () => {
   const { uiConfig, aiConfig, handleAddToChat } = useApp();
@@ -20,31 +25,168 @@ const AIToolbar = () => {
   
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [lockedPosition, setLockedPosition] = useState(null); // Lock position when result is showing
+  const [resultPanelActive, setResultPanelActive] = useState(false); // Track if result panel is showing (prevents toolbar from hiding when selection lost)
   const [selectedText, setSelectedText] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedAudios, setSelectedAudios] = useState([]);
+  const [hoveredImageElement, setHoveredImageElement] = useState(null);
+  const savedCursorPositionRef = useRef(null); // Save cursor position before toolbar interaction // Store hovered image element for later extraction
   const [isLoading, setIsLoading] = useState(false);
-  const [action, setAction] = useState(null); // 'summarize', 'translate', 'image-describe', 'image-extract-text', 'image-analyze', or null
+  const [action, setAction] = useState(null); // 'summarize-*', 'translate', 'image-*', 'dictionary-*', 'improve-*', or null
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
-  const [hoveredButton, setHoveredButton] = useState(null); // 'summarize', 'translate', 'chat', 'image-describe', 'image-extract', 'image-analyze', or null
   const [isLightBackgroundToolbar, setIsLightBackgroundToolbar] = useState(false);
   const [isLightBackgroundPanel, setIsLightBackgroundPanel] = useState(false);
   const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null); // For translation override
+  const [detectedLanguageName, setDetectedLanguageName] = useState(null); // Full language name for display
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
   const [currentSessionId, setCurrentSessionId] = useState(null); // TTS session ID
   
+  // Dictation (STT) state
+  const [isRecording, setIsRecording] = useState(false); // STT recording state
+  const [recordingDuration, setRecordingDuration] = useState(0); // Recording duration in seconds
+  const [dictationMode, setDictationMode] = useState(null); // 'manual' (with selection) or 'auto-insert' (no selection)
+  const [accumulatedTranscription, setAccumulatedTranscription] = useState(''); // Accumulated transcription for continuous dictation
+  const recordingIntervalRef = useRef(null); // Timer interval for recording duration
+  const isProcessingRef = useRef(false); // Prevent multiple simultaneous processings
+  
+  const [isEditableContent, setIsEditableContent] = useState(false); // Is selection in editable element
+  const [editableElement, setEditableElement] = useState(null); // Reference to editable element
+  const [originalContent, setOriginalContent] = useState(null); // Original content for undo
+  const [editableType, setEditableType] = useState(null); // 'input', 'textarea', or 'contenteditable'
+  const [editableSelectionStart, setEditableSelectionStart] = useState(0); // Selection start position
+  const [editableSelectionEnd, setEditableSelectionEnd] = useState(0); // Selection end position
+  const [hasInserted, setHasInserted] = useState(false); // Track if content was inserted (for undo/redo toggle)
+  const [improvedContent, setImprovedContent] = useState(null); // Store improved content for redo
+  
   const toolbarRef = useRef(null);
   const resultPanelRef = useRef(null);
   const selectionTimeoutRef = useRef(null);
   const abortControllerRef = useRef(null); // For aborting streaming
+  const hasInsertedRef = useRef(false); // Ref to track insert state for callbacks
+  const showingFromInputFocusRef = useRef(false); // Track if toolbar was shown by input focus (prevent immediate hide)
+  const showingFromImageHoverRef = useRef(false); // Track if toolbar was shown by image hover (prevent immediate hide)
 
   /**
    * Check if toolbar is enabled
    */
   const isEnabled = uiConfig?.enableAIToolbar !== false;
+
+  /**
+   * Determine selection type based on word count
+   * - Single word: 1-2 words (show dictionary features)
+   * - Short phrase: 3-10 words (show both dictionary and summarize)
+   * - Passage: >10 words (show only summarize)
+   */
+  const getSelectionType = useCallback((text) => {
+    if (!text || !text.trim()) {
+      return { isSingleWord: false, wordCount: 0 };
+    }
+    
+    // Count words (split by whitespace and filter empty strings)
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    const wordCount = words.length;
+    
+    return {
+      isSingleWord: wordCount <= 2, // 1-2 words
+      wordCount,
+    };
+  }, []);
+
+  /**
+   * Check if selection is inside editable content
+   * Returns: { isEditable, element, originalContent, selectionStart, selectionEnd }
+   */
+  const checkEditableContent = useCallback(() => {
+    // First check if active element is input/textarea with selection
+    const activeElement = document.activeElement;
+    const isInputOrTextarea = 
+      activeElement && 
+      (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+    
+    if (isInputOrTextarea) {
+      const element = activeElement;
+      
+      // Check if input type is excluded
+      if (element.tagName === 'INPUT') {
+        const type = element.type.toLowerCase();
+        const excludedTypes = ['password', 'email', 'number', 'date', 'time', 'datetime-local', 
+                               'month', 'week', 'tel', 'url', 'search', 'hidden', 'checkbox', 
+                               'radio', 'file', 'submit', 'button', 'reset', 'image'];
+        if (excludedTypes.includes(type)) {
+          return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
+        }
+      }
+      
+      // Check if there's a selection
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      
+      if (start !== undefined && end !== undefined && start !== end) {
+        return {
+          isEditable: true,
+          element: element,
+          originalContent: element.value,
+          selectionStart: start,
+          selectionEnd: end,
+          editableType: element.tagName.toLowerCase(),
+        };
+      }
+      
+      return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
+    }
+    
+    // For contenteditable and other elements, use window.getSelection()
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
+    }
+
+    const range = selection.getRangeAt(0);
+    const startContainer = range.startContainer;
+    const endContainer = range.endContainer;
+
+    // Get the parent elements for both start and end of selection
+    const startElement = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer;
+    const endElement = endContainer.nodeType === 3 ? endContainer.parentElement : endContainer;
+
+    // Helper to check if element is contenteditable
+    const findContentEditableAncestor = (element) => {
+      let current = element;
+      while (current && current !== document.body) {
+        // Check for standard contenteditable
+        if (current.isContentEditable || current.getAttribute('contenteditable') === 'true') {
+          return current;
+        }
+        // Check for Gmail's g_editable attribute
+        if (current.getAttribute('g_editable') === 'true') {
+          return current;
+        }
+        current = current.parentElement;
+      }
+      return null;
+    };
+
+    const startEditable = findContentEditableAncestor(startElement);
+    const endEditable = findContentEditableAncestor(endElement);
+
+    // Both start and end must be in the same contenteditable element
+    if (!startEditable || !endEditable || startEditable !== endEditable) {
+      return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
+    }
+
+    return {
+      isEditable: true,
+      element: startEditable,
+      originalContent: startEditable.innerHTML,
+      selectionStart: range.startOffset,
+      selectionEnd: range.endOffset,
+      editableType: 'contenteditable',
+    };
+  }, []);
 
   /**
    * Set up TTS callbacks for speaker icon
@@ -76,7 +218,7 @@ const AIToolbar = () => {
    * Handle TTS speaker button click
    */
   const onSpeakerClick = async () => {
-    if (!result || action !== 'summarize') return;
+    if (!result || !(action?.startsWith('summarize-') || action?.startsWith('image-') || action?.startsWith('improve-') || action?.startsWith('dictionary-') || action === 'dictation' || action === 'translate')) return;
 
     // Check if TTS is configured and enabled
     if (!ttsConfig?.enabled) {
@@ -95,10 +237,10 @@ const AIToolbar = () => {
     } else {
       // Start playback
       try {
-        console.log('[AIToolbar] Starting TTS for summary');
+        console.log('[AIToolbar] Starting TTS');
         
         // Generate unique session ID
-        const sessionId = `toolbar_summary_${Date.now()}`;
+        const sessionId = `toolbar_${Date.now()}`;
         setCurrentSessionId(sessionId);
         setIsSpeaking(true);
 
@@ -144,6 +286,9 @@ const AIToolbar = () => {
     setAction(null);
     setSelectedTargetLanguage(null);
     setCopySuccess(false);
+    setHasInserted(false); // Clear insert/undo state
+    hasInsertedRef.current = false; // Clear ref
+    setLockedPosition(null); // Clear locked position
     
     // Cancel ongoing request if loading
     if (isLoading) {
@@ -156,9 +301,9 @@ const AIToolbar = () => {
       
       // Also call service abort methods to stop generation at source
       try {
-        if (action === 'summarize') {
+        if (action?.startsWith('summarize-')) {
           await SummarizerServiceProxy.abort();
-        } else if (action === 'translate') {
+        } else if (action === 'translate' || action === 'detect-language') {
           await TranslatorServiceProxy.abort();
         } else if (action?.startsWith('image-')) {
           // Use correct method name: abortRequest() not abort()
@@ -189,6 +334,32 @@ const AIToolbar = () => {
    * Get selection and images from the page
    */
   const getSelection = useCallback(() => {
+    // Check if the active element is an input or textarea
+    const activeElement = document.activeElement;
+    const isInputOrTextarea = 
+      activeElement && 
+      (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+    
+    // Handle input/textarea selection separately
+    if (isInputOrTextarea) {
+      const element = activeElement;
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      
+      if (start !== undefined && end !== undefined && start !== end) {
+        const text = element.value.substring(start, end).trim();
+        return { 
+          text, 
+          images: [], 
+          audios: [], 
+          selection: window.getSelection() 
+        };
+      }
+      
+      return { text: '', images: [], audios: [], selection: window.getSelection() };
+    }
+    
+    // Handle regular selection (for contenteditable and other elements)
     const selection = window.getSelection();
     
     if (!selection || selection.rangeCount === 0) {
@@ -216,16 +387,63 @@ const AIToolbar = () => {
    * Calculate optimal position for toolbar at selection start
    */
   const calculatePosition = useCallback((selection) => {
-    if (!selection || selection.rangeCount === 0) return null;
+    // Check if the active element is an input or textarea
+    const activeElement = document.activeElement;
+    const isInputOrTextarea = 
+      activeElement && 
+      (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
     
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
+    let rect;
     
-    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    if (isInputOrTextarea) {
+      // For input/textarea, calculate approximate cursor position
+      const element = activeElement;
+      const start = element.selectionStart || 0;
+      
+      // Create a temporary span to measure text width
+      const tempSpan = document.createElement('span');
+      tempSpan.style.font = window.getComputedStyle(element).font;
+      tempSpan.style.visibility = 'hidden';
+      tempSpan.style.position = 'absolute';
+      tempSpan.style.whiteSpace = 'pre';
+      tempSpan.textContent = element.value.substring(0, start);
+      document.body.appendChild(tempSpan);
+      
+      const textWidth = tempSpan.offsetWidth;
+      document.body.removeChild(tempSpan);
+      
+      // Get element position
+      const elemRect = element.getBoundingClientRect();
+      
+      // Calculate cursor X position (approximate)
+      // Account for padding and scrollLeft
+      const computedStyle = window.getComputedStyle(element);
+      const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+      const scrollLeft = element.scrollLeft || 0;
+      
+      const cursorX = elemRect.left + paddingLeft + textWidth - scrollLeft;
+      
+      // Create a rect-like object for cursor position
+      rect = {
+        left: cursorX,
+        top: elemRect.top,
+        bottom: elemRect.bottom,
+        width: 1,
+        height: elemRect.height
+      };
+    } else {
+      // For regular selection
+      if (!selection || selection.rangeCount === 0) return null;
+      
+      const range = selection.getRangeAt(0);
+      rect = range.getBoundingClientRect();
+    }
     
-    // Toolbar dimensions (approximate)
-    const toolbarWidth = 110; // Compact: 3 icons
-    const toolbarHeight = 40; // Slim height
+    if (!rect || rect.height === 0) return null;
+    
+    // Toolbar dimensions - use actual toolbar width if available, otherwise estimate
+    const toolbarWidth = toolbarRef.current ? toolbarRef.current.offsetWidth : 400; // More conservative estimate
+    const toolbarHeight = toolbarRef.current ? toolbarRef.current.offsetHeight : 50;
     const offset = 8;
     
     // Use viewport coordinates (getBoundingClientRect already gives us these)
@@ -233,14 +451,17 @@ const AIToolbar = () => {
     let x = rect.left;
     let y = rect.top - toolbarHeight - offset;
     
-    // Adjust if too far left
-    if (x < 10) {
-      x = 10;
+    // Ensure toolbar never goes off-screen horizontally
+    const viewportWidth = window.innerWidth;
+    
+    // Check if would go off-screen on the right
+    if (x + toolbarWidth > viewportWidth - 10) {
+      x = viewportWidth - toolbarWidth - 10;
     }
     
-    // Adjust if too far right
-    if (x + toolbarWidth > window.innerWidth - 10) {
-      x = window.innerWidth - toolbarWidth - 10;
+    // Check if would go off-screen on the left
+    if (x < 10) {
+      x = 10;
     }
     
     // Adjust if too close to top (show below instead)
@@ -266,48 +487,109 @@ const AIToolbar = () => {
     selectionTimeoutRef.current = setTimeout(() => {
       const { text, images, audios, selection } = getSelection();
       
-      // Check if selection is inside result panel - if so, ignore
-      if (resultPanelRef.current && selection) {
+      // Check if selection is inside result panel OR toolbar - if so, ignore completely
+      if ((resultPanelRef.current || toolbarRef.current) && selection) {
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         if (range) {
           const container = range.commonAncestorContainer;
           const containerEl = container.nodeType === 3 ? container.parentElement : container;
-          if (containerEl && resultPanelRef.current.contains(containerEl)) {
-            // Selection is inside result panel, ignore this change
-            return;
+          if (containerEl) {
+            // Check if selection is inside toolbar or result panel
+            if (
+              (resultPanelRef.current && resultPanelRef.current.contains(containerEl)) ||
+              (toolbarRef.current && toolbarRef.current.contains(containerEl))
+            ) {
+              // Selection is inside our UI, ignore this change completely
+              console.log('[AIToolbar] Selection inside toolbar/panel, ignoring');
+              return;
+            }
           }
         }
       }
       
-      // Hide if no text, images, or audios selected
+      // If no selection but result panel is active, keep toolbar visible
+      // This prevents toolbar from closing when selection is lost (scroll, click result panel, etc.)
       if (!text && images.length === 0 && audios.length === 0) {
-        setIsVisible(false);
-        setSelectedText('');
-        setSelectedImages([]);
-        setSelectedAudios([]);
-        setResult('');
-        setError('');
-        setAction(null);
-        setHoveredButton(null); // Reset hover state
+        // ALSO: Don't hide if toolbar was just shown by input focus or image hover
+        if (showingFromInputFocusRef.current || showingFromImageHoverRef.current) {
+          console.log('[AIToolbar] No selection but showing from input focus or image hover, keeping toolbar visible');
+          return;
+        }
+        
+        // Only hide if result panel is not active
+        if (!resultPanelActive) {
+          setIsVisible(false);
+          setSelectedText('');
+          setSelectedImages([]);
+          setSelectedAudios([]);
+          setResult('');
+          setError('');
+          setAction(null);
+          setIsEditableContent(false);
+          setEditableElement(null);
+          setOriginalContent(null);
+          setEditableType(null);
+          setEditableSelectionStart(0);
+          setEditableSelectionEnd(0);
+          setHasInserted(false);
+          hasInsertedRef.current = false; // Clear ref
+          setImprovedContent(null); // Clear improved content
+        } else {
+          console.log('[AIToolbar] No selection but result panel active, keeping toolbar visible');
+        }
         return;
       }
       
       // Calculate position
       const pos = calculatePosition(selection);
       if (!pos) {
+        // No valid position but we have content - keep visible at current position
+        if (result || error || isLoading) {
+          console.log('[AIToolbar] No position but result active, keeping toolbar at current position');
+          return;
+        }
         setIsVisible(false);
         return;
+      }
+      
+      // Check if selection is in editable content
+      const editableInfo = checkEditableContent();
+      
+      // Don't update editable state if we just inserted (preserve original for undo)
+      if (!hasInsertedRef.current) {
+        setIsEditableContent(editableInfo.isEditable);
+        setEditableElement(editableInfo.element);
+        setOriginalContent(editableInfo.originalContent);
+        setEditableType(editableInfo.editableType);
+        setEditableSelectionStart(editableInfo.selectionStart || 0);
+        setEditableSelectionEnd(editableInfo.selectionEnd || 0);
       }
       
       // Update state (only reset result/error/action if not already showing results)
       setSelectedText(text);
       setSelectedImages(images);
       setSelectedAudios(audios);
-      setPosition(pos);
+      
+      // Clear hoveredImageElement if we have a new selection (user selected something else)
+      if ((text || images.length > 0 || audios.length > 0) && !showingFromImageHoverRef.current) {
+        setHoveredImageElement(null);
+      }
+      
+      // Lock position when result/error/loading is active to prevent drift
+      if (!result && !error && !isLoading) {
+        setPosition(pos);
+        setLockedPosition(null); // Clear lock when no result
+      } else if (!lockedPosition) {
+        // First time showing result - lock position
+        setPosition(pos);
+        setLockedPosition(pos);
+      }
+      // If lockedPosition exists, keep using it (don't update position)
+      
       setIsVisible(true);
       // Don't clear result/error/action here - they should only be cleared by closeResult or new action
     }, 150);
-  }, [isEnabled, getSelection, calculatePosition]);
+  }, [isEnabled, getSelection, calculatePosition, checkEditableContent, resultPanelActive, result, error, isLoading, lockedPosition]);
 
   /**
    * Handle mouse up (show toolbar after selection)
@@ -318,9 +600,16 @@ const AIToolbar = () => {
 
   /**
    * Handle scroll - update toolbar position instantly to follow selection
+   * BUT: Don't update if result/error/loading is showing (locked position)
    */
   const handleScroll = useCallback(() => {
     if (!isVisible) return;
+    
+    // If position is locked (result showing), don't update position on scroll
+    if (lockedPosition) {
+      console.log('[AIToolbar] Position locked, ignoring scroll');
+      return;
+    }
     
     // Update position instantly - no delay, no RAF
     const selection = window.getSelection();
@@ -333,7 +622,7 @@ const AIToolbar = () => {
         setIsVisible(false);
       }
     }
-  }, [isVisible, calculatePosition]);
+  }, [isVisible, calculatePosition, lockedPosition]);
 
   /**
    * Hide toolbar when clicking outside
@@ -343,14 +632,35 @@ const AIToolbar = () => {
     // Get the full event path including shadow DOM elements
     const path = e.composedPath ? e.composedPath() : (e.path || [e.target]);
     
-    // Check if any element in the path is our toolbar or result panel
-    const clickedInside = path.some(el => 
-      el === toolbarRef.current || 
-      el === resultPanelRef.current
-    );
+    // Check if any element in the path is our toolbar, result panel, or any dropdown/popup elements
+    const clickedInside = path.some(el => {
+      if (el === toolbarRef.current || el === resultPanelRef.current) {
+        return true;
+      }
+      // Check for common popup/dropdown classes that might be portaled
+      if (el.nodeType === 1) { // Element node
+        const classList = el.classList || [];
+        const classStr = Array.from(classList).join(' ');
+        // Check for dropdown menus, select options, portals, etc.
+        if (
+          classStr.includes('dropdown') ||
+          classStr.includes('menu') ||
+          classStr.includes('popover') ||
+          classStr.includes('portal') ||
+          classStr.includes('select') ||
+          el.tagName === 'OPTION' ||
+          el.closest('[role="listbox"]') ||
+          el.closest('[role="menu"]') ||
+          el.closest('[role="dialog"]')
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
     
     if (clickedInside) {
-      return; // Click is inside our components
+      return; // Click is inside our components or related UI
     }
     
     // Don't hide if user is clicking on selected text
@@ -365,19 +675,247 @@ const AIToolbar = () => {
       }
     }
     
+    // Stop dictation if running
+    if (isRecording) {
+      console.log('[AIToolbar] Stopping dictation on click outside');
+      VoiceRecordingService.stop();
+      setIsRecording(false);
+    }
+    
+    // Hide toolbar immediately AND close result panel
+    setIsVisible(false);
+    setResultPanelActive(false); // Deactivate result panel
+    
+    // Clear input focus and image hover flags
+    showingFromInputFocusRef.current = false;
+    showingFromImageHoverRef.current = false;
+    
     // Close result panel if open (this will also abort streaming and stop TTS)
     if (result || error || isLoading) {
       closeResult();
     }
+  }, [result, error, isLoading, closeResult, isRecording]);
+
+  /**
+   * Handle input focus - show toolbar with dictation
+   */
+  const handleInputFocus = useCallback((e) => {
+    console.log('[AIToolbar] handleInputFocus triggered', {
+      enabled: uiConfig?.aiToolbar?.showOnInputFocus,
+      target: e.target,
+      tagName: e.target.tagName,
+      isContentEditable: e.target.isContentEditable,
+      uiConfig: uiConfig
+    });
     
-    setIsVisible(false);
-    setHoveredButton(null); // Reset hover state when hiding
-  }, [result, error, isLoading, closeResult]);
+    if (!uiConfig?.aiToolbar?.showOnInputFocus) {
+      console.log('[AIToolbar] Input focus disabled in settings');
+      return;
+    }
+    
+    const target = e.target;
+    
+    // Ignore if focus is inside our own toolbar or result panel
+    if (toolbarRef.current?.contains(target) || resultPanelRef.current?.contains(target)) {
+      console.log('[AIToolbar] Focus inside toolbar/panel, ignoring');
+      return;
+    }
+    
+    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+    const isContentEditable = target.isContentEditable;
+    
+    console.log('[AIToolbar] Input check', { isInput, isContentEditable });
+    
+    if (isInput || isContentEditable) {
+      console.log('[AIToolbar] Input focused, showing toolbar with dictation');
+      
+      // CRITICAL: Save cursor position BEFORE showing toolbar (clicking toolbar will remove focus)
+      if (isInput) {
+        savedCursorPositionRef.current = {
+          element: target,
+          start: target.selectionStart,
+          end: target.selectionEnd
+        };
+        console.log('[AIToolbar] Saved cursor position:', savedCursorPositionRef.current);
+      } else {
+        // For contenteditable, save selection
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          savedCursorPositionRef.current = {
+            element: target,
+            range: selection.getRangeAt(0).cloneRange()
+          };
+        }
+      }
+      
+      // Calculate position at cursor or caret
+      const rect = target.getBoundingClientRect();
+      const toolbarHeight = 50;
+      const toolbarWidth = 150;
+      
+      // Use viewport coordinates directly (no scrollX/Y) because toolbar uses fixed positioning
+      let x = rect.left;
+      let y = rect.top - toolbarHeight - 10; // 10px above input
+      
+      // Smart positioning - check if would go off-screen
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // Adjust horizontal position if would go off-screen
+      if (x + toolbarWidth > viewportWidth) {
+        x = viewportWidth - toolbarWidth - 10;
+      }
+      if (x < 0) {
+        x = 10;
+      }
+      
+      // Adjust vertical position if would go off-screen at top
+      if (y < 0) {
+        // Position below input instead
+        y = rect.bottom + 10;
+      }
+      
+      console.log('[AIToolbar] Setting position', { x, y, rect, viewport: { width: viewportWidth, height: viewportHeight } });
+      
+      // Clear hoveredImageElement since we're showing toolbar for input focus
+      setHoveredImageElement(null);
+      
+      setPosition({ x, y });
+      setIsVisible(true);
+      setAction('dictation'); // Pre-select dictation action
+      setIsEditableContent(true);
+      setEditableElement(target);
+      setEditableType(isContentEditable ? 'contenteditable' : 'input');
+      
+      // Save initial selection for dictation
+      if (!isContentEditable) {
+        setEditableSelectionStart(target.selectionStart);
+        setEditableSelectionEnd(target.selectionEnd);
+      }
+      
+      // Set flag to prevent handleSelectionChange from immediately hiding toolbar
+      showingFromInputFocusRef.current = true;
+      
+      // DON'T clear the flag automatically - let user interaction clear it
+      console.log('[AIToolbar] Set showingFromInputFocusRef to true, will clear on hide');
+    } else {
+      console.log('[AIToolbar] Not an input element, ignoring');
+    }
+  }, [uiConfig]);
+
+  /**
+   * Handle image hover - show toolbar with image actions
+   */
+  const handleImageHover = useCallback((e) => {
+    console.log('[AIToolbar] handleImageHover triggered', {
+      enabled: uiConfig?.aiToolbar?.showOnImageHover,
+      target: e.target.tagName,
+      src: e.target.src
+    });
+    
+    if (!uiConfig?.aiToolbar?.showOnImageHover) return;
+    
+    const target = e.target;
+    if (target.tagName === 'IMG') {
+      console.log('[AIToolbar] Image hovered, showing toolbar (will extract on button click)');
+      
+      // If hovering a different image, clear previous results
+      if (hoveredImageElement && hoveredImageElement !== target) {
+        console.log('[AIToolbar] Different image hovered, clearing previous results');
+        setResult('');
+        setError('');
+        setAction(null);
+        setResultPanelActive(false);
+      }
+      
+      // Clear input focus flag when showing toolbar for image
+      // This ensures we show image buttons (not dictation button)
+      showingFromInputFocusRef.current = false;
+      
+      // Clear editable content state to hide dictation button
+      setIsEditableContent(false);
+      setEditableElement(null);
+      setEditableType(null);
+      
+      // Calculate smart position - check if toolbar would go off-screen
+      const rect = target.getBoundingClientRect();
+      const toolbarWidth = 400; // Approximate toolbar width
+      const toolbarHeight = 50; // Approximate toolbar height
+      const viewportWidth = window.innerWidth;
+      
+      let x, y;
+      
+      // Use viewport coordinates directly (no scrollX/Y) because toolbar uses fixed positioning
+      // Horizontal positioning - prefer right side, but flip to left if would go off-screen
+      if (rect.right + toolbarWidth - 120 > viewportWidth) {
+        // Would go off-screen on right, position on left side
+        x = rect.left;
+      } else {
+        // Position on right side
+        x = rect.right - 120;
+      }
+      
+      // Vertical positioning - prefer top, but flip to bottom if would go off-screen
+      const topY = rect.top - toolbarHeight - 10;
+      const bottomY = rect.bottom + 10;
+      
+      if (topY < 0) {
+        // Top would be off-screen, use bottom
+        y = bottomY;
+      } else {
+        // Use top
+        y = topY;
+      }
+      
+      console.log('[AIToolbar] Image toolbar position', { x, y, rect });
+      
+      setPosition({ x, y });
+      setIsVisible(true);
+      
+      // Store the hovered image element for extraction when user clicks button
+      setHoveredImageElement(target);
+      setSelectedImages([]); // Clear selection-based images
+      setSelectedText(''); // Clear text selection
+      setSelectedAudios([]);
+      
+      // Set flag to prevent handleSelectionChange from hiding toolbar
+      showingFromImageHoverRef.current = true;
+      
+      // DON'T clear the flag automatically - let user interaction clear it
+      console.log('[AIToolbar] Set showingFromImageHoverRef to true, will clear on hide');
+    }
+  }, [uiConfig, hoveredImageElement]);
+
+  /**
+   * Handle image leave - only hide if result panel not active
+   */
+  const handleImageLeave = useCallback((e) => {
+    console.log('[AIToolbar] handleImageLeave triggered', {
+      enabled: uiConfig?.aiToolbar?.showOnImageHover,
+      resultPanelActive: resultPanelActive
+    });
+    
+    if (!uiConfig?.aiToolbar?.showOnImageHover) return;
+    
+    const target = e.target;
+    if (target.tagName === 'IMG') {
+      // Don't hide - let handleClickOutside or user action close it
+      // This prevents flickering when moving from image to toolbar
+      console.log('[AIToolbar] Image unhovered, but keeping toolbar visible');
+    }
+  }, [uiConfig, resultPanelActive]);
 
   /**
    * Set up event listeners
    */
   useEffect(() => {
+    console.log('[AIToolbar] Setting up event listeners', {
+      isEnabled,
+      showOnInputFocus: uiConfig?.aiToolbar?.showOnInputFocus,
+      showOnImageHover: uiConfig?.aiToolbar?.showOnImageHover,
+      uiConfig: uiConfig
+    });
+    
     if (!isEnabled) {
       setIsVisible(false);
       return;
@@ -388,17 +926,157 @@ const AIToolbar = () => {
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('scroll', handleScroll, true); // Use capture to catch all scroll events
     
+    // Input focus listener
+    if (uiConfig?.aiToolbar?.showOnInputFocus) {
+      console.log('[AIToolbar] Adding focusin listener for input focus');
+      document.addEventListener('focusin', handleInputFocus);
+    }
+    
+    // Image hover listeners + MutationObserver
+    let observer;
+    if (uiConfig?.aiToolbar?.showOnImageHover) {
+      console.log('[AIToolbar] Adding image hover listeners');
+      // Add event listeners to all existing images
+      const images = document.querySelectorAll('img');
+      console.log('[AIToolbar] Found', images.length, 'images on page');
+      images.forEach(img => {
+        img.addEventListener('mouseenter', handleImageHover);
+        img.addEventListener('mouseleave', handleImageLeave);
+      });
+      
+      // Use MutationObserver to handle dynamically added images
+      observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.tagName === 'IMG') {
+              node.addEventListener('mouseenter', handleImageHover);
+              node.addEventListener('mouseleave', handleImageLeave);
+            } else if (node.querySelectorAll) {
+              const imgs = node.querySelectorAll('img');
+              imgs.forEach(img => {
+                img.addEventListener('mouseenter', handleImageHover);
+                img.addEventListener('mouseleave', handleImageLeave);
+              });
+            }
+          });
+        });
+      });
+      
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('selectionchange', handleSelectionChange);
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
       
+      if (uiConfig?.aiToolbar?.showOnInputFocus) {
+        document.removeEventListener('focusin', handleInputFocus);
+      }
+      
+      if (uiConfig?.aiToolbar?.showOnImageHover) {
+        const images = document.querySelectorAll('img');
+        images.forEach(img => {
+          img.removeEventListener('mouseenter', handleImageHover);
+          img.removeEventListener('mouseleave', handleImageLeave);
+        });
+        
+        // Disconnect MutationObserver
+        if (observer) {
+          observer.disconnect();
+        }
+      }
+      
       if (selectionTimeoutRef.current) {
         clearTimeout(selectionTimeoutRef.current);
       }
     };
-  }, [isEnabled, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll]);
+  }, [isEnabled, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave, uiConfig]);
+
+  /**
+   * Clear flags and stop dictation when toolbar becomes invisible
+   */
+  useEffect(() => {
+    if (!isVisible) {
+      // Clear all flags when toolbar is hidden
+      showingFromInputFocusRef.current = false;
+      showingFromImageHoverRef.current = false;
+      savedCursorPositionRef.current = null;
+      
+      if (isRecording) {
+        console.log('[AIToolbar] Toolbar hidden, stopping dictation');
+        VoiceRecordingService.stop();
+        setIsRecording(false);
+        setAccumulatedTranscription('');
+      }
+      
+      // Clear the recording timer interval to prevent timer glitch
+      if (recordingIntervalRef.current) {
+        console.log('[AIToolbar] Clearing recording timer interval');
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+        setRecordingDuration(0);
+      }
+    }
+  }, [isVisible, isRecording]);
+
+  /**
+   * Track cursor position changes in editable element
+   * Update savedCursorPositionRef whenever user clicks or moves cursor
+   */
+  useEffect(() => {
+    if (!editableElement || !isEditableContent) return;
+    
+    const updateCursorPosition = () => {
+      if (editableType === 'contenteditable') {
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          savedCursorPositionRef.current = {
+            element: editableElement,
+            range: selection.getRangeAt(0).cloneRange()
+          };
+          console.log('[AIToolbar] Updated cursor position (contenteditable)');
+        }
+      } else {
+        // Input/textarea
+        savedCursorPositionRef.current = {
+          element: editableElement,
+          start: editableElement.selectionStart,
+          end: editableElement.selectionEnd
+        };
+        console.log('[AIToolbar] Updated cursor position:', {
+          start: editableElement.selectionStart,
+          end: editableElement.selectionEnd
+        });
+      }
+    };
+    
+    // Listen for click, keyup, and select events to track cursor changes
+    editableElement.addEventListener('click', updateCursorPosition);
+    editableElement.addEventListener('keyup', updateCursorPosition);
+    editableElement.addEventListener('select', updateCursorPosition);
+    
+    return () => {
+      editableElement.removeEventListener('click', updateCursorPosition);
+      editableElement.removeEventListener('keyup', updateCursorPosition);
+      editableElement.removeEventListener('select', updateCursorPosition);
+    };
+  }, [editableElement, isEditableContent, editableType]);
+
+  /**
+   * Track result panel active state
+   * Activate when result/error/loading appears, deactivate when all are cleared
+   */
+  useEffect(() => {
+    if (result || error || isLoading) {
+      setResultPanelActive(true);
+      console.log('[AIToolbar] Result panel activated');
+    } else {
+      setResultPanelActive(false);
+      console.log('[AIToolbar] Result panel deactivated');
+    }
+  }, [result, error, isLoading]);
 
   /**
    * Detect background brightness for toolbar and result panel
@@ -465,19 +1143,27 @@ const AIToolbar = () => {
 
   /**
    * Handle Summarize action with streaming
+   * @param {string} summaryType - 'tldr' (default), 'headline', 'key-points', 'teaser'
    */
-  const onSummarizeClick = async () => {
+  const onSummarizeClick = async (summaryType = null) => {
     if (!selectedText) {
       setError('No text selected');
       return;
     }
     
+    // Cancel any ongoing request first
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
+    }
+    
     setIsLoading(true);
-    setAction('summarize');
+    const type = summaryType || aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr';
+    setAction(`summarize-${type}`);
     setError('');
     setResult(''); // Clear previous result
     
-    console.log('[AIToolbar] Summarize clicked (streaming)');
+    console.log(`[AIToolbar] Summarize clicked (${type}, streaming)`);
     
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
@@ -489,7 +1175,7 @@ const AIToolbar = () => {
       }
       
       const options = {
-        type: aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr',
+        type: type,
         format: aiConfig?.aiFeatures?.summarizer?.defaultFormat || 'plain-text',
         length: aiConfig?.aiFeatures?.summarizer?.defaultLength || 'medium',
       };
@@ -526,12 +1212,67 @@ const AIToolbar = () => {
   };
 
   /**
-   * Handle Translate action with streaming
+   * Handle Language Detection action
    */
-  const onTranslateClick = async (targetLang = null) => {
+  const onDetectLanguageClick = async () => {
     if (!selectedText) {
       setError('No text selected');
       return;
+    }
+    
+    // Cancel any ongoing request first
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
+    }
+    
+    setIsLoading(true);
+    setAction('detect-language');
+    setError('');
+    setResult('');
+    
+    console.log('[AIToolbar] Detect language clicked');
+    
+    try {
+      const { LanguageDetectorServiceProxy } = await import('../services/proxies');
+      const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
+      
+      if (detectionResults && detectionResults.length > 0) {
+        const detected = detectionResults[0];
+        const langInfo = TranslationLanguages.find(l => l.code === detected.detectedLanguage);
+        const languageName = langInfo ? langInfo.name : detected.detectedLanguage.toUpperCase();
+        
+        setDetectedLanguageName(languageName);
+        
+        // Show result
+        const confidencePercent = detected.confidence ? (detected.confidence * 100).toFixed(1) : 'N/A';
+        setResult(`Language: ${languageName}\nConfidence: ${confidencePercent}%`);
+      } else {
+        throw new Error('Could not detect language');
+      }
+    } catch (err) {
+      console.error('[AIToolbar] Language detection failed:', err);
+      setError(err.message || 'Failed to detect language');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Handle Translate action with streaming
+   * @param {string} targetLang - Target language code (optional)
+   * @param {boolean} useAutoDetect - Whether to auto-detect source language (default: true)
+   */
+  const onTranslateClick = async (targetLang = null, useAutoDetect = true) => {
+    if (!selectedText) {
+      setError('No text selected');
+      return;
+    }
+    
+    // Cancel any ongoing request first
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
     }
     
     setIsLoading(true);
@@ -541,7 +1282,7 @@ const AIToolbar = () => {
     
     const targetLanguage = targetLang || selectedTargetLanguage || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
     
-    console.log('[AIToolbar] Translate clicked (streaming)');
+    console.log('[AIToolbar] Translate clicked (streaming, auto-detect:', useAutoDetect, ')');
     
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
@@ -552,17 +1293,23 @@ const AIToolbar = () => {
         throw new Error('Translator is disabled in settings');
       }
       
-      // Auto-detect source language
+      // Auto-detect source language if enabled
       let sourceLang = null;
-      try {
-        const { LanguageDetectorServiceProxy } = await import('../services/proxies');
-        const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
-        if (detectionResults && detectionResults.length > 0) {
-          sourceLang = detectionResults[0].detectedLanguage;
+      if (useAutoDetect) {
+        try {
+          const { LanguageDetectorServiceProxy } = await import('../services/proxies');
+          const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
+          if (detectionResults && detectionResults.length > 0) {
+            sourceLang = detectionResults[0].detectedLanguage;
+            
+            // Find and store full language name for display
+            const langInfo = TranslationLanguages.find(l => l.code === sourceLang);
+            setDetectedLanguageName(langInfo ? langInfo.name : sourceLang.toUpperCase());
+          }
+        } catch (err) {
+          console.warn('[AIToolbar] Language detection failed:', err);
+          throw new Error('Could not detect source language');
         }
-      } catch (err) {
-        console.warn('[AIToolbar] Language detection failed:', err);
-        throw new Error('Could not detect source language');
       }
       
       // Don't translate if source and target are the same
@@ -608,9 +1355,16 @@ const AIToolbar = () => {
    * @param {string} analysisType - 'describe', 'extract-text', or 'analyze'
    */
   const onImageAnalysisClick = async (analysisType) => {
-    if (!selectedImages || selectedImages.length === 0) {
+    // Check if we have any image source (hoveredImageElement OR selectedImages)
+    if (!hoveredImageElement && (!selectedImages || selectedImages.length === 0)) {
       setError('No images selected');
       return;
+    }
+    
+    // Cancel any ongoing request first
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
     }
     
     setIsLoading(true);
@@ -624,24 +1378,48 @@ const AIToolbar = () => {
     abortControllerRef.current = new AbortController();
     
     try {
-      // Use existing getSelection method to get container and selection
-      const { selection } = getSelection();
+      let processedMedia = null;
       
-      if (!selection || selection.rangeCount === 0) {
-        setError('No selection available');
-        setIsLoading(false);
-        return;
+      // Check if we have hoveredImageElement from image hover feature
+      if (hoveredImageElement) {
+        // Extract the hovered image using MediaExtractionService
+        console.log('[AIToolbar] Extracting hovered image for analysis');
+        
+        // If hoveredImageElement is an IMG element itself, we need to pass its parent
+        // and create a fake selection that contains only this image
+        const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
+        
+        // Create a fake selection that contains only the hovered image
+        const fakeSelection = {
+          containsNode: (node) => node === hoveredImageElement,
+          toString: () => ''
+        };
+        
+        processedMedia = await MediaExtractionService.processAndExtract({
+          container: containerToUse,
+          selection: fakeSelection
+        });
+      } else {
+        // Extract from selection
+        // Use existing getSelection method to get container and selection
+        const { selection } = getSelection();
+        
+        if (!selection || selection.rangeCount === 0) {
+          setError('No selection available');
+          setIsLoading(false);
+          return;
+        }
+        
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const containerEl = container.nodeType === 3 ? container.parentElement : container;
+        
+        // Convert image URLs to data URLs using MediaExtractionService
+        processedMedia = await MediaExtractionService.processAndExtract({
+          container: containerEl,
+          selection: selection
+        });
       }
-      
-      const range = selection.getRangeAt(0);
-      const container = range.commonAncestorContainer;
-      const containerEl = container.nodeType === 3 ? container.parentElement : container;
-      
-      // Convert image URLs to data URLs using MediaExtractionService
-      const processedMedia = await MediaExtractionService.processAndExtract({
-        container: containerEl,
-        selection: selection
-      });
       
       if (!processedMedia.images || processedMedia.images.length === 0) {
         setError('Failed to process images');
@@ -649,26 +1427,21 @@ const AIToolbar = () => {
         return;
       }
       
-      // Build prompt based on analysis type
+      // Build prompt based on analysis type using PromptConfig
       let prompt;
+      const imageCount = processedMedia.images.length;
       switch (analysisType) {
         case 'describe':
-          prompt = processedMedia.images.length === 1 
-            ? 'Describe this image in detail.'
-            : `Describe these ${processedMedia.images.length} images in detail.`;
+          prompt = PromptConfig.image.describe(imageCount);
           break;
         case 'extract-text':
-          prompt = processedMedia.images.length === 1
-            ? 'Extract all text from this image. If there is no text, say "No text found".'
-            : `Extract all text from these ${processedMedia.images.length} images. If there is no text, say "No text found".`;
+          prompt = PromptConfig.image.extractText(imageCount);
           break;
-        case 'analyze':
-          prompt = processedMedia.images.length === 1
-            ? 'Analyze this image and provide insights about what you see.'
-            : `Analyze these ${processedMedia.images.length} images and provide insights about what you see.`;
+        case 'identify-objects':
+          prompt = PromptConfig.image.identifyObjects(imageCount);
           break;
         default:
-          prompt = 'Describe this image.';
+          prompt = PromptConfig.image.describe(1);
       }
 
       // Format message with images for AIService
@@ -718,18 +1491,349 @@ const AIToolbar = () => {
   };
 
   /**
+   * Generic handler for Dictionary actions
+   * @param {string} actionType - Action type (e.g., 'define', 'synonyms', 'antonyms', 'pronunciation', 'examples')
+   * @param {string} actionName - Display name for logging
+   * @param {Function} promptBuilder - Function that takes the word and returns the prompt string
+   */
+  const handleDictionaryAction = async (actionType, actionName, promptBuilder) => {
+    if (!selectedText) {
+      setError('No word selected');
+      return;
+    }
+    
+    // Cancel any ongoing request first
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
+    }
+    
+    setIsLoading(true);
+    setAction(`dictionary-${actionType}`);
+    setError('');
+    setResult('');
+    
+    console.log(`[AIToolbar] ${actionName} clicked (streaming)`);
+    
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      const word = selectedText.trim();
+      const prompt = promptBuilder(word);
+      const messages = [{ role: 'user', content: prompt }];
+      let fullResponse = '';
+      
+      console.log(`[AIToolbar] Sending ${actionName} request with messages:`, messages);
+      
+      const response = await AIServiceProxy.sendMessage(messages, (chunk) => {
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log(`[AIToolbar] ${actionName} streaming aborted`);
+          return;
+        }
+        console.log(`[AIToolbar] ${actionName} chunk received:`, chunk);
+        fullResponse += chunk;
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResult(fullResponse);
+        }
+      });
+      
+      console.log(`[AIToolbar] ${actionName} response object:`, response);
+      console.log(`[AIToolbar] ${actionName} fullResponse:`, fullResponse);
+      
+      // Check if request was cancelled
+      if (response?.cancelled) {
+        console.log(`[AIToolbar] ${actionName} request was cancelled`);
+        return;
+      }
+      
+      // Check for errors
+      if (!response?.success) {
+        const errorMsg = response?.error?.message || 'AI request failed';
+        console.error(`[AIToolbar] ${actionName} request failed:`, response?.error);
+        setError(errorMsg);
+        return;
+      }
+      
+      // Handle non-streaming response
+      if (response?.response && !fullResponse) {
+        console.log(`[AIToolbar] Using non-streaming response`);
+        setResult(response.response);
+      }
+      
+      // If we still have no result, show error
+      if (!fullResponse && !response?.response) {
+        console.error(`[AIToolbar] No response received from AI`);
+        setError('No response received from AI service');
+      }
+      
+      console.log(`[AIToolbar] ${actionName} streaming complete`);
+    } catch (err) {
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error(`[AIToolbar] ${actionName} failed:`, err);
+        setError(`${actionName} lookup failed: ` + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  /**
+   * Handle Dictionary action - Get word definition
+   */
+  const onDictionaryClick = async () => {
+    await handleDictionaryAction('define', 'Dictionary', (word) => PromptConfig.dictionary.define(word));
+  };
+
+  /**
+   * Handle Synonyms action
+   */
+  const onSynonymsClick = async () => {
+    await handleDictionaryAction('synonyms', 'Synonyms', (word) => PromptConfig.dictionary.synonyms(word));
+  };
+
+  /**
+   * Handle Antonyms action
+   */
+  const onAntonymsClick = async () => {
+    await handleDictionaryAction('antonyms', 'Antonyms', (word) => PromptConfig.dictionary.antonyms(word));
+  };
+
+  /**
+   * Handle Pronunciation action
+   */
+  const onPronunciationClick = async () => {
+    await handleDictionaryAction('pronunciation', 'Pronunciation', (word) => PromptConfig.dictionary.pronunciation(word));
+  };
+
+  /**
+   * Handle Examples action
+   */
+  const onExamplesClick = async () => {
+    await handleDictionaryAction('examples', 'Examples', (word) => PromptConfig.dictionary.examples(word));
+  };
+
+  /**
+   * Generic text improvement handler
+   * @param {string} actionType - Type of improvement ('grammar', 'spelling', etc.)
+   * @param {string} actionName - Display name for action
+   * @param {string} prompt - AI prompt for improvement
+   */
+  const handleTextImprovement = async (actionType, actionName, prompt) => {
+    if (!selectedText) {
+      setError('No text selected');
+      return;
+    }
+    
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      await abortPreviousRequest();
+    }
+    
+    setIsLoading(true);
+    setAction(`improve-${actionType}`);
+    setError('');
+    setResult('');
+    setHasInserted(false); // Reset insert state for new improvement
+    hasInsertedRef.current = false; // Reset ref for new improvement
+    setImprovedContent(null); // Clear improved content on new improvement
+    
+    console.log(`[AIToolbar] ${actionName} clicked (streaming)`);
+    
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      const text = selectedText.trim();
+      const fullPrompt = prompt.replace('{text}', text);
+      
+      const messages = [{ role: 'user', content: fullPrompt }];
+      let fullResponse = '';
+      
+      const response = await AIServiceProxy.sendMessage(messages, (chunk) => {
+        if (abortControllerRef.current?.signal.aborted) return;
+        fullResponse += chunk;
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResult(fullResponse);
+        }
+      });
+      
+      // Check if request was cancelled
+      if (response?.cancelled) return;
+      
+      // Check for errors
+      if (!response?.success) {
+        setError(response?.error?.message || 'AI request failed');
+        return;
+      }
+      
+      // Handle non-streaming response
+      if (response?.response && !fullResponse) {
+        setResult(response.response);
+      } else if (!fullResponse && !response?.response) {
+        setError('No response received from AI service');
+      }
+      
+      console.log(`[AIToolbar] ${actionName} streaming complete`);
+    } catch (err) {
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error(`[AIToolbar] ${actionName} failed:`, err);
+        setError(`${actionName} failed: ` + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  /**
+   * Fix Grammar
+   */
+  const onFixGrammarClick = async () => {
+    const prompt = PromptConfig.textImprovement.grammar('{text}');
+    await handleTextImprovement('grammar', 'Fix Grammar', prompt);
+  };
+
+  /**
+   * Fix Spelling
+   */
+  const onFixSpellingClick = async () => {
+    const prompt = PromptConfig.textImprovement.spelling('{text}');
+    await handleTextImprovement('spelling', 'Fix Spelling', prompt);
+  };
+
+  /**
+   * Make Professional
+   */
+  const onMakeProfessionalClick = async () => {
+    const prompt = PromptConfig.textImprovement.professional('{text}');
+    await handleTextImprovement('professional', 'Make Professional', prompt);
+  };
+
+  /**
+   * Make Casual
+   */
+  const onMakeCasualClick = async () => {
+    const prompt = PromptConfig.textImprovement.casual('{text}');
+    await handleTextImprovement('casual', 'Make Casual', prompt);
+  };
+
+  /**
+   * Improve Clarity
+   */
+  const onImproveClarityClick = async () => {
+    const prompt = PromptConfig.textImprovement.clarity('{text}');
+    await handleTextImprovement('clarity', 'Improve Clarity', prompt);
+  };
+
+  /**
+   * Expand
+   */
+  const onExpandClick = async () => {
+    const prompt = PromptConfig.textImprovement.expand('{text}');
+    await handleTextImprovement('expand', 'Expand', prompt);
+  };
+
+  /**
+   * Make Concise
+   */
+  const onMakeConciseClick = async () => {
+    const prompt = PromptConfig.textImprovement.concise('{text}');
+    await handleTextImprovement('concise', 'Make Concise', prompt);
+  };
+
+  /**
+   * Make Formal
+   */
+  const onMakeFormalClick = async () => {
+    const prompt = PromptConfig.textImprovement.formal('{text}');
+    await handleTextImprovement('formal', 'Make Formal', prompt);
+  };
+
+  /**
+   * Simplify
+   */
+  const onSimplifyClick = async () => {
+    const prompt = PromptConfig.textImprovement.simplify('{text}');
+    await handleTextImprovement('simplify', 'Simplify', prompt);
+  };
+
+  /**
+   * Helper to abort previous request
+   */
+  const abortPreviousRequest = async () => {
+    try {
+      if (action?.startsWith('summarize-')) {
+        await SummarizerServiceProxy.abort();
+      } else if (action === 'translate' || action === 'detect-language') {
+        await TranslatorServiceProxy.abort();
+      } else if (action?.startsWith('image-') || action?.startsWith('dictionary-') || action?.startsWith('improve-')) {
+        await AIServiceProxy.abortRequest();
+      }
+    } catch (err) {
+      console.error('[AIToolbar] Service abort failed:', err);
+    }
+  };
+
+  /**
    * Handle Regenerate action
    */
   const onRegenerateClick = async () => {
     setIsRegenerating(true);
     
-    if (action === 'summarize') {
-      await onSummarizeClick();
+    if (action?.startsWith('summarize-')) {
+      const summaryType = action.replace('summarize-', '');
+      await onSummarizeClick(summaryType);
     } else if (action === 'translate') {
       await onTranslateClick(selectedTargetLanguage);
+    } else if (action === 'detect-language') {
+      await onDetectLanguageClick();
     } else if (action?.startsWith('image-')) {
       const analysisType = action.replace('image-', '');
       await onImageAnalysisClick(analysisType);
+    } else if (action?.startsWith('dictionary-')) {
+      const dictAction = action.replace('dictionary-', '');
+      switch (dictAction) {
+        case 'define':
+          await onDictionaryClick();
+          break;
+        case 'synonyms':
+          await onSynonymsClick();
+          break;
+        case 'antonyms':
+          await onAntonymsClick();
+          break;
+        case 'pronunciation':
+          await onPronunciationClick();
+          break;
+        case 'examples':
+          await onExamplesClick();
+          break;
+      }
+    } else if (action?.startsWith('improve-')) {
+      const improveAction = action.replace('improve-', '');
+      switch (improveAction) {
+        case 'grammar':
+          await onFixGrammarClick();
+          break;
+        case 'spelling':
+          await onFixSpellingClick();
+          break;
+        case 'professional':
+          await onMakeProfessionalClick();
+          break;
+        case 'formal':
+          await onMakeFormalClick();
+          break;
+        case 'simplify':
+          await onSimplifyClick();
+          break;
+        case 'expand':
+          await onExpandClick();
+          break;
+        case 'concise':
+          await onMakeConciseClick();
+          break;
+      }
     }
     
     setIsRegenerating(false);
@@ -741,27 +1845,49 @@ const AIToolbar = () => {
   const onAddToChatClick = async () => {
     console.log('[AIToolbar] Add to Chat clicked');
     
-    if (!selectedText && selectedImages.length === 0 && selectedAudios.length === 0) {
+    // Check if we have hoveredImageElement or selection
+    if (!hoveredImageElement && !selectedText && selectedImages.length === 0 && selectedAudios.length === 0) {
       setError('Nothing selected');
       return;
     }
     
-    // Get selection again to get container
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      setError('Selection lost');
-      return;
+    // Get selection again to get container (only if not using hoveredImageElement)
+    let result;
+    
+    if (hoveredImageElement) {
+      console.log('[AIToolbar] Extracting hovered image for Add to Chat');
+      
+      // If hoveredImageElement is an IMG element itself, we need to pass its parent
+      // and create a fake selection that contains only this image
+      const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
+      
+      // Create a fake selection that contains only the hovered image
+      const fakeSelection = {
+        containsNode: (node) => node === hoveredImageElement,
+        toString: () => ''
+      };
+      
+      result = await MediaExtractionService.processAndExtract({
+        container: containerToUse,
+        selection: fakeSelection
+      });
+    } else {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        setError('Selection lost');
+        return;
+      }
+      
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const containerEl = container.nodeType === 3 ? container.parentElement : container;
+      
+      // Use single MediaExtractionService method
+      result = await MediaExtractionService.processAndExtract({
+        container: containerEl,
+        selection: selection
+      });
     }
-    
-    const range = selection.getRangeAt(0);
-    const container = range.commonAncestorContainer;
-    const containerEl = container.nodeType === 3 ? container.parentElement : container;
-    
-    // Use single MediaExtractionService method
-    const result = await MediaExtractionService.processAndExtract({
-      container: containerEl,
-      selection: selection
-    });
     
     console.log('[AIToolbar] Extracted data:', result);
     
@@ -772,9 +1898,8 @@ const AIToolbar = () => {
       audios: result.audios
     });
     
-    // Hide toolbar and reset hover state
+    // Hide toolbar
     setIsVisible(false);
-    setHoveredButton(null);
   };
 
   /**
@@ -790,21 +1915,473 @@ const AIToolbar = () => {
     }
   };
 
+  /**
+   * Handle Insert - replace selected text with improved version
+   */
+  /**
+   * Generic handler for content manipulation (Insert, Undo/Redo Toggle)
+   * @param {string} operation - 'insert' or 'toggle'
+   */
+  const handleContentManipulation = async (operation) => {
+    if (!editableElement || !isEditableContent) return;
+    
+    let newContent = '';
+    let restoreSelection = false;
+    let selectionStart = 0;
+    let selectionEnd = 0;
+    
+    // Determine the operation specifics
+    if (operation === 'insert') {
+      if (!result) return;
+      newContent = result;
+      // Insert will select the new content
+    } else if (operation === 'toggle') {
+      // Toggle between original and improved content
+      if (hasInserted) {
+        // Currently showing improved - switch to original
+        if (!originalContent) return;
+        newContent = originalContent;
+        restoreSelection = true;
+        selectionStart = editableSelectionStart;
+        selectionEnd = editableSelectionEnd;
+      } else {
+        // Currently showing original - switch to improved
+        if (!improvedContent) return;
+        newContent = improvedContent;
+      }
+    } else {
+      return;
+    }
+    
+    console.log(`[AIToolbar] ${operation.charAt(0).toUpperCase() + operation.slice(1)} operation started`);
+    
+    try {
+      if (editableType === 'input' || editableType === 'textarea') {
+        // Update the value based on operation
+        if (operation === 'insert') {
+          // For insert, replace only the selected portion
+          const currentValue = editableElement.value;
+          const start = editableSelectionStart;
+          const end = editableSelectionEnd;
+          const improvedValue = currentValue.substring(0, start) + newContent + currentValue.substring(end);
+          
+          // Store improved content for toggling
+          setImprovedContent(improvedValue);
+          
+          editableElement.value = improvedValue;
+          selectionStart = start;
+          selectionEnd = start + newContent.length;
+        } else {
+          // For toggle, replace entire value
+          editableElement.value = newContent;
+          if (!hasInserted) {
+            // Switching to improved - select the improved portion
+            selectionStart = editableSelectionStart;
+            selectionEnd = editableSelectionStart + (improvedContent.length - originalContent.length + (editableSelectionEnd - editableSelectionStart));
+          }
+        }
+        
+        // Trigger events
+        editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+        editableElement.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // Handle selection
+        editableElement.focus();
+        editableElement.setSelectionRange(selectionStart, selectionEnd);
+        
+      } else if (editableType === 'contenteditable') {
+        if (operation === 'insert') {
+          // For insert, work with current selection
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            
+            // Insert the new text (convert newlines to <br>)
+            const fragment = document.createDocumentFragment();
+            const lines = newContent.split('\n');
+            lines.forEach((line, index) => {
+              fragment.appendChild(document.createTextNode(line));
+              if (index < lines.length - 1) {
+                fragment.appendChild(document.createElement('br'));
+              }
+            });
+            
+            const firstNode = fragment.firstChild;
+            const lastNode = fragment.lastChild;
+            range.insertNode(fragment);
+            
+            // Store improved content for toggling
+            setImprovedContent(editableElement.innerHTML);
+            
+            // Trigger input event
+            editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Select the inserted text
+            if (firstNode && lastNode) {
+              range.setStartBefore(firstNode);
+              range.setEndAfter(lastNode);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          }
+        } else {
+          // For toggle, replace innerHTML
+          editableElement.innerHTML = newContent;
+          editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+          editableElement.focus();
+          
+          // Handle selection based on toggle direction
+          try {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            
+            if (hasInserted && restoreSelection && selectedText) {
+              // Switching to original - try to restore original selection
+              const textNodes = [];
+              const walk = document.createTreeWalker(editableElement, NodeFilter.SHOW_TEXT, null);
+              let node;
+              while ((node = walk.nextNode())) {
+                textNodes.push(node);
+              }
+              
+              if (textNodes.length > 0) {
+                let charCount = 0;
+                let startNode = null;
+                let startOffset = 0;
+                let endNode = null;
+                let endOffset = 0;
+                let found = false;
+                
+                for (const textNode of textNodes) {
+                  const nodeLength = textNode.textContent.length;
+                  
+                  if (!found && charCount + nodeLength >= selectionStart) {
+                    startNode = textNode;
+                    startOffset = selectionStart - charCount;
+                    found = true;
+                  }
+                  
+                  if (found && charCount + nodeLength >= selectionEnd) {
+                    endNode = textNode;
+                    endOffset = selectionEnd - charCount;
+                    break;
+                  }
+                  
+                  charCount += nodeLength;
+                }
+                
+                if (startNode && endNode) {
+                  range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+                  range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }
+              }
+            } else {
+              // Switching to improved - select all content
+              range.selectNodeContents(editableElement);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          } catch (selectionErr) {
+            console.warn(`[AIToolbar] Could not restore selection for toggle:`, selectionErr);
+          }
+        }
+      }
+      
+      // Update state based on operation
+      if (operation === 'insert') {
+        setHasInserted(true);
+        hasInsertedRef.current = true;
+        setResult('');
+        setError('');
+        console.log('[AIToolbar] Text inserted successfully and selected, panel closed');
+      } else if (operation === 'toggle') {
+        setHasInserted(!hasInserted); // Toggle state
+        hasInsertedRef.current = !hasInsertedRef.current;
+        console.log(`[AIToolbar] Toggled to ${hasInserted ? 'original' : 'improved'} content`);
+      }
+      
+    } catch (err) {
+      console.error(`[AIToolbar] Failed to ${operation}:`, err);
+      setError(`Failed to ${operation}: ` + (err.message || 'Unknown error'));
+    }
+  };
+
+  /**
+   * Handle Insert - insert improved text
+   */
+  const onInsertClick = async () => {
+    // Stop dictation recording if active
+    if (action === 'dictation' && isRecording) {
+      console.log('[AIToolbar] Stopping dictation on Insert click');
+      VoiceRecordingService.stop();
+      setIsRecording(false);
+    }
+    
+    await handleContentManipulation('insert');
+  };
+
+  /**
+   * Handle Undo - Restore original content
+   */
+  const onUndoClick = async () => {
+    if (!hasInserted || !originalContent || !editableElement) return;
+    
+    // Restore original content
+    if (editableType === 'contenteditable') {
+      editableElement.innerHTML = originalContent;
+      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+      editableElement.focus();
+      
+      // Restore selection for contenteditable
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editableElement);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // Update selected text state to keep toolbar visible
+        setSelectedText(editableElement.textContent || editableElement.innerText);
+      } catch (err) {
+        console.warn('[AIToolbar] Could not restore selection after undo:', err);
+      }
+    } else {
+      editableElement.value = originalContent;
+      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+      editableElement.focus();
+      
+      // Restore selection for input/textarea
+      editableElement.setSelectionRange(0, originalContent.length);
+      
+      // Update selected text state to keep toolbar visible
+      setSelectedText(originalContent);
+    }
+    
+    setHasInserted(false);
+    hasInsertedRef.current = false;
+    setResultPanelActive(true); // Keep result panel active to prevent toolbar from disappearing
+    console.log('[AIToolbar] Undo: Restored original content with selection');
+  };
+
+  /**
+   * Handle Redo - Restore improved content
+   */
+  const onRedoClick = async () => {
+    if (hasInserted || !improvedContent || !editableElement) return;
+    
+    // Restore improved content
+    if (editableType === 'contenteditable') {
+      editableElement.innerHTML = improvedContent;
+      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+      editableElement.focus();
+      
+      // Restore selection for contenteditable
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editableElement);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // Update selected text state to keep toolbar visible
+        setSelectedText(editableElement.textContent || editableElement.innerText);
+      } catch (err) {
+        console.warn('[AIToolbar] Could not restore selection after redo:', err);
+      }
+    } else {
+      editableElement.value = improvedContent;
+      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+      editableElement.focus();
+      
+      // Restore selection for input/textarea
+      editableElement.setSelectionRange(0, improvedContent.length);
+      
+      // Update selected text state to keep toolbar visible
+      setSelectedText(improvedContent);
+    }
+    
+    setHasInserted(true);
+    hasInsertedRef.current = true;
+    setResultPanelActive(true); // Keep result panel active to prevent toolbar from disappearing
+    console.log('[AIToolbar] Redo: Restored improved content with selection');
+  };
+
+  /**
+   * Handle dictation button click
+   * Continuous dictation mode with VAD (Voice Activity Detection):
+   * - Manual mode: User clicks Insert to insert all accumulated text
+   * - Auto mode: Text already inserted sentence-by-sentence, cursor at end
+   */
+  const onDictationClick = async () => {
+    try {
+      if (!isRecording) {
+        const hasSelection = selectedText && selectedText.trim().length > 0;
+        const mode = hasSelection ? 'manual' : 'auto-insert';
+        setDictationMode(mode);
+        setIsRecording(true);
+        setRecordingDuration(0);
+        setAccumulatedTranscription(''); // Clear previous transcription
+        setAction('dictation'); // Set action to show result panel
+        setResult(''); // Clear previous result
+        setError('');
+        isProcessingRef.current = false;
+        
+        console.log(`[AIToolbar] Starting dictation session in ${mode} mode with VAD`);
+        
+        // Start duration timer
+        const startTime = Date.now();
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingDuration(Math.floor((Date.now() - startTime) / 1000));
+        }, 100);
+        
+        // Start VoiceRecordingService with VAD
+        // VAD will auto-detect speech and silence, transcribing each sentence
+        await VoiceRecordingService.start({
+          onTranscription: (transcription) => {
+            console.log(`[AIToolbar] VAD transcription received: "${transcription}"`);
+            
+            if (mode === 'auto-insert') {
+              // ========== AUTO-INSERT MODE ==========
+              // Insert each sentence at cursor as it's transcribed
+              if (editableElement && isEditableContent) {
+                const separator = accumulatedTranscription ? ' ' : ''; // Add space between sentences
+                
+                // Restore focus to input if lost
+                if (document.activeElement !== editableElement) {
+                  editableElement.focus();
+                }
+                
+                if (editableType === 'contenteditable') {
+                  // ContentEditable handling
+                  let range;
+                  if (savedCursorPositionRef.current?.range) {
+                    // Use saved cursor position
+                    range = savedCursorPositionRef.current.range;
+                  } else {
+                    const selection = window.getSelection();
+                    if (selection.rangeCount > 0) {
+                      range = selection.getRangeAt(0);
+                    }
+                  }
+                  
+                  if (range) {
+                    range.deleteContents();
+                    range.insertNode(document.createTextNode(separator + transcription));
+                    range.collapse(false);
+                    // Update saved position for next insertion
+                    savedCursorPositionRef.current = { element: editableElement, range: range.cloneRange() };
+                  }
+                } else {
+                  // Input/textarea handling - use saved cursor position or current position
+                  const currentValue = editableElement.value;
+                  const cursorPos = savedCursorPositionRef.current?.start ?? editableElement.selectionStart ?? editableSelectionStart;
+                  const newValue = 
+                    currentValue.slice(0, cursorPos) + 
+                    separator + transcription + 
+                    currentValue.slice(cursorPos);
+                  editableElement.value = newValue;
+                  const newCursorPos = cursorPos + separator.length + transcription.length;
+                  editableElement.setSelectionRange(newCursorPos, newCursorPos);
+                  // Trigger input event for React
+                  editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+                  
+                  // Update cursor position for next insertion
+                  setEditableSelectionStart(newCursorPos);
+                  setEditableSelectionEnd(newCursorPos);
+                  // Update saved position
+                  savedCursorPositionRef.current = { element: editableElement, start: newCursorPos, end: newCursorPos };
+                }
+                
+                // Update accumulated transcription (for display/tracking)
+                setAccumulatedTranscription(prev => prev + separator + transcription);
+                console.log(`[AIToolbar] Auto-inserted sentence: "${transcription}" at cursor position`);
+              }
+            } else {
+              // Accumulate each sentence in result panel for later insert
+              setAccumulatedTranscription(prev => {
+                const separator = prev ? ' ' : '';
+                const newText = prev + separator + transcription;
+                setResult(newText); // Update result panel with all accumulated text
+                console.log(`[AIToolbar] Added sentence to result panel. Total: "${newText}"`);
+                return newText;
+              });
+            }
+          },
+          onError: (errorMsg) => {
+            console.error('[AIToolbar] Dictation error:', errorMsg);
+            setError(errorMsg.message || errorMsg.toString());
+            setIsRecording(false);
+            if (recordingIntervalRef.current) {
+              clearInterval(recordingIntervalRef.current);
+              recordingIntervalRef.current = null;
+            }
+          },
+          onRecordingStart: () => {
+            console.log('[AIToolbar] VAD detected speech - recording started');
+            // Visual feedback could be added here (pulsing mic icon)
+          },
+          onRecordingStop: () => {
+            console.log('[AIToolbar] VAD detected silence - recording stopped, processing transcription...');
+            // Each pause triggers transcription, which calls onTranscription above
+            // No need to change isRecording state - VAD will continue monitoring
+          },
+          onVolumeChange: (volume) => {
+            // Could use for visual feedback (volume meter)
+            // console.log(`Volume: ${volume}`);
+          }
+        });
+        
+      } else {
+        console.log('[AIToolbar] Stopping dictation session (VAD will stop monitoring)');
+        VoiceRecordingService.stop();
+        setIsRecording(false);
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = null;
+        }
+        // IMPORTANT: Toolbar stays open with accumulated transcription
+        console.log('[AIToolbar] Dictation session ended, toolbar remains open');
+      }
+    } catch (error) {
+      console.error('[AIToolbar] Dictation error:', error);
+      setError(error.message || 'Failed to start dictation');
+      setIsRecording(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+  };
+
+  // Cleanup recording timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+    };
+  }, []);
+
   if (!isEnabled || !isVisible) {
     return null;
   }
 
+  // Determine selection type for conditional rendering
+  const { isSingleWord } = getSelectionType(selectedText);
+  
+  // Check if we have text selection (not just images)
+  const hasTextSelection = selectedText && selectedText.trim().length > 0;
+
   return (
     <>
-      {!result && !error && (
+      {isVisible && (
         <div
           ref={toolbarRef}
           onMouseEnter={() => {
-            // Keep hover state while inside toolbar
-          }}
-          onMouseLeave={() => {
-            // Clear hover when leaving entire toolbar
-            setHoveredButton(null);
+            // Toolbar is visible, no need for timeout cleanup
           }}
           className={`
             fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px] 
@@ -816,347 +2393,377 @@ const AIToolbar = () => {
             zIndex: 999999,
           }}
         >
-          {/* Toolbar buttons - Expand on hover to show text */}
-          <button
-            onClick={onSummarizeClick}
-            disabled={isLoading || !selectedText}
-            onMouseEnter={() => setHoveredButton('summarize')}
-            className={`
-              min-w-8 h-8 flex items-center justify-center gap-1.5
-              rounded-2xl border-none text-base
-              whitespace-nowrap overflow-hidden
-              transition-all duration-300 ease-in-out
-              ${hoveredButton === 'summarize' ? 'bg-blue-500/20 opacity-100' : 'bg-transparent opacity-80'}
-              ${isLoading || !selectedText ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-              ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-            `}
-            style={{
-              padding: hoveredButton === 'summarize' ? '0 12px 0 8px' : '0',
-            }}
-            title="Summarize selected text"
-          >
-            <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'summarize' ? 'animate-spin' : ''}`}>
-              {isLoading && action === 'summarize' ? '⏳' : '📝'}
-            </span>
-            <span 
-              className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-              style={{
-                opacity: hoveredButton === 'summarize' ? 1 : 0,
-                maxWidth: hoveredButton === 'summarize' ? '100px' : '0',
-                transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
-              }}
-            >
-              Summarize
-            </span>
-          </button>          <button
-            onClick={() => onTranslateClick()}
-            disabled={isLoading || !selectedText}
-            onMouseEnter={() => setHoveredButton('translate')}
-            className={`
-              min-w-8 h-8 flex items-center justify-center gap-1.5
-              rounded-2xl border-none text-base
-              whitespace-nowrap overflow-hidden
-              transition-all duration-300 ease-in-out
-              ${hoveredButton === 'translate' ? 'bg-emerald-500/20 opacity-100' : 'bg-transparent opacity-80'}
-              ${isLoading || !selectedText ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-              ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-            `}
-            style={{
-              padding: hoveredButton === 'translate' ? '0 12px 0 8px' : '0',
-            }}
-            title="Translate selected text"
-          >
-            <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'translate' ? 'animate-spin' : ''}`}>
-              {isLoading && action === 'translate' ? '⏳' : '🌐'}
-            </span>
-            <span 
-              className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-              style={{
-                opacity: hoveredButton === 'translate' ? 1 : 0,
-                maxWidth: hoveredButton === 'translate' ? '100px' : '0',
-                transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
-              }}
-            >
-              Translate
-            </span>
-          </button>
+          {/* Toolbar buttons with labels - Expand sub-options on hover */}
           
-          {/* Image Analysis buttons - only show when images are selected */}
-          {selectedImages.length > 0 && (
-            <>
-              {/* Visual separator before image buttons */}
-              <div className="w-px h-6 bg-white/20 mx-1"></div>
-              
-              <button
-                onClick={() => onImageAnalysisClick('describe')}
-                disabled={isLoading}
-                onMouseEnter={() => setHoveredButton('image-describe')}
-                className={`
-                  min-w-8 h-8 flex items-center justify-center gap-1.5
-                  rounded-2xl border-none text-base
-                  whitespace-nowrap overflow-hidden
-                  transition-all duration-300 ease-in-out
-                  ${hoveredButton === 'image-describe' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
-                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-                `}
-                style={{
-                  padding: hoveredButton === 'image-describe' ? '0 12px 0 8px' : '0',
-                }}
-                title="Describe image"
-              >
-                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-describe' ? 'animate-spin' : ''}`}>
-                  {isLoading && action === 'image-describe' ? '⏳' : '🖼️'}
-                </span>
-                <span 
-                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-                  style={{
-                    opacity: hoveredButton === 'image-describe' ? 1 : 0,
-                    maxWidth: hoveredButton === 'image-describe' ? '120px' : '0',
-                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
-                  }}
-                >
-                  Describe Image
-                </span>
-              </button>
-              
-              <button
-                onClick={() => onImageAnalysisClick('extract-text')}
-                disabled={isLoading}
-                onMouseEnter={() => setHoveredButton('image-extract')}
-                className={`
-                  min-w-8 h-8 flex items-center justify-center gap-1.5
-                  rounded-2xl border-none text-base
-                  whitespace-nowrap overflow-hidden
-                  transition-all duration-300 ease-in-out
-                  ${hoveredButton === 'image-extract' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
-                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-                `}
-                style={{
-                  padding: hoveredButton === 'image-extract' ? '0 12px 0 8px' : '0',
-                }}
-                title="Extract text from image"
-              >
-                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-extract-text' ? 'animate-spin' : ''}`}>
-                  {isLoading && action === 'image-extract-text' ? '⏳' : '📄'}
-                </span>
-                <span 
-                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-                  style={{
-                    opacity: hoveredButton === 'image-extract' ? 1 : 0,
-                    maxWidth: hoveredButton === 'image-extract' ? '100px' : '0',
-                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
-                  }}
-                >
-                  Extract Text
-                </span>
-              </button>
-              
-              <button
-                onClick={() => onImageAnalysisClick('analyze')}
-                disabled={isLoading}
-                onMouseEnter={() => setHoveredButton('image-analyze')}
-                className={`
-                  min-w-8 h-8 flex items-center justify-center gap-1.5
-                  rounded-2xl border-none text-base
-                  whitespace-nowrap overflow-hidden
-                  transition-all duration-300 ease-in-out
-                  ${hoveredButton === 'image-analyze' ? 'bg-amber-500/20 opacity-100' : 'bg-transparent opacity-80'}
-                  ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-                  ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-                `}
-                style={{
-                  padding: hoveredButton === 'image-analyze' ? '0 12px 0 8px' : '0',
-                }}
-                title="Analyze image content"
-              >
-                <span className={`inline-block transition-opacity duration-200 ${isLoading && action === 'image-analyze' ? 'animate-spin' : ''}`}>
-                  {isLoading && action === 'image-analyze' ? '⏳' : '🔍'}
-                </span>
-                <span 
-                  className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-                  style={{
-                    opacity: hoveredButton === 'image-analyze' ? 1 : 0,
-                    maxWidth: hoveredButton === 'image-analyze' ? '120px' : '0',
-                    transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
-                  }}
-                >
-                  Analyze Content
-                </span>
-              </button>
-              
-              {/* Visual separator after image buttons */}
-              <div className="w-px h-6 bg-white/20 mx-1"></div>
-            </>
+          {/* Dictionary Group - Only show for single words/short selections with text */}
+          {hasTextSelection && isSingleWord && (
+            <ToolbarSection
+              isLoading={isLoading}
+              isLightBackground={isLightBackgroundToolbar}
+              mainButton={{
+                icon: '📖',
+                label: 'Dictionary',
+                onClick: () => onDictionaryClick(),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'dictionary-define',
+                actionType: 'dictionary',
+                title: 'Get word definition',
+                maxLabelWidth: '100px',
+              }}
+              subButtons={[
+                {
+                  icon: '🔄',
+                  label: 'Synonyms',
+                  onClick: () => onSynonymsClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'dictionary-synonyms',
+                  actionType: 'dictionary',
+                  title: 'Find similar words',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '↔️',
+                  label: 'Antonyms',
+                  onClick: () => onAntonymsClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'dictionary-antonyms',
+                  actionType: 'dictionary',
+                  title: 'Find opposite words',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '🔊',
+                  label: 'Pronunciation',
+                  onClick: () => onPronunciationClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'dictionary-pronunciation',
+                  actionType: 'dictionary',
+                  title: 'Get pronunciation guide',
+                  maxLabelWidth: '120px',
+                },
+                {
+                  icon: '💡',
+                  label: 'Examples',
+                  onClick: () => onExamplesClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'dictionary-examples',
+                  actionType: 'dictionary',
+                  title: 'See usage examples',
+                  maxLabelWidth: '100px',
+                },
+              ]}
+            />
           )}
           
-          <button
-            onClick={onAddToChatClick}
-            disabled={isLoading}
-            onMouseEnter={() => setHoveredButton('chat')}
-            className={`
-              min-w-8 h-8 flex items-center justify-center gap-1.5
-              rounded-2xl border-none text-base
-              whitespace-nowrap overflow-hidden
-              transition-all duration-300 ease-in-out
-              ${hoveredButton === 'chat' ? 'bg-purple-500/20 opacity-100' : 'bg-transparent opacity-80'}
-              ${isLoading ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-              ${isLightBackgroundToolbar ? 'text-white' : 'text-white'}
-            `}
-            style={{
-              padding: hoveredButton === 'chat' ? '0 12px 0 8px' : '0',
-            }}
-            title="Add to chat"
-          >
-            <span className="transition-opacity duration-200">💬</span>
-            <span 
-              className="text-[13px] font-medium transition-opacity duration-300 delay-100"
-              style={{
-                opacity: hoveredButton === 'chat' ? 1 : 0,
-                maxWidth: hoveredButton === 'chat' ? '100px' : '0',
-                transition: 'opacity 0.3s ease 0.1s, max-width 0.3s ease',
+          {/* Improve Text Group - Only show for editable content */}
+          {hasTextSelection && isEditableContent && (
+            <ToolbarSection
+              isLoading={isLoading}
+              isLightBackground={isLightBackgroundToolbar}
+              mainButton={{
+                icon: '✍️',
+                label: 'Improve',
+                onClick: () => onFixGrammarClick(),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'improve-grammar',
+                actionType: 'improve',
+                title: 'Fix grammar (default)',
+                maxLabelWidth: '100px',
               }}
-            >
-              Add to Chat
-            </span>
-          </button>
+              subButtons={[
+                {
+                  icon: '✓',
+                  label: 'Spelling',
+                  onClick: () => onFixSpellingClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-spelling',
+                  actionType: 'improve',
+                  title: 'Fix spelling',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '💼',
+                  label: 'Professional',
+                  onClick: () => onMakeProfessionalClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-professional',
+                  actionType: 'improve',
+                  title: 'Make professional',
+                  maxLabelWidth: '110px',
+                },
+                {
+                  icon: '🎩',
+                  label: 'Formal',
+                  onClick: () => onMakeFormalClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-formal',
+                  actionType: 'improve',
+                  title: 'Make formal',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '📖',
+                  label: 'Simplify',
+                  onClick: () => onSimplifyClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-simplify',
+                  actionType: 'improve',
+                  title: 'Simplify text',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '📝',
+                  label: 'Expand',
+                  onClick: () => onExpandClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-expand',
+                  actionType: 'improve',
+                  title: 'Expand text',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: '⚡',
+                  label: 'Concise',
+                  onClick: () => onMakeConciseClick(),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'improve-concise',
+                  actionType: 'improve',
+                  title: 'Make concise',
+                  maxLabelWidth: '100px',
+                },
+              ]}
+            />
+          )}
+          
+          {/* Dictation Button - Only show for editable content */}
+          {isEditableContent && (
+            <ToolbarButton
+              icon={isRecording ? "⏹️" : "🎤"}
+              label={isRecording ? `${recordingDuration}s` : "Dictate"}
+              onClick={onDictationClick}
+              disabled={false}
+              isLoading={isRecording}
+              actionType="dictation"
+              title={
+                isRecording 
+                  ? "Click to stop recording" 
+                  : (selectedText && selectedText.trim().length > 0)
+                    ? "Record and insert via button"
+                    : "Record and auto-insert at cursor"
+              }
+              maxLabelWidth="80px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Insert button - Only show when result is ready for editable content */}
+          {result && !hasInserted && isEditableContent && (action?.startsWith('improve-') || action === 'dictation' || action === 'translate') && (
+            <ToolbarButton
+              icon="✏️"
+              label="Insert"
+              onClick={onInsertClick}
+              disabled={false}
+              isLoading={false}
+              actionType="insert"
+              title="Insert improved text"
+              maxLabelWidth="80px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Undo button - Restore original text after insert */}
+          {hasInserted && isEditableContent && originalContent && (
+            <ToolbarButton
+              icon="↩️"
+              label="Undo"
+              onClick={onUndoClick}
+              disabled={false}
+              isLoading={false}
+              actionType="undo"
+              title="Restore original text"
+              maxLabelWidth="80px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Redo button - Restore improved text after undo */}
+          {!hasInserted && isEditableContent && improvedContent && (
+            <ToolbarButton
+              icon="↪️"
+              label="Redo"
+              onClick={onRedoClick}
+              disabled={false}
+              isLoading={false}
+              actionType="redo"
+              title="Restore improved text"
+              maxLabelWidth="80px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Summarize Group - Only show when text is selected and not a single word */}
+          {hasTextSelection && !isSingleWord && (
+            <ToolbarSection
+            isLoading={isLoading}
+            isLightBackground={isLightBackgroundToolbar}
+            mainButton={{
+              icon: '📝',
+              label: 'Summarize',
+              onClick: () => onSummarizeClick(),
+              disabled: !selectedText,
+              isLoading: isLoading && action === 'summarize-tldr',
+              actionType: 'summarize',
+              title: 'Summarize (default from settings)',
+              maxLabelWidth: '100px',
+            }}
+            subButtons={[
+              {
+                icon: '📰',
+                label: 'Headline',
+                onClick: () => onSummarizeClick('headline'),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'summarize-headline',
+                actionType: 'summarize',
+                title: 'Generate headline',
+                maxLabelWidth: '100px',
+              },
+              {
+                icon: '�',
+                label: 'Key Points',
+                onClick: () => onSummarizeClick('key-points'),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'summarize-key-points',
+                actionType: 'summarize',
+                title: 'Extract key points',
+                maxLabelWidth: '100px',
+              },
+              {
+                icon: '✨',
+                label: 'Teaser',
+                onClick: () => onSummarizeClick('teaser'),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'summarize-teaser',
+                actionType: 'summarize',
+                title: 'Create teaser',
+                maxLabelWidth: '100px',
+              },
+            ]}
+          />
+          )}
+          
+          {/* Translate Group - Only show when text is selected */}
+          {hasTextSelection && (
+            <ToolbarSection
+              isLoading={isLoading}
+              isLightBackground={isLightBackgroundToolbar}
+              mainButton={{
+                icon: '🌐',
+                label: 'Translate',
+                onClick: () => onTranslateClick(),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'translate',
+                actionType: 'translate',
+                title: 'Translate',
+                maxLabelWidth: '100px',
+              }}
+              subButtons={[
+                {
+                icon: '🔍',
+                label: 'Detect Lang',
+                onClick: () => onDetectLanguageClick(),
+                disabled: !selectedText,
+                isLoading: isLoading && action === 'detect-language',
+                actionType: 'translate',
+                title: 'Detect language',
+                maxLabelWidth: '90px',
+              },
+            ]}
+          />
+          )}
+          
+          {/* Image Analysis Group - show when images are selected OR when hovered image exists */}
+          {(selectedImages.length > 0 || hoveredImageElement) && (
+            <ToolbarSection
+                isLoading={isLoading}
+                isLightBackground={isLightBackgroundToolbar}
+                mainButton={{
+                  icon: '🖼️',
+                  label: 'Describe',
+                  onClick: () => onImageAnalysisClick('describe'),
+                  disabled: false,
+                  isLoading: isLoading && action === 'image-describe',
+                  actionType: 'image',
+                  title: 'Describe image',
+                  maxLabelWidth: '100px',
+                }}
+                subButtons={[
+                  {
+                    icon: '📄',
+                    label: 'Extract Text',
+                    onClick: () => onImageAnalysisClick('extract-text'),
+                    disabled: false,
+                    isLoading: isLoading && action === 'image-extract-text',
+                    actionType: 'image',
+                    title: 'Extract text',
+                    maxLabelWidth: '100px',
+                  },
+                  {
+                    icon: '🏷️',
+                    label: 'Identify Objects',
+                    onClick: () => onImageAnalysisClick('identify-objects'),
+                    disabled: false,
+                    isLoading: isLoading && action === 'image-identify-objects',
+                    actionType: 'image',
+                    title: 'Identify objects',
+                    maxLabelWidth: '150px',
+                  },
+                ]}
+              />
+          )}
+          
+          {/* Add to Chat button - hide when showing toolbar from input focus (dictation mode) */}
+          {!showingFromInputFocusRef.current && (
+            <ToolbarButton
+              icon="💬"
+              label="Add to Chat"
+              onClick={onAddToChatClick}
+              disabled={false}
+              isLoading={false}
+              actionType="chat"
+              title="Add to chat"
+              maxLabelWidth="100px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
         </div>
       )}
       
-      {/* Result panel (shown below toolbar) - only show after first chunk arrives */}
-      {(result || error) && (
-        <div
+      {/* Result panel - shown BELOW toolbar, toolbar stays visible */}
+      {(result || error) && isVisible && (
+        <ToolbarResultPanel
           ref={resultPanelRef}
-          data-ai-toolbar-result="true"
-          className={`
-            fixed top-0 left-0 min-w-[280px] max-w-[400px] p-3 rounded-xl 
-            border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl 
-            will-change-transform
-            glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}
-          `}
-          style={{
-            transform: `translate(${position.x}px, ${position.y + 48}px)`,
-            zIndex: 999999,
+          result={result}
+          error={error}
+          isLoading={isLoading}
+          action={action}
+          position={position}
+          isLightBackground={isLightBackgroundPanel}
+          detectedLanguageName={detectedLanguageName}
+          selectedTargetLanguage={selectedTargetLanguage}
+          onTargetLanguageChange={(lang) => {
+            setSelectedTargetLanguage(lang);
+            onTranslateClick(lang);
           }}
-        >
-          <div className="flex justify-between items-start mb-2">
-            <div className="flex items-center gap-2 flex-1">
-              <div className={`text-[11px] font-semibold uppercase opacity-70 ${isLightBackgroundPanel ? 'text-white' : 'text-white'}`}>
-                {action === 'summarize' ? '📝 Summary' : 
-                 action === 'translate' ? '🌐 Translation' : 
-                 action === 'image-describe' ? '📸 Image Description' :
-                 action === 'image-extract-text' ? '📄 Extracted Text' :
-                 action === 'image-analyze' ? '🔍 Image Analysis' :
-                 '❓ Result'}
-              </div>
-              
-              {/* Language selector for translation */}
-              {action === 'translate' && !isLoading && (
-                <select
-                  value={selectedTargetLanguage || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en'}
-                  onChange={(e) => {
-                    setSelectedTargetLanguage(e.target.value);
-                    onTranslateClick(e.target.value);
-                  }}
-                  className="text-[11px] px-2 py-0.5 rounded bg-white/10 border border-white/20 text-white cursor-pointer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {TranslationLanguages.map(lang => (
-                    <option key={lang.code} value={lang.code} className="bg-gray-900 text-white">
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              
-              {/* Regenerate button */}
-              {!isLoading && !error && result && (
-                <button
-                  onClick={onRegenerateClick}
-                  disabled={isRegenerating}
-                  className={`
-                    w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                    bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                    hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
-                    ${isLightBackgroundPanel ? 'text-white' : 'text-white'}
-                  `}
-                  title="Regenerate"
-                >
-                  {isRegenerating ? '⏳' : '🔄'}
-                </button>
-              )}
-              
-              {/* Copy button */}
-              {!isLoading && !error && result && (
-                <button
-                  onClick={onCopyClick}
-                  className={`
-                    w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                    bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                    hover:bg-white/10 hover:opacity-100
-                    ${isLightBackgroundPanel ? 'text-white' : 'text-white'}
-                  `}
-                  title="Copy to clipboard"
-                >
-                  {copySuccess ? '✓' : '📋'}
-                </button>
-              )}
-              
-              {/* Speaker button - for summarizer and image analysis */}
-              {!isLoading && !error && result && (action === 'summarize' || action?.startsWith('image-')) && ttsConfig?.enabled && (
-                <button
-                  onClick={onSpeakerClick}
-                  disabled={isLoading}
-                  className={`
-                    w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                    bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                    hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
-                    ${isLightBackgroundPanel ? 'text-white' : 'text-white'}
-                  `}
-                  title={isSpeaking ? 'Pause speaking' : 'Speak summary'}
-                >
-                  {isSpeaking ? '⏸️' : '🔊'}
-                </button>
-              )}
-            </div>
-            
-            <button
-              onClick={closeResult}
-              className={`
-                w-5 h-5 flex items-center justify-center text-xs rounded-xl border-none 
-                bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                hover:bg-white/10 hover:opacity-100
-                ${isLightBackgroundPanel ? 'text-white' : 'text-white'}
-              `}
-            >
-              ✕
-            </button>
-          </div>
-          
-          {/* Error display */}
-          {error && !isLoading && (
-            <div className={`text-[13px] leading-6 text-[#ff6b6b]`}>
-              {error}
-            </div>
-          )}
-          
-          {/* Show result with streaming indicator */}
-          {result && (
-            <div>
-              <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackgroundPanel ? 'text-white' : 'text-white'}`}>
-                {result}
-              </div>
-              {/* Show streaming indicator while loading */}
-              {isLoading && (
-                <div className="flex items-center gap-1 mt-2 text-white/50">
-                  <span className="animate-pulse text-xs">●</span>
-                  <span className="text-[11px]">streaming...</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+          aiConfig={aiConfig}
+          isRegenerating={isRegenerating}
+          onRegenerateClick={onRegenerateClick}
+          copySuccess={copySuccess}
+          onCopyClick={onCopyClick}
+          isSpeaking={isSpeaking}
+          onSpeakerClick={onSpeakerClick}
+          ttsConfig={ttsConfig}
+          onClose={closeResult}
+        />
       )}
     </>
   );

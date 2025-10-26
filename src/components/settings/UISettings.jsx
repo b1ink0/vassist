@@ -125,6 +125,9 @@ const UISettings = ({ isLightBackground }) => {
 
       {/* AI Toolbar Settings */}
       <div className="space-y-2 border-t border-white/10 pt-4">
+        <h4 className="text-sm font-semibold text-white mb-3">AI Toolbar</h4>
+        
+        {/* Enable AI Toolbar */}
         <label className="flex items-center space-x-3 cursor-pointer">
           <input
             type="checkbox"
@@ -135,8 +138,40 @@ const UISettings = ({ isLightBackground }) => {
           <span className="text-sm text-white">Enable AI Toolbar</span>
         </label>
         <p className="text-xs text-white/50 ml-7">
-          Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions. Configure default translation language in AI+ tab.
+          Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions
         </p>
+
+        {/* Show on Input Focus */}
+        {uiConfig.enableAIToolbar !== false && (
+          <>
+            <label className="flex items-center space-x-3 cursor-pointer mt-3">
+              <input
+                type="checkbox"
+                checked={uiConfig.aiToolbar?.showOnInputFocus !== false}
+                onChange={(e) => updateUIConfig('aiToolbar.showOnInputFocus', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-white">Show on Input Focus</span>
+            </label>
+            <p className="text-xs text-white/50 ml-7">
+              Automatically show toolbar with dictation when clicking on any text input field or editable area
+            </p>
+
+            {/* Show on Image Hover */}
+            <label className="flex items-center space-x-3 cursor-pointer mt-3">
+              <input
+                type="checkbox"
+                checked={uiConfig.aiToolbar?.showOnImageHover !== false}
+                onChange={(e) => updateUIConfig('aiToolbar.showOnImageHover', e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-white">Show on Image Hover</span>
+            </label>
+            <p className="text-xs text-white/50 ml-7">
+              Automatically show toolbar with image analysis actions when hovering over any image
+            </p>
+          </>
+        )}
       </div>
 
       {/* Status Messages - auto-save feedback */}
