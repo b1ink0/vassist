@@ -27,12 +27,34 @@ class VirtualAssistantInjector {
   async init() {
     console.log('[Content Script] Initializing...');
     
-    // Don't auto-inject - wait for user to click extension icon
-    // The message listener at the bottom handles injection
-    
     // Initialize tab in background
     const { promise } = this.bridge.sendMessage(MessageTypes.TAB_INIT, {});
     await promise;
+    
+    // Check if auto-load is enabled
+    try {
+      // Read from CONFIG namespace (not SETTINGS) - uiConfig is saved to config namespace
+      const { promise: configPromise } = this.bridge.sendMessage(MessageTypes.STORAGE_CONFIG_LOAD, {
+        key: 'uiConfig',
+        defaultValue: null
+      });
+      
+      const uiConfig = await configPromise;
+      const autoLoadEnabled = uiConfig?.autoLoadOnAllPages !== false; // Default to true if not set
+      
+      console.log('[Content Script] Auto-load setting:', autoLoadEnabled);
+      console.log('[Content Script] Full uiConfig:', uiConfig);
+      
+      if (autoLoadEnabled) {
+        console.log('[Content Script] Auto-loading assistant...');
+        await this.injectAssistant();
+      } else {
+        console.log('[Content Script] Auto-load disabled - waiting for manual trigger');
+      }
+    } catch (error) {
+      console.error('[Content Script] Failed to check auto-load setting:', error);
+      // On error, don't auto-load (safer default)
+    }
     
     console.log('[Content Script] Ready');
   }
@@ -141,12 +163,6 @@ class VirtualAssistantInjector {
     
     this.shadowRoot.appendChild(root);
     console.log('[Content Script] injectReactApp: Root div appended to shadow root');
-    
-    // Set extension mode flag for main world
-    // This flag tells React app that it's running as an extension
-    // Resource URLs must be requested via ExtensionBridge.getResourceURL()
-    window.__VASSIST_EXTENSION_MODE__ = true;
-    console.log('[Content Script] injectReactApp: Set extension mode flag');
     
     // Setup message bridge for cross-world communication
     this._setupMessageBridge();
@@ -326,18 +342,31 @@ class VirtualAssistantInjector {
       if (canvas) {
         canvas.style.opacity = '1';
       }
+      this.isVisible = true;
       return;
     }
     
     if (!this.isInjected) {
       // Not injected yet, inject it
       await this.injectAssistant();
-    } else {
-      // Already injected, fade out and cleanup
+      this.isVisible = true;
+    } else if (this.isVisible) {
+      // Already visible, hide it (but don't cleanup - just fade out)
       await this.fadeOutAndCleanup();
+      this.isVisible = false;
+    } else {
+      // Already injected but hidden, show it again
+      if (this.container) {
+        this.container.style.opacity = '1';
+      }
+      const canvas = document.getElementById('vassist-babylon-canvas');
+      if (canvas) {
+        canvas.style.opacity = '1';
+      }
+      this.isVisible = true;
     }
     
-    console.log(`[Content Script] Assistant ${this.isInjected ? 'shown' : 'hidden'}`);
+    console.log(`[Content Script] Assistant ${this.isVisible ? 'shown' : 'hidden'}`);
   }
 
   show() {
@@ -437,6 +466,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handleMessage = async () => {
     try {
       switch (message.type) {
+        case 'PING':
+          // Simple ping to check if content script is loaded
+          return { success: true, loaded: true };
+          
         case 'TOGGLE_ASSISTANT':
           await injector.toggle();
           return { success: true, isVisible: injector.isInjected };

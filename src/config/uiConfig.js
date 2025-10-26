@@ -20,6 +20,9 @@ export const DefaultUIConfig = {
   // Model loading behavior
   enableModelLoading: true,
   
+  // Extension auto-load behavior
+  autoLoadOnAllPages: true, // Auto-load extension on all pages (extension mode only)
+  
   // AI Toolbar
   enableAIToolbar: true,
   

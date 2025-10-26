@@ -211,10 +211,10 @@ class ExtensionBridge {
 
   /**
    * Check if running in extension mode
-   * @returns {boolean} True if in extension
+   * @returns {boolean} True if in extension mode
    */
   isExtensionMode() {
-    return !!window.__VASSIST_EXTENSION_MODE__;
+    return typeof window !== 'undefined' && !!window.__VASSIST_BRIDGE__;
   }
 
   /**

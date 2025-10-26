@@ -6,6 +6,7 @@
 
 import { useConfig } from '../../contexts/ConfigContext';
 import { BackgroundThemeModes } from '../../config/uiConfig';
+import ExtensionBridge from '../../utils/ExtensionBridge';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -16,9 +17,32 @@ const UISettings = ({ isLightBackground }) => {
     updateUIConfig,
   } = useConfig();
 
+  // Check if running as extension
+  const isExtensionMode = ExtensionBridge.isExtensionMode();
+
   return (
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-white mb-4">UI Configuration</h3>
+      
+      {/* Auto-load on All Pages Toggle - Extension mode only */}
+      {isExtensionMode && (
+        <div className="space-y-2">
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={uiConfig.autoLoadOnAllPages !== false}
+              onChange={(e) => updateUIConfig('autoLoadOnAllPages', e.target.checked)}
+              className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-white">Auto-load on Every Page</span>
+          </label>
+          <p className="text-xs text-white/50 ml-7">
+            {uiConfig.autoLoadOnAllPages !== false
+              ? 'Extension loads automatically on all pages' 
+              : 'Click extension icon to manually load on each page'}
+          </p>
+        </div>
+      )}
       
       {/* Model Loading Toggle */}
       <div className="space-y-2">

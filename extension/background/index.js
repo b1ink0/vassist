@@ -861,38 +861,14 @@ chrome.action.onClicked.addListener(async (tab) => {
   console.log('[Background] Action clicked for tab:', tab.id);
   
   try {
-    // Inject the content script (IIFE wrapper that loads ES module)
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content.js']
-    });
-    
-    console.log('[Content Script] Injected successfully');
-    
-    // Wait for content script to initialize (increased delay)
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Send toggle message and wait for response
+    // Send toggle message to content script (which is always loaded via manifest)
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: 'TOGGLE_ASSISTANT'
     });
     
     console.log('[Background] Toggle response:', response);
-    
   } catch (error) {
-    // If already injected, just send toggle message
-    if (error.message && error.message.includes('Cannot access')) {
-      try {
-        const response = await chrome.tabs.sendMessage(tab.id, {
-          type: 'TOGGLE_ASSISTANT'
-        });
-        console.log('[Background] Toggle response (already injected):', response);
-      } catch (toggleError) {
-        console.error('[Background] Failed to toggle:', toggleError);
-      }
-    } else {
-      console.error('[Background] Failed to inject:', error);
-    }
+    console.error('[Background] Failed to toggle assistant:', error);
   }
 });
 
