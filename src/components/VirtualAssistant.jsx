@@ -18,15 +18,17 @@
  * - Model loading with async blob URL support
  */
 
-import { forwardRef, useImperativeHandle, useState, useCallback, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useState, useCallback, useRef, useEffect } from 'react';
 import BabylonScene from './BabylonScene';
 import LoadingIndicator from './LoadingIndicator';
 import { buildMmdModelScene } from '../babylon/scenes/MmdModelScene';
 import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
 import { TTSServiceProxy } from '../services/proxies';
+import { useConfig } from '../contexts/ConfigContext';
 
 const VirtualAssistant = forwardRef((props, ref) => {
   const { onReady } = props;
+  const { uiConfig, updateUIConfig, isConfigLoading } = useConfig(); // Get uiConfig, update function, and loading state
   
   const [animationManager, setAnimationManager] = useState(null);
   const [positionManager, setPositionManager] = useState(null);
@@ -106,6 +108,29 @@ const VirtualAssistant = forwardRef((props, ref) => {
       });
     }
   }, [onReady]);
+
+  /**
+   * Save position when model is dragged
+   */
+  useEffect(() => {
+    const handleDragEnd = () => {
+      // Only save if preset is set to 'last-location'
+      if (uiConfig.position?.preset === 'last-location' && positionManager) {
+        const currentPos = {
+          x: positionManager.positionX,
+          y: positionManager.positionY,
+          width: positionManager.modelWidthPx,
+          height: positionManager.modelHeightPx
+        };
+        
+        console.log('[VirtualAssistant] Saving last location:', currentPos);
+        updateUIConfig('position.lastLocation', currentPos);
+      }
+    };
+    
+    window.addEventListener('modelDragEnd', handleDragEnd);
+    return () => window.removeEventListener('modelDragEnd', handleDragEnd);
+  }, [uiConfig.position?.preset, positionManager, updateUIConfig]);
 
   /**
    * Expose imperative API to parent components
@@ -360,16 +385,19 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
   return (
     <>
-      {/* Custom loading indicator - shown while model loads */}
-      <LoadingIndicator isVisible={!isReady} progress={loadingProgress} />
+      {/* Custom loading indicator - shown while model loads OR config loads */}
+      <LoadingIndicator isVisible={!isReady || isConfigLoading} progress={loadingProgress} />
       
-      {/* Babylon scene with fade-in transition */}
-      <BabylonScene 
-        sceneBuilder={buildMmdModelScene} 
-        onSceneReady={handleSceneReady}
-        onLoadProgress={handleLoadProgress}
-        positionManagerRef={positionManagerRef}
-      />
+      {/* Only render Babylon scene after config is loaded */}
+      {!isConfigLoading && (
+        <BabylonScene 
+          sceneBuilder={buildMmdModelScene} 
+          onSceneReady={handleSceneReady}
+          onLoadProgress={handleLoadProgress}
+          positionManagerRef={positionManagerRef}
+          sceneConfig={{ uiConfig }}
+        />
+      )}
     </>
   );
 });

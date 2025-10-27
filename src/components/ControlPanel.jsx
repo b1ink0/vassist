@@ -14,6 +14,8 @@ const ControlPanel = ({
   onStateChange
 }) => {
   const { uiConfig } = useConfig();
+  const [showPerf, setShowPerf] = useState(false);
+  const [perfData, setPerfData] = useState({ fps: 0, meshes: 0, particles: 0, drawCalls: 0 });
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
   const [queueStatus, setQueueStatus] = useState({ length: 0, isEmpty: true, items: [] });
@@ -88,6 +90,58 @@ const ControlPanel = ({
     e.preventDefault();
     e.stopPropagation();
   };
+
+  // Lightweight perf sampler when overlay is enabled
+  useEffect(() => {
+    if (!showPerf) return;
+
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let actualFps = 0;
+
+    const update = () => {
+      try {
+        const scene = sceneRef.current;
+        if (!scene) return;
+        const engine = scene.getEngine && scene.getEngine();
+        
+        // Calculate actual FPS by counting frames
+        frameCount++;
+        const currentTime = performance.now();
+        const elapsed = currentTime - lastTime;
+        
+        if (elapsed >= 1000) { // Update every second
+          actualFps = Math.round((frameCount * 1000) / elapsed);
+          frameCount = 0;
+          lastTime = currentTime;
+        }
+        
+        const meshes = scene.meshes ? scene.meshes.length : 0;
+        const particles = scene.particleSystems ? scene.particleSystems.length : 0;
+        const drawCalls = engine && engine._drawCalls && engine._drawCalls.current 
+          ? engine._drawCalls.current 
+          : 0;
+        
+        setPerfData({ fps: actualFps, meshes, particles, drawCalls });
+      } catch (err) {
+        // tolerate sampling errors
+        console.warn('[ControlPanel] perf sampler error', err);
+      }
+    };
+
+    // Use scene's render observable to count actual rendered frames
+    const scene = sceneRef.current;
+    let observer = null;
+    if (scene && scene.onAfterRenderObservable) {
+      observer = scene.onAfterRenderObservable.add(update);
+    }
+
+    return () => {
+      if (observer && scene && scene.onAfterRenderObservable) {
+        scene.onAfterRenderObservable.remove(observer);
+      }
+    };
+  }, [showPerf, sceneRef]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -249,10 +303,10 @@ const ControlPanel = ({
     }
     
     // Queue a sequence of animations - use actual animation names from config
-    queueSimple('Waving', false);        // Idle category - waving
-    queueSimple('Thinking', false);      // Thinking category
-    queueSimple('Happy', false);         // Happy category
-    queueSimple('Yawn', false);          // Idle category - yawn
+    queueSimple('Hi 1', false);                // Idle category - waving
+    queueSimple('Thinking 1', false);          // Thinking category
+    queueSimple('Celebrating Clap', false);    // Celebrating category
+    queueSimple('Yawn 1', false);              // Idle category - yawn
     console.log('[ControlPanel] Queued 4-animation sequence');
   };
 
@@ -369,6 +423,24 @@ const ControlPanel = ({
           <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
             {currentState}
           </span>
+          {/* Performance Stats Toggle (internal lightweight panel) */}
+          <button
+            onClick={() => setShowPerf((s) => !s)}
+            className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors border border-blue-500/30"
+            title="Toggle Performance Stats"
+          >
+            📊 Stats
+          </button>
+          {showPerf && (
+            <div className="ml-2 text-[11px] text-gray-200 bg-black/60 px-2 py-1 rounded">
+              <div className="flex gap-3 items-center">
+                <span>FPS: <strong className="text-white">{perfData.fps}</strong></span>
+                <span>Meshes: <strong className="text-white">{perfData.meshes}</strong></span>
+                <span>Particles: <strong className="text-white">{perfData.particles}</strong></span>
+                <span>Draw: <strong className="text-white">{perfData.drawCalls}</strong></span>
+              </div>
+            </div>
+          )}
         </div>
         <button
           onClick={() => setIsVisible(false)}
@@ -598,30 +670,48 @@ const ControlPanel = ({
             {/* Queue Actions */}
             <div className="space-y-2">
               <p className="text-xs text-white font-semibold">Queue Idle Animations</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={() => queueSimple('Idle Breathing')}
+                  onClick={() => queueSimple('Idle 1')}
                   className="px-2 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
                 >
-                  😴 Breathing
+                  😴 Idle 1
                 </button>
                 <button
-                  onClick={() => queueSimple('Idle Looking Around')}
+                  onClick={() => queueSimple('Idle 2')}
                   className="px-2 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
                 >
-                  👀 Looking
+                  👀 Idle 2
                 </button>
                 <button
-                  onClick={() => queueSimple('Waving')}
+                  onClick={() => queueSimple('Idle Short')}
+                  className="px-2 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                >
+                  ⚡ Short
+                </button>
+                <button
+                  onClick={() => queueSimple('Yawn 1')}
                   className="px-2 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
                 >
-                  👋 Waving
+                  🥱 Yawn 1
                 </button>
                 <button
-                  onClick={() => queueSimple('Yawn')}
+                  onClick={() => queueSimple('Yawn 2')}
                   className="px-2 py-2 bg-teal-500 text-white border-none rounded cursor-pointer text-xs hover:bg-teal-600 transition-colors"
                 >
-                  🥱 Yawn
+                  😮 Yawn 2
+                </button>
+                <button
+                  onClick={() => queueSimple('Hi 1')}
+                  className="px-2 py-2 bg-pink-500 text-white border-none rounded cursor-pointer text-xs hover:bg-pink-600 transition-colors"
+                >
+                  👋 Hi 1
+                </button>
+                <button
+                  onClick={() => queueSimple('Hi 2')}
+                  className="px-2 py-2 bg-pink-500 text-white border-none rounded cursor-pointer text-xs hover:bg-pink-600 transition-colors"
+                >
+                  👋 Hi 2
                 </button>
               </div>
             </div>
@@ -631,28 +721,28 @@ const ControlPanel = ({
               <p className="text-xs text-white font-semibold">Queue Action Animations</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => queueSimple('Thinking')}
+                  onClick={() => queueSimple('Thinking 1')}
                   className="px-2 py-2 bg-purple-500 text-white border-none rounded cursor-pointer text-xs hover:bg-purple-600 transition-colors"
                 >
-                  🤔 Thinking
+                  🤔 Thinking 1
                 </button>
                 <button
-                  onClick={() => queueSimple('Walking')}
-                  className="px-2 py-2 bg-orange-500 text-white border-none rounded cursor-pointer text-xs hover:bg-orange-600 transition-colors"
+                  onClick={() => queueSimple('Thinking 2')}
+                  className="px-2 py-2 bg-purple-500 text-white border-none rounded cursor-pointer text-xs hover:bg-purple-600 transition-colors"
                 >
-                  🚶 Walking
+                  🤔 Thinking 2
                 </button>
                 <button
-                  onClick={() => queueSimple('Celebrating')}
+                  onClick={() => queueSimple('Celebrating Clap')}
                   className="px-2 py-2 bg-yellow-500 text-black border-none rounded cursor-pointer text-xs hover:bg-yellow-600 transition-colors"
                 >
                   🎉 Celebrate
                 </button>
                 <button
-                  onClick={() => queueSimple('Happy')}
+                  onClick={() => queueSimple('Hi 1')}
                   className="px-2 py-2 bg-pink-500 text-white border-none rounded cursor-pointer text-xs hover:bg-pink-600 transition-colors"
                 >
-                  😊 Happy
+                  👋 Hi 1
                 </button>
               </div>
             </div>
@@ -689,13 +779,13 @@ const ControlPanel = ({
             <div className="space-y-2 border-t border-white/20 pt-3">
               <p className="text-xs text-white font-semibold">Force Mode (Interrupt Current)</p>
               <button
-                onClick={() => queueSimple('Thinking', true)}
+                onClick={() => queueSimple('Thinking 1', true)}
                 className="w-full px-3 py-2 bg-red-600 text-white border-none rounded cursor-pointer text-xs hover:bg-red-700 transition-colors"
               >
                 ⚡ Force Play Thinking (Interrupt)
               </button>
               <button
-                onClick={() => queueSpeakTest('celebrating', true)}
+                onClick={() => queueSpeakTest('talk_excited', true)}
                 className="w-full px-3 py-2 bg-orange-600 text-white border-none rounded cursor-pointer text-xs hover:bg-orange-700 transition-colors"
               >
                 ⚡ Force Excited Speech (Interrupt)
@@ -732,40 +822,40 @@ const ControlPanel = ({
             <div className="space-y-2">
               <p className="text-xs text-white font-semibold">Lip Sync + Body Animations</p>
               <button
-                onClick={() => playComposite('Audio Idle', 'talking')}
+                onClick={() => playComposite('Audio Test', 'talking')}
                 className="w-full px-3 py-2 bg-indigo-500 text-white border-none rounded cursor-pointer text-xs hover:bg-indigo-600 transition-colors"
               >
-                💬 Lip Sync + Talking
+                💬 Lip Sync + Talking (Random)
               </button>
               <button
-                onClick={() => playComposite('Audio Idle', 'idle')}
+                onClick={() => playComposite('Audio Test', 'idle')}
                 className="w-full px-3 py-2 bg-green-500 text-white border-none rounded cursor-pointer text-xs hover:bg-green-600 transition-colors"
               >
-                🧘 Lip Sync + Idle
+                🧘 Lip Sync + Idle (Random)
               </button>
               <button
-                onClick={() => playComposite('Audio Idle', 'thinking')}
+                onClick={() => playComposite('Audio Test', 'thinking')}
                 className="w-full px-3 py-2 bg-purple-500 text-white border-none rounded cursor-pointer text-xs hover:bg-purple-600 transition-colors"
               >
-                🤔 Lip Sync + Thinking
+                🤔 Lip Sync + Thinking (Random)
               </button>
               <button
-                onClick={() => playComposite('Audio Idle', 'happy')}
+                onClick={() => playComposite('Audio Test', 'happy')}
                 className="w-full px-3 py-2 bg-yellow-500 text-white border-none rounded cursor-pointer text-xs hover:bg-yellow-600 transition-colors"
               >
-                😊 Lip Sync + Happy
+                😊 Lip Sync + Happy (Placeholder)
               </button>
               <button
-                onClick={() => playComposite('Audio Idle', 'excited')}
+                onClick={() => playComposite('Audio Test', 'excited')}
                 className="w-full px-3 py-2 bg-pink-500 text-white border-none rounded cursor-pointer text-xs hover:bg-pink-600 transition-colors"
               >
-                🎉 Lip Sync + Excited
+                🎉 Lip Sync + Excited (Placeholder)
               </button>
               <button
-                onClick={() => playComposite('Audio Idle', 'walking')}
+                onClick={() => playComposite('Audio Test', 'walking')}
                 className="w-full px-3 py-2 bg-orange-500 text-white border-none rounded cursor-pointer text-xs hover:bg-orange-600 transition-colors"
               >
-                🚶 Lip Sync + Walking
+                🚶 Lip Sync + Walking (Placeholder)
               </button>
             </div>
           </div>

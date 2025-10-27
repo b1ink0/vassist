@@ -4,6 +4,8 @@ import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 
 import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
+import { FPSLimitOptions } from '../config/uiConfig';
 
 const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {}, positionManagerRef }) => {
   const canvasRef = useRef(null);
@@ -12,6 +14,10 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
   const cleanupFnRef = useRef(null); // Store cleanup function
+  
+  // Get FPS limit from config
+  const { uiConfig } = useConfig();
+  const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
   // Drag-drop overlay state
   const [overlayPos, setOverlayPos] = useState({ x: 0, y: 0, width: 0, height: 0 });
@@ -85,6 +91,24 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
         stencil: true,
         alpha: true, // Enable alpha channel for transparency
       });
+      
+      // Set FPS limit
+      if (fpsLimit !== FPSLimitOptions.NATIVE && fpsLimit !== 'native') {
+        const targetFPS = typeof fpsLimit === 'number' ? fpsLimit : 60;
+        try {
+          engine.maxFPS = targetFPS;
+          console.log(`[BabylonScene] Set engine.maxFPS to ${targetFPS}`);
+        } catch (err) {
+          // Fallback: if maxFPS isn't available, try engine.fps (legacy/alternate)
+          try {
+            engine.fps = targetFPS;
+            console.log(`[BabylonScene] engine.maxFPS not available, set engine.fps to ${targetFPS}`);
+          } catch (err2) {
+            console.warn('[BabylonScene] Failed to set engine FPS limit via maxFPS or fps', err, err2);
+          }
+        }
+      }
+      
       engineRef.current = engine;
 
       let scene;
@@ -152,7 +176,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
 
       setTimeout(() => {
         setIsReady(true);
-      }, 400); // 400ms delay for physics to stabilize
+      }, 800); // 800ms delay - longer to ensure intro animation has started
 
       // Handle window resize
       const handleResize = () => {
@@ -237,7 +261,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       }
     };
     // onSceneReady and onLoadProgress stored in refs to prevent re-initialization
-  }, [sceneBuilder]);
+  }, [sceneBuilder, fpsLimit]);
 
   // Detect when user starts dragging content anywhere on the page
   useEffect(() => {

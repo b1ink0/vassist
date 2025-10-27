@@ -13,11 +13,22 @@
 import { useState, useEffect } from 'react';
 import * as BABYLON from '@babylonjs/core';
 
-const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
-  const [isVisible, setIsVisible] = useState(false);
+const DebugOverlay = ({ scene, positionManager }) => {
+  const [activeTab, setActiveTab] = useState('debug'); // 'debug' or 'config'
   const [showAxis, setShowAxis] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
+  const [showPickingBox, setShowPickingBox] = useState(false);
+  const [is3DView, setIs3DView] = useState(false);
+  const [clipPlaneY, setClipPlaneY] = useState(6.5);
   const [coords, setCoords] = useState({ x: 0, y: 0, scale: 12 });
+  
+  // Preset editing states
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [boundaryLeft, setBoundaryLeft] = useState(0);
+  const [boundaryRight, setBoundaryRight] = useState(0);
+  const [boundaryTop, setBoundaryTop] = useState(0);
+  const [boundaryBottom, setBoundaryBottom] = useState(0);
   
   // Refs for visualization objects
   const [axisHelper, setAxisHelper] = useState(null);
@@ -81,6 +92,20 @@ const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
       setAxisHelper(null);
     }
   }, [showAxis, scene, axisHelper]);
+
+  // Picking box visibility
+  useEffect(() => {
+    if (!scene) return;
+    
+    const animationManager = scene.metadata?.animationManager;
+    if (!animationManager || !animationManager.pickingBox) return;
+    
+    // Toggle wireframe visibility via alpha (keeps it pickable)
+    const material = animationManager.pickingBox.material;
+    if (material) {
+      material.alpha = showPickingBox ? 0.3 : 0; // 0.3 = visible, 0 = invisible
+    }
+  }, [showPickingBox, scene]);
 
   // Camera movement functions
   const moveCamera = (direction, amount = 1) => {
@@ -153,185 +178,179 @@ const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
     positionManager.updateCameraFrustum();
   };
 
-  // If embedded mode, render without wrapper and always visible
-  if (embedded) {
-    return (
-      <>
-        {/* Coordinate Display */}
-        {showCoords && (
-          <div className="mb-4 p-2.5 bg-black/70 text-green-500 font-mono text-xs rounded border border-green-500/30">
-            <div>Camera Offset X: {coords.x}</div>
-            <div>Camera Offset Y: {coords.y}</div>
-            <div>Model Height: {coords.scale}px</div>
-          </div>
-        )}
+  // Toggle 3D view camera
+  const toggle3DView = () => {
+    if (!scene || !scene.metadata) return;
+    
+    const mmdCamera = scene.metadata.mmdCamera;
+    const arcRotateCamera = scene.metadata.arcRotateCamera;
+    
+    if (!mmdCamera || !arcRotateCamera) {
+      console.warn('[DebugOverlay] Cameras not found in scene metadata');
+      return;
+    }
+    
+    const newIs3DView = !is3DView;
+    setIs3DView(newIs3DView);
+    
+    if (newIs3DView) {
+      scene.activeCamera = arcRotateCamera;
+      console.log('[DebugOverlay] Switched to 3D view camera');
+    } else {
+      scene.activeCamera = mmdCamera;
+      console.log('[DebugOverlay] Switched to MMD camera');
+    }
+  };
 
-        {/* Camera Movement Controls */}
-        <div className="mb-4 grid grid-cols-1">
-          <div className="text-xs mb-2 text-gray-400 justify-self-start">Camera Movement</div>
-          <div className="grid grid-cols-3 gap-1.5 w-[190px] justify-self-center">
-            <div></div>
-            <button
-              onClick={() => moveCamera('up')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ↑
-            </button>
-            <div></div>
-            
-            <button
-              onClick={() => moveCamera('left')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ←
-            </button>
-            <button
-              onClick={resetCamera}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 cursor-pointer text-[10px] transition-all hover:bg-gray-600"
-            >
-              Reset
-            </button>
-            <button
-              onClick={() => moveCamera('right')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              →
-            </button>
-            
-            <div></div>
-            <button
-              onClick={() => moveCamera('down')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ↓
-            </button>
-            <div></div>
-          </div>
-        </div>
+  // Update clipping plane Y value (Portrait Mode)
+  const updateClipPlaneY = (newY) => {
+    if (!scene || !scene.clipPlane) return;
+    
+    setClipPlaneY(newY);
+    // Update the clipping plane - normal pointing down (0,-1,0) clips below Y
+    scene.clipPlane = new BABYLON.Plane(0, -1, 0, newY);
+    console.log(`[DebugOverlay] Updated clipping plane to Y = ${newY}`);
+  };
 
-        {/* Zoom Controls */}
-        <div className="mb-4">
-          <div className="text-xs mb-2 text-gray-400">Zoom</div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => zoom('in')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all w-full hover:bg-gray-600"
-            >
-              Zoom In (+)
-            </button>
-            <button
-              onClick={() => zoom('out')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all w-full hover:bg-gray-600"
-            >
-              Zoom Out (−)
-            </button>
-          </div>
-        </div>
-
-        {/* Visualization Toggles */}
-        <div>
-          <div className="text-xs mb-2 text-gray-400">Visualization</div>
-          <div className="flex flex-col gap-1.5">
-            <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
-              <input
-                type="checkbox"
-                checked={showAxis}
-                onChange={(e) => setShowAxis(e.target.checked)}
-                className="mr-2"
-              />
-              Show Axis (RGB = XYZ)
-            </label>
-            <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
-              <input
-                type="checkbox"
-                checked={showCoords}
-                onChange={(e) => setShowCoords(e.target.checked)}
-                className="mr-2"
-              />
-              Show Coordinates
-            </label>
-          </div>
-        </div>
-      </>
+  // Update offset values
+  const updateOffset = (axis, value) => {
+    if (!positionManager) return;
+    
+    const newOffset = { ...positionManager.offset };
+    newOffset[axis] = parseFloat(value);
+    
+    if (axis === 'x') setOffsetX(value);
+    if (axis === 'y') setOffsetY(value);
+    
+    // Apply new offset
+    positionManager.setPositionPixels(
+      positionManager.positionX,
+      positionManager.positionY,
+      positionManager.modelWidthPx,
+      positionManager.modelHeightPx,
+      positionManager.effectiveHeightPx,
+      newOffset
     );
-  }
+  };
 
-  if (!isVisible) {
-    return (
-      <button
-        onClick={() => setIsVisible(true)}
-        className="fixed bottom-5 right-5 px-5 py-2.5 bg-gray-800 text-white border-none rounded cursor-pointer z-[1000] text-sm hover:bg-gray-700"
-      >
-        Show Debug Controls
-      </button>
-    );
-  }
+  // Update boundary values
+  const updateBoundary = (edge, value) => {
+    if (!positionManager) return;
+    
+    const newBoundaries = { ...positionManager.customBoundaries };
+    newBoundaries[edge] = parseFloat(value);
+    
+    if (edge === 'left') setBoundaryLeft(value);
+    if (edge === 'right') setBoundaryRight(value);
+    if (edge === 'top') setBoundaryTop(value);
+    if (edge === 'bottom') setBoundaryBottom(value);
+    
+    positionManager.setCustomBoundaries(newBoundaries);
+  };
+
+  // Initialize clipPlaneY from scene metadata
+  useEffect(() => {
+    if (scene?.metadata?.portraitClipPlaneY) {
+      setClipPlaneY(scene.metadata.portraitClipPlaneY);
+    }
+  }, [scene]);
+
+  // Initialize offset and boundary values from positionManager
+  useEffect(() => {
+    if (!positionManager) return;
+    
+    if (positionManager.offset) {
+      setOffsetX(positionManager.offset.x || 0);
+      setOffsetY(positionManager.offset.y || 0);
+    }
+    
+    if (positionManager.customBoundaries) {
+      setBoundaryLeft(positionManager.customBoundaries.left || 0);
+      setBoundaryRight(positionManager.customBoundaries.right || 0);
+      setBoundaryTop(positionManager.customBoundaries.top || 0);
+      setBoundaryBottom(positionManager.customBoundaries.bottom || 0);
+    }
+  }, [positionManager]);
 
   return (
     <>
       {/* Coordinate Display */}
       {showCoords && (
-        <div className="fixed top-5 left-5 p-2.5 bg-black/70 text-green-500 font-mono text-xs rounded z-[1001]">
+        <div className="mb-4 p-2.5 bg-black/70 text-green-500 font-mono text-xs rounded border border-green-500/30">
           <div>Camera Offset X: {coords.x}</div>
           <div>Camera Offset Y: {coords.y}</div>
           <div>Model Height: {coords.scale}px</div>
         </div>
       )}
 
-      {/* Debug Control Panel */}
-      <div className="fixed bottom-5 right-5 p-4 bg-black/80 text-white rounded-lg z-[1000]">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4 border-b border-gray-600 pb-2.5">
-          <h3 className="m-0 text-base">Debug Controls</h3>
-          <button
-            onClick={() => setIsVisible(false)}
-            className="bg-red-600 text-white border-none rounded px-2.5 py-1 cursor-pointer text-xs hover:bg-red-700"
-          >
-            Hide
-          </button>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setActiveTab('debug')}
+          className={`flex-1 px-3 py-2 rounded text-sm transition-all ${
+            activeTab === 'debug' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Debug
+        </button>
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex-1 px-3 py-2 rounded text-sm transition-all ${
+            activeTab === 'config' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Preset Config
+        </button>
+      </div>
 
-        {/* Camera Movement Controls */}
-        <div className="mb-4">
-          <div className="text-xs mb-2 text-gray-400">Camera Movement</div>
-          <div className="grid grid-cols-3 gap-1.5 w-[190px]">
-            <div></div>
-            <button
-              onClick={() => moveCamera('up')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ↑
-            </button>
-            <div></div>
-            
-            <button
-              onClick={() => moveCamera('left')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ←
-            </button>
-            <button
-              onClick={resetCamera}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 cursor-pointer text-[10px] transition-all hover:bg-gray-600"
-            >
-              Reset
-            </button>
-            <button
-              onClick={() => moveCamera('right')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              →
-            </button>
-            
-            <div></div>
-            <button
-              onClick={() => moveCamera('down')}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-            >
-              ↓
-            </button>
-            <div></div>
-          </div>
+      {/* Debug Tab Content */}
+      {activeTab === 'debug' && (
+        <>
+            {/* Camera Movement Controls */}
+            <div className="mb-4">
+              <div className="text-xs mb-2 text-gray-400">Camera Movement</div>
+              <div className="grid grid-cols-3 gap-1.5 w-[190px]">
+                <div></div>
+                <button
+                  onClick={() => moveCamera('up')}
+                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
+                >
+                  ↑
+                </button>
+                <div></div>
+                
+                <button
+                  onClick={() => moveCamera('left')}
+                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={resetCamera}
+                  className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 cursor-pointer text-[10px] transition-all hover:bg-gray-600"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => moveCamera('right')}
+                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
+                >
+                  →
+                </button>
+                
+                <div></div>
+                <button
+                  onClick={() => moveCamera('down')}
+                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
+                >
+                  ↓
+                </button>
+                <div></div>
+              </div>
         </div>
 
         {/* Zoom Controls */}
@@ -375,14 +394,152 @@ const DebugOverlay = ({ scene, positionManager, embedded = false }) => {
               />
               Show Coordinates
             </label>
+            <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
+              <input
+                type="checkbox"
+                checked={showPickingBox}
+                onChange={(e) => {
+                  const newValue = e.target.checked;
+                  setShowPickingBox(newValue);
+                  if (scene?.pickingBox) {
+                    scene.pickingBox.isVisible = newValue;
+                  }
+                }}
+                className="mr-2"
+              />
+              Show Picking Box
+            </label>
+            <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
+              <input
+                type="checkbox"
+                checked={is3DView}
+                onChange={toggle3DView}
+                className="mr-2"
+              />
+              3D View (Debug Camera)
+            </label>
           </div>
         </div>
+          </>
+        )}
+
+        {/* Preset Config Tab Content */}
+        {activeTab === 'config' && (
+          <>
+            {/* Portrait Mode Clipping Plane Control */}
+            {scene?.clipPlane && (
+              <div className="mb-4">
+                <div className="text-xs mb-2 text-gray-400">Portrait Mode Clipping</div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-300">
+                    Clip Plane Y: {clipPlaneY.toFixed(1)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="15"
+                    step="0.1"
+                    value={clipPlaneY}
+                    onChange={(e) => updateClipPlaneY(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="text-[10px] text-gray-500">
+                    Adjust where lower body is clipped
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Preset Offset Controls */}
+            <div className="mb-4">
+          <div className="text-xs mb-2 text-gray-400">
+            {scene?.metadata?.isPortraitMode ? 'Portrait Offset' : 'Offset'}
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-xs text-gray-300">Offset X</label>
+              <input
+                type="number"
+                step="0.1"
+                value={offsetX || 0}
+                onChange={(e) => updateOffset('x', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-xs text-gray-300">Offset Y</label>
+              <input
+                type="number"
+                step="0.1"
+                value={offsetY || 0}
+                onChange={(e) => updateOffset('y', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-500 mt-1">
+            Camera position offset in world units
+          </div>
+        </div>
+
+        {/* Preset Boundary Controls */}
+        <div className="mt-4">
+          <div className="text-xs mb-2 text-gray-400">
+            {scene?.metadata?.isPortraitMode ? 'Portrait Boundaries' : 'Boundaries'}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-300">Left</label>
+              <input
+                type="number"
+                step="1"
+                value={boundaryLeft || 0}
+                onChange={(e) => updateBoundary('left', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-300">Right</label>
+              <input
+                type="number"
+                step="1"
+                value={boundaryRight || 0}
+                onChange={(e) => updateBoundary('right', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-300">Top</label>
+              <input
+                type="number"
+                step="1"
+                value={boundaryTop || 0}
+                onChange={(e) => updateBoundary('top', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-300">Bottom</label>
+              <input
+                type="number"
+                step="1"
+                value={boundaryBottom || 0}
+                onChange={(e) => updateBoundary('bottom', e.target.value)}
+                className="w-full px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded text-sm"
+              />
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-500 mt-1">
+            Boundary padding (+ = more restrictive, - = less)
+          </div>
+        </div>
+          </>
+        )}
 
         {/* Instructions */}
         <div className="mt-4 pt-2.5 border-t border-gray-600 text-[10px] text-gray-500">
           💡 Arrow keys move model, zoom adjusts size
         </div>
-      </div>
     </>
   );
 };

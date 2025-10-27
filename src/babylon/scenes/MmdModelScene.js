@@ -10,6 +10,7 @@ import { Camera } from "@babylonjs/core/Cameras/camera";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
@@ -28,7 +29,6 @@ import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
-import { MmdCameraAutoFocus } from "../camera/MmdCameraAutoFocus";
 import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
@@ -46,6 +46,9 @@ import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
  */
 export const buildMmdModelScene = async (canvas, engine, config) => {
   const finalConfig = config;
+  
+  // Check if Portrait Mode is enabled (used in multiple places)
+  const isPortraitMode = finalConfig.uiConfig?.enablePortraitMode || false;
   
   SdefInjector.OverrideEngineCreateEffect(engine);
 
@@ -77,6 +80,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Set orthographic frustum
   const orthoHeight = finalConfig.orthoHeight;
+  const cameraDistance = finalConfig.cameraDistance;
   const aspectRatio = engine.getAspectRatio(mmdCamera);
   
   mmdCamera.orthoTop = orthoHeight;
@@ -85,7 +89,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   mmdCamera.orthoRight = orthoHeight * aspectRatio;
 
   // Set camera distance for orthographic view
-  mmdCamera.distance = finalConfig.cameraDistance;
+  mmdCamera.distance = cameraDistance;
   mmdCamera.rotation.set(0, 0, 0);
 
   // Handle window resize to maintain aspect ratio
@@ -111,23 +115,11 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   camera.inertia = 0.8;
   camera.speed = 10;
 
-  // Double-click to switch cameras
-  let lastClickTime = -Infinity;
-  canvas.onclick = () => {
-    const currentTime = performance.now();
-    if (500 < currentTime - lastClickTime) {
-      lastClickTime = currentTime;
-      return;
-    }
-
-    lastClickTime = -Infinity;
-
-    if (scene.activeCamera === camera) {
-      scene.activeCamera = mmdCamera;
-    } else {
-      scene.activeCamera = camera;
-    }
-  };
+  // Store cameras in metadata for debug panel access
+  scene.metadata = scene.metadata || {};
+  scene.metadata.mmdCamera = mmdCamera;
+  scene.metadata.arcRotateCamera = camera;
+  scene.metadata.is3DViewActive = false;
 
   // ========================================
   // LIGHTING
@@ -332,9 +324,56 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     mmdModel,
     bvmdLoader
   );
+  
+  // Initialize scene metadata if null
+  if (!scene.metadata) {
+    scene.metadata = {};
+  }
+  
+  // Store AnimationManager in scene metadata for cross-manager communication
+  scene.metadata.animationManager = animationManager;
+  
+  // Get position preset BEFORE initializing AnimationManager
+  // so intro animation can be flipped if model is on left side
+  const positionConfig = finalConfig.uiConfig?.position || { preset: 'bottom-right' };
+  const preset = positionConfig.preset || 'bottom-right';
+  // Use the actual preset directly (last-location preset now exists in config)
+  const actualPreset = preset;
+  
+  // Portrait Mode - Use clipping plane to hide lower body
+  // Get clipping plane Y value from preset (allows per-model adjustment)
+  if (isPortraitMode) {
+    // Import PositionPresets to get the portraitClipPlaneY value
+    const { PositionPresets } = await import('../../config/uiConfig.js');
+    const presetData = PositionPresets[actualPreset];
+    const clipPlaneY = presetData?.portraitClipPlaneY ?? 6.5; // Default to 6.5 if not specified
+    
+    console.log(`[MmdModelScene] Portrait Mode enabled - setting up clipping plane at Y = ${clipPlaneY}`);
+    
+    // Create a clipping plane at specified height
+    // Normal pointing DOWN (0,-1,0) clips everything BELOW the Y coordinate
+    const clipPlane = new Plane(0, -1, 0, clipPlaneY);
+    scene.clipPlane = clipPlane;
+    
+    // Store clipping plane Y value in metadata for debug panel access
+    scene.metadata.portraitClipPlaneY = clipPlaneY;
+    
+    // Store Portrait Mode flag in scene metadata
+    scene.metadata.isPortraitMode = true;
+    
+    console.log(`[MmdModelScene] Portrait Mode: Clipping plane set at Y = ${clipPlaneY}`);
+  }
+  
+  // Determine if we should skip intro
+  // Skip for: center positions, last-location, or Portrait Mode
+  const shouldSkipIntro = preset.includes('center') || preset === 'last-location' || isPortraitMode;
+  
+  console.log(`[MmdModelScene] Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}`);
 
-  // Initialize animation system (loads first idle animation)
-  await animationManager.initialize();
+  // Initialize animation system
+  // Skip intro for center positions (model just appears in place)
+  // Pass position preset so intro can be flipped for left-side positions
+  await animationManager.initialize(!shouldSkipIntro, actualPreset);
 
   console.log('[MmdModelScene] AnimationManager initialized and running');
 
@@ -351,10 +390,54 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     finalConfig.positionConfig
   );
 
-  // Initialize positioning system (applies default bottom-right preset)
-  positionManager.initialize();
+  // Store in metadata BEFORE initializing so AnimationManager can find it
+  scene.metadata = scene.metadata || {};
+  scene.metadata.positionManager = positionManager;
 
-  console.log('[MmdModelScene] PositionManager initialized and running');
+  // Initialize positioning system with saved preset/location from uiConfig
+  console.log('[MmdModelScene] Initializing PositionManager with config:', positionConfig);
+  console.log('[MmdModelScene] uiConfig:', finalConfig.uiConfig);
+  
+  // If preset is 'last-location' and we have saved coordinates, use them
+  if (preset === 'last-location' && positionConfig.lastLocation) {
+    const { x, y } = positionConfig.lastLocation;
+    console.log('[MmdModelScene] Loading last location:', positionConfig.lastLocation);
+    
+    // Initialize with the preset first to get correct modelSize
+    positionManager.initialize(actualPreset);
+    
+    // Then override just the position (x, y), keeping the preset's width/height and offset
+    const { PositionPresets } = await import('../../config/uiConfig.js');
+    const presetData = PositionPresets[actualPreset];
+    const modelSize = isPortraitMode ? presetData.portraitModelSize : presetData.modelSize;
+    const width = modelSize.width;
+    const height = modelSize.height;
+    
+    // Get the correct offset based on Portrait Mode
+    const offset = isPortraitMode && presetData.portraitOffset 
+      ? presetData.portraitOffset 
+      : presetData.offset || { x: 0, y: 0 };
+    
+    // Apply two-height system for Portrait Mode
+    let cameraHeight = height;
+    let effectiveHeight = height;
+    if (isPortraitMode) {
+      cameraHeight = height * 3;  // 1500px for zoom
+      effectiveHeight = height;    // 500px for positioning
+    }
+    
+    console.log(`[MmdModelScene] Restoring position (${x}, ${y}) with preset size ${width}x${height}, offset:`, offset);
+    positionManager.setPositionPixels(x, y, width, cameraHeight, effectiveHeight, offset);
+  } else {
+    // Use preset
+    console.log('[MmdModelScene] Using preset:', actualPreset);
+    positionManager.initialize(actualPreset);
+  }
+
+  console.log('[MmdModelScene] PositionManager initialized');
+  
+  // Notify AnimationManager about PositionManager (for picking box creation)
+  animationManager.setPositionManager(positionManager);
 
   // ========================================
   // POST-PROCESSING PIPELINE
@@ -376,10 +459,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   defaultPipeline.imageProcessing.vignetteColor = new Color4(0, 0, 0, 0);
   defaultPipeline.imageProcessing.vignetteEnabled = true;
 
-  const mmdCameraAutoFocus = new MmdCameraAutoFocus(mmdCamera, defaultPipeline);
-  mmdCameraAutoFocus.setTarget(mmdModel);
-  mmdCameraAutoFocus.register(scene);
-
   // ========================================
   // CANVAS INTERACTION MANAGER
   // ========================================
@@ -398,11 +477,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // onDrag
     (deltaX, deltaY) => {
       const currentPos = positionManager.getPositionPixels();
+      // Preserve two-height system during drag
       positionManager.setPositionPixels(
         currentPos.x + deltaX,
         currentPos.y + deltaY,
         currentPos.width,
-        currentPos.height,
+        positionManager.modelHeightPx,
+        positionManager.effectiveHeightPx,
         positionManager.offset
       );
     },
@@ -426,9 +507,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // ========================================
   
   // Expose managers via scene metadata for external control
-  scene.metadata = scene.metadata || {};
   scene.metadata.animationManager = animationManager;
-  scene.metadata.positionManager = positionManager;
   scene.metadata.interactionManager = interactionManager;
   scene.metadata.modelMesh = modelMesh;
   scene.metadata.mmdModel = mmdModel;

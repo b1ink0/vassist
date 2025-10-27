@@ -5,7 +5,7 @@
  */
 
 import { useConfig } from '../../contexts/ConfigContext';
-import { BackgroundThemeModes } from '../../config/uiConfig';
+import { BackgroundThemeModes, PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 
 const UISettings = ({ isLightBackground }) => {
@@ -61,6 +61,51 @@ const UISettings = ({ isLightBackground }) => {
             : 'Chat-only mode (no 3D model)'}
         </p>
       </div>
+
+      {/* Portrait Mode Toggle - Only show when 3D model is enabled */}
+      {uiConfig.enableModelLoading && (
+        <div className="space-y-2">
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={uiConfig.enablePortraitMode || false}
+              onChange={(e) => updateUIConfig('enablePortraitMode', e.target.checked)}
+              className="w-4 h-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-white">Enable Portrait Mode</span>
+          </label>
+          <p className="text-xs text-white/50 ml-7">
+            {uiConfig.enablePortraitMode 
+              ? 'Upper body framing with closer camera view' 
+              : 'Full body view with standard camera'}
+          </p>
+        </div>
+      )}
+
+      {/* FPS Limit - Only show when 3D model is enabled */}
+      {uiConfig.enableModelLoading && (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Frame Rate Limit</label>
+          <select
+            value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
+            onChange={(e) => {
+              const value = e.target.value === 'native' ? 'native' : parseInt(e.target.value);
+              updateUIConfig('fpsLimit', value);
+            }}
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          >
+            <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
+            <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
+            <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
+            <option value={FPSLimitOptions.NATIVE} className="bg-gray-900">Native (Monitor Rate)</option>
+          </select>
+          <p className="text-xs text-white/50">
+            {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native'
+              ? '⚠️ Native refresh rate may impact performance on high-refresh monitors'
+              : `Limits rendering to ${uiConfig.fpsLimit || 60} frames per second`}
+          </p>
+        </div>
+      )}
 
       {/* Enable Developer Tools Toggle */}
       <div className="space-y-2">
@@ -132,19 +177,28 @@ const UISettings = ({ isLightBackground }) => {
         </>
       )}
 
-      {/* Chat Position */}
+      {/* Position Preset - Show for both model and chat-only mode */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Chat Position</label>
+        <label className="block text-sm font-medium text-white/90">
+          {uiConfig.enableModelLoading ? 'Model Position' : 'Chat Position'}
+        </label>
         <select
-          value={uiConfig.chatPosition}
-          onChange={(e) => updateUIConfig('chatPosition', e.target.value)}
+          value={uiConfig.position?.preset || 'bottom-right'}
+          onChange={(e) => updateUIConfig('position.preset', e.target.value)}
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         >
-          <option value="bottom-right" className="bg-gray-900">Bottom Right</option>
-          <option value="bottom-left" className="bg-gray-900">Bottom Left</option>
-          <option value="top-right" className="bg-gray-900">Top Right</option>
-          <option value="top-left" className="bg-gray-900">Top Left</option>
+          <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
+          {Object.entries(PositionPresets).map(([key, preset]) => (
+            <option key={key} value={key} className="bg-gray-900">
+              {preset.name}
+            </option>
+          ))}
         </select>
+        <p className="text-xs text-white/50">
+          {uiConfig.position?.preset === 'last-location'
+            ? 'Will load at the last dragged position. Drag to save new position.'
+            : 'Changes will apply on next page load or reload'}
+        </p>
       </div>
 
       {/* AI Toolbar Settings */}

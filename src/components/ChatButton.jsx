@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
 
 const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
   const {
@@ -11,6 +12,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     endButtonDrag,
     setPendingDropData,
   } = useApp();
+  
+  const { uiConfig, updateUIConfig } = useConfig();
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
@@ -22,37 +25,80 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const dragDropServiceRef = useRef(null);
   const buttonRef = useRef(null);
 
-  // Load saved position when model is disabled (draggable mode)
+  /**
+   * Convert preset name to button pixel position
+   */
+  const getButtonPositionFromPreset = useCallback((preset) => {
+    const buttonSize = 48;
+    const padding = 20;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    
+    switch (preset) {
+      case 'bottom-right':
+        return { x: width - buttonSize - padding, y: height - buttonSize - padding };
+      case 'bottom-left':
+        return { x: padding, y: height - buttonSize - padding };
+      case 'bottom-center':
+        return { x: (width - buttonSize) / 2, y: height - buttonSize - padding };
+      case 'top-right':
+        return { x: width - buttonSize - padding, y: padding };
+      case 'top-left':
+        return { x: padding, y: padding };
+      case 'top-center':
+        return { x: (width - buttonSize) / 2, y: padding };
+      case 'center':
+        return { x: (width - buttonSize) / 2, y: (height - buttonSize) / 2 };
+      default:
+        return { x: width - buttonSize - padding, y: height - buttonSize - padding };
+    }
+  }, []);
+
+  // Load saved position when model is disabled (chat-only mode)
   useEffect(() => {
     if (!modelDisabled) return;
     const load = async () => {
       const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
+      
       try {
-        const saved = await StorageServiceProxy.configLoad('chatButtonPosition', defaultPos);
+        const positionConfig = uiConfig.position || { preset: 'bottom-right' };
+        const preset = positionConfig.preset || 'bottom-right';
+        
+        let targetPos = defaultPos;
+        
+        // If preset is 'last-location' and we have saved coordinates
+        if (preset === 'last-location' && positionConfig.lastLocation) {
+          const { x, y } = positionConfig.lastLocation;
+          targetPos = { x, y };
+          console.log('[ChatButton] Loading from last location:', targetPos);
+        } else if (preset !== 'last-location') {
+          // Use preset position (convert to button position)
+          targetPos = getButtonPositionFromPreset(preset);
+          console.log('[ChatButton] Loading from preset:', preset, targetPos);
+        }
+        
+        // Bound check
         const buttonSize = 48;
-        const boundedX = Math.max(10, Math.min(saved.x, window.innerWidth - buttonSize - 10));
-        const boundedY = Math.max(10, Math.min(saved.y, window.innerHeight - buttonSize - 10));
+        const boundedX = Math.max(10, Math.min(targetPos.x, window.innerWidth - buttonSize - 10));
+        const boundedY = Math.max(10, Math.min(targetPos.y, window.innerHeight - buttonSize - 10));
         const validPos = { x: boundedX, y: boundedY };
+        
         setButtonPos(validPos);
         buttonPosRef.current = validPos;
-        if (boundedX !== saved.x || boundedY !== saved.y) {
-          await StorageServiceProxy.configSave('chatButtonPosition', validPos);
-        }
       } catch (err) {
         console.error('[ChatButton] load position failed', err);
-        const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
         setButtonPos(defaultPos);
         buttonPosRef.current = defaultPos;
       }
     };
     load();
-  }, [modelDisabled, setButtonPos]);
+  }, [modelDisabled, setButtonPos, uiConfig.position, getButtonPositionFromPreset]);
 
   useEffect(() => {
     buttonPosRef.current = buttonPos;
   }, [buttonPos]);
 
-  // Adjust button position when chat opens (if in model-disabled mode)
+  // Adjust button position when chat opens (if in chat-only mode)
   useEffect(() => {
     if (!modelDisabled || !isChatOpen) return;
 
@@ -65,17 +111,24 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       const newPos = { x: currentPos.x, y: newY };
       setButtonPos(newPos);
       buttonPosRef.current = newPos;
-      StorageServiceProxy.configSave('chatButtonPosition', newPos).catch(error => {
-        console.error('[ChatButton] Failed to save position when chat opened:', error);
-      });
+      
+      // Save if using last-location
+      if (uiConfig.position?.preset === 'last-location') {
+        updateUIConfig('position.lastLocation', { 
+          x: newPos.x, 
+          y: newPos.y,
+          width: 48,
+          height: 48
+        });
+      }
 
       const event = new CustomEvent('chatButtonMoved', { detail: newPos });
       window.dispatchEvent(event);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelDisabled, isChatOpen]); // chatInputRef is stable, don't include in dependencies
+  }, [modelDisabled, isChatOpen, uiConfig.position?.preset, updateUIConfig]); // chatInputRef is stable, don't include in dependencies
 
-  // Handle window resize - keep button within bounds when model disabled
+  // Handle window resize - keep button within bounds when in chat-only mode
   const handleResize = useCallback(async () => {
     const buttonSize = 48;
     const boundedX = Math.max(10, Math.min(buttonPos.x, window.innerWidth - buttonSize - 10));
@@ -83,13 +136,18 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     if (boundedX !== buttonPos.x || boundedY !== buttonPos.y) {
       const newPos = { x: boundedX, y: boundedY };
       setButtonPos(newPos);
-      try {
-        await StorageServiceProxy.configSave('chatButtonPosition', newPos);
-      } catch (error) {
-        console.error('[ChatButton] Failed to save position on resize:', error);
+      
+      // Save if using last-location
+      if (uiConfig.position?.preset === 'last-location') {
+        updateUIConfig('position.lastLocation', { 
+          x: newPos.x, 
+          y: newPos.y,
+          width: 48,
+          height: 48
+        });
       }
     }
-  }, [buttonPos.x, buttonPos.y, setButtonPos]);
+  }, [buttonPos.x, buttonPos.y, setButtonPos, uiConfig.position?.preset, updateUIConfig]);
 
   useEffect(() => {
     if (!modelDisabled) return;
@@ -115,14 +173,16 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       try {
         const buttonSize = 48;
         const offsetX = 15;
-        const offsetY = 25;
+        
+        // Chat icon positioning - at bottom of effectiveHeight (visible area)
+        const buttonY = modelPos.y + modelPos.height - buttonSize;
+        
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - buttonSize - offsetX;
         const windowWidth = window.innerWidth;
         const wouldOverflowRight = rightX + buttonSize > windowWidth - 10;
         const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
         const buttonX = shouldBeOnLeft ? leftX : rightX;
-        const buttonY = modelPos.y + modelPos.height - buttonSize - offsetY;
         const newX = Math.round(buttonX);
         const newY = Math.round(buttonY);
         if (newX === lastSetPosition.current.x && newY === lastSetPosition.current.y) return;
@@ -182,14 +242,24 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const handleMouseUp = useCallback(() => {
     if (!modelDisabled || !isDragging) return;
     setIsDragging(false);
-    StorageServiceProxy.configSave('chatButtonPosition', buttonPos).catch(err => console.error('[ChatButton] save pos failed', err));
+    
+    // Save position if preset is 'last-location'
+    if (uiConfig.position?.preset === 'last-location') {
+      console.log('[ChatButton] Saving last location:', buttonPos);
+      updateUIConfig('position.lastLocation', { 
+        x: buttonPos.x, 
+        y: buttonPos.y,
+        width: 48, // Button size
+        height: 48
+      });
+    }
     
     // Emit chatButtonMoved event for ChatContainer to follow
     const event = new CustomEvent('chatButtonMoved', { detail: buttonPos });
     window.dispatchEvent(event);
     
     endButtonDrag();
-  }, [modelDisabled, isDragging, buttonPos, endButtonDrag]);
+  }, [modelDisabled, isDragging, buttonPos, endButtonDrag, uiConfig.position?.preset, updateUIConfig]);
 
   useEffect(() => {
     if (!modelDisabled) return;
@@ -244,7 +314,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         position: 'fixed',
         left: `${buttonPos.x}px`,
         top: `${buttonPos.y}px`,
-        zIndex: 9999,
+        zIndex: 10000, // Higher than canvas (9999) to ensure clickability
         width: '48px',
         height: '48px',
         cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',

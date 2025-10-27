@@ -91,222 +91,320 @@ export const AnimationRegistry = {
   // ===== IDLE =====
   idle: [
     {
-      id: 'idle_breathing',
-      name: 'Idle Breathing',
-      filePath: 'res/private_test/motion/breathing-idle-1.bvmd',
+      id: 'idle_1',
+      name: 'Idle 1',
+      filePath: 'res/assets/motion/idle1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Default idle animation with subtle breathing',
-        tags: ['default', 'breathing', 'calm'],
+        description: 'Primary idle animation with subtle movements',
+        tags: ['default', 'idle', 'calm'],
       },
     },
     {
-      id: 'idle_looking',
-      name: 'Idle Looking Around',
-      filePath: 'res/private_test/motion/breathing-idle-2.bvmd',
+      id: 'idle_2',
+      name: 'Idle 2',
+      filePath: 'res/assets/motion/idle2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Idle with occasional head movements',
-        tags: ['looking', 'curious', 'attentive'],
+        description: 'Secondary idle animation variant',
+        tags: ['idle', 'calm', 'breathing'],
       },
     },
     {
-      id: 'waving_1',
-      name: 'Waving',
-      filePath: 'res/private_test/motion/waving-1.bvmd',
+      id: 'idle_4_short',
+      name: 'Idle Short',
+      filePath: 'res/assets/motion/idle4-short.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Idle with occasional head movements',
-        tags: ['looking', 'curious', 'attentive'],
+        description: 'Short idle animation loop',
+        tags: ['idle', 'short', 'quick'],
       },
     },
     {
-      id: 'waving_2',
-      name: 'Waving',
-      filePath: 'res/private_test/motion/waving-2.bvmd',
+      id: 'yawn_1',
+      name: 'Yawn 1',
+      filePath: 'res/assets/motion/ywan1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: true,
-      loopTransition: false,
+      loop: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Idle with occasional head movements',
-        tags: ['looking', 'curious', 'attentive'],
+        description: 'Yawning animation',
+        tags: ['yawn', 'tired', 'idle'],
       },
     },
     {
-      id: 'yawn',
-      name: 'Yawn',
-      filePath: 'res/private_test/motion/yawn.bvmd',
+      id: 'yawn_2',
+      name: 'Yawn 2',
+      filePath: 'res/assets/motion/ywan2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: true,
-      loopTransition: false,
+      loop: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Idle with occasional head movements',
-        tags: ['looking', 'curious', 'attentive'],
+        description: 'Alternative yawning animation',
+        tags: ['yawn', 'tired', 'idle'],
       },
     },
-    // TODO: Add more idle variants
+    {
+      id: 'hi_1',
+      name: 'Hi 1',
+      filePath: 'res/assets/motion/hi1.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Waving hello gesture',
+        tags: ['greeting', 'hello', 'wave', 'friendly', 'idle'],
+      },
+    },
+    {
+      id: 'hi_2',
+      name: 'Hi 2',
+      filePath: 'res/assets/motion/hi2.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Alternative hello gesture',
+        tags: ['greeting', 'hello', 'wave', 'friendly', 'idle'],
+      },
+    },
   ],
   
   // ===== THINKING =====
   thinking: [
     {
       id: 'thinking_1',
-      name: 'Thinking',
-      filePath: 'res/private_test/motion/thinking.bvmd', // TODO: Replace with actual thinking animation
+      name: 'Thinking 1',
+      filePath: 'res/assets/motion/think1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Thoughtful pose - hand on chin',
+        description: 'Thoughtful pose - considering something',
         tags: ['thinking', 'pondering', 'contemplating'],
       },
     },
-    // TODO: Add more thinking variants
+    {
+      id: 'thinking_2',
+      name: 'Thinking 2',
+      filePath: 'res/assets/motion/think2.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Alternative thinking animation',
+        tags: ['thinking', 'pondering', 'analyzing'],
+      },
+    },
   ],
   
   // ===== CELEBRATING =====
   celebrating: [
     {
-      id: 'celebrating_1',
-      name: 'Celebrating',
-      filePath: 'res/private_test/motion/excited.bvmd', // TODO: Replace with actual celebration
+      id: 'clap_1',
+      name: 'Clapping',
+      filePath: 'res/assets/motion/clap1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Happy celebration with arms raised',
-        tags: ['happy', 'celebrating', 'excited', 'victory'],
+        description: 'Clapping hands in celebration',
+        tags: ['happy', 'celebrating', 'clapping', 'excited'],
       },
     },
-    {
-      id: 'celebrating_2',
-      name: 'Celebrating',
-      filePath: 'res/private_test/motion/victory.bvmd', // TODO: Replace with actual celebration
-      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,
-      weight: 1.0,
-      metadata: {
-        description: 'Happy celebration with arms raised',
-        tags: ['happy', 'celebrating', 'excited', 'victory'],
-      },
-    },
-    // TODO: Add more celebration variants
   ],
   
-  // ===== WALKING =====
-  walking: [
+  // ===== INTRO =====
+  // Used only for app initialization intro animations
+  intro: [
     {
-      id: 'walking_1',
-      name: 'Walking',
-      filePath: 'res/private_test/motion/yawn.bvmd',
+      id: 'intro_1',
+      name: 'Intro 1',
+      filePath: 'res/assets/motion/intro1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: true,
+      loop: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Walking forward animation',
-        tags: ['walking', 'movement', 'locomotion'],
+        description: 'Entrance animation - walks from left to right and greets',
+        tags: ['intro', 'greeting', 'entrance', 'walk-in'],
       },
     },
-    // TODO: Add more walking variants (fast walk, slow walk, etc.)
+    {
+      id: 'intro_2',
+      name: 'Intro 2',
+      filePath: 'res/assets/motion/intro2.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Alternative entrance animation - walks in and greets',
+        tags: ['intro', 'greeting', 'entrance', 'walk-in'],
+      },
+    },
   ],
   
   // ===== TALKING =====
+  // Body animations for talking (used with lip-sync composite)
   talking: [
     {
-      id: 'talking_1',
-      name: 'Talking',
-      filePath: 'res/private_test/motion/talking2.bvmd',
+      id: 'talk_excited',
+      name: 'Talk Excited',
+      filePath: 'res/assets/motion/talk1-excited.bvmd',
       transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false, // Perfect loop - no transition needed when same animation repeats
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Body gestures while talking',
-        tags: ['talking', 'gestures', 'body'],
+        description: 'Excited talking body gestures',
+        tags: ['talking', 'gestures', 'excited', 'energetic'],
       },
     },
-  ],
-
-  happy: [
     {
-      id: 'happy_1',
-      name: 'Happy',
-      filePath: 'res/private_test/motion/happy.bvmd',
-      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      id: 'talk_nervous',
+      name: 'Talk Nervous',
+      filePath: 'res/assets/motion/talk2-nervous.bvmd',
+      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Lip sync from TTS audio',
-        tags: ['lip-sync', 'mouth', 'facial'],
+        description: 'Nervous talking body gestures',
+        tags: ['talking', 'gestures', 'nervous', 'anxious'],
       },
     },
-  ],
-  excited: [
     {
-      id: 'excited_1',
-      name: 'Excited',
-      filePath: 'res/private_test/motion/excited.bvmd',
-      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      id: 'talk_calm',
+      name: 'Talk Calm',
+      filePath: 'res/assets/motion/talk3-calm.bvmd',
+      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Lip sync from TTS audio',
-        tags: ['lip-sync', 'mouth', 'facial'],
+        description: 'Calm talking body gestures',
+        tags: ['talking', 'gestures', 'calm', 'relaxed'],
       },
     },
-  ],
-  error: [
     {
-      id: 'error_1',
-      name: 'Error',
-      filePath: 'res/private_test/motion/focus.bvmd',
-      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      id: 'talk_angry',
+      name: 'Talk Angry',
+      filePath: 'res/assets/motion/talk4-angry.bvmd',
+      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Lip sync from TTS audio',
-        tags: ['lip-sync', 'mouth', 'facial'],
+        description: 'Angry talking body gestures',
+        tags: ['talking', 'gestures', 'angry', 'frustrated'],
       },
     },
   ],
-
-
+  
+  // ===== WALKING =====
+  // Placeholder animations for testing (no actual walking animations yet)
+  walking: [
+    {
+      id: 'walking_placeholder',
+      name: 'Walking (Placeholder)',
+      filePath: 'res/assets/motion/idle1.bvmd', // Using idle as placeholder
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: true,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Placeholder for walking animation',
+        tags: ['placeholder', 'testing'],
+      },
+    },
+  ],
+  
+  // ===== LIP SYNC =====
+  // For debug panel testing only - not used in production
   lipSync: [
     {
       id: 'audio_1',
-      name: 'Audio Idle',
+      name: 'Audio Test',
       filePath: 'res/private_test/motion/audio.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false,
+      loopTransition: true,
       weight: 1.0,
       metadata: {
-        description: 'Lip sync from TTS audio',
-        tags: ['lip-sync', 'mouth', 'facial'],
+        description: 'Test lip sync animation (debug only)',
+        tags: ['lip-sync', 'mouth', 'facial', 'debug'],
       },
     },
-  ]
+  ],
   
-  // TODO: Add more animation types as needed:
-  // waving: [...],
-  // pointing: [...],
-  // sad: [...],
-  // surprised: [...],
-  // confused: [...],
+  // ===== HAPPY/EXCITED =====
+  // Placeholder animations for testing
+  happy: [
+    {
+      id: 'happy_placeholder',
+      name: 'Happy (Placeholder)',
+      filePath: 'res/assets/motion/clap1.bvmd', // Using clap as placeholder
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Placeholder for happy animation',
+        tags: ['placeholder', 'testing', 'happy'],
+      },
+    },
+  ],
+  
+  excited: [
+    {
+      id: 'excited_placeholder',
+      name: 'Excited (Placeholder)',
+      filePath: 'res/assets/motion/clap1.bvmd', // Using clap as placeholder
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Placeholder for excited animation',
+        tags: ['placeholder', 'testing', 'excited'],
+      },
+    },
+  ],
+  
+  // ===== ERROR/FOCUS =====
+  // Placeholder animations for testing
+  error: [
+    {
+      id: 'error_placeholder',
+      name: 'Error (Placeholder)',
+      filePath: 'res/assets/motion/think1.bvmd', // Using think as placeholder
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Placeholder for error state animation',
+        tags: ['placeholder', 'testing', 'error'],
+      },
+    },
+  ],
 };
 
 /**
@@ -479,63 +577,78 @@ export const StateTransitions = {
  */
 export const EmotionMapping = {
   // ===== POSITIVE EMOTIONS =====
-  happy: 'celebrating_1',
-  excited: 'celebrating_1',
-  joyful: 'celebrating_1',
-  cheerful: 'celebrating_1',
-  enthusiastic: 'celebrating_1',
+  happy: 'clap_1',
+  excited: 'clap_1',
+  joyful: 'clap_1',
+  cheerful: 'clap_1',
+  enthusiastic: 'clap_1',
   
   // ===== NEUTRAL/CALM EMOTIONS =====
-  neutral: 'idle_breathing',
-  calm: 'idle_breathing',
-  relaxed: 'idle_breathing',
-  idle: 'idle_breathing',
-  default: 'idle_breathing',
+  neutral: 'idle_1',
+  calm: 'idle_1',
+  relaxed: 'idle_2',
+  idle: 'idle_1',
+  default: 'idle_1',
   
   // ===== THINKING/COGNITIVE EMOTIONS =====
   thinking: 'thinking_1',
-  pondering: 'thinking_1',
+  pondering: 'thinking_2',
   contemplating: 'thinking_1',
-  analyzing: 'thinking_1',
+  analyzing: 'thinking_2',
   processing: 'thinking_1',
   
   // ===== ATTENTIVE/CURIOUS EMOTIONS =====
-  curious: 'idle_looking',
-  attentive: 'idle_looking',
-  focused: 'idle_looking',
-  interested: 'idle_looking',
-  observing: 'idle_looking',
+  curious: 'idle_2',
+  attentive: 'idle_2',
+  focused: 'idle_1',
+  interested: 'idle_2',
+  observing: 'idle_1',
   
   // ===== ACTIVE/ENERGETIC EMOTIONS =====
-  active: 'walking_1',
-  energetic: 'walking_1',
-  working: 'walking_1',
-  busy: 'walking_1',
+  active: 'talk_excited',
+  energetic: 'talk_excited',
+  working: 'thinking_1',
+  busy: 'thinking_1',
   
   // ===== ERROR/SYSTEM STATES =====
-  error: 'thinking_1',           // Thoughtful pose when something goes wrong
-  confused: 'thinking_1',         // Same - trying to figure it out
-  uncertain: 'thinking_1',        // Not sure about something
-  validation_error: 'thinking_1', // Data validation failed
+  error: 'thinking_1',
+  confused: 'thinking_2',
+  uncertain: 'thinking_1',
+  validation_error: 'thinking_1',
   
   // ===== WAITING/LOADING STATES =====
-  waiting: 'idle_breathing',      // Calm while waiting
-  loading: 'idle_breathing',      // Processing in background
-  listening: 'idle_looking',      // Attentive while user speaks
+  waiting: 'idle_1',
+  loading: 'idle_1',
+  listening: 'idle_2',
   
   // ===== ACKNOWLEDGMENT STATES =====
-  acknowledging: 'idle_breathing', // Simple acknowledgment
-  understanding: 'idle_breathing', // Got it
-  agreeing: 'idle_breathing',      // Agreement
+  acknowledging: 'idle_1',
+  understanding: 'idle_2',
+  agreeing: 'idle_1',
   
-  // TODO: Add more emotions as animations become available:
-  // sad: 'sad_1',
-  // surprised: 'surprised_1',
-  // worried: 'worried_1',
-  // frustrated: 'frustrated_1',
-  // apologetic: 'apologetic_1',
-  // greeting: 'waving_1',
-  // farewell: 'waving_1',
+  // ===== GREETING/FAREWELL =====
+  greeting: 'hi_1',
+  hello: 'hi_2',
+  hi: 'hi_1',
+  welcome: 'intro_1',
+  introduction: 'intro_2',
+  farewell: 'hi_1',
+  goodbye: 'hi_2',
+  
+  // ===== TIRED/BORED =====
+  tired: 'yawn_1',
+  bored: 'yawn_2',
+  sleepy: 'yawn_1',
+  
+  // ===== NERVOUS/ANXIOUS =====
+  nervous: 'talk_nervous',
+  anxious: 'talk_nervous',
+  worried: 'talk_nervous',
+  
+  // ===== ANGRY/FRUSTRATED =====
+  angry: 'talk_angry',
+  frustrated: 'talk_angry',
+  annoyed: 'talk_angry',
 };
 
 /**

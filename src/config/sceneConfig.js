@@ -18,7 +18,7 @@ const SceneConfig = {
   
   // Model configuration - these will be resolved at runtime
   // In extension mode, URLs are fetched via ExtensionBridge.getResourceURL()
-  modelUrl: "res/private_test/model/1.bpmx",
+  modelUrl: "res/assets/model/default1.bpmx",
   cameraAnimationUrl: "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   

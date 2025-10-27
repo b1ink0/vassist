@@ -710,7 +710,7 @@ const ChatContainer = ({
           position: 'fixed',
           left: `${containerPos.x}px`,
           top: `${containerPos.y}px`,
-          zIndex: 998,
+          zIndex: 9999, // Same as canvas, but will be above due to DOM order. Below chat button (10000)
           width: '400px',
           height: '500px',
           borderRadius: '24px',

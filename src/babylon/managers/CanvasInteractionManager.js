@@ -191,10 +191,20 @@ export class CanvasInteractionManager {
   }
   
   /**
-   * Check if a mesh belongs to the model
+   * Check if a mesh belongs to the model or is the picking box
+   * In Portrait Mode, ONLY the picking box should be draggable (not the invisible clipped body)
    */
   isModelMesh(mesh) {
     if (!mesh) return false;
+    
+    // Check if it's the picking box
+    if (mesh.metadata && mesh.metadata.isPickingBox) return true;
+    
+    // In Portrait Mode, ONLY the picking box is draggable
+    const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
+    if (isPortraitMode) {
+      return false;
+    }
     
     // Check if it's the model itself
     if (mesh === this.modelMesh) return true;

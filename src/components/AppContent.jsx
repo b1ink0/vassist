@@ -10,6 +10,7 @@ import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
 import { useApp } from '../contexts/AppContext';
+import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
 
 function AppContent({ mode = 'development' }) {
   const [currentState, setCurrentState] = useState('IDLE');
@@ -24,6 +25,9 @@ function AppContent({ mode = 'development' }) {
     positionManagerRef,
     handleAssistantReady: contextHandleAssistantReady,
   } = useApp();
+  
+  // Auto-unmount when tab is hidden for 15+ seconds
+  const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
   
   /**
    * Handle VirtualAssistant ready
@@ -48,6 +52,10 @@ function AppContent({ mode = 'development' }) {
     if (!enableModelLoading) {
       return null; // Model disabled
     }
+    if (!shouldMountModel) {
+      console.log('[AppContent] Model unmounted due to prolonged tab inactivity');
+      return null;
+    }
     return (
       <VirtualAssistant 
         ref={assistantRef}
@@ -55,7 +63,7 @@ function AppContent({ mode = 'development' }) {
         mode={mode}
       />
     );
-  }, [enableModelLoading, handleAssistantReady, mode, assistantRef]);
+  }, [enableModelLoading, shouldMountModel, handleAssistantReady, mode, assistantRef]);
 
   return (
     <div className="relative">

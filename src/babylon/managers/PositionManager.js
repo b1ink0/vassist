@@ -10,91 +10,9 @@
  * - Automatic window resize handling with debouncing
  * - Boundary validation to prevent model cutoff
  * - No hardcoded magic numbers - everything calculated from actual dimensions
- * 
- * @see docs/POSITIONING_SYSTEM_ARCHITECTURE.md
  */
 
-/**
- * Position preset definitions
- * 
- * offset: Camera offset in world units { x, y }
- *         X-axis (horizontal):
- *           - Positive = moves camera RIGHT (model appears LEFT on screen)
- *           - Negative = moves camera LEFT (model appears RIGHT on screen)
- *         Y-axis (vertical):
- *           - Positive = moves camera UP (model appears LOWER on screen)
- *           - Negative = moves camera DOWN (model appears HIGHER on screen)
- *         Tune these values to adjust positioning
- * 
- * customBoundaries: Optional per-edge boundary adjustments { left, right, top, bottom } in pixels
- *         - Positive values = more restrictive (adds padding)
- *         - Negative values = less restrictive (allows going past edge)
- *         - Use to compensate for model-specific bounding box differences
- */
-export const PositionPresets = {
-  'bottom-right': {
-    name: 'Bottom Right (Chatbot)',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: -2, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: -80, right: 0, top: -80, bottom: 0 },  // Compensate for model bounding box
-    description: 'Default chatbot position in bottom-right corner'
-  },
-  
-  'bottom-left': {
-    name: 'Bottom Left',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: 2, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: 0, right: -80, top: -80, bottom: 0 },  // Compensate for model bounding box
-    description: 'Chatbot position in bottom-left corner'
-  },
-  
-  'bottom-center': {
-    name: 'Bottom Center',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: 0, y: 2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: -40, right: -40, top: -80, bottom: 0 },  // Compensate for model bounding box
-    description: 'Chatbot position at bottom center'
-  },
-  
-  'top-center': {
-    name: 'Top Center',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: 0, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: -40, right: -40, top: 0, bottom: -80 },  // Compensate for model bounding box
-    description: 'Model at top center of screen'
-  },
-  
-  'center': {
-    name: 'Center (Debug)',
-    modelSize: { width: 600, height: 900 },
-    padding: 0,
-    offset: { x: 0, y: 0 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: -80, right: -80, top: -80, bottom: -80 },  // Compensate for model bounding box
-    description: 'Large centered view for development/debugging'
-  },
-  
-  'top-left': {
-    name: 'Top Left',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: 2, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: 0, right: -80, top: 0, bottom: -80 },  // Compensate for model bounding box
-    description: 'Top-left corner position'
-  },
-  
-  'top-right': {
-    name: 'Top Right',
-    modelSize: { width: 300, height: 500 },
-    padding: 0,
-    offset: { x: -2, y: -2 },  // Tune: +x = push left, -x = push right, +y = push down, -y = push up
-    customBoundaries: { left: -80, right: 0, top: 0, bottom: -80 },  // Compensate for model bounding box
-    description: 'Top-right corner position'
-  }
-};
+import { PositionPresets } from '../../config/uiConfig.js';
 
 export class PositionManager {
   /**
@@ -128,10 +46,15 @@ export class PositionManager {
     this.canvasWidth = 0;
     this.canvasHeight = 0;
     this.modelWidthPx = 400;   // Model width in pixels (default)
-    this.modelHeightPx = 600;  // Model height in pixels (default)
-    this.positionX = 0;        // Position X in pixels (from left)
-    this.positionY = 0;        // Position Y in pixels (from top)
+    this.modelHeightPx = 600;  // Model height in pixels (used for CAMERA frustum zoom calculation)
+    this.effectiveHeightPx = 600; // Effective height for positioning/boundaries (same as modelHeightPx in normal mode)
+    this.positionX = 0;        // Position X in pixels (from left) - for camera
+    this.positionY = 0;        // Position Y in pixels (from top) - for camera
     this.offset = { x: 0, y: 0 }; // Camera offset in world units
+    
+    // Portrait Mode tracking
+    this.isPortraitMode = false;
+    this.effectiveHeightRatio = 1.0; // Ratio for effective height calculation
     
     // Resize handler reference for cleanup
     this.resizeHandler = null;
@@ -155,18 +78,19 @@ export class PositionManager {
   /**
    * Initialize - setup resize handler and apply default position
    * Call this after model is fully loaded
+   * @param {string} savedPreset - Optional saved preset from settings (default: 'bottom-right')
    */
-  initialize() {
+  initialize(savedPreset = 'bottom-right') {
     console.log('[PositionManager] Initializing...');
     
     this.updateCanvasDimensions();
     this.setupResizeHandler();
     
-    // Apply default position (bottom-right chatbot style)
+    // Apply saved position preset from settings (or default bottom-right)
     // This will trigger modelPositionChange event
-    this.applyPreset('bottom-right');
+    this.applyPreset(savedPreset);
     
-    console.log('[PositionManager] Initialized', {
+    console.log('[PositionManager] Initialized with preset:', savedPreset, {
       canvas: { width: this.canvasWidth, height: this.canvasHeight }
     });
     
@@ -179,10 +103,60 @@ export class PositionManager {
           x: this.positionX,
           y: this.positionY,
           width: this.modelWidthPx,
-          height: this.modelHeightPx
+          height: this.effectiveHeightPx,  // Use effective height for UI, not camera height
+          cameraHeight: this.modelHeightPx // Also expose camera height
         }
       }));
     });
+    
+    // Notify AnimationManager that PositionManager is ready (for intro locomotion compensation)
+    // ONLY apply intro offset if the preset actually plays intro (not center positions, last-location, or Portrait Mode)
+    const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
+    const shouldSkipIntro = savedPreset.includes('center') || savedPreset === 'last-location' || isPortraitMode;
+    const animationManager = this.scene.metadata?.animationManager;
+    
+    if (!shouldSkipIntro && animationManager && animationManager._introLocomotionOffset) {
+      console.log('[PositionManager] Applying intro locomotion offset stored by AnimationManager');
+      
+      const { x, y } = animationManager._introLocomotionOffset;
+      const currentOffset = this.offset || { x: 0, y: 0 };
+      
+      const preShiftedOffset = {
+        x: currentOffset.x + x,
+        y: currentOffset.y - y
+      };
+      
+      console.log('[PositionManager] PRE-SHIFTING camera for intro:', {
+        from: currentOffset,
+        to: preShiftedOffset,
+        locomotion: { x, y }
+      });
+      
+      const currentPos = this.getPositionPixels();
+      // Use two-height system when applying intro offset
+      this.setPositionPixels(
+        currentPos.x,
+        currentPos.y,
+        currentPos.width,
+        this.modelHeightPx,      // Use stored camera height (1500px in Portrait Mode)
+        this.effectiveHeightPx,  // Use stored effective height (500px)
+        preShiftedOffset
+      );
+      
+      console.log('[PositionManager] Camera pre-shifted - intro will play with model walking in from offscreen');
+      // Record original/pre-shifted offsets on the AnimationManager so it can schedule resets
+      try {
+        if (animationManager) {
+          animationManager._cameraOriginalOffset = currentOffset;
+          animationManager._cameraPreShiftedOffset = preShiftedOffset;
+          console.log('[PositionManager] Recorded original and pre-shift offsets on AnimationManager');
+        }
+      } catch (e) {
+        console.warn('[PositionManager] Failed to record camera offsets on AnimationManager', e);
+      }
+    } else if (shouldSkipIntro) {
+      console.log('[PositionManager] Skipping intro locomotion offset (center position, last-location, or Portrait Mode)');
+    }
   }
   
   /**
@@ -213,13 +187,52 @@ export class PositionManager {
     }
     
     const config = PositionPresets[preset];
-    const modelWidth = options.modelSizePx?.width || config.modelSize.width;
-    const modelHeight = options.modelSizePx?.height || config.modelSize.height;
+    
+    // Use Portrait Mode model size if enabled, otherwise use standard size
+    const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
+    this.isPortraitMode = isPortraitMode; // Store for later use
+    
+    const modelSize = isPortraitMode && config.portraitModelSize 
+      ? config.portraitModelSize 
+      : config.modelSize;
+    
+    let modelWidth = options.modelSizePx?.width || modelSize.width;
+    let modelHeight = options.modelSizePx?.height || modelSize.height;
+    
+    let cameraHeight = modelHeight; // Height used for camera frustum (zoom)
+    let effectiveHeight = modelHeight; // Height used for positioning/boundaries
+    
+    if (isPortraitMode) {
+      // For zoom: Use larger height (3x normal) → makes camera zoom IN
+      cameraHeight = modelHeight * 3;
+      
+      // For positioning: Keep normal height so boundaries work correctly
+      effectiveHeight = modelHeight;
+      
+      this.effectiveHeightRatio = 1.0;
+      
+      console.log(`[PositionManager] Portrait Mode: Camera height=${cameraHeight}px (zoom), Effective height=${effectiveHeight}px (positioning)`);
+    } else {
+      this.effectiveHeightRatio = 1.0;
+    }
+    
     const padding = options.padding !== undefined ? options.padding : config.padding;
-    const offset = options.offset || config.offset || { x: 0, y: 0 };
+    
+    // Use portraitOffset in Portrait Mode, otherwise use regular offset
+    let offset;
+    if (isPortraitMode && config.portraitOffset) {
+      offset = options.offset || config.portraitOffset;
+    } else {
+      offset = options.offset || config.offset || { x: 0, y: 0 };
+    }
     
     // Apply preset's custom boundaries (if defined)
-    if (config.customBoundaries) {
+    // Use portraitCustomBoundaries if in Portrait Mode, otherwise use customBoundaries
+    const isPortrait = this.scene.metadata?.isPortraitMode;
+    if (isPortrait && config.portraitCustomBoundaries) {
+      this.customBoundaries = { ...config.portraitCustomBoundaries };
+      console.log(`[PositionManager] Applied Portrait Mode custom boundaries from preset '${preset}':`, this.customBoundaries);
+    } else if (config.customBoundaries) {
       this.customBoundaries = { ...config.customBoundaries };
       console.log(`[PositionManager] Applied custom boundaries from preset '${preset}':`, this.customBoundaries);
     } else {
@@ -230,20 +243,21 @@ export class PositionManager {
     let pixelX, pixelY;
     
     // Calculate pixel position based on preset
+    // Use effectiveHeight for positioning (accounts for clipping in Portrait Mode)
     switch(preset) {
       case 'bottom-right':
         pixelX = this.canvasWidth - modelWidth - padding;
-        pixelY = this.canvasHeight - modelHeight - padding;
+        pixelY = this.canvasHeight - effectiveHeight - padding;
         break;
         
       case 'bottom-left':
         pixelX = padding;
-        pixelY = this.canvasHeight - modelHeight - padding;
+        pixelY = this.canvasHeight - effectiveHeight - padding;
         break;
         
       case 'bottom-center':
         pixelX = (this.canvasWidth - modelWidth) / 2;
-        pixelY = this.canvasHeight - modelHeight - padding;
+        pixelY = this.canvasHeight - effectiveHeight - padding;
         break;
         
       case 'top-center':
@@ -253,7 +267,7 @@ export class PositionManager {
         
       case 'center':
         pixelX = (this.canvasWidth - modelWidth) / 2;
-        pixelY = (this.canvasHeight - modelHeight) / 2;
+        pixelY = (this.canvasHeight - effectiveHeight) / 2;
         break;
         
       case 'top-left':
@@ -269,17 +283,20 @@ export class PositionManager {
       default:
         // Fallback to center
         pixelX = (this.canvasWidth - modelWidth) / 2;
-        pixelY = (this.canvasHeight - modelHeight) / 2;
+        pixelY = (this.canvasHeight - effectiveHeight) / 2;
     }
     
     console.log(`[PositionManager] Applying preset: ${preset}`, {
+      isPortraitMode: isPortraitMode,
       pixelPosition: { x: pixelX, y: pixelY },
       modelSize: { width: modelWidth, height: modelHeight },
+      cameraHeight: cameraHeight,
+      effectiveHeight: effectiveHeight,
       padding,
       offset
     });
     
-    this.setPositionPixels(pixelX, pixelY, modelWidth, modelHeight, offset);
+    this.setPositionPixels(pixelX, pixelY, modelWidth, cameraHeight, effectiveHeight, offset);
   }
   
   /**
@@ -288,18 +305,26 @@ export class PositionManager {
    * @param {number} x - X position in pixels (from left edge of canvas)
    * @param {number} y - Y position in pixels (from top edge of canvas)
    * @param {number} width - Model width in pixels
-   * @param {number} height - Model height in pixels
+   * @param {number} cameraHeight - Height used for camera frustum (zoom calculation)
+   * @param {number} effectiveHeight - Height used for positioning/boundaries (can be same as cameraHeight)
    * @param {object} offset - Camera offset in world units { x, y }
    */
-  setPositionPixels(x, y, width, height, offset = { x: 0, y: 0 }) {
-    // Validate and clamp to prevent cutoff
-    const validated = this.validatePosition(x, y, width, height);
+  setPositionPixels(x, y, width, cameraHeight, effectiveHeight = null, offset = { x: 0, y: 0 }) {
+    // If effectiveHeight not provided, use cameraHeight for both
+    if (effectiveHeight === null || typeof effectiveHeight === 'object') {
+      offset = effectiveHeight || offset;
+      effectiveHeight = cameraHeight;
+    }
+    
+    // Validate using effective height for boundaries
+    const validated = this.validatePosition(x, y, width, effectiveHeight);
     
     // Store current position
     this.positionX = validated.adjustedX;
     this.positionY = validated.adjustedY;
     this.modelWidthPx = width;
-    this.modelHeightPx = height;
+    this.modelHeightPx = cameraHeight;
+    this.effectiveHeightPx = effectiveHeight;
     this.offset = offset;  // Store offset for camera calculations
     
     // Convert pixel position to camera frustum
@@ -311,7 +336,8 @@ export class PositionManager {
       x: this.positionX, 
       y: this.positionY, 
       width: this.modelWidthPx, 
-      height: this.modelHeightPx 
+      height: this.effectiveHeightPx,
+      cameraHeight: this.modelHeightPx
     });
     
     if (!validated.valid) {
@@ -360,8 +386,9 @@ export class PositionManager {
     const aspectRatio = this.canvasWidth / this.canvasHeight;
     
     // Step 2: Calculate pixel offsets for positioning
+    // Use effectiveHeightPx for positioning - this represents the visible area
     const modelCenterPixelX = this.positionX + this.modelWidthPx / 2;
-    const modelCenterPixelY = this.positionY + this.modelHeightPx / 2;
+    const modelCenterPixelY = this.positionY + this.effectiveHeightPx / 2;
     const canvasCenterX = this.canvasWidth / 2;
     const canvasCenterY = this.canvasHeight / 2;
     const offsetPixelX = modelCenterPixelX - canvasCenterX;
@@ -430,15 +457,21 @@ export class PositionManager {
   
   /**
    * Get current position in pixels
+   * Returns where the VISIBLE area appears on screen, accounting for zoom
    * @returns {object} - { x, y, width, height } all in pixels
    */
   getPositionPixels() {
-    return {
+    const result = {
       x: this.positionX,
       y: this.positionY,
       width: this.modelWidthPx,
-      height: this.modelHeightPx
+      height: this.effectiveHeightPx,
+      cameraHeight: this.modelHeightPx
     };
+    
+    console.log('[PositionManager] getPositionPixels() returning:', result);
+    
+    return result;
   }
   
   /**
@@ -449,21 +482,22 @@ export class PositionManager {
    * @param {number} height - Model height (pixels)
    * @returns {object} - { valid: boolean, adjustedX, adjustedY }
    */
-  validatePosition(x, y, width = this.modelWidthPx, height = this.modelHeightPx) {
+  validatePosition(x, y, width = this.modelWidthPx, height = this.effectiveHeightPx) {
     let adjustedX = x;
     let adjustedY = y;
     let valid = true;
     
+    // Use the height parameter directly
+    const effectiveHeight = height;
+    
     // Calculate allowed offscreen amount if enabled
     const allowedOffscreenX = this.allowPartialOffscreen ? width * this.partialOffscreenAmount : 0;
-    const allowedOffscreenY = this.allowPartialOffscreen ? height * this.partialOffscreenAmount : 0;
+    const allowedOffscreenY = this.allowPartialOffscreen ? effectiveHeight * this.partialOffscreenAmount : 0;
     
     // Calculate effective boundaries
-    // Use custom boundaries if provided, otherwise use uniform padding
     let leftPadding, rightPadding, topPadding, bottomPadding;
     
     if (this.customBoundaries) {
-      // Custom per-edge boundaries (fine-tuned for specific model)
       leftPadding = this.customBoundaries.left ?? this.boundaryPadding;
       rightPadding = this.customBoundaries.right ?? this.boundaryPadding;
       topPadding = this.customBoundaries.top ?? this.boundaryPadding;
@@ -474,10 +508,11 @@ export class PositionManager {
     }
     
     // Pure pixel boundaries (offset is handled separately in camera frustum)
-    const minX = leftPadding - allowedOffscreenX;
-    const maxX = this.canvasWidth - width - rightPadding + allowedOffscreenX;
-    const minY = topPadding - allowedOffscreenY;
-    const maxY = this.canvasHeight - height - bottomPadding + allowedOffscreenY;
+    // Negative padding values allow model to go beyond canvas edge
+    const minX = -leftPadding - allowedOffscreenX;
+    const maxX = this.canvasWidth + rightPadding - width + allowedOffscreenX;
+    const minY = -topPadding - allowedOffscreenY;
+    const maxY = this.canvasHeight + bottomPadding - effectiveHeight + allowedOffscreenY;
     
     // Check left edge
     if (x < minX) {

@@ -39,6 +39,7 @@ export const useConfig = () => {
 export const ConfigProvider = ({ children }) => {
   // Track if initial load is complete to prevent auto-save during load
   const initialLoadRef = useRef(true);
+  const [isConfigLoading, setIsConfigLoading] = useState(true);
 
   // Auto-save timeout refs for debouncing
   const aiSaveTimeoutRef = useRef(null);
@@ -146,6 +147,13 @@ export const ConfigProvider = ({ children }) => {
         }
       } catch (error) {
         console.error('[ConfigContext] Failed to load configs:', error);
+      } finally {
+        // Mark loading as complete
+        setIsConfigLoading(false);
+        // Allow auto-save after initial load
+        setTimeout(() => {
+          initialLoadRef.current = false;
+        }, 100);
       }
     };
 
@@ -763,6 +771,9 @@ export const ConfigProvider = ({ children }) => {
   }, []); // Run once on mount
 
   const value = useMemo(() => ({
+    // Config loading state
+    isConfigLoading,
+    
     // UI Config
     uiConfig,
     uiConfigSaved,
@@ -811,7 +822,7 @@ export const ConfigProvider = ({ children }) => {
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,
-  }), [uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
+  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
 
   return (
     <ConfigContext.Provider value={value}>

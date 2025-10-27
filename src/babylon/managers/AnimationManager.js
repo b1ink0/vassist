@@ -14,6 +14,9 @@
  */
 
 import { BezierCurveEase } from "@babylonjs/core/Animations/easing";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { MmdAnimationSpan, MmdCompositeAnimation } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 import {
   AssistantState,
@@ -102,6 +105,23 @@ export class AnimationManager {
     
     // Visibility change handling
     this.visibilityChangeHandler = null;
+    
+    // Intro animation locomotion tracking
+    this._pendingLocomotionOffset = null; // Stores locomotion offset to apply after PositionManager initializes
+    
+    // Camera offset management for locomotion compensation
+    this._introLocomotionOffset = null; // Store the intro's final locomotion offset (where model ended up)
+    this._introCompleted = false; // Track if intro has completed
+    this._currentIntroAnimation = null; // Store current intro animation reference
+    this._shouldFlipAnimations = false; // Whether to flip X-axis (for left-side positions)
+    // Camera reset state (smoothly move camera back after intro)
+    this._cameraOriginalOffset = null; // original offset before intro pre-shift
+    this._cameraPreShiftedOffset = null; // offset after pre-shift
+    this._cameraResetActive = false;
+    this._cameraResetElapsed = 0;
+    this._cameraResetFrames = 0;
+    this._cameraResetFrom = null;
+    this._cameraResetTo = null;
 
     // ========================================
     // ANIMATION QUEUE SYSTEM
@@ -122,16 +142,149 @@ export class AnimationManager {
   }
 
   /**
-   * Initialize the animation system
-   * Loads first idle animation and sets up composite animation
+   * Create a visible bounding box for picking at the offset position
+   * This box moves with the locomotion offset so picking works correctly
+   * @param {PositionManager} positionManager - To get model dimensions and conversion
    */
-  async initialize() {
+  _createPickingBoundingBox(positionManager) {
+    if (!this._introLocomotionOffset) {
+      console.warn('[AnimationManager] Cannot create picking box - no locomotion offset');
+      return;
+    }
+    
+    if (!positionManager) {
+      console.warn('[AnimationManager] Cannot create picking box - no positionManager');
+      return;
+    }
+
+    // Get model dimensions in pixels from PositionManager
+    const modelWidthPx = positionManager.modelWidthPx;
+    const modelHeightPx = positionManager.effectiveHeightPx || positionManager.modelHeightPx; // Use effective height for Portrait Mode
+    
+    // Check if Portrait Mode is active
+    const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
+    const clipPlaneY = this.scene.metadata?.portraitClipPlaneY || 12;
+    
+    const widthMultiplier = isPortraitMode ? 0.8 : 0.4;  // 40% in Normal, 80% in Portrait
+    const heightMultiplier = 0.75; // 75% of model height (good balance)
+    
+    const pickingWidthPx = modelWidthPx * widthMultiplier;
+    const pickingHeightPx = modelHeightPx * heightMultiplier;
+    
+    // Convert pixel dimensions to world space
+    const baseOrthoHeight = 12;
+    const canvasHeight = positionManager.canvasHeight;
+    // Use the CAMERA height (for zoom)
+    const cameraHeightPx = positionManager.modelHeightPx;
+    const orthoHeight = (baseOrthoHeight * canvasHeight) / cameraHeightPx;
+    const pixelsPerWorldUnit = canvasHeight / (2 * orthoHeight);
+    
+    const pickingWidthWorld = pickingWidthPx / pixelsPerWorldUnit;
+    const pickingHeightWorld = pickingHeightPx / pixelsPerWorldUnit;
+    // Increase depth significantly to ensure it covers the entire model
+    // especially in Portrait Mode where the model might extend further in Z
+    const pickingDepthWorld = pickingWidthWorld * 3.0;
+    
+    // Create a box mesh for picking
+    this.pickingBox = MeshBuilder.CreateBox('pickingBox', {
+      width: pickingWidthWorld,
+      height: pickingHeightWorld,
+      depth: pickingDepthWorld
+    }, this.scene);
+    
+    // Position it at the locomotion offset
+    let yPosition;
+    if (isPortraitMode) {
+      // In Portrait Mode: Position box so its BOTTOM aligns with clipping plane
+      yPosition = clipPlaneY + (pickingHeightWorld / 2);
+      console.log(`[AnimationManager] Portrait Mode: Picking box bottom aligned with clip plane at Y=${clipPlaneY}`);
+    } else {
+      // Normal mode: Box center at half height from ground (Y=0)
+      yPosition = pickingHeightWorld / 2;
+    }
+    
+    this.pickingBox.position.x = this._introLocomotionOffset.x;
+    this.pickingBox.position.y = yPosition;
+    this.pickingBox.position.z = this._introLocomotionOffset.z;
+    
+    // Make it with wireframe for debugging (starts invisible)
+    const material = new StandardMaterial('pickingBoxMat', this.scene);
+    material.wireframe = true;
+    material.emissiveColor = new Color3(0, 1, 0);
+    material.alpha = 0; // Start fully transparent
+    this.pickingBox.material = material;
+    
+    // Tag it for identification in picking
+    this.pickingBox.metadata = { isPickingBox: true };
+    
+    const pickingBoxWorldTop = yPosition + (pickingHeightWorld / 2);
+    const pickingBoxWorldBottom = yPosition - (pickingHeightWorld / 2);
+    
+    // Store world bounds - PositionManager will convert to pixels when needed
+    this.scene.metadata.pickingBoxWorldBounds = {
+      topY: pickingBoxWorldTop,
+      bottomY: pickingBoxWorldBottom,
+      height: pickingHeightWorld,
+      widthPx: pickingWidthPx,
+      heightPx: pickingHeightPx
+    };
+    
+    console.log('[AnimationManager] Created picking box:', {
+      mode: isPortraitMode ? 'Portrait' : 'Normal',
+      position: {
+        x: this.pickingBox.position.x,
+        y: this.pickingBox.position.y,
+        z: this.pickingBox.position.z
+      },
+      size: {
+        width: pickingWidthWorld,
+        height: pickingHeightWorld,
+        depth: pickingDepthWorld
+      },
+      pixelSize: {
+        width: pickingWidthPx,
+        height: pickingHeightPx
+      },
+      multipliers: {
+        width: widthMultiplier,
+        height: heightMultiplier
+      }
+    });
+  }
+
+  /**
+   * Set position manager reference and create picking box if needed
+   * Called by MmdModelScene after PositionManager is created
+   * @param {PositionManager} positionManager
+   */
+  setPositionManager(positionManager) {
+    this.positionManager = positionManager;
+    
+    // If intro completed and we need picking box, create it now
+    if (this._needsPickingBox && this._introLocomotionOffset) {
+      this._createPickingBoundingBox(positionManager);
+      this._needsPickingBox = false;
+    }
+  }
+
+  /**
+   * Initialize the animation system
+   * Loads and plays intro animation first, then transitions to idle
+   * @param {boolean} playIntro - Whether to play intro animation (default: true)
+   * @param {string} positionPreset - Position preset to determine if animations should be flipped
+   */
+  async initialize(playIntro = true, positionPreset = 'bottom-right') {
     if (this.isInitialized) {
       console.warn('[AnimationManager] Already initialized');
       return;
     }
 
     console.log('[AnimationManager] Initializing...');
+    
+    // Determine if we should flip animations based on position preset
+    // Flip if preset contains 'left' (bottom-left, top-left)
+    this._shouldFlipAnimations = positionPreset.includes('left');
+    console.log(`[AnimationManager] Position preset: ${positionPreset}, flip animations: ${this._shouldFlipAnimations}`);
 
     // Create composite animation
     this.compositeAnimation = new MmdCompositeAnimation('assistantComposite');
@@ -140,14 +293,54 @@ export class AnimationManager {
     this.mmdModel.addAnimation(this.compositeAnimation);
     this.mmdModel.setAnimation('assistantComposite');
 
-    // Load and start first idle animation
-    await this.transitionToState(AssistantState.IDLE);
-
     // Register onBeforeRender observer for dynamic span management
     this.registerRenderObserver();
     
     // Register visibility change handler to pause/resume on tab switch
     this.registerVisibilityHandler();
+
+    if (playIntro) {
+      console.log('[AnimationManager] Playing intro animation...');
+      const introAnim = getRandomAnimation('intro');
+      
+      if (introAnim) {
+        console.log('[AnimationManager] Loading intro animation to read locomotion...');
+        const loadedIntroAnim = await this.loadAnimation(introAnim);
+        
+        // Read intro's final locomotion offset
+        if (loadedIntroAnim.movableBoneTracks && loadedIntroAnim.movableBoneTracks.length > 0) {
+          const movableTrack = loadedIntroAnim.movableBoneTracks[0];
+          const frameCount = movableTrack.frameNumbers.length;
+          
+          if (frameCount > 0) {
+            const lastFrameIndex = frameCount - 1;
+            const finalX = movableTrack.positions[lastFrameIndex * 3 + 0];
+            const finalY = movableTrack.positions[lastFrameIndex * 3 + 1];
+            
+            console.log('[AnimationManager] Intro locomotion:', { x: finalX, y: finalY, frames: frameCount });
+            
+            // Store the intro locomotion for later (PositionManager not initialized yet!)
+            this._introLocomotionOffset = { x: finalX, y: finalY };
+            
+            console.log('[AnimationManager] Stored intro locomotion offset - will apply when PositionManager initializes');
+          }
+        }
+        
+        // NOW play the intro animation
+        await this.playAnimation(introAnim);
+        
+        // Store the intro animation reference
+        this._currentIntroAnimation = this.currentLoadedAnimation;
+        
+        console.log(`[AnimationManager] Intro animation started (${this.currentAnimationDuration} frames, ~${(this.currentAnimationDuration/30).toFixed(1)}s) - will auto-transition to IDLE`);
+      } else {
+        console.warn('[AnimationManager] No intro animations found, starting with idle');
+        await this.transitionToState(AssistantState.IDLE);
+      }
+    } else {
+      // Skip intro, go straight to idle
+      await this.transitionToState(AssistantState.IDLE);
+    }
 
     this.isInitialized = true;
     console.log('[AnimationManager] Initialized successfully');
@@ -189,6 +382,19 @@ export class AnimationManager {
     try {
       const animation = await loadPromise;
 
+      // Flip animation X-axis if position is on left side (BEFORE applying locomotion offset)
+      if (this._shouldFlipAnimations) {
+        this._flipAnimationXAxis(animation);
+      }
+
+      // Apply intro locomotion offset to this animation if we have one
+      this._applyLocomotionOffset(animation);
+
+      // Fix root bone position for Portrait Mode to prevent drifting
+      if (this.scene.metadata?.isPortraitMode) {
+        this._fixRootBoneForPortraitMode(animation);
+      }
+
       // Cache the loaded animation
       this.loadedAnimations.set(filePath, animation);
 
@@ -202,6 +408,151 @@ export class AnimationManager {
       // Clean up promise tracker
       this.loadingPromises.delete(filePath);
     }
+  }
+
+  /**
+   * Mirror animation for left-side positions
+   * Mirrors positions, rotations, and swaps left/right bones
+   * @param {Animation} animation - Animation to mirror
+   */
+  _flipAnimationXAxis(animation) {
+    console.log(`[AnimationManager] Mirroring animation "${animation.name}"...`);
+    
+    // 1. Mirror movable bone tracks (positions)
+    if (animation.movableBoneTracks) {
+      for (let i = 0; i < animation.movableBoneTracks.length; i++) {
+        const track = animation.movableBoneTracks[i];
+        const positions = track.positions;
+        // Negate X coordinate for all position keyframes
+        for (let j = 0; j < positions.length; j += 3) {
+          positions[j] = -positions[j];
+        }
+      }
+    }
+
+    // 2. Mirror bone tracks (rotations)
+    if (animation.boneTracks) {
+      for (let i = 0; i < animation.boneTracks.length; i++) {
+        const track = animation.boneTracks[i];
+        
+        // Mirror the rotations (quaternions)
+        // To mirror around YZ plane (X-axis flip), negate Y and Z components of quaternion
+        if (track.rotations) {
+          for (let j = 0; j < track.rotations.length; j += 4) {
+            // Quaternion format: [x, y, z, w]
+            // Mirror by negating y and z components
+            track.rotations[j + 1] = -track.rotations[j + 1]; // negate Y
+            track.rotations[j + 2] = -track.rotations[j + 2]; // negate Z
+          }
+        }
+        
+        // 3. Swap left/right bone names
+        const boneName = track.name;
+        track.name = this._getMirroredBoneName(boneName);
+      }
+    }
+
+    console.log(`[AnimationManager] Mirrored animation "${animation.name}" complete`);
+  }
+
+  /**
+   * Get mirrored bone name (swap left/right)
+   * @param {string} boneName - Original bone name
+   * @returns {string} Mirrored bone name
+   */
+  _getMirroredBoneName(boneName) {
+    // Japanese bone names
+    if (boneName.includes('左')) {
+      return boneName.replace('左', '右'); // 左 (left) → 右 (right)
+    }
+    if (boneName.includes('右')) {
+      return boneName.replace('右', '左'); // 右 (right) → 左 (left)
+    }
+    
+    // English bone names
+    if (boneName.toLowerCase().includes('left')) {
+      return boneName.replace(/left/i, 'right');
+    }
+    if (boneName.toLowerCase().includes('right')) {
+      return boneName.replace(/right/i, 'left');
+    }
+    
+    // Common abbreviations
+    if (boneName.match(/\bL\b/)) {
+      return boneName.replace(/\bL\b/, 'R');
+    }
+    if (boneName.match(/\bR\b/)) {
+      return boneName.replace(/\bR\b/, 'L');
+    }
+    
+    // No change for center bones
+    return boneName;
+  }
+
+  /**
+   * Apply intro locomotion offset to an animation's movable bone tracks
+   * @param {Animation} animation - Animation to modify
+   */
+  _applyLocomotionOffset(animation) {
+    if (!this._introLocomotionOffset || !animation.movableBoneTracks) {
+      return;
+    }
+
+    // Find the center bone track
+    for (let i = 0; i < animation.movableBoneTracks.length; i++) {
+      const track = animation.movableBoneTracks[i];
+      if (track.name === 'センター' || track.name === 'center') {
+        // Add intro offset to ALL position keyframes in this track
+        const positions = track.positions;
+        for (let j = 0; j < positions.length; j += 3) {
+          positions[j] += this._introLocomotionOffset.x;     // x - horizontal offset
+          positions[j + 2] += this._introLocomotionOffset.z; // z - depth offset
+        }
+        console.log(`[AnimationManager] Applied intro offset (X,Z only) to animation "${animation.name}": x=${this._introLocomotionOffset.x.toFixed(2)}, z=${this._introLocomotionOffset.z.toFixed(2)}`);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Fix root bone position in Portrait Mode to prevent drifting
+   * Resets all root bone position keyframes to 0 (like intro offset but sets to fixed value)
+   * @param {Animation} animation - Animation to modify
+   */
+  _fixRootBoneForPortraitMode(animation) {
+    if (!animation.movableBoneTracks) {
+      return;
+    }
+
+    // Find the center/root bone track
+    for (let i = 0; i < animation.movableBoneTracks.length; i++) {
+      const track = animation.movableBoneTracks[i];
+      if (track.name === 'センター' || track.name === 'center' || track.name === 'root' || track.name === 'Root') {
+        // Reset ALL position keyframes to 0 (keep root bone fixed)
+        const positions = track.positions;
+        for (let j = 0; j < positions.length; j += 3) {
+          positions[j] = 0;     // x = 0
+          positions[j + 1] = 0; // y = 0
+          positions[j + 2] = 0; // z = 0
+        }
+        console.log(`[AnimationManager] Portrait Mode: Fixed root bone "${track.name}" position in animation "${animation.name}"`);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Get the current intro locomotion offset (for drag/interaction adjustments)
+   * @returns {{x: number, z: number}} The locomotion offset or {x:0, z:0} if not set
+   */
+  getIntroLocomotionOffset() {
+    if (!this._introLocomotionOffset) {
+      return { x: 0, z: 0 };
+    }
+    return {
+      x: this._introLocomotionOffset.x,
+      z: this._introLocomotionOffset.z
+    };
   }
 
   /**
@@ -231,6 +582,20 @@ export class AnimationManager {
 
     try {
       const animation = await loadPromise;
+      
+      // Flip animation X-axis if position is on left side (BEFORE applying locomotion offset)
+      if (this._shouldFlipAnimations) {
+        this._flipAnimationXAxis(animation);
+      }
+
+      // Apply intro locomotion offset if we have one
+      this._applyLocomotionOffset(animation);
+      
+      // Fix root bone position for Portrait Mode to prevent drifting
+      if (this.scene.metadata?.isPortraitMode) {
+        this._fixRootBoneForPortraitMode(animation);
+      }
+      
       this.loadedAnimations.set(blobUrl, animation);
       console.log(`[AnimationManager] Loaded blob animation: ${animationId}, duration: ${animation.endFrame} frames`);
       return animation;
@@ -249,6 +614,40 @@ export class AnimationManager {
    */
   async transitionToState(newState, customBehavior = null, customAnimation = null) {
     console.log(`[AnimationManager] [TRANSITION START] ${this.currentState} -> ${newState}`);
+    
+    // Detect when intro completes (first transition to IDLE)
+    if (!this._introCompleted && newState === AssistantState.IDLE && this.previousState !== AssistantState.IDLE) {
+      this._introCompleted = true;
+      console.log('[AnimationManager] [INTRO COMPLETE] Intro finished - locking model at final frame position');
+
+      // Find the center bone (root locomotion bone) and save its final LOCAL position
+      const centerBone = this.mmdModel.skeleton.bones.find(bone => bone.name === 'センター' || bone.name === 'center');
+      if (centerBone) {
+        // Save the locomotion offset from intro's final position
+        this._introLocomotionOffset = centerBone.position.clone();
+        
+        console.log('[AnimationManager] Intro locomotion offset saved:', { 
+          x: this._introLocomotionOffset.x, 
+          y: this._introLocomotionOffset.y, 
+          z: this._introLocomotionOffset.z 
+        });
+        console.log('[AnimationManager] All future animations will have this offset added to their center bone positions');
+        
+        // Create picking box if we have positionManager, otherwise defer
+        const positionManager = this.scene.metadata?.positionManager;
+        if (positionManager) {
+          this._createPickingBoundingBox(positionManager);
+        } else {
+          console.log('[AnimationManager] Deferring picking box creation until PositionManager is available');
+          this._needsPickingBox = true;
+        }
+      } else {
+        console.warn('[AnimationManager] Center bone not found - cannot save locomotion offset');
+      }
+
+      // DO NOT reset camera - keep it at pre-shifted offset to show the locked bone position
+      console.log('[AnimationManager] Camera stays at pre-shifted offset to display locked bone position');
+    }
     
     // Validate transition
     if (this.currentState !== newState && !isValidTransition(this.currentState, newState)) {
@@ -315,7 +714,7 @@ export class AnimationManager {
     this.currentLoadedAnimation = loadedAnimation;
     this.currentAnimationDuration = loadedAnimation.endFrame;
 
-    // CRITICAL: Handle transition between different animations
+    // Handle transition between different animations
     // Keep old spans active during transition for smooth blending
     const allOldSpans = Array.from(this.spanMap.values()).flat();
     
@@ -711,7 +1110,6 @@ export class AnimationManager {
 
   /**
    * Called every frame - handles dynamic span management
-   * Uses EXACT logic from working experimental code
    */
   onBeforeRender() {
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
