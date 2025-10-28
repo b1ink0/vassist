@@ -91,6 +91,9 @@ class SharedAudioWorker {
             case MessageTypes.KOKORO_LIST_VOICES:
                 data = await this.handleKokoroListVoices(message);
                 break;
+            case MessageTypes.KOKORO_PING:
+                data = await this.handleKokoroPing(message);
+                break;
             case MessageTypes.KOKORO_GET_CACHE_SIZE:
                 data = await this.handleKokoroGetCacheSize(message);
                 break;
@@ -252,6 +255,11 @@ class SharedAudioWorker {
         const { text, voice, speed } = message.data;
         
         try {
+            // Validate text parameter
+            if (!text || typeof text !== 'string' || text.trim().length === 0) {
+                throw new Error(`Invalid text parameter: ${JSON.stringify(text)}`);
+            }
+            
             console.log(`[SharedAudioWorker] Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
             
             // Generate audio using KokoroTTSCore
@@ -297,6 +305,19 @@ class SharedAudioWorker {
         } catch (error) {
             console.error('[SharedAudioWorker] Kokoro list voices failed:', error);
             throw new Error(`Failed to list voices: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle Kokoro ping
+     */
+    async handleKokoroPing() {
+        try {
+            const alive = await KokoroTTSCore.ping();
+            return { alive };
+        } catch {
+            // Silent failure for heartbeat
+            return { alive: false };
         }
     }
 

@@ -418,7 +418,7 @@ const ControlPanel = ({
         >
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-white/20">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <h3 className="m-0 text-base font-semibold text-white">Dev Control Panel</h3>
           <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
             {currentState}
@@ -432,13 +432,19 @@ const ControlPanel = ({
             📊 Stats
           </button>
           {showPerf && (
-            <div className="ml-2 text-[11px] text-gray-200 bg-black/60 px-2 py-1 rounded">
-              <div className="flex gap-3 items-center">
-                <span>FPS: <strong className="text-white">{perfData.fps}</strong></span>
-                <span>Meshes: <strong className="text-white">{perfData.meshes}</strong></span>
-                <span>Particles: <strong className="text-white">{perfData.particles}</strong></span>
-                <span>Draw: <strong className="text-white">{perfData.drawCalls}</strong></span>
-              </div>
+            <div
+              className="ml-1 text-[11px] text-gray-200 bg-black/60 px-1.5 py-0.5 rounded whitespace-nowrap flex items-center gap-2"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+              title={`FPS: ${perfData.fps} · Meshes: ${perfData.meshes} · Particles: ${perfData.particles} · Draw: ${perfData.drawCalls}`}
+            >
+              <span className="text-[10px] text-gray-300">FPS:</span>
+              <span className="text-white font-medium text-[12px]">{perfData.fps}</span>
+              <span className="text-[10px] text-gray-400">·</span>
+              <span className="text-[10px] text-gray-300">M:</span>
+              <span className="text-white text-[11px]">{perfData.meshes}</span>
+              <span className="text-[10px] text-gray-400">·</span>
+              <span className="text-[10px] text-gray-300">D:</span>
+              <span className="text-white text-[11px]">{perfData.drawCalls}</span>
             </div>
           )}
         </div>

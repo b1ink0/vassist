@@ -90,18 +90,24 @@ export class KokoroTTSCore {
             dtype: dtype,
             device: device,
             progress_callback: (progress) => {
+              // Safely handle progress object
+              if (!progress || typeof progress !== 'object') {
+                console.warn('[KokoroTTSCore] Invalid progress object:', progress);
+                return;
+              }
+              
               // Calculate progress percentage
-              const percent = progress.total > 0 
-                ? (progress.loaded / progress.total) * 100 
-                : 0;
+              const loaded = progress.loaded || 0;
+              const total = progress.total || 0;
+              const percent = total > 0 ? (loaded / total) * 100 : 0;
               
               console.log(`[KokoroTTSCore] Download progress: ${percent.toFixed(1)}%`);
               
               if (progressCallback) {
                 progressCallback({
-                  loaded: progress.loaded,
-                  total: progress.total,
-                  percent: percent,
+                  loaded,
+                  total,
+                  percent,
                   file: progress.file || 'model files'
                 });
               }
@@ -119,15 +125,20 @@ export class KokoroTTSCore {
               dtype: 'q8', // WASM always uses q8
               device: 'wasm',
               progress_callback: (progress) => {
-                const percent = progress.total > 0 
-                  ? (progress.loaded / progress.total) * 100 
-                  : 0;
+                // Safely handle progress object
+                if (!progress || typeof progress !== 'object') {
+                  return;
+                }
+                
+                const loaded = progress.loaded || 0;
+                const total = progress.total || 0;
+                const percent = total > 0 ? (loaded / total) * 100 : 0;
                 
                 if (progressCallback) {
                   progressCallback({
-                    loaded: progress.loaded,
-                    total: progress.total,
-                    percent: percent,
+                    loaded,
+                    total,
+                    percent,
                     file: progress.file || 'model files (WASM fallback)'
                   });
                 }
@@ -164,13 +175,15 @@ export class KokoroTTSCore {
         this.tts = null;
         
         // Provide user-friendly error messages
-        let errorMessage = error.message;
+        // Safely access error.message with fallback
+        const errorMsg = error?.message || error?.toString() || 'Unknown initialization error';
+        let errorMessage = errorMsg;
         
-        if (error.message.includes('network') || error.message.includes('fetch')) {
+        if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
           errorMessage = 'Network error: Unable to download model. Check your internet connection and try again.';
-        } else if (error.message.includes('quota') || error.message.includes('storage')) {
+        } else if (errorMsg.includes('quota') || errorMsg.includes('storage')) {
           errorMessage = 'Storage error: Not enough disk space. Free up some space and try again.';
-        } else if (error.message.includes('WebGPU') || error.message.includes('gpu')) {
+        } else if (errorMsg.includes('WebGPU') || errorMsg.includes('gpu')) {
           errorMessage = 'GPU error: WebGPU not available. Using WASM fallback failed.';
         }
         
@@ -283,7 +296,7 @@ export class KokoroTTSCore {
   }
 
   /**
-   * Destroy model and free resources
+   * Destroy the TTS model and free up memory
    */
   async destroy() {
     console.log('[KokoroTTSCore] Destroying model...');
@@ -296,6 +309,26 @@ export class KokoroTTSCore {
     this.initPromise = null;
     
     console.log('[KokoroTTSCore] Model destroyed');
+  }
+
+  /**
+   * Ping/heartbeat to keep model loaded in memory
+   * Lightweight check that doesn't generate audio or trigger any side effects
+   * @returns {Promise<boolean>} True if model is still loaded
+   */
+  async ping() {
+    if (!this.isInitialized || !this.tts) {
+      return false;
+    }
+    
+    try {
+      // Simple check that model is accessible without generating audio
+      // Just verify the TTS instance exists and is valid
+      return this.tts !== null && this.isInitialized;
+    } catch (error) {
+      console.warn('[KokoroTTSCore] Ping failed:', error);
+      return false;
+    }
   }
 
   /**

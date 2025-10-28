@@ -295,6 +295,23 @@ const ChatInput = forwardRef(({
     setPendingDropData(null);
   }, [pendingDropData, isVisible, isVoiceMode, processDropData, setPendingDropData]);
 
+  /**
+   * Listen for focus event (e.g., when new chat is created)
+   */
+  useEffect(() => {
+    const handleFocusInput = () => {
+      if (textareaRef.current && isVisible && !isVoiceMode) {
+        textareaRef.current.focus();
+      }
+    };
+
+    window.addEventListener('focusChatInput', handleFocusInput);
+
+    return () => {
+      window.removeEventListener('focusChatInput', handleFocusInput);
+    };
+  }, [isVisible, isVoiceMode]);
+
 
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -573,6 +590,11 @@ const ChatInput = forwardRef(({
 
   const handleInterrupt = () => {
     console.log('[ChatInput] User interrupted');
+    
+    // Dispatch event to trigger force-complete animation in ChatContainer
+    const event = new CustomEvent('voiceInterrupt');
+    window.dispatchEvent(event);
+    
     VoiceConversationService.interrupt();
   };
 

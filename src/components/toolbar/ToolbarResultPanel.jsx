@@ -10,6 +10,8 @@
 
 import { forwardRef } from 'react';
 import { TranslationLanguages } from '../../config/aiConfig';
+import StreamingText from '../common/StreamingText';
+import StreamingContainer from '../common/StreamingContainer';
 
 const ToolbarResultPanel = forwardRef(({
   result,
@@ -27,6 +29,7 @@ const ToolbarResultPanel = forwardRef(({
   copySuccess = false,
   onCopyClick,
   isSpeaking = false,
+  isTTSGenerating = false,
   onSpeakerClick,
   ttsConfig,
   onClose,
@@ -149,9 +152,9 @@ const ToolbarResultPanel = forwardRef(({
                 hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
                 ${isLightBackground ? 'text-white' : 'text-white'}
               `}
-              title={isSpeaking ? 'Pause speaking' : 'Speak text'}
+              title={isTTSGenerating ? 'Cancel TTS generation' : isSpeaking ? 'Stop speaking' : 'Speak text'}
             >
-              {isSpeaking ? '⏸️' : '🔊'}
+              {isTTSGenerating ? '⏳' : isSpeaking ? '⏸️' : '🔊'}
             </button>
           )}
         </div>
@@ -179,18 +182,25 @@ const ToolbarResultPanel = forwardRef(({
       
       {/* Show result with streaming indicator */}
       {result && (
-        <div>
-          <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackground ? 'text-white' : 'text-white'}`}>
-            {result}
-          </div>
-          {/* Show streaming indicator while loading */}
-          {isLoading && (
-            <div className="flex items-center gap-1 mt-2 text-white/50">
-              <span className="animate-pulse text-xs">●</span>
-              <span className="text-[11px]">streaming...</span>
+        <StreamingContainer autoActivate speed="fast">
+          <div>
+            <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackground ? 'text-white' : 'text-white'}`}>
+              <StreamingText 
+                text={result}
+                wordsPerSecond={40}
+                showCursor={false}
+                disabled={false}
+              />
             </div>
-          )}
-        </div>
+            {/* Show streaming indicator while loading */}
+            {isLoading && (
+              <div className="flex items-center gap-1 mt-2 text-white/50">
+                <span className="animate-pulse text-xs">●</span>
+                <span className="text-[11px]">streaming...</span>
+              </div>
+            )}
+          </div>
+        </StreamingContainer>
       )}
     </div>
   );

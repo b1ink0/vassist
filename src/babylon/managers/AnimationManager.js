@@ -14,6 +14,7 @@
  */
 
 import { BezierCurveEase } from "@babylonjs/core/Animations/easing";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -158,7 +159,7 @@ export class AnimationManager {
     }
 
     // Get model dimensions in pixels from PositionManager
-    const modelWidthPx = positionManager.modelWidthPx;
+    const modelWidthPx = positionManager.modelWidthPx;   // e.g., 300px
     const modelHeightPx = positionManager.effectiveHeightPx || positionManager.modelHeightPx; // Use effective height for Portrait Mode
     
     // Check if Portrait Mode is active
@@ -211,7 +212,7 @@ export class AnimationManager {
     const material = new StandardMaterial('pickingBoxMat', this.scene);
     material.wireframe = true;
     material.emissiveColor = new Color3(0, 1, 0);
-    material.alpha = 0; // Start fully transparent
+    material.alpha = 0; // Start fully transparent (invisible but still pickable)
     this.pickingBox.material = material;
     
     // Tag it for identification in picking
@@ -300,10 +301,12 @@ export class AnimationManager {
     this.registerVisibilityHandler();
 
     if (playIntro) {
+      // Play intro animation using existing state transition logic
       console.log('[AnimationManager] Playing intro animation...');
       const introAnim = getRandomAnimation('intro');
       
       if (introAnim) {
+        // Load intro animation FIRST to read its locomotion
         console.log('[AnimationManager] Loading intro animation to read locomotion...');
         const loadedIntroAnim = await this.loadAnimation(introAnim);
         
@@ -1156,7 +1159,11 @@ export class AnimationManager {
     this.currentCycle = Math.floor(currentFrame / cycleDuration);
     
     // Check if animation should loop or auto-return to IDLE
-    const shouldLoop = this.currentAnimationConfig.loop !== false; // Default true unless explicitly false
+    // State loop setting overrides individual animation loop setting
+    const stateBehavior = StateBehavior[this.currentState];
+    const stateLoop = stateBehavior?.loop;
+    const animLoop = this.currentAnimationConfig.loop !== false;
+    const shouldLoop = stateLoop !== undefined ? stateLoop : animLoop; // State overrides animation
     
     // For ALL animations (looping or not), check if we've completed at least one cycle
     // and there's something in the queue that wants to interrupt

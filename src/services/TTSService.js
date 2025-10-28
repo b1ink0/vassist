@@ -44,6 +44,10 @@ class TTSService {
       this.onAudioStartCallback = null;
       this.onAudioEndCallback = null;
 
+      // Kokoro heartbeat to keep model in memory
+      this.kokoroHeartbeatInterval = null;
+      this.kokoroHeartbeatEnabled = false;
+
       console.log('[TTSService] Initialized with lip sync support');
     }
   }
@@ -228,14 +232,33 @@ class TTSService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
     
+    console.log(`${logPrefix} - generateSpeech called with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
+    
     if (!this.isConfigured(tabId)) {
       throw new Error('TTSService not configured or disabled');
+    }
+
+    // Validate text parameter
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      console.error(`${logPrefix} - Invalid text for speech generation:`, text);
+      throw new Error(`Invalid text parameter for TTS: ${JSON.stringify(text)}`);
     }
 
     if (state.isStopped) return null;
 
     // Handle Kokoro TTS generation
     if (state.provider === TTSProviders.KOKORO) {
+      // Auto-initialize Kokoro if not initialized
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+      
+      const status = await audioWorkerClient.checkKokoroStatus();
+      if (!status.initialized && !status.initializing) {
+        console.log(`${logPrefix} - Auto-initializing Kokoro...`);
+        await this.initializeKokoro(null, tabId);
+      }
+      
       return await this.generateKokoroSpeech(text, generateLipSync, tabId);
     }
 
@@ -735,11 +758,6 @@ class TTSService {
 
       if (state.isStopped) return null;
 
-      // Initialize worker client if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
-
       // Generate audio using Kokoro TTS via worker
       const audioBuffer = await audioWorkerClient.generateKokoroSpeech(text, {
         voice: state.config.voice,
@@ -822,6 +840,25 @@ class TTSService {
       }, progressCallback);
 
       console.log(`${logPrefix} - Kokoro TTS initialized:`, result.message);
+      
+      // Generate a test audio to fully warm up the model (ensures it's truly ready)
+      console.log(`${logPrefix} - Warming up model with test generation...`);
+      try {
+        await audioWorkerClient.generateKokoroSpeech('ready', {
+          voice: state.config.voice,
+          speed: state.config.speed
+        });
+        console.log(`${logPrefix} - Model warmup complete, fully initialized`);
+      } catch (warmupError) {
+        console.warn(`${logPrefix} - Model warmup failed (continuing anyway):`, warmupError);
+      }
+      
+      // Start heartbeat if keepModelLoaded is enabled
+      if (state.config.keepModelLoaded !== false) {
+        console.log(`${logPrefix} - Starting Kokoro heartbeat (keepModelLoaded: true)`);
+        this.startKokoroHeartbeat(10000); // 10 seconds
+      }
+      
       return result.initialized;
 
     } catch (error) {
@@ -903,6 +940,39 @@ class TTSService {
   }
 
   /**
+   * Ping Kokoro to keep model loaded in memory (heartbeat)
+   * Only for dev mode - extension mode uses TTSServiceProxy
+   * @returns {Promise<boolean>} True if model is alive
+   */
+  async pingKokoro() {
+    try {
+      const state = this._getState(null);
+      
+      // Initialize worker if needed
+      if (!audioWorkerClient.isReady) {
+        await audioWorkerClient.init();
+      }
+
+      // Check if initialized first
+      const status = await audioWorkerClient.checkKokoroStatus();
+      if (!status.initialized) {
+        return false;
+      }
+
+      // Generate one word to keep model alive (use configured voice)
+      await audioWorkerClient.generateKokoroSpeech('hi', {
+        voice: state.config.voice,
+        speed: state.config.speed
+      });
+      
+      return true;
+    } catch {
+      // Silent failure for heartbeat
+      return false;
+    }
+  }
+
+  /**
    * Clear Kokoro cache and reset model
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
@@ -911,6 +981,9 @@ class TTSService {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
+      // Stop heartbeat before clearing cache
+      this.stopKokoroHeartbeat();
+      
       // Initialize worker client if needed
       if (!audioWorkerClient.isReady) {
         await audioWorkerClient.init();
@@ -923,6 +996,47 @@ class TTSService {
     } catch (error) {
       console.error(`${logPrefix} - Kokoro cache clear failed:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Start Kokoro heartbeat to keep model loaded in memory
+   * Generates small audio periodically to prevent model unload
+   * Works in both dev mode and extension mode via TTSServiceProxy
+   * @param {number} intervalMs - Heartbeat interval in milliseconds (default: 10000 = 10 seconds)
+   */
+  startKokoroHeartbeat(intervalMs = 10000) {
+    if (this.kokoroHeartbeatInterval) {
+      console.log('[TTSService] Kokoro heartbeat already running');
+      return;
+    }
+
+    console.log(`[TTSService] Starting Kokoro heartbeat (interval: ${intervalMs}ms)`);
+    this.kokoroHeartbeatEnabled = true;
+
+    this.kokoroHeartbeatInterval = setInterval(async () => {
+      if (!this.kokoroHeartbeatEnabled) {
+        return;
+      }
+
+      try {
+        // Use the same method for both dev and extension mode
+        await this.pingKokoro();
+      } catch {
+        // Silent error - heartbeat will retry next interval
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Stop Kokoro heartbeat
+   */
+  stopKokoroHeartbeat() {
+    if (this.kokoroHeartbeatInterval) {
+      console.log('[TTSService] Stopping Kokoro heartbeat');
+      clearInterval(this.kokoroHeartbeatInterval);
+      this.kokoroHeartbeatInterval = null;
+      this.kokoroHeartbeatEnabled = false;
     }
   }
 

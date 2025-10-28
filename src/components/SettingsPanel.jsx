@@ -12,10 +12,28 @@ import LLMSettings from './settings/LLMSettings';
 import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
 import AIFeaturesSettings from './settings/AIFeaturesSettings';
+import { useConfig } from '../contexts/ConfigContext';
 
 const SettingsPanel = ({ onClose, isLightBackground }) => {
   const [activeTab, setActiveTab] = useState('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
+  
+  // Get all status states from ConfigContext
+  const {
+    uiConfigSaved,
+    aiConfigSaved,
+    aiConfigError,
+    aiTesting,
+    clearAIConfigError,
+    ttsConfigSaved,
+    ttsConfigError,
+    ttsTesting,
+    clearTTSConfigError,
+    sttConfigSaved,
+    sttConfigError,
+    sttTesting,
+    clearSTTConfigError,
+  } = useConfig();
   
   // Check Chrome version on mount
   useEffect(() => {
@@ -29,14 +47,76 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
     }
   }, []);
 
+  // Determine which status to show based on active tab
+  const getActiveStatus = () => {
+    if (activeTab === 'ui') {
+      if (uiConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
+    } else if (activeTab === 'llm') {
+      if (aiTesting) return { type: 'testing', message: 'Testing connection...', dismissible: false };
+      if (aiConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
+      if (aiConfigError) return { type: 'error', message: aiConfigError, dismissible: true };
+    } else if (activeTab === 'tts') {
+      if (ttsTesting) return { type: 'testing', message: 'Testing TTS...', dismissible: false };
+      if (ttsConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
+      if (ttsConfigError) return { type: 'error', message: ttsConfigError, dismissible: true };
+    } else if (activeTab === 'stt') {
+      if (sttTesting) return { type: 'testing', message: 'Testing STT...', dismissible: false };
+      if (sttConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
+      if (sttConfigError) return { type: 'error', message: sttConfigError, dismissible: true };
+    }
+    return null;
+  };
+
+  const activeStatus = getActiveStatus();
+
+  // Handle dismiss of status message
+  const handleDismissStatus = () => {
+    if (activeTab === 'llm' && aiConfigError) {
+      clearAIConfigError();
+    } else if (activeTab === 'tts' && ttsConfigError) {
+      clearTTSConfigError();
+    } else if (activeTab === 'stt' && sttConfigError) {
+      clearSTTConfigError();
+    }
+  };
+
   return (
     <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden`}>
       {/* Header */}
       <div className="flex justify-between items-center px-6 py-4 border-b border-white/20">
-        <h2 className="text-lg font-semibold text-white">Settings</h2>
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <h2 className="text-lg font-semibold text-white shrink-0">Settings</h2>
+          
+          {/* Global Status Display */}
+          {activeStatus && (
+            <div 
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg animate-in fade-in max-w-md ${
+                activeStatus.type === 'success' ? 'bg-emerald-500/10' :
+                activeStatus.type === 'testing' ? 'bg-blue-500/10' :
+                activeStatus.type === 'warning' ? 'bg-amber-500/10' :
+                'bg-red-500/10'
+              }`}
+              title={activeStatus.message}
+            >
+              <span className="text-xs text-white truncate">
+                {activeStatus.message}
+              </span>
+              {activeStatus.dismissible && (
+                <button
+                  onClick={handleDismissStatus}
+                  className="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-white/20 text-white/60 hover:text-white transition-colors text-xs"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        
         <button
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors shrink-0"
           aria-label="Close settings"
         >
           ✕

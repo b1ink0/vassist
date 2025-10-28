@@ -1,0 +1,348 @@
+/**
+ * Streaming Animations - Global CSS Utilities
+ */
+
+/* Enable interpolation between numerical values and auto */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  
+  .streaming-smooth-size {
+    transition: width 0.3s ease, height 0.3s ease;
+  }
+  
+  .streaming-smooth-size.streaming-active {
+    height: auto;
+    width: auto;
+  }
+}
+
+.streaming-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.1, 1), 
+              opacity 0.3s cubic-bezier(0.4, 0, 0.1, 1);
+  overflow: hidden;
+  opacity: 0;
+  will-change: grid-template-rows, opacity;
+}
+
+.streaming-container.streaming-active {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.streaming-content {
+  min-height: 0; /* Critical for grid collapse to work */
+  overflow: hidden;
+  will-change: height;
+}
+
+/* Faster variant for small content */
+.streaming-container-fast {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.5s cubic-bezier(0.4, 0, 0.1, 1), 
+              opacity 0.4s cubic-bezier(0.4, 0, 0.1, 1);
+  overflow: hidden;
+  opacity: 0;
+  will-change: grid-template-rows, opacity;
+}
+
+.streaming-container-fast.streaming-active {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* Slower variant for large content */
+.streaming-container-slow {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 1s cubic-bezier(0.4, 0, 0.1, 1), 
+              opacity 0.7s cubic-bezier(0.4, 0, 0.1, 1);
+  overflow: hidden;
+  opacity: 0;
+  will-change: grid-template-rows, opacity;
+}
+
+.streaming-container-slow.streaming-active {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.streaming-word {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(2px);
+  animation: streamingWordFadeIn 0.3s ease-in forwards;
+}
+
+@keyframes streamingWordFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Faster word animation */
+.streaming-word-fast {
+  display: inline-block;
+  opacity: 0;
+  animation: streamingWordFadeInFast 0.15s ease-in forwards;
+}
+
+@keyframes streamingWordFadeInFast {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Instant fade for interrupted streaming - all remaining text fades in smoothly at once */
+.streaming-word-instant-fade {
+  display: inline-block;
+  opacity: 0;
+  animation: streamingWordInstantFade 0.2s ease-out forwards;
+}
+
+@keyframes streamingWordInstantFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Character-by-character fade (more subtle) */
+.streaming-char {
+  display: inline-block;
+  opacity: 0;
+  animation: streamingCharFadeIn 0.1s ease-in forwards;
+}
+
+@keyframes streamingCharFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: currentColor;
+  margin-left: 2px;
+  animation: streamingCursorBlink 1s infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes streamingCursorBlink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Modern glowing cursor with glassmorphism theme */
+.streaming-cursor-glow {
+  display: inline-block;
+  position: relative;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 4px;
+  vertical-align: baseline;
+  transform: translateY(0.1em);
+}
+
+.streaming-cursor-glow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 1),
+    rgba(255, 255, 255, 0.9)
+  );
+  border-radius: 1px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    0 0 12px rgba(255, 255, 255, 0.6),
+    0 0 20px rgba(255, 255, 255, 0.3),
+    0 0 32px rgba(255, 255, 255, 0.15),
+    inset 0 0 4px rgba(255, 255, 255, 0.8);
+  animation: streamingCursorGlowPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes streamingCursorGlowPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 
+      0 0 12px rgba(255, 255, 255, 0.6),
+      0 0 20px rgba(255, 255, 255, 0.3),
+      0 0 32px rgba(255, 255, 255, 0.15),
+      inset 0 0 4px rgba(255, 255, 255, 0.8);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 
+      0 0 8px rgba(255, 255, 255, 0.5),
+      0 0 14px rgba(255, 255, 255, 0.25),
+      0 0 20px rgba(255, 255, 255, 0.1),
+      inset 0 0 3px rgba(255, 255, 255, 0.6);
+  }
+}
+
+.streaming-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: 
+    grid-template-rows 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  will-change: grid-template-rows, opacity, transform;
+}
+
+.streaming-panel.streaming-active {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.streaming-panel-content {
+  min-height: 0;
+  overflow: hidden;
+  will-change: height;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Smooth opacity fade */
+.streaming-fade-in {
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
+}
+
+.streaming-fade-in.streaming-active {
+  opacity: 1;
+}
+
+/* Auto fade-in for user messages (no need for streaming-active class) */
+.message-fade-in {
+  animation: messageFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes messageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Slide in from bottom */
+.streaming-slide-up {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.streaming-slide-up.streaming-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Scale in effect */
+.streaming-scale-in {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.streaming-scale-in.streaming-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Enable GPU acceleration for animated elements */
+.streaming-container,
+.streaming-container-fast,
+.streaming-container-slow,
+.streaming-panel,
+.streaming-fade-in,
+.streaming-slide-up,
+.streaming-scale-in {
+  will-change: grid-template-rows, opacity, transform;
+}
+
+/* Remove will-change after animation completes to free resources */
+.streaming-container.streaming-complete,
+.streaming-container-fast.streaming-complete,
+.streaming-container-slow.streaming-complete,
+.streaming-panel.streaming-complete,
+.streaming-fade-in.streaming-complete,
+.streaming-slide-up.streaming-complete,
+.streaming-scale-in.streaming-complete {
+  will-change: auto;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .streaming-container,
+  .streaming-container-fast,
+  .streaming-container-slow,
+  .streaming-panel {
+    transition: none;
+    opacity: 1;
+    grid-template-rows: 1fr;
+  }
+  
+  .streaming-word,
+  .streaming-word-fast,
+  .streaming-char {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  
+  .streaming-cursor {
+    animation: none;
+    opacity: 1;
+  }
+  
+  .streaming-fade-in,
+  .streaming-slide-up,
+  .streaming-scale-in {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+}

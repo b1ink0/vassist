@@ -370,11 +370,13 @@ export class AudioWorkerClient {
    */
   async generateKokoroSpeech(text, options = {}) {
     try {
-      console.log(`[AudioWorkerClient] Generating Kokoro speech (${this.mode} mode)...`);
+      console.log(`[AudioWorkerClient] generateKokoroSpeech called (${this.mode} mode) with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
       
       if (!this.isReady) {
         await this.init();
       }
+      
+      console.log(`[AudioWorkerClient] Sending message to worker with text:`, typeof text, text?.substring?.(0, 50));
       
       const response = await this.sendMessage(
         MessageTypes.KOKORO_GENERATE,
@@ -413,7 +415,7 @@ export class AudioWorkerClient {
       const response = await this.sendMessage(
         MessageTypes.KOKORO_CHECK_STATUS,
         {},
-        { timeout: 5000 }
+        { timeout: 30000 } // Increased from 5000ms to 30000ms for slow model loading
       );
       
       return response;
@@ -437,7 +439,7 @@ export class AudioWorkerClient {
       const response = await this.sendMessage(
         MessageTypes.KOKORO_LIST_VOICES,
         {},
-        { timeout: 5000 }
+        { timeout: 30000 }
       );
       
       return response.voices || [];
@@ -445,6 +447,31 @@ export class AudioWorkerClient {
     } catch (error) {
       console.error('[AudioWorkerClient] Kokoro list voices failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Ping Kokoro to keep model loaded in memory (heartbeat)
+   * Lightweight check with no side effects
+   * @returns {Promise<boolean>} True if model is loaded
+   */
+  async pingKokoro() {
+    try {
+      if (!this.isReady) {
+        return false;
+      }
+      
+      const response = await this.sendMessage(
+        MessageTypes.KOKORO_PING,
+        {},
+        { timeout: 3000 }
+      );
+      
+      return response.alive === true;
+      
+    } catch {
+      // Silent failure for heartbeat - don't spam logs
+      return false;
     }
   }
 
@@ -461,7 +488,7 @@ export class AudioWorkerClient {
       const response = await this.sendMessage(
         MessageTypes.KOKORO_GET_CACHE_SIZE,
         {},
-        { timeout: 5000 }
+        { timeout: 30000 }
       );
       
       return response || { usage: 0, quota: 0, databases: [] };
@@ -485,7 +512,7 @@ export class AudioWorkerClient {
       const response = await this.sendMessage(
         MessageTypes.KOKORO_CLEAR_CACHE,
         {},
-        { timeout: 5000 }
+        { timeout: 30000 }
       );
       
       return response.cleared || false;

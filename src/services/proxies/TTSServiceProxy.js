@@ -481,7 +481,7 @@ class TTSServiceProxy extends ServiceProxy {
   }
 
   /**
-   * List available Kokoro voices
+   * List Kokoro voices
    * @returns {Promise<string[]>} Array of voice IDs
    */
   async listKokoroVoices() {
@@ -493,6 +493,27 @@ class TTSServiceProxy extends ServiceProxy {
       return response.voices;
     } else {
       return await this.directService.listKokoroVoices();
+    }
+  }
+
+  /**
+   * Ping Kokoro to keep model loaded in memory (heartbeat)
+   * Generates small audio without side effects
+   * @returns {Promise<boolean>} True if model is alive
+   */
+  async pingKokoro() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      
+      try {
+        const response = await bridge.sendMessage(MessageTypes.KOKORO_PING, {});
+        return response.alive === true;
+      } catch {
+        return false; // Silent failure for heartbeat
+      }
+    } else {
+      return await this.directService.pingKokoro();
     }
   }
 
@@ -553,14 +574,17 @@ class TTSServiceProxy extends ServiceProxy {
    */
   async testConnection(testText = 'Hello, this is a test.') {
     try {
-      const audioUrls = await this.generateChunkedSpeech(testText);
+      const audioItems = await this.generateChunkedSpeech(testText);
       
-      if (audioUrls.length === 0) {
+      if (!audioItems || audioItems.length === 0) {
         throw new Error('No audio generated');
       }
       
-      await this.playAudioSequence(audioUrls, 'test_connection');
-      this.cleanupBlobUrls(audioUrls);
+      await this.playAudioSequence(audioItems, 'test_connection');
+      
+      // Cleanup blob URLs
+      const urls = audioItems.map(item => item.audioUrl).filter(Boolean);
+      this.cleanupBlobUrls(urls);
       
       return true;
     } catch (error) {

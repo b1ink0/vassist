@@ -10,6 +10,7 @@ import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
 
 function AppContent({ mode = 'development' }) {
@@ -25,9 +26,18 @@ function AppContent({ mode = 'development' }) {
     positionManagerRef,
     handleAssistantReady: contextHandleAssistantReady,
   } = useApp();
+
+  // Get Kokoro status from ConfigContext
+  const { kokoroStatus, ttsConfig } = useConfig();
   
   // Auto-unmount when tab is hidden for 15+ seconds
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
+  
+  // Check if we should wait for Kokoro pre-initialization
+  const shouldWaitForKokoro = ttsConfig.enabled && 
+                              ttsConfig.provider === 'kokoro' && 
+                              ttsConfig.kokoro?.keepModelLoaded !== false &&
+                              kokoroStatus.preInitializing;
   
   /**
    * Handle VirtualAssistant ready
@@ -52,9 +62,13 @@ function AppContent({ mode = 'development' }) {
     if (!enableModelLoading) {
       return null; // Model disabled
     }
+    if (shouldWaitForKokoro) {
+      console.log('[AppContent] Waiting for Kokoro pre-initialization before loading model...');
+      return null; // Wait for Kokoro to pre-initialize
+    }
     if (!shouldMountModel) {
       console.log('[AppContent] Model unmounted due to prolonged tab inactivity');
-      return null;
+      return null; // Unmounted to free resources while tab is hidden
     }
     return (
       <VirtualAssistant 
@@ -63,12 +77,12 @@ function AppContent({ mode = 'development' }) {
         mode={mode}
       />
     );
-  }, [enableModelLoading, shouldMountModel, handleAssistantReady, mode, assistantRef]);
+  }, [enableModelLoading, shouldMountModel, shouldWaitForKokoro, handleAssistantReady, mode, assistantRef]);
 
   return (
     <div className="relative">
       {/* Don't render anything until config is loaded to prevent mount/unmount cycles */}
-      {enableModelLoading === null ? (
+      {enableModelLoading === null || shouldWaitForKokoro ? (
         <LoadingIndicator isVisible={true} />
       ) : (
         <>

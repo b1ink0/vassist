@@ -211,7 +211,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
         return;
       }
 
-      console.log(`[VirtualAssistant] setState("${stateOrEmotion}")`);
+      console.log(`[VirtualAssistant] setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
       
       // Check if it's a valid AssistantState
       if (Object.values(AssistantState).includes(stateOrEmotion)) {

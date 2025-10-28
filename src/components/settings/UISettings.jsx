@@ -12,8 +12,6 @@ const UISettings = ({ isLightBackground }) => {
   const {
     // UI Config
     uiConfig,
-    uiConfigSaved,
-    uiConfigError,
     updateUIConfig,
   } = useConfig();
 
@@ -101,7 +99,7 @@ const UISettings = ({ isLightBackground }) => {
           </select>
           <p className="text-xs text-white/50">
             {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native'
-              ? '⚠️ Native refresh rate may impact performance on high-refresh monitors'
+              ? '⚠️ Native refresh rate may impact performance on high-refresh monitors (144Hz+)'
               : `Limits rendering to ${uiConfig.fpsLimit || 60} frames per second`}
           </p>
         </div>
@@ -251,18 +249,6 @@ const UISettings = ({ isLightBackground }) => {
           </>
         )}
       </div>
-
-      {/* Status Messages - auto-save feedback */}
-      {uiConfigSaved && (
-        <div className="glass-success rounded-2xl p-3 animate-in fade-in">
-          <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
-        </div>
-      )}
-      {uiConfigError && (
-        <div className="glass-error rounded-2xl p-3 animate-in fade-in">
-          <span className="text-sm text-red-100">{uiConfigError}</span>
-        </div>
-      )}
     </div>
   );
 };

@@ -89,6 +89,8 @@ class OffscreenWorker {
       this.handleKokoroCheckStatus.bind(this));
     this.messageHandlers.set(MessageTypes.KOKORO_LIST_VOICES,
       this.handleKokoroListVoices.bind(this));
+    this.messageHandlers.set(MessageTypes.KOKORO_PING,
+      this.handleKokoroPing.bind(this));
     this.messageHandlers.set(MessageTypes.KOKORO_GET_CACHE_SIZE,
       this.handleKokoroGetCacheSize.bind(this));
     this.messageHandlers.set(MessageTypes.KOKORO_CLEAR_CACHE,
@@ -286,6 +288,36 @@ class OffscreenWorker {
     } catch (error) {
       console.error('[OffscreenWorker] Kokoro list voices failed:', error);
       throw new Error(`Failed to list voices: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle Kokoro ping (heartbeat)
+   * Generates small audio to keep model in memory
+   */
+  async handleKokoroPing(message) {
+    try {
+      // Check if initialized first
+      const status = await KokoroTTSCore.checkStatus();
+      if (!status.initialized) {
+        return { alive: false };
+      }
+
+      // Get voice and speed from message data (passed from background)
+      const { voiceId = 'af_heart', speed = 1.0 } = message.data || {};
+
+      // Generate one word to keep model alive (use configured voice)
+      await KokoroTTSCore.generate({
+        text: 'hi',
+        voiceId,
+        speed,
+        lang: 'en-us'
+      });
+      
+      return { alive: true };
+    } catch {
+      // Silent failure for heartbeat
+      return { alive: false };
     }
   }
 

@@ -190,8 +190,9 @@ export const AnimationRegistry = {
       name: 'Thinking 1',
       filePath: 'res/assets/motion/think1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,
-      loopTransition: true,
+      loop: false,           // Animation itself doesn't loop
+      loopTransition: true,  // When state loops, use smooth transition
+      autoReturn: null,      // Don't auto-return - let BUSY state control it
       weight: 1.0,
       metadata: {
         description: 'Thoughtful pose - considering something',
@@ -203,8 +204,9 @@ export const AnimationRegistry = {
       name: 'Thinking 2',
       filePath: 'res/assets/motion/think2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,
-      loopTransition: true,
+      loop: false,           // Animation itself doesn't loop
+      loopTransition: true,  // When state loops, use smooth transition
+      autoReturn: null,      // Don't auto-return - let BUSY state control it
       weight: 1.0,
       metadata: {
         description: 'Alternative thinking animation',
@@ -482,10 +484,11 @@ export const StateBehavior = {
   },
   
   [AssistantState.BUSY]: {
-    allowedAnimations: ['thinking', 'walking'], // Can do thinking or walking
-    randomSelection: true,        // Can randomly pick
-    loop: false,                  // One-shot animations
-    autoReturn: AssistantState.IDLE, // Return to IDLE when done
+    allowedAnimations: ['thinking'], // Use thinking animations
+    randomSelection: true,        // Can randomly pick between thinking variants
+    loop: true,                   // Loop thinking animations continuously
+    autoSwitch: true,             // Auto-switch between thinking variants for variety
+    autoSwitchInterval: 8000,     // Switch every 8 seconds
   },
   
   [AssistantState.SPEAKING]: {

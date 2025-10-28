@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/ui-effects.css";
+@import "./styles/streaming-animations.css";
 
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;

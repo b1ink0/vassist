@@ -11,8 +11,6 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
   const {
     // STT Config
     sttConfig,
-    sttConfigSaved,
-    sttConfigError,
     sttTesting,
     updateSTTConfig,
     testSTTRecording,
@@ -274,39 +272,10 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
         <button 
           onClick={testSTTRecording}
           disabled={!sttConfig.enabled || sttTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {sttTesting ? (
-            <>
-              <span className="animate-spin">🎤</span>
-              <span>Testing...</span>
-            </>
-          ) : (
-            'Test Recording (3s)'
-          )}
+          Test Recording (3s)
         </button>
-      </div>
-      
-      {/* Status Messages */}
-      <div className="space-y-2 min-h-[40px]">
-        {sttConfigSaved && (
-          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
-            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
-          </div>
-        )}
-        {sttConfigError && (
-          <div className={`${
-            sttConfigError.includes('✅') ? 'glass-success' : 
-            sttConfigError.includes('🎤') ? 'glass-warning' : 
-            'glass-error'
-          } rounded-2xl p-3 animate-in fade-in`}>
-            <span className={`text-sm ${
-              sttConfigError.includes('✅') ? 'text-emerald-100' : 
-              sttConfigError.includes('🎤') ? 'text-amber-100' : 
-              'text-red-100'
-            }`}>{sttConfigError}</span>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -16,8 +16,6 @@ const TTSSettings = ({ isLightBackground }) => {
   const {
     // TTS Config
     ttsConfig,
-    ttsConfigSaved,
-    ttsConfigError,
     ttsTesting,
     updateTTSConfig,
     testTTSConnection,
@@ -140,6 +138,29 @@ const TTSSettings = ({ isLightBackground }) => {
                       </select>
                       <p className="text-xs text-white/50">
                         Quantization is automatic: WebGPU uses fp32, WASM uses q8
+                      </p>
+                      <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-xs text-yellow-200/90 leading-relaxed">
+                          ⚠️ <strong>Performance Note:</strong> If the model or page lags, try switching to WASM backend for better stability. 
+                          However, WASM is significantly slower than WebGPU. For optimal performance, consider using different TTS providers 
+                          (OpenAI, OpenAI-Compatible) or hosting a TTS service directly on your device.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Keep Model Loaded */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ttsConfig.kokoro?.keepModelLoaded !== false}
+                          onChange={(e) => updateTTSConfig('kokoro.keepModelLoaded', e.target.checked)}
+                          className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-500"
+                        />
+                        <span className="text-sm font-medium text-white/90">Keep Model Loaded</span>
+                      </label>
+                      <p className="text-xs text-white/50">
+                        Periodically generates audio to keep model in memory (prevents unload lag)
                       </p>
                     </div>
                   </div>
@@ -399,39 +420,10 @@ const TTSSettings = ({ isLightBackground }) => {
         <button 
           onClick={testTTSConnection}
           disabled={!ttsConfig.enabled || ttsTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {ttsTesting ? (
-            <>
-              <span className="animate-spin">⏳</span>
-              <span>Testing...</span>
-            </>
-          ) : (
-            'Test TTS'
-          )}
+          Test TTS
         </button>
-      </div>
-      
-      {/* Status Messages */}
-      <div className="space-y-2 min-h-[40px]">
-        {ttsConfigSaved && (
-          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
-            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
-          </div>
-        )}
-        {ttsConfigError && (
-          <div className={`${
-            ttsConfigError.includes('✅') ? 'glass-success' : 
-            ttsConfigError.includes('⏳') ? 'glass-warning' : 
-            'glass-error'
-          } rounded-2xl p-3 animate-in fade-in`}>
-            <span className={`text-sm ${
-              ttsConfigError.includes('✅') ? 'text-emerald-100' : 
-              ttsConfigError.includes('⏳') ? 'text-amber-100' : 
-              'text-red-100'
-            }`}>{ttsConfigError}</span>
-          </div>
-        )}
       </div>
     </div>
   );

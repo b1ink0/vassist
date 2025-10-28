@@ -198,13 +198,14 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
-  // Poll TTS playback state for non-voice mode
+  // Register TTS callbacks for centralized playback state
   useEffect(() => {
+    // Only poll when NOT in voice mode
+    if (isVoiceMode) return;
+    
     const interval = setInterval(() => {
-      if (!isVoiceMode) {
-        const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
-        setIsSpeaking(isPlaying);
-      }
+      const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
+      setIsSpeaking(isPlaying);
     }, 100);
 
     return () => clearInterval(interval);

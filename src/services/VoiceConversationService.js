@@ -86,6 +86,11 @@ class VoiceConversationService {
           // Check if speech detected while AI is speaking (for interrupt)
           if (volume > VoiceRecordingService.vadThreshold && this.currentState === ConversationStates.SPEAKING) {
             console.log('[VoiceConversation] Speech detected while AI speaking - interrupting and stopping TTS');
+            
+            // Dispatch event to trigger force-complete animation in ChatContainer
+            const event = new CustomEvent('voiceInterrupt');
+            window.dispatchEvent(event);
+            
             TTSServiceProxy.stopPlayback();
             this.interrupt();
           }

@@ -521,6 +521,28 @@ async function registerHandlers() {
     try {
       const result = await offscreenManager.sendToOffscreen(offscreenMessage);
       console.log('[Background] KOKORO_INIT result from offscreen:', result);
+      
+      // Load TTS config to get the configured voice for warmup
+      const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
+      const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      
+      // Warm up the model with a test generation (ensures it's fully ready)
+      console.log('[Background] Warming up Kokoro model with test generation...');
+      try {
+        await offscreenManager.sendToOffscreen({
+          type: MessageTypes.KOKORO_GENERATE,
+          requestId: `warmup_${requestId}`,
+          data: {
+            text: 'ready',
+            voice: ttsConfig.kokoro?.voice || 'af_heart',
+            speed: ttsConfig.kokoro?.speed || 1.0
+          }
+        });
+        console.log('[Background] Kokoro model warmup complete');
+      } catch (warmupError) {
+        console.warn('[Background] Model warmup failed (continuing anyway):', warmupError);
+      }
+      
       console.log('[Background] KOKORO_INIT returning data:', result?.data);
       return result.data;
     } finally {
@@ -584,6 +606,23 @@ async function registerHandlers() {
     // Forward to offscreen for cache clearing
     const result = await offscreenManager.sendToOffscreen(message);
     return result?.data || { cleared: false };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.KOKORO_PING, async (message) => {
+    const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
+    const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+    
+    // Add voice and speed to the message data
+    const pingMessage = {
+      ...message,
+      data: {
+        voiceId: ttsConfig.kokoro?.voice || 'af_heart',
+        speed: ttsConfig.kokoro?.speed || 1.0
+      }
+    };
+    
+    const result = await offscreenManager.sendToOffscreen(pingMessage);
+    return result?.data || { alive: false };
   });
 
   // TTS Audio Processing with Lip Sync (via offscreen)

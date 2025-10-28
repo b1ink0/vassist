@@ -197,6 +197,8 @@ export const DefaultAIConfig = {
     outputLanguage: 'en', // Supported: en, es, ja
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
+    systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
+    systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
   },
   
   openai: {
@@ -206,6 +208,8 @@ export const DefaultAIConfig = {
     maxTokens: 2000,
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
+    systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
+    systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
   },
   
   ollama: {
@@ -215,9 +219,11 @@ export const DefaultAIConfig = {
     maxTokens: 2000,
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
+    systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
+    systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
   },
   
-  systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
+  systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.', // Deprecated - use provider-specific systemPrompt instead
   
   // AI Features Configuration (Available for all providers)
   aiFeatures: {
@@ -256,6 +262,7 @@ export const DefaultTTSConfig = {
     voice: KokoroVoices.AF_HEART, // Default voice
     speed: 1.0, // 0.5 to 2.0 recommended
     device: KokoroDevice.AUTO, // Auto-detect best backend (quantization is automatic)
+    keepModelLoaded: true, // Keep model in memory with periodic heartbeat (prevents unload, enabled by default)
   },
   
   // OpenAI TTS Settings

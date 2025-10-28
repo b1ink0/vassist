@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
@@ -7,6 +7,8 @@ import UtilService from '../services/UtilService';
 import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
+import StreamingText from './common/StreamingText';
+import StreamingContainer from './common/StreamingContainer';
 import { useApp } from '../contexts/AppContext';
 
 const ChatContainer = ({ 
@@ -69,11 +71,105 @@ const ChatContainer = ({
   const [editingImages, setEditingImages] = useState([]);
   const [editingAudios, setEditingAudios] = useState([]);
   const editTextareaRef = useRef(null);
+  const previousMessageCountRef = useRef(0);
+  const previousIsGeneratingRef = useRef(false);
+  const [shouldForceComplete, setShouldForceComplete] = useState(false);
+  const [isWaitingForAnimation, setIsWaitingForAnimation] = useState(false);
+  
+  // Track which message IDs have been streamed in this session (not from history)
+  const streamedMessageIdsRef = useRef(new Set());
 
   // Keep button position ref in sync with context
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
   }, [buttonPosition]);
+
+  /**
+   * Detect when to force-complete streaming animation
+   * Triggers when AI generation stops
+   */
+  useEffect(() => {
+    // Track messages that are being generated (streamed) in this session
+    if (isGenerating && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && !lastMessage.isUser && !streamedMessageIdsRef.current.has(lastMessage.id)) {
+        streamedMessageIdsRef.current.add(lastMessage.id);
+        console.log('[ChatContainer] Tracking streamed message:', lastMessage.id);
+      }
+    }
+    
+    // Detect when generation stops (was generating, now not generating)
+    const wasGenerating = previousIsGeneratingRef.current;
+    const stoppedGenerating = wasGenerating && !isGenerating;
+    
+    // Also check if messages increased (user sent new message)
+    const messageCountIncreased = messages.length > previousMessageCountRef.current;
+    
+    if (stoppedGenerating && messageCountIncreased) {
+      // User interrupted AI by sending new message - force complete the streaming animation
+      console.log('[ChatContainer] AI interrupted by user, forcing completion');
+      setShouldForceComplete(true);
+      setIsWaitingForAnimation(true);
+      
+      // Wait for instant-fade animation to complete (200ms) before showing new message
+      const animationTimer = setTimeout(() => {
+        setIsWaitingForAnimation(false);
+      }, 200); // Match the instant-fade animation duration
+      
+      // Reset forceComplete flag after StreamingText processes it
+      const resetTimer = setTimeout(() => {
+        setShouldForceComplete(false);
+      }, 250);
+      
+      return () => {
+        clearTimeout(animationTimer);
+        clearTimeout(resetTimer);
+      };
+    }
+
+    previousIsGeneratingRef.current = isGenerating;
+    previousMessageCountRef.current = messages.length;
+  }, [messages, isGenerating]);
+
+  /**
+   * Auto-focus input when chat is cleared (new chat created)
+   */
+  useEffect(() => {
+    if (messages.length === 0 && isVisible) {
+      // Clear tracked message IDs when starting a new chat
+      streamedMessageIdsRef.current.clear();
+      console.log('[ChatContainer] Cleared streamed message tracking for new chat');
+      
+      // Dispatch event for ChatInput to focus
+      const event = new CustomEvent('focusChatInput');
+      window.dispatchEvent(event);
+    }
+  }, [messages.length, isVisible]);
+
+  /**
+   * Listen for voice interrupt events to trigger force-complete
+   */
+  useEffect(() => {
+    const handleVoiceInterrupt = () => {
+      if (isGenerating) {
+        console.log('[ChatContainer] Voice interrupt detected, forcing instant completion');
+        
+        // Trigger force-complete to instantly show remaining text
+        setShouldForceComplete(true);
+        
+        // Reset forceComplete flag after StreamingText processes it
+        setTimeout(() => {
+          setShouldForceComplete(false);
+        }, 250);
+      }
+    };
+
+    window.addEventListener('voiceInterrupt', handleVoiceInterrupt);
+    
+    return () => {
+      window.removeEventListener('voiceInterrupt', handleVoiceInterrupt);
+    };
+  }, [isGenerating]);
 
   const calculateContainerPosition = useCallback(() => {
     const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
@@ -267,9 +363,36 @@ const ChatContainer = ({
   }, [setIsHistoryPanelOpen]);
 
   const handleSelectChat = useCallback((chat) => {
+    // Clear tracked message IDs when loading from history
+    streamedMessageIdsRef.current.clear();
+    console.log('[ChatContainer] Cleared streamed message tracking for history load');
+    
     loadChatFromHistory(chat);
     setIsHistoryPanelOpen(false);
   }, [loadChatFromHistory, setIsHistoryPanelOpen]);
+
+  /**
+   * Handle stop generation with force-complete animation
+   */
+  const handleStopGeneration = useCallback(() => {
+    if (isGenerating) {
+      console.log('[ChatContainer] Stop button clicked, forcing instant completion');
+      
+      // Trigger force-complete to instantly show remaining text
+      setShouldForceComplete(true);
+      
+      // Stop the generation
+      stopGeneration();
+      
+      // Reset forceComplete flag after StreamingText processes it
+      setTimeout(() => {
+        setShouldForceComplete(false);
+      }, 250);
+    } else {
+      // Just stop TTS if playing
+      stopGeneration();
+    }
+  }, [isGenerating, stopGeneration]);
 
   // Load TTS configuration from storage on mount
   useEffect(() => {
@@ -461,41 +584,50 @@ const ChatContainer = ({
   }, [messages, setLoadingMessageIndex, setPlayingMessageIndex]);
 
   /**
-   * Smooth scroll to bottom with proper offset for fade area
+   * Smooth scroll to bottom - ALWAYS scrolls, no tolerance check
+   * The tolerance check was causing issues because measurements happen before DOM updates
    */
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
-      const scrollHeight = scrollRef.current.scrollHeight;
-      const height = scrollRef.current.clientHeight;
-      const maxScrollTop = scrollHeight - height;
-      
-      scrollRef.current.scrollTo({
-        top: maxScrollTop,
-        behavior: 'smooth'
-      });
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  };
+  }, []);
 
-  // Auto-scroll to bottom when messages change
+  // Use layoutEffect for synchronous scroll after DOM mutations
+  useLayoutEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom]);
+
+  // Listen for streaming word updates to trigger scroll
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const handleStreamingUpdate = () => {
+      scrollToBottom();
+    };
+
+    window.addEventListener('streamingWordAdded', handleStreamingUpdate);
+    
+    return () => {
+      window.removeEventListener('streamingWordAdded', handleStreamingUpdate);
+    };
+  }, [scrollToBottom]);
 
   /**
    * Handle copying message content to clipboard
    */
-  const handleCopyMessage = async (messageIndex, content) => {
+  const handleCopyMessage = useCallback(async (messageIndex, content) => {
     const success = await UtilService.copyToClipboard(content);
     if (success) {
       setCopiedMessageIndex(messageIndex);
       setTimeout(() => setCopiedMessageIndex(null), 2000);
     }
-  };
+  }, []);
 
   /**
    * Handle rewriting/regenerating AI message
    */
-  const handleRewriteMessage = async (message) => {
+  const handleRewriteMessage = useCallback(async (message) => {
     if (message?.id && message?.role === 'assistant') {
       try {
         console.log('[ChatContainer] Regenerating AI message:', message.id);
@@ -504,12 +636,12 @@ const ChatContainer = ({
         console.error('[ChatContainer] Failed to regenerate message:', error);
       }
     }
-  };
+  }, [regenerateAIMessage]);
 
   /**
    * Handle editing user message
    */
-  const handleEditMessage = (message) => {
+  const handleEditMessage = useCallback((message) => {
     if (message?.id && message?.role === 'user') {
       console.log('[ChatContainer] Starting edit for message:', message.id);
       setEditingMessageId(message.id);
@@ -517,12 +649,12 @@ const ChatContainer = ({
       setEditingImages(message.images || []);
       setEditingAudios(message.audios || []);
     }
-  };
+  }, []);
 
   /**
    * Save edited message
    */
-  const handleSaveEdit = async (messageId) => {
+  const handleSaveEdit = useCallback(async (messageId) => {
     if (!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0) {
       setEditingMessageId(null);
       setEditingContent('');
@@ -542,59 +674,82 @@ const ChatContainer = ({
     } catch (error) {
       console.error('[ChatContainer] Failed to save edit:', error);
     }
-  };
+  }, [editingContent, editingImages, editingAudios, editUserMessage]);
 
   /**
    * Cancel editing
    */
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setEditingMessageId(null);
     setEditingContent('');
     setEditingImages([]);
     setEditingAudios([]);
-  };
+  }, []);
+
+  /**
+   * Auto-resize edit textarea
+   */
+  const adjustEditTextareaHeight = useCallback(() => {
+    const textarea = editTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, 300);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, []);
+
+  /**
+   * Handle edit textarea content change
+   */
+  const handleEditContentChange = useCallback((e) => {
+    setEditingContent(e.target.value);
+    // Adjust height after state update
+    setTimeout(() => adjustEditTextareaHeight(), 0);
+  }, [adjustEditTextareaHeight]);
 
   /**
    * Remove image from editing
    */
-  const handleRemoveEditingImage = (index) => {
+  const handleRemoveEditingImage = useCallback((index) => {
     setEditingImages(prev => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
   /**
    * Remove audio from editing
    */
-  const handleRemoveEditingAudio = (index) => {
+  const handleRemoveEditingAudio = useCallback((index) => {
     setEditingAudios(prev => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
   /**
    * Handle branch navigation
    */
-  const handlePreviousBranch = (message) => {
+  const handlePreviousBranch = useCallback((message) => {
     if (message?.id && message?.branchInfo?.canGoBack) {
       previousBranch(message.id);
     }
-  };
+  }, [previousBranch]);
 
-  const handleNextBranch = (message) => {
+  const handleNextBranch = useCallback((message) => {
     if (message?.id && message?.branchInfo?.canGoForward) {
       nextBranch(message.id);
     }
-  };
+  }, [nextBranch]);
 
   // Auto-focus edit textarea when editing starts
   useEffect(() => {
     if (editingMessageId && editTextareaRef.current) {
       editTextareaRef.current.focus();
       editTextareaRef.current.selectionStart = editTextareaRef.current.value.length;
+      // Initial height adjustment
+      adjustEditTextareaHeight();
     }
-  }, [editingMessageId]);
+  }, [editingMessageId, adjustEditTextareaHeight]);
 
   /**
    * Handle playing TTS for a message
    */
-  const handlePlayTTS = async (messageIndex, messageContent) => {
+  const handlePlayTTS = useCallback(async (messageIndex, messageContent) => {
     // Check if TTS is enabled and configured
     let ttsConfig;
     try {
@@ -662,13 +817,15 @@ const ChatContainer = ({
       setPlayingMessageIndex(null);
       currentSessionRef.current = null;
     }
-  };
+  }, [playingMessageIndex, setPlayingMessageIndex, setLoadingMessageIndex]);
 
   if (!isVisible) return null;
 
   if (modelDisabled && !buttonInitializedRef.current) return null;
 
   if (!modelDisabled && (containerPos.x === 0 && containerPos.y === 0)) return null;
+
+  const ttsEnabled = ttsConfig.enabled;
 
   return (
     <>
@@ -763,17 +920,17 @@ const ChatContainer = ({
         {messages.length > 0 && (
           <>
             <button
-              onClick={stopGeneration}
-              disabled={!isGenerating && !isSpeaking}
+              onClick={handleStopGeneration}
+              disabled={!isGenerating && !isSpeaking && loadingMessageIndex === null}
               className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
-                isGenerating || isSpeaking
+                isGenerating || isSpeaking || loadingMessageIndex !== null
                   ? 'glass-error' 
                   : 'opacity-50 cursor-not-allowed'
               }`}
-              title={isGenerating ? 'Stop generation' : isSpeaking ? 'Stop speaking' : 'Nothing to stop'}
+              title={isGenerating ? 'Stop generation' : (isSpeaking || loadingMessageIndex !== null) ? 'Stop TTS' : 'Nothing to stop'}
             >
               <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
-                isGenerating || isSpeaking ? '' : 'opacity-50'
+                isGenerating || isSpeaking || loadingMessageIndex !== null ? '' : 'opacity-50'
               }`}>⏹</span>
             </button>
             
@@ -832,12 +989,13 @@ const ChatContainer = ({
         {/* Scrollable messages */}
         <div 
           ref={scrollRef}
-          className="absolute inset-0 flex flex-col-reverse gap-3 px-6 overflow-y-auto"
+          className="absolute inset-0 flex flex-col gap-3 px-6 overflow-y-auto"
           style={{
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
             paddingTop: '50px',
             paddingBottom: '50px',
+            scrollBehavior: 'smooth',
           }}
         >
           {messages.length === 0 ? (
@@ -885,28 +1043,47 @@ const ChatContainer = ({
             </div>
           ) : (
             <>
-              {messages.slice().reverse().map((msg, index) => {
+              {messages.map((msg, index) => {
                 const isUser = msg.role === 'user';
                 const isError = msg.content.toLowerCase().startsWith('error:');
-                const messageIndex = messages.length - 1 - index;
+                const messageIndex = index;
                 const isPlaying = playingMessageIndex === messageIndex;
                 const isLoading = loadingMessageIndex === messageIndex;
-                const isLastMessage = index === 0; // Last message in reversed order = first message
+                const isLastMessage = index === messages.length - 1;
                 
-                // Use ttsConfig from state
-                const ttsEnabled = ttsConfig.enabled;
+                // Hide the last message while instant-fade animation is completing
+                if (isWaitingForAnimation && isLastMessage) {
+                  return null;
+                }
+                // Check if this message was streamed in the current session
+                const wasStreamedInSession = streamedMessageIdsRef.current.has(msg.id);
+                
+                // Disable streaming for messages not streamed in this session (loaded from history)
+                // This keeps the prop stable based on the message ID, not on position
+                const shouldDisableStreaming = !isUser && !isError && !wasStreamedInSession;
+                
+                // Force-complete ONLY the last AI message when interrupted
+                const isLastAIMessage = !isUser && !isError && index === messages.length - 1;
+                const shouldForceCompleteThis = shouldForceComplete && isLastAIMessage;
                 
                 // Check if message has audio attachments
                 const hasAudio = isUser && msg.audios && msg.audios.length > 0;
+                const isEditing = editingMessageId === msg.id;
                 
                 return (
-                  <div key={`message-wrapper-${messageIndex}`} className="flex flex-col gap-3">
+                  <div key={msg.id} className="flex flex-col gap-3">
                     <div
                       className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                     >
-                      <div className={`flex items-start gap-2 ${hasAudio ? 'w-[80%]' : 'max-w-[80%]'}`}>
+                      <div className={`flex items-start gap-2 ${
+                        isEditing 
+                          ? 'w-full' 
+                          : hasAudio 
+                          ? 'w-[80%]' 
+                          : 'max-w-[80%]'
+                      }`}>
                         {/* Message bubble */}
-                        <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-1.5" style={{ width: isEditing ? '100%' : 'auto' }}>
                           <div
                             className={`${
                               isError
@@ -920,7 +1097,10 @@ const ChatContainer = ({
                                 : isUser
                                 ? 'rounded-[20px] rounded-tr-md'
                                 : 'rounded-[20px] rounded-tl-md'
-                            } ${hasAudio ? 'w-full' : ''}`}
+                            } ${hasAudio || isEditing ? 'w-full' : ''}`}
+                            style={{
+                              minHeight: !isUser && !isError ? 'calc(1.5em + 1.5rem)' : undefined
+                            }}
                           >
                             {/* Image attachments (for user messages) - only show when NOT editing */}
                             {isUser && msg.images && msg.images.length > 0 && editingMessageId !== msg.id && (
@@ -1001,15 +1181,16 @@ const ChatContainer = ({
                                 <textarea
                                   ref={editTextareaRef}
                                   value={editingContent}
-                                  onChange={(e) => setEditingContent(e.target.value)}
-                                  className={`w-full min-h-[80px] px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed ${
+                                  onChange={handleEditContentChange}
+                                  className={`w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar ${
                                     isLightBackground
                                       ? 'bg-transparent text-black placeholder-black/40'
                                       : 'bg-transparent text-white placeholder-white/40'
                                   } focus:outline-none`}
                                   style={{ 
                                     background: 'transparent',
-                                    border: 'none'
+                                    border: 'none',
+                                    minHeight: '24px'
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' && e.ctrlKey) {
@@ -1038,9 +1219,29 @@ const ChatContainer = ({
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                                {msg.content}
-                              </div>
+                              <>
+                                {!isUser && !isError ? (
+                                  <StreamingContainer 
+                                    autoActivate={true}
+                                    speed="normal"
+                                    disabled={shouldDisableStreaming}
+                                  >
+                                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                                      <StreamingText 
+                                        text={msg.content}
+                                        wordsPerSecond={40}
+                                        showCursor={false}
+                                        disabled={shouldDisableStreaming}
+                                        forceComplete={shouldForceCompleteThis}
+                                      />
+                                    </div>
+                                  </StreamingContainer>
+                                ) : (
+                                  <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                                    {msg.content}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                           
@@ -1074,10 +1275,20 @@ const ChatContainer = ({
                             {/* Speaker button for AI messages (only show if TTS is enabled) */}
                             {!isUser && !isError && ttsEnabled && (
                               <button
-                                onClick={() => handlePlayTTS(messageIndex, msg.content)}
+                                onClick={() => {
+                                  if (isLoading) {
+                                    // Cancel TTS generation if loading
+                                    TTSServiceProxy.stopPlayback();
+                                    setLoadingMessageIndex(null);
+                                    setPlayingMessageIndex(null);
+                                    currentSessionRef.current = null;
+                                  } else {
+                                    // Play or stop TTS
+                                    handlePlayTTS(messageIndex, msg.content);
+                                  }
+                                }}
                                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                                title={isPlaying ? 'Stop audio' : 'Play audio'}
-                                disabled={isLoading}
+                                title={isLoading ? 'Cancel TTS generation' : isPlaying ? 'Stop audio' : 'Play audio'}
                               >
                                 {isLoading ? (
                                   <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] animate-spin`}>⏳</span>

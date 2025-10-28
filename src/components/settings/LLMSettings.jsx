@@ -6,13 +6,120 @@
 
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
+import { PromptConfig } from '../../config/promptConfig';
+
+// Reusable Image Support Component
+const ImageSupportToggle = ({ providerKey, isLightBackground, updateAIConfig, aiConfig, additionalNote = '' }) => (
+  <div className="space-y-2">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+      <input
+        type="checkbox"
+        id={`${providerKey}-image-support`}
+        checked={aiConfig[providerKey]?.enableImageSupport !== false}
+        onChange={(e) => updateAIConfig(`${providerKey}.enableImageSupport`, e.target.checked)}
+        className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+      />
+      <label htmlFor={`${providerKey}-image-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+        Enable Image Support (Multi-modal)
+      </label>
+    </div>
+    <p className="text-xs text-white/50">
+      Allows sending images with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
+    </p>
+  </div>
+);
+
+// Reusable Audio Support Component
+const AudioSupportToggle = ({ providerKey, isLightBackground, updateAIConfig, aiConfig, additionalNote = '' }) => (
+  <div className="space-y-2">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+      <input
+        type="checkbox"
+        id={`${providerKey}-audio-support`}
+        checked={aiConfig[providerKey]?.enableAudioSupport !== false}
+        onChange={(e) => updateAIConfig(`${providerKey}.enableAudioSupport`, e.target.checked)}
+        className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
+      />
+      <label htmlFor={`${providerKey}-audio-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+        Enable Audio Support (Multi-modal)
+      </label>
+    </div>
+    <p className="text-xs text-white/50">
+      Allows sending audio files with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
+    </p>
+  </div>
+);
+
+// Reusable System Prompt Section Component
+const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, aiConfig }) => {
+  const providerConfig = aiConfig[providerKey] || {};
+  const currentType = providerConfig.systemPromptType || 'default';
+  const currentPrompt = providerConfig.systemPrompt || '';
+  
+  return (
+    <>
+      {/* System Prompt Personality */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">System Prompt Personality</label>
+        <select
+          value={currentType}
+          onChange={(e) => {
+            const newType = e.target.value;
+            updateAIConfig(`${providerKey}.systemPromptType`, newType);
+            // If switching to non-custom, clear custom prompt
+            if (newType !== 'custom') {
+              updateAIConfig(`${providerKey}.systemPrompt`, '');
+            }
+          }}
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+        >
+          {Object.entries(PromptConfig.systemPrompts).map(([key, value]) => (
+            <option key={key} value={key} className="bg-gray-900">{value.name}</option>
+          ))}
+        </select>
+        <p className="text-xs text-white/50">
+          Choose a personality for the AI assistant
+        </p>
+      </div>
+
+      {/* Custom System Prompt Editor */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">
+          System Prompt
+          {currentType !== 'custom' && (
+            <span className="ml-2 text-xs text-white/50">(Read-only - Select "Custom" to edit)</span>
+          )}
+        </label>
+        <textarea
+          value={
+            currentType === 'custom' 
+              ? currentPrompt 
+              : (PromptConfig.systemPrompts[currentType]?.prompt || '')
+          }
+          onChange={(e) => {
+            const newValue = e.target.value;
+            // If user edits a preset prompt, switch to custom
+            if (currentType !== 'custom') {
+              updateAIConfig(`${providerKey}.systemPromptType`, 'custom');
+            }
+            updateAIConfig(`${providerKey}.systemPrompt`, newValue);
+          }}
+          placeholder="Enter custom system prompt..."
+          rows="4"
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full resize-y`}
+        />
+        <p className="text-xs text-white/50">
+          Instructions that define the AI's behavior and personality. Editing a preset will switch to "Custom" mode.
+        </p>
+      </div>
+    </>
+  );
+};
 
 const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
   const {
     // AI Config
     aiConfig,
-    aiConfigSaved,
-    aiConfigError,
     aiTesting,
     updateAIConfig,
     testAIConnection,
@@ -73,43 +180,9 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             />
           </div>
 
-          {/* Image Support */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="openai-image-support"
-                checked={aiConfig.openai?.enableImageSupport !== false}
-                onChange={(e) => updateAIConfig('openai.enableImageSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
-              <label htmlFor="openai-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-                Enable Image Support (Multi-modal)
-              </label>
-            </div>
-            <p className="text-xs text-white/50">
-              Allows sending images with text prompts. Enabled by default.
-            </p>
-          </div>
-
-          {/* Audio Support */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="openai-audio-support"
-                checked={aiConfig.openai?.enableAudioSupport !== false}
-                onChange={(e) => updateAIConfig('openai.enableAudioSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
-              <label htmlFor="openai-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-                Enable Audio Support (Multi-modal)
-              </label>
-            </div>
-            <p className="text-xs text-white/50">
-              Allows sending audio files with text prompts. Enabled by default.
-            </p>
-          </div>
+          <ImageSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          <AudioSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          <SystemPromptSection providerKey="openai" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
         </>
       )}
 
@@ -143,43 +216,9 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             </p>
           </div>
 
-          {/* Image Support */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="ollama-image-support"
-                checked={aiConfig.ollama?.enableImageSupport !== false}
-                onChange={(e) => updateAIConfig('ollama.enableImageSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
-              <label htmlFor="ollama-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-                Enable Image Support (Multi-modal)
-              </label>
-            </div>
-            <p className="text-xs text-white/50">
-              Allows sending images with text prompts. Enabled by default. Requires multi-modal capable model.
-            </p>
-          </div>
-
-          {/* Audio Support */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="ollama-audio-support"
-                checked={aiConfig.ollama?.enableAudioSupport !== false}
-                onChange={(e) => updateAIConfig('ollama.enableAudioSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
-              <label htmlFor="ollama-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-                Enable Audio Support (Multi-modal)
-              </label>
-            </div>
-            <p className="text-xs text-white/50">
-              Allows sending audio files with text prompts. Enabled by default. Requires multi-modal capable model.
-            </p>
-          </div>
+          <ImageSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
+          <AudioSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
+          <SystemPromptSection providerKey="ollama" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
         </>
       )}
 
@@ -355,6 +394,9 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
             </p>
           </div>
 
+          {/* System Prompt */}
+          <SystemPromptSection providerKey="chromeAi" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+
           {/* Required Flags */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Required Chrome Flags</label>
@@ -390,39 +432,10 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
         <button 
           onClick={testAIConnection}
           disabled={aiTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {aiTesting ? (
-            <>
-              <span className="animate-spin">⏳</span>
-              <span>Testing...</span>
-            </>
-          ) : (
-            'Test Connection'
-          )}
+          Test Connection
         </button>
-      </div>
-      
-      {/* Status Messages */}
-      <div className="space-y-2 min-h-[40px]">
-        {aiConfigSaved && (
-          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
-            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
-          </div>
-        )}
-        {aiConfigError && (
-          <div className={`${
-            aiConfigError.includes('✅') ? 'glass-success' :
-            aiConfigError.includes('⏳') ? 'glass-warning' :
-            'glass-error'
-          } rounded-2xl p-3 animate-in fade-in`}>
-            <span className={`text-sm ${
-              aiConfigError.includes('✅') ? 'text-emerald-100' :
-              aiConfigError.includes('⏳') ? 'text-amber-100' :
-              'text-red-100'
-            }`}>{aiConfigError}</span>
-          </div>
-        )}
       </div>
     </div>
   );

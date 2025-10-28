@@ -43,6 +43,7 @@ const AIToolbar = () => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
+  const [isTTSGenerating, setIsTTSGenerating] = useState(false); // TTS generation state (before playback)
   const [currentSessionId, setCurrentSessionId] = useState(null); // TTS session ID
   
   // Dictation (STT) state
@@ -227,52 +228,59 @@ const AIToolbar = () => {
       return;
     }
 
-    // Toggle playback
-    if (isSpeaking) {
-      // Stop playback
-      console.log('[AIToolbar] Stopping TTS');
+    // If generating or playing, stop everything
+    if (isTTSGenerating || isSpeaking) {
+      console.log('[AIToolbar] Cancelling TTS (generating:', isTTSGenerating, ', speaking:', isSpeaking, ')');
       TTSServiceProxy.stopPlayback();
+      setIsTTSGenerating(false);
       setIsSpeaking(false);
       setCurrentSessionId(null);
-    } else {
-      // Start playback
-      try {
-        console.log('[AIToolbar] Starting TTS');
-        
-        // Generate unique session ID
-        const sessionId = `toolbar_${Date.now()}`;
-        setCurrentSessionId(sessionId);
-        setIsSpeaking(true);
+      return;
+    }
 
-        // Generate and play audio chunks
-        const audioChunks = await TTSServiceProxy.generateChunkedSpeech(
-          result,
-          null, // onChunkReady callback
-          500,  // maxChunkSize
-          100,  // minChunkSize
-          sessionId
-        );
+    // Start playback
+    try {
+      console.log('[AIToolbar] Starting TTS');
+      
+      // Generate unique session ID
+      const sessionId = `toolbar_${Date.now()}`;
+      setCurrentSessionId(sessionId);
+      setIsTTSGenerating(true); // Mark as generating
 
-        // Check if generation was stopped
-        if (audioChunks.length === 0) {
-          console.log('[AIToolbar] TTS generation was stopped');
-          setIsSpeaking(false);
-          setCurrentSessionId(null);
-          return;
-        }
+      // Generate and play audio chunks
+      const audioChunks = await TTSServiceProxy.generateChunkedSpeech(
+        result,
+        null, // onChunkReady callback
+        500,  // maxChunkSize
+        100,  // minChunkSize
+        sessionId
+      );
 
-        // Play audio sequence
-        await TTSServiceProxy.playAudioSequence(audioChunks, sessionId);
-
-        // Playback complete
+      // Check if generation was stopped
+      if (audioChunks.length === 0) {
+        console.log('[AIToolbar] TTS generation was stopped');
+        setIsTTSGenerating(false);
         setIsSpeaking(false);
         setCurrentSessionId(null);
-      } catch (err) {
-        console.error('[AIToolbar] TTS failed:', err);
-        setError('Text-to-Speech failed: ' + (err.message || 'Unknown error'));
-        setIsSpeaking(false);
-        setCurrentSessionId(null);
+        return;
       }
+
+      // Generation complete, now playing
+      setIsTTSGenerating(false);
+      setIsSpeaking(true);
+
+      // Play audio sequence
+      await TTSServiceProxy.playAudioSequence(audioChunks, sessionId);
+
+      // Playback complete
+      setIsSpeaking(false);
+      setCurrentSessionId(null);
+    } catch (err) {
+      console.error('[AIToolbar] TTS failed:', err);
+      setError('Text-to-Speech failed: ' + (err.message || 'Unknown error'));
+      setIsTTSGenerating(false);
+      setIsSpeaking(false);
+      setCurrentSessionId(null);
     }
   };
 
@@ -611,6 +619,16 @@ const AIToolbar = () => {
       return;
     }
     
+    // If toolbar is shown from image hover, hide it on scroll
+    // (because the image position changes and toolbar would be misaligned)
+    if (showingFromImageHoverRef.current) {
+      console.log('[AIToolbar] Hiding toolbar on scroll (was shown from image hover)');
+      setIsVisible(false);
+      setHoveredImageElement(null);
+      showingFromImageHoverRef.current = false;
+      return;
+    }
+    
     // Update position instantly - no delay, no RAF
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0) {
@@ -909,11 +927,13 @@ const AIToolbar = () => {
    * Set up event listeners
    */
   useEffect(() => {
+    const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus;
+    const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover;
+    
     console.log('[AIToolbar] Setting up event listeners', {
       isEnabled,
-      showOnInputFocus: uiConfig?.aiToolbar?.showOnInputFocus,
-      showOnImageHover: uiConfig?.aiToolbar?.showOnImageHover,
-      uiConfig: uiConfig
+      showOnInputFocus,
+      showOnImageHover
     });
     
     if (!isEnabled) {
@@ -927,14 +947,14 @@ const AIToolbar = () => {
     window.addEventListener('scroll', handleScroll, true); // Use capture to catch all scroll events
     
     // Input focus listener
-    if (uiConfig?.aiToolbar?.showOnInputFocus) {
+    if (showOnInputFocus) {
       console.log('[AIToolbar] Adding focusin listener for input focus');
       document.addEventListener('focusin', handleInputFocus);
     }
     
     // Image hover listeners + MutationObserver
     let observer;
-    if (uiConfig?.aiToolbar?.showOnImageHover) {
+    if (showOnImageHover) {
       console.log('[AIToolbar] Adding image hover listeners');
       // Add event listeners to all existing images
       const images = document.querySelectorAll('img');
@@ -971,11 +991,11 @@ const AIToolbar = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
       
-      if (uiConfig?.aiToolbar?.showOnInputFocus) {
+      if (showOnInputFocus) {
         document.removeEventListener('focusin', handleInputFocus);
       }
       
-      if (uiConfig?.aiToolbar?.showOnImageHover) {
+      if (showOnImageHover) {
         const images = document.querySelectorAll('img');
         images.forEach(img => {
           img.removeEventListener('mouseenter', handleImageHover);
@@ -992,7 +1012,7 @@ const AIToolbar = () => {
         clearTimeout(selectionTimeoutRef.current);
       }
     };
-  }, [isEnabled, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave, uiConfig]);
+  }, [isEnabled, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover]);
 
   /**
    * Clear flags and stop dictation when toolbar becomes invisible
@@ -1143,9 +1163,9 @@ const AIToolbar = () => {
 
   /**
    * Handle Summarize action with streaming
-   * @param {string} summaryType - 'tldr' (default), 'headline', 'key-points', 'teaser'
+   * @param {string} summaryType - 'tldr', 'headline', 'key-points', 'teaser'
    */
-  const onSummarizeClick = async (summaryType = null) => {
+  const onSummarizeClick = async (summaryType = 'tldr') => {
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1158,7 +1178,7 @@ const AIToolbar = () => {
     }
     
     setIsLoading(true);
-    const type = summaryType || aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr';
+    const type = summaryType || 'tldr';
     setAction(`summarize-${type}`);
     setError('');
     setResult(''); // Clear previous result
@@ -1274,6 +1294,13 @@ const AIToolbar = () => {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
     }
+    
+    // Reset undo/redo state when translate is clicked
+    // (This prevents showing undo button after translate when previously using rewrite)
+    setHasInserted(false);
+    hasInsertedRef.current = false;
+    setOriginalContent(null);
+    setImprovedContent(null);
     
     setIsLoading(true);
     setAction('translate');
@@ -2609,11 +2636,11 @@ const AIToolbar = () => {
             mainButton={{
               icon: '📝',
               label: 'Summarize',
-              onClick: () => onSummarizeClick(),
+              onClick: () => onSummarizeClick('tldr'),
               disabled: !selectedText,
               isLoading: isLoading && action === 'summarize-tldr',
               actionType: 'summarize',
-              title: 'Summarize (default from settings)',
+              title: 'Summarize (TL;DR)',
               maxLabelWidth: '100px',
             }}
             subButtons={[
@@ -2760,6 +2787,7 @@ const AIToolbar = () => {
           copySuccess={copySuccess}
           onCopyClick={onCopyClick}
           isSpeaking={isSpeaking}
+          isTTSGenerating={isTTSGenerating}
           onSpeakerClick={onSpeakerClick}
           ttsConfig={ttsConfig}
           onClose={closeResult}

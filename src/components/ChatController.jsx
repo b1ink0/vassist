@@ -208,6 +208,7 @@ const ChatController = ({
     const allChunks = []; // All text chunks (stored, not generated yet)
     let nextChunkToGenerate = 0; // Index of next chunk to generate
     const MAX_QUEUED_AUDIO = 3; // Only queue up to 3 audio chunks ahead
+    let isGeneratingChunk = false; // Track if chunk generation is in progress
 
     /**
      * Generate TTS for a text chunk with lip sync
@@ -216,6 +217,14 @@ const ChatController = ({
       if (chunkIndex >= allChunks.length) return;
       
       const chunkText = allChunks[chunkIndex];
+      
+      // Validate chunk text exists and is not empty
+      if (!chunkText || typeof chunkText !== 'string' || chunkText.trim().length === 0) {
+        console.warn(`[ChatController] Skipping empty/invalid chunk ${chunkIndex}:`, chunkText);
+        return;
+      }
+      
+      console.log(`[ChatController] Generating TTS for chunk ${chunkIndex}: "${chunkText.substring(0, 100)}..." (type: ${typeof chunkText}, length: ${chunkText.length})`);
       
       // Check if stopped
       if (TTSServiceProxy.isStopped) {
@@ -251,12 +260,24 @@ const ChatController = ({
     };
 
     // Generate next chunk if queue has space
-    const tryGenerateNextChunk = () => {
+    const tryGenerateNextChunk = async () => {
+      // Don't start new generation if one is already in progress
+      if (isGeneratingChunk) {
+        return;
+      }
+      
       const queueLength = TTSServiceProxy.getQueueLength();
       
       // Only generate if queue has room AND we have more chunks
       if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-        generateTTSChunk(nextChunkToGenerate++);
+        isGeneratingChunk = true;
+        await generateTTSChunk(nextChunkToGenerate++);
+        isGeneratingChunk = false;
+        
+        // Continue generating if there's room (non-blocking)
+        if (nextChunkToGenerate < allChunks.length) {
+          setTimeout(() => tryGenerateNextChunk(), 0);
+        }
       }
     };
 
@@ -279,10 +300,8 @@ const ChatController = ({
       }
       setChatMessages([...ChatService.getMessages()]);
 
-      // Start speaking animation after first chunk
-      if (!hasSwitchedToSpeaking && 
-          fullResponse.length > 10 && 
-          assistantRef.current?.isReady()) {
+      // If TTS disabled, trigger speak animation after some text (no audio to sync with)
+      if (!ttsEnabled && !hasSwitchedToSpeaking && fullResponse.length > 10 && assistantRef.current?.isReady()) {
         assistantRef.current.triggerAction('speak');
         hasSwitchedToSpeaking = true;
       }
@@ -297,12 +316,15 @@ const ChatController = ({
           const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim();
           textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length);
           
-          // Store chunk (don't generate yet, just store)
-          if (chunkToSpeak && chunkToSpeak.length >= 3) {
+          // Store chunk (don't generate yet, just store) - VALIDATE it's not empty
+          if (chunkToSpeak && chunkToSpeak.length >= 3 && chunkToSpeak.trim().length >= 3) {
             allChunks.push(chunkToSpeak);
             
-            // Start generating first 3 chunks
-            tryGenerateNextChunk();
+            // Only trigger generation if we're not already generating and queue has room
+            // This prevents multiple simultaneous calls during fast streaming
+            if (!isGeneratingChunk && TTSServiceProxy.getQueueLength() < MAX_QUEUED_AUDIO) {
+              tryGenerateNextChunk();
+            }
           }
         }
       }
@@ -337,14 +359,19 @@ const ChatController = ({
     if (ttsEnabled && textBuffer.trim().length > 0) {
       const finalChunk = textBuffer.trim();
       allChunks.push(finalChunk);
+      // Trigger generation for final chunk
+      tryGenerateNextChunk();
     }
 
     // Wait for all chunks to finish generating
-    if (ttsEnabled) {
+    if (ttsEnabled && allChunks.length > 0) {
       while (nextChunkToGenerate < allChunks.length) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
+    
+    // Clean up callback to prevent memory leaks
+    TTSServiceProxy.setAudioFinishedCallback(null);
 
     return { success: true, fullResponse };
   };
@@ -359,6 +386,15 @@ const ChatController = ({
     if (audios && audios.length > 0) attachmentInfo.push(`${audios.length} audio(s)`);
     const attachmentStr = attachmentInfo.length > 0 ? ` with ${attachmentInfo.join(' and ')}` : '';
     console.log('[ChatController] Message sent:', message, attachmentStr);
+
+    // Abort any ongoing AI generation BEFORE adding new message
+    // This ensures forceComplete triggers synchronously and previous message completes instantly
+    if (AIServiceProxy.isGenerating()) {
+      console.log('[ChatController] Aborting ongoing AI generation before adding new message');
+      AIServiceProxy.abortRequest();
+      // Brief delay to let abort process
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
 
     // Add user message to chat (with images and audios if provided)
     ChatService.addMessage('user', message, images, audios);
@@ -377,10 +413,18 @@ const ChatController = ({
       return;
     }
 
-    // Start thinking animation
+    // Start thinking animation (continuous loop until interrupted by TTS)
+    console.log('[ChatController] Checking assistant ready state:', {
+      hasRef: !!assistantRef.current,
+      isReady: assistantRef.current?.isReady?.(),
+    });
+    
     if (assistantRef.current?.isReady()) {
-      console.log('[ChatController] Starting thinking animation');
-      await assistantRef.current.triggerAction('think');
+      console.log('[ChatController] Starting BUSY state (thinking animation)');
+      await assistantRef.current.setState('BUSY');
+      console.log('[ChatController] BUSY state set successfully');
+    } else {
+      console.warn('[ChatController] Assistant not ready, skipping BUSY state');
     }
 
     // Brief pause to show thinking
@@ -467,10 +511,18 @@ const ChatController = ({
       return;
     }
 
-    // Start thinking animation
+    // Start thinking animation (continuous loop until interrupted by TTS)
+    console.log('[ChatController] [Voice] Checking assistant ready state:', {
+      hasRef: !!assistantRef.current,
+      isReady: assistantRef.current?.isReady?.(),
+    });
+    
     if (assistantRef.current?.isReady()) {
-      console.log('[ChatController] Starting thinking animation')
-      await assistantRef.current.triggerAction('think')
+      console.log('[ChatController] [Voice] Starting BUSY state (thinking animation)')
+      await assistantRef.current.setState('BUSY')
+      console.log('[ChatController] [Voice] BUSY state set successfully')
+    } else {
+      console.warn('[ChatController] [Voice] Assistant not ready, skipping BUSY state')
     }
 
     // Load system prompt and TTS config
@@ -503,6 +555,7 @@ const ChatController = ({
     const allChunks = [] // All text chunks (stored, not generated yet)
     let nextChunkToGenerate = 0 // Index of next chunk to generate
     const MAX_QUEUED_AUDIO = 3 // Only queue up to 3 audio chunks ahead
+    let isGeneratingChunk = false // Track if chunk generation is in progress
 
     // Generate unique session ID for this voice response
     const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -542,10 +595,20 @@ const ChatController = ({
     }
 
     // Generate next chunk if queue has space
-    const tryGenerateNextChunk = () => {
+    const tryGenerateNextChunk = async () => {
+      // Don't start new generation if one is already in progress
+      if (isGeneratingChunk) {
+        return
+      }
+      
       const queueLength = TTSServiceProxy.getQueueLength()
       if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-        generateTTSChunk(nextChunkToGenerate++)
+        isGeneratingChunk = true
+        await generateTTSChunk(nextChunkToGenerate++)
+        isGeneratingChunk = false
+        
+        // After finishing, try to generate next chunk if there's still room
+        tryGenerateNextChunk()
       }
     }
 
@@ -568,11 +631,9 @@ const ChatController = ({
       }
       setChatMessages([...ChatService.getMessages()])
 
-      // Start speaking animation
-      if (!hasSwitchedToSpeaking && 
-          fullResponse.length > 10 && 
-          assistantRef.current?.isReady()) {
-        console.log('[ChatController] [Voice] Starting speaking animation')
+      // If TTS disabled, trigger speak animation after some text (no audio to sync with)
+      if (!ttsEnabled && !hasSwitchedToSpeaking && fullResponse.length > 10 && assistantRef.current?.isReady()) {
+        console.log('[ChatController] [Voice] Starting speaking animation (no TTS)')
         assistantRef.current.triggerAction('speak')
         hasSwitchedToSpeaking = true
       }
@@ -586,8 +647,8 @@ const ChatController = ({
           const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim()
           textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length)
           
-          // Store chunk for just-in-time generation
-          if (chunkToSpeak && chunkToSpeak.length >= 3) {
+          // Store chunk for just-in-time generation - VALIDATE it's not empty
+          if (chunkToSpeak && chunkToSpeak.length >= 3 && chunkToSpeak.trim().length >= 3) {
             allChunks.push(chunkToSpeak)
             tryGenerateNextChunk()
           }
@@ -648,16 +709,16 @@ const ChatController = ({
   /**
    * Handle voice mode toggle
    */
-  const handleVoiceModeChange = (active) => {
+  const handleVoiceModeChange = useCallback((active) => {
     console.log('[ChatController] Voice mode changed:', active)
     setIsVoiceMode(active)
-  }
+  }, [setIsVoiceMode])
 
   /**
    * Handle drag-drop onto ChatContainer
    * This forwards the dropped content to ChatInput
    */
-  const handleDragDrop = (dropData) => {
+  const handleDragDrop = useCallback((dropData) => {
     console.log('[ChatController] Drag drop received:', dropData);
     
     // Ensure all fields exist with defaults
@@ -673,7 +734,7 @@ const ChatController = ({
       detail: normalizedData 
     });
     window.dispatchEvent(event);
-  };
+  }, []);
 
   /**
    * Streaming regeneration handler (called by AppContext)
@@ -685,9 +746,9 @@ const ChatController = ({
     setIsProcessing(true);
     TTSServiceProxy.stopPlayback();
     
-    // Start thinking animation
+    // Start thinking animation (continuous loop until interrupted by TTS)
     if (assistantRef.current?.isReady()) {
-      await assistantRef.current.triggerAction('think');
+      await assistantRef.current.setState('BUSY');
     }
     
     await new Promise(resolve => setTimeout(resolve, 500));

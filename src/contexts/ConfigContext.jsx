@@ -85,6 +85,7 @@ export const ConfigProvider = ({ children }) => {
   const [kokoroStatus, setKokoroStatus] = useState({
     checking: false,
     initialized: false,
+    preInitializing: false, // Pre-initialization before scene loads
     state: 'notInitialized', // 'notInitialized' | 'downloading' | 'ready' | 'error'
     message: '',
     details: '',
@@ -745,32 +746,46 @@ export const ConfigProvider = ({ children }) => {
   }, [aiConfig]);
 
   // Auto-check Kokoro status on mount and auto-initialize if model is already downloaded
+  // This happens BEFORE the Babylon scene loads (pre-initialization)
   useEffect(() => {
     const checkAndAutoInit = async () => {
-      // Only proceed if TTS is enabled AND provider is Kokoro
-      if (ttsConfig.enabled && ttsConfig.provider === 'kokoro') {
+      // Only proceed if TTS is enabled AND provider is Kokoro AND keepModelLoaded is enabled
+      if (ttsConfig.enabled && ttsConfig.provider === 'kokoro' && ttsConfig.kokoro?.keepModelLoaded !== false) {
         try {
-          console.log('[ConfigContext] Checking Kokoro status on mount...');
-          await checkKokoroStatus();
+          console.log('[ConfigContext] Pre-initializing Kokoro before scene loads...');
+          setKokoroStatus(prev => ({ ...prev, preInitializing: true }));
           
-          // If model is already downloaded but not initialized, auto-initialize
-          // This happens when the model was downloaded in a previous session
+          // Check current status
           const status = await TTSServiceProxy.checkKokoroStatus();
+          
           if (!status.initialized && !status.initializing) {
-            console.log('[ConfigContext] Model downloaded but not initialized, auto-initializing...');
+            // Model needs initialization - do it now
+            console.log('[ConfigContext] Initializing Kokoro model...');
             await initializeKokoro();
+            console.log('[ConfigContext] Kokoro initialization complete with warmup');
+          } else if (status.initialized) {
+            // Model already initialized - just do a warmup ping to ensure it's fully ready
+            console.log('[ConfigContext] Kokoro already initialized, doing warmup ping...');
+            try {
+              await TTSServiceProxy.pingKokoro();
+              console.log('[ConfigContext] Kokoro warmup ping complete');
+            } catch (pingError) {
+              console.warn('[ConfigContext] Warmup ping failed:', pingError);
+            }
           }
+          
+          console.log('[ConfigContext] Kokoro pre-initialization complete');
+          setKokoroStatus(prev => ({ ...prev, preInitializing: false }));
         } catch (error) {
-          console.error('[ConfigContext] Auto-init check failed:', error);
+          console.error('[ConfigContext] Kokoro pre-initialization failed:', error);
+          setKokoroStatus(prev => ({ ...prev, preInitializing: false }));
         }
       }
     };
     
     checkAndAutoInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
-
-  const value = useMemo(() => ({
+  }, [ttsConfig.enabled, ttsConfig.provider, ttsConfig.kokoro?.keepModelLoaded]);  const value = useMemo(() => ({
     // Config loading state
     isConfigLoading,
     
@@ -789,6 +804,7 @@ export const ConfigProvider = ({ children }) => {
     updateAIConfig,
     saveAIConfig,
     testAIConnection,
+    clearAIConfigError: () => setAiConfigError(''),
     
     // AI Features Tests
     testTranslator,
@@ -803,6 +819,7 @@ export const ConfigProvider = ({ children }) => {
     updateTTSConfig,
     saveTTSConfig,
     testTTSConnection,
+    clearTTSConfigError: () => setTtsConfigError(''),
     
     // STT Config
     sttConfig,
@@ -812,6 +829,7 @@ export const ConfigProvider = ({ children }) => {
     updateSTTConfig,
     saveSTTConfig,
     testSTTRecording,
+    clearSTTConfigError: () => setSttConfigError(''),
     
     // Chrome AI Status
     chromeAiStatus,

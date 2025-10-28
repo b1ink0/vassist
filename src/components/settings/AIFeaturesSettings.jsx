@@ -9,6 +9,8 @@ import { useConfig } from '../../contexts/ConfigContext';
 import { TranslationLanguages } from '../../config/aiConfig';
 import ChromeAIValidator from '../../services/ChromeAIValidator';
 import React, { useState } from 'react';
+import StreamingContainer from '../common/StreamingContainer';
+import StreamingText from '../common/StreamingText';
 
 // Reusable component to show test results below each feature
 const TestResult = ({ status, message }) => {
@@ -18,9 +20,17 @@ const TestResult = ({ status, message }) => {
   const textClass = status === 'success' ? 'text-emerald-100' : status === 'loading' ? 'text-amber-100' : 'text-red-100';
 
   return (
-    <div className={`mt-2 rounded-lg p-2 text-sm ${bgClass}`}>
-      <span className={textClass} style={{whiteSpace: 'pre-wrap'}}>{message}</span>
-    </div>
+    <StreamingContainer speed="fast" active={!!message}>
+      <div className={`mt-2 rounded-lg p-2 text-sm ${bgClass}`}>
+        <span className={textClass} style={{whiteSpace: 'pre-wrap'}}>
+          {status === 'loading' ? (
+            <StreamingText text={message} speed={5} showCursor={true} />
+          ) : (
+            message
+          )}
+        </span>
+      </div>
+    </StreamingContainer>
   );
 };
 
@@ -34,8 +44,6 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
   const {
     // AI Config
     aiConfig,
-    aiConfigSaved,
-    aiConfigError,
     updateAIConfig,
     
     // AI Features Tests
@@ -51,47 +59,47 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
   // Wrapper helpers to run tests and show per-section status
   const runTranslatorTest = async (...args) => {
     try {
-      setTranslatorTest({ status: 'loading', message: '⏳ Translating...' });
+      setTranslatorTest({ status: 'loading', message: 'Translating...' });
       const res = await testTranslator(...args);
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
-      setTranslatorTest({ status: 'success', message: `✅ Translation: "${msg}"` });
+      setTranslatorTest({ status: 'success', message: `Translation: "${msg}"` });
     } catch (err) {
-      setTranslatorTest({ status: 'error', message: `❌ ${(err && err.message) ? err.message : String(err)}` });
+      setTranslatorTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
     }
   };
 
   const runLanguageDetectorTest = async (...args) => {
     try {
-      setLanguageDetectorTest({ status: 'loading', message: '⏳ Detecting language...' });
+      setLanguageDetectorTest({ status: 'loading', message: 'Detecting language...' });
       const res = await testLanguageDetector(...args);
       
       if (Array.isArray(res) && res.length > 0) {
         const topResult = res[0];
-        const msg = `✅ Detected: ${topResult.detectedLanguage} (${(topResult.confidence * 100).toFixed(1)}% confidence)`;
+        const msg = `Detected: ${topResult.detectedLanguage} (${(topResult.confidence * 100).toFixed(1)}% confidence)`;
         setLanguageDetectorTest({ status: 'success', message: msg });
       } else {
         const msg = typeof res === 'string' ? res : JSON.stringify(res);
-        setLanguageDetectorTest({ status: 'success', message: `✅ ${msg}` });
+        setLanguageDetectorTest({ status: 'success', message: msg });
       }
     } catch (err) {
-      setLanguageDetectorTest({ status: 'error', message: `❌ ${(err && err.message) ? err.message : String(err)}` });
+      setLanguageDetectorTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
     }
   };
 
   const runSummarizerTest = async (...args) => {
     try {
-      setSummarizerTest({ status: 'loading', message: '⏳ Summarizing...' });
+      setSummarizerTest({ status: 'loading', message: 'Summarizing...' });
       const res = await testSummarizer(...args);
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
-      setSummarizerTest({ status: 'success', message: `✅ Summary: "${msg.substring(0, 150)}${msg.length > 150 ? '...' : ''}"`  });
+      setSummarizerTest({ status: 'success', message: `Summary: "${msg.substring(0, 150)}${msg.length > 150 ? '...' : ''}"`  });
     } catch (err) {
-      setSummarizerTest({ status: 'error', message: `❌ ${(err && err.message) ? err.message : String(err)}` });
+      setSummarizerTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
+      <div className="space-y-1">
         <h3 className="text-base font-semibold text-white">AI Features</h3>
         <p className="text-xs text-white/50">
           Advanced AI capabilities that work with all LLM providers (Chrome AI, OpenAI, Ollama)
@@ -284,59 +292,17 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
         {aiConfig.aiFeatures?.summarizer?.enabled !== false && (
           <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
-              Generate different types of summaries from long text
+              Generate different types of summaries from long text. Use the toolbar buttons to choose summary type.
             </p>
-            
-            {/* Summary Type */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-white/80">Type</label>
-              <select
-                value={aiConfig.aiFeatures?.summarizer?.defaultType || 'tldr'}
-                onChange={(e) => updateAIConfig('aiFeatures.summarizer.defaultType', e.target.value)}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              >
-                <option value="tldr" className="bg-gray-900">TL;DR (Overview)</option>
-                <option value="key-points" className="bg-gray-900">Key Points (Bullets)</option>
-                <option value="teaser" className="bg-gray-900">Teaser (Hook)</option>
-                <option value="headline" className="bg-gray-900">Headline</option>
-              </select>
-            </div>
-
-            {/* Summary Format */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-white/80">Format</label>
-              <select
-                value={aiConfig.aiFeatures?.summarizer?.defaultFormat || 'plain-text'}
-                onChange={(e) => updateAIConfig('aiFeatures.summarizer.defaultFormat', e.target.value)}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              >
-                <option value="plain-text" className="bg-gray-900">Plain Text</option>
-                <option value="markdown" className="bg-gray-900">Markdown</option>
-              </select>
-            </div>
-
-            {/* Summary Length */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-white/80">Length</label>
-              <select
-                value={aiConfig.aiFeatures?.summarizer?.defaultLength || 'medium'}
-                onChange={(e) => updateAIConfig('aiFeatures.summarizer.defaultLength', e.target.value)}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              >
-                <option value="short" className="bg-gray-900">Short</option>
-                <option value="medium" className="bg-gray-900">Medium</option>
-                <option value="long" className="bg-gray-900">Long</option>
-              </select>
-            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => runSummarizerTest(
                   'Artificial intelligence (AI) is intelligence demonstrated by machines, in contrast to the natural intelligence displayed by humans. Leading AI textbooks define the field as the study of intelligent agents: any device that perceives its environment and takes actions that maximize its chance of successfully achieving its goals.',
                   {
-                    type: aiConfig.aiFeatures?.summarizer?.defaultType || 'tldr',
-                    format: aiConfig.aiFeatures?.summarizer?.defaultFormat || 'plain-text',
-                    length: aiConfig.aiFeatures?.summarizer?.defaultLength || 'medium',
+                    type: 'tldr',
+                    format: 'plain-text',
+                    length: 'medium',
                   }
                 )}
                 className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
@@ -352,28 +318,6 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
             </div>
 
             <TestResult status={summarizerTest.status} message={summarizerTest.message} />
-          </div>
-        )}
-      </div>
-      
-      {/* Status Messages */}
-      <div className="space-y-2 min-h-[40px]">
-        {aiConfigSaved && (
-          <div className="glass-success rounded-2xl p-3 animate-in fade-in">
-            <span className="text-sm text-emerald-100">✅ Auto-saved successfully!</span>
-          </div>
-        )}
-        {aiConfigError && (
-          <div className={`${
-            aiConfigError.includes('✅') ? 'glass-success' :
-            aiConfigError.includes('⏳') ? 'glass-warning' :
-            'glass-error'
-          } rounded-2xl p-3 animate-in fade-in`}>
-            <span className={`text-sm ${
-              aiConfigError.includes('✅') ? 'text-emerald-100' :
-              aiConfigError.includes('⏳') ? 'text-amber-100' :
-              'text-red-100'
-            }`}>{aiConfigError}</span>
           </div>
         )}
       </div>

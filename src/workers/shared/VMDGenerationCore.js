@@ -9,11 +9,11 @@ import { AudioProcessingCore } from './AudioProcessingCore.js';
 
 export class VMDGenerationCore {
     static defaultConfig = {
-        a_weight_multiplier: 1.2,
-        i_weight_multiplier: 0.8,
-        o_weight_multiplier: 1.1,
-        u_weight_multiplier: 0.9,
-        smoothness: 15,
+        a_weight_multiplier: 2.7,
+        i_weight_multiplier: 1,
+        o_weight_multiplier: 2.7,
+        u_weight_multiplier: 2.5,
+        smoothness: 30,
         optimize_vmd: true
     };
 
