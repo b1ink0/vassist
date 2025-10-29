@@ -365,10 +365,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   }
   
   // Determine if we should skip intro
-  // Skip for: center positions, last-location, or Portrait Mode
-  const shouldSkipIntro = preset.includes('center') || preset === 'last-location' || isPortraitMode;
+  // Skip for: center positions, last-location, Portrait Mode, OR if we have savedModelPosition (model already loaded before)
+  const shouldSkipIntro = preset.includes('center') 
+    || preset === 'last-location' 
+    || isPortraitMode 
+    || finalConfig.savedModelPosition !== null; // Skip intro if model already loaded in this session
   
-  console.log(`[MmdModelScene] Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}`);
+  console.log(`[MmdModelScene] Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}${finalConfig.savedModelPosition ? ' (has saved position)' : ''}`);
 
   // Initialize animation system
   // Skip intro for center positions (model just appears in place)
@@ -397,21 +400,31 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // Initialize positioning system with saved preset/location from uiConfig
   console.log('[MmdModelScene] Initializing PositionManager with config:', positionConfig);
   console.log('[MmdModelScene] uiConfig:', finalConfig.uiConfig);
+  console.log('[MmdModelScene] savedModelPosition from context:', finalConfig.savedModelPosition);
   
-  // If preset is 'last-location' and we have saved coordinates, use them
-  if (preset === 'last-location' && positionConfig.lastLocation) {
-    const { x, y } = positionConfig.lastLocation;
-    console.log('[MmdModelScene] Loading last location:', positionConfig.lastLocation);
+  // Priority: savedModelPosition from context > lastLocation from config > preset
+  // savedModelPosition persists across unmount/remount (tab visibility changes)
+  // Use savedModelPosition REGARDLESS of preset if it exists
+  if (finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation)) {
+    const savedPos = finalConfig.savedModelPosition || positionConfig.lastLocation;
+    const { x, y, width, height, preset: savedPreset } = savedPos;
+    console.log('[MmdModelScene] Loading saved position:', savedPos);
     
-    // Initialize with the preset first to get correct modelSize
-    positionManager.initialize(actualPreset);
+    // Setup PositionManager manually (without calling applyPreset which would fire wrong position event)
+    positionManager.updateCanvasDimensions();
+    positionManager.setupResizeHandler();
     
-    // Then override just the position (x, y), keeping the preset's width/height and offset
+    // Store Portrait Mode state on PositionManager (needed for offset calculations)
+    positionManager.isPortraitMode = isPortraitMode;
+    
+    // Get preset data for dimensions and offset
+    // Use the saved preset if available, otherwise fall back to current preset
     const { PositionPresets } = await import('../../config/uiConfig.js');
-    const presetData = PositionPresets[actualPreset];
+    const presetToUse = savedPreset || actualPreset;
+    const presetData = PositionPresets[presetToUse];
     const modelSize = isPortraitMode ? presetData.portraitModelSize : presetData.modelSize;
-    const width = modelSize.width;
-    const height = modelSize.height;
+    const finalWidth = width || modelSize.width;
+    const finalHeight = height || modelSize.height;
     
     // Get the correct offset based on Portrait Mode
     const offset = isPortraitMode && presetData.portraitOffset 
@@ -419,15 +432,15 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       : presetData.offset || { x: 0, y: 0 };
     
     // Apply two-height system for Portrait Mode
-    let cameraHeight = height;
-    let effectiveHeight = height;
+    let cameraHeight = finalHeight;
+    let effectiveHeight = finalHeight;
     if (isPortraitMode) {
-      cameraHeight = height * 3;  // 1500px for zoom
-      effectiveHeight = height;    // 500px for positioning
+      cameraHeight = finalHeight * 3;  // 1500px for zoom
+      effectiveHeight = finalHeight;    // 500px for positioning
     }
     
-    console.log(`[MmdModelScene] Restoring position (${x}, ${y}) with preset size ${width}x${height}, offset:`, offset);
-    positionManager.setPositionPixels(x, y, width, cameraHeight, effectiveHeight, offset);
+    console.log(`[MmdModelScene] Restoring position (${x}, ${y}) with size ${finalWidth}x${finalHeight}, preset: ${presetToUse}, offset:`, offset);
+    positionManager.setPositionPixels(x, y, finalWidth, cameraHeight, effectiveHeight, offset);
   } else {
     // Use preset
     console.log('[MmdModelScene] Using preset:', actualPreset);

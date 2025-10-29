@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
+import { Icon } from './icons';
 
 const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
   const {
@@ -13,7 +14,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     setPendingDropData,
   } = useApp();
   
-  const { uiConfig, updateUIConfig } = useConfig();
+  const { uiConfig, updateUIConfig } = useConfig(); // Get position config
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
@@ -24,6 +25,32 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const [isDragOverButton, setIsDragOverButton] = useState(false);
   const dragDropServiceRef = useRef(null);
   const buttonRef = useRef(null);
+  
+  // Delayed render state for fade animation
+  const [shouldRender, setShouldRender] = useState(isVisible);
+  const [isAppearing, setIsAppearing] = useState(false);
+
+  /**
+   * Handle delayed unmount for fade animation
+   */
+  useEffect(() => {
+    if (isVisible && !shouldRender) {
+      // Transitioning to visible - mount and trigger fade-in
+      setShouldRender(true);
+      setIsAppearing(true);
+      // Remove appearing class after animation completes
+      const timeout = setTimeout(() => setIsAppearing(false), 300);
+      return () => clearTimeout(timeout);
+    } else if (!isVisible && shouldRender) {
+      // Transitioning to hidden - trigger fade-out then unmount
+      setIsAppearing(false);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+    // No state change if already in correct state
+  }, [isVisible, shouldRender]);
 
   /**
    * Convert preset name to button pixel position
@@ -185,9 +212,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         const buttonX = shouldBeOnLeft ? leftX : rightX;
         const newX = Math.round(buttonX);
         const newY = Math.round(buttonY);
+        
         if (newX === lastSetPosition.current.x && newY === lastSetPosition.current.y) return;
+        
         lastSetPosition.current = { x: newX, y: newY };
-  setButtonPos({ x: newX, y: newY });
+        setButtonPos({ x: newX, y: newY });
       } catch (err) {
         console.error('[ChatButton] updateFromModel failed', err);
       }
@@ -301,9 +330,9 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       });
     }).catch(err => console.error('[ChatButton] load DragDropService failed', err));
     return () => { attached = false; if (dragDropServiceRef.current) dragDropServiceRef.current.detach(); };
-  }, [buttonPos.x, buttonPos.y, isChatOpen, handleClick, setPendingDropData]);
+  }, [isChatOpen, handleClick, setPendingDropData]);
 
-  if (!isVisible) return null;
+  if (!shouldRender) return null;
 
   return (
     <button
@@ -321,10 +350,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       }}
       className={`glass-button rounded-full flex items-center justify-center ${
         modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
-      } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''}`}
+      } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''} ${
+        isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
+      }`}
       title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
     >
-      <span className="glass-text text-2xl drop-shadow-lg">{isChatOpen ? '✕' : '💬'}</span>
+      <Icon name={isChatOpen ? 'close' : 'ai'} size={24} className="glass-text drop-shadow-lg" />
     </button>
   );
 };

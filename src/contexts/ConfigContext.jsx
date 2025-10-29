@@ -385,12 +385,12 @@ export const ConfigProvider = ({ children }) => {
     
     try {
       await AIServiceProxy.configure(aiConfig);
-      setAiConfigError('⏳ Testing connection...');
+      setAiConfigError('hourglass:Testing connection...');
       await AIServiceProxy.testConnection();
-      setAiConfigError('✅ Connection successful!');
+      setAiConfigError('success:Connection successful!');
       setTimeout(() => setAiConfigError(''), 3000);
     } catch (error) {
-      setAiConfigError('❌ Connection failed: ' + error.message);
+      setAiConfigError('error-status:Connection failed:' + error.message);
     } finally {
       setAiTesting(false);
     }
@@ -538,14 +538,14 @@ export const ConfigProvider = ({ children }) => {
       
       // For Kokoro, check if initialized first and auto-initialize if needed
       if (ttsConfig.provider === 'kokoro') {
-        setTtsConfigError('⏳ Checking Kokoro status...');
+        setTtsConfigError('hourglass:Checking Kokoro status...');
         
         // Check current status
         const status = await TTSServiceProxy.checkKokoroStatus();
         
         if (!status.initialized) {
           // Auto-initialize if not initialized
-          setTtsConfigError('⏳ Initializing Kokoro model (first time may take a moment)...');
+          setTtsConfigError('hourglass:Initializing Kokoro model (first time may take a moment)...');
           console.log('[ConfigContext] Auto-initializing Kokoro for test TTS');
           
           try {
@@ -553,19 +553,19 @@ export const ConfigProvider = ({ children }) => {
             // Check status again after initialization
             const newStatus = await TTSServiceProxy.checkKokoroStatus();
             if (!newStatus.initialized) {
-              setTtsConfigError('❌ Failed to initialize Kokoro model');
+              setTtsConfigError('error-status:Failed to initialize Kokoro model');
               setTtsTesting(false);
               return;
             }
           } catch (initError) {
-            setTtsConfigError('❌ Kokoro initialization failed: ' + initError.message);
+            setTtsConfigError('error-status:Kokoro initialization failed:' + initError.message);
             setTtsTesting(false);
             return;
           }
         }
       }
       
-      setTtsConfigError('⏳ Testing TTS...');
+      setTtsConfigError('hourglass:Testing TTS...');
       const startTime = Date.now();
       
       await TTSServiceProxy.testConnection("Hello, this is a test of the text to speech system.");
@@ -580,7 +580,7 @@ export const ConfigProvider = ({ children }) => {
       
       setTimeout(() => setTtsConfigError(''), 5000);
     } catch (error) {
-      setTtsConfigError('❌ TTS test failed: ' + error.message);
+      setTtsConfigError('error-status:TTS test failed:' + error.message);
     } finally {
       setTtsTesting(false);
     }
@@ -644,7 +644,7 @@ export const ConfigProvider = ({ children }) => {
       setSttConfigError(`✅ Transcription: "${transcription}"`);
       setTimeout(() => setSttConfigError(''), 5000);
     } catch (error) {
-      setSttConfigError('❌ STT test failed: ' + error.message);
+      setSttConfigError('error-status:STT test failed:' + error.message);
     } finally {
       setSttTesting(false);
     }

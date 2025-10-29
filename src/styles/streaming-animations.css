@@ -89,9 +89,8 @@
   }
 }
 
-/* Faster word animation */
+/* Faster word animation - NO TRANSFORM to prevent layout shift/bouncing */
 .streaming-word-fast {
-  display: inline-block;
   opacity: 0;
   animation: streamingWordFadeInFast 0.15s ease-in forwards;
 }
@@ -105,9 +104,8 @@
   }
 }
 
-/* Instant fade for interrupted streaming - all remaining text fades in smoothly at once */
+/* Instant fade for interrupted streaming - NO LAYOUT SHIFT */
 .streaming-word-instant-fade {
-  display: inline-block;
   opacity: 0;
   animation: streamingWordInstantFade 0.2s ease-out forwards;
 }

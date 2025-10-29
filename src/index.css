@@ -16,3 +16,17 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a, 
+.clickable,
+[role="button"] {
+  cursor: pointer;
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Icon } from './icons';
 
 const ChatBubble = ({ 
   positionManagerRef, 
@@ -193,7 +194,7 @@ const ChatBubble = ({
           className="glass-button absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors"
           title="Close"
         >
-          <span className="glass-text text-xs">✕</span>
+          <Icon name="close" size={12} className="glass-text" />
         </button>
       )}
     </div>

@@ -261,10 +261,17 @@ export class AnimationManager {
   setPositionManager(positionManager) {
     this.positionManager = positionManager;
     
-    // If intro completed and we need picking box, create it now
-    if (this._needsPickingBox && this._introLocomotionOffset) {
+    // This allows canvas interaction during intro animation, not just after
+    if (this._introLocomotionOffset) {
+      // Intro has loaded, create picking box now
       this._createPickingBoundingBox(positionManager);
       this._needsPickingBox = false;
+    } else if (this._needsPickingBox) {
+      // Intro will load later, create box when it does
+      console.log('[AnimationManager] Will create picking box after intro loads');
+    } else {
+      this._introLocomotionOffset = { x: 0, y: 0, z: 0 };
+      this._createPickingBoundingBox(positionManager);
     }
   }
 
@@ -301,7 +308,7 @@ export class AnimationManager {
     this.registerVisibilityHandler();
 
     if (playIntro) {
-      // Play intro animation using existing state transition logic
+      // Play intro animation using INTRO state (loop: false, autoReturn: IDLE)
       console.log('[AnimationManager] Playing intro animation...');
       const introAnim = getRandomAnimation('intro');
       
@@ -319,18 +326,19 @@ export class AnimationManager {
             const lastFrameIndex = frameCount - 1;
             const finalX = movableTrack.positions[lastFrameIndex * 3 + 0];
             const finalY = movableTrack.positions[lastFrameIndex * 3 + 1];
+            const finalZ = movableTrack.positions[lastFrameIndex * 3 + 2] || 0; // Add Z coordinate
             
-            console.log('[AnimationManager] Intro locomotion:', { x: finalX, y: finalY, frames: frameCount });
+            console.log('[AnimationManager] Intro locomotion:', { x: finalX, y: finalY, z: finalZ, frames: frameCount });
             
             // Store the intro locomotion for later (PositionManager not initialized yet!)
-            this._introLocomotionOffset = { x: finalX, y: finalY };
+            this._introLocomotionOffset = { x: finalX, y: finalY, z: finalZ };
             
             console.log('[AnimationManager] Stored intro locomotion offset - will apply when PositionManager initializes');
           }
         }
         
-        // NOW play the intro animation
-        await this.playAnimation(introAnim);
+        // NOW transition to INTRO state
+        await this.transitionToState(AssistantState.INTRO, null, introAnim);
         
         // Store the intro animation reference
         this._currentIntroAnimation = this.currentLoadedAnimation;
@@ -501,6 +509,15 @@ export class AnimationManager {
       return;
     }
 
+    // Safety check: ensure offset has x property, default z to 0 if missing
+    if (typeof this._introLocomotionOffset.x === 'undefined') {
+      console.warn('[AnimationManager] Intro locomotion offset missing x property:', this._introLocomotionOffset);
+      return;
+    }
+    
+    const offsetX = this._introLocomotionOffset.x;
+    const offsetZ = this._introLocomotionOffset.z || 0; // Default to 0 if z is missing
+
     // Find the center bone track
     for (let i = 0; i < animation.movableBoneTracks.length; i++) {
       const track = animation.movableBoneTracks[i];
@@ -508,10 +525,10 @@ export class AnimationManager {
         // Add intro offset to ALL position keyframes in this track
         const positions = track.positions;
         for (let j = 0; j < positions.length; j += 3) {
-          positions[j] += this._introLocomotionOffset.x;     // x - horizontal offset
-          positions[j + 2] += this._introLocomotionOffset.z; // z - depth offset
+          positions[j] += offsetX;     // x - horizontal offset
+          positions[j + 2] += offsetZ; // z - depth offset
         }
-        console.log(`[AnimationManager] Applied intro offset (X,Z only) to animation "${animation.name}": x=${this._introLocomotionOffset.x.toFixed(2)}, z=${this._introLocomotionOffset.z.toFixed(2)}`);
+        console.log(`[AnimationManager] Applied intro offset (X,Z only) to animation "${animation.name}": x=${offsetX.toFixed(2)}, z=${offsetZ.toFixed(2)}`);
         break;
       }
     }
@@ -632,7 +649,8 @@ export class AnimationManager {
         console.log('[AnimationManager] Intro locomotion offset saved:', { 
           x: this._introLocomotionOffset.x, 
           y: this._introLocomotionOffset.y, 
-          z: this._introLocomotionOffset.z 
+          z: this._introLocomotionOffset.z,
+          raw: this._introLocomotionOffset
         });
         console.log('[AnimationManager] All future animations will have this offset added to their center bone positions');
         

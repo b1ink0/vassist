@@ -83,6 +83,17 @@ export const AppProvider = ({ children }) => {
   // POSITION STATE (for chat-only mode)
   // ========================================
   const [buttonPosition, setButtonPosition] = useState({ x: -100, y: -100 });
+  
+  // ========================================
+  // MODEL OVERLAY STATE
+  // ========================================
+  const [modelOverlayPos, setModelOverlayPos] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [showModelLoadingOverlay, setShowModelLoadingOverlay] = useState(false);
+  
+  // ========================================
+  // SAVED MODEL POSITION (for tab visibility unmount/remount)
+  // ========================================
+  const [savedModelPosition, setSavedModelPosition] = useState(null);
 
   // ========================================
   // ASSISTANT INITIALIZATION
@@ -205,7 +216,13 @@ export const AppProvider = ({ children }) => {
     
     const interval = setInterval(() => {
       const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
-      setIsSpeaking(isPlaying);
+      setIsSpeaking(prev => {
+        // Only update state if value actually changed to prevent unnecessary re-renders
+        if (prev !== isPlaying) {
+          return isPlaying;
+        }
+        return prev;
+      });
     }, 100);
 
     return () => clearInterval(interval);
@@ -735,6 +752,16 @@ export const AppProvider = ({ children }) => {
     // Position state
     buttonPosition,
     setButtonPosition,
+
+    // Model overlay state
+    modelOverlayPos,
+    setModelOverlayPos,
+    showModelLoadingOverlay,
+    setShowModelLoadingOverlay,
+    
+    // Saved model position (persists across unmount/remount)
+    savedModelPosition,
+    setSavedModelPosition,
 
     // Chat actions
     toggleChat,

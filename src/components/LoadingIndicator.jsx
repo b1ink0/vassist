@@ -5,34 +5,32 @@
  * loading indicator that doesn't block the page.
  * 
  * Features:
- * - Bottom-right corner positioning
+ * - Bottom-right corner positioning (or centered in container)
  * - Glassmorphism design with Tailwind
  * - Optional progress percentage display
  * - Smooth fade in/out transitions
  */
 
-const LoadingIndicator = ({ isVisible = false, progress = null }) => {
+import { Icon } from './icons';
+
+const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }) => {
   if (!isVisible) return null;
 
   return (
     <div
-      className="fixed bottom-5 right-5 z-[10000] pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl"
+      className={`${centered ? '' : 'fixed bottom-5 right-5'} z-[10000] pointer-events-auto flex items-center justify-center px-2 py-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl`}
       style={{
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
       }}
     >
-      {/* Animated spinner */}
-      <div className="relative w-8 h-8">
-        <div className="absolute inset-0 rounded-full border-4 border-white/20"></div>
-        <div className="absolute inset-0 rounded-full border-4 border-t-white border-r-white border-b-transparent border-l-transparent animate-spin"></div>
-      </div>
-
-      {/* Loading text */}
-      <div className="flex flex-col">
-        <span className="text-white text-sm font-medium">Loading...</span>
+      {/* Animated spinner with percentage inside */}
+      <div className="relative w-8 h-8 flex items-center justify-center">
+        <div className="animate-spin">
+          <Icon name="spinner" size={32} className="text-white" />
+        </div>
         {progress !== null && (
-          <span className="text-white/70 text-xs">{Math.round(progress)}%</span>
+          <span className="absolute text-white text-[9px] font-bold z-10">{Math.round(progress)}</span>
         )}
       </div>
     </div>

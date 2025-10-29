@@ -9,6 +9,7 @@ import VirtualAssistant from './VirtualAssistant';
 import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
+import ModelLoadingOverlay from './ModelLoadingOverlay';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
@@ -110,6 +111,9 @@ function AppContent({ mode = 'development' }) {
           {!enableModelLoading && !isChatUIReady && (
             <LoadingIndicator isVisible={true} />
           )}
+
+          {/* Model loading overlay */}
+          <ModelLoadingOverlay />
         </>
       )}
     </div>

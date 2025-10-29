@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Icon } from './icons';
 
 const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -66,9 +67,7 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
         className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-10 h-10 rounded-full flex items-center justify-center hover:bg-purple-500/20 transition-all flex-shrink-0`}
         title={isPlaying ? 'Pause' : 'Play'}
       >
-        <span className="text-xl">
-          {isPlaying ? '⏸️' : '▶️'}
-        </span>
+        <Icon name={isPlaying ? 'pause' : 'play'} size={20} />
       </button>
 
       {/* Progress Bar Container */}
@@ -103,7 +102,7 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
 
       {/* Audio Icon */}
       <div className="flex-shrink-0">
-        <span className="text-xl">🎵</span>
+        <Icon name="music" size={20} />
       </div>
     </div>
   );

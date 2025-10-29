@@ -469,8 +469,6 @@ export class PositionManager {
       cameraHeight: this.modelHeightPx
     };
     
-    console.log('[PositionManager] getPositionPixels() returning:', result);
-    
     return result;
   }
   

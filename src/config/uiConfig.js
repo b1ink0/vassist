@@ -173,6 +173,10 @@ export const DefaultUIConfig = {
     showOnImageHover: true, // Show toolbar when hovering over images
   },
   
+  // Icon Settings
+  enableColoredIcons: false, // Use colored icons instead of monochrome
+  enableColoredIconsToolbarOnly: false, // Apply colored icons only to toolbar (when enableColoredIcons is true)
+  
   // Debug panel
   enableDebugPanel: true,
   
@@ -188,4 +192,7 @@ export const DefaultUIConfig = {
     sampleGridSize: 5, // 5x5 grid = 25 sample points
     showDebug: false,
   },
+  
+  // Smooth streaming response animation (performance impact)
+  smoothStreamingAnimation: false, // Enable smooth height animation for streaming text (disabled by default for performance)
 };

@@ -164,12 +164,16 @@ const ChatController = ({
   }, [isChatInputVisible, setPendingDropData])
 
   /**
-   * Handle chat input close - hide input and container
+   * Handle chat input close - hide input and container with fade-out animation
    */
   const handleChatInputClose = () => {
     console.log('[ChatController] Chat input closed')
+    
+    const event = new CustomEvent('closeChat');
+    window.dispatchEvent(event);
+    
+    // Also hide input immediately (input doesn't need animation)
     setIsChatInputVisible(false)
-    setIsChatContainerVisible(false)
   }
 
   /**

@@ -1,21 +1,5 @@
 /**
- * VirtualAssistant - High-level wrapper component for the 3D virtual assistant
- * 
- * Provides a clean, simple API for controlling the assistant:
- * - speak(text, emotion) - Make the assistant speak with an emotion
- * - idle() - Return to idle state
- * - setState(state) - Change assistant state (IDLE, BUSY, CELEBRATING, SPEAKING)
- * 
- * This component:
- * 1. Wraps BabylonScene + MmdModelScene internally
- * 2. Manages AnimationManager initialization
- * 3. Exposes imperative API via ref forwarding
- * 4. Keeps all animation logic in AnimationManager (no duplication)
- * 
- * Integration points:
- * - speak() triggers TTS→VMD generation pipeline
- * - Audio playback synchronized with lip-sync animations
- * - Model loading with async blob URL support
+ * VirtualAssistant - High-level wrapper component for the virtual assistant
  */
 
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef, useEffect } from 'react';
@@ -25,10 +9,12 @@ import { buildMmdModelScene } from '../babylon/scenes/MmdModelScene';
 import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
+import { useApp } from '../contexts/AppContext';
 
 const VirtualAssistant = forwardRef((props, ref) => {
   const { onReady } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig(); // Get uiConfig, update function, and loading state
+  const { savedModelPosition, setSavedModelPosition } = useApp(); // Get saved position from context
   
   const [animationManager, setAnimationManager] = useState(null);
   const [positionManager, setPositionManager] = useState(null);
@@ -131,6 +117,34 @@ const VirtualAssistant = forwardRef((props, ref) => {
     window.addEventListener('modelDragEnd', handleDragEnd);
     return () => window.removeEventListener('modelDragEnd', handleDragEnd);
   }, [uiConfig.position?.preset, positionManager, updateUIConfig]);
+
+  /**
+   * Save position before unmounting (e.g., when tab becomes hidden)
+   */
+  useEffect(() => {
+    return () => {
+      // On unmount, save current position to both config AND context
+      if (positionManager) {
+        const currentPos = {
+          x: positionManager.positionX,
+          y: positionManager.positionY,
+          width: positionManager.modelWidthPx,
+          height: positionManager.effectiveHeightPx, // Use effectiveHeightPx (500px in Portrait, same as modelHeightPx in Normal)
+          preset: uiConfig.position?.preset || 'bottom-right' // Save the preset too!
+        };
+        
+        console.log('[VirtualAssistant] Unmounting - saving position to context:', currentPos);
+        
+        // Save to context (in-memory, persists across unmount/remount)
+        setSavedModelPosition(currentPos);
+        
+        // Also save to config if using last-location preset
+        if (uiConfig.position?.preset === 'last-location') {
+          updateUIConfig('position.lastLocation', currentPos);
+        }
+      }
+    };
+  }, [positionManager, uiConfig.position?.preset, updateUIConfig, setSavedModelPosition]);
 
   /**
    * Expose imperative API to parent components
@@ -395,7 +409,13 @@ const VirtualAssistant = forwardRef((props, ref) => {
           onSceneReady={handleSceneReady}
           onLoadProgress={handleLoadProgress}
           positionManagerRef={positionManagerRef}
-          sceneConfig={{ uiConfig }}
+          sceneConfig={{ 
+            uiConfig,
+            // Pass physics setting from uiConfig (defaults to true if not set)
+            enablePhysics: uiConfig?.enablePhysics !== false,
+            // Pass saved position (from context) to override preset on remount
+            savedModelPosition: savedModelPosition
+          }}
         />
       )}
     </>

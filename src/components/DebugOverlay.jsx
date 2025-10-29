@@ -10,10 +10,13 @@
  * - Smooth camera movement (no reloading)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
+import { Icon } from './icons';;
 import * as BABYLON from '@babylonjs/core';
+import { useConfig } from '../contexts/ConfigContext';
 
 const DebugOverlay = ({ scene, positionManager }) => {
+  const { uiConfig, updateUIConfig } = useConfig();
   const [activeTab, setActiveTab] = useState('debug'); // 'debug' or 'config'
   const [showAxis, setShowAxis] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
@@ -318,17 +321,13 @@ const DebugOverlay = ({ scene, positionManager }) => {
                 <button
                   onClick={() => moveCamera('up')}
                   className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-                >
-                  ↑
-                </button>
+                ><Icon name="arrow-up" size={16} /></button>
                 <div></div>
                 
                 <button
                   onClick={() => moveCamera('left')}
                   className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-                >
-                  ←
-                </button>
+                ><Icon name="arrow-left" size={16} /></button>
                 <button
                   onClick={resetCamera}
                   className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 cursor-pointer text-[10px] transition-all hover:bg-gray-600"
@@ -338,17 +337,13 @@ const DebugOverlay = ({ scene, positionManager }) => {
                 <button
                   onClick={() => moveCamera('right')}
                   className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-                >
-                  →
-                </button>
+                ><Icon name="arrow-right" size={16} /></button>
                 
                 <div></div>
                 <button
                   onClick={() => moveCamera('down')}
                   className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 cursor-pointer text-sm transition-all hover:bg-gray-600"
-                >
-                  ↓
-                </button>
+                ><Icon name="arrow-down" size={16} /></button>
                 <div></div>
               </div>
         </div>
@@ -408,6 +403,15 @@ const DebugOverlay = ({ scene, positionManager }) => {
                 className="mr-2"
               />
               Show Picking Box
+            </label>
+            <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
+              <input
+                type="checkbox"
+                checked={uiConfig.backgroundDetection?.showDebug || false}
+                onChange={(e) => updateUIConfig('backgroundDetection.showDebug', e.target.checked)}
+                className="mr-2"
+              />
+              Show Debug Markers
             </label>
             <label className="flex items-center text-xs cursor-pointer hover:text-gray-300">
               <input

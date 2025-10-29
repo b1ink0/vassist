@@ -9,13 +9,17 @@
  * - Click to load a chat
  */
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react'
+import { Icon } from './icons';;
 import chatHistoryService from '../services/ChatHistoryService';
 
 const ChatHistoryPanel = ({
   isLightBackground = false,
   onSelectChat = null, // Callback when user clicks a chat
   onClose = null,
+  animationClass = '', // Animation class for entrance/exit
+  onRequestEditDialog = null, // Callback to request showing edit dialog
+  onRequestDeleteDialog = null, // Callback to request showing delete dialog
 }) => {
   const [displayedChats, setDisplayedChats] = useState([]); // Only 20 chats to display at a time
   const [filteredChats, setFilteredChats] = useState([]);
@@ -26,11 +30,6 @@ const ChatHistoryPanel = ({
   const [hasMoreAbove, setHasMoreAbove] = useState(false); // Can scroll up for more
   const [hasMoreBelow, setHasMoreBelow] = useState(true); // Can scroll down for more
   const [deletingChatId, setDeletingChatId] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [confirmChatId, setConfirmChatId] = useState(null);
-  const [editingChatId, setEditingChatId] = useState(null);
-  const [editingTitle, setEditingTitle] = useState('');
-  const [isSavingTitle, setIsSavingTitle] = useState(false);
   
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
@@ -237,58 +236,15 @@ const ChatHistoryPanel = ({
 
   // Handle delete chat
   const handleDeleteClick = (chatId) => {
-    setConfirmChatId(chatId);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!confirmChatId) return;
-
-    try {
-      setDeletingChatId(confirmChatId);
-      await chatHistoryService.deleteChat(confirmChatId);
-      
-      // Remove from lists
-      setDisplayedChats(prev => prev.filter(c => c.chatId !== confirmChatId));
-      setFilteredChats(prev => prev.filter(c => c.chatId !== confirmChatId));
-      
-      setShowDeleteConfirm(false);
-      setConfirmChatId(null);
-    } catch (error) {
-      console.error('[ChatHistoryPanel] Failed to delete chat:', error);
-      alert('Failed to delete chat');
-    } finally {
-      setDeletingChatId(null);
+    if (onRequestDeleteDialog) {
+      onRequestDeleteDialog(chatId);
     }
   };
 
+  // Handle edit title
   const handleEditTitle = (chat) => {
-    setEditingChatId(chat.chatId);
-    setEditingTitle(chat.title || 'Untitled Chat');
-  };
-
-  const saveEditedTitle = async () => {
-    if (!editingChatId || !editingTitle.trim()) return;
-
-    try {
-      setIsSavingTitle(true);
-      await chatHistoryService.updateChatTitle(editingChatId, editingTitle);
-      
-      // Update in lists
-      setDisplayedChats(prev => prev.map(c => 
-        c.chatId === editingChatId ? { ...c, title: editingTitle } : c
-      ));
-      setFilteredChats(prev => prev.map(c => 
-        c.chatId === editingChatId ? { ...c, title: editingTitle } : c
-      ));
-      
-      setEditingChatId(null);
-      setEditingTitle('');
-    } catch (error) {
-      console.error('[ChatHistoryPanel] Failed to save title:', error);
-      alert('Failed to save title');
-    } finally {
-      setIsSavingTitle(false);
+    if (onRequestEditDialog) {
+      onRequestEditDialog(chat.chatId, chat.title || 'Untitled Chat');
     }
   };
 
@@ -330,7 +286,7 @@ const ChatHistoryPanel = ({
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col h-full rounded-3xl overflow-hidden glass-container ${isLightBackground ? 'glass-container-dark' : ''}`}
+      className={`flex flex-col h-full rounded-3xl overflow-hidden glass-container ${isLightBackground ? 'glass-container-dark' : ''} ${animationClass}`}
     >
       {/* Header */}
       <div className={`px-6 py-4 border-b ${isLightBackground ? 'border-white/30' : 'border-white/20'}`}>
@@ -341,11 +297,9 @@ const ChatHistoryPanel = ({
           {onClose && (
             <button
               onClick={onClose}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-6 w-6 rounded-lg flex items-center justify-center`}
-              title="Close history"
-            >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none`}>✕</span>
-            </button>
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors shrink-0"
+              aria-label="Close history"
+            ><Icon name="close" size={16} /></button>
           )}
         </div>
 
@@ -366,25 +320,22 @@ const ChatHistoryPanel = ({
                 searchInputRef.current?.focus();
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/70"
-            >
-              ✕
-            </button>
+            ><Icon name="close" size={16} /></button>
           )}
         </div>
       </div>
 
       {/* Chats List */}
-      <div
+      <div 
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth"
-        style={{ scrollBehavior: 'smooth' }}
       >
         {isLoading ? (
           // Loading state
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-white/60">
-              <div className="animate-spin text-2xl mb-2">⏳</div>
+              <div className="animate-spin text-2xl mb-2"><Icon name="hourglass" size={16} /></div>
               <div className="text-sm">Loading chats...</div>
             </div>
           </div>
@@ -392,7 +343,7 @@ const ChatHistoryPanel = ({
           // Empty state
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-white/60">
-              <div className="text-3xl mb-2">📭</div>
+              <div className="text-3xl mb-2"><Icon name="empty" size={16} /></div>
               <div className="text-sm">
                 {searchQuery ? 'No chats match your search' : 'No chat history yet'}
               </div>
@@ -427,8 +378,9 @@ const ChatHistoryPanel = ({
                     <span>{formatDate(chat.updatedAt || chat.createdAt)}</span>
                   </div>
                   {chat.metadata?.sourceUrl && (
-                    <div className="text-xs truncate text-white/30">
-                      📍 {formatUrl(chat.metadata.sourceUrl)}
+                    <div className="flex items-center gap-1 text-xs truncate text-white/30">
+                      <Icon name="location" size={12} />
+                      <span>{formatUrl(chat.metadata.sourceUrl)}</span>
                     </div>
                   )}
                 </div>
@@ -445,9 +397,7 @@ const ChatHistoryPanel = ({
                   className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-6 w-6 rounded-md flex items-center justify-center transition-opacity`}
                   title="Edit title"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs leading-none`}>
-                    ✎
-                  </span>
+                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs leading-none`}><Icon name="pencil" size={16} /></span>
                 </button>
 
                 {/* Delete button */}
@@ -463,7 +413,7 @@ const ChatHistoryPanel = ({
                   title="Delete chat"
                 >
                   <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs leading-none`}>
-                    {deletingChatId === chat.chatId ? '⏳' : '🗑'}
+                    <Icon name={deletingChatId === chat.chatId ? 'hourglass' : 'delete'} size={14} />
                   </span>
                 </button>
               </div>
@@ -485,74 +435,6 @@ const ChatHistoryPanel = ({
           </div>
         )}
       </div>
-
-      {/* Edit Title Dialog */}
-      {editingChatId && (
-        <div className="absolute inset-0 flex items-center justify-center z-50 p-6">
-          <div className={`relative p-6 rounded-2xl w-full glass-container ${isLightBackground ? 'glass-container-dark' : ''}`}>
-            <h3 className="text-lg font-semibold mb-4 text-white">
-              Edit Chat Title
-            </h3>
-            <input
-              type="text"
-              value={editingTitle}
-              onChange={(e) => setEditingTitle(e.target.value)}
-              placeholder="Enter new title..."
-              className="w-full px-3 py-2 rounded-lg mb-4 border bg-white/10 border-white/20 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
-              maxLength={100}
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setEditingChatId(null);
-                  setEditingTitle('');
-                }}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 rounded-lg text-sm`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveEditedTitle}
-                disabled={isSavingTitle}
-                className="glass-button px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-              >
-                {isSavingTitle ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
-        <div className="absolute inset-0 flex items-center justify-center z-50 p-6">
-          <div className={`relative p-6 rounded-2xl w-full glass-container ${isLightBackground ? 'glass-container-dark' : ''}`}>
-            <h3 className="text-lg font-semibold mb-2 text-white">
-              Delete Chat?
-            </h3>
-            <p className="text-sm mb-6 text-white/80">
-              This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  setConfirmChatId(null);
-                }}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 rounded-lg text-sm`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="glass-error px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

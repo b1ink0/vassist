@@ -4,7 +4,8 @@
  * Handles Text-to-Speech provider selection and configuration
  */
 
-import { useState } from 'react';
+import { useState } from 'react'
+import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
 import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice } from '../../config/aiConfig';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
@@ -140,8 +141,7 @@ const TTSSettings = ({ isLightBackground }) => {
                         Quantization is automatic: WebGPU uses fp32, WASM uses q8
                       </p>
                       <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                        <p className="text-xs text-yellow-200/90 leading-relaxed">
-                          ⚠️ <strong>Performance Note:</strong> If the model or page lags, try switching to WASM backend for better stability. 
+                        <p className="text-xs text-yellow-200/90 leading-relaxed"><Icon name="warning" size={16} /><strong>Performance Note:</strong> If the model or page lags, try switching to WASM backend for better stability. 
                           However, WASM is significantly slower than WebGPU. For optimal performance, consider using different TTS providers 
                           (OpenAI, OpenAI-Compatible) or hosting a TTS service directly on your device.
                         </p>
@@ -182,12 +182,12 @@ const TTSSettings = ({ isLightBackground }) => {
                     >
                       {kokoroStatus.downloading ? (
                         <>
-                          <span className="animate-spin">⏳</span>
+                          <span className="animate-spin"><Icon name="hourglass" size={16} /></span>
                           <span>Downloading...</span>
                         </>
                       ) : kokoroStatus.initialized ? (
                         <>
-                          <span>✅</span>
+                          <span><Icon name="success" size={16} /></span>
                           <span>Model Ready</span>
                         </>
                       ) : (
@@ -203,9 +203,7 @@ const TTSSettings = ({ isLightBackground }) => {
                       disabled={kokoroStatus.checking}
                       className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-2 text-sm rounded-lg disabled:opacity-50`}
                       title="Check model status"
-                    >
-                      🔄
-                    </button>
+                    ><Icon name="refresh" size={16} /></button>
                   </div>
 
                   {/* Progress Bar */}
@@ -278,7 +276,7 @@ const TTSSettings = ({ isLightBackground }) => {
                           className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg disabled:opacity-50`}
                           title="Clear model cache"
                         >
-                          {clearingCache ? '⏳ Clearing...' : '🗑️ Clear Cache'}
+                          {clearingCache ? 'hourglass:Clearing...' : 'delete:Clear Cache'}
                         </button>
                       </div>
                       {cacheSize !== null && cacheSize.usage !== undefined && (
@@ -288,12 +286,6 @@ const TTSSettings = ({ isLightBackground }) => {
                       )}
                     </div>
                   )}
-                </div>
-
-                {/* Status/Info */}
-                <div className="text-xs text-white/60 space-y-1 pt-2 border-t border-white/10">
-                  <p>💾 Open-weight model, runs locally</p>
-                  <p>🎯 24kHz audio output</p>
                 </div>
               </div>
             </>

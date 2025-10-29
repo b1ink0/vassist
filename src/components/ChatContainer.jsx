@@ -1,15 +1,18 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { Icon } from './icons';;
 import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
 import UtilService from '../services/UtilService';
-import AudioPlayer from './AudioPlayer';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
-import StreamingText from './common/StreamingText';
-import StreamingContainer from './common/StreamingContainer';
+import ChatEditDialog from './ChatEditDialog';
+import ChatDeleteDialog from './ChatDeleteDialog';
+import ChatMessage from './ChatMessage';
+import chatHistoryService from '../services/ChatHistoryService';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
 
 const ChatContainer = ({ 
   modelDisabled = false,
@@ -49,7 +52,11 @@ const ChatContainer = ({
     regenerateAIMessage,
     previousBranch,
     nextBranch,
+    uiConfig,
   } = useApp();
+
+  // Get config for toggling model visibility
+  const { updateUIConfig } = useConfig();
 
   // Local refs and state for internal component logic
   const buttonPosRef = useRef(buttonPosition);
@@ -65,19 +72,29 @@ const ChatContainer = ({
   const [debugMarkers, setDebugMarkers] = useState([]);
   const chatInputRef = useRef(null); // Get input ref from context when needed
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
-  const [isContainerHovered, setIsContainerHovered] = useState(false);
-  const [editingMessageId, setEditingMessageId] = useState(null);
-  const [editingContent, setEditingContent] = useState('');
-  const [editingImages, setEditingImages] = useState([]);
-  const [editingAudios, setEditingAudios] = useState([]);
-  const editTextareaRef = useRef(null);
   const previousMessageCountRef = useRef(0);
   const previousIsGeneratingRef = useRef(false);
   const [shouldForceComplete, setShouldForceComplete] = useState(false);
   const [isWaitingForAnimation, setIsWaitingForAnimation] = useState(false);
+  const [isClosing, setIsClosing] = useState(false); // Track closing animation state
+  const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false); // Track settings panel closing
+  const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false); // Track history panel closing
+  
+  // Chat history dialog state (rendered outside ChatHistoryPanel to avoid backdrop-filter issues)
+  const [editingChatId, setEditingChatId] = useState(null);
+  const [editingChatTitle, setEditingChatTitle] = useState('');
+  const [deletingChatId, setDeletingChatId] = useState(null);
+  const [isEditDialogClosing, setIsEditDialogClosing] = useState(false);
+  const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   
   // Track which message IDs have been streamed in this session (not from history)
   const streamedMessageIdsRef = useRef(new Set());
+  
+  // Track which message IDs have completed streaming (NEVER cleared - persists across chat open/close)
+  const completedMessageIdsRef = useRef(new Set());
+  
+  // Track the last USER message ID to determine which should animate
+  const lastAnimatedMessageIdRef = useRef(null);
 
   // Keep button position ref in sync with context
   useEffect(() => {
@@ -177,12 +194,13 @@ const ChatContainer = ({
     if (modelDisabled) {
       const buttonPos = buttonPosRef.current;
       const containerWidth = 400;
-      const containerHeight = 500;
-      const offsetY = 15;
+      const containerHeight = 400; // Messages area height
+      const offsetY = 5; // Gap between chat bottom and button
       const buttonSize = 48;
       
       const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
-      let containerY = buttonPos.y - containerHeight - offsetY - chatInputHeight;
+      // Position chat so its BOTTOM (including input) is offsetY above the button
+      let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
       containerY = Math.max(10, containerY);
       const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
       containerY = Math.min(containerY, maxY);
@@ -359,7 +377,11 @@ const ChatContainer = ({
   }, [modelDisabled, startButtonDrag, endButtonDrag, startModelDrag, endModelDrag]);
 
   const handleHistoryClose = useCallback(() => {
-    setIsHistoryPanelOpen(false);
+    setIsHistoryPanelClosing(true);
+    setTimeout(() => {
+      setIsHistoryPanelOpen(false);
+      setIsHistoryPanelClosing(false);
+    }, 200);
   }, [setIsHistoryPanelOpen]);
 
   const handleSelectChat = useCallback((chat) => {
@@ -368,8 +390,84 @@ const ChatContainer = ({
     console.log('[ChatContainer] Cleared streamed message tracking for history load');
     
     loadChatFromHistory(chat);
-    setIsHistoryPanelOpen(false);
+    setIsHistoryPanelClosing(true);
+    setTimeout(() => {
+      setIsHistoryPanelOpen(false);
+      setIsHistoryPanelClosing(false);
+    }, 200);
   }, [loadChatFromHistory, setIsHistoryPanelOpen]);
+
+  // Handle edit dialog requests from ChatHistoryPanel
+  const handleRequestEditDialog = useCallback((chatId, title) => {
+    setEditingChatId(chatId);
+    setEditingChatTitle(title);
+  }, []);
+
+  const handleEditDialogSave = useCallback(async (chatId, newTitle) => {
+    try {
+      await chatHistoryService.updateChatTitle(chatId, newTitle);
+      console.log('[ChatContainer] Updated chat title:', chatId, newTitle);
+      
+      // Close dialog with animation
+      setIsEditDialogClosing(true);
+      setTimeout(() => {
+        setEditingChatId(null);
+        setEditingChatTitle('');
+        setIsEditDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      console.error('[ChatContainer] Failed to update chat title:', error);
+    }
+  }, []);
+
+  const handleEditDialogCancel = useCallback(() => {
+    setIsEditDialogClosing(true);
+    setTimeout(() => {
+      setEditingChatId(null);
+      setEditingChatTitle('');
+      setIsEditDialogClosing(false);
+    }, 200);
+  }, []);
+
+  // Handle delete dialog requests from ChatHistoryPanel
+  const handleRequestDeleteDialog = useCallback((chatId) => {
+    setDeletingChatId(chatId);
+  }, []);
+
+  const handleDeleteDialogConfirm = useCallback(async (chatId) => {
+    try {
+      await chatHistoryService.deleteChat(chatId);
+      console.log('[ChatContainer] Deleted chat:', chatId);
+      
+      // Close dialog with animation
+      setIsDeleteDialogClosing(true);
+      setTimeout(() => {
+        setDeletingChatId(null);
+        setIsDeleteDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      console.error('[ChatContainer] Failed to delete chat:', error);
+    }
+  }, []);
+
+  const handleDeleteDialogCancel = useCallback(() => {
+    setIsDeleteDialogClosing(true);
+    setTimeout(() => {
+      setDeletingChatId(null);
+      setIsDeleteDialogClosing(false);
+    }, 200);
+  }, []);
+
+  /**
+   * Handle settings panel close with animation
+   */
+  const handleSettingsPanelClose = useCallback(() => {
+    setIsSettingsPanelClosing(true);
+    setTimeout(() => {
+      setIsSettingsPanelOpen(false);
+      setIsSettingsPanelClosing(false);
+    }, 200);
+  }, [setIsSettingsPanelOpen]);
 
   /**
    * Handle stop generation with force-complete animation
@@ -584,26 +682,66 @@ const ChatContainer = ({
   }, [messages, setLoadingMessageIndex, setPlayingMessageIndex]);
 
   /**
+   * Scroll to bottom without checking if user is near bottom
+   * Used for: chat open, user sends message
+   */
+  const scrollToBottomImmediate = useCallback(() => {
+    if (!scrollRef.current) return;
+    
+    const container = scrollRef.current;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'instant' // Instant for immediate scroll (no animation flash)
+    });
+  }, []);
+
+  /**
    * Smooth scroll to bottom - ALWAYS scrolls, no tolerance check
    * The tolerance check was causing issues because measurements happen before DOM updates
    */
   const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (!scrollRef.current) return;
+    
+    const container = scrollRef.current;
+    const scrollHeight = container.scrollHeight;
+    const scrollTop = container.scrollTop;
+    const clientHeight = container.clientHeight;
+    
+    // Check if user is within one container height of the bottom
+    // If user can see the bottom within their viewport, auto-scroll
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < clientHeight;
+    
+    // Only auto-scroll if user is already near the bottom
+    // This prevents annoying scroll interruption if user scrolled up to read
+    if (isNearBottom) {
+      // Smooth scroll to bottom
+      container.scrollTo({
+        top: scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, []);
 
-  // Use layoutEffect for synchronous scroll after DOM mutations
-  useLayoutEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages, scrollToBottom]);
 
   // Listen for streaming word updates to trigger scroll
   useEffect(() => {
+    let lastScrollTime = 0;
+    const THROTTLE_MS = 200; // Only scroll at most once every 200ms
+    
     const handleStreamingUpdate = () => {
-      scrollToBottom();
+      const now = Date.now();
+      
+      // Throttle: skip if we scrolled too recently
+      if (now - lastScrollTime < THROTTLE_MS) {
+        return;
+      }
+      
+      lastScrollTime = now;
+      
+      // Use requestAnimationFrame to ensure scroll happens AFTER layout is complete
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
     };
 
     window.addEventListener('streamingWordAdded', handleStreamingUpdate);
@@ -612,6 +750,34 @@ const ChatContainer = ({
       window.removeEventListener('streamingWordAdded', handleStreamingUpdate);
     };
   }, [scrollToBottom]);
+
+  /**
+   * Scroll to bottom immediately when chat opens (from button or history)
+   * Uses useLayoutEffect to scroll BEFORE paint to prevent visible jump
+   */
+  useLayoutEffect(() => {
+    if (isVisible && messages.length > 0) {
+      scrollToBottomImmediate();
+    }
+  }, [isVisible, scrollToBottomImmediate, messages.length]);
+
+  /**
+   * Force scroll to bottom when user sends a message
+   * Tracks last message to detect when user adds new message
+   */
+  useEffect(() => {
+    if (!isVisible || messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    
+    // If last message is from user, they just sent it - scroll to bottom immediately
+    if (lastMessage?.role === 'user') {
+      // Use setTimeout to ensure DOM has updated with new message
+      setTimeout(() => {
+        scrollToBottomImmediate();
+      }, 0);
+    }
+  }, [messages, isVisible, scrollToBottomImmediate]);
 
   /**
    * Handle copying message content to clipboard
@@ -639,89 +805,6 @@ const ChatContainer = ({
   }, [regenerateAIMessage]);
 
   /**
-   * Handle editing user message
-   */
-  const handleEditMessage = useCallback((message) => {
-    if (message?.id && message?.role === 'user') {
-      console.log('[ChatContainer] Starting edit for message:', message.id);
-      setEditingMessageId(message.id);
-      setEditingContent(message.content);
-      setEditingImages(message.images || []);
-      setEditingAudios(message.audios || []);
-    }
-  }, []);
-
-  /**
-   * Save edited message
-   */
-  const handleSaveEdit = useCallback(async (messageId) => {
-    if (!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0) {
-      setEditingMessageId(null);
-      setEditingContent('');
-      setEditingImages([]);
-      setEditingAudios([]);
-      return;
-    }
-
-    try {
-      console.log('[ChatContainer] Saving edited message:', messageId);
-      // TODO: Need to update editUserMessage in AppContext to accept images/audios
-      await editUserMessage(messageId, editingContent.trim(), editingImages, editingAudios);
-      setEditingMessageId(null);
-      setEditingContent('');
-      setEditingImages([]);
-      setEditingAudios([]);
-    } catch (error) {
-      console.error('[ChatContainer] Failed to save edit:', error);
-    }
-  }, [editingContent, editingImages, editingAudios, editUserMessage]);
-
-  /**
-   * Cancel editing
-   */
-  const handleCancelEdit = useCallback(() => {
-    setEditingMessageId(null);
-    setEditingContent('');
-    setEditingImages([]);
-    setEditingAudios([]);
-  }, []);
-
-  /**
-   * Auto-resize edit textarea
-   */
-  const adjustEditTextareaHeight = useCallback(() => {
-    const textarea = editTextareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      const newHeight = Math.min(textarea.scrollHeight, 300);
-      textarea.style.height = `${newHeight}px`;
-    }
-  }, []);
-
-  /**
-   * Handle edit textarea content change
-   */
-  const handleEditContentChange = useCallback((e) => {
-    setEditingContent(e.target.value);
-    // Adjust height after state update
-    setTimeout(() => adjustEditTextareaHeight(), 0);
-  }, [adjustEditTextareaHeight]);
-
-  /**
-   * Remove image from editing
-   */
-  const handleRemoveEditingImage = useCallback((index) => {
-    setEditingImages(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  /**
-   * Remove audio from editing
-   */
-  const handleRemoveEditingAudio = useCallback((index) => {
-    setEditingAudios(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  /**
    * Handle branch navigation
    */
   const handlePreviousBranch = useCallback((message) => {
@@ -736,15 +819,29 @@ const ChatContainer = ({
     }
   }, [nextBranch]);
 
-  // Auto-focus edit textarea when editing starts
+  /**
+   * Handle close with animation - fade out before actually closing
+   */
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    // Wait for fade-out animation (200ms) before actually closing
+    setTimeout(() => {
+      closeChat();
+      setIsClosing(false); // Reset for next open
+    }, 200);
+  }, [closeChat]);
+
+  /**
+   * Listen for close chat event (from ChatInput close button)
+   */
   useEffect(() => {
-    if (editingMessageId && editTextareaRef.current) {
-      editTextareaRef.current.focus();
-      editTextareaRef.current.selectionStart = editTextareaRef.current.value.length;
-      // Initial height adjustment
-      adjustEditTextareaHeight();
-    }
-  }, [editingMessageId, adjustEditTextareaHeight]);
+    const handleCloseChatEvent = () => {
+      handleClose();
+    };
+
+    window.addEventListener('closeChat', handleCloseChatEvent);
+    return () => window.removeEventListener('closeChat', handleCloseChatEvent);
+  }, [handleClose]);
 
   /**
    * Handle playing TTS for a message
@@ -861,33 +958,23 @@ const ChatContainer = ({
       
       <div
         ref={containerRef}
-        onMouseEnter={() => setIsContainerHovered(true)}
-        onMouseLeave={() => setIsContainerHovered(false)}
         style={{
           position: 'fixed',
           left: `${containerPos.x}px`,
           top: `${containerPos.y}px`,
           zIndex: 9999, // Same as canvas, but will be above due to DOM order. Below chat button (10000)
-          width: '400px',
-          height: '500px',
-          borderRadius: '24px',
-          border: '2px solid',
           borderColor: isDragOver 
             ? 'rgba(59, 130, 246, 0.6)' 
             : (isDraggingButton || isDraggingModel)
             ? 'rgba(255, 255, 255, 0.4)'
-            : isContainerHovered
-            ? 'rgba(255, 255, 255, 0.2)'
             : 'transparent',
           boxShadow: isDragOver
             ? '0 4px 20px rgba(59, 130, 246, 0.3)'
             : (isDraggingButton || isDraggingModel)
             ? '0 4px 20px rgba(255, 255, 255, 0.2)'
-            : isContainerHovered
-            ? '0 2px 10px rgba(255, 255, 255, 0.1)'
             : 'none',
         }}
-        className="flex flex-col-reverse gap-3"
+        className="flex flex-col-reverse gap-3 w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
       >
       {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
       <div 
@@ -914,470 +1001,199 @@ const ChatContainer = ({
         </div>
       </div>
       
-      {/* Action buttons at BOTTOM - closer to container */}
-      <div className="relative flex items-center justify-end gap-2 px-6 pb-1">
-        {/* Stop, Clear, and Settings buttons - only shown when there are messages */}
-        {messages.length > 0 && (
-          <>
+      {/* Action buttons at BOTTOM - reorganized: left/center/right layout */}
+      <div className="relative flex items-center justify-between gap-2 px-6 pb-1">
+        {/* LEFT: Settings + History */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title="Settings"
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}><Icon name="settings" size={16} /></span>
+          </button>
+          
+          <button
+            onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title="Chat history"
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+              <Icon name="history" size={16} />
+            </span>
+          </button>
+        </div>
+        
+        {/* CENTER: Stop + Add Chat + Close (grouped) */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleStopGeneration}
+            disabled={!isGenerating && !isSpeaking && loadingMessageIndex === null}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
+              isGenerating || isSpeaking || loadingMessageIndex !== null
+                ? 'glass-error' 
+                : 'opacity-50 cursor-not-allowed'
+            } ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title={isGenerating ? 'Stop generation' : (isSpeaking || loadingMessageIndex !== null) ? 'Stop TTS' : 'Nothing to stop'}
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
+              isGenerating || isSpeaking || loadingMessageIndex !== null ? '' : 'opacity-50'
+            }`}><Icon name="stop" size={16} /></span>
+          </button>
+          
+          <button
+            onClick={clearChat}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title="Start new chat"
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+              <Icon name="add" size={18} />
+            </span>
+          </button>
+          
+          {!modelDisabled && (
             <button
-              onClick={handleStopGeneration}
-              disabled={!isGenerating && !isSpeaking && loadingMessageIndex === null}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
-                isGenerating || isSpeaking || loadingMessageIndex !== null
-                  ? 'glass-error' 
-                  : 'opacity-50 cursor-not-allowed'
-              }`}
-              title={isGenerating ? 'Stop generation' : (isSpeaking || loadingMessageIndex !== null) ? 'Stop TTS' : 'Nothing to stop'}
+              onClick={handleClose}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+              title="Close chat"
             >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
-                isGenerating || isSpeaking || loadingMessageIndex !== null ? '' : 'opacity-50'
-              }`}>⏹</span>
+              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}><Icon name="close" size={16} /></span>
             </button>
-            
-            <button
-              onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-              title="Chat history"
-            >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>📋</span>
+          )}
+        </div>
+        
+        {/* RIGHT: Temp Chat + Model Visibility Toggle */}
+        <div className="flex items-center gap-2">
+          {/* Model Visibility Toggle - always visible */}
+          <button
+            onClick={() => updateUIConfig('enableModelLoading', !uiConfig.enableModelLoading)}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title={uiConfig.enableModelLoading ? 'Hide character' : 'Show character'}
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+              <Icon name={uiConfig.enableModelLoading ? 'eye-off' : 'eye'} size={18} />
+            </span>
             </button>
-            
-            <button
-              onClick={() => setIsTempChat(!isTempChat)}
-              className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center`}
-              title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
-            >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>{isTempChat ? '💫' : '📌'}</span>
-            </button>
-            
-            <button
-              onClick={clearChat}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-              title="Start new chat"
-            >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>+</span>
-            </button>
-            
-            {/* Settings button - only shown when there are messages */}
-            <button
-              onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-              title="Settings"
-            >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
-            </button>
-            
-            {/* Close button only shown when model is loaded (no chat button available) */}
-            {!modelDisabled && (
-              <button
-                onClick={closeChat}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-                title="Close chat"
-              >
-                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
-              </button>
-            )}
-          </>
-        )}
+          
+          <button
+            onClick={() => setIsTempChat(!isTempChat)}
+            className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
+          >
+            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+              <Icon name={isTempChat ? 'star' : 'pin'} size={18} />
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Messages container with MASK for fade */}
+      {/* Messages container - removed mask to enable backdrop-filter blur */}
       <div 
         ref={messagesContainerRef}
-        className={`flex-1 relative overflow-hidden ${isLightBackground ? 'glass-messages-mask-dark' : 'glass-messages-mask'}`}
+        className="flex-1 relative overflow-hidden"
       >
+        {/* Top glass bar - matches message style */}
+        <div 
+          className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+        />
+        
+        {/* Bottom glass bar - matches message style */}
+        <div 
+          className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+        />
+        
         {/* Scrollable messages */}
         <div 
           ref={scrollRef}
-          className="absolute inset-0 flex flex-col gap-3 px-6 overflow-y-auto"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            paddingTop: '50px',
-            paddingBottom: '50px',
-            scrollBehavior: 'smooth',
-          }}
+          className="absolute inset-0 flex flex-col gap-3 px-6 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
         >
           {messages.length === 0 ? (
-            /* Placeholder message when empty with settings and history buttons */
-            <div className="flex flex-col items-center justify-center h-full gap-3">
-              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-6 py-4 rounded-3xl`}>
-                <div className="text-center text-sm">
-                  💬 Type a message to start chatting...
-                </div>
-              </div>
-              {/* Buttons when no messages: History, Temp, Settings, and Close */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-                  title="Chat history"
-                >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>📋</span>
-                </button>
-                <button
-                  onClick={() => setIsTempChat(!isTempChat)}
-                  className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center`}
-                  title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
-                >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>{isTempChat ? '💫' : '📌'}</span>
-                </button>
-                <button
-                  onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-                  title="Settings"
-                >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}>⚙</span>
-                </button>
-                {/* Close button - always shown when model is loaded (no chat button available) */}
-                {!modelDisabled && (
-                  <button
-                    onClick={closeChat}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center`}
-                    title="Close chat"
-                  >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}>✕</span>
-                  </button>
-                )}
+            /* Welcome message - improved design */
+            <div className="flex flex-col items-center justify-center h-full gap-6">
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                <div className="text-6xl mb-4"><Icon name="chat" size={16} /></div>
+                <h2 className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xl font-semibold mb-2`}>
+                  Start a Conversation
+                </h2>
+                <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm opacity-70`}>
+                  Type a message below to begin chatting with your AI assistant
+                </p>
               </div>
             </div>
           ) : (
             <>
               {messages.map((msg, index) => {
                 const isUser = msg.role === 'user';
-                const isError = msg.content.toLowerCase().startsWith('error:');
-                const messageIndex = index;
-                const isPlaying = playingMessageIndex === messageIndex;
-                const isLoading = loadingMessageIndex === messageIndex;
                 const isLastMessage = index === messages.length - 1;
                 
                 // Hide the last message while instant-fade animation is completing
                 if (isWaitingForAnimation && isLastMessage) {
                   return null;
                 }
-                // Check if this message was streamed in the current session
-                const wasStreamedInSession = streamedMessageIdsRef.current.has(msg.id);
-                
-                // Disable streaming for messages not streamed in this session (loaded from history)
-                // This keeps the prop stable based on the message ID, not on position
-                const shouldDisableStreaming = !isUser && !isError && !wasStreamedInSession;
                 
                 // Force-complete ONLY the last AI message when interrupted
-                const isLastAIMessage = !isUser && !isError && index === messages.length - 1;
+                const isError = msg.content.toLowerCase().startsWith('error:');
+                const isLastAIMessage = !isUser && !isError && isLastMessage;
                 const shouldForceCompleteThis = shouldForceComplete && isLastAIMessage;
                 
-                // Check if message has audio attachments
-                const hasAudio = isUser && msg.audios && msg.audios.length > 0;
-                const isEditing = editingMessageId === msg.id;
+                // Find the last USER message in the entire list
+                const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+                const isLastUserMessage = isUser && lastUserMessage?.id === msg.id;
+                
+                // Determine if this message should animate:
+                // 1. ONLY the last USER message animates (never AI messages)
+                // 2. Only if it hasn't been animated before (prevents re-animation on reopening)
+                const shouldAnimateThis = isLastUserMessage && lastAnimatedMessageIdRef.current !== msg.id;
+                
+                // Mark this message as animated if it should animate
+                if (shouldAnimateThis) {
+                  lastAnimatedMessageIdRef.current = msg.id;
+                }
                 
                 return (
-                  <div key={msg.id} className="flex flex-col gap-3">
-                    <div
-                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
-                    >
-                      <div className={`flex items-start gap-2 ${
-                        isEditing 
-                          ? 'w-full' 
-                          : hasAudio 
-                          ? 'w-[80%]' 
-                          : 'max-w-[80%]'
-                      }`}>
-                        {/* Message bubble */}
-                        <div className="flex flex-col gap-1.5" style={{ width: isEditing ? '100%' : 'auto' }}>
-                          <div
-                            className={`${
-                              isError
-                                ? 'glass-error'
-                                : isUser
-                                ? `glass-message-user ${isLightBackground ? 'glass-message-user-dark' : ''}`
-                                : `glass-message ${isLightBackground ? 'glass-message-dark' : ''}`
-                            } px-4 py-3 ${
-                              isError
-                                ? 'rounded-3xl'
-                                : isUser
-                                ? 'rounded-[20px] rounded-tr-md'
-                                : 'rounded-[20px] rounded-tl-md'
-                            } ${hasAudio || isEditing ? 'w-full' : ''}`}
-                            style={{
-                              minHeight: !isUser && !isError ? 'calc(1.5em + 1.5rem)' : undefined
-                            }}
-                          >
-                            {/* Image attachments (for user messages) - only show when NOT editing */}
-                            {isUser && msg.images && msg.images.length > 0 && editingMessageId !== msg.id && (
-                              <div className="mb-3 flex flex-wrap gap-2">
-                                {msg.images.map((imgUrl, imgIndex) => (
-                                  <img 
-                                    key={imgIndex}
-                                    src={imgUrl}
-                                    alt={`Attachment ${imgIndex + 1}`}
-                                    className="max-w-[200px] max-h-[200px] object-contain rounded-lg border-2 border-white/30 cursor-pointer hover:border-blue-400/50 transition-all"
-                                    onClick={() => window.open(imgUrl, '_blank')}
-                                    title="Click to view full size"
-                                  />
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* Audio attachments (for user messages) - only show when NOT editing */}
-                            {isUser && msg.audios && msg.audios.length > 0 && editingMessageId !== msg.id && (
-                              <div className="mb-3 space-y-2">
-                                {msg.audios.map((audioUrl, audioIndex) => (
-                                  <div key={audioIndex} className="w-full">
-                                    <AudioPlayer 
-                                      audioUrl={audioUrl} 
-                                      isLightBackground={isLightBackground}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* Message content - inline editing for user messages */}
-                            {editingMessageId === msg.id ? (
-                              <div className="relative space-y-2">
-                                {/* Editing images */}
-                                {editingImages.length > 0 && (
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {editingImages.map((img, imgIndex) => (
-                                      <div key={imgIndex} className="relative group">
-                                        <img 
-                                          src={img} 
-                                          alt={`Edit ${imgIndex + 1}`}
-                                          className="w-full rounded-lg max-h-[150px] object-cover"
-                                        />
-                                        <button
-                                          onClick={() => handleRemoveEditingImage(imgIndex)}
-                                          className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                          title="Remove image"
-                                        >
-                                          <span className="text-[11px]">✗</span>
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                
-                                {/* Editing audios */}
-                                {editingAudios.length > 0 && (
-                                  <div className="space-y-2">
-                                    {editingAudios.map((audioUrl, audioIndex) => (
-                                      <div key={audioIndex} className="relative group">
-                                        <AudioPlayer 
-                                          audioUrl={audioUrl} 
-                                          isLightBackground={isLightBackground}
-                                        />
-                                        <button
-                                          onClick={() => handleRemoveEditingAudio(audioIndex)}
-                                          className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                          title="Remove audio"
-                                        >
-                                          <span className="text-[11px]">✗</span>
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                
-                                <textarea
-                                  ref={editTextareaRef}
-                                  value={editingContent}
-                                  onChange={handleEditContentChange}
-                                  className={`w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar ${
-                                    isLightBackground
-                                      ? 'bg-transparent text-black placeholder-black/40'
-                                      : 'bg-transparent text-white placeholder-white/40'
-                                  } focus:outline-none`}
-                                  style={{ 
-                                    background: 'transparent',
-                                    border: 'none',
-                                    minHeight: '24px'
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                      handleSaveEdit(msg.id);
-                                    } else if (e.key === 'Escape') {
-                                      handleCancelEdit();
-                                    }
-                                  }}
-                                />
-                                <div className="flex gap-1 justify-end mt-1">
-                                  <button
-                                    onClick={handleCancelEdit}
-                                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100`}
-                                    title="Cancel (Esc)"
-                                  >
-                                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}>✗</span>
-                                  </button>
-                                  <button
-                                    onClick={() => handleSaveEdit(msg.id)}
-                                    disabled={!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0}
-                                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 disabled:opacity-30`}
-                                    title="Save (Ctrl+Enter)"
-                                  >
-                                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}>✓</span>
-                                  </button>
+                  <div key={msg.id}>
+                    <ChatMessage
+                      message={msg}
+                      messageIndex={index}
+                      isLightBackground={isLightBackground}
+                      ttsEnabled={ttsEnabled}
+                      playingMessageIndex={playingMessageIndex}
+                      loadingMessageIndex={loadingMessageIndex}
+                      copiedMessageIndex={copiedMessageIndex}
+                      streamedMessageIdsRef={streamedMessageIdsRef}
+                      completedMessageIdsRef={completedMessageIdsRef}
+                      shouldForceComplete={shouldForceCompleteThis}
+                      currentSessionRef={currentSessionRef}
+                      smoothStreamingAnimation={uiConfig?.smoothStreamingAnimation || false}
+                      shouldAnimate={shouldAnimateThis} 
+                      onCopyMessage={handleCopyMessage}
+                      onPlayTTS={handlePlayTTS}
+                      onEditUserMessage={editUserMessage}
+                      onRewriteMessage={handleRewriteMessage}
+                      onPreviousBranch={handlePreviousBranch}
+                      onNextBranch={handleNextBranch}
+                      setLoadingMessageIndex={setLoadingMessageIndex}
+                      setPlayingMessageIndex={setPlayingMessageIndex}
+                    />
+                    
+                    {/* Loading indicator after last user message */}
+                    {isGenerating && isLastMessage && isUser && (
+                      <div className="flex flex-col gap-3 animate-slide-left-up">
+                        <div className="flex flex-col items-start">
+                          <div className="flex items-start gap-2 max-w-[80%]">
+                            <div className="flex flex-col gap-1.5">
+                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
+                                <div className="loading-dots">
+                                  <span className="loading-dot"></span>
+                                  <span className="loading-dot"></span>
+                                  <span className="loading-dot"></span>
                                 </div>
                               </div>
-                            ) : (
-                              <>
-                                {!isUser && !isError ? (
-                                  <StreamingContainer 
-                                    autoActivate={true}
-                                    speed="normal"
-                                    disabled={shouldDisableStreaming}
-                                  >
-                                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                                      <StreamingText 
-                                        text={msg.content}
-                                        wordsPerSecond={40}
-                                        showCursor={false}
-                                        disabled={shouldDisableStreaming}
-                                        forceComplete={shouldForceCompleteThis}
-                                      />
-                                    </div>
-                                  </StreamingContainer>
-                                ) : (
-                                  <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                                    {msg.content}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          
-                          {/* Action buttons and branch navigation on same line */}
-                          <div className={`flex items-center gap-1 ${isUser ? 'justify-end' : 'justify-start'} mt-1`}>
-                            {/* Branch navigation for AI messages */}
-                            {!isUser && msg.branchInfo && msg.branchInfo.totalBranches > 1 && editingMessageId !== msg.id && (
-                              <>
-                                <button
-                                  onClick={() => handlePreviousBranch(msg)}
-                                  disabled={!msg.branchInfo.canGoBack}
-                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
-                                  title="Previous variant"
-                                >
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
-                                </button>
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
-                                  {msg.branchInfo.currentIndex}/{msg.branchInfo.totalBranches}
-                                </span>
-                                <button
-                                  onClick={() => handleNextBranch(msg)}
-                                  disabled={!msg.branchInfo.canGoForward}
-                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
-                                  title="Next variant"
-                                >
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>▶</span>
-                                </button>
-                              </>
-                            )}
-                            
-                            {/* Speaker button for AI messages (only show if TTS is enabled) */}
-                            {!isUser && !isError && ttsEnabled && (
-                              <button
-                                onClick={() => {
-                                  if (isLoading) {
-                                    // Cancel TTS generation if loading
-                                    TTSServiceProxy.stopPlayback();
-                                    setLoadingMessageIndex(null);
-                                    setPlayingMessageIndex(null);
-                                    currentSessionRef.current = null;
-                                  } else {
-                                    // Play or stop TTS
-                                    handlePlayTTS(messageIndex, msg.content);
-                                  }
-                                }}
-                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                                title={isLoading ? 'Cancel TTS generation' : isPlaying ? 'Stop audio' : 'Play audio'}
-                              >
-                                {isLoading ? (
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] animate-spin`}>⏳</span>
-                                ) : isPlaying ? (
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>⏸</span>
-                                ) : (
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>🔊</span>
-                                )}
-                              </button>
-                            )}
-                            
-                            {/* Copy button for all messages */}
-                            {editingMessageId !== msg.id && (
-                              <button
-                                onClick={() => handleCopyMessage(messageIndex, msg.content)}
-                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                                title="Copy message"
-                              >
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>
-                                  {copiedMessageIndex === messageIndex ? '✓' : '📋'}
-                                </span>
-                              </button>
-                            )}
-                            
-                            {/* Edit button for user messages */}
-                            {isUser && !isError && editingMessageId !== msg.id && (
-                              <button
-                                onClick={() => handleEditMessage(msg)}
-                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                                title="Edit message"
-                              >
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>✏️</span>
-                              </button>
-                            )}
-                            
-                            {/* Branch navigation */}
-                            {isUser && msg.branchInfo && msg.branchInfo.totalBranches > 1 && editingMessageId !== msg.id && (
-                              <>
-                                <button
-                                  onClick={() => handlePreviousBranch(msg)}
-                                  disabled={!msg.branchInfo.canGoBack}
-                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
-                                  title="Previous variant"
-                                >
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
-                                </button>
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
-                                  {msg.branchInfo.currentIndex}/{msg.branchInfo.totalBranches}
-                                </span>
-                                <button
-                                  onClick={() => handleNextBranch(msg)}
-                                  disabled={!msg.branchInfo.canGoForward}
-                                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
-                                  title="Next variant"
-                                >
-                                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>▶</span>
-                                </button>
-                              </>
-                            )}
-                            
-                            {/* Rewrite button for AI messages */}
-                            {!isUser && !isError && editingMessageId !== msg.id && (
-                              <button
-                                onClick={() => handleRewriteMessage(msg)}
-                                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
-                                title="Regenerate response"
-                              >
-                                <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>↻</span>
-                              </button>
-                            )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                
-                {/* Loading indicator after last (first when reversed) user message */}
-                {isGenerating && isLastMessage && isUser && (
-                  <div className="flex justify-start mb-7">
-                    <div className="flex items-start gap-2 max-w-[80%]">
-                      <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
-                        <div className="loading-dots">
-                          <span className="loading-dot"></span>
-                          <span className="loading-dot"></span>
-                          <span className="loading-dot"></span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    )}
                   </div>
                 );
               })}
@@ -1390,8 +1206,9 @@ const ChatContainer = ({
       {isSettingsPanelOpen && (
         <div className="absolute inset-0 z-10">
           <SettingsPanel 
-            onClose={() => setIsSettingsPanelOpen(false)} 
+            onClose={handleSettingsPanelClose} 
             isLightBackground={isLightBackground}
+            animationClass={isSettingsPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
           />
         </div>
       )}
@@ -1403,6 +1220,36 @@ const ChatContainer = ({
             isLightBackground={isLightBackground}
             onClose={handleHistoryClose}
             onSelectChat={handleSelectChat}
+            onRequestEditDialog={handleRequestEditDialog}
+            onRequestDeleteDialog={handleRequestDeleteDialog}
+            animationClass={isHistoryPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+          />
+        </div>
+      )}
+
+      {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
+      {editingChatId && (
+        <div className="absolute inset-0 z-20">
+          <ChatEditDialog
+            chatId={editingChatId}
+            initialTitle={editingChatTitle}
+            isLightBackground={isLightBackground}
+            animationClass={isEditDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            onSave={handleEditDialogSave}
+            onCancel={handleEditDialogCancel}
+          />
+        </div>
+      )}
+
+      {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
+      {deletingChatId && (
+        <div className="absolute inset-0 z-20">
+          <ChatDeleteDialog
+            chatId={deletingChatId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            onConfirm={handleDeleteDialogConfirm}
+            onCancel={handleDeleteDialogCancel}
           />
         </div>
       )}

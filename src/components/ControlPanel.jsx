@@ -1,5 +1,6 @@
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react'
+import { Icon } from './icons';;
 import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
 import { StorageServiceProxy } from '../services/proxies';
@@ -401,9 +402,7 @@ const ControlPanel = ({
           isDragging ? 'border-white/40' : ''
         }`}
         title="Drag to reposition | Click to toggle panel"
-      >
-        🛠️
-      </button>
+      ><Icon name="tools" size={16} /></button>
 
       {/* Control Panel */}
       {isVisible && (

@@ -5,7 +5,8 @@
  * Uses ConfigContext for state management
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
+import { Icon } from './icons';;
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import UISettings from './settings/UISettings';
 import LLMSettings from './settings/LLMSettings';
@@ -14,9 +15,17 @@ import STTSettings from './settings/STTSettings';
 import AIFeaturesSettings from './settings/AIFeaturesSettings';
 import { useConfig } from '../contexts/ConfigContext';
 
-const SettingsPanel = ({ onClose, isLightBackground }) => {
+const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
   const [activeTab, setActiveTab] = useState('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
+  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
+  const tabsRef = useState({
+    ui: null,
+    llm: null,
+    tts: null,
+    stt: null,
+    'ai-plus': null,
+  })[0];
   
   // Get all status states from ConfigContext
   const {
@@ -46,6 +55,15 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
       console.log(`[SettingsPanel] Chrome ${version} detected - Chrome AI requires Chrome 138+`);
     }
   }, []);
+
+  // Update tab indicator position when active tab changes
+  useEffect(() => {
+    const activeTabElement = tabsRef[activeTab];
+    if (activeTabElement) {
+      const { offsetLeft, offsetWidth } = activeTabElement;
+      setTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
+    }
+  }, [activeTab, tabsRef]);
 
   // Determine which status to show based on active tab
   const getActiveStatus = () => {
@@ -81,7 +99,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
   };
 
   return (
-    <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden`}>
+    <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden ${animationClass}`}>
       {/* Header */}
       <div className="flex justify-between items-center px-6 py-4 border-b border-white/20">
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -90,7 +108,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
           {/* Global Status Display */}
           {activeStatus && (
             <div 
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg animate-in fade-in max-w-md ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg animate-in fade-in max-w-md min-w-0 ${
                 activeStatus.type === 'success' ? 'bg-emerald-500/10' :
                 activeStatus.type === 'testing' ? 'bg-blue-500/10' :
                 activeStatus.type === 'warning' ? 'bg-amber-500/10' :
@@ -98,7 +116,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
               }`}
               title={activeStatus.message}
             >
-              <span className="text-xs text-white truncate">
+              <span className="text-xs text-white truncate break-all overflow-hidden min-w-0 flex-1">
                 {activeStatus.message}
               </span>
               {activeStatus.dismissible && (
@@ -106,9 +124,7 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
                   onClick={handleDismissStatus}
                   className="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-white/20 text-white/60 hover:text-white transition-colors text-xs"
                   aria-label="Dismiss"
-                >
-                  ✕
-                </button>
+                ><Icon name="close" size={16} /></button>
               )}
             </div>
           )}
@@ -118,58 +134,70 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
           onClick={onClose}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors shrink-0"
           aria-label="Close settings"
-        >
-          ✕
-        </button>
+        ><Icon name="close" size={16} /></button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-white/20 px-6">
+      <div className="flex border-b border-white/20 px-6 relative">
+        {/* Sliding indicator */}
+        <div 
+          className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
+          style={{
+            left: `${tabIndicatorStyle.left}px`,
+            width: `${tabIndicatorStyle.width}px`,
+          }}
+        />
+        
         <button
-          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          ref={(el) => (tabsRef.ui = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ui' 
-              ? 'border-white text-white' 
-              : 'border-transparent text-white/60 hover:text-white/90'
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
           }`}
           onClick={() => setActiveTab('ui')}
         >
           UI
         </button>
         <button
-          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          ref={(el) => (tabsRef.llm = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'llm' 
-              ? 'border-white text-white' 
-              : 'border-transparent text-white/60 hover:text-white/90'
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
           }`}
           onClick={() => setActiveTab('llm')}
         >
           LLM
         </button>
         <button
-          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          ref={(el) => (tabsRef.tts = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'tts' 
-              ? 'border-white text-white' 
-              : 'border-transparent text-white/60 hover:text-white/90'
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
           }`}
           onClick={() => setActiveTab('tts')}
         >
           TTS
         </button>
         <button
-          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          ref={(el) => (tabsRef.stt = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'stt' 
-              ? 'border-white text-white' 
-              : 'border-transparent text-white/60 hover:text-white/90'
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
           }`}
           onClick={() => setActiveTab('stt')}
         >
           STT
         </button>
         <button
-          className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          ref={(el) => (tabsRef['ai-plus'] = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ai-plus' 
-              ? 'border-white text-white' 
-              : 'border-transparent text-white/60 hover:text-white/90'
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
           }`}
           onClick={() => setActiveTab('ai-plus')}
         >
@@ -177,28 +205,39 @@ const SettingsPanel = ({ onClose, isLightBackground }) => {
         </button>
       </div>
 
-      {/* Tab Content - Scrollable with custom scrollbar */}
-      <div 
-        className="flex-1 overflow-y-auto px-6 py-4"
-        style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)',
-        }}
-      >
-        {/* UI Tab */}
-        {activeTab === 'ui' && <UISettings isLightBackground={isLightBackground} />}
+      {/* Tab Content - Scrollable with custom scrollbar and slide transition */}
+      <div className="flex-1 overflow-hidden relative">
+        <div 
+          className="absolute inset-0 flex transition-transform duration-300 ease-out"
+          style={{
+            transform: `translateX(-${['ui', 'llm', 'tts', 'stt', 'ai-plus'].indexOf(activeTab) * 100}%)`
+          }}
+        >
+          {/* UI Tab */}
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <UISettings isLightBackground={isLightBackground} />
+          </div>
 
-        {/* LLM Tab */}
-        {activeTab === 'llm' && <LLMSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />}
+          {/* LLM Tab */}
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <LLMSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />
+          </div>
 
-        {/* TTS Tab */}
-        {activeTab === 'tts' && <TTSSettings isLightBackground={isLightBackground} />}
+          {/* TTS Tab */}
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <TTSSettings isLightBackground={isLightBackground} />
+          </div>
 
-        {/* STT Tab */}
-        {activeTab === 'stt' && <STTSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />}
+          {/* STT Tab */}
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <STTSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />
+          </div>
 
-        {/* AI Features Tab */}
-        {activeTab === 'ai-plus' && <AIFeaturesSettings isLightBackground={isLightBackground} />}
+          {/* AI Features Tab */}
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <AIFeaturesSettings isLightBackground={isLightBackground} />
+          </div>
+        </div>
       </div>
     </div>
   );

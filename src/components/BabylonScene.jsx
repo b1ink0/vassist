@@ -20,12 +20,16 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
   // Drag-drop overlay state
-  const [overlayPos, setOverlayPos] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
-  const { setPendingDropData, openChat } = useApp();
+  
+  // Model overlay state from context (shared with AppContent)
+  const { modelOverlayPos, setModelOverlayPos, setShowModelLoadingOverlay, setPendingDropData, openChat } = useApp();
+  
+  // Track if this is first mount
+  const isFirstMountRef = useRef(true);
   
   // Store callbacks in refs to avoid dependency-related re-initialization
   const onSceneReadyRef = useRef(onSceneReady);
@@ -38,6 +42,48 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
     onLoadProgressRef.current = onLoadProgress;
     sceneConfigRef.current = sceneConfig;
   }, [onSceneReady, onLoadProgress, sceneConfig]);
+
+  // Track component mount/unmount for tab visibility
+  useEffect(() => {
+    // On mount
+    if (isFirstMountRef.current) {
+      // First mount - don't show loading
+      isFirstMountRef.current = false;
+      console.log('[BabylonScene] First mount - no loading overlay');
+    } else {
+      // Remount after unmount (tab was hidden) - show loading immediately
+      console.log('[BabylonScene] Remounting after tab hide - showing loading');
+      setShowModelLoadingOverlay(true);
+    }
+
+    // Track visibility changes to show overlay BEFORE unmount
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab becoming hidden - show loading overlay immediately as placeholder
+        console.log('[BabylonScene] Tab hidden - showing loading overlay');
+        setShowModelLoadingOverlay(true);
+      } else if (isReady) {
+        // Tab becoming visible and scene is ready - hide loading overlay
+        console.log('[BabylonScene] Tab visible and scene ready - hiding loading overlay');
+        setShowModelLoadingOverlay(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      console.log('[BabylonScene] Unmounting');
+    };
+  }, [setShowModelLoadingOverlay, isReady]);
+
+  // Hide loading when scene is ready (only if we're showing loading)
+  useEffect(() => {
+    if (isReady) {
+      console.log('[BabylonScene] Scene ready - hiding loading');
+      setShowModelLoadingOverlay(false);
+    }
+  }, [isReady, setShowModelLoadingOverlay]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -289,7 +335,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
     const updatePosition = () => {
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
-        setOverlayPos({
+        setModelOverlayPos({
           x: modelPos.x,
           y: modelPos.y,
           width: modelPos.width,
@@ -311,7 +357,7 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       window.removeEventListener('modelPositionChange', updatePosition);
       window.removeEventListener('resize', updatePosition);
     };
-  }, [positionManagerRef, isReady]);
+  }, [positionManagerRef, isReady, setModelOverlayPos]);
 
   // Setup drag-drop service for the overlay
   useEffect(() => {
@@ -377,56 +423,57 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
           ref={overlayRef}
           style={{
             position: 'fixed',
-            left: `${overlayPos.x}px`,
-            top: `${overlayPos.y}px`,
-            width: `${overlayPos.width}px`,
-            height: `${overlayPos.height}px`,
+            left: `${modelOverlayPos.x}px`,
+            top: `${modelOverlayPos.y}px`,
+            width: `${modelOverlayPos.width}px`,
+            height: `${modelOverlayPos.height}px`,
             zIndex: 10000, // Above canvas (9999) but below chat button (9999+)
             pointerEvents: isDragging ? 'auto' : 'none',
             borderRadius: '24px'
           }}
         >
-          {/* Visual feedback when dragging over model - always rendered, visibility controlled by opacity */}
-          <div 
-            style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '24px',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-              border: '2px solid rgba(59, 130, 246, 0.6)',
-              opacity: isDragOver ? 1 : 0,
-              visibility: isDragOver ? 'visible' : 'hidden',
-              transition: 'opacity 200ms ease-in-out, visibility 200ms ease-in-out',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none'
-            }}
-          >
+          {/* Drag-drop visual feedback */}
+          {isDragOver && (
             <div 
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                padding: '16px 24px',
-                borderRadius: '12px',
-                border: '2px dashed rgba(59, 130, 246, 0.5)',
-                transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
-                transition: 'transform 200ms ease-in-out'
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '24px',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                border: '2px solid rgba(59, 130, 246, 0.6)',
+                opacity: 1,
+                transition: 'opacity 200ms ease-in-out',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none'
               }}
             >
-              <p style={{
-                color: 'rgba(255, 255, 255, 0.9)',
-                fontSize: '18px',
-                fontWeight: '500',
-                margin: 0
-              }}>
-                📎 Drop
-              </p>
+              <div 
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  padding: '16px 24px',
+                  borderRadius: '12px',
+                  border: '2px dashed rgba(59, 130, 246, 0.5)',
+                  transform: 'scale(1)',
+                  transition: 'transform 200ms ease-in-out'
+                }}
+              >
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '18px',
+                  fontWeight: '500',
+                  margin: 0
+                }}>
+                  📎 Drop
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </>,

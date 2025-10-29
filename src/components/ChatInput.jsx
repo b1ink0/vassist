@@ -5,6 +5,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
+import { Icon } from './icons';
 
 const ChatInput = forwardRef(({ 
   onSend, 
@@ -25,6 +26,8 @@ const ChatInput = forwardRef(({
   const textareaRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
+  const [isClosing, setIsClosing] = useState(false); // Track closing animation state
+  const [shouldRender, setShouldRender] = useState(isVisible); // Local control for render during animation
   
   useEffect(() => {
     if (ref) {
@@ -35,6 +38,25 @@ const ChatInput = forwardRef(({
       }
     }
   }, [ref]);
+
+  /**
+   * Sync shouldRender with isVisible, but delay when closing for animation
+   */
+  useEffect(() => {
+    if (isVisible) {
+      // Opening - render immediately
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      // Closing - set closing state and delay unmount
+      setIsClosing(true);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 200);
+      return () => clearTimeout(timeout);
+    }
+  }, [isVisible, shouldRender]);
   
   // Voice conversation mode
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -638,20 +660,20 @@ const ChatInput = forwardRef(({
     }
   };
 
-  if (!isVisible) return null;
+  if (!shouldRender) return null;
 
   const getVoiceStateDisplay = () => {
     switch (voiceState) {
       case ConversationStates.LISTENING:
-        return { icon: '🎤', label: 'Listening...', class: 'listening', showInterrupt: false };
+        return { icon: 'microphone', label: 'Listening...', class: 'listening', showInterrupt: false };
       case ConversationStates.THINKING:
-        return { icon: '🤔', label: 'Thinking...', class: 'thinking', showInterrupt: false };
+        return { icon: 'thinking', label: 'Thinking...', class: 'thinking', showInterrupt: false };
       case ConversationStates.SPEAKING:
-        return { icon: '🔊', label: 'Speaking...', class: 'speaking', showInterrupt: true };
+        return { icon: 'speaker', label: 'Speaking...', class: 'speaking', showInterrupt: true };
       case ConversationStates.INTERRUPTED:
-        return { icon: '⏸️', label: 'Interrupted', class: 'interrupted', showInterrupt: false };
+        return { icon: 'pause', label: 'Interrupted', class: 'interrupted', showInterrupt: false };
       default:
-        return { icon: '⏹️', label: 'Ready', class: 'idle', showInterrupt: false };
+        return { icon: 'stop', label: 'Ready', class: 'idle', showInterrupt: false };
     }
   };
 
@@ -690,15 +712,17 @@ const ChatInput = forwardRef(({
                 transition: 'transform 200ms ease-in-out'
               }}
             >
-              <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium`}>
-                📎 Drop
+              <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
+                <Icon name="attachment" size={20} /> Drop
               </p>
             </div>
           </div>
         )}
         {hasAttachments && !isVoiceMode && (
           <div className="max-w-3xl mx-auto mb-2">
-            <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg`}>
+            <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg ${
+              isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
+            }`}>
               <div className="flex items-center gap-2 flex-wrap">
                 {attachedImages.map((img, index) => (
                   <div key={`img-${index}`} className="relative group">
@@ -713,7 +737,7 @@ const ChatInput = forwardRef(({
                       className={`absolute -top-2 -right-2 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity glass-button ${isLightBackground ? 'glass-button-dark' : ''} hover:bg-red-500/20`}
                       title="Remove image"
                     >
-                      <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>✕</span>
+                      <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     </button>
                     <div className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs mt-1 text-center truncate w-16`} title={img.name}>
                       {img.name.split('.')[0].substring(0, 8)}
@@ -724,7 +748,7 @@ const ChatInput = forwardRef(({
                 {attachedAudios.map((audio, index) => (
                   <div key={`audio-${index}`} className="relative group">
                     <div className="w-16 h-16 flex items-center justify-center bg-purple-500/20 rounded-lg border-2 border-purple-400/30">
-                      <span className="text-2xl">🎵</span>
+                      <Icon name="music" size={24} />
                     </div>
                     <button
                       type="button"
@@ -732,7 +756,7 @@ const ChatInput = forwardRef(({
                       className={`absolute -top-2 -right-2 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity glass-button ${isLightBackground ? 'glass-button-dark' : ''} hover:bg-red-500/20`}
                       title="Remove audio"
                     >
-                      <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>✕</span>
+                      <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     </button>
                     <div className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs mt-1 text-center truncate w-16`} title={audio.name}>
                       {audio.name.split('.')[0].substring(0, 8)}
@@ -745,14 +769,16 @@ const ChatInput = forwardRef(({
         )}
 
         {recordingError && (
-          <div className="glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2">
+          <div className={`glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
+            isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
+          }`}>
             <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm`}>{recordingError}</span>
             <button
               onClick={() => setRecordingError('')}
               className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} hover:opacity-80 transition-opacity flex-shrink-0`}
               title="Close"
             >
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
         )}
@@ -760,11 +786,11 @@ const ChatInput = forwardRef(({
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2 items-end">
           {isVoiceMode ? (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between`}>
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between ${
+                isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
+              }`}>
                 <div className="flex items-center gap-3">
-                  <span className={`text-2xl ${voiceStateDisplay.class === 'listening' ? 'animate-pulse' : ''}`}>
-                    {voiceStateDisplay.icon}
-                  </span>
+                  <Icon name={voiceStateDisplay.icon} size={24} className={voiceStateDisplay.class === 'listening' ? 'animate-pulse' : ''} />
                   <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>{voiceStateDisplay.label}</span>
                 </div>
                 
@@ -773,9 +799,10 @@ const ChatInput = forwardRef(({
                     <button
                       type="button"
                       onClick={handleInterrupt}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20`}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20 flex items-center gap-1.5`}
                     >
-                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>✋ Stop</span>
+                      <Icon name="hand-stop" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>Stop</span>
                     </button>
                   )}
                   
@@ -785,7 +812,7 @@ const ChatInput = forwardRef(({
                     className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg glass-error`}
                     title="Stop Voice Mode"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>📞</span>
+                    <Icon name="phone" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                   </button>
                   
                   <button
@@ -794,14 +821,16 @@ const ChatInput = forwardRef(({
                     className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg hover:bg-white/10`}
                     title="Close (Esc)"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>✕</span>
+                    <Icon name="close" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                   </button>
                 </div>
               </div>
             </>
           ) : (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 rounded-xl p-3 flex flex-col gap-2`}>
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 rounded-xl p-3 flex flex-col gap-2 ${
+                isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
+              }`}>
                 <textarea
                   ref={textareaRef}
                   value={message}
@@ -817,9 +846,8 @@ const ChatInput = forwardRef(({
                       ? `${attachedImages.length + attachedAudios.length} file(s) attached`
                       : 'Type a message... (Enter to send, Shift+Enter for new line)'
                   }
-                  className="w-full bg-transparent border-none outline-none placeholder-white/40 resize-none custom-scrollbar"
+                  className="w-full bg-transparent text-white border-none outline-none placeholder-white/40 resize-none custom-scrollbar min-h-[24px] max-h-[200px]"
                   rows={1}
-                  style={{ minHeight: '24px', maxHeight: '200px' }}
                 />
                 
                 <div className="flex items-center justify-between">
@@ -845,24 +873,26 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1 ${
                         attachedImages.length > 0 ? 'text-blue-400' : isLightBackground ? 'glass-text' : 'glass-text-black'
                       } ${isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
                       title={attachedImages.length > 0 ? `${attachedImages.length} image(s)` : 'Attach Image'}
                     >
-                      {attachedImages.length > 0 ? `🖼️ ${attachedImages.length}` : '🖼️'}
+                      <Icon name="image" size={18} />
+                      {attachedImages.length > 0 && <span>{attachedImages.length}</span>}
                     </button>
                     
                     <button
                       type="button"
                       onClick={() => audioInputRef.current?.click()}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1 ${
                         attachedAudios.length > 0 ? 'text-purple-400' : isLightBackground ? 'glass-text' : 'glass-text-black'
                       } ${isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
                       title={attachedAudios.length > 0 ? `${attachedAudios.length} audio(s)` : 'Attach Audio'}
                     >
-                      {attachedAudios.length > 0 ? `🎵 ${attachedAudios.length}` : '🎵'}
+                      <Icon name="music" size={18} />
+                      {attachedAudios.length > 0 && <span>{attachedAudios.length}</span>}
                     </button>
                     
                     <button
@@ -874,7 +904,7 @@ const ChatInput = forwardRef(({
                       }`}
                       title={isProcessingRecording ? 'Processing...' : isRecording ? 'Stop Recording' : 'Voice Input'}
                     >
-                      {isProcessingRecording ? '⏳' : isRecording ? '⏺️' : '🎤'}
+                      <Icon name={isProcessingRecording ? 'hourglass' : isRecording ? 'record' : 'microphone'} size={18} />
                     </button>
                     
                     <button
@@ -886,7 +916,7 @@ const ChatInput = forwardRef(({
                       }`}
                       title="Voice Mode"
                     >
-                      📞
+                      <Icon name="phone" size={18} />
                     </button>
                   </div>
                   
@@ -894,13 +924,14 @@ const ChatInput = forwardRef(({
                     <button
                       type="submit"
                       disabled={!message.trim() && !hasAttachments}
-                      className={`px-3 py-1.5 rounded-lg transition-all text-sm font-medium ${
+                      className={`p-1.5 rounded-lg transition-all ${
                         message.trim() || hasAttachments
-                          ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                          ? `hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`
                           : 'opacity-30 cursor-not-allowed'
                       }`}
+                      title="Send message"
                     >
-                      Send
+                      <Icon name="send" size={20} />
                     </button>
                     
                     <button
@@ -909,7 +940,7 @@ const ChatInput = forwardRef(({
                       className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
                       title="Close (Esc)"
                     >
-                      <span className="text-xl">✕</span>
+                      <Icon name="close" size={20} />
                     </button>
                   </div>
                 </div>

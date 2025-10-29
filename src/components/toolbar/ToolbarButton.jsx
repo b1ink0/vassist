@@ -9,10 +9,11 @@
  */
 
 import { useRef } from 'react';
+import { Icon } from '../icons';
 
 const ToolbarButton = ({
   icon,
-  loadingIcon = '⏳',
+  loadingIcon = 'spinner',
   label,
   onClick,
   disabled = false,
@@ -64,12 +65,49 @@ const ToolbarButton = ({
   // Inline color variant handling based on actionType prop
   const getHoverBgClass = () => {
     const colorMap = {
-      'summarize': 'hover:bg-blue-500/20',
-      'translate': 'hover:bg-emerald-500/20',
-      'image': 'hover:bg-purple-500/20',
-      'chat': 'hover:bg-orange-500/20',
+      // Summarize group - Diverse spectrum (blue, orange, purple, green)
+      'summarize': 'hover:bg-blue-500/30',
+      'summarize-tldr': 'hover:bg-blue-500/30',
+      'summarize-headline': 'hover:bg-orange-500/30',
+      'summarize-key-points': 'hover:bg-purple-500/30',
+      'summarize-teaser': 'hover:bg-emerald-500/30',
+      
+      // Translate group - Green spectrum (different from summarize)
+      'translate': 'hover:bg-teal-500/30',
+      'detect-language': 'hover:bg-lime-500/30',
+      
+      // Image group - Purple/Pink spectrum (warm purples)
+      'image': 'hover:bg-violet-500/30',
+      'image-describe': 'hover:bg-violet-500/30',
+      'image-extract-text': 'hover:bg-fuchsia-500/30',
+      'image-identify-objects': 'hover:bg-pink-500/30',
+      
+      // Dictionary group - Cool spectrum (cyan, indigo, blue variants)
+      'dictionary': 'hover:bg-cyan-500/30',
+      'dictionary-define': 'hover:bg-cyan-500/30',
+      'dictionary-synonyms': 'hover:bg-amber-500/30',
+      'dictionary-antonyms': 'hover:bg-rose-500/30',
+      'dictionary-pronunciation': 'hover:bg-indigo-500/30',
+      'dictionary-examples': 'hover:bg-lime-500/30',
+      
+      // Improve group - Rainbow spectrum (maximum variety)
+      'improve': 'hover:bg-rose-500/30',
+      'improve-grammar': 'hover:bg-rose-500/30',
+      'improve-spelling': 'hover:bg-yellow-500/30',
+      'improve-professional': 'hover:bg-emerald-500/30',
+      'improve-formal': 'hover:bg-sky-500/30',
+      'improve-simplify': 'hover:bg-orange-500/30',
+      'improve-expand': 'hover:bg-purple-500/30',
+      'improve-concise': 'hover:bg-teal-500/30',
+      
+      // Other actions - Unique colors
+      'chat': 'hover:bg-amber-500/30',
+      'dictation': 'hover:bg-red-500/30',
+      'insert': 'hover:bg-green-500/30',
+      'undo': 'hover:bg-slate-500/30',
+      'redo': 'hover:bg-blue-500/30',
     };
-    return colorMap[actionType] || 'hover:bg-blue-500/20';
+    return colorMap[actionType] || 'hover:bg-blue-500/30';
   };
 
   return (
@@ -93,7 +131,7 @@ const ToolbarButton = ({
       title={title}
     >
       <span className={`inline-block transition-opacity duration-200 ${isLoading ? 'animate-spin' : ''}`}>
-        {isLoading ? loadingIcon : icon}
+        <Icon name={isLoading ? loadingIcon : icon} size={16} context="toolbar" />
       </span>
       <span 
         ref={labelRef}

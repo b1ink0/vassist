@@ -31,6 +31,7 @@ export const AnimationCategory = {
  * Each state can play different animation types with configurable behavior.
  */
 export const AssistantState = {
+  INTRO: 'INTRO',         // Initial entrance animation - plays once and transitions to IDLE
   IDLE: 'IDLE',           // Default state - plays idle animations on loop
   BUSY: 'BUSY',           // Doing something - can play thinking, walking, etc.
   SPEAKING: 'SPEAKING',   // Talking to user - plays talking + current animation
@@ -241,7 +242,8 @@ export const AnimationRegistry = {
       filePath: 'res/assets/motion/intro1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: true,
+      loopTransition: false, // Don't loop intro - play once and return to idle
+      autoReturn: AssistantState.IDLE, // Auto-return to idle after intro completes
       weight: 1.0,
       metadata: {
         description: 'Entrance animation - walks from left to right and greets',
@@ -254,7 +256,8 @@ export const AnimationRegistry = {
       filePath: 'res/assets/motion/intro2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: true,
+      loopTransition: false, // Don't loop intro - play once and return to idle
+      autoReturn: AssistantState.IDLE, // Auto-return to idle after intro completes
       weight: 1.0,
       metadata: {
         description: 'Alternative entrance animation - walks in and greets',
@@ -475,6 +478,14 @@ export function validateAnimationConfig(config) {
  * This is designed to be easily configurable via UI in the future.
  */
 export const StateBehavior = {
+  [AssistantState.INTRO]: {
+    allowedAnimations: ['intro'],  // Only intro animations
+    randomSelection: true,         // Pick random intro variant
+    loop: false,                   // Play once, don't loop
+    autoSwitch: false,             // Don't auto-switch
+    autoReturn: AssistantState.IDLE, // Return to IDLE when intro finishes
+  },
+  
   [AssistantState.IDLE]: {
     allowedAnimations: ['idle'],  // Only idle animations
     randomSelection: true,        // Randomly pick from variants
@@ -528,7 +539,12 @@ export const StateBehavior = {
  * Designed to be easily modifiable for future UI configuration.
  */
 export const StateTransitions = {
+  [AssistantState.INTRO]: [
+    AssistantState.IDLE, // Intro only transitions to IDLE
+  ],
+  
   [AssistantState.IDLE]: [
+    AssistantState.INTRO,     // Allow IDLE -> INTRO for initial animation
     AssistantState.BUSY,
     AssistantState.SPEAKING,
     AssistantState.SPEAKING_HOLD,

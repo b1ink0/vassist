@@ -5,7 +5,7 @@
  * Provides quick actions: Summarize, Translate, Add to Chat.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import BackgroundDetector from '../utils/BackgroundDetector';
@@ -24,9 +24,13 @@ const AIToolbar = () => {
   const { ttsConfig } = useConfig();
   
   const [isVisible, setIsVisible] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false); // Local control for render during animation
+  const [isClosing, setIsClosing] = useState(false); // Track closing animation
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [lockedPosition, setLockedPosition] = useState(null); // Lock position when result is showing
   const [resultPanelActive, setResultPanelActive] = useState(false); // Track if result panel is showing (prevents toolbar from hiding when selection lost)
+  const [shouldRenderResultPanel, setShouldRenderResultPanel] = useState(false); // Control result panel render during animation
+  const [isResultPanelClosing, setIsResultPanelClosing] = useState(false); // Track result panel closing animation
   const [selectedText, setSelectedText] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedAudios, setSelectedAudios] = useState([]);
@@ -40,7 +44,6 @@ const AIToolbar = () => {
   const [isLightBackgroundPanel, setIsLightBackgroundPanel] = useState(false);
   const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null); // For translation override
   const [detectedLanguageName, setDetectedLanguageName] = useState(null); // Full language name for display
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
   const [isTTSGenerating, setIsTTSGenerating] = useState(false); // TTS generation state (before playback)
@@ -70,6 +73,125 @@ const AIToolbar = () => {
   const hasInsertedRef = useRef(false); // Ref to track insert state for callbacks
   const showingFromInputFocusRef = useRef(false); // Track if toolbar was shown by input focus (prevent immediate hide)
   const showingFromImageHoverRef = useRef(false); // Track if toolbar was shown by image hover (prevent immediate hide)
+  const pendingResultRef = useRef(null); // Pending result for batched update
+  const resultUpdateRafRef = useRef(null); // RAF ID for batched updates
+  const resultPanelCloseTimeoutRef = useRef(null); // Timeout for result panel close animation
+  
+  // Refs for result, error, isLoading to prevent handleSelectionChange recreation
+  const resultRef = useRef('');
+  const errorRef = useRef('');
+  const isLoadingRef = useRef(false);
+  const lockedPositionRef = useRef(null);
+  const isVisibleRef = useRef(false);
+  
+  /**
+   * Throttled setResult to prevent excessive re-renders during streaming
+   * Batches rapid updates using requestAnimationFrame
+   */
+  const setResultThrottled = useCallback((newResult) => {
+    // Store the latest result
+    pendingResultRef.current = newResult;
+    
+    // If update is already scheduled, don't schedule another
+    if (resultUpdateRafRef.current !== null) {
+      return;
+    }
+    
+    // Schedule update on next animation frame (60fps max)
+    resultUpdateRafRef.current = requestAnimationFrame(() => {
+      if (pendingResultRef.current !== null) {
+        setResult(pendingResultRef.current);
+        pendingResultRef.current = null;
+      }
+      resultUpdateRafRef.current = null;
+    });
+  }, []);
+
+  /**
+   * Sync refs with state values to prevent callback recreations
+   */
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
+  
+  useEffect(() => {
+    errorRef.current = error;
+  }, [error]);
+  
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+  
+  useEffect(() => {
+    lockedPositionRef.current = lockedPosition;
+  }, [lockedPosition]);
+
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  /**
+   * Sync shouldRender with isVisible, but delay when closing for animation
+   */
+  useEffect(() => {
+    if (isVisible) {
+      // Opening - render immediately
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      // Closing - set closing state and delay unmount
+      setIsClosing(true);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 300); // 300ms to match fade-in duration
+      return () => clearTimeout(timeout);
+    }
+  }, [isVisible, shouldRender]);
+
+  /**
+   * Track whether we have result/error as booleans to prevent content changes triggering useEffect
+   */
+  const hasResult = Boolean(result);
+  const hasError = Boolean(error);
+
+  /**
+   * Memoize hasResultFlag to prevent useEffect from running on every result content change during streaming
+   */
+  const hasResultFlag = useMemo(() => {
+    const flag = (hasResult || hasError) && isVisible;
+    return flag;
+  }, [hasResult, hasError, isVisible]);
+
+  /**
+   * Sync shouldRenderResultPanel with result/error state, delay when closing for animation
+   */
+  useEffect(() => {
+    if (hasResultFlag && !shouldRenderResultPanel) {
+      // Result appeared and panel not showing - render immediately
+      // Clear any pending close animation
+      if (resultPanelCloseTimeoutRef.current) {
+        clearTimeout(resultPanelCloseTimeoutRef.current);
+        resultPanelCloseTimeoutRef.current = null;
+      }
+      setShouldRenderResultPanel(true);
+      setIsResultPanelClosing(false);
+    } else if (!hasResultFlag && shouldRenderResultPanel) {
+      // Result disappeared and panel is showing - start closing animation
+      setIsResultPanelClosing(true);
+      resultPanelCloseTimeoutRef.current = setTimeout(() => {
+        setShouldRenderResultPanel(false);
+        setIsResultPanelClosing(false);
+        resultPanelCloseTimeoutRef.current = null;
+      }, 300);
+      return () => {
+        if (resultPanelCloseTimeoutRef.current) {
+          clearTimeout(resultPanelCloseTimeoutRef.current);
+          resultPanelCloseTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [hasResultFlag, shouldRenderResultPanel]);
 
   /**
    * Check if toolbar is enabled
@@ -214,6 +336,18 @@ const AIToolbar = () => {
       TTSServiceProxy.setAudioEndCallback(null);
     };
   }, [currentSessionId]);
+  
+  /**
+   * Cleanup RAF on unmount
+   */
+  useEffect(() => {
+    return () => {
+      if (resultUpdateRafRef.current !== null) {
+        cancelAnimationFrame(resultUpdateRafRef.current);
+        resultUpdateRafRef.current = null;
+      }
+    };
+  }, []);
 
   /**
    * Handle TTS speaker button click
@@ -288,16 +422,6 @@ const AIToolbar = () => {
    * Close result panel
    */
   const closeResult = useCallback(async () => {
-    // Clear UI immediately so panel disappears
-    setResult('');
-    setError('');
-    setAction(null);
-    setSelectedTargetLanguage(null);
-    setCopySuccess(false);
-    setHasInserted(false); // Clear insert/undo state
-    hasInsertedRef.current = false; // Clear ref
-    setLockedPosition(null); // Clear locked position
-    
     // Cancel ongoing request if loading
     if (isLoading) {
       console.log('[AIToolbar] Aborting ongoing streaming request...');
@@ -336,6 +460,18 @@ const AIToolbar = () => {
       setIsSpeaking(false);
       setCurrentSessionId(null);
     }
+    
+    // Delay clearing states UNTIL AFTER fade-out animation completes (500ms to be safe)
+    setTimeout(() => {
+      setResult('');
+      setError('');
+      setAction(null);
+      setSelectedTargetLanguage(null);
+      setCopySuccess(false);
+      setHasInserted(false);
+      hasInsertedRef.current = false;
+      setLockedPosition(null);
+    }, 500);
   }, [isLoading, action, isSpeaking, currentSessionId]);
 
   /**
@@ -552,7 +688,7 @@ const AIToolbar = () => {
       const pos = calculatePosition(selection);
       if (!pos) {
         // No valid position but we have content - keep visible at current position
-        if (result || error || isLoading) {
+        if (resultRef.current || errorRef.current || isLoadingRef.current) {
           console.log('[AIToolbar] No position but result active, keeping toolbar at current position');
           return;
         }
@@ -584,10 +720,10 @@ const AIToolbar = () => {
       }
       
       // Lock position when result/error/loading is active to prevent drift
-      if (!result && !error && !isLoading) {
+      if (!resultRef.current && !errorRef.current && !isLoadingRef.current) {
         setPosition(pos);
         setLockedPosition(null); // Clear lock when no result
-      } else if (!lockedPosition) {
+      } else if (!lockedPositionRef.current) {
         // First time showing result - lock position
         setPosition(pos);
         setLockedPosition(pos);
@@ -597,7 +733,7 @@ const AIToolbar = () => {
       setIsVisible(true);
       // Don't clear result/error/action here - they should only be cleared by closeResult or new action
     }, 150);
-  }, [isEnabled, getSelection, calculatePosition, checkEditableContent, resultPanelActive, result, error, isLoading, lockedPosition]);
+  }, [isEnabled, getSelection, calculatePosition, checkEditableContent, resultPanelActive]);
 
   /**
    * Handle mouse up (show toolbar after selection)
@@ -611,18 +747,16 @@ const AIToolbar = () => {
    * BUT: Don't update if result/error/loading is showing (locked position)
    */
   const handleScroll = useCallback(() => {
-    if (!isVisible) return;
+    if (!isVisibleRef.current) return;
     
     // If position is locked (result showing), don't update position on scroll
-    if (lockedPosition) {
-      console.log('[AIToolbar] Position locked, ignoring scroll');
+    if (lockedPositionRef.current) {
       return;
     }
     
     // If toolbar is shown from image hover, hide it on scroll
     // (because the image position changes and toolbar would be misaligned)
     if (showingFromImageHoverRef.current) {
-      console.log('[AIToolbar] Hiding toolbar on scroll (was shown from image hover)');
       setIsVisible(false);
       setHoveredImageElement(null);
       showingFromImageHoverRef.current = false;
@@ -640,7 +774,7 @@ const AIToolbar = () => {
         setIsVisible(false);
       }
     }
-  }, [isVisible, calculatePosition, lockedPosition]);
+  }, [calculatePosition]);
 
   /**
    * Hide toolbar when clicking outside
@@ -930,12 +1064,6 @@ const AIToolbar = () => {
     const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus;
     const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover;
     
-    console.log('[AIToolbar] Setting up event listeners', {
-      isEnabled,
-      showOnInputFocus,
-      showOnImageHover
-    });
-    
     if (!isEnabled) {
       setIsVisible(false);
       return;
@@ -948,17 +1076,14 @@ const AIToolbar = () => {
     
     // Input focus listener
     if (showOnInputFocus) {
-      console.log('[AIToolbar] Adding focusin listener for input focus');
       document.addEventListener('focusin', handleInputFocus);
     }
     
     // Image hover listeners + MutationObserver
     let observer;
     if (showOnImageHover) {
-      console.log('[AIToolbar] Adding image hover listeners');
       // Add event listeners to all existing images
       const images = document.querySelectorAll('img');
-      console.log('[AIToolbar] Found', images.length, 'images on page');
       images.forEach(img => {
         img.addEventListener('mouseenter', handleImageHover);
         img.addEventListener('mouseleave', handleImageLeave);
@@ -1012,7 +1137,8 @@ const AIToolbar = () => {
         clearTimeout(selectionTimeoutRef.current);
       }
     };
-  }, [isEnabled, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEnabled, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover]);
 
   /**
    * Clear flags and stop dictation when toolbar becomes invisible
@@ -1089,17 +1215,20 @@ const AIToolbar = () => {
    * Activate when result/error/loading appears, deactivate when all are cleared
    */
   useEffect(() => {
-    if (result || error || isLoading) {
+    const hasResult = Boolean(result);
+    const hasError = Boolean(error);
+    const hasLoading = Boolean(isLoading);
+    
+    if (hasResult || hasError || hasLoading) {
       setResultPanelActive(true);
-      console.log('[AIToolbar] Result panel activated');
     } else {
       setResultPanelActive(false);
-      console.log('[AIToolbar] Result panel deactivated');
     }
   }, [result, error, isLoading]);
 
   /**
    * Detect background brightness for toolbar and result panel
+   * Only re-detect when panel visibility or position changes, NOT when result content changes
    */
   useEffect(() => {
     if (!isVisible) return;
@@ -1130,8 +1259,8 @@ const AIToolbar = () => {
         setIsLightBackgroundToolbar(toolbarResult.isLight);
       }
       
-      // Detect result panel background
-      if (panel && (result || error)) {
+      // Detect result panel background (only if panel should be visible)
+      if (panel && shouldRenderResultPanel) {
         const elementsToDisable = [canvas, panel].filter(Boolean);
         const panelResult = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
           return BackgroundDetector.detectBrightness({
@@ -1159,13 +1288,16 @@ const AIToolbar = () => {
     const timeoutId = setTimeout(detectBackgrounds, 400);
     
     return () => clearTimeout(timeoutId);
-  }, [isVisible, position, result, error]);
+  }, [isVisible, position, shouldRenderResultPanel]); // Only depend on visibility and position, NOT result content
 
   /**
    * Handle Summarize action with streaming
    * @param {string} summaryType - 'tldr', 'headline', 'key-points', 'teaser'
+   * @param {boolean} skipClearResult - Don't clear result (for regenerate)
    */
-  const onSummarizeClick = async (summaryType = 'tldr') => {
+  const onSummarizeClick = async (summaryType = 'tldr', skipClearResult = false) => {
+    console.log('[AIToolbar] onSummarizeClick START', { summaryType, skipClearResult, currentResult: result, currentError: error, currentIsLoading: isLoading });
+    
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1181,9 +1313,10 @@ const AIToolbar = () => {
     const type = summaryType || 'tldr';
     setAction(`summarize-${type}`);
     setError('');
-    setResult(''); // Clear previous result
-    
-    console.log(`[AIToolbar] Summarize clicked (${type}, streaming)`);
+    // Don't clear result if regenerating (keep panel visible)
+    if (!skipClearResult) {
+      setResult('');
+    }
     
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
@@ -1212,10 +1345,15 @@ const AIToolbar = () => {
         
         fullSummary += chunk;
         
-        // Only update result if not aborted
+        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
-          setResult(fullSummary);
+          setResultThrottled(fullSummary);
         }
+      }
+      
+      // Ensure final result is set
+      if (!abortControllerRef.current?.signal.aborted && fullSummary) {
+        setResult(fullSummary);
       }
       
       console.log('[AIToolbar] Summary streaming complete');
@@ -1234,7 +1372,7 @@ const AIToolbar = () => {
   /**
    * Handle Language Detection action
    */
-  const onDetectLanguageClick = async () => {
+  const onDetectLanguageClick = async (skipClearResult = false) => {
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1249,9 +1387,9 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction('detect-language');
     setError('');
-    setResult('');
-    
-    console.log('[AIToolbar] Detect language clicked');
+    if (!skipClearResult) {
+      setResult('');
+    }
     
     try {
       const { LanguageDetectorServiceProxy } = await import('../services/proxies');
@@ -1282,8 +1420,11 @@ const AIToolbar = () => {
    * Handle Translate action with streaming
    * @param {string} targetLang - Target language code (optional)
    * @param {boolean} useAutoDetect - Whether to auto-detect source language (default: true)
+   * @param {boolean} skipClearResult - Don't clear result (for regenerate)
    */
-  const onTranslateClick = async (targetLang = null, useAutoDetect = true) => {
+  const onTranslateClick = async (targetLang = null, useAutoDetect = true, skipClearResult = false) => {
+    console.log('[AIToolbar] onTranslateClick START', { targetLang, useAutoDetect, skipClearResult, currentResult: result, currentError: error, currentIsLoading: isLoading });
+    
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1305,11 +1446,12 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction('translate');
     setError('');
-    setResult(''); // Clear previous result
+    // Don't clear result if regenerating (keep panel visible)
+    if (!skipClearResult) {
+      setResult('');
+    }
     
     const targetLanguage = targetLang || selectedTargetLanguage || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
-    
-    console.log('[AIToolbar] Translate clicked (streaming, auto-detect:', useAutoDetect, ')');
     
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
@@ -1358,10 +1500,15 @@ const AIToolbar = () => {
         
         fullTranslation += chunk;
         
-        // Only update result if not aborted
+        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
-          setResult(fullTranslation);
+          setResultThrottled(fullTranslation);
         }
+      }
+      
+      // Ensure final result is set
+      if (!abortControllerRef.current?.signal.aborted && fullTranslation) {
+        setResult(fullTranslation);
       }
       
       console.log('[AIToolbar] Translation streaming complete');
@@ -1381,7 +1528,7 @@ const AIToolbar = () => {
    * Handle Image Analysis action with streaming
    * @param {string} analysisType - 'describe', 'extract-text', or 'analyze'
    */
-  const onImageAnalysisClick = async (analysisType) => {
+  const onImageAnalysisClick = async (analysisType, skipClearResult = false) => {
     // Check if we have any image source (hoveredImageElement OR selectedImages)
     if (!hoveredImageElement && (!selectedImages || selectedImages.length === 0)) {
       setError('No images selected');
@@ -1397,7 +1544,10 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`image-${analysisType}`);
     setError('');
-    setResult(''); // Clear previous result
+    // Don't clear result if regenerating (keep panel visible)
+    if (!skipClearResult) {
+      setResult('');
+    }
     
     console.log(`[AIToolbar] Image Analysis clicked (${analysisType}, streaming)`);
     
@@ -1493,15 +1643,19 @@ const AIToolbar = () => {
         
         fullResponse += chunk;
         
-        // Only update result if not aborted
+        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
-          setResult(fullResponse);
+          setResultThrottled(fullResponse);
         }
       });
       
-      // Handle final response if not streaming
-      if (!abortControllerRef.current?.signal.aborted && response.response) {
-        setResult(response.response);
+      // Handle final response if not streaming - ensure final result is always set
+      if (!abortControllerRef.current?.signal.aborted) {
+        if (response.response) {
+          setResult(response.response);
+        } else if (fullResponse) {
+          setResult(fullResponse);
+        }
       }
       
       console.log('[AIToolbar] Image analysis streaming complete');
@@ -1523,7 +1677,7 @@ const AIToolbar = () => {
    * @param {string} actionName - Display name for logging
    * @param {Function} promptBuilder - Function that takes the word and returns the prompt string
    */
-  const handleDictionaryAction = async (actionType, actionName, promptBuilder) => {
+  const handleDictionaryAction = async (actionType, actionName, promptBuilder, skipClearResult = false) => {
     if (!selectedText) {
       setError('No word selected');
       return;
@@ -1538,7 +1692,10 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`dictionary-${actionType}`);
     setError('');
-    setResult('');
+    // Don't clear result if regenerating (keep panel visible)
+    if (!skipClearResult) {
+      setResult('');
+    }
     
     console.log(`[AIToolbar] ${actionName} clicked (streaming)`);
     
@@ -1560,7 +1717,7 @@ const AIToolbar = () => {
         console.log(`[AIToolbar] ${actionName} chunk received:`, chunk);
         fullResponse += chunk;
         if (!abortControllerRef.current?.signal.aborted) {
-          setResult(fullResponse);
+          setResultThrottled(fullResponse);
         }
       });
       
@@ -1581,10 +1738,12 @@ const AIToolbar = () => {
         return;
       }
       
-      // Handle non-streaming response
-      if (response?.response && !fullResponse) {
+      // Handle non-streaming response - ensure final result is always set
+      if (response?.response) {
         console.log(`[AIToolbar] Using non-streaming response`);
         setResult(response.response);
+      } else if (fullResponse) {
+        setResult(fullResponse);
       }
       
       // If we still have no result, show error
@@ -1608,36 +1767,36 @@ const AIToolbar = () => {
   /**
    * Handle Dictionary action - Get word definition
    */
-  const onDictionaryClick = async () => {
-    await handleDictionaryAction('define', 'Dictionary', (word) => PromptConfig.dictionary.define(word));
+  const onDictionaryClick = async (skipClearResult = false) => {
+    await handleDictionaryAction('define', 'Dictionary', (word) => PromptConfig.dictionary.define(word), skipClearResult);
   };
 
   /**
    * Handle Synonyms action
    */
-  const onSynonymsClick = async () => {
-    await handleDictionaryAction('synonyms', 'Synonyms', (word) => PromptConfig.dictionary.synonyms(word));
+  const onSynonymsClick = async (skipClearResult = false) => {
+    await handleDictionaryAction('synonyms', 'Synonyms', (word) => PromptConfig.dictionary.synonyms(word), skipClearResult);
   };
 
   /**
    * Handle Antonyms action
    */
-  const onAntonymsClick = async () => {
-    await handleDictionaryAction('antonyms', 'Antonyms', (word) => PromptConfig.dictionary.antonyms(word));
+  const onAntonymsClick = async (skipClearResult = false) => {
+    await handleDictionaryAction('antonyms', 'Antonyms', (word) => PromptConfig.dictionary.antonyms(word), skipClearResult);
   };
 
   /**
    * Handle Pronunciation action
    */
-  const onPronunciationClick = async () => {
-    await handleDictionaryAction('pronunciation', 'Pronunciation', (word) => PromptConfig.dictionary.pronunciation(word));
+  const onPronunciationClick = async (skipClearResult = false) => {
+    await handleDictionaryAction('pronunciation', 'Pronunciation', (word) => PromptConfig.dictionary.pronunciation(word), skipClearResult);
   };
 
   /**
    * Handle Examples action
    */
-  const onExamplesClick = async () => {
-    await handleDictionaryAction('examples', 'Examples', (word) => PromptConfig.dictionary.examples(word));
+  const onExamplesClick = async (skipClearResult = false) => {
+    await handleDictionaryAction('examples', 'Examples', (word) => PromptConfig.dictionary.examples(word), skipClearResult);
   };
 
   /**
@@ -1646,7 +1805,7 @@ const AIToolbar = () => {
    * @param {string} actionName - Display name for action
    * @param {string} prompt - AI prompt for improvement
    */
-  const handleTextImprovement = async (actionType, actionName, prompt) => {
+  const handleTextImprovement = async (actionType, actionName, prompt, skipClearResult = false) => {
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1660,7 +1819,10 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`improve-${actionType}`);
     setError('');
-    setResult('');
+    // Don't clear result if regenerating (keep panel visible)
+    if (!skipClearResult) {
+      setResult('');
+    }
     setHasInserted(false); // Reset insert state for new improvement
     hasInsertedRef.current = false; // Reset ref for new improvement
     setImprovedContent(null); // Clear improved content on new improvement
@@ -1680,7 +1842,7 @@ const AIToolbar = () => {
         if (abortControllerRef.current?.signal.aborted) return;
         fullResponse += chunk;
         if (!abortControllerRef.current?.signal.aborted) {
-          setResult(fullResponse);
+          setResultThrottled(fullResponse);
         }
       });
       
@@ -1693,10 +1855,12 @@ const AIToolbar = () => {
         return;
       }
       
-      // Handle non-streaming response
-      if (response?.response && !fullResponse) {
+      // Handle non-streaming response - ensure final result is always set
+      if (response?.response) {
         setResult(response.response);
-      } else if (!fullResponse && !response?.response) {
+      } else if (fullResponse) {
+        setResult(fullResponse);
+      } else {
         setError('No response received from AI service');
       }
       
@@ -1715,73 +1879,73 @@ const AIToolbar = () => {
   /**
    * Fix Grammar
    */
-  const onFixGrammarClick = async () => {
+  const onFixGrammarClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.grammar('{text}');
-    await handleTextImprovement('grammar', 'Fix Grammar', prompt);
+    await handleTextImprovement('grammar', 'Fix Grammar', prompt, skipClearResult);
   };
 
   /**
    * Fix Spelling
    */
-  const onFixSpellingClick = async () => {
+  const onFixSpellingClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.spelling('{text}');
-    await handleTextImprovement('spelling', 'Fix Spelling', prompt);
+    await handleTextImprovement('spelling', 'Fix Spelling', prompt, skipClearResult);
   };
 
   /**
    * Make Professional
    */
-  const onMakeProfessionalClick = async () => {
+  const onMakeProfessionalClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.professional('{text}');
-    await handleTextImprovement('professional', 'Make Professional', prompt);
+    await handleTextImprovement('professional', 'Make Professional', prompt, skipClearResult);
   };
 
   /**
    * Make Casual
    */
-  const onMakeCasualClick = async () => {
+  const onMakeCasualClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.casual('{text}');
-    await handleTextImprovement('casual', 'Make Casual', prompt);
+    await handleTextImprovement('casual', 'Make Casual', prompt, skipClearResult);
   };
 
   /**
    * Improve Clarity
    */
-  const onImproveClarityClick = async () => {
+  const onImproveClarityClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.clarity('{text}');
-    await handleTextImprovement('clarity', 'Improve Clarity', prompt);
+    await handleTextImprovement('clarity', 'Improve Clarity', prompt, skipClearResult);
   };
 
   /**
    * Expand
    */
-  const onExpandClick = async () => {
+  const onExpandClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.expand('{text}');
-    await handleTextImprovement('expand', 'Expand', prompt);
+    await handleTextImprovement('expand', 'Expand', prompt, skipClearResult);
   };
 
   /**
    * Make Concise
    */
-  const onMakeConciseClick = async () => {
+  const onMakeConciseClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.concise('{text}');
-    await handleTextImprovement('concise', 'Make Concise', prompt);
+    await handleTextImprovement('concise', 'Make Concise', prompt, skipClearResult);
   };
 
   /**
    * Make Formal
    */
-  const onMakeFormalClick = async () => {
+  const onMakeFormalClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.formal('{text}');
-    await handleTextImprovement('formal', 'Make Formal', prompt);
+    await handleTextImprovement('formal', 'Make Formal', prompt, skipClearResult);
   };
 
   /**
    * Simplify
    */
-  const onSimplifyClick = async () => {
+  const onSimplifyClick = async (skipClearResult = false) => {
     const prompt = PromptConfig.textImprovement.simplify('{text}');
-    await handleTextImprovement('simplify', 'Simplify', prompt);
+    await handleTextImprovement('simplify', 'Simplify', prompt, skipClearResult);
   };
 
   /**
@@ -1805,65 +1969,61 @@ const AIToolbar = () => {
    * Handle Regenerate action
    */
   const onRegenerateClick = async () => {
-    setIsRegenerating(true);
-    
     if (action?.startsWith('summarize-')) {
       const summaryType = action.replace('summarize-', '');
-      await onSummarizeClick(summaryType);
+      await onSummarizeClick(summaryType, true);
     } else if (action === 'translate') {
-      await onTranslateClick(selectedTargetLanguage);
+      await onTranslateClick(selectedTargetLanguage, true, true);
     } else if (action === 'detect-language') {
       await onDetectLanguageClick();
     } else if (action?.startsWith('image-')) {
       const analysisType = action.replace('image-', '');
-      await onImageAnalysisClick(analysisType);
+      await onImageAnalysisClick(analysisType, true);
     } else if (action?.startsWith('dictionary-')) {
       const dictAction = action.replace('dictionary-', '');
       switch (dictAction) {
         case 'define':
-          await onDictionaryClick();
+          await onDictionaryClick(true);
           break;
         case 'synonyms':
-          await onSynonymsClick();
+          await onSynonymsClick(true);
           break;
         case 'antonyms':
-          await onAntonymsClick();
+          await onAntonymsClick(true);
           break;
         case 'pronunciation':
-          await onPronunciationClick();
+          await onPronunciationClick(true);
           break;
         case 'examples':
-          await onExamplesClick();
+          await onExamplesClick(true);
           break;
       }
     } else if (action?.startsWith('improve-')) {
       const improveAction = action.replace('improve-', '');
       switch (improveAction) {
         case 'grammar':
-          await onFixGrammarClick();
+          await onFixGrammarClick(true);
           break;
         case 'spelling':
-          await onFixSpellingClick();
+          await onFixSpellingClick(true);
           break;
         case 'professional':
-          await onMakeProfessionalClick();
+          await onMakeProfessionalClick(true);
           break;
         case 'formal':
-          await onMakeFormalClick();
+          await onMakeFormalClick(true);
           break;
         case 'simplify':
-          await onSimplifyClick();
+          await onSimplifyClick(true);
           break;
         case 'expand':
-          await onExpandClick();
+          await onExpandClick(true);
           break;
         case 'concise':
-          await onMakeConciseClick();
+          await onMakeConciseClick(true);
           break;
       }
     }
-    
-    setIsRegenerating(false);
   };
 
   /**
@@ -2404,7 +2564,7 @@ const AIToolbar = () => {
 
   return (
     <>
-      {isVisible && (
+      {shouldRender && (
         <div
           ref={toolbarRef}
           onMouseEnter={() => {
@@ -2414,6 +2574,7 @@ const AIToolbar = () => {
             fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px] 
             border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform
             glass-container ${isLightBackgroundToolbar ? 'glass-container-dark' : ''}
+            ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}
           `}
           style={{
             transform: `translate(${position.x}px, ${position.y}px)`,
@@ -2428,53 +2589,53 @@ const AIToolbar = () => {
               isLoading={isLoading}
               isLightBackground={isLightBackgroundToolbar}
               mainButton={{
-                icon: '📖',
+                icon: 'book',
                 label: 'Dictionary',
-                onClick: () => onDictionaryClick(),
+                onClick: () => onDictionaryClick(resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'dictionary-define',
-                actionType: 'dictionary',
+                actionType: 'dictionary-define',
                 title: 'Get word definition',
                 maxLabelWidth: '100px',
               }}
               subButtons={[
                 {
-                  icon: '🔄',
+                  icon: 'refresh',
                   label: 'Synonyms',
-                  onClick: () => onSynonymsClick(),
+                  onClick: () => onSynonymsClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'dictionary-synonyms',
-                  actionType: 'dictionary',
+                  actionType: 'dictionary-synonyms',
                   title: 'Find similar words',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '↔️',
+                  icon: 'bidirectional',
                   label: 'Antonyms',
-                  onClick: () => onAntonymsClick(),
+                  onClick: () => onAntonymsClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'dictionary-antonyms',
-                  actionType: 'dictionary',
+                  actionType: 'dictionary-antonyms',
                   title: 'Find opposite words',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '🔊',
+                  icon: 'speaker',
                   label: 'Pronunciation',
-                  onClick: () => onPronunciationClick(),
+                  onClick: () => onPronunciationClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'dictionary-pronunciation',
-                  actionType: 'dictionary',
+                  actionType: 'dictionary-pronunciation',
                   title: 'Get pronunciation guide',
                   maxLabelWidth: '120px',
                 },
                 {
-                  icon: '💡',
+                  icon: 'idea',
                   label: 'Examples',
-                  onClick: () => onExamplesClick(),
+                  onClick: () => onExamplesClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'dictionary-examples',
-                  actionType: 'dictionary',
+                  actionType: 'dictionary-examples',
                   title: 'See usage examples',
                   maxLabelWidth: '100px',
                 },
@@ -2488,73 +2649,73 @@ const AIToolbar = () => {
               isLoading={isLoading}
               isLightBackground={isLightBackgroundToolbar}
               mainButton={{
-                icon: '✍️',
+                icon: 'write',
                 label: 'Improve',
-                onClick: () => onFixGrammarClick(),
+                onClick: () => onFixGrammarClick(resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'improve-grammar',
-                actionType: 'improve',
+                actionType: 'improve-grammar',
                 title: 'Fix grammar (default)',
                 maxLabelWidth: '100px',
               }}
               subButtons={[
                 {
-                  icon: '✓',
+                  icon: 'check',
                   label: 'Spelling',
-                  onClick: () => onFixSpellingClick(),
+                  onClick: () => onFixSpellingClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-spelling',
-                  actionType: 'improve',
+                  actionType: 'improve-spelling',
                   title: 'Fix spelling',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '💼',
+                  icon: 'briefcase',
                   label: 'Professional',
-                  onClick: () => onMakeProfessionalClick(),
+                  onClick: () => onMakeProfessionalClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-professional',
-                  actionType: 'improve',
+                  actionType: 'improve-professional',
                   title: 'Make professional',
                   maxLabelWidth: '110px',
                 },
                 {
-                  icon: '🎩',
+                  icon: 'formal',
                   label: 'Formal',
-                  onClick: () => onMakeFormalClick(),
+                  onClick: () => onMakeFormalClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-formal',
-                  actionType: 'improve',
+                  actionType: 'improve-formal',
                   title: 'Make formal',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '📖',
+                  icon: 'book',
                   label: 'Simplify',
-                  onClick: () => onSimplifyClick(),
+                  onClick: () => onSimplifyClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-simplify',
-                  actionType: 'improve',
+                  actionType: 'improve-simplify',
                   title: 'Simplify text',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '📝',
+                  icon: 'note',
                   label: 'Expand',
-                  onClick: () => onExpandClick(),
+                  onClick: () => onExpandClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-expand',
-                  actionType: 'improve',
+                  actionType: 'improve-expand',
                   title: 'Expand text',
                   maxLabelWidth: '100px',
                 },
                 {
-                  icon: '⚡',
+                  icon: 'lightning',
                   label: 'Concise',
-                  onClick: () => onMakeConciseClick(),
+                  onClick: () => onMakeConciseClick(resultPanelActive),
                   disabled: !selectedText,
                   isLoading: isLoading && action === 'improve-concise',
-                  actionType: 'improve',
+                  actionType: 'improve-concise',
                   title: 'Make concise',
                   maxLabelWidth: '100px',
                 },
@@ -2565,7 +2726,7 @@ const AIToolbar = () => {
           {/* Dictation Button - Only show for editable content */}
           {isEditableContent && (
             <ToolbarButton
-              icon={isRecording ? "⏹️" : "🎤"}
+              icon={isRecording ? 'stop' : 'microphone'}
               label={isRecording ? `${recordingDuration}s` : "Dictate"}
               onClick={onDictationClick}
               disabled={false}
@@ -2586,7 +2747,7 @@ const AIToolbar = () => {
           {/* Insert button - Only show when result is ready for editable content */}
           {result && !hasInserted && isEditableContent && (action?.startsWith('improve-') || action === 'dictation' || action === 'translate') && (
             <ToolbarButton
-              icon="✏️"
+              icon='edit'
               label="Insert"
               onClick={onInsertClick}
               disabled={false}
@@ -2601,7 +2762,7 @@ const AIToolbar = () => {
           {/* Undo button - Restore original text after insert */}
           {hasInserted && isEditableContent && originalContent && (
             <ToolbarButton
-              icon="↩️"
+              icon='undo'
               label="Undo"
               onClick={onUndoClick}
               disabled={false}
@@ -2616,7 +2777,7 @@ const AIToolbar = () => {
           {/* Redo button - Restore improved text after undo */}
           {!hasInserted && isEditableContent && improvedContent && (
             <ToolbarButton
-              icon="↪️"
+              icon='redo'
               label="Redo"
               onClick={onRedoClick}
               disabled={false}
@@ -2634,43 +2795,43 @@ const AIToolbar = () => {
             isLoading={isLoading}
             isLightBackground={isLightBackgroundToolbar}
             mainButton={{
-              icon: '📝',
+              icon: 'note',
               label: 'Summarize',
-              onClick: () => onSummarizeClick('tldr'),
+              onClick: () => onSummarizeClick('tldr', resultPanelActive),
               disabled: !selectedText,
               isLoading: isLoading && action === 'summarize-tldr',
-              actionType: 'summarize',
+              actionType: 'summarize-tldr',
               title: 'Summarize (TL;DR)',
               maxLabelWidth: '100px',
             }}
             subButtons={[
               {
-                icon: '📰',
+                icon: 'article',
                 label: 'Headline',
-                onClick: () => onSummarizeClick('headline'),
+                onClick: () => onSummarizeClick('headline', resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'summarize-headline',
-                actionType: 'summarize',
+                actionType: 'summarize-headline',
                 title: 'Generate headline',
                 maxLabelWidth: '100px',
               },
               {
-                icon: '�',
+                icon: 'key',
                 label: 'Key Points',
-                onClick: () => onSummarizeClick('key-points'),
+                onClick: () => onSummarizeClick('key-points', resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'summarize-key-points',
-                actionType: 'summarize',
+                actionType: 'summarize-key-points',
                 title: 'Extract key points',
                 maxLabelWidth: '100px',
               },
               {
-                icon: '✨',
+                icon: 'magic',
                 label: 'Teaser',
-                onClick: () => onSummarizeClick('teaser'),
+                onClick: () => onSummarizeClick('teaser', resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'summarize-teaser',
-                actionType: 'summarize',
+                actionType: 'summarize-teaser',
                 title: 'Create teaser',
                 maxLabelWidth: '100px',
               },
@@ -2684,9 +2845,9 @@ const AIToolbar = () => {
               isLoading={isLoading}
               isLightBackground={isLightBackgroundToolbar}
               mainButton={{
-                icon: '🌐',
+                icon: 'globe',
                 label: 'Translate',
-                onClick: () => onTranslateClick(),
+                onClick: () => onTranslateClick(null, true, resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'translate',
                 actionType: 'translate',
@@ -2695,12 +2856,12 @@ const AIToolbar = () => {
               }}
               subButtons={[
                 {
-                icon: '🔍',
+                icon: 'search',
                 label: 'Detect Lang',
-                onClick: () => onDetectLanguageClick(),
+                onClick: () => onDetectLanguageClick(resultPanelActive),
                 disabled: !selectedText,
                 isLoading: isLoading && action === 'detect-language',
-                actionType: 'translate',
+                actionType: 'detect-language',
                 title: 'Detect language',
                 maxLabelWidth: '90px',
               },
@@ -2714,33 +2875,33 @@ const AIToolbar = () => {
                 isLoading={isLoading}
                 isLightBackground={isLightBackgroundToolbar}
                 mainButton={{
-                  icon: '🖼️',
+                  icon: 'image',
                   label: 'Describe',
-                  onClick: () => onImageAnalysisClick('describe'),
+                  onClick: () => onImageAnalysisClick('describe', resultPanelActive),
                   disabled: false,
                   isLoading: isLoading && action === 'image-describe',
-                  actionType: 'image',
+                  actionType: 'image-describe',
                   title: 'Describe image',
                   maxLabelWidth: '100px',
                 }}
                 subButtons={[
                   {
-                    icon: '📄',
+                    icon: 'document',
                     label: 'Extract Text',
-                    onClick: () => onImageAnalysisClick('extract-text'),
+                    onClick: () => onImageAnalysisClick('extract-text', resultPanelActive),
                     disabled: false,
                     isLoading: isLoading && action === 'image-extract-text',
-                    actionType: 'image',
+                    actionType: 'image-extract-text',
                     title: 'Extract text',
                     maxLabelWidth: '100px',
                   },
                   {
-                    icon: '🏷️',
+                    icon: 'tag',
                     label: 'Identify Objects',
-                    onClick: () => onImageAnalysisClick('identify-objects'),
+                    onClick: () => onImageAnalysisClick('identify-objects', resultPanelActive),
                     disabled: false,
                     isLoading: isLoading && action === 'image-identify-objects',
-                    actionType: 'image',
+                    actionType: 'image-identify-objects',
                     title: 'Identify objects',
                     maxLabelWidth: '150px',
                   },
@@ -2751,7 +2912,7 @@ const AIToolbar = () => {
           {/* Add to Chat button - hide when showing toolbar from input focus (dictation mode) */}
           {!showingFromInputFocusRef.current && (
             <ToolbarButton
-              icon="💬"
+              icon='ai'
               label="Add to Chat"
               onClick={onAddToChatClick}
               disabled={false}
@@ -2766,7 +2927,7 @@ const AIToolbar = () => {
       )}
       
       {/* Result panel - shown BELOW toolbar, toolbar stays visible */}
-      {(result || error) && isVisible && (
+      {shouldRenderResultPanel && (
         <ToolbarResultPanel
           ref={resultPanelRef}
           result={result}
@@ -2775,6 +2936,7 @@ const AIToolbar = () => {
           action={action}
           position={position}
           isLightBackground={isLightBackgroundPanel}
+          animationClass={isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'}
           detectedLanguageName={detectedLanguageName}
           selectedTargetLanguage={selectedTargetLanguage}
           onTargetLanguageChange={(lang) => {
@@ -2782,7 +2944,6 @@ const AIToolbar = () => {
             onTranslateClick(lang);
           }}
           aiConfig={aiConfig}
-          isRegenerating={isRegenerating}
           onRegenerateClick={onRegenerateClick}
           copySuccess={copySuccess}
           onCopyClick={onCopyClick}
