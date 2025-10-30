@@ -18,7 +18,14 @@ const TTSProviderStep = () => {
   
   // Kokoro config state
   const [kokoroConfig, setKokoroConfig] = useState(DefaultTTSConfig.kokoro || {});
-  const [kokoroStatus, setKokoroStatus] = useState({ initialized: false, loading: false });
+  const [kokoroStatus, setKokoroStatus] = useState({ 
+    initialized: false, 
+    loading: false,
+    downloading: false,
+    progress: 0,
+    details: ''
+  });
+  const [testingVoice, setTestingVoice] = useState(false);
   
   // OpenAI config state
   const [openAIKey, setOpenAIKey] = useState('');
@@ -195,7 +202,7 @@ const TTSProviderStep = () => {
 
   // Initialize Kokoro (simplified - user can fully configure in settings later)
   const handleKokoroInit = async () => {
-    setKokoroStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
+    setKokoroStatus(prev => ({ ...prev, downloading: true, progress: 0, details: 'Starting download...' }));
     try {
       await TTSServiceProxy.configure({
         enabled: true,
@@ -205,13 +212,14 @@ const TTSProviderStep = () => {
       
       await TTSServiceProxy.initializeKokoro((progressData) => {
         const percent = typeof progressData.percent === 'number' ? progressData.percent : 0;
-        setKokoroStatus(prev => ({ ...prev, progress: percent, downloading: true }));
+        const details = progressData.file || progressData.status || 'Downloading...';
+        setKokoroStatus(prev => ({ ...prev, progress: percent, downloading: true, details }));
       });
       
-      setKokoroStatus({ initialized: true, downloading: false, progress: 100 });
+      setKokoroStatus({ initialized: true, downloading: false, progress: 100, details: 'Complete!' });
     } catch (error) {
       console.error('Kokoro init failed:', error);
-      setKokoroStatus({ initialized: false, downloading: false, error: error.message });
+      setKokoroStatus({ initialized: false, downloading: false, error: error.message, progress: 0, details: '' });
     }
   };
 
@@ -227,6 +235,7 @@ const TTSProviderStep = () => {
 
   // Test Kokoro voice
   const handleTestKokoroVoice = async () => {
+    setTestingVoice(true);
     try {
       // Configure TTS with current Kokoro config
       await TTSServiceProxy.configure({
@@ -239,6 +248,8 @@ const TTSProviderStep = () => {
       await TTSServiceProxy.testConnection('Hello! This is a test of the Kokoro voice.');
     } catch (error) {
       console.error('Voice test failed:', error);
+    } finally {
+      setTestingVoice(false);
     }
   };
 
@@ -414,6 +425,7 @@ const TTSProviderStep = () => {
           onInitialize={handleKokoroInit}
           onCheckStatus={handleCheckKokoroStatus}
           onTestVoice={handleTestKokoroVoice}
+          testingVoice={testingVoice}
           isLightBackground={false}
           showTitle={false}
           showTestButton={true}

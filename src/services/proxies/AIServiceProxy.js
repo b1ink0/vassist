@@ -255,8 +255,17 @@ class AIServiceProxy extends ServiceProxy {
       return response;
     } else {
       const ChromeAIValidator = (await import('../ChromeAIValidator.js')).default;
-      return await ChromeAIValidator.startDownload(onProgress);
+      return await ChromeAIValidator.monitorDownload(onProgress);
     }
+  }
+
+  /**
+   * Download Chrome AI model (alias for startChromeAIDownload)
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<Object>} Download result
+   */
+  async downloadChromeAIModel(onProgress) {
+    return await this.startChromeAIDownload(onProgress);
   }
 
   /**

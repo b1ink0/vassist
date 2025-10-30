@@ -74,6 +74,7 @@ const KokoroTTSConfig = ({
   onInitialize,
   onCheckStatus,
   onTestVoice,
+  testingVoice = false, // New prop to show loading state
   isLightBackground = false,
   showTitle = true,
   showTestButton = true,
@@ -282,12 +283,12 @@ const KokoroTTSConfig = ({
             >
               {kokoroStatus.checking ? (
                 <>
-                  <span className="animate-spin"><Icon name="hourglass" size={16} /></span>
+                  <span className="animate-spin"><Icon name="spinner" size={16} /></span>
                   <span>Loading...</span>
                 </>
               ) : kokoroStatus.downloading ? (
                 <>
-                  <span className="animate-spin"><Icon name="hourglass" size={16} /></span>
+                  <span className="animate-spin"><Icon name="spinner" size={16} /></span>
                   <span>Downloading...</span>
                 </>
               ) : kokoroStatus.initialized ? (
@@ -364,13 +365,23 @@ const KokoroTTSConfig = ({
           
           <button
             onClick={onTestVoice}
+            disabled={testingVoice}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full py-2 text-sm font-medium rounded-lg ${
               isSetupMode ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent' : ''
-            }`}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             <div className="flex items-center justify-center gap-2">
-              <Icon name="volume" size={16} />
-              <span>Test Voice</span>
+              {testingVoice ? (
+                <>
+                  <span className="animate-spin"><Icon name="spinner" size={16} /></span>
+                  <span>Testing Voice...</span>
+                </>
+              ) : (
+                <>
+                  <Icon name="volume" size={16} />
+                  <span>Test Voice</span>
+                </>
+              )}
             </div>
           </button>
         </>

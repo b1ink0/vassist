@@ -106,8 +106,12 @@ export const ConfigProvider = ({ children }) => {
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
         setAiConfig(savedAiConfig);
         try {
-          await AIServiceProxy.configure(savedAiConfig);
-          console.log('[ConfigContext] AI Service configured');
+          if (savedAiConfig.provider) {
+            await AIServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] AI Service configured');
+          } else {
+            console.log('[ConfigContext] Skipping AI Service configuration - no provider set');
+          }
           
           // Configure AI Features services if enabled
           if (savedAiConfig.aiFeatures?.translator?.enabled) {

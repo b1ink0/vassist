@@ -842,6 +842,21 @@ export const iconMap = {
       <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+
+  // Flag - marker/indicator
+  'flag': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Copy - clipboard/duplicate
+  'copy': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 };
 
 export default iconMap;

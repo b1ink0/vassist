@@ -39,6 +39,71 @@ const WelcomeStep = () => {
         Get Started →
       </button>
 
+      {/* Chrome AI Requirements */}
+      <div className="mt-6 sm:mt-8 max-w-2xl mx-auto px-4">
+        <details className="group text-left">
+          <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-center gap-2 hover:text-white transition-colors">
+            <Icon name="info" size={16} />
+            <span>Using Chrome Built-in AI? Click here first</span>
+            <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+          </summary>
+          <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-3">
+            <p className="text-xs text-blue-200 mb-3">
+              If you plan to use Chrome's built-in AI features (free, on-device), you'll need to enable these flags <strong>before</strong> starting setup:
+            </p>
+            
+            <div className="space-y-2 text-xs">
+              <div className="flex items-start gap-2">
+                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <code className="text-blue-300 text-[11px]">chrome://flags/#optimization-guide-on-device-model</code>
+                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled BypassPerfRequirement</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2">
+                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <code className="text-blue-300 text-[11px]">chrome://flags/#prompt-api-for-gemini-nano</code>
+                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2">
+                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <code className="text-blue-300 text-[11px]">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code>
+                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (for voice input)</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2">
+                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <code className="text-blue-300 text-[11px]">chrome://flags/#writer-api-for-gemini-nano</code>
+                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (optional - for content generation)</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2">
+                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <code className="text-blue-300 text-[11px]">chrome://flags/#rewriter-api-for-gemini-nano</code>
+                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (optional - for text rewriting)</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-white/10">
+              <p className="text-[11px] text-white/70">
+                <Icon name="alert-circle" size={12} className="inline mr-1" />
+                After enabling flags, <strong>restart Chrome completely</strong> before continuing with setup.
+              </p>
+            </div>
+          </div>
+        </details>
+      </div>
+
       {/* Footer hint */}
       <p className="text-xs text-white/50 mt-6 sm:mt-8">
         Takes less than 2 minutes

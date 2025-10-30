@@ -110,7 +110,7 @@ const CharacterIntroStep = () => {
             {/* Display Mode Selection */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-white mb-4">Display Mode</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 {/* Standard Mode */}
                 <div 
                   className={`relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${

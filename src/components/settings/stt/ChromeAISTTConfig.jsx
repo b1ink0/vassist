@@ -163,15 +163,6 @@ const ChromeAISTTConfig = ({
               Copy
             </button>
           </div>
-          <div className="flex items-center justify-between">
-            <code className="text-white/70">multimodal-input</code>
-            <button
-              onClick={() => navigator.clipboard.writeText('chrome://flags/#multimodal-input')}
-              className="text-blue-400 hover:text-blue-300 text-xs"
-            >
-              Copy
-            </button>
-          </div>
           <p className="text-white/50 mt-2">
             Enable these flags and restart Chrome, then visit <code className="text-blue-300">chrome://components</code> to download Gemini Nano
           </p>

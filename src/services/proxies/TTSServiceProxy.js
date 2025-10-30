@@ -13,6 +13,7 @@ class TTSServiceProxy extends ServiceProxy {
   constructor() {
     super('TTSService');
     this.directService = TTSService;
+    this.lastConfigured = null; // Store last configured settings for initialization
   }
 
   /**
@@ -20,6 +21,9 @@ class TTSServiceProxy extends ServiceProxy {
    * @param {Object} config - TTS configuration
    */
   async configure(config) {
+    // Store the config for later use in initializeKokoro
+    this.lastConfigured = config;
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
@@ -426,12 +430,18 @@ class TTSServiceProxy extends ServiceProxy {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TTSServiceProxy: Bridge not available');
       
-      // Import StorageServiceProxy to load config
-      const { default: StorageServiceProxy } = await import('./StorageServiceProxy.js');
-      const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
-      
-      // Load current TTS config to get modelId and device
-      const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+      // Determine config source: use lastConfigured if available, otherwise load from storage
+      let kokoroConfig;
+      if (this.lastConfigured && this.lastConfigured.kokoro) {
+        console.log('[TTSServiceProxy] Using lastConfigured for initialization:', this.lastConfigured.kokoro);
+        kokoroConfig = this.lastConfigured.kokoro;
+      } else {
+        console.log('[TTSServiceProxy] Loading config from storage for initialization');
+        const { default: StorageServiceProxy } = await import('./StorageServiceProxy.js');
+        const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
+        const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        kokoroConfig = config.kokoro || {};
+      }
       
       // Set up message listener for progress updates via bridge
       let progressListener = null;
@@ -448,8 +458,8 @@ class TTSServiceProxy extends ServiceProxy {
         const response = await bridge.sendMessage(
           MessageTypes.KOKORO_INIT,
           {
-            modelId: config.kokoro?.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
-            device: config.kokoro?.device || 'auto'
+            modelId: kokoroConfig.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
+            device: kokoroConfig.device || 'auto'
           },
           { timeout: 300000 } // 5 minutes for model download
         );
