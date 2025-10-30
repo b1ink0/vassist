@@ -745,6 +745,15 @@ export const ConfigProvider = ({ children }) => {
     return summary;
   }, [aiConfig]);
 
+  const testRewriter = useCallback(async (text) => {
+    if (!aiConfig.aiFeatures?.rewriter?.enabled) {
+      throw new Error('Rewriter is disabled in settings');
+    }
+    // TODO: Implement RewriterServiceProxy
+    // For now, return a placeholder message
+    return `Rewriter feature coming soon! Input text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`;
+  }, [aiConfig]);
+
   // Auto-check Kokoro status on mount and auto-initialize if model is already downloaded
   // This happens BEFORE the Babylon scene loads (pre-initialization)
   useEffect(() => {
@@ -810,6 +819,7 @@ export const ConfigProvider = ({ children }) => {
     testTranslator,
     testLanguageDetector,
     testSummarizer,
+    testRewriter,
     
     // TTS Config
     ttsConfig,
@@ -840,7 +850,7 @@ export const ConfigProvider = ({ children }) => {
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,
-  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
+  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, testRewriter, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
 
   return (
     <ConfigContext.Provider value={value}>

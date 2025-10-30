@@ -19,6 +19,7 @@ import sttService from '../../src/services/STTService.js';
 import translatorService from '../../src/services/TranslatorService.js';
 import languageDetectorService from '../../src/services/LanguageDetectorService.js';
 import summarizerService from '../../src/services/SummarizerService.js';
+import ChromeAIValidator from '../../src/services/ChromeAIValidator.js';
 
 console.log('[Background] Service worker starting...');
 
@@ -333,6 +334,26 @@ async function registerHandlers() {
     if (!tabId) throw new Error('Tab ID required');
     const success = await aiService.testConnection(tabId);
     return { success };
+  });
+
+  // Chrome AI Validator handlers
+  backgroundBridge.registerHandler(MessageTypes.CHROME_AI_CHECK_AVAILABILITY, async () => {
+    const result = await ChromeAIValidator.checkAvailability();
+    return result;
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.CHROME_AI_IS_SUPPORTED, async () => {
+    const supported = ChromeAIValidator.isSupported();
+    return { supported };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.CHROME_AI_START_DOWNLOAD, async () => {
+    // For extension mode, we can't directly start download
+    // This is handled manually by opening chrome://components
+    return { 
+      success: false, 
+      message: 'Manual download required via chrome://components' 
+    };
   });
 
   // TTS Service handlers

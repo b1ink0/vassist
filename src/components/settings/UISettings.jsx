@@ -8,6 +8,9 @@ import { useConfig } from '../../contexts/ConfigContext';
 import { BackgroundThemeModes, PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
+import { useSetup } from '../../contexts/SetupContext';
+import { useState } from 'react';
+import Icon from '../icons/Icon';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -16,6 +19,9 @@ const UISettings = ({ isLightBackground }) => {
     updateUIConfig,
   } = useConfig();
 
+  const { resetSetup } = useSetup();
+  const [isResetting, setIsResetting] = useState(false);
+
   // Check if running as extension
   const isExtensionMode = ExtensionBridge.isExtensionMode();
 
@@ -23,109 +29,154 @@ const UISettings = ({ isLightBackground }) => {
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-white mb-4">UI Configuration</h3>
       
+      {/* Start Setup Again Button */}
+      <div className="space-y-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+        <button
+          onClick={async () => {
+            if (isResetting) return;
+            
+            if (window.confirm('This will reset the setup wizard and take you back to the beginning. Continue?')) {
+              try {
+                setIsResetting(true);
+                await resetSetup();
+                // Reload to start fresh
+                window.location.reload();
+              } catch (error) {
+                console.error('Failed to reset setup:', error);
+                alert('Failed to reset setup. Please try again.');
+              } finally {
+                setIsResetting(false);
+              }
+            }
+          }}
+          disabled={isResetting}
+          className="glass-button w-full px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+        >
+          <Icon name="refresh" size={16} />
+          {isResetting ? 'Resetting...' : 'Start Setup Wizard Again'}
+        </button>
+        <p className="text-xs text-purple-300">
+          Re-run the initial setup wizard to reconfigure your assistant
+        </p>
+      </div>
+      
       {/* Auto-load on All Pages Toggle - Extension mode only */}
       {isExtensionMode && (
         <div className="space-y-2">
-          <label className="flex items-center space-x-3 cursor-pointer">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="text-sm text-white font-medium">Auto-load on Every Page</label>
+              <p className="text-xs text-white/50 mt-0.5">
+                {uiConfig.autoLoadOnAllPages !== false
+                  ? 'Extension loads automatically on all pages' 
+                  : 'Click extension icon to manually load on each page'}
+              </p>
+            </div>
             <Toggle
               checked={uiConfig.autoLoadOnAllPages !== false}
               onChange={(checked) => updateUIConfig('autoLoadOnAllPages', checked)}
             />
-            <span className="text-sm text-white">Auto-load on Every Page</span>
-          </label>
-          <p className="text-xs text-white/50 ml-11">
-            {uiConfig.autoLoadOnAllPages !== false
-              ? 'Extension loads automatically on all pages' 
-              : 'Click extension icon to manually load on each page'}
-          </p>
+          </div>
         </div>
       )}
       
-      {/* Model Loading Toggle */}
-      <div className="space-y-2">
-        <label className="flex items-center space-x-3 cursor-pointer">
-          <Toggle
-            checked={uiConfig.enableModelLoading}
-            onChange={(checked) => updateUIConfig('enableModelLoading', checked)}
-          />
-          <span className="text-sm text-white">Enable 3D Model Loading</span>
-        </label>
-        <p className="text-xs text-white/50 ml-11">
-          {uiConfig.enableModelLoading 
-            ? 'Virtual assistant with 3D avatar' 
-            : 'Chat-only mode (no 3D model)'}
-        </p>
-      </div>
-
       {/* Colored Icons Toggle */}
       <div className="space-y-2">
-        <label className="flex items-center space-x-3 cursor-pointer">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <label className="text-sm text-white font-medium">Use Colored Icons</label>
+            <p className="text-xs text-white/50 mt-0.5">
+              {uiConfig.enableColoredIcons 
+                ? 'Icons are displayed in color' 
+                : 'Icons are displayed in monochrome gray'}
+            </p>
+          </div>
           <Toggle
             checked={uiConfig.enableColoredIcons || false}
             onChange={(checked) => updateUIConfig('enableColoredIcons', checked)}
           />
-          <span className="text-sm text-white">Use Colored Icons</span>
-        </label>
-        <p className="text-xs text-white/50 ml-11">
-          {uiConfig.enableColoredIcons 
-            ? 'Icons are displayed in color' 
-            : 'Icons are displayed in monochrome gray'}
-        </p>
+        </div>
         
         {/* Toolbar Only Sub-option */}
         {uiConfig.enableColoredIcons && (
-          <div className="ml-11 mt-2">
-            <label className="flex items-center space-x-3 cursor-pointer">
+          <div className="ml-4 mt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <label className="text-xs text-white font-medium">Toolbar Only</label>
+                <p className="text-xs text-white/50 mt-0.5">
+                  {uiConfig.enableColoredIconsToolbarOnly 
+                    ? 'Colored icons only in AI toolbar' 
+                    : 'Colored icons everywhere'}
+                </p>
+              </div>
               <Toggle
                 checked={uiConfig.enableColoredIconsToolbarOnly || false}
                 onChange={(checked) => updateUIConfig('enableColoredIconsToolbarOnly', checked)}
               />
-              <span className="text-xs text-white">Toolbar Only</span>
-            </label>
-            <p className="text-xs text-white/50 ml-11">
-              {uiConfig.enableColoredIconsToolbarOnly 
-                ? 'Colored icons only in AI toolbar' 
-                : 'Colored icons everywhere'}
-            </p>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Character Display Settings - Only show when 3D model is enabled */}
-      {uiConfig.enableModelLoading && (
-        <div className="space-y-4 border-t border-white/10 pt-4">
-          <h4 className="text-sm font-semibold text-white mb-3">Character Display</h4>
-          
+      {/* Virtual Companion Settings */}
+      <div className="space-y-4 border-t border-white/10 pt-4">
+        <h4 className="text-sm font-semibold text-white mb-3">Virtual Companion</h4>
+        
+        {/* Enable 3D Model Loading Toggle */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="text-sm text-white font-medium">Enable 3D Model Loading</label>
+              <p className="text-xs text-white/50 mt-0.5">
+                {uiConfig.enableModelLoading 
+                  ? 'Virtual assistant with 3D avatar' 
+                  : 'Chat-only mode (no 3D model)'}
+              </p>
+            </div>
+            <Toggle
+              checked={uiConfig.enableModelLoading}
+              onChange={(checked) => updateUIConfig('enableModelLoading', checked)}
+            />
+          </div>
+        </div>
+
+        {/* Character Display Settings - Only show when 3D model is enabled */}
+        {uiConfig.enableModelLoading && (
+          <>
           {/* Portrait Mode Toggle */}
           <div className="space-y-2">
-            <label className="flex items-center space-x-3 cursor-pointer">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <label className="text-sm text-white font-medium">Portrait Mode</label>
+                <p className="text-xs text-white/50 mt-0.5">
+                  {uiConfig.enablePortraitMode 
+                    ? 'Upper body framing with closer camera view' 
+                    : 'Full body view with standard camera'}
+                </p>
+              </div>
               <Toggle
                 checked={uiConfig.enablePortraitMode || false}
                 onChange={(checked) => updateUIConfig('enablePortraitMode', checked)}
               />
-              <span className="text-sm text-white">Portrait Mode</span>
-            </label>
-            <p className="text-xs text-white/50 ml-11">
-              {uiConfig.enablePortraitMode 
-                ? 'Upper body framing with closer camera view' 
-                : 'Full body view with standard camera'}
-            </p>
+            </div>
           </div>
 
           {/* Physics Toggle */}
           <div className="space-y-2">
-            <label className="flex items-center space-x-3 cursor-pointer">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <label className="text-sm text-white font-medium">Physics Simulation</label>
+                <p className="text-xs text-white/50 mt-0.5">
+                  {uiConfig.enablePhysics !== false
+                    ? 'Realistic hair and cloth movement' 
+                    : 'Disable physics for better performance'}
+                </p>
+              </div>
               <Toggle
                 checked={uiConfig.enablePhysics !== false}
                 onChange={(checked) => updateUIConfig('enablePhysics', checked)}
               />
-              <span className="text-sm text-white">Physics Simulation</span>
-            </label>
-            <p className="text-xs text-white/50 ml-11">
-              {uiConfig.enablePhysics !== false
-                ? 'Realistic hair and cloth movement' 
-                : 'Disable physics for better performance'}
-            </p>
+            </div>
           </div>
 
           {/* FPS Limit */}
@@ -172,8 +223,9 @@ const UISettings = ({ isLightBackground }) => {
                 : 'Changes will apply on next page load or reload'}
             </p>
           </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Chat Position for chat-only mode */}
       {!uiConfig.enableModelLoading && (
@@ -203,16 +255,18 @@ const UISettings = ({ isLightBackground }) => {
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
         
-        <label className="flex items-center space-x-3 cursor-pointer">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <label className="text-sm text-white font-medium">Enable Developer Tools</label>
+            <p className="text-xs text-white/50 mt-0.5">
+              Show draggable debug panel for testing animations and positions
+            </p>
+          </div>
           <Toggle
             checked={uiConfig.enableDebugPanel || false}
             onChange={(checked) => updateUIConfig('enableDebugPanel', checked)}
           />
-          <span className="text-sm text-white">Enable Developer Tools</span>
-        </label>
-        <p className="text-xs text-white/50 ml-11">
-          Show draggable debug panel for testing animations and positions
-        </p>
+        </div>
       </div>
 
       {/* Chat & UI Settings */}
@@ -221,16 +275,18 @@ const UISettings = ({ isLightBackground }) => {
         
         {/* Smooth Streaming Animation Toggle */}
         <div className="space-y-2">
-          <label className="flex items-center space-x-3 cursor-pointer">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="text-sm text-white font-medium">Smooth Response Animation</label>
+              <p className="text-xs text-yellow-400/80 mt-0.5">
+                ⚠️ Performance Impact: Enables smooth height animation for streaming text. May affect performance on lower-end devices.
+              </p>
+            </div>
             <Toggle
               checked={uiConfig.smoothStreamingAnimation || false}
               onChange={(checked) => updateUIConfig('smoothStreamingAnimation', checked)}
             />
-            <span className="text-sm text-white">Smooth Response Animation</span>
-          </label>
-          <p className="text-xs text-yellow-400/80 ml-11">
-            ⚠️ Performance Impact: Enables smooth height animation for streaming text. May affect performance on lower-end devices.
-          </p>
+          </div>
         </div>
 
         {/* Theme Mode */}
@@ -278,42 +334,48 @@ const UISettings = ({ isLightBackground }) => {
         <h4 className="text-sm font-semibold text-white mb-3">AI Toolbar</h4>
         
         {/* Enable AI Toolbar */}
-        <label className="flex items-center space-x-3 cursor-pointer">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <label className="text-sm text-white font-medium">Enable AI Toolbar</label>
+            <p className="text-xs text-white/50 mt-0.5">
+              Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions
+            </p>
+          </div>
           <Toggle
             checked={uiConfig.enableAIToolbar !== false}
             onChange={(checked) => updateUIConfig('enableAIToolbar', checked)}
           />
-          <span className="text-sm text-white">Enable AI Toolbar</span>
-        </label>
-        <p className="text-xs text-white/50 ml-11">
-          Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions
-        </p>
+        </div>
 
         {/* Show on Input Focus */}
         {uiConfig.enableAIToolbar !== false && (
           <>
-            <label className="flex items-center space-x-3 cursor-pointer mt-3">
+            <div className="flex items-center justify-between gap-3 mt-3">
+              <div className="flex-1">
+                <label className="text-sm text-white font-medium">Show on Input Focus</label>
+                <p className="text-xs text-white/50 mt-0.5">
+                  Automatically show toolbar with dictation when clicking on any text input field or editable area
+                </p>
+              </div>
               <Toggle
                 checked={uiConfig.aiToolbar?.showOnInputFocus !== false}
                 onChange={(checked) => updateUIConfig('aiToolbar.showOnInputFocus', checked)}
               />
-              <span className="text-sm text-white">Show on Input Focus</span>
-            </label>
-            <p className="text-xs text-white/50 ml-11">
-              Automatically show toolbar with dictation when clicking on any text input field or editable area
-            </p>
+            </div>
 
             {/* Show on Image Hover */}
-            <label className="flex items-center space-x-3 cursor-pointer mt-3">
+            <div className="flex items-center justify-between gap-3 mt-3">
+              <div className="flex-1">
+                <label className="text-sm text-white font-medium">Show on Image Hover</label>
+                <p className="text-xs text-white/50 mt-0.5">
+                  Automatically show toolbar with image analysis actions when hovering over any image
+                </p>
+              </div>
               <Toggle
                 checked={uiConfig.aiToolbar?.showOnImageHover !== false}
                 onChange={(checked) => updateUIConfig('aiToolbar.showOnImageHover', checked)}
               />
-              <span className="text-sm text-white">Show on Image Hover</span>
-            </label>
-            <p className="text-xs text-white/50 ml-11">
-              Automatically show toolbar with image analysis actions when hovering over any image
-            </p>
+            </div>
           </>
         )}
       </div>

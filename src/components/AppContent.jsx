@@ -10,8 +10,10 @@ import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
 import LoadingIndicator from './LoadingIndicator';
 import ModelLoadingOverlay from './ModelLoadingOverlay';
+import SetupWizard from './setup/SetupWizard';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
+import { useSetup } from '../contexts/SetupContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
 
 function AppContent({ mode = 'development' }) {
@@ -30,6 +32,9 @@ function AppContent({ mode = 'development' }) {
 
   // Get Kokoro status from ConfigContext
   const { kokoroStatus, ttsConfig } = useConfig();
+  
+  // Get setup status
+  const { setupCompleted, isLoading: isSetupLoading } = useSetup();
   
   // Auto-unmount when tab is hidden for 15+ seconds
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
@@ -79,6 +84,15 @@ function AppContent({ mode = 'development' }) {
       />
     );
   }, [enableModelLoading, shouldMountModel, shouldWaitForKokoro, handleAssistantReady, mode, assistantRef]);
+  
+  // Show setup wizard if setup not completed
+  if (isSetupLoading) {
+    return <LoadingIndicator isVisible={true} />;
+  }
+  
+  if (!setupCompleted) {
+    return <SetupWizard />;
+  }
 
   return (
     <div className="relative">

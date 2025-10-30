@@ -12,7 +12,15 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
 
 const VirtualAssistant = forwardRef((props, ref) => {
-  const { onReady } = props;
+  const { 
+    onReady,
+    isPreview = false, // NEW: Preview mode for setup wizard
+    previewWidth = '100%', // NEW: Width for preview mode
+    previewHeight = '100%', // NEW: Height for preview mode
+    previewClassName = '', // NEW: Additional classes for preview mode
+    portraitMode = false, // NEW: Enable portrait mode in preview
+    previewPosition = 'bottom-center' // NEW: Position preset for preview mode
+  } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig(); // Get uiConfig, update function, and loading state
   const { savedModelPosition, setSavedModelPosition } = useApp(); // Get saved position from context
   
@@ -399,8 +407,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
   return (
     <>
-      {/* Custom loading indicator - shown while model loads OR config loads */}
-      <LoadingIndicator isVisible={!isReady || isConfigLoading} progress={loadingProgress} />
+      {/* Custom loading indicator - shown while model loads OR config loads (skip in preview mode) */}
+      {!isPreview && <LoadingIndicator isVisible={!isReady || isConfigLoading} progress={loadingProgress} />}
       
       {/* Only render Babylon scene after config is loaded */}
       {!isConfigLoading && (
@@ -409,12 +417,16 @@ const VirtualAssistant = forwardRef((props, ref) => {
           onSceneReady={handleSceneReady}
           onLoadProgress={handleLoadProgress}
           positionManagerRef={positionManagerRef}
+          isPreview={isPreview}
+          previewWidth={previewWidth}
+          previewHeight={previewHeight}
+          previewClassName={previewClassName}
           sceneConfig={{ 
-            uiConfig,
-            // Pass physics setting from uiConfig (defaults to true if not set)
-            enablePhysics: uiConfig?.enablePhysics !== false,
-            // Pass saved position (from context) to override preset on remount
-            savedModelPosition: savedModelPosition
+            uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
+            // Pass physics setting from uiConfig (defaults to true if not set, disable in preview for performance)
+            enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
+            // Pass saved position (from context) to override preset on remount - NOT in preview mode
+            savedModelPosition: isPreview ? null : savedModelPosition
           }}
         />
       )}

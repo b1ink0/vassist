@@ -155,6 +155,28 @@ export const iconMap = {
     </svg>
   ),
 
+  // Info - ℹ️
+  'info': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Download - ⬇️
+  'download': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Volume/Speaker for voice - 🔊
+  'volume': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
   // ============================================
   // COMMUNICATION
   // ============================================
@@ -685,6 +707,139 @@ export const iconMap = {
       <circle cx="19" cy="19" r="1.5" />
       {/* Connection lines */}
       <path d="M6.5 5H9M15 5H17.5M5 6.5V9M5 15V17.5M19 6.5V9M19 15V17.5M6.5 19H9M15 19H17.5" strokeLinecap="round" />
+    </svg>
+  ),
+
+  // ============================================
+  // MISSING ICONS ADDED
+  // ============================================
+
+  // Language/Translation - 🌐
+  'language': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M5 8h8M9 13h4M2 3h11M11 3v3M7 7l-3 9M4 16h6M16 16l2 6M22 16l-2 6M16 22h6M3 21h18" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // File Text - document with lines
+  'file-text': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Pen/Edit tool - ✍️
+  'pen': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M12 19l7-7 3 3-7 7-3-3z" />
+      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+      <path d="M2 2l7.586 7.586" />
+      <circle cx="11" cy="11" r="2" />
+    </svg>
+  ),
+
+  // Check Circle - success with circle
+  'check-circle': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Move - drag/reposition icon
+  'move': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Maximize - expand window
+  'maximize': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // User/Person - profile icon
+  'user': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
+
+  // Message Circle - chat bubble
+  'message-circle': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Arrow Down Right - diagonal positioning
+  'arrow-down-right': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M7 7l10 10M17 17V9M17 17H9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Arrow Down Left - diagonal positioning
+  'arrow-down-left': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M17 7L7 17M7 17h8M7 17V9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Arrow Up Right - diagonal positioning
+  'arrow-up-right': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M7 17L17 7M17 7H9M17 7v8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Arrow Up Left - diagonal positioning
+  'arrow-up-left': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M17 17L7 7M7 7h8M7 7v8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Map Pin - location marker
+  'map-pin': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  ),
+
+  // Shield - security/protection
+  'shield': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Mic - microphone (alias)
+  'mic': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+      <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // Sparkles - AI/magic effects
+  'sparkles': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M12 3l1.545 4.635L18.18 9.18l-4.635 1.545L12 15.36l-1.545-4.635L5.82 9.18l4.635-1.545L12 3zM19.5 3.5l.773 2.318L22.591 6.59l-2.318.773L19.5 9.681l-.773-2.318L16.409 6.59l2.318-.773L19.5 3.5zM19.5 14.319l.773 2.318 2.318.773-2.318.773-.773 2.318-.773-2.318-2.318-.773 2.318-.773.773-2.318z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+
+  // CPU - processor/system
+  'cpu': (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 };

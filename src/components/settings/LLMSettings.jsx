@@ -7,46 +7,43 @@
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
+import Toggle from '../common/Toggle';
 
 // Reusable Image Support Component
-const ImageSupportToggle = ({ providerKey, isLightBackground, updateAIConfig, aiConfig, additionalNote = '' }) => (
+const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
   <div className="space-y-2">
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-      <input
-        type="checkbox"
-        id={`${providerKey}-image-support`}
-        checked={aiConfig[providerKey]?.enableImageSupport !== false}
-        onChange={(e) => updateAIConfig(`${providerKey}.enableImageSupport`, e.target.checked)}
-        className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-      />
+    <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
       <label htmlFor={`${providerKey}-image-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
         Enable Image Support (Multi-modal)
+        <p className="text-xs text-white/50 mt-0.5">
+          Allows sending images with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
+        </p>
       </label>
+      <Toggle
+        id={`${providerKey}-image-support`}
+        checked={aiConfig[providerKey]?.enableImageSupport !== false}
+        onChange={(checked) => updateAIConfig(`${providerKey}.enableImageSupport`, checked)}
+      />
     </div>
-    <p className="text-xs text-white/50">
-      Allows sending images with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
-    </p>
   </div>
 );
 
 // Reusable Audio Support Component
-const AudioSupportToggle = ({ providerKey, isLightBackground, updateAIConfig, aiConfig, additionalNote = '' }) => (
+const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
   <div className="space-y-2">
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-      <input
-        type="checkbox"
-        id={`${providerKey}-audio-support`}
-        checked={aiConfig[providerKey]?.enableAudioSupport !== false}
-        onChange={(e) => updateAIConfig(`${providerKey}.enableAudioSupport`, e.target.checked)}
-        className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-      />
+    <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
       <label htmlFor={`${providerKey}-audio-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
         Enable Audio Support (Multi-modal)
+        <p className="text-xs text-white/50 mt-0.5">
+          Allows sending audio files with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
+        </p>
       </label>
+      <Toggle
+        id={`${providerKey}-audio-support`}
+        checked={aiConfig[providerKey]?.enableAudioSupport !== false}
+        onChange={(checked) => updateAIConfig(`${providerKey}.enableAudioSupport`, checked)}
+      />
     </div>
-    <p className="text-xs text-white/50">
-      Allows sending audio files with text prompts. Enabled by default.{additionalNote && ` ${additionalNote}`}
-    </p>
   </div>
 );
 
@@ -358,40 +355,36 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
 
           {/* Image Support */}
           <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="chrome-ai-image-support"
-                checked={aiConfig.chromeAi?.enableImageSupport !== false}
-                onChange={(e) => updateAIConfig('chromeAi.enableImageSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
+            <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
               <label htmlFor="chrome-ai-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
                 Enable Image Support (Multi-modal)
+                <p className="text-xs text-white/50 mt-0.5">
+                  Allows sending images with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
+                </p>
               </label>
+              <Toggle
+                id="chrome-ai-image-support"
+                checked={aiConfig.chromeAi?.enableImageSupport !== false}
+                onChange={(checked) => updateAIConfig('chromeAi.enableImageSupport', checked)}
+              />
             </div>
-            <p className="text-xs text-white/50">
-              Allows sending images with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
-            </p>
           </div>
 
           {/* Audio Support */}
           <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input
-                type="checkbox"
-                id="chrome-ai-audio-support"
-                checked={aiConfig.chromeAi?.enableAudioSupport !== false}
-                onChange={(e) => updateAIConfig('chromeAi.enableAudioSupport', e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/10 checked:bg-blue-500"
-              />
+            <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
               <label htmlFor="chrome-ai-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
                 Enable Audio Support (Multi-modal)
+                <p className="text-xs text-white/50 mt-0.5">
+                  Allows sending audio files with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
+                </p>
               </label>
+              <Toggle
+                id="chrome-ai-audio-support"
+                checked={aiConfig.chromeAi?.enableAudioSupport !== false}
+                onChange={(checked) => updateAIConfig('chromeAi.enableAudioSupport', checked)}
+              />
             </div>
-            <p className="text-xs text-white/50">
-              Allows sending audio files with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
-            </p>
           </div>
 
           {/* System Prompt */}

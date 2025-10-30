@@ -995,8 +995,8 @@ const ChatContainer = ({
             transition: 'transform 200ms ease-in-out'
           }}
         >
-          <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium`}>
-            📎 Drop
+          <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
+            <Icon name="attachment" size={20} /> Drop
           </p>
         </div>
       </div>
