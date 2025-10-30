@@ -195,6 +195,80 @@ class AIServiceProxy extends ServiceProxy {
   }
 
   /**
+   * Check Chrome AI availability
+   * @returns {Promise<Object>} Availability result object
+   */
+  async checkChromeAIAvailability() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
+        MessageTypes.CHROME_AI_CHECK_AVAILABILITY,
+        {},
+        { timeout: 10000 }
+      );
+      return response;
+    } else {
+      // Direct access to ChromeAIValidator through AIService
+      const ChromeAIValidator = (await import('../ChromeAIValidator.js')).default;
+      return await ChromeAIValidator.checkAvailability();
+    }
+  }
+
+  /**
+   * Check if Chrome AI is supported
+   * @returns {Promise<boolean>} True if supported
+   */
+  async isChromeAISupported() {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+      const response = await bridge.sendMessage(
+        MessageTypes.CHROME_AI_IS_SUPPORTED,
+        {},
+        { timeout: 5000 }
+      );
+      return response.supported || false;
+    } else {
+      const ChromeAIValidator = (await import('../ChromeAIValidator.js')).default;
+      return ChromeAIValidator.isSupported();
+    }
+  }
+
+  /**
+   * Start Chrome AI model download
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<Object>} Download result
+   */
+  async startChromeAIDownload(onProgress) {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
+      
+      // For extension mode, we can't stream progress easily
+      // So we'll poll for progress instead
+      const response = await bridge.sendMessage(
+        MessageTypes.CHROME_AI_START_DOWNLOAD,
+        {},
+        { timeout: 300000 } // 5 minutes for download
+      );
+      return response;
+    } else {
+      const ChromeAIValidator = (await import('../ChromeAIValidator.js')).default;
+      return await ChromeAIValidator.monitorDownload(onProgress);
+    }
+  }
+
+  /**
+   * Download Chrome AI model (alias for startChromeAIDownload)
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<Object>} Download result
+   */
+  async downloadChromeAIModel(onProgress) {
+    return await this.startChromeAIDownload(onProgress);
+  }
+
+  /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
   async callViaBridge(method, ...args) {

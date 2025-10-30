@@ -106,8 +106,12 @@ export const ConfigProvider = ({ children }) => {
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
         setAiConfig(savedAiConfig);
         try {
-          await AIServiceProxy.configure(savedAiConfig);
-          console.log('[ConfigContext] AI Service configured');
+          if (savedAiConfig.provider) {
+            await AIServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] AI Service configured');
+          } else {
+            console.log('[ConfigContext] Skipping AI Service configuration - no provider set');
+          }
           
           // Configure AI Features services if enabled
           if (savedAiConfig.aiFeatures?.translator?.enabled) {
@@ -745,6 +749,15 @@ export const ConfigProvider = ({ children }) => {
     return summary;
   }, [aiConfig]);
 
+  const testRewriter = useCallback(async (text) => {
+    if (!aiConfig.aiFeatures?.rewriter?.enabled) {
+      throw new Error('Rewriter is disabled in settings');
+    }
+    // TODO: Implement RewriterServiceProxy
+    // For now, return a placeholder message
+    return `Rewriter feature coming soon! Input text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`;
+  }, [aiConfig]);
+
   // Auto-check Kokoro status on mount and auto-initialize if model is already downloaded
   // This happens BEFORE the Babylon scene loads (pre-initialization)
   useEffect(() => {
@@ -810,6 +823,7 @@ export const ConfigProvider = ({ children }) => {
     testTranslator,
     testLanguageDetector,
     testSummarizer,
+    testRewriter,
     
     // TTS Config
     ttsConfig,
@@ -840,7 +854,7 @@ export const ConfigProvider = ({ children }) => {
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,
-  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
+  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, testRewriter, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
 
   return (
     <ConfigContext.Provider value={value}>
