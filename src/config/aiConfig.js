@@ -240,6 +240,18 @@ export const DefaultAIConfig = {
       defaultFormat: 'plain-text', // 'plain-text' or 'markdown'
       defaultLength: 'medium', // 'short', 'medium', 'long'
     },
+    rewriter: {
+      enabled: true, // Enable rewriter feature
+      defaultTone: 'as-is', // 'as-is', 'more-formal', 'more-casual'
+      defaultFormat: 'as-is', // 'as-is', 'plain-text', 'markdown'
+      defaultLength: 'as-is', // 'as-is', 'shorter', 'longer'
+    },
+    writer: {
+      enabled: true, // Enable writer feature
+      defaultTone: 'neutral', // 'formal', 'neutral', 'casual'
+      defaultFormat: 'plain-text', // 'plain-text', 'markdown'
+      defaultLength: 'medium', // 'short', 'medium', 'long'
+    },
   },
 };
 

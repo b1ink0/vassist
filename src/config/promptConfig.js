@@ -127,43 +127,113 @@ Usage Examples for "${word}":
 5. Example sentence five.`,
   },
 
-  // Text Improvement Prompts
-  textImprovement: {
-    grammar: (text) => `Fix grammar errors in the following text. Return ONLY the corrected text with no explanations:
+  // Rewriter Prompts (Chrome AI Rewriter API compatible)
+  // Supports tone: 'as-is', 'more-formal', 'more-casual'
+  // Supports format: 'as-is', 'plain-text', 'markdown'
+  // Supports length: 'as-is', 'shorter', 'longer'
+  rewriter: {
+    // More formal tone
+    moreFormal: (text) => `Rewrite the following text in a more formal, professional tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    spelling: (text) => `Fix spelling errors in the following text. Return ONLY the corrected text with no explanations:
+    // More casual tone
+    moreCasual: (text) => `Rewrite the following text in a more casual, conversational tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    clarity: (text) => `Improve clarity of the following text. Return ONLY the improved text with no explanations:
+    // Make shorter
+    shorter: (text) => `Rewrite the following text to be shorter while preserving key information. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    concise: (text) => `Make the following text more concise while preserving meaning. Return ONLY the concise version with no explanations:
+    // Make longer
+    longer: (text) => `Rewrite the following text to be longer with more detail and elaboration. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    professional: (text) => `Make the following text more professional in tone. Return ONLY the professional version with no explanations:
+    // Plain text format
+    plainText: (text) => `Rewrite the following text using plain text only, no markdown. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    casual: (text) => `Make the following text more casual and friendly in tone. Return ONLY the casual version with no explanations:
+    // Markdown format
+    markdown: (text) => `Rewrite the following text using markdown formatting. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    expand: (text) => `Expand the following text with more detail and elaboration. Return ONLY the expanded version with no explanations:
+    // Fix grammar (useful rewrite action)
+    grammar: (text) => `Rewrite the following text to fix grammar errors. Return ONLY the corrected text with no explanations:
 
 ${text}`,
 
+    // Fix spelling (useful rewrite action)
+    spelling: (text) => `Rewrite the following text to fix spelling errors. Return ONLY the corrected text with no explanations:
+
+${text}`,
+
+    // Improve clarity
+    clarity: (text) => `Rewrite the following text to improve clarity. Return ONLY the improved text with no explanations:
+
+${text}`,
+
+    // Professional tone
+    professional: (text) => `Rewrite the following text in a professional, business-appropriate tone. Return ONLY the rewritten text with no explanations:
+
+${text}`,
+
+    // Formal style
     formal: (text) => `Rewrite the following text in a formal, academic style. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
-    simplify: (text) => `Simplify the following text to make it easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
+    // Simplify
+    simplify: (text) => `Rewrite the following text to be simpler and easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
 
 ${text}`,
+
+    // Expand
+    expand: (text) => `Rewrite the following text to be more detailed and comprehensive. Return ONLY the expanded text with no explanations:
+
+${text}`,
+
+    // Make concise
+    concise: (text) => `Rewrite the following text to be more concise while preserving meaning. Return ONLY the concise version with no explanations:
+
+${text}`,
+  },
+
+  // Writer Prompts (Chrome AI Writer API compatible)
+  // Supports tone: 'formal', 'neutral', 'casual'
+  // Supports format: 'plain-text', 'markdown'
+  // Supports length: 'short', 'medium', 'long'
+  writer: {
+    // General writing prompt
+    write: (prompt) => `${prompt}`,
+
+    // Formal tone
+    formal: (prompt) => `Write in a formal, professional tone:\n\n${prompt}`,
+
+    // Neutral tone
+    neutral: (prompt) => `Write in a neutral, balanced tone:\n\n${prompt}`,
+
+    // Casual tone
+    casual: (prompt) => `Write in a casual, conversational tone:\n\n${prompt}`,
+
+    // Short length
+    short: (prompt) => `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
+
+    // Medium length
+    medium: (prompt) => `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
+
+    // Long length
+    long: (prompt) => `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
+
+    // Plain text format
+    plainText: (prompt) => `Write using plain text only, no markdown:\n\n${prompt}`,
+
+    // Markdown format
+    markdown: (prompt) => `Write using markdown formatting:\n\n${prompt}`,
   },
 
   // Image Analysis Prompts

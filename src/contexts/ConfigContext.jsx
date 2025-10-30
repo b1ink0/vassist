@@ -13,7 +13,9 @@ import {
   StorageServiceProxy,
   TranslatorServiceProxy,
   LanguageDetectorServiceProxy,
-  SummarizerServiceProxy
+  SummarizerServiceProxy,
+  RewriterServiceProxy,
+  WriterServiceProxy
 } from '../services/proxies';
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
@@ -122,6 +124,14 @@ export const ConfigProvider = ({ children }) => {
             await SummarizerServiceProxy.configure(savedAiConfig);
             console.log('[ConfigContext] Summarizer Service configured');
           }
+          if (savedAiConfig.aiFeatures?.rewriter?.enabled) {
+            await RewriterServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] Rewriter Service configured');
+          }
+          if (savedAiConfig.aiFeatures?.writer?.enabled) {
+            await WriterServiceProxy.configure(savedAiConfig);
+            console.log('[ConfigContext] Writer Service configured');
+          }
         } catch (error) {
           console.warn('[ConfigContext] Failed to configure AI Service:', error);
         }
@@ -187,6 +197,12 @@ export const ConfigProvider = ({ children }) => {
         }
         if (aiConfig.aiFeatures?.summarizer?.enabled) {
           await SummarizerServiceProxy.configure(aiConfig);
+        }
+        if (aiConfig.aiFeatures?.rewriter?.enabled) {
+          await RewriterServiceProxy.configure(aiConfig);
+        }
+        if (aiConfig.aiFeatures?.writer?.enabled) {
+          await WriterServiceProxy.configure(aiConfig);
         }
         
         // Notify other contexts about config change
@@ -366,6 +382,14 @@ export const ConfigProvider = ({ children }) => {
         if (aiConfig.aiFeatures?.summarizer?.enabled) {
           await SummarizerServiceProxy.configure(aiConfig);
           console.log('[ConfigContext] Summarizer Service configured');
+        }
+        if (aiConfig.aiFeatures?.rewriter?.enabled) {
+          await RewriterServiceProxy.configure(aiConfig);
+          console.log('[ConfigContext] Rewriter Service configured');
+        }
+        if (aiConfig.aiFeatures?.writer?.enabled) {
+          await WriterServiceProxy.configure(aiConfig);
+          console.log('[ConfigContext] Writer Service configured');
         }
         
         setTimeout(() => setAiConfigSaved(false), 2000);

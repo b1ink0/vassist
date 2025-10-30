@@ -11,13 +11,14 @@ import { useConfig } from '../contexts/ConfigContext';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import MediaExtractionService from '../services/MediaExtractionService';
 import UtilService from '../services/UtilService';
-import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy } from '../services/proxies';
+import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy, RewriterServiceProxy, WriterServiceProxy } from '../services/proxies';
 import VoiceRecordingService from '../services/VoiceRecordingService';
 import { TranslationLanguages } from '../config/aiConfig';
 import { PromptConfig } from '../config/promptConfig';
 import ToolbarButton from './toolbar/ToolbarButton';
 import ToolbarSection from './toolbar/ToolbarSection';
 import ToolbarResultPanel from './toolbar/ToolbarResultPanel';
+import { Icon } from './icons';
 
 const AIToolbar = () => {
   const { uiConfig, aiConfig, handleAddToChat } = useApp();
@@ -37,7 +38,7 @@ const AIToolbar = () => {
   const [hoveredImageElement, setHoveredImageElement] = useState(null);
   const savedCursorPositionRef = useRef(null); // Save cursor position before toolbar interaction // Store hovered image element for later extraction
   const [isLoading, setIsLoading] = useState(false);
-  const [action, setAction] = useState(null); // 'summarize-*', 'translate', 'image-*', 'dictionary-*', 'improve-*', or null
+  const [action, setAction] = useState(null); // 'summarize-*', 'translate', 'image-*', 'dictionary-*', 'rewrite-*', 'write-*', or null
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [isLightBackgroundToolbar, setIsLightBackgroundToolbar] = useState(false);
@@ -48,6 +49,10 @@ const AIToolbar = () => {
   const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
   const [isTTSGenerating, setIsTTSGenerating] = useState(false); // TTS generation state (before playback)
   const [currentSessionId, setCurrentSessionId] = useState(null); // TTS session ID
+  
+  // Writer state
+  const [writerPrompt, setWriterPrompt] = useState(''); // User prompt for writer
+  const [showWriterInput, setShowWriterInput] = useState(false); // Show writer input panel
   
   // Dictation (STT) state
   const [isRecording, setIsRecording] = useState(false); // STT recording state
@@ -83,6 +88,7 @@ const AIToolbar = () => {
   const isLoadingRef = useRef(false);
   const lockedPositionRef = useRef(null);
   const isVisibleRef = useRef(false);
+  const showWriterInputRef = useRef(false); // Ref for showWriterInput to use in handleSelectionChange
   
   /**
    * Throttled setResult to prevent excessive re-renders during streaming
@@ -130,6 +136,21 @@ const AIToolbar = () => {
     isVisibleRef.current = isVisible;
   }, [isVisible]);
 
+  useEffect(() => {
+    showWriterInputRef.current = showWriterInput;
+  }, [showWriterInput]);
+
+  /**
+   * Clear writer input panel when toolbar becomes invisible
+   */
+  useEffect(() => {
+    if (!isVisible && showWriterInput) {
+      console.log('[AIToolbar] Toolbar became invisible, clearing writer input panel');
+      setShowWriterInput(false);
+      setWriterPrompt('');
+    }
+  }, [isVisible, showWriterInput]);
+
   /**
    * Sync shouldRender with isVisible, but delay when closing for animation
    */
@@ -157,11 +178,26 @@ const AIToolbar = () => {
 
   /**
    * Memoize hasResultFlag to prevent useEffect from running on every result content change during streaming
+   * Panel shows when: has result, has error, is loading (for blinking state), or showing writer input
    */
   const hasResultFlag = useMemo(() => {
-    const flag = (hasResult || hasError) && isVisible;
+    const flag = (hasResult || hasError || isLoading || (showWriterInput && (action === 'write-input' || action === 'rewrite-custom'))) && isVisible;
     return flag;
-  }, [hasResult, hasError, isVisible]);
+  }, [hasResult, hasError, isLoading, showWriterInput, action, isVisible]);
+
+  /**
+   * Calculate if result panel should be above or below toolbar based on available space
+   */
+  const shouldShowPanelAbove = useMemo(() => {
+    const toolbarHeight = 50; // Approximate toolbar height
+    const estimatedPanelHeight = 300; // Estimated result panel height
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - (position.y + toolbarHeight);
+    const spaceAbove = position.y;
+    
+    // If not enough space below but more space above, show above
+    return spaceBelow < estimatedPanelHeight && spaceAbove > spaceBelow;
+  }, [position.y]);
 
   /**
    * Sync shouldRenderResultPanel with result/error state, delay when closing for animation
@@ -353,7 +389,7 @@ const AIToolbar = () => {
    * Handle TTS speaker button click
    */
   const onSpeakerClick = async () => {
-    if (!result || !(action?.startsWith('summarize-') || action?.startsWith('image-') || action?.startsWith('improve-') || action?.startsWith('dictionary-') || action === 'dictation' || action === 'translate')) return;
+    if (!result || !(action?.startsWith('summarize-') || action?.startsWith('image-') || action?.startsWith('rewrite-') || action?.startsWith('write-') || action?.startsWith('dictionary-') || action === 'dictation' || action === 'translate')) return;
 
     // Check if TTS is configured and enabled
     if (!ttsConfig?.enabled) {
@@ -631,7 +667,20 @@ const AIToolbar = () => {
     selectionTimeoutRef.current = setTimeout(() => {
       const { text, images, audios, selection } = getSelection();
       
-      // Check if selection is inside result panel OR toolbar - if so, ignore completely
+      // Check if active element is inside our toolbar or panels - if so, ignore completely
+      const activeElement = document.activeElement;
+      if (activeElement && (resultPanelRef.current || toolbarRef.current)) {
+        if (
+          (resultPanelRef.current && resultPanelRef.current.contains(activeElement)) ||
+          (toolbarRef.current && toolbarRef.current.contains(activeElement))
+        ) {
+          // Focus is inside our UI, ignore this change completely
+          console.log('[AIToolbar] Focus inside toolbar/panel (element:', activeElement.tagName, '), ignoring selection change');
+          return;
+        }
+      }
+      
+      // Also check if selection is inside result panel OR toolbar
       if ((resultPanelRef.current || toolbarRef.current) && selection) {
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         if (range) {
@@ -654,14 +703,27 @@ const AIToolbar = () => {
       // If no selection but result panel is active, keep toolbar visible
       // This prevents toolbar from closing when selection is lost (scroll, click result panel, etc.)
       if (!text && images.length === 0 && audios.length === 0) {
+        console.log('[AIToolbar] No selection detected, checking if should hide toolbar...');
+        console.log('[AIToolbar] - showingFromInputFocusRef:', showingFromInputFocusRef.current);
+        console.log('[AIToolbar] - showingFromImageHoverRef:', showingFromImageHoverRef.current);
+        console.log('[AIToolbar] - showWriterInputRef:', showWriterInputRef.current);
+        console.log('[AIToolbar] - resultPanelActive:', resultPanelActive);
+        
         // ALSO: Don't hide if toolbar was just shown by input focus or image hover
         if (showingFromInputFocusRef.current || showingFromImageHoverRef.current) {
           console.log('[AIToolbar] No selection but showing from input focus or image hover, keeping toolbar visible');
           return;
         }
         
+        // ALSO: Don't hide if writer input panel is showing
+        if (showWriterInputRef.current) {
+          console.log('[AIToolbar] No selection but writer input panel is showing, keeping toolbar visible');
+          return;
+        }
+        
         // Only hide if result panel is not active
         if (!resultPanelActive) {
+          console.log('[AIToolbar] No selection and result panel not active, HIDING TOOLBAR');
           setIsVisible(false);
           setSelectedText('');
           setSelectedImages([]);
@@ -1800,12 +1862,17 @@ const AIToolbar = () => {
   };
 
   /**
-   * Generic text improvement handler
-   * @param {string} actionType - Type of improvement ('grammar', 'spelling', etc.)
+   * Generic rewriter handler using Chrome AI Rewriter API
+   * @param {string} actionType - Type of rewrite ('grammar', 'moreFormal', 'shorter', etc.)
    * @param {string} actionName - Display name for action
-   * @param {string} prompt - AI prompt for improvement
+   * @param {Object} rewriteOptions - RewriterService options (tone, format, length)
    */
-  const handleTextImprovement = async (actionType, actionName, prompt, skipClearResult = false) => {
+  const handleRewrite = async (actionType, actionName, rewriteOptions = {}, skipClearResult = false) => {
+    // Close writer input if open
+    if (showWriterInput) {
+      setShowWriterInput(false);
+    }
+    
     if (!selectedText) {
       setError('No text selected');
       return;
@@ -1817,55 +1884,53 @@ const AIToolbar = () => {
     }
     
     setIsLoading(true);
-    setAction(`improve-${actionType}`);
+    setAction(`rewrite-${actionType}`);
     setError('');
     // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
-    setHasInserted(false); // Reset insert state for new improvement
-    hasInsertedRef.current = false; // Reset ref for new improvement
-    setImprovedContent(null); // Clear improved content on new improvement
+    setHasInserted(false); // Reset insert state for new rewrite
+    hasInsertedRef.current = false; // Reset ref for new rewrite
+    setImprovedContent(null); // Clear improved content on new rewrite
     
     console.log(`[AIToolbar] ${actionName} clicked (streaming)`);
     
     abortControllerRef.current = new AbortController();
     
     try {
-      const text = selectedText.trim();
-      const fullPrompt = prompt.replace('{text}', text);
-      
-      const messages = [{ role: 'user', content: fullPrompt }];
-      let fullResponse = '';
-      
-      const response = await AIServiceProxy.sendMessage(messages, (chunk) => {
-        if (abortControllerRef.current?.signal.aborted) return;
-        fullResponse += chunk;
-        if (!abortControllerRef.current?.signal.aborted) {
-          setResultThrottled(fullResponse);
-        }
-      });
-      
-      // Check if request was cancelled
-      if (response?.cancelled) return;
-      
-      // Check for errors
-      if (!response?.success) {
-        setError(response?.error?.message || 'AI request failed');
-        return;
+      // Check if explicitly disabled
+      if (aiConfig?.aiFeatures?.rewriter?.enabled === false) {
+        throw new Error('Rewriter is disabled in settings');
       }
       
-      // Handle non-streaming response - ensure final result is always set
-      if (response?.response) {
-        setResult(response.response);
-      } else if (fullResponse) {
-        setResult(fullResponse);
-      } else {
-        setError('No response received from AI service');
+      const text = selectedText.trim();
+      let fullRewrite = '';
+      
+      // Use RewriterServiceProxy streaming API
+      for await (const chunk of RewriterServiceProxy.rewriteStreaming(text, rewriteOptions)) {
+        // Check if aborted before processing chunk
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log('[AIToolbar] Rewrite streaming aborted');
+          break;
+        }
+        
+        fullRewrite += chunk;
+        
+        // Only update result if not aborted - use throttled update to prevent max depth exceeded
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResultThrottled(fullRewrite);
+        }
+      }
+      
+      // Ensure final result is set
+      if (!abortControllerRef.current?.signal.aborted && fullRewrite) {
+        setResult(fullRewrite);
       }
       
       console.log(`[AIToolbar] ${actionName} streaming complete`);
     } catch (err) {
+      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         console.error(`[AIToolbar] ${actionName} failed:`, err);
         setError(`${actionName} failed: ` + (err.message || 'Unknown error'));
@@ -1877,75 +1942,241 @@ const AIToolbar = () => {
   };
 
   /**
-   * Fix Grammar
+   * Fix Grammar - More formal tone
    */
   const onFixGrammarClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.grammar('{text}');
-    await handleTextImprovement('grammar', 'Fix Grammar', prompt, skipClearResult);
+    await handleRewrite('grammar', 'Fix Grammar', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'as-is',
+      context: 'Fix any grammar errors while maintaining the original tone and style.'
+    }, skipClearResult);
   };
 
   /**
-   * Fix Spelling
+   * Fix Spelling - More formal tone
    */
   const onFixSpellingClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.spelling('{text}');
-    await handleTextImprovement('spelling', 'Fix Spelling', prompt, skipClearResult);
+    await handleRewrite('spelling', 'Fix Spelling', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'as-is',
+      context: 'Fix any spelling errors while maintaining the original tone and style.'
+    }, skipClearResult);
   };
 
   /**
-   * Make Professional
-   */
-  const onMakeProfessionalClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.professional('{text}');
-    await handleTextImprovement('professional', 'Make Professional', prompt, skipClearResult);
-  };
-
-  /**
-   * Make Casual
-   */
-  const onMakeCasualClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.casual('{text}');
-    await handleTextImprovement('casual', 'Make Casual', prompt, skipClearResult);
-  };
-
-  /**
-   * Improve Clarity
-   */
-  const onImproveClarityClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.clarity('{text}');
-    await handleTextImprovement('clarity', 'Improve Clarity', prompt, skipClearResult);
-  };
-
-  /**
-   * Expand
-   */
-  const onExpandClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.expand('{text}');
-    await handleTextImprovement('expand', 'Expand', prompt, skipClearResult);
-  };
-
-  /**
-   * Make Concise
-   */
-  const onMakeConciseClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.concise('{text}');
-    await handleTextImprovement('concise', 'Make Concise', prompt, skipClearResult);
-  };
-
-  /**
-   * Make Formal
+   * Make More Formal
    */
   const onMakeFormalClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.formal('{text}');
-    await handleTextImprovement('formal', 'Make Formal', prompt, skipClearResult);
+    await handleRewrite('moreFormal', 'Make Formal', {
+      tone: 'more-formal',
+      format: 'as-is',
+      length: 'as-is'
+    }, skipClearResult);
   };
 
   /**
-   * Simplify
+   * Make More Casual
+   */
+  const onMakeCasualClick = async (skipClearResult = false) => {
+    await handleRewrite('moreCasual', 'Make Casual', {
+      tone: 'more-casual',
+      format: 'as-is',
+      length: 'as-is'
+    }, skipClearResult);
+  };
+
+  /**
+   * Make Shorter
+   */
+  const onMakeShorterClick = async (skipClearResult = false) => {
+    await handleRewrite('shorter', 'Make Shorter', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'shorter'
+    }, skipClearResult);
+  };
+
+  /**
+   * Make Longer/Expand
+   */
+  const onExpandClick = async (skipClearResult = false) => {
+    await handleRewrite('longer', 'Expand', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'longer'
+    }, skipClearResult);
+  };
+
+  /**
+   * Professional Tone (combination: more formal + maintain length)
+   */
+  const onMakeProfessionalClick = async (skipClearResult = false) => {
+    await handleRewrite('professional', 'Make Professional', {
+      tone: 'more-formal',
+      format: 'as-is',
+      length: 'as-is',
+      context: 'Rewrite in a professional, business-appropriate tone.'
+    }, skipClearResult);
+  };
+
+  /**
+   * Simplify (combination: casual tone + shorter length)
    */
   const onSimplifyClick = async (skipClearResult = false) => {
-    const prompt = PromptConfig.textImprovement.simplify('{text}');
-    await handleTextImprovement('simplify', 'Simplify', prompt, skipClearResult);
+    await handleRewrite('simplify', 'Simplify', {
+      tone: 'more-casual',
+      format: 'plain-text',
+      length: 'shorter',
+      context: 'Simplify the text using simpler words and shorter sentences.'
+    }, skipClearResult);
+  };
+
+  /**
+   * Improve Clarity (rewrite maintaining tone but improving structure)
+   */
+  const onImproveClarityClick = async (skipClearResult = false) => {
+    await handleRewrite('clarity', 'Improve Clarity', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'as-is',
+      context: 'Improve clarity and readability while maintaining the original tone and length.'
+    }, skipClearResult);
+  };
+
+  /**
+   * Make Concise (shorter)
+   */
+  const onMakeConciseClick = async (skipClearResult = false) => {
+    await handleRewrite('concise', 'Make Concise', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'shorter',
+      context: 'Make more concise while preserving key information.'
+    }, skipClearResult);
+  };
+
+  /**
+   * Custom Rewrite - Show input panel for custom instructions
+   */
+  const onCustomRewriteClick = () => {
+    console.log('[AIToolbar] Custom Rewrite clicked - showing input panel');
+    setShowWriterInput(!showWriterInput); // Toggle
+    setAction('rewrite-custom');
+    setResult('');
+    setError('');
+  };
+
+  /**
+   * Handle Custom Rewrite - Rewrite selected text with custom instructions
+   */
+  const handleCustomRewrite = async (customInstructions, skipClearResult = false) => {
+    if (!customInstructions || !selectedText) {
+      console.error('[AIToolbar] No instructions or selected text for custom rewrite');
+      return;
+    }
+
+    console.log('[AIToolbar] Custom rewrite with instructions:', customInstructions);
+    
+    // Hide input panel when starting rewrite
+    setShowWriterInput(false);
+    
+    await handleRewrite('custom', 'Custom Rewrite', {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'as-is',
+      context: customInstructions // Use user's custom instructions as context
+    }, skipClearResult);
+    
+    // Clear the input after successful rewrite
+    setWriterPrompt('');
+  };
+
+  /**
+   * Write - Generate content using Writer API
+   */
+  const handleWrite = async (writerOptions, skipClearResult = false) => {
+    if (!skipClearResult) {
+      setResult('');
+    }
+    setError('');
+    // Don't hide input yet - wait until streaming starts
+    setAction('write');
+    setIsLoading(true);
+    setResultPanelActive(true); // Keep toolbar visible during write operation
+    
+    console.log('[AIToolbar] Write clicked (streaming)');
+    
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      // Check if explicitly disabled
+      if (aiConfig?.aiFeatures?.writer?.enabled === false) {
+        throw new Error('Writer is disabled in settings');
+      }
+      
+      // Check if user provided a prompt
+      if (!writerPrompt || writerPrompt.trim().length === 0) {
+        throw new Error('Please enter what you want to write');
+      }
+      
+      // Use writer prompt as shared context
+      const sharedContext = writerPrompt.trim();
+      let fullWritten = '';
+      let isFirstChunk = true;
+      
+      // Use WriterServiceProxy streaming API
+      for await (const chunk of WriterServiceProxy.writeStreaming(sharedContext, writerOptions)) {
+        // Hide input panel on first chunk
+        if (isFirstChunk) {
+          setShowWriterInput(false);
+          isFirstChunk = false;
+        }
+        
+        // Check if aborted before processing chunk
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log('[AIToolbar] Write streaming aborted');
+          break;
+        }
+        
+        fullWritten += chunk;
+        
+        // Only update result if not aborted - use throttled update to prevent max depth exceeded
+        if (!abortControllerRef.current?.signal.aborted) {
+          setResultThrottled(fullWritten);
+        }
+      }
+      
+      // Ensure final result is set
+      if (!abortControllerRef.current?.signal.aborted && fullWritten) {
+        setResult(fullWritten);
+        setWriterPrompt(''); // Clear prompt after successful generation
+      }
+      
+      console.log('[AIToolbar] Write streaming complete');
+    } catch (err) {
+      // Don't show error if user aborted
+      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+        console.error('[AIToolbar] Write failed:', err);
+        setError('Write failed: ' + (err.message || 'Unknown error'));
+        setShowWriterInput(true); // Show input again on error
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  /**
+   * Show Writer Input Panel
+   */
+  const onWriteClick = () => {
+    console.log('[AIToolbar] Write clicked - showing input panel');
+    setShowWriterInput(!showWriterInput); // Toggle
+    setAction('write-input');
+    setResult('');
+    setError('');
   };
 
   /**
@@ -1957,7 +2188,11 @@ const AIToolbar = () => {
         await SummarizerServiceProxy.abort();
       } else if (action === 'translate' || action === 'detect-language') {
         await TranslatorServiceProxy.abort();
-      } else if (action?.startsWith('image-') || action?.startsWith('dictionary-') || action?.startsWith('improve-')) {
+      } else if (action?.startsWith('rewrite-')) {
+        await RewriterServiceProxy.abort();
+      } else if (action?.startsWith('write-')) {
+        await WriterServiceProxy.abort();
+      } else if (action?.startsWith('image-') || action?.startsWith('dictionary-')) {
         await AIServiceProxy.abortRequest();
       }
     } catch (err) {
@@ -1998,31 +2233,43 @@ const AIToolbar = () => {
           await onExamplesClick(true);
           break;
       }
-    } else if (action?.startsWith('improve-')) {
-      const improveAction = action.replace('improve-', '');
-      switch (improveAction) {
+    } else if (action?.startsWith('rewrite-')) {
+      const rewriteAction = action.replace('rewrite-', '');
+      switch (rewriteAction) {
         case 'grammar':
           await onFixGrammarClick(true);
           break;
         case 'spelling':
           await onFixSpellingClick(true);
           break;
+        case 'moreFormal':
+          await onMakeFormalClick(true);
+          break;
+        case 'moreCasual':
+          await onMakeCasualClick(true);
+          break;
         case 'professional':
           await onMakeProfessionalClick(true);
-          break;
-        case 'formal':
-          await onMakeFormalClick(true);
           break;
         case 'simplify':
           await onSimplifyClick(true);
           break;
-        case 'expand':
+        case 'longer':
           await onExpandClick(true);
           break;
         case 'concise':
           await onMakeConciseClick(true);
           break;
+        case 'shorter':
+          await onMakeShorterClick(true);
+          break;
+        case 'clarity':
+          await onImproveClarityClick(true);
+          break;
       }
+    } else if (action === 'write') {
+      // Regenerate write action
+      await handleWrite(aiConfig?.aiFeatures?.writer || { tone: 'neutral', format: 'plain-text', length: 'medium' });
     }
   };
 
@@ -2643,18 +2890,18 @@ const AIToolbar = () => {
             />
           )}
           
-          {/* Improve Text Group - Only show for editable content */}
+          {/* Rewrite Text Group - Only show for editable content */}
           {hasTextSelection && isEditableContent && (
             <ToolbarSection
               isLoading={isLoading}
               isLightBackground={isLightBackgroundToolbar}
               mainButton={{
                 icon: 'write',
-                label: 'Improve',
+                label: 'Rewrite',
                 onClick: () => onFixGrammarClick(resultPanelActive),
                 disabled: !selectedText,
-                isLoading: isLoading && action === 'improve-grammar',
-                actionType: 'improve-grammar',
+                isLoading: isLoading && action === 'rewrite-grammar',
+                actionType: 'rewrite-grammar',
                 title: 'Fix grammar (default)',
                 maxLabelWidth: '100px',
               }}
@@ -2664,9 +2911,29 @@ const AIToolbar = () => {
                   label: 'Spelling',
                   onClick: () => onFixSpellingClick(resultPanelActive),
                   disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-spelling',
-                  actionType: 'improve-spelling',
+                  isLoading: isLoading && action === 'rewrite-spelling',
+                  actionType: 'rewrite-spelling',
                   title: 'Fix spelling',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: 'formal',
+                  label: 'Formal',
+                  onClick: () => onMakeFormalClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'rewrite-moreFormal',
+                  actionType: 'rewrite-moreFormal',
+                  title: 'Make formal',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: 'casual',
+                  label: 'Casual',
+                  onClick: () => onMakeCasualClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'rewrite-moreCasual',
+                  actionType: 'rewrite-moreCasual',
+                  title: 'Make casual',
                   maxLabelWidth: '100px',
                 },
                 {
@@ -2674,29 +2941,19 @@ const AIToolbar = () => {
                   label: 'Professional',
                   onClick: () => onMakeProfessionalClick(resultPanelActive),
                   disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-professional',
-                  actionType: 'improve-professional',
+                  isLoading: isLoading && action === 'rewrite-professional',
+                  actionType: 'rewrite-professional',
                   title: 'Make professional',
                   maxLabelWidth: '110px',
                 },
                 {
-                  icon: 'formal',
-                  label: 'Formal',
-                  onClick: () => onMakeFormalClick(resultPanelActive),
+                  icon: 'compress',
+                  label: 'Shorter',
+                  onClick: () => onMakeShorterClick(resultPanelActive),
                   disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-formal',
-                  actionType: 'improve-formal',
-                  title: 'Make formal',
-                  maxLabelWidth: '100px',
-                },
-                {
-                  icon: 'book',
-                  label: 'Simplify',
-                  onClick: () => onSimplifyClick(resultPanelActive),
-                  disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-simplify',
-                  actionType: 'improve-simplify',
-                  title: 'Simplify text',
+                  isLoading: isLoading && action === 'rewrite-shorter',
+                  actionType: 'rewrite-shorter',
+                  title: 'Make shorter',
                   maxLabelWidth: '100px',
                 },
                 {
@@ -2704,9 +2961,19 @@ const AIToolbar = () => {
                   label: 'Expand',
                   onClick: () => onExpandClick(resultPanelActive),
                   disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-expand',
-                  actionType: 'improve-expand',
+                  isLoading: isLoading && action === 'rewrite-longer',
+                  actionType: 'rewrite-longer',
                   title: 'Expand text',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: 'book',
+                  label: 'Simplify',
+                  onClick: () => onSimplifyClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'rewrite-simplify',
+                  actionType: 'rewrite-simplify',
+                  title: 'Simplify text',
                   maxLabelWidth: '100px',
                 },
                 {
@@ -2714,12 +2981,47 @@ const AIToolbar = () => {
                   label: 'Concise',
                   onClick: () => onMakeConciseClick(resultPanelActive),
                   disabled: !selectedText,
-                  isLoading: isLoading && action === 'improve-concise',
-                  actionType: 'improve-concise',
+                  isLoading: isLoading && action === 'rewrite-concise',
+                  actionType: 'rewrite-concise',
                   title: 'Make concise',
                   maxLabelWidth: '100px',
                 },
+                {
+                  icon: 'clarity',
+                  label: 'Clarity',
+                  onClick: () => onImproveClarityClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === 'rewrite-clarity',
+                  actionType: 'rewrite-clarity',
+                  title: 'Improve clarity',
+                  maxLabelWidth: '100px',
+                },
+                {
+                  icon: 'edit',
+                  label: 'Custom',
+                  onClick: () => onCustomRewriteClick(),
+                  disabled: !selectedText,
+                  isLoading: false,
+                  actionType: 'rewrite-custom',
+                  title: 'Custom rewrite with instructions',
+                  maxLabelWidth: '100px',
+                },
               ]}
+            />
+          )}
+          
+          {/* Write Button - Only show for editable content */}
+          {isEditableContent && (
+            <ToolbarButton
+              icon='note'
+              label="Write"
+              onClick={onWriteClick}
+              disabled={false}
+              isLoading={isLoading && action === 'write'}
+              actionType="write"
+              title="Generate text with AI"
+              maxLabelWidth="80px"
+              isLightBackground={isLightBackgroundToolbar}
             />
           )}
           
@@ -2739,51 +3041,6 @@ const AIToolbar = () => {
                     ? "Record and insert via button"
                     : "Record and auto-insert at cursor"
               }
-              maxLabelWidth="80px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
-          
-          {/* Insert button - Only show when result is ready for editable content */}
-          {result && !hasInserted && isEditableContent && (action?.startsWith('improve-') || action === 'dictation' || action === 'translate') && (
-            <ToolbarButton
-              icon='edit'
-              label="Insert"
-              onClick={onInsertClick}
-              disabled={false}
-              isLoading={false}
-              actionType="insert"
-              title="Insert improved text"
-              maxLabelWidth="80px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
-          
-          {/* Undo button - Restore original text after insert */}
-          {hasInserted && isEditableContent && originalContent && (
-            <ToolbarButton
-              icon='undo'
-              label="Undo"
-              onClick={onUndoClick}
-              disabled={false}
-              isLoading={false}
-              actionType="undo"
-              title="Restore original text"
-              maxLabelWidth="80px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
-          
-          {/* Redo button - Restore improved text after undo */}
-          {!hasInserted && isEditableContent && improvedContent && (
-            <ToolbarButton
-              icon='redo'
-              label="Redo"
-              onClick={onRedoClick}
-              disabled={false}
-              isLoading={false}
-              actionType="redo"
-              title="Restore improved text"
               maxLabelWidth="80px"
               isLightBackground={isLightBackgroundToolbar}
             />
@@ -2923,36 +3180,239 @@ const AIToolbar = () => {
               isLightBackground={isLightBackgroundToolbar}
             />
           )}
+          
+          {/* Insert button - Only show when result is ready for editable content */}
+          {result && !hasInserted && isEditableContent && (action?.startsWith('rewrite-') || action?.startsWith('write-') || action === 'write' || action === 'dictation' || action === 'translate') && (
+            <ToolbarButton
+              icon='edit'
+              label=""
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onInsertClick();
+              }}
+              disabled={false}
+              isLoading={false}
+              actionType="insert"
+              title="Insert generated text"
+              maxLabelWidth="0px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Undo button - Restore original text after insert */}
+          {hasInserted && isEditableContent && originalContent && (
+            <ToolbarButton
+              icon='undo'
+              label=""
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onUndoClick();
+              }}
+              disabled={false}
+              isLoading={false}
+              actionType="undo"
+              title="Restore original text"
+              maxLabelWidth="0px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
+          
+          {/* Redo button - Restore generated text after undo */}
+          {!hasInserted && isEditableContent && improvedContent && (
+            <ToolbarButton
+              icon='redo'
+              label=""
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onRedoClick();
+              }}
+              disabled={false}
+              isLoading={false}
+              actionType="redo"
+              title="Restore generated text"
+              maxLabelWidth="0px"
+              isLightBackground={isLightBackgroundToolbar}
+            />
+          )}
         </div>
       )}
       
-      {/* Result panel - shown BELOW toolbar, toolbar stays visible */}
+      {/* Writer Input Panel or Result Panel - shown BELOW toolbar, toolbar stays visible */}
       {shouldRenderResultPanel && (
-        <ToolbarResultPanel
-          ref={resultPanelRef}
-          result={result}
-          error={error}
-          isLoading={isLoading}
-          action={action}
-          position={position}
-          isLightBackground={isLightBackgroundPanel}
-          animationClass={isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'}
-          detectedLanguageName={detectedLanguageName}
-          selectedTargetLanguage={selectedTargetLanguage}
-          onTargetLanguageChange={(lang) => {
-            setSelectedTargetLanguage(lang);
-            onTranslateClick(lang);
-          }}
-          aiConfig={aiConfig}
-          onRegenerateClick={onRegenerateClick}
-          copySuccess={copySuccess}
-          onCopyClick={onCopyClick}
-          isSpeaking={isSpeaking}
-          isTTSGenerating={isTTSGenerating}
-          onSpeakerClick={onSpeakerClick}
-          ttsConfig={ttsConfig}
-          onClose={closeResult}
-        />
+        showWriterInput && (action === 'write-input' || action === 'rewrite-custom') ? (
+          <div
+            ref={resultPanelRef}
+            className={`
+              ${isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'}
+            `}
+            style={{
+              position: 'fixed',
+              top: shouldShowPanelAbove ? `${position.y - 60}px` : `${position.y + 50}px`,
+              left: `${position.x}px`,
+              zIndex: 999998,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            {/* Writer input field */}
+            <input
+              type="text"
+              value={writerPrompt}
+              onChange={(e) => setWriterPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (writerPrompt.trim()) {
+                    if (action === 'rewrite-custom') {
+                      handleCustomRewrite(writerPrompt.trim());
+                    } else {
+                      handleWrite(aiConfig?.aiFeatures?.writer || { tone: 'neutral', format: 'plain-text', length: 'medium' });
+                    }
+                  }
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowWriterInput(false);
+                  setWriterPrompt('');
+                }
+              }}
+              placeholder={action === 'rewrite-custom' ? "How should I rewrite the selected text?" : "What would you like to write?"}
+              className={`
+                glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}
+              `}
+              style={{
+                minWidth: '320px',
+                maxWidth: '480px',
+                height: '44px',
+                padding: '0 12px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                color: 'rgba(255, 255, 255, 0.95)',
+                border: 'none',
+                borderRadius: '16px',
+                outline: 'none',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.37)',
+                transition: 'all 0.2s ease'
+              }}
+            />
+            
+            {/* Action buttons */}
+            <div style={{ 
+              display: 'flex',
+              gap: '6px'
+            }}>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (writerPrompt.trim()) {
+                    if (action === 'rewrite-custom') {
+                      handleCustomRewrite(writerPrompt.trim());
+                    } else {
+                      handleWrite(aiConfig?.aiFeatures?.writer || { tone: 'neutral', format: 'plain-text', length: 'medium' });
+                    }
+                  }
+                }}
+                disabled={!writerPrompt.trim()}
+                className={`glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}`}
+                title="Generate (Enter)"
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  padding: '0',
+                  border: 'none',
+                  borderRadius: '12px',
+                  cursor: writerPrompt.trim() ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  color: writerPrompt.trim() 
+                    ? (isLightBackgroundPanel ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)') 
+                    : (isLightBackgroundPanel ? '#999' : 'rgba(255, 255, 255, 0.5)'),
+                  opacity: writerPrompt.trim() ? 1 : 0.5,
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  if (writerPrompt.trim()) {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (writerPrompt.trim()) {
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                <Icon name="send" size={16} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowWriterInput(false);
+                  setWriterPrompt('');
+                }}
+                className={`glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}`}
+                title="Cancel (Esc)"
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  padding: '0',
+                  border: 'none',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  color: isLightBackgroundPanel ? '#666' : 'rgba(255, 255, 255, 0.7)',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <ToolbarResultPanel
+            ref={resultPanelRef}
+            result={result}
+            error={error}
+            isLoading={isLoading}
+            action={action}
+            position={position}
+            showAbove={shouldShowPanelAbove}
+            isLightBackground={isLightBackgroundPanel}
+            animationClass={isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'}
+            detectedLanguageName={detectedLanguageName}
+            selectedTargetLanguage={selectedTargetLanguage}
+            onTargetLanguageChange={(lang) => {
+              setSelectedTargetLanguage(lang);
+              onTranslateClick(lang);
+            }}
+            aiConfig={aiConfig}
+            onRegenerateClick={onRegenerateClick}
+            copySuccess={copySuccess}
+            onCopyClick={onCopyClick}
+            isSpeaking={isSpeaking}
+            isTTSGenerating={isTTSGenerating}
+            onSpeakerClick={onSpeakerClick}
+            ttsConfig={ttsConfig}
+            onClose={closeResult}
+          />
+        )
       )}
     </>
   );

@@ -19,6 +19,8 @@ import sttService from '../../src/services/STTService.js';
 import translatorService from '../../src/services/TranslatorService.js';
 import languageDetectorService from '../../src/services/LanguageDetectorService.js';
 import summarizerService from '../../src/services/SummarizerService.js';
+import rewriterService from '../../src/services/RewriterService.js';
+import writerService from '../../src/services/WriterService.js';
 
 console.log('[Background] Service worker starting...');
 
@@ -834,6 +836,118 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_DESTROY, async (_message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     await summarizerService.destroy(tabId);
+    return { destroyed: true };
+  });
+
+  // Rewriter Service handlers
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_CONFIGURE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { config } = message.data;
+    await rewriterService.configure(config, tabId);
+    return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const availability = await rewriterService.checkAvailability(tabId);
+    return { availability };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, options } = message.data;
+    console.log(`[Background] REWRITER_REWRITE (${options?.tone || 'as-is'}):`, text.substring(0, 50));
+    const rewrittenText = await rewriterService.rewrite(text, options, tabId);
+    return { rewrittenText };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE_STREAMING, async (message, sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { text, options } = message.data;
+    console.log(`[Background] REWRITER_REWRITE_STREAMING (${options?.tone || 'as-is'}):`, text.substring(0, 50));
+    
+    let fullRewrite = '';
+    
+    // Stream rewrite chunks back to content script
+    for await (const chunk of rewriterService.rewriteStreaming(text, options, tabId)) {
+      // Send streaming token back to content script
+      chrome.tabs.sendMessage(sender.tab.id, {
+        type: MessageTypes.AI_STREAM_TOKEN,
+        requestId: message.requestId,
+        data: { token: chunk }
+      }).catch(err => console.error('[Background] Failed to send rewrite stream token:', err));
+      
+      fullRewrite += chunk;
+    }
+    
+    return { rewrittenText: fullRewrite };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_ABORT, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    rewriterService.abort(tabId);
+    return { aborted: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_DESTROY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    await rewriterService.destroy(tabId);
+    return { destroyed: true };
+  });
+
+  // Writer Service handlers
+  backgroundBridge.registerHandler(MessageTypes.WRITER_CONFIGURE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { config } = message.data;
+    await writerService.configure(config, tabId);
+    return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const availability = await writerService.checkAvailability(tabId);
+    return { availability };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE, async (message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { sharedContext, options } = message.data;
+    console.log(`[Background] WRITER_WRITE (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
+    const writtenText = await writerService.write(sharedContext, options, tabId);
+    return { writtenText };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE_STREAMING, async (message, sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const { sharedContext, options } = message.data;
+    console.log(`[Background] WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
+    
+    let fullWritten = '';
+    
+    // Stream write chunks back to content script
+    for await (const chunk of writerService.writeStreaming(sharedContext, options, tabId)) {
+      // Send streaming token back to content script
+      chrome.tabs.sendMessage(sender.tab.id, {
+        type: MessageTypes.AI_STREAM_TOKEN,
+        requestId: message.requestId,
+        data: { token: chunk }
+      }).catch(err => console.error('[Background] Failed to send write stream token:', err));
+      
+      fullWritten += chunk;
+    }
+    
+    return { writtenText: fullWritten };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_ABORT, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    writerService.abort(tabId);
+    return { aborted: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_DESTROY, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    await writerService.destroy(tabId);
     return { destroyed: true };
   });
 

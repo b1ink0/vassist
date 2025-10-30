@@ -8,7 +8,7 @@
  * - Streaming indicator
  */
 
-import { forwardRef } from 'react'
+import { forwardRef, useRef, useEffect } from 'react'
 import { Icon } from '../icons';;
 import { TranslationLanguages } from '../../config/aiConfig';
 import StreamingText from '../common/StreamingText';
@@ -20,6 +20,7 @@ const ToolbarResultPanel = forwardRef(({
   isLoading,
   action,
   position,
+  showAbove = false, // Whether to show panel above toolbar
   isLightBackground = false,
   animationClass = '', // Animation class to apply (for fade-in/fade-out)
   detectedLanguageName = null,
@@ -37,12 +38,23 @@ const ToolbarResultPanel = forwardRef(({
   onClose,
 }, ref) => {
 
+  const contentRef = useRef(null);
+
+  // Auto-scroll to bottom when content updates during streaming
+  useEffect(() => {
+    if (contentRef.current && isLoading) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [result, isLoading]);
+
   // Get action title with icon
   const getActionInfo = () => {
     if (action?.startsWith('summarize-')) return { icon: 'note', label: 'Summary' };
     if (action === 'translate') return { icon: 'globe', label: 'Translation' };
     if (action === 'detect-language') return { icon: 'search', label: 'Language Detection' };
     if (action === 'dictation') return { icon: 'microphone', label: 'Dictation' };
+    if (action === 'write') return { icon: 'edit', label: 'Writer' };
+    if (action?.startsWith('rewrite-')) return { icon: 'refresh', label: 'Rewrite' };
     if (action === 'image-describe') return { icon: 'image', label: 'Description' };
     if (action === 'image-extract-text') return { icon: 'document', label: 'Extracted Text' };
     if (action === 'image-identify-objects') return { icon: 'tag', label: 'Objects' };
@@ -75,7 +87,9 @@ const ToolbarResultPanel = forwardRef(({
         ${animationClass}
       `}
       style={{
-        transform: `translate(${position.x}px, ${position.y + 48}px)`,
+        transform: showAbove 
+          ? `translate(${position.x}px, ${position.y - 310}px)` 
+          : `translate(${position.x}px, ${position.y + 48}px)`,
         zIndex: 999999,
       }}
     >
@@ -184,27 +198,46 @@ const ToolbarResultPanel = forwardRef(({
         </div>
       )}
       
+      {/* Show loading/blinking state when waiting for first chunk */}
+      {isLoading && !result && !error && (
+        <div className="flex items-center gap-2 py-3">
+          <span className="animate-pulse text-white/70 text-xs">●</span>
+          <span className={`text-[13px] opacity-70 animate-pulse ${isLightBackground ? 'text-white' : 'text-white'}`}>
+            Generating...
+          </span>
+        </div>
+      )}
+      
       {/* Show result with streaming indicator */}
       {result && (
-        <StreamingContainer autoActivate speed="fast">
-          <div>
-            <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackground ? 'text-white' : 'text-white'}`}>
-              <StreamingText 
-                text={result}
-                wordsPerSecond={40}
-                showCursor={false}
-                disabled={false}
-              />
-            </div>
-            {/* Show streaming indicator while loading */}
-            {isLoading && (
-              <div className="flex items-center gap-1 mt-2 text-white/50">
-                <span className="animate-pulse text-xs">●</span>
-                <span className="text-[11px]">streaming...</span>
+        <div 
+          ref={contentRef}
+          className="custom-scrollbar"
+          style={{ 
+            maxHeight: '400px', 
+            overflowY: 'auto' 
+          }}
+        >
+          <StreamingContainer autoActivate speed="fast">
+            <div>
+              <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackground ? 'text-white' : 'text-white'}`}>
+                <StreamingText 
+                  text={result}
+                  wordsPerSecond={40}
+                  showCursor={false}
+                  disabled={false}
+                />
               </div>
-            )}
-          </div>
-        </StreamingContainer>
+              {/* Show streaming indicator while loading */}
+              {isLoading && (
+                <div className="flex items-center gap-1 mt-2 text-white/50">
+                  <span className="animate-pulse text-xs">●</span>
+                  <span className="text-[11px]">streaming...</span>
+                </div>
+              )}
+            </div>
+          </StreamingContainer>
+        </div>
       )}
     </div>
   );

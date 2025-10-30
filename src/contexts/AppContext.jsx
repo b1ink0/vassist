@@ -11,7 +11,9 @@ import {
   StorageServiceProxy, 
   SummarizerServiceProxy, 
   TranslatorServiceProxy, 
-  LanguageDetectorServiceProxy 
+  LanguageDetectorServiceProxy,
+  RewriterServiceProxy,
+  WriterServiceProxy
 } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
@@ -131,6 +133,14 @@ export const AppProvider = ({ children }) => {
           if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
             await SummarizerServiceProxy.configure(loadedAIConfig);
             console.log('[AppContext] Summarizer Service configured');
+          }
+          if (loadedAIConfig.aiFeatures?.rewriter?.enabled !== false) {
+            await RewriterServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] Rewriter Service configured');
+          }
+          if (loadedAIConfig.aiFeatures?.writer?.enabled !== false) {
+            await WriterServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] Writer Service configured');
           }
         } catch (error) {
           console.warn('[AppContext] Failed to configure services:', error);
