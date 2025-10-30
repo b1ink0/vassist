@@ -116,23 +116,29 @@ export const AppProvider = ({ children }) => {
         console.log('[AppContext] AI Config loaded:', loadedAIConfig);
         setAIConfig(loadedAIConfig);
         
-        // Configure services
+        // Configure services (only if provider is set)
         try {
-          await AIServiceProxy.configure(loadedAIConfig);
-          console.log('[AppContext] AI Service configured');
+          if (loadedAIConfig.provider) {
+            await AIServiceProxy.configure(loadedAIConfig);
+            console.log('[AppContext] AI Service configured');
+          } else {
+            console.log('[AppContext] Skipping AI Service configuration - no provider set');
+          }
           
-          // Configure AI Features services if enabled
-          if (loadedAIConfig.aiFeatures?.translator?.enabled !== false) {
-            await TranslatorServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] Translator Service configured');
-          }
-          if (loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false) {
-            await LanguageDetectorServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] Language Detector Service configured');
-          }
-          if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
-            await SummarizerServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] Summarizer Service configured');
+          // Configure AI Features services if enabled (only if we have a provider)
+          if (loadedAIConfig.provider) {
+            if (loadedAIConfig.aiFeatures?.translator?.enabled !== false) {
+              await TranslatorServiceProxy.configure(loadedAIConfig);
+              console.log('[AppContext] Translator Service configured');
+            }
+            if (loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false) {
+              await LanguageDetectorServiceProxy.configure(loadedAIConfig);
+              console.log('[AppContext] Language Detector Service configured');
+            }
+            if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
+              await SummarizerServiceProxy.configure(loadedAIConfig);
+              console.log('[AppContext] Summarizer Service configured');
+            }
           }
           if (loadedAIConfig.aiFeatures?.rewriter?.enabled !== false) {
             await RewriterServiceProxy.configure(loadedAIConfig);

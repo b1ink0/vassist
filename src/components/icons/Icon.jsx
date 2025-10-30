@@ -59,7 +59,7 @@ const Icon = ({
     strokeWidth: IconSVG.props?.strokeWidth || strokeWidth,
     style: {
       display: 'block',
-      margin: 'auto',
+      flexShrink: 0,
       ...style
     },
     ...props

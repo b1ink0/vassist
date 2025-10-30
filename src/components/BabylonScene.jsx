@@ -4,28 +4,40 @@ import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 
 import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
+import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 
-const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig = {}, positionManagerRef }) => {
+const BabylonScene = ({ 
+  sceneBuilder, 
+  onSceneReady, 
+  onLoadProgress, 
+  sceneConfig = {}, 
+  positionManagerRef,
+  isPreview = false, // NEW: Preview mode renders inline instead of portal
+  previewWidth = '100%', // NEW: Width for preview mode
+  previewHeight = '100%', // NEW: Height for preview mode
+  previewClassName = '' // NEW: Additional classes for preview mode
+}) => {
   const canvasRef = useRef(null);
   const canvasElementRef = useRef(null); // Track actual canvas DOM element
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0); // Track loading progress for preview mode
   const cleanupFnRef = useRef(null); // Store cleanup function
   
   // Get FPS limit from config
   const { uiConfig } = useConfig();
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
-  // Drag-drop overlay state
+  // Drag-drop overlay state (only in non-preview mode)
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
   
-  // Model overlay state from context (shared with AppContent)
+  // Model overlay state from context (shared with AppContent) - skip in preview mode
   const { modelOverlayPos, setModelOverlayPos, setShowModelLoadingOverlay, setPendingDropData, openChat } = useApp();
   
   // Track if this is first mount
@@ -43,8 +55,10 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
     sceneConfigRef.current = sceneConfig;
   }, [onSceneReady, onLoadProgress, sceneConfig]);
 
-  // Track component mount/unmount for tab visibility
+  // Track component mount/unmount for tab visibility (skip in preview mode)
   useEffect(() => {
+    if (isPreview) return; // Skip loading overlay management in preview mode
+    
     // On mount
     if (isFirstMountRef.current) {
       // First mount - don't show loading
@@ -75,15 +89,17 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       console.log('[BabylonScene] Unmounting');
     };
-  }, [setShowModelLoadingOverlay, isReady]);
+  }, [setShowModelLoadingOverlay, isReady, isPreview]);
 
-  // Hide loading when scene is ready (only if we're showing loading)
+  // Hide loading when scene is ready (only if we're showing loading) - skip in preview mode
   useEffect(() => {
+    if (isPreview) return; // Skip in preview mode
+    
     if (isReady) {
       console.log('[BabylonScene] Scene ready - hiding loading');
       setShowModelLoadingOverlay(false);
     }
-  }, [isReady, setShowModelLoadingOverlay]);
+  }, [isReady, setShowModelLoadingOverlay, isPreview]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -165,7 +181,13 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
         let finalConfig = createSceneConfig({
           ...sceneConfigRef.current,
           // Pass progress callback to scene builder - use ref to avoid dependency changes
-          onLoadProgress: onLoadProgressRef.current,
+          // Wrap to also update local state for preview mode
+          onLoadProgress: (progress) => {
+            setLoadingProgress(progress); // Update state for preview mode
+            if (onLoadProgressRef.current) {
+              onLoadProgressRef.current(progress); // Call parent callback
+            }
+          },
         });
         // Resolve resource URLs for extension mode
         finalConfig = await resolveResourceURLs(finalConfig);
@@ -359,8 +381,9 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
     };
   }, [positionManagerRef, isReady, setModelOverlayPos]);
 
-  // Setup drag-drop service for the overlay
+  // Setup drag-drop service for the overlay (skip in preview mode)
   useEffect(() => {
+    if (isPreview) return; // Skip drag-drop in preview mode
     if (!overlayRef.current || !isReady) return;
 
     dragDropServiceRef.current = new DragDropService({
@@ -390,18 +413,26 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
         dragDropServiceRef.current.detach();
       }
     };
-  }, [isReady, openChat, setPendingDropData]);
+  }, [isReady, openChat, setPendingDropData, isPreview]);
 
-  // Use portal to render canvas AND drag-drop overlay directly to document.body
-  // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work
-  // Use inline styles instead of Tailwind (Tailwind is scoped to Shadow DOM)
-  // Start with opacity 0, transition to opacity 100 when ready
-  return createPortal(
+  // Render canvas content
+  const canvasContent = (
     <>
       <canvas
-        id="vassist-babylon-canvas"
+        id={isPreview ? undefined : "vassist-babylon-canvas"}
         ref={canvasRef}
-        style={{
+        style={isPreview ? {
+          // Preview mode: inline rendering
+          width: previewWidth,
+          height: previewHeight,
+          display: 'block',
+          outline: 'none',
+          backgroundColor: 'transparent',
+          borderRadius: '16px',
+          opacity: isReady ? 1 : 0,
+          transition: 'opacity 700ms ease-in-out'
+        } : {
+          // Normal mode: full-screen portal
           width: '100%',
           height: '100vh',
           display: 'block',
@@ -417,8 +448,8 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
         }}
       />
       
-      {/* Drag-drop overlay positioned over the model */}
-      {isReady && (
+      {/* Drag-drop overlay positioned over the model (only in normal mode) */}
+      {!isPreview && isReady && (
         <div
           ref={overlayRef}
           style={{
@@ -467,16 +498,45 @@ const BabylonScene = ({ sceneBuilder, onSceneReady, onLoadProgress, sceneConfig 
                   color: 'rgba(255, 255, 255, 0.9)',
                   fontSize: '18px',
                   fontWeight: '500',
-                  margin: 0
+                  margin: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}>
-                  📎 Drop
+                  <Icon name="attachment" size={20} /> Drop
                 </p>
               </div>
             </div>
           )}
         </div>
       )}
-    </>,
+    </>
+  );
+
+  // In preview mode, render inline with loading indicator
+  if (isPreview) {
+    return (
+      <div className={`relative ${previewClassName}`} style={{ width: previewWidth, height: previewHeight }}>
+        {canvasContent}
+        {/* Loading overlay for preview mode */}
+        {!isReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500/30 border-t-purple-500 mx-auto mb-4"></div>
+              <p className="text-white/70 text-sm font-medium">
+                Loading 3D Model... {Math.round(loadingProgress || 0)}%
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Normal mode: Use portal to render canvas AND drag-drop overlay directly to document.body
+  // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work
+  return createPortal(
+    canvasContent,
     document.body
   );
 };

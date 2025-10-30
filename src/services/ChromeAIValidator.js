@@ -144,7 +144,7 @@ class ChromeAIValidator {
    * NOTE: downloadprogress events only fire when LanguageModel.create() 
    * actually initiates the download. If download is already in progress
    * (from chrome://components or another call), events won't fire.
-   * @param {Function} onProgress - Callback (progress: number) => void
+   * @param {Function} onProgress - Callback ({ progress: number, details: string }) => void
    * @returns {Promise<void>}
    */
   async monitorDownload(onProgress) {
@@ -164,13 +164,14 @@ class ChromeAIValidator {
           
           m.ondownloadprogress = (e) => {
             const progress = e.loaded * 100;
+            const details = `Downloading model: ${progress.toFixed(1)}%`;
             
             console.log(`[ChromeAIValidator] Download progress: ${progress.toFixed(1)}%`);
             
             validator.downloadProgress = progress;
             
             if (onProgress) {
-              onProgress(progress);
+              onProgress({ progress, details });
             }
           };
         }

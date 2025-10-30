@@ -229,6 +229,44 @@ const ChatInput = forwardRef(({
     };
   }, [onVoiceTranscription]);
 
+  // Listen for external voice mode start event
+  useEffect(() => {
+    const handleStartVoiceMode = async () => {
+      if (!isVoiceMode && isVisible) {
+        console.log('[ChatInput] External voice mode start requested');
+        try {
+          if (!STTServiceProxy.isConfigured()) {
+            setRecordingError('STT not configured. Please configure in Control Panel.');
+            setTimeout(() => setRecordingError(''), 3000);
+            return;
+          }
+
+          console.log('[ChatInput] Starting voice conversation mode (external trigger)');
+          TTSServiceProxy.stopPlayback();
+          
+          setAttachedImages([]);
+          setAttachedAudios([]);
+          
+          setRecordingError('');
+          await VoiceConversationService.start();
+          setIsVoiceMode(true);
+          
+          if (onVoiceMode) onVoiceMode(true);
+        } catch (error) {
+          console.error('[ChatInput] Voice mode start error:', error);
+          setRecordingError(error.message || 'Failed to start voice mode');
+          setTimeout(() => setRecordingError(''), 3000);
+          setIsVoiceMode(false);
+        }
+      }
+    };
+
+    window.addEventListener('startVoiceMode', handleStartVoiceMode);
+    return () => {
+      window.removeEventListener('startVoiceMode', handleStartVoiceMode);
+    };
+  }, [isVoiceMode, isVisible, onVoiceMode]);
+
   /**
    * Process drop data - shared logic for both event listener and pending data
    */
