@@ -72,17 +72,45 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
     } else if (activeTab === 'llm') {
       if (aiTesting) return { type: 'testing', message: 'Testing connection...', dismissible: false };
       if (aiConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
-      if (aiConfigError) return { type: 'error', message: aiConfigError, dismissible: true };
+      if (aiConfigError) {
+        // Parse the message to extract type and text
+        const parsed = parseStatusMessage(aiConfigError);
+        return { type: parsed.type, message: parsed.text, dismissible: true };
+      }
     } else if (activeTab === 'tts') {
       if (ttsTesting) return { type: 'testing', message: 'Testing TTS...', dismissible: false };
       if (ttsConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
-      if (ttsConfigError) return { type: 'error', message: ttsConfigError, dismissible: true };
+      if (ttsConfigError) {
+        const parsed = parseStatusMessage(ttsConfigError);
+        return { type: parsed.type, message: parsed.text, dismissible: true };
+      }
     } else if (activeTab === 'stt') {
       if (sttTesting) return { type: 'testing', message: 'Testing STT...', dismissible: false };
       if (sttConfigSaved) return { type: 'success', message: 'Auto-saved successfully', dismissible: false };
-      if (sttConfigError) return { type: 'error', message: sttConfigError, dismissible: true };
+      if (sttConfigError) {
+        const parsed = parseStatusMessage(sttConfigError);
+        return { type: parsed.type, message: parsed.text, dismissible: true };
+      }
     }
     return null;
+  };
+
+  // Parse status message with prefix (success:, error:, warning:)
+  const parseStatusMessage = (msg) => {
+    const prefixMatch = msg.match(/^(success|warning|error|hourglass|error-status):\s*(.+)$/i);
+    if (!prefixMatch) {
+      return { type: 'info', text: msg };
+    }
+    const [, prefix, text] = prefixMatch;
+    const lowerPrefix = prefix.toLowerCase();
+    
+    // Map prefixes to types
+    if (lowerPrefix === 'success') return { type: 'success', text };
+    if (lowerPrefix === 'warning') return { type: 'warning', text };
+    if (lowerPrefix === 'error' || lowerPrefix === 'error-status') return { type: 'error', text };
+    if (lowerPrefix === 'hourglass') return { type: 'testing', text };
+    
+    return { type: 'info', text };
   };
 
   const activeStatus = getActiveStatus();

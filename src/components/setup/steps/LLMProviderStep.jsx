@@ -3,6 +3,7 @@ import { useSetup } from '../../../contexts/SetupContext';
 import { AIServiceProxy } from '../../../services/proxies';
 import ProviderSelection from '../shared/ProviderSelection';
 import Icon from '../../icons/Icon';
+import StatusMessage from '../../common/StatusMessage';
 
 // Copy button component for Chrome flags
 const FlagCopyButton = ({ flagUrl, flagValue }) => {
@@ -31,7 +32,7 @@ const FlagCopyButton = ({ flagUrl, flagValue }) => {
   );
 };
 
-const LLMProviderStep = () => {
+const LLMProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const [selectedProvider, setSelectedProvider] = useState('chrome-ai');
@@ -196,7 +197,7 @@ const LLMProviderStep = () => {
       id: 'chrome-ai',
       name: 'Chrome AI',
       description: 'Free, local AI powered by Google',
-      icon: '🌐',
+      iconName: 'globe',
       available: true, // Always allow selection
       recommended: chromeAIStatus.ready, // Only recommend if ready
       requirements: chromeAIStatus.ready ? 'Ready to use!' : chromeAIStatus.available ? 'Setup required' : 'Chrome 138+ required',
@@ -207,7 +208,7 @@ const LLMProviderStep = () => {
       id: 'openai',
       name: 'OpenAI',
       description: 'Cloud-based AI with GPT models',
-      icon: '🤖',
+      iconName: 'ai',
       available: true,
       recommended: !chromeAIAvailable, // Recommend if Chrome AI not available
       requirements: 'API key required (paid service)',
@@ -218,7 +219,7 @@ const LLMProviderStep = () => {
       id: 'ollama',
       name: 'Ollama',
       description: 'Run large language models locally',
-      icon: '🦙',
+      iconName: 'cpu',
       available: true,
       recommended: false,
       requirements: 'Local Ollama server required',
@@ -526,21 +527,27 @@ const LLMProviderStep = () => {
           <button
             onClick={testConnection}
             disabled={testing}
-            className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50"
+            className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {testing ? '🔄 Testing...' : '🧪 Test'}
+            {testing ? (
+              <>
+                <Icon name="refresh" size={14} className="animate-spin" />
+                <span>Testing...</span>
+              </>
+            ) : (
+              <>
+                <Icon name="wrench" size={14} />
+                <span>Test</span>
+              </>
+            )}
           </button>
 
           {testResult && (
-            <div className={`mt-2 p-2 rounded-lg border ${
-              testResult.success
-                ? 'bg-green-500/10 border-green-500/30'
-                : 'bg-red-500/10 border-red-500/30'
-            }`}>
-              <p className={`text-xs ${testResult.success ? 'text-green-300' : 'text-red-300'}`}>
-                {testResult.success ? '✓' : '✗'} {testResult.message}
-              </p>
-            </div>
+            <StatusMessage 
+              message={testResult.success ? `success:${testResult.message}` : `error:${testResult.message}`}
+              isLightBackground={isLightBackground}
+              className="mt-2"
+            />
           )}
         </div>
       )}

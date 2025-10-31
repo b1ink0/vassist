@@ -8,6 +8,7 @@
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 import { KokoroVoices, KokoroDevice } from '../../../config/aiConfig';
+import StatusMessage from '../../common/StatusMessage';
 
 /**
  * Helper function to format voice key into a readable label
@@ -194,10 +195,11 @@ const KokoroTTSConfig = ({
             </select>
             {isSetupMode && (
               <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-                <p className="text-xs text-blue-200/90">
-                  💡 <strong>Tip:</strong> Select "Auto" to let the system choose the best option for your device. 
+                <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
+                  <Icon name="idea" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
+                  <span><strong>Tip:</strong> Select "Auto" to let the system choose the best option for your device. 
                   If you have a gaming PC or laptop with a dedicated graphics card, it will use WebGPU (faster). 
-                  Otherwise, it will use WASM (smaller download, works everywhere).
+                  Otherwise, it will use WASM (smaller download, works everywhere).</span>
                 </p>
               </div>
             )}
@@ -333,13 +335,10 @@ const KokoroTTSConfig = ({
 
           {/* Status Message */}
           {kokoroStatus.message && !kokoroStatus.downloading && (
-            <div className={`p-2 rounded-lg text-xs ${
-              kokoroStatus.state === 'ready' ? 'bg-emerald-500/20 text-emerald-100' :
-              kokoroStatus.state === 'error' ? 'bg-red-500/20 text-red-100' :
-              'bg-blue-500/20 text-blue-100'
-            }`}>
-              {kokoroStatus.message}
-            </div>
+            <StatusMessage 
+              message={kokoroStatus.message}
+              isLightBackground={isLightBackground}
+            />
           )}
         </div>
       )}

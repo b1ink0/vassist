@@ -100,7 +100,22 @@ const ToolbarButton = ({
       'improve-expand': 'hover:bg-purple-500/30',
       'improve-concise': 'hover:bg-teal-500/30',
       
+      // Rewrite group (same as improve)
+      'rewrite': 'hover:bg-rose-500/30',
+      'rewrite-grammar': 'hover:bg-rose-500/30',
+      'rewrite-spelling': 'hover:bg-yellow-500/30',
+      'rewrite-professional': 'hover:bg-emerald-500/30',
+      'rewrite-moreFormal': 'hover:bg-sky-500/30',
+      'rewrite-moreCasual': 'hover:bg-yellow-500/30',
+      'rewrite-shorter': 'hover:bg-orange-500/30',
+      'rewrite-longer': 'hover:bg-purple-500/30',
+      'rewrite-simplify': 'hover:bg-orange-500/30',
+      'rewrite-concise': 'hover:bg-teal-500/30',
+      'rewrite-clarity': 'hover:bg-blue-500/30',
+      'rewrite-custom': 'hover:bg-violet-500/30',
+      
       // Other actions - Unique colors
+      'write': 'hover:bg-green-500/30',
       'chat': 'hover:bg-amber-500/30',
       'dictation': 'hover:bg-red-500/30',
       'insert': 'hover:bg-green-500/30',

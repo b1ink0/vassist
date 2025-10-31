@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Virtual Assistant",
+  "name": "VAssist",
   "version": "1.0.0",
-  "description": "AI-powered 3D virtual assistant with chat, voice, and animation capabilities",
+  "description": "AI-powered Chrome extension with 3D character, chat, voice, and animation capabilities",
   
   "permissions": [
     "storage",
@@ -50,7 +50,7 @@
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     },
-    "default_title": "Toggle Virtual Assistant"
+    "default_title": "Toggle VAssist"
   },
   
   "icons": {

@@ -922,7 +922,8 @@ const AIToolbar = () => {
       uiConfig: uiConfig
     });
     
-    if (!uiConfig?.aiToolbar?.showOnInputFocus) {
+    // Default to true if not explicitly set to false
+    if (uiConfig?.aiToolbar?.showOnInputFocus === false) {
       console.log('[AIToolbar] Input focus disabled in settings');
       return;
     }
@@ -1027,7 +1028,8 @@ const AIToolbar = () => {
       src: e.target.src
     });
     
-    if (!uiConfig?.aiToolbar?.showOnImageHover) return;
+    // Default to true if not explicitly set to false
+    if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
     
     const target = e.target;
     if (target.tagName === 'IMG') {
@@ -1109,7 +1111,8 @@ const AIToolbar = () => {
       resultPanelActive: resultPanelActive
     });
     
-    if (!uiConfig?.aiToolbar?.showOnImageHover) return;
+    // Default to true if not explicitly set to false
+    if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
     
     const target = e.target;
     if (target.tagName === 'IMG') {
@@ -1123,8 +1126,9 @@ const AIToolbar = () => {
    * Set up event listeners
    */
   useEffect(() => {
-    const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus;
-    const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover;
+    // Default to true if not explicitly set to false
+    const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus !== false;
+    const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover !== false;
     
     if (!isEnabled) {
       setIsVisible(false);
@@ -3013,7 +3017,7 @@ const AIToolbar = () => {
           {/* Write Button - Only show for editable content */}
           {isEditableContent && (
             <ToolbarButton
-              icon='note'
+              icon='edit'
               label="Write"
               onClick={onWriteClick}
               disabled={false}
@@ -3184,8 +3188,8 @@ const AIToolbar = () => {
           {/* Insert button - Only show when result is ready for editable content */}
           {result && !hasInserted && isEditableContent && (action?.startsWith('rewrite-') || action?.startsWith('write-') || action === 'write' || action === 'dictation' || action === 'translate') && (
             <ToolbarButton
-              icon='edit'
-              label=""
+              icon='download'
+              label="Insert"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3195,7 +3199,7 @@ const AIToolbar = () => {
               isLoading={false}
               actionType="insert"
               title="Insert generated text"
-              maxLabelWidth="0px"
+              maxLabelWidth="80px"
               isLightBackground={isLightBackgroundToolbar}
             />
           )}

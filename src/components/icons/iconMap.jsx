@@ -36,11 +36,13 @@ export const iconMap = {
   'speaker': HeroIconsSolid.SpeakerWaveIcon,
   'phone': HeroIconsSolid.PhoneIcon,
   'image': HeroIconsSolid.PhotoIcon,
+  'photo': HeroIconsSolid.PhotoIcon,
   'music': HeroIconsSolid.MusicalNoteIcon,
   'document': HeroIconsSolid.DocumentIcon,
   'note': HeroIconsSolid.DocumentTextIcon,
   'article': HeroIconsSolid.NewspaperIcon,
   'book': HeroIconsSolid.BookOpenIcon,
+  'test': HeroIconsSolid.BeakerIcon,
   'happy': HeroIconsSolid.FaceSmileIcon,
   'thinking': HeroIconsSolid.QuestionMarkCircleIcon,
   'calm': HeroIconsSolid.FaceSmileIcon,
@@ -82,6 +84,8 @@ export const iconMap = {
   'question': HeroIconsSolid.QuestionMarkCircleIcon,
   'formal': HeroIconsSolid.UserIcon,
   'sleeping': HeroIconsSolid.MoonIcon,
+  'moon': HeroIconsSolid.MoonIcon,
+  'sun': HeroIconsSolid.SunIcon,
   'eyes': HeroIconsSolid.EyeIcon,
   'yawn': HeroIconsSolid.FaceSmileIcon,
   'surprised': HeroIconsSolid.FaceSmileIcon,
@@ -115,6 +119,10 @@ export const iconMap = {
   'cpu': HeroIconsSolid.CpuChipIcon,
   'flag': HeroIconsSolid.FlagIcon,
   'copy': HeroIconsSolid.DocumentDuplicateIcon,
+  'link': HeroIconsSolid.LinkIcon,
+  'casual': HeroIconsSolid.ChatBubbleLeftRightIcon,
+  'compress': HeroIconsSolid.ArrowsPointingInIcon,
+  'clarity': HeroIconsSolid.EyeIcon,
 };
 
 export default iconMap;

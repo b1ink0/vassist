@@ -195,11 +195,18 @@ const UISettings = ({ isLightBackground }) => {
               <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
               <option value={FPSLimitOptions.NATIVE} className="bg-gray-900">Native (Monitor Rate)</option>
             </select>
-            <p className="text-xs text-white/50">
-              {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native'
-                ? 'warning:Native refresh rate may impact performance on high-refresh monitors (144Hz+)'
-                : `Limits rendering to ${uiConfig.fpsLimit || 60} frames per second`}
-            </p>
+            {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native' ? (
+              <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
+                <Icon name="alert-triangle" size={14} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-yellow-200/90">
+                  Native refresh rate may impact performance on high-refresh monitors (144Hz+)
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-white/50">
+                Limits rendering to {uiConfig.fpsLimit || 60} frames per second
+              </p>
+            )}
           </div>
 
           {/* Position Preset */}
@@ -278,8 +285,9 @@ const UISettings = ({ isLightBackground }) => {
           <div className="flex items-center justify-between gap-3">
             <div className="flex-1">
               <label className="text-sm text-white font-medium">Smooth Response Animation</label>
-              <p className="text-xs text-yellow-400/80 mt-0.5">
-                ⚠️ Performance Impact: Enables smooth height animation for streaming text. May affect performance on lower-end devices.
+              <p className="text-xs text-yellow-400/80 mt-0.5 flex items-start gap-1.5">
+                <Icon name="warning" size={14} className="flex-shrink-0 mt-0.5" />
+                <span>Performance Impact: Enables smooth height animation for streaming text. May affect performance on lower-end devices.</span>
               </p>
             </div>
             <Toggle
@@ -291,7 +299,7 @@ const UISettings = ({ isLightBackground }) => {
 
         {/* Theme Mode */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">Theme Mode</label>
+          <label className="block text-sm font-medium text-white/90">Application Theme</label>
           <select
             value={uiConfig.backgroundDetection?.mode || BackgroundThemeModes.ADAPTIVE}
             onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
@@ -304,15 +312,21 @@ const UISettings = ({ isLightBackground }) => {
             ))}
           </select>
           <p className="text-xs text-white/50">
-            Adaptive: Detects background brightness automatically
+            Choose the color theme for the assistant UI (chat, input, buttons)
           </p>
         </div>
 
         {/* Adaptive Settings - Only show when mode is ADAPTIVE */}
         {(uiConfig.backgroundDetection?.mode || BackgroundThemeModes.ADAPTIVE) === BackgroundThemeModes.ADAPTIVE && (
           <>
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-400/20 mb-3">
+              <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
+                <Icon name="idea" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
+                <span><strong>Adaptive Mode:</strong> Automatically detects the page background color and adjusts the assistant's theme for optimal contrast and readability.</span>
+              </p>
+            </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-white/90">Sample Grid Size</label>
+              <label className="block text-sm font-medium text-white/90">Detection Accuracy</label>
               <input
                 type="number"
                 min="3"
@@ -322,7 +336,7 @@ const UISettings = ({ isLightBackground }) => {
                 className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
               />
               <p className="text-xs text-white/50">
-                Number of sample points (grid size x grid size). Default: 5 (25 points)
+                Sample grid size for background detection (3-10). Higher = more accurate. Default: 5
               </p>
             </div>
           </>

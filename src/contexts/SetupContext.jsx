@@ -356,8 +356,8 @@ export function SetupProvider({ children }) {
       const uiConfig = {
         enableModelLoading: setupState.setupData.ui?.enableModelLoading ?? true,
         enablePortraitMode: setupState.setupData.ui?.enablePortraitMode ?? false,
-        enablePhysics: false,
-        fpsLimit: 30,
+        enablePhysics: true, // Enable physics by default
+        fpsLimit: 60, // Set default to 60 FPS
         position: {
           preset: setupState.setupData.ui?.position || 'bottom-right',
           custom: { x: 0, y: 0 },

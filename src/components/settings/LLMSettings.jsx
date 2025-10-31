@@ -8,6 +8,7 @@ import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
 import Toggle from '../common/Toggle';
+import StatusMessage from '../common/StatusMessage';
 
 // Reusable Image Support Component
 const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
@@ -240,14 +241,11 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
                 </div>
               ) : chromeAiStatus.state ? (
                 <>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      chromeAiStatus.available ? 'bg-green-400' :
-                      chromeAiStatus.downloading ? 'bg-yellow-400 animate-pulse' :
-                      'bg-red-400'
-                    }`}></div>
-                    <span className="text-sm font-semibold text-white/90">{chromeAiStatus.message}</span>
-                  </div>
+                  <StatusMessage 
+                    message={chromeAiStatus.message}
+                    isLightBackground={isLightBackground}
+                    className="mb-2"
+                  />
                   <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
                   
                   {/* Download Progress */}

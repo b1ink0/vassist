@@ -5,7 +5,7 @@ import Toggle from '../../common/Toggle';
 import VirtualAssistant from '../../VirtualAssistant';
 import { PositionPresets } from '../../../config/uiConfig';
 
-const CharacterIntroStep = () => {
+const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
   const normalRef = useRef(null);
   const portraitRef = useRef(null);
@@ -262,8 +262,9 @@ const CharacterIntroStep = () => {
                   );
                 })}
               </div>
-              <p className="text-xs text-white/60 mt-3">
-                💡 You can drag the character anywhere on screen later
+              <p className="text-xs text-white/60 mt-3 flex items-center gap-1.5">
+                <Icon name="idea" size={14} className="text-yellow-400" />
+                You can drag the character anywhere on screen later
               </p>
             </div>
           </>

@@ -8,8 +8,9 @@ import OpenAISTTConfig from '../../settings/stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from '../../settings/stt/OpenAICompatibleSTTConfig';
 import ChromeAISTTConfig from '../../settings/stt/ChromeAISTTConfig';
 import { TTSProviders, STTProviders, DefaultTTSConfig } from '../../../config/aiConfig';
+import StatusMessage from '../../common/StatusMessage';
 
-const TTSProviderStep = () => {
+const TTSProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   
@@ -138,7 +139,7 @@ const TTSProviderStep = () => {
       id: 'kokoro',
       name: 'Kokoro TTS',
       description: 'High-quality local text-to-speech',
-      icon: '🎭',
+      iconName: 'speaker',
       recommended: true,
       pros: [
         '100% Free',
@@ -158,7 +159,7 @@ const TTSProviderStep = () => {
       id: 'openai',
       name: 'OpenAI TTS',
       description: 'Cloud-based text-to-speech from OpenAI',
-      icon: '🔊',
+      iconName: 'volume',
       recommended: false,
       pros: [
         'High quality',
@@ -178,7 +179,7 @@ const TTSProviderStep = () => {
       id: 'openai-compatible',
       name: 'OpenAI-Compatible',
       description: 'Custom OpenAI-compatible TTS endpoint',
-      icon: '🔗',
+      iconName: 'link',
       recommended: false,
       pros: [
         'Use your own server',
@@ -260,7 +261,7 @@ const TTSProviderStep = () => {
     {
       id: STTProviders.CHROME_AI_MULTIMODAL,
       name: 'Chrome AI',
-      icon: '🎤',
+      iconName: 'microphone',
       description: 'On-device speech recognition',
       recommended: true,
       available: hasMultimodal,
@@ -269,7 +270,7 @@ const TTSProviderStep = () => {
     {
       id: STTProviders.OPENAI,
       name: 'OpenAI Whisper',
-      icon: '🌐',
+      iconName: 'globe',
       description: 'Cloud-based speech recognition',
       recommended: false,
       available: true,
@@ -278,7 +279,7 @@ const TTSProviderStep = () => {
     {
       id: STTProviders.OPENAI_COMPATIBLE,
       name: 'OpenAI-Compatible',
-      icon: '⚙️',
+      iconName: 'settings',
       description: 'Custom STT endpoint',
       recommended: false,
       available: true,
@@ -490,21 +491,25 @@ const TTSProviderStep = () => {
               <button
                 onClick={testConnection}
                 disabled={!openAIKey || testing}
-                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50"
+                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {testing ? '🔄 Testing...' : '🧪 Test'}
+                {testing ? (
+                  <>
+                    <Icon name="refresh" size={14} className="animate-spin" /> Testing...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="test" size={14} /> Test
+                  </>
+                )}
               </button>
             </div>
             {testResult && (
-              <div className={`mt-2 p-2 rounded-lg border ${
-                testResult.success 
-                  ? 'bg-green-500/10 border-green-500/30' 
-                  : 'bg-red-500/10 border-red-500/30'
-              }`}>
-                <p className={`text-xs ${testResult.success ? 'text-green-300' : 'text-red-300'}`}>
-                  {testResult.success ? '✓' : '✗'} {testResult.message}
-                </p>
-              </div>
+              <StatusMessage 
+                message={testResult.success ? `success:${testResult.message}` : `error:${testResult.message}`}
+                isLightBackground={isLightBackground}
+                className="mt-2"
+              />
             )}
           </div>
         </div>
@@ -568,21 +573,25 @@ const TTSProviderStep = () => {
               <button
                 onClick={testConnection}
                 disabled={!customEndpoint || testing}
-                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50"
+                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {testing ? '🔄 Testing...' : '🧪 Test'}
+                {testing ? (
+                  <>
+                    <Icon name="refresh" size={14} className="animate-spin" /> Testing...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="test" size={14} /> Test
+                  </>
+                )}
               </button>
             </div>
             {testResult && (
-              <div className={`mt-2 p-2 rounded-lg border ${
-                testResult.success 
-                  ? 'bg-green-500/10 border-green-500/30' 
-                  : 'bg-red-500/10 border-red-500/30'
-              }`}>
-                <p className={`text-xs ${testResult.success ? 'text-green-300' : 'text-red-300'}`}>
-                  {testResult.success ? '✓' : '✗'} {testResult.message}
-                </p>
-              </div>
+              <StatusMessage 
+                message={testResult.success ? `success:${testResult.message}` : `error:${testResult.message}`}
+                isLightBackground={isLightBackground}
+                className="mt-2"
+              />
             )}
           </div>
         </div>

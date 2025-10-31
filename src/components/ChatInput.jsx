@@ -92,7 +92,8 @@ const ChatInput = forwardRef(({
     
     const detectBackgroundBrightness = () => {
       const container = containerRef.current;
-      const elementsToDisable = [container].filter(Boolean);
+      const canvas = document.getElementById('vassist-babylon-canvas');
+      const elementsToDisable = [container, canvas].filter(Boolean);
       
       const result = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
         return BackgroundDetector.detectBrightness({
@@ -104,11 +105,8 @@ const ChatInput = forwardRef(({
             padding: 20,
           },
           elementsToIgnore: [
-            '.glass-fade-overlay',
-            '.glass-fade-overlay-dark',
-            'form',
             container,
-            '#vassist-babylon-canvas',
+            canvas,
           ],
           logPrefix: '[ChatInput]',
         });
@@ -559,52 +557,83 @@ const ChatInput = forwardRef(({
    * Initialize drag-drop service
    */
   useEffect(() => {
-    if (!isVisible || !containerRef.current) {
+    console.log('[ChatInput] Drag-drop setup effect running', { 
+      isVisible, 
+      hasContainer: !!containerRef.current 
+    });
+    
+    if (!isVisible) {
+      console.log('[ChatInput] Skipping drag-drop setup - not visible');
       return;
     }
 
-    // Create service instance
-    dragDropServiceRef.current = new DragDropService({
-      maxImages: 3,
-      maxAudios: 1
-    });
-
-    // Attach with simple action callbacks
-    dragDropServiceRef.current.attach(containerRef.current, {
-      onSetDragOver: (isDragging) => setIsDragOver(isDragging),
-      onShowError: (error) => {
-        setRecordingError(error);
-        setTimeout(() => setRecordingError(''), 3000);
-      },
-      checkVoiceMode: () => isVoiceMode,
-      getCurrentCounts: () => ({
-        images: attachedImages.length,
-        audios: attachedAudios.length
-      }),
-      onAddText: (text) => {
-        setMessage(prev => prev ? prev + '\n' + text : text);
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            adjustTextareaHeight();
-          }
-        }, 0);
-      },
-      onAddImages: (images) => {
-        setAttachedImages(prev => [...prev, ...images]);
-      },
-      onAddAudios: (audios) => {
-        setAttachedAudios(prev => [...prev, ...audios]);
+    // Wait for the container to be rendered (after fade-in animation starts)
+    const setupTimeout = setTimeout(() => {
+      if (!containerRef.current) {
+        console.log('[ChatInput] Container still not available after delay');
+        return;
       }
-    });
+
+      console.log('[ChatInput] Setting up drag-drop service');
+
+      // Create service instance
+      dragDropServiceRef.current = new DragDropService({
+        maxImages: 3,
+        maxAudios: 1
+      });
+
+      // Attach with simple action callbacks
+      dragDropServiceRef.current.attach(containerRef.current, {
+        onSetDragOver: (isDragging) => setIsDragOver(isDragging),
+        onShowError: (error) => {
+          setRecordingError(error);
+          setTimeout(() => setRecordingError(''), 3000);
+        },
+        checkVoiceMode: () => isVoiceMode,
+        getCurrentCounts: () => ({
+          images: attachedImages.length,
+          audios: attachedAudios.length
+        }),
+        onProcessData: (data) => {
+          const { text, images, audios } = data;
+          
+          // Add text if present
+          if (text && text.trim()) {
+            setMessage(prev => prev ? prev + '\n' + text : text);
+          }
+          
+          // Add images if present
+          if (images && images.length > 0) {
+            setAttachedImages(prev => [...prev, ...images]);
+          }
+          
+          // Add audios if present
+          if (audios && audios.length > 0) {
+            setAttachedAudios(prev => [...prev, ...audios]);
+          }
+          
+          // Focus textarea after processing
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+              adjustTextareaHeight();
+            }
+          }, 0);
+        }
+      });
+    }, 100); // Wait 100ms for element to render
 
     // Cleanup
     return () => {
+      clearTimeout(setupTimeout);
+      console.log('[ChatInput] Cleaning up drag-drop service');
       if (dragDropServiceRef.current) {
         dragDropServiceRef.current.detach();
+        dragDropServiceRef.current = null;
       }
     };
-  }, [isVisible, isVoiceMode, attachedImages.length, attachedAudios.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible]); // Only re-run when visibility changes. Callbacks use closures for latest values.
 
   const handleVoiceModeToggle = async () => {
     if (!STTServiceProxy.isConfigured()) {
@@ -725,9 +754,13 @@ const ChatInput = forwardRef(({
       <div 
         ref={containerRef}
         className="relative p-4 w-full max-w-3xl pointer-events-auto"
+        style={{
+          // Ensure drop events are captured
+          touchAction: 'none'
+        }}
       >
         {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
-        {!isVoiceMode && (
+        {!isVoiceMode && isDragOver && (
           <div 
             className="absolute z-10 pointer-events-none flex items-center justify-center rounded-xl"
             style={{
@@ -738,17 +771,10 @@ const ChatInput = forwardRef(({
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               backgroundColor: 'rgba(0, 0, 0, 0.2)',
-              opacity: isDragOver ? 1 : 0,
-              visibility: isDragOver ? 'visible' : 'hidden',
-              transition: 'opacity 200ms ease-in-out, visibility 200ms ease-in-out'
             }}
           >
             <div 
               className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
-              style={{
-                transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
-                transition: 'transform 200ms ease-in-out'
-              }}
             >
               <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
                 <Icon name="attachment" size={20} /> Drop

@@ -10,6 +10,8 @@
  * @param {boolean} props.compact - Use compact layout (default: false)
  * @param {boolean} props.showProsCons - Show pros/cons (default: false)
  */
+import { Icon } from '../../icons';
+
 const ProviderSelection = ({ 
   providers, 
   selectedProvider, 
@@ -21,10 +23,6 @@ const ProviderSelection = ({
   const textColor = isLightBackground ? 'text-gray-900' : 'text-white';
   const mutedColor = isLightBackground ? 'text-gray-700' : 'text-white/90';
   const subtleColor = isLightBackground ? 'text-gray-600' : 'text-white/80';
-
-  const isEmojiIcon = (icon) => {
-    return icon && icon.length <= 2;
-  };
 
   return (
     <div className={compact ? "space-y-2" : "space-y-4"}>
@@ -45,11 +43,11 @@ const ProviderSelection = ({
           >
             <div className={`flex items-start ${compact ? 'gap-2' : 'gap-4'}`}>
               {/* Icon */}
-              <div className={`flex-shrink-0 ${compact ? 'text-xl sm:text-2xl' : 'text-4xl'}`}>
-                {isEmojiIcon(provider.icon) ? (
-                  <span>{provider.icon}</span>
+              <div className={`flex-shrink-0`}>
+                {provider.iconName ? (
+                  <Icon name={provider.iconName} size={compact ? 20 : 40} className={mutedColor} />
                 ) : (
-                  <Icon name={provider.icon} size={compact ? 20 : 40} className={mutedColor} />
+                  <span className={`${compact ? 'text-xl sm:text-2xl' : 'text-4xl'}`}>{provider.icon}</span>
                 )}
               </div>
 
@@ -98,7 +96,10 @@ const ProviderSelection = ({
                         <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-green-400 mb-1`}>Pros:</p>
                         <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
                           {provider.pros.map((pro, idx) => (
-                            <li key={idx}>✓ {pro}</li>
+                            <li key={idx} className="flex items-start gap-1.5">
+                              <Icon name="check" size={10} className="text-green-400 mt-0.5 flex-shrink-0" />
+                              <span>{pro}</span>
+                            </li>
                           ))}
                         </ul>
                       </div>
@@ -110,7 +111,10 @@ const ProviderSelection = ({
                         <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-yellow-400 mb-1`}>Cons:</p>
                         <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
                           {provider.cons.map((con, idx) => (
-                            <li key={idx}>⚠ {con}</li>
+                            <li key={idx} className="flex items-start gap-1.5">
+                              <Icon name="warning" size={10} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                              <span>{con}</span>
+                            </li>
                           ))}
                         </ul>
                       </div>

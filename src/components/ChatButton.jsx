@@ -311,26 +311,68 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   // Attach drag-drop service to button so drops set pending data in AppContext
   useEffect(() => {
-    if (!buttonRef.current) return;
+    if (!shouldRender) {
+      console.log('[ChatButton] Skipping drag-drop setup - not rendered');
+      return;
+    }
+    
+    console.log('[ChatButton] Drag-drop setup effect running', {
+      hasButton: !!buttonRef.current,
+      shouldRender
+    });
+    
     let attached = true;
-    import('../services/DragDropService').then(({ default: DragDropService }) => {
-      if (!attached) return;
-      const el = buttonRef.current;
-      if (!el) return;
-      dragDropServiceRef.current = new DragDropService({ maxImages: 3, maxAudios: 1 });
-      dragDropServiceRef.current.attach(el, {
-        onSetDragOver: (flag) => setIsDragOverButton(flag),
-        onShowError: (err) => console.error('[ChatButton] DragDrop error', err),
-        checkVoiceMode: null,
-        getCurrentCounts: () => ({ images: 0, audios: 0 }),
-        onProcessData: (data) => {
-          if (!isChatOpen) handleClick();
-          setPendingDropData(data);
+    
+    // Wait a short moment for the element to be in DOM
+    const setupTimeout = setTimeout(() => {
+      if (!attached) {
+        console.log('[ChatButton] Cleanup called before setup completed');
+        return;
+      }
+      
+      if (!buttonRef.current) {
+        console.log('[ChatButton] Button ref not available');
+        return;
+      }
+      
+      console.log('[ChatButton] Setting up drag-drop service');
+      
+      import('../services/DragDropService').then(({ default: DragDropService }) => {
+        if (!attached) {
+          console.log('[ChatButton] Cleanup called during async import');
+          return;
         }
-      });
-    }).catch(err => console.error('[ChatButton] load DragDropService failed', err));
-    return () => { attached = false; if (dragDropServiceRef.current) dragDropServiceRef.current.detach(); };
-  }, [isChatOpen, handleClick, setPendingDropData]);
+        const el = buttonRef.current;
+        if (!el) {
+          console.log('[ChatButton] Button ref lost during async import');
+          return;
+        }
+        
+        dragDropServiceRef.current = new DragDropService({ maxImages: 3, maxAudios: 1 });
+        dragDropServiceRef.current.attach(el, {
+          onSetDragOver: (flag) => setIsDragOverButton(flag),
+          onShowError: (err) => console.error('[ChatButton] DragDrop error', err),
+          checkVoiceMode: null,
+          getCurrentCounts: () => ({ images: 0, audios: 0 }),
+          onProcessData: (data) => {
+            if (!isChatOpen) handleClick();
+            setPendingDropData(data);
+          }
+        });
+      }).catch(err => console.error('[ChatButton] load DragDropService failed', err));
+    }, 50); // Short delay for DOM to be ready
+    
+    return () => { 
+      attached = false;
+      clearTimeout(setupTimeout);
+      console.log('[ChatButton] Cleaning up drag-drop service');
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+        dragDropServiceRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRender]); // Trigger when button actually renders
 
   if (!shouldRender) return null;
 
@@ -355,7 +397,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       }`}
       title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
     >
-      <Icon name={isChatOpen ? 'close' : 'ai'} size={24} className="glass-text drop-shadow-lg" />
+      <Icon 
+        name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
+        size={24} 
+        className="glass-text drop-shadow-lg" 
+      />
     </button>
   );
 };

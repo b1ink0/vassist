@@ -15,7 +15,7 @@ export const iconColors = {
   
   // Actions
   'send': 'text-blue-500',
-  'microphone': 'text-blue-500',
+  'microphone': 'text-red-500',
   'speaker': 'text-purple-400',
   'stop': 'text-red-500',
   'play': 'text-green-500',
@@ -23,7 +23,7 @@ export const iconColors = {
   
   // Communication
   'chat': 'text-blue-400',
-  'ai': 'text-purple-500',
+  'ai': 'text-cyan-400',
   
   // Content Types
   'book': 'text-orange-400',
@@ -110,6 +110,9 @@ export const iconColors = {
   // Improvements
   'briefcase': 'text-blue-500',
   'formal': 'text-indigo-500',
+  'casual': 'text-blue-400',
+  'compress': 'text-gray-400',
+  'clarity': 'text-blue-400',
   
   // Location
   'location': 'text-red-500',

@@ -9,9 +9,8 @@
  * - Glassmorphism design with Tailwind
  * - Optional progress percentage display
  * - Smooth fade in/out transitions
+ * - Custom circular loading animation (no icon dependency)
  */
-
-import { Icon } from './icons';
 
 const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }) => {
   if (!isVisible) return null;
@@ -24,11 +23,28 @@ const LoadingIndicator = ({ isVisible = false, progress = null, centered = false
         WebkitBackdropFilter: 'blur(16px)',
       }}
     >
-      {/* Animated spinner with percentage inside */}
+      {/* Custom circular loading spinner with percentage inside */}
       <div className="relative w-8 h-8 flex items-center justify-center">
-        <div className="animate-spin">
-          <Icon name="spinner" size={32} className="text-white" />
-        </div>
+        {/* Spinning circle */}
+        <svg 
+          className="animate-spin" 
+          width="32" 
+          height="32" 
+          viewBox="0 0 32 32" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle 
+            cx="16" 
+            cy="16" 
+            r="14" 
+            stroke="currentColor" 
+            strokeWidth="3" 
+            strokeLinecap="round"
+            strokeDasharray="70 20"
+            className="text-white opacity-90"
+          />
+        </svg>
         {progress !== null && (
           <span className="absolute text-white text-[9px] font-bold z-10">{Math.round(progress)}</span>
         )}

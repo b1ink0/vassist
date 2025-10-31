@@ -72,21 +72,20 @@ class BackgroundDetector {
       for (const point of samplePoints) {
         const result = this._samplePointBrightness(point, elementsToIgnore);
         
-        if (result.brightness !== null) {
-          allBrightness.push(result.brightness);
-          
-          if (showDebug) {
-            const hue = (result.brightness / 255) * 120; // 0 (red) to 120 (green)
-            const color = `hsl(${hue}, 100%, 50%)`;
-            markers.push({
-              x: point.x,
-              y: point.y,
-              color,
-              brightness: Math.round(result.brightness),
-              alpha: result.alpha?.toFixed(2) || '1.00',
-              element: result.element || 'unknown',
-            });
-          }
+        // Always include the result since we now default to white if nothing found
+        allBrightness.push(result.brightness);
+        
+        if (showDebug) {
+          const hue = (result.brightness / 255) * 120; // 0 (red) to 120 (green)
+          const color = `hsl(${hue}, 100%, 50%)`;
+          markers.push({
+            x: point.x,
+            y: point.y,
+            color,
+            brightness: Math.round(result.brightness),
+            alpha: result.alpha?.toFixed(2) || '1.00',
+            element: result.element || 'unknown',
+          });
         }
       }
       
@@ -163,6 +162,7 @@ class BackgroundDetector {
     
     // Traverse up DOM tree to find first element with non-transparent background
     let bgColor = '';
+    let bgImage = '';
     let attempts = 0;
     const maxAttempts = 10;
     
@@ -189,9 +189,24 @@ class BackgroundDetector {
         continue;
       }
       
-      bgColor = window.getComputedStyle(elementBehind).backgroundColor;
+      const computedStyle = window.getComputedStyle(elementBehind);
+      bgColor = computedStyle.backgroundColor;
+      bgImage = computedStyle.backgroundImage;
       
-      // Check if we got a valid color
+      // Check for gradient backgrounds first
+      if (bgImage && bgImage !== 'none' && bgImage.includes('gradient')) {
+        const brightness = this._calculateGradientBrightness(bgImage);
+        if (brightness !== null) {
+          return {
+            brightness,
+            alpha: 1,
+            element: elementBehind.tagName,
+            type: 'gradient',
+          };
+        }
+      }
+      
+      // Check if we got a valid solid color
       const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
       if (rgbMatch) {
         const a = rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1;
@@ -208,6 +223,7 @@ class BackgroundDetector {
             brightness,
             alpha: a,
             element: elementBehind.tagName,
+            type: 'solid',
           };
         }
       }
@@ -217,7 +233,138 @@ class BackgroundDetector {
       attempts++;
     }
     
-    return { brightness: null };
+    // If we traversed all the way up without finding a background, default to white
+    // This handles websites that don't explicitly set background colors (browser default is white)
+    return {
+      brightness: 255, // White background
+      alpha: 1,
+      element: 'body-default',
+      type: 'default',
+    };
+  }
+
+  /**
+   * Calculate brightness from a CSS gradient at a specific point
+   * @private
+   */
+  _calculateGradientBrightness(gradientString) {
+    try {
+      // Extract colors from gradient string
+      // Supports: linear-gradient, radial-gradient, conic-gradient
+      const colorMatches = gradientString.matchAll(/rgba?\([\d\s,]+\)|#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)/g);
+      const colors = [];
+      
+      for (const match of colorMatches) {
+        const color = this._parseColor(match[0]);
+        if (color) {
+          colors.push(color);
+        }
+      }
+      
+      if (colors.length === 0) {
+        return null;
+      }
+      
+      // For simplicity, calculate average brightness of all gradient colors
+      // More sophisticated: could calculate based on gradient direction and point position
+      const avgBrightness = colors.reduce((sum, color) => {
+        const brightness = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+        return sum + brightness;
+      }, 0) / colors.length;
+      
+      return avgBrightness;
+    } catch (error) {
+      console.warn('[BackgroundDetector] Failed to parse gradient:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Parse a CSS color string to RGB values
+   * @private
+   */
+  _parseColor(colorString) {
+    // Handle rgb/rgba
+    const rgbMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1]),
+        g: parseInt(rgbMatch[2]),
+        b: parseInt(rgbMatch[3]),
+        a: rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1,
+      };
+    }
+    
+    // Handle hex colors
+    const hexMatch = colorString.match(/^#([0-9a-fA-F]{3,8})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      let r, g, b, a = 1;
+      
+      if (hex.length === 3) {
+        // #RGB
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else if (hex.length === 6) {
+        // #RRGGBB
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+      } else if (hex.length === 8) {
+        // #RRGGBBAA
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+        a = parseInt(hex.substr(6, 2), 16) / 255;
+      }
+      
+      return { r, g, b, a };
+    }
+    
+    // Handle hsl/hsla (convert to RGB)
+    const hslMatch = colorString.match(/hsla?\((\d+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/);
+    if (hslMatch) {
+      const h = parseInt(hslMatch[1]) / 360;
+      const s = parseFloat(hslMatch[2]) / 100;
+      const l = parseFloat(hslMatch[3]) / 100;
+      const a = hslMatch[4] !== undefined ? parseFloat(hslMatch[4]) : 1;
+      
+      // HSL to RGB conversion
+      const hslToRgb = (h, s, l) => {
+        let r, g, b;
+        
+        if (s === 0) {
+          r = g = b = l;
+        } else {
+          const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+          };
+          
+          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+          const p = 2 * l - q;
+          r = hue2rgb(p, q, h + 1/3);
+          g = hue2rgb(p, q, h);
+          b = hue2rgb(p, q, h - 1/3);
+        }
+        
+        return {
+          r: Math.round(r * 255),
+          g: Math.round(g * 255),
+          b: Math.round(b * 255),
+        };
+      };
+      
+      const rgb = hslToRgb(h, s, l);
+      return { ...rgb, a };
+    }
+    
+    return null;
   }
 
   /**

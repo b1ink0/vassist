@@ -97,10 +97,10 @@ const TTSSettings = ({ isLightBackground }) => {
                           console.error('Failed to get cache size:', error);
                         }
                       }}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg`}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg flex items-center gap-1.5`}
                       title="Check cache size"
                     >
-                      📊 Check Size
+                      <Icon name="stats" size={14} /> Check Size
                     </button>
                     <button 
                       onClick={async () => {
@@ -120,10 +120,18 @@ const TTSSettings = ({ isLightBackground }) => {
                         }
                       }}
                       disabled={clearingCache}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg disabled:opacity-50`}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg disabled:opacity-50 flex items-center gap-1.5`}
                       title="Clear model cache"
                     >
-                      {clearingCache ? '⏳ Clearing...' : '🗑️ Clear Cache'}
+                      {clearingCache ? (
+                        <>
+                          <Icon name="loading" size={14} className="animate-spin" /> Clearing...
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="delete" size={14} /> Clear Cache
+                        </>
+                      )}
                     </button>
                   </div>
                   {cacheSize !== null && cacheSize.usage !== undefined && (

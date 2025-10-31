@@ -6,7 +6,7 @@
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 
-const WelcomeStep = () => {
+const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { nextStep } = useSetup();
 
   return (

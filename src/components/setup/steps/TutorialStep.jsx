@@ -5,7 +5,7 @@
 
 import { Icon } from '../../icons';
 
-const TutorialStep = () => {
+const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const tutorials = [
     {
       title: 'Chat Interface',

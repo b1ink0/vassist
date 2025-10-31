@@ -91,12 +91,15 @@ class DragDropService {
   _handleDragEnter(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log('[DragDropService] Drag enter');
     this._setDragState(true);
   }
 
   _handleDragOver(e) {
     e.preventDefault();
     e.stopPropagation();
+    // Set dropEffect to indicate this is a valid drop target
+    e.dataTransfer.dropEffect = 'copy';
   }
 
   _handleDragLeave(e) {
@@ -104,7 +107,11 @@ class DragDropService {
     e.stopPropagation();
     
     // Only set to false if leaving the container entirely
-    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget)) {
+    // Check if relatedTarget is null (left the window) or not contained in our element
+    const isLeavingContainer = !e.relatedTarget || !this.element.contains(e.relatedTarget);
+    
+    if (isLeavingContainer) {
+      console.log('[DragDropService] Drag leave (exiting container)');
       this._setDragState(false);
     }
   }
@@ -145,6 +152,7 @@ class DragDropService {
   _setDragState(isDragOver) {
     if (this.isDragOver !== isDragOver) {
       this.isDragOver = isDragOver;
+      console.log('[DragDropService] Drag state changed:', isDragOver);
       if (this.onSetDragOver) {
         this.onSetDragOver(isDragOver);
       }

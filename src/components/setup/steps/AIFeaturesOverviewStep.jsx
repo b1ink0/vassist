@@ -8,7 +8,7 @@ import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 
-const AIFeaturesOverviewStep = () => {
+const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const [features, setFeatures] = useState({

@@ -136,9 +136,16 @@ class TTSService {
 
         console.log(`${logPrefix} - OpenAI TTS configured:`, state.config);
       } else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
+        // Normalize endpoint URL - ensure it ends with /v1 (SDK appends /audio/speech)
+        let endpoint = config['openai-compatible'].endpoint;
+        if (!endpoint.endsWith('/v1')) {
+          // Remove trailing slash if present, then add /v1
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
         state.client = new OpenAI({
           apiKey: config['openai-compatible'].apiKey || 'default',
-          baseURL: config['openai-compatible'].endpoint,
+          baseURL: endpoint,
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
 
@@ -149,7 +156,7 @@ class TTSService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - Generic TTS configured:`, { baseURL: config['openai-compatible'].endpoint });
+        console.log(`${logPrefix} - Generic TTS configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }

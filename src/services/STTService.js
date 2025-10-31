@@ -114,9 +114,15 @@ class STTService {
 
         console.log(`${logPrefix} - OpenAI Whisper configured:`, state.config);
       } else if (provider === STTProviders.OPENAI_COMPATIBLE) {
+        // Normalize endpoint to ensure /v1 is present (OpenAI SDK appends /audio/transcriptions to baseURL)
+        let endpoint = config['openai-compatible'].endpoint;
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+
         state.client = new OpenAI({
           apiKey: config['openai-compatible'].apiKey || 'default',
-          baseURL: config['openai-compatible'].endpoint,
+          baseURL: endpoint,
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
 
@@ -127,7 +133,7 @@ class STTService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - Generic STT configured:`, { baseURL: config['openai-compatible'].endpoint });
+        console.log(`${logPrefix} - Generic STT configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown STT provider: ${provider}`);
       }

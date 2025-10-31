@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import { ChromeAILanguages } from '../../../config/aiConfig';
+import StatusMessage from '../../common/StatusMessage';
 
 const ChromeAISTTConfig = ({ 
   config, 
@@ -61,14 +62,11 @@ const ChromeAISTTConfig = ({
             </div>
           ) : chromeAiStatus.state ? (
             <>
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  chromeAiStatus.available ? 'bg-green-400' :
-                  chromeAiStatus.downloading ? 'bg-yellow-400 animate-pulse' :
-                  'bg-red-400'
-                }`}></div>
-                <span className="text-sm font-semibold text-white/90">{chromeAiStatus.message}</span>
-              </div>
+              <StatusMessage 
+                message={chromeAiStatus.message}
+                isLightBackground={isLightBackground}
+                className="mb-2"
+              />
               <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
               
               {/* Download Progress */}
