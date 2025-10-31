@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import { ChromeAILanguages } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
+import Logger from '../../../services/Logger';
 
 const ChromeAISTTConfig = ({ 
   config, 
@@ -23,7 +24,7 @@ const ChromeAISTTConfig = ({
   // Auto-check status on mount
   useEffect(() => {
     if (onCheckStatus && !hasCheckedRef.current) {
-      console.log('[ChromeAISTTConfig] Auto-checking status on mount');
+      Logger.log('ChromeAISTTConfig', 'Auto-checking status on mount');
       hasCheckedRef.current = true;
       onCheckStatus();
     }

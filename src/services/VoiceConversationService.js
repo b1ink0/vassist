@@ -10,6 +10,7 @@
 
 import { TTSServiceProxy, AIServiceProxy } from './proxies';
 import VoiceRecordingService from './VoiceRecordingService';
+import Logger from './Logger';
 
 
 
@@ -35,7 +36,7 @@ class VoiceConversationService {
     this.onResponse = null; // (text) => void
     this.onError = null; // (error) => void
     
-    console.log('[VoiceConversation] Initialized');
+    // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -43,23 +44,23 @@ class VoiceConversationService {
    */
   async start() {
     if (this.isActive) {
-      console.warn('[VoiceConversation] Already active');
+      Logger.warn('VoiceConversation', 'Already active');
       return;
     }
 
     try {
-      console.log('[VoiceConversation] Starting conversation mode...');
+      Logger.log('VoiceConversation', 'Starting conversation mode...');
       
       // Start VoiceRecordingService with callbacks
       await VoiceRecordingService.start({
         onTranscription: (transcription) => {
-          console.log(`[VoiceConversation] Transcription received: "${transcription}"`);
+          Logger.log('VoiceConversation', `Transcription received: "${transcription}"`);
           
           if (this.onTranscription) {
-            console.log('[VoiceConversation] Calling onTranscription callback...');
+            Logger.log('VoiceConversation', 'Calling onTranscription callback...');
             this.onTranscription(transcription);
           } else {
-            console.warn('[VoiceConversation] No onTranscription callback set!');
+            Logger.warn('VoiceConversation', 'No onTranscription callback set!');
             // Return to listening if no callback
             this.changeState(ConversationStates.LISTENING);
           }
@@ -73,11 +74,11 @@ class VoiceConversationService {
           this.changeState(ConversationStates.LISTENING);
         },
         onRecordingStart: () => {
-          console.log('[VoiceConversation] Recording started (VAD detected speech)');
+          Logger.log('VoiceConversation', 'Recording started (VAD detected speech)');
           // We're already in LISTENING state, no need to change
         },
         onRecordingStop: () => {
-          console.log('[VoiceConversation] Recording stopped (VAD detected silence)');
+          Logger.log('VoiceConversation', 'Recording stopped (VAD detected silence)');
           // Transition to THINKING state while transcription is being processed
           this.changeState(ConversationStates.THINKING);
         },
@@ -85,7 +86,7 @@ class VoiceConversationService {
           // Optional: Could use for UI feedback
           // Check if speech detected while AI is speaking (for interrupt)
           if (volume > VoiceRecordingService.vadThreshold && this.currentState === ConversationStates.SPEAKING) {
-            console.log('[VoiceConversation] Speech detected while AI speaking - interrupting and stopping TTS');
+            Logger.log('VoiceConversation', 'Speech detected while AI speaking - interrupting and stopping TTS');
             
             // Dispatch event to trigger force-complete animation in ChatContainer
             const event = new CustomEvent('voiceInterrupt');
@@ -100,7 +101,7 @@ class VoiceConversationService {
       this.isActive = true;
       this.changeState(ConversationStates.LISTENING);
       
-      console.log('[VoiceConversation] Started successfully');
+      Logger.log('VoiceConversation', 'Started successfully');
       
     } catch (error) {
       console.error('[VoiceConversation] Failed to start:', error);
@@ -115,7 +116,7 @@ class VoiceConversationService {
    * Stop voice conversation mode
    */
   stop() {
-    console.log('[VoiceConversation] Stopping conversation mode...');
+    Logger.log('VoiceConversation', 'Stopping conversation mode...');
     
     // Stop VoiceRecordingService
     VoiceRecordingService.stop();
@@ -127,14 +128,14 @@ class VoiceConversationService {
     this.isActive = false;
     this.changeState(ConversationStates.IDLE);
     
-    console.log('[VoiceConversation] Stopped');
+    Logger.log('VoiceConversation', 'Stopped');
   }
 
   /**
    * Manual interrupt - stop AI from speaking
    */
   interrupt() {
-    console.log('[VoiceConversation] Manual interrupt');
+    Logger.log('VoiceConversation', 'Manual interrupt');
     
     // Stop TTS and AI generation
     TTSServiceProxy.stopPlayback();
@@ -158,7 +159,7 @@ class VoiceConversationService {
    */
   async speak(text) {
     try {
-      console.log(`[VoiceConversation] Speaking: "${text.substring(0, 100)}..."`);
+      Logger.log('VoiceConversation', `Speaking: "${text.substring(0, 100)}..."`);
       
       this.changeState(ConversationStates.SPEAKING);
       
@@ -167,7 +168,7 @@ class VoiceConversationService {
       
       // Chunk the text for better TTS generation
       const chunks = this.chunkTextForSpeech(text);
-      console.log(`[VoiceConversation] Chunked into ${chunks.length} parts for TTS`);
+      Logger.log('VoiceConversation', `Chunked into ${chunks.length} parts for TTS`);
       
       const MAX_CONCURRENT_TTS = 3;
       let activeTTSGenerations = 0;
@@ -184,20 +185,20 @@ class VoiceConversationService {
         
         // Check if stopped
         if (TTSServiceProxy.isStopped) {
-          console.log(`[VoiceConversation] Stopped, skipping TTS chunk ${index}`);
+          Logger.log('VoiceConversation', `Stopped, skipping TTS chunk ${index}`);
           return;
         }
         
         activeTTSGenerations++;
         try {
-          console.log(`[VoiceConversation] Generating TTS+lip sync ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
+          Logger.log('VoiceConversation', `Generating TTS+lip sync ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
           
           // Generate TTS audio + lip sync (VMD -> BVMD)
           const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunk, true);
           
           // Check if stopped after generation
           if (TTSServiceProxy.isStopped) {
-            console.log(`[VoiceConversation] Stopped after generation, discarding chunk ${index}`);
+            Logger.log('VoiceConversation', `Stopped after generation, discarding chunk ${index}`);
             return;
           }
           
@@ -206,7 +207,7 @@ class VoiceConversationService {
           // Queue audio with BVMD for synchronized lip sync
           TTSServiceProxy.queueAudio(chunk, audioUrl, bvmdUrl);
           
-          console.log(`[VoiceConversation] TTS ${index + 1}/${chunks.length} queued${bvmdUrl ? ' with lip sync' : ''}`);
+          Logger.log('VoiceConversation', `TTS ${index + 1}/${chunks.length} queued${bvmdUrl ? ' with lip sync' : ''}`);
         } catch (error) {
           console.warn(`[VoiceConversation] TTS generation failed for chunk ${index + 1}:`, error);
         } finally {
@@ -221,7 +222,7 @@ class VoiceConversationService {
       
       // Wait for all generations to complete
       await Promise.all(ttsGenerationQueue);
-      console.log('[VoiceConversation] All TTS generations complete');
+      Logger.log('VoiceConversation', 'All TTS generations complete');
       
       // Monitor playback and return to listening when done
       this.monitorTTSPlayback();
@@ -241,13 +242,13 @@ class VoiceConversationService {
   monitorTTSPlayback() {
     // Change to SPEAKING state if we're in THINKING
     if (this.currentState === ConversationStates.THINKING) {
-      console.log('[VoiceConversation] Transitioning THINKING → SPEAKING (audio started)');
+      Logger.log('VoiceConversation', 'Transitioning THINKING → SPEAKING (audio started)');
       this.changeState(ConversationStates.SPEAKING);
     }
     
     // Don't start monitoring if not in speaking state
     if (this.currentState !== ConversationStates.SPEAKING) {
-      console.log('[VoiceConversation] Not in SPEAKING state, skipping playback monitoring');
+      Logger.log('VoiceConversation', 'Not in SPEAKING state, skipping playback monitoring');
       return;
     }
     
@@ -256,7 +257,7 @@ class VoiceConversationService {
       
       // Only monitor if we're still in speaking state
       if (this.currentState !== ConversationStates.SPEAKING) {
-        console.log('[VoiceConversation] No longer in SPEAKING state, stopping monitoring');
+        Logger.log('VoiceConversation', 'No longer in SPEAKING state, stopping monitoring');
         return;
       }
       
@@ -264,7 +265,7 @@ class VoiceConversationService {
       const isAudioActive = TTSServiceProxy.isAudioActive();
       
       if (!isAudioActive) {
-        console.log('[VoiceConversation] TTS finished (no audio playing or queued), returning to listening');
+        Logger.log('VoiceConversation', 'TTS finished (no audio playing or queued), returning to listening');
         this.changeState(ConversationStates.LISTENING);
       } else {
         // Check again in 100ms
@@ -316,7 +317,7 @@ class VoiceConversationService {
   changeState(newState) {
     if (this.currentState === newState) return;
     
-    console.log(`[VoiceConversation] State: ${this.currentState} → ${newState}`);
+    Logger.log('VoiceConversation', `State: ${this.currentState} → ${newState}`);
     this.currentState = newState;
     
     if (this.onStateChange) {

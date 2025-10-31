@@ -9,6 +9,7 @@ import { MessageTypes } from '../../extension/shared/MessageTypes.js';
 import { VMDGenerationCore } from './shared/VMDGenerationCore.js';
 import { BVMDConversionCore } from './shared/BVMDConversionCore.js';
 import KokoroTTSCore from './shared/KokoroTTSCore.js';
+import Logger from '../services/Logger';
 
 class SharedAudioWorker {
     constructor() {
@@ -23,20 +24,20 @@ class SharedAudioWorker {
             const port = e.ports[0];
             this.ports.add(port);
             
-            console.log('[SharedAudioWorker] New connection, total ports:', this.ports.size);
+            Logger.log('SharedAudioWorker', 'New connection, total ports:', this.ports.size);
             
             port.onmessage = async (event) => {
                 try {
                     // Wait for initialization to complete before processing
                     if (!this.isReady) {
-                        console.log('[SharedAudioWorker] Waiting for initialization...');
+                        Logger.log('SharedAudioWorker', 'Waiting for initialization...');
                         await this.initPromise;
                     }
                     
                     const response = await this.handleMessage(event.data);
                     port.postMessage(response);
                 } catch (error) {
-                    console.error('[SharedAudioWorker] Error:', error);
+                    Logger.error('SharedAudioWorker', 'Error:', error);
                     port.postMessage({
                         type: MessageTypes.ERROR,
                         requestId: event.data.requestId,
@@ -53,28 +54,28 @@ class SharedAudioWorker {
     }
 
     async init() {
-        console.log('[SharedAudioWorker] Initializing...');
+        Logger.log('SharedAudioWorker', 'Initializing...');
         
         // Try to create Babylon scene for BVMD conversion
         try {
             this.scene = await BVMDConversionCore.createWorkerScene();
             if (this.scene) {
-                console.log('[SharedAudioWorker] BVMD conversion available');
+                Logger.log('SharedAudioWorker', 'BVMD conversion available');
             } else {
-                console.warn('[SharedAudioWorker] BVMD conversion not available, will fallback to main thread');
+                Logger.warn('SharedAudioWorker', 'BVMD conversion not available, will fallback to main thread');
             }
         } catch (error) {
-            console.error('[SharedAudioWorker] Failed to initialize BVMD converter:', error);
+            Logger.error('SharedAudioWorker', 'Failed to initialize BVMD converter:', error);
         }
         
         this.isReady = true;
-        console.log('[SharedAudioWorker] Ready');
+        Logger.log('SharedAudioWorker', 'Ready');
     }
 
     async handleMessage(message) {
         const { type, requestId } = message;
         
-        console.log(`[SharedAudioWorker] Received ${type}, request ${requestId}`);
+        Logger.log('SharedAudioWorker', `Received ${type}, request ${requestId}`);
         
         let data;
         
@@ -113,7 +114,7 @@ class SharedAudioWorker {
                 throw new Error(`Unknown message type: ${type}`);
         }
         
-        console.log(`[SharedAudioWorker] Handler completed, returning response for ${requestId}`);
+        Logger.log('SharedAudioWorker', `Handler completed, returning response for ${requestId}`);
         
         return {
             type: MessageTypes.SUCCESS,
@@ -133,7 +134,7 @@ class SharedAudioWorker {
         const { audioData, sampleRate, originalAudioBuffer } = message.data;
         
         try {
-            console.log(`[SharedAudioWorker] Processing audio: ${audioData.length} samples @ ${sampleRate}Hz`);
+            Logger.log('SharedAudioWorker', `Processing audio: ${audioData.length} samples @ ${sampleRate}Hz`);
             
             // Convert array back to Float32Array if needed
             const pcmData = audioData instanceof Float32Array ? audioData : new Float32Array(audioData);
@@ -148,7 +149,7 @@ class SharedAudioWorker {
                 bvmdArrayBuffer = await BVMDConversionCore.convertVMDToBVMD(vmdData, this.scene);
             } else {
                 // Return VMD and signal main thread to convert
-                console.warn('[SharedAudioWorker] BVMD conversion not available, returning VMD for main thread conversion');
+                Logger.warn('SharedAudioWorker', 'BVMD conversion not available, returning VMD for main thread conversion');
                 return {
                     audioBuffer: Array.from(new Uint8Array(originalAudioBuffer)),
                     vmdData: Array.from(new Uint8Array(vmdData)),
@@ -164,7 +165,7 @@ class SharedAudioWorker {
             };
             
         } catch (error) {
-            console.error('[SharedAudioWorker] Processing failed:', error);
+            Logger.error('SharedAudioWorker', 'Processing failed:', error);
             // Return audio without lip sync on error
             return {
                 audioBuffer: Array.from(new Uint8Array(originalAudioBuffer)),
@@ -181,7 +182,7 @@ class SharedAudioWorker {
     async handleVMDGenerate(message) {
         const { audioData, sampleRate, modelName } = message.data;
         
-        console.log('[SharedAudioWorker] Generating VMD from PCM...');
+        Logger.log('SharedAudioWorker', 'Generating VMD from PCM...');
         
         try {
             // Convert array back to Float32Array if needed
@@ -190,14 +191,14 @@ class SharedAudioWorker {
             // Generate VMD using core
             const vmdData = await VMDGenerationCore.generateVMDFromPCM(pcmData, sampleRate, modelName);
             
-            console.log(`[SharedAudioWorker] VMD generated: ${vmdData.byteLength} bytes`);
+            Logger.log('SharedAudioWorker', `VMD generated: ${vmdData.byteLength} bytes`);
             
             return {
                 vmdData,
                 modelName: modelName || 'Model'
             };
         } catch (error) {
-            console.error('[SharedAudioWorker] VMD generation failed:', error);
+            Logger.error('SharedAudioWorker', 'VMD generation failed:', error);
             throw error;
         }
     }
@@ -211,7 +212,7 @@ class SharedAudioWorker {
         const { modelId, device } = message.data;
         
         try {
-            console.log('[SharedAudioWorker] Initializing Kokoro TTS...', { modelId, device });
+            Logger.log('SharedAudioWorker', 'Initializing Kokoro TTS...', { modelId, device });
             
             // Pass config directly to KokoroTTSCore - it handles device/dtype mapping internally
             const initialized = await KokoroTTSCore.initialize({
@@ -241,7 +242,7 @@ class SharedAudioWorker {
                 message: initialized ? 'Kokoro TTS initialized successfully' : 'Initialization failed'
             };
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro initialization failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro initialization failed:', error);
             throw new Error(`Kokoro initialization failed: ${error.message}`);
         }
     }
@@ -260,7 +261,7 @@ class SharedAudioWorker {
                 throw new Error(`Invalid text parameter: ${JSON.stringify(text)}`);
             }
             
-            console.log(`[SharedAudioWorker] Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
+            Logger.log('SharedAudioWorker', `Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
             
             // Generate audio using KokoroTTSCore
             const audioBuffer = await KokoroTTSCore.generate(text, {
@@ -275,7 +276,7 @@ class SharedAudioWorker {
                 sampleRate: 24000
             };
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro generation failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro generation failed:', error);
             throw new Error(`Kokoro generation failed: ${error.message}`);
         }
     }
@@ -289,7 +290,7 @@ class SharedAudioWorker {
             const status = KokoroTTSCore.getStatus();
             return status;
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro status check failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro status check failed:', error);
             throw new Error(`Kokoro status check failed: ${error.message}`);
         }
     }
@@ -303,7 +304,7 @@ class SharedAudioWorker {
             const voices = await KokoroTTSCore.listVoices();
             return { voices };
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro list voices failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro list voices failed:', error);
             throw new Error(`Failed to list voices: ${error.message}`);
         }
     }
@@ -331,7 +332,7 @@ class SharedAudioWorker {
             const cacheInfo = await KokoroTTSCore.getCacheSize();
             return cacheInfo;
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro cache size check failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro cache size check failed:', error);
             throw new Error(`Failed to get cache size: ${error.message}`);
         }
     }
@@ -345,7 +346,7 @@ class SharedAudioWorker {
             await KokoroTTSCore.clearCache();
             return { cleared: true };
         } catch (error) {
-            console.error('[SharedAudioWorker] Kokoro cache clear failed:', error);
+            Logger.error('SharedAudioWorker', 'Kokoro cache clear failed:', error);
             throw new Error(`Failed to clear cache: ${error.message}`);
         }
     }
@@ -376,7 +377,7 @@ class SharedAudioWorker {
                 spectrogramFrames: spectrogram.data.length
             };
         } catch (error) {
-            console.error('[SharedAudioWorker] Audio processing failed:', error);
+            Logger.error('SharedAudioWorker', 'Audio processing failed:', error);
             throw error;
         }
     }

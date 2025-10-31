@@ -7,6 +7,7 @@ import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
+import Logger from '../services/Logger';
 
 const BabylonScene = ({ 
   sceneBuilder, 
@@ -63,10 +64,10 @@ const BabylonScene = ({
     if (isFirstMountRef.current) {
       // First mount - don't show loading
       isFirstMountRef.current = false;
-      console.log('[BabylonScene] First mount - no loading overlay');
+      Logger.log('BabylonScene', 'First mount - no loading overlay');
     } else {
       // Remount after unmount (tab was hidden) - show loading immediately
-      console.log('[BabylonScene] Remounting after tab hide - showing loading');
+      Logger.log('BabylonScene', 'Remounting after tab hide - showing loading');
       setShowModelLoadingOverlay(true);
     }
 
@@ -74,11 +75,11 @@ const BabylonScene = ({
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // Tab becoming hidden - show loading overlay immediately as placeholder
-        console.log('[BabylonScene] Tab hidden - showing loading overlay');
+        Logger.log('BabylonScene', 'Tab hidden - showing loading overlay');
         setShowModelLoadingOverlay(true);
       } else if (isReady) {
         // Tab becoming visible and scene is ready - hide loading overlay
-        console.log('[BabylonScene] Tab visible and scene ready - hiding loading overlay');
+        Logger.log('BabylonScene', 'Tab visible and scene ready - hiding loading overlay');
         setShowModelLoadingOverlay(false);
       }
     };
@@ -87,7 +88,7 @@ const BabylonScene = ({
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      console.log('[BabylonScene] Unmounting');
+      Logger.log('BabylonScene', 'Unmounting');
     };
   }, [setShowModelLoadingOverlay, isReady, isPreview]);
 
@@ -96,7 +97,7 @@ const BabylonScene = ({
     if (isPreview) return; // Skip in preview mode
     
     if (isReady) {
-      console.log('[BabylonScene] Scene ready - hiding loading');
+      Logger.log('BabylonScene', 'Scene ready - hiding loading');
       setShowModelLoadingOverlay(false);
     }
   }, [isReady, setShowModelLoadingOverlay, isPreview]);
@@ -104,30 +105,30 @@ const BabylonScene = ({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      console.log('[BabylonScene] Canvas ref not ready');
+      Logger.log('BabylonScene', 'Canvas ref not ready');
       return;
     }
     
-    console.log('[BabylonScene] Canvas ref ready, checking if in DOM...', canvas.parentNode ? 'YES' : 'NO');
+    Logger.log('BabylonScene', 'Canvas ref ready, checking if in DOM...', canvas.parentNode ? 'YES' : 'NO');
     
     // Store canvas element for cleanup
     canvasElementRef.current = canvas;
     
     // Check if this canvas is actually in the DOM (not orphaned from previous mount)
     if (!canvas.parentNode) {
-      console.log('[BabylonScene] Canvas not in DOM yet, skipping initialization');
+      Logger.log('BabylonScene', 'Canvas not in DOM yet, skipping initialization');
       return;
     }
     
     // Prevent double initialization - check if THIS specific canvas is already initialized
     // We need to track per-canvas, not globally, because Strict Mode creates multiple canvases
     if (canvas.dataset.babylonInitialized === 'true') {
-      console.log('[BabylonScene] This canvas already initialized, skipping');
+      Logger.log('BabylonScene', 'This canvas already initialized, skipping');
       return;
     }
     
     // Mark as initializing to prevent race conditions
-    console.log('[BabylonScene] Starting initialization for new canvas...');
+    Logger.log('BabylonScene', 'Starting initialization for new canvas...');
     canvas.dataset.babylonInitializing = 'true';
 
     // Cancellation flag to stop async initialization
@@ -139,19 +140,19 @@ const BabylonScene = ({
       
       // Check cancellation after RAF wait
       if (cancelled) {
-        console.log('[BabylonScene] Initialization cancelled after RAF');
+        Logger.log('BabylonScene', 'Initialization cancelled after RAF');
         delete canvas.dataset.babylonInitializing;
         return null;
       }
       
       // Check if canvas was removed during RAF wait
       if (!canvas.parentNode) {
-        console.log('[BabylonScene] Canvas removed from DOM during initialization, aborting');
+        Logger.log('BabylonScene', 'Canvas removed from DOM during initialization, aborting');
         delete canvas.dataset.babylonInitializing;
         return null;
       }
       
-      console.log('[BabylonScene] Canvas in DOM, creating engine...');
+      Logger.log('BabylonScene', 'Canvas in DOM, creating engine...');
       
       // Mark this specific canvas as initialized
       canvas.dataset.babylonInitialized = 'true';
@@ -169,14 +170,14 @@ const BabylonScene = ({
         const targetFPS = typeof fpsLimit === 'number' ? fpsLimit : 60;
         try {
           engine.maxFPS = targetFPS;
-          console.log(`[BabylonScene] Set engine.maxFPS to ${targetFPS}`);
+          Logger.log('BabylonScene', `Set engine.maxFPS to ${targetFPS}`);
         } catch (err) {
           // Fallback: if maxFPS isn't available, try engine.fps (legacy/alternate)
           try {
             engine.fps = targetFPS;
-            console.log(`[BabylonScene] engine.maxFPS not available, set engine.fps to ${targetFPS}`);
+            Logger.log('BabylonScene', `engine.maxFPS not available, set engine.fps to ${targetFPS}`);
           } catch (err2) {
-            console.warn('[BabylonScene] Failed to set engine FPS limit via maxFPS or fps', err, err2);
+            Logger.warn('BabylonScene', 'Failed to set engine FPS limit via maxFPS or fps', err, err2);
           }
         }
       }
@@ -205,7 +206,7 @@ const BabylonScene = ({
         
         // Check cancellation after scene building
         if (cancelled) {
-          console.log('[BabylonScene] Initialization cancelled after scene building');
+          Logger.log('BabylonScene', 'Initialization cancelled after scene building');
           if (scene?.metadata?.animationManager) {
             scene.metadata.animationManager.dispose();
           }
@@ -256,7 +257,7 @@ const BabylonScene = ({
       sceneRef.current = scene;
       
       // Scene is now fully initialized
-      console.log('[BabylonScene] Initialization complete, scene mounted');
+      Logger.log('BabylonScene', 'Initialization complete, scene mounted');
 
       // Notify parent component that scene is ready - use ref to avoid dependency changes
       if (onSceneReadyRef.current) {
@@ -280,7 +281,7 @@ const BabylonScene = ({
 
       // Cleanup function for Babylon resources
       const cleanupBabylon = () => {
-        console.log('[BabylonScene] Cleaning up Babylon resources...');
+        Logger.log('BabylonScene', 'Cleaning up Babylon resources...');
         
         // Clear canvas initialization flags
         if (canvas) {
@@ -297,11 +298,11 @@ const BabylonScene = ({
         
         // Dispose AnimationManager and PositionManager before scene disposal
         if (scene?.metadata?.animationManager) {
-          console.log('[BabylonScene] Disposing AnimationManager...');
+          Logger.log('BabylonScene', 'Disposing AnimationManager...');
           scene.metadata.animationManager.dispose();
         }
         if (scene?.metadata?.positionManager) {
-          console.log('[BabylonScene] Disposing PositionManager...');
+          Logger.log('BabylonScene', 'Disposing PositionManager...');
           scene.metadata.positionManager.dispose?.();
         }
         
@@ -317,7 +318,7 @@ const BabylonScene = ({
         engineRef.current = null;
         sceneRef.current = null;
         
-        console.log('[BabylonScene] Babylon cleanup complete');
+        Logger.log('BabylonScene', 'Babylon cleanup complete');
       };
       
       return cleanupBabylon;
@@ -333,14 +334,14 @@ const BabylonScene = ({
     
     // Cleanup effect
     return () => {
-      console.log('[BabylonScene] Effect cleanup triggered');
+      Logger.log('BabylonScene', 'Effect cleanup triggered');
       
       // Set cancellation flag to stop async initialization
       cancelled = true;
       
       // Cancel initialization if still in progress
       if (canvas.dataset.babylonInitializing === 'true') {
-        console.log('[BabylonScene] Cancelling initialization');
+        Logger.log('BabylonScene', 'Cancelling initialization');
         delete canvas.dataset.babylonInitializing;
       }
       
@@ -362,7 +363,7 @@ const BabylonScene = ({
           if (canvasToRemove.dataset.babylonInitialized !== 'true' && 
               canvasToRemove.dataset.babylonInitializing !== 'true' &&
               canvasToRemove.parentNode) {
-            console.log('[BabylonScene] Removing orphaned canvas from DOM');
+            Logger.log('BabylonScene', 'Removing orphaned canvas from DOM');
             canvasToRemove.parentNode.removeChild(canvasToRemove);
           }
         }, 0);
@@ -405,7 +406,7 @@ const BabylonScene = ({
           height: modelPos.height
         });
       } catch (error) {
-        console.error('[BabylonScene] Failed to get model position:', error);
+        Logger.error('BabylonScene', 'Failed to get model position:', error);
       }
     };
 
@@ -437,12 +438,12 @@ const BabylonScene = ({
         setIsDragOver(isDragging);
         // DON'T open chat here - only on drop
       },
-      onShowError: (error) => console.error('[BabylonScene] Drag-drop error:', error),
+      onShowError: (error) => Logger.error('BabylonScene', 'Drag-drop error:', error),
       checkVoiceMode: null,
       getCurrentCounts: () => ({ images: 0, audios: 0 }),
       onProcessData: (data) => {
         // Open chat when content is DROPPED (not just dragged over)
-        console.log('[BabylonScene] Opening chat from model drop with data:', data);
+        Logger.log('BabylonScene', 'Opening chat from model drop with data:', data);
         openChat();
         // Pass all data at once so nothing gets lost
         setPendingDropData(data);

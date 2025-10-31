@@ -14,6 +14,7 @@ import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
 import AIFeaturesSettings from './settings/AIFeaturesSettings';
 import { useConfig } from '../contexts/ConfigContext';
+import Logger from '../services/Logger';
 
 const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
   const [activeTab, setActiveTab] = useState('ui');
@@ -52,7 +53,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
     
     if (!hasMinVersion) {
       const version = validator.getChromeVersion();
-      console.log(`[SettingsPanel] Chrome ${version} detected - Chrome AI requires Chrome 138+`);
+      Logger.log('SettingsPanel', `Chrome ${version} detected - Chrome AI requires Chrome 138+`);
     }
   }, []);
 

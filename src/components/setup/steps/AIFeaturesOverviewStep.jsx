@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
+import Logger from '../../../services/Logger';
 
 const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
@@ -36,7 +37,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
   useEffect(() => {
     if (initialLoadRef.current) return;
     
-    console.log('[AIFeaturesOverviewStep] Saving AI features config');
+    Logger.log('AIFeaturesOverviewStep', 'Saving AI features config');
     updateSetupData({ aiFeatures: features });
   }, [features, updateSetupData]);
 

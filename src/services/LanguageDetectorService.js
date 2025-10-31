@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import Logger from './Logger';
 
 class LanguageDetectorService {
   constructor() {
@@ -13,13 +14,11 @@ class LanguageDetectorService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[LanguageDetectorService] Initialized (Extension mode - multi-tab)');
     } else {
       this.detectorSession = null;
       this.config = null;
       this.provider = null;
       this.llmClient = null;
-      console.log('[LanguageDetectorService] Initialized (Dev mode)');
     }
   }
 
@@ -37,7 +36,7 @@ class LanguageDetectorService {
         provider: null,
         llmClient: null,
       });
-      console.log(`[LanguageDetectorService] Tab ${tabId} initialized`);
+      Logger.log('LanguageDetectorService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -57,11 +56,11 @@ class LanguageDetectorService {
             state.detectorSession.destroy();
           }
         } catch (error) {
-          console.warn(`[LanguageDetectorService] Error destroying session:`, error);
+          Logger.warn('LanguageDetectorService', 'Error destroying session:', error);
         }
       }
       this.tabStates.delete(tabId);
-      console.log(`[LanguageDetectorService] Tab ${tabId} cleaned up`);
+      Logger.log('LanguageDetectorService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -92,7 +91,7 @@ class LanguageDetectorService {
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
-    console.log(`${logPrefix} Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
     
     try {
       if (provider === 'chrome-ai') {
@@ -103,7 +102,7 @@ class LanguageDetectorService {
         
         state.config = { provider: 'chrome-ai' };
         state.provider = 'chrome-ai';
-        console.log(`${logPrefix} Chrome AI LanguageDetector configured`);
+        Logger.log('other', `${logPrefix} Chrome AI LanguageDetector configured`);
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
@@ -118,7 +117,7 @@ class LanguageDetectorService {
           temperature: openaiConfig.temperature || 0.1,
         };
         state.provider = 'openai';
-        console.log(`${logPrefix} OpenAI configured for language detection`);
+        Logger.log('other', `${logPrefix} OpenAI configured for language detection`);
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
@@ -134,7 +133,7 @@ class LanguageDetectorService {
           temperature: ollamaConfig.temperature || 0.1,
         };
         state.provider = 'ollama';
-        console.log(`${logPrefix} Ollama configured for language detection`);
+        Logger.log('other', `${logPrefix} Ollama configured for language detection`);
       }
       else {
         throw new Error(`Unknown provider: ${provider}`);
@@ -142,7 +141,7 @@ class LanguageDetectorService {
       
       return true;
     } catch (error) {
-      console.error(`${logPrefix} Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -180,10 +179,10 @@ class LanguageDetectorService {
       
       try {
         const availability = await self.LanguageDetector.availability();
-        console.log(`${logPrefix} LanguageDetector availability:`, availability);
+        Logger.log('other', `${logPrefix} LanguageDetector availability:`, availability);
         return availability;
       } catch (error) {
-        console.error(`${logPrefix} Failed to check availability:`, error);
+        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
         return 'unavailable';
       }
     } else {
@@ -212,14 +211,14 @@ class LanguageDetectorService {
     
     // Create new Chrome AI LanguageDetector session
     try {
-      console.log(`${logPrefix} Creating language detector session`);
+      Logger.log('other', `${logPrefix} Creating language detector session`);
       const session = await self.LanguageDetector.create();
       
       state.detectorSession = session;
-      console.log(`${logPrefix} Language detector session created`);
+      Logger.log('other', `${logPrefix} Language detector session created`);
       return session;
     } catch (error) {
-      console.error(`${logPrefix} Failed to create language detector session:`, error);
+      Logger.error('other', `${logPrefix} Failed to create language detector session:`, error);
       throw error;
     }
   }
@@ -238,12 +237,12 @@ class LanguageDetectorService {
       throw new Error('LanguageDetectorService not configured');
     }
     
-    console.log(`${logPrefix} Detecting language:`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Detecting language:`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tabId);
       const results = await session.detect(text);
-      console.log(`${logPrefix} Detection complete:`, results.slice(0, 3));
+      Logger.log('other', `${logPrefix} Detection complete:`, results.slice(0, 3));
       return results;
     } 
     else if (state.provider === 'openai' || state.provider === 'ollama') {
@@ -286,10 +285,10 @@ Text: ${text}`;
       }
       
       const results = JSON.parse(jsonMatch[0]);
-      console.log(`${logPrefix} ${state.provider} detection complete:`, results.slice(0, 3));
+      Logger.log('other', `${logPrefix} ${state.provider} detection complete:`, results.slice(0, 3));
       return results;
     } catch (error) {
-      console.error(`${logPrefix} ${state.provider} detection failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} detection failed:`, error);
       // Fallback to English with low confidence
       return [
         { detectedLanguage: 'en', confidence: 0.5 }
@@ -306,13 +305,13 @@ Text: ${text}`;
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
     if (state.detectorSession) {
-      console.log(`${logPrefix} Destroying language detector session`);
+      Logger.log('other', `${logPrefix} Destroying language detector session`);
       try {
         if (typeof state.detectorSession.destroy === 'function') {
           state.detectorSession.destroy();
         }
       } catch (error) {
-        console.warn(`${logPrefix} Error destroying session:`, error);
+        Logger.warn('other', `${logPrefix} Error destroying session:`, error);
       }
       state.detectorSession = null;
     }

@@ -6,6 +6,7 @@ import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
+import Logger from '../services/Logger';
 
 const ChatInput = forwardRef(({ 
   onSend, 
@@ -114,7 +115,7 @@ const ChatInput = forwardRef(({
       
       setIsLightBackground(prevState => {
         if (prevState !== result.isLight) {
-          console.log('[ChatInput] Background brightness changed:', {
+          Logger.log('ChatInput', 'Background brightness changed:', {
             median: result.brightness.toFixed(1),
             isLight: result.isLight,
             samples: result.sampleCount,
@@ -148,7 +149,7 @@ const ChatInput = forwardRef(({
     if (isVisible && textareaRef.current && !isVoiceMode) {
       textareaRef.current.focus();
       adjustTextareaHeight();
-      console.log('[ChatInput] Focused textarea');
+      Logger.log('ChatInput', 'Focused textarea');
     } else if (!isVisible) {
       setAttachedImages([]);
       setAttachedAudios([]);
@@ -164,7 +165,7 @@ const ChatInput = forwardRef(({
   // Setup STT callbacks
   useEffect(() => {
     STTServiceProxy.setTranscriptionCallback((text) => {
-      console.log('[ChatInput] Transcription received:', text);
+      Logger.log('ChatInput', 'Transcription received:', text);
       setMessage(text);
       setRecordingError('');
       setIsProcessingRecording(false);
@@ -174,21 +175,21 @@ const ChatInput = forwardRef(({
     });
 
     STTServiceProxy.setErrorCallback((error) => {
-      console.error('[ChatInput] STT error:', error);
+      Logger.error('ChatInput', 'STT error:', error);
       setRecordingError(error.message || 'Recording failed');
       setIsRecording(false);
       setIsProcessingRecording(false);
     });
 
     STTServiceProxy.setRecordingStartCallback(() => {
-      console.log('[ChatInput] Recording started');
+      Logger.log('ChatInput', 'Recording started');
       setIsRecording(true);
       setIsProcessingRecording(false);
       setRecordingError('');
     });
 
     STTServiceProxy.setRecordingStopCallback(() => {
-      console.log('[ChatInput] Recording stopped - transcription complete');
+      Logger.log('ChatInput', 'Recording stopped - transcription complete');
       setIsRecording(false);
       setIsProcessingRecording(false);
     });
@@ -204,19 +205,19 @@ const ChatInput = forwardRef(({
   // Setup Voice Conversation callbacks
   useEffect(() => {
     VoiceConversationService.setStateChangeCallback((state) => {
-      console.log('[ChatInput] Voice state changed:', state);
+      Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
     });
 
     VoiceConversationService.setTranscriptionCallback((text) => {
-      console.log('[ChatInput] Voice transcription:', text);
+      Logger.log('ChatInput', 'Voice transcription:', text);
       if (onVoiceTranscription) {
         onVoiceTranscription(text);
       }
     });
 
     VoiceConversationService.setErrorCallback((error) => {
-      console.error('[ChatInput] Voice error:', error);
+      Logger.error('ChatInput', 'Voice error:', error);
       setRecordingError(error.message || 'Voice conversation error');
     });
 
@@ -231,7 +232,7 @@ const ChatInput = forwardRef(({
   useEffect(() => {
     const handleStartVoiceMode = async () => {
       if (!isVoiceMode && isVisible) {
-        console.log('[ChatInput] External voice mode start requested');
+        Logger.log('ChatInput', 'External voice mode start requested');
         try {
           if (!STTServiceProxy.isConfigured()) {
             setRecordingError('STT not configured. Please configure in Control Panel.');
@@ -239,7 +240,7 @@ const ChatInput = forwardRef(({
             return;
           }
 
-          console.log('[ChatInput] Starting voice conversation mode (external trigger)');
+          Logger.log('ChatInput', 'Starting voice conversation mode (external trigger)');
           TTSServiceProxy.stopPlayback();
           
           setAttachedImages([]);
@@ -251,7 +252,7 @@ const ChatInput = forwardRef(({
           
           if (onVoiceMode) onVoiceMode(true);
         } catch (error) {
-          console.error('[ChatInput] Voice mode start error:', error);
+          Logger.error('ChatInput', 'Voice mode start error:', error);
           setRecordingError(error.message || 'Failed to start voice mode');
           setTimeout(() => setRecordingError(''), 3000);
           setIsVoiceMode(false);
@@ -273,7 +274,7 @@ const ChatInput = forwardRef(({
 
     const { text, images, audios, errors } = dropData;
     
-    console.log('[ChatInput] Processing drop data:', { 
+    Logger.log('ChatInput', 'Processing drop data:', { 
       textLength: text?.length || 0,
       imageCount: images?.length || 0,
       audioCount: audios?.length || 0,
@@ -346,7 +347,7 @@ const ChatInput = forwardRef(({
   useEffect(() => {
     if (!pendingDropData || !isVisible || isVoiceMode) return;
 
-    console.log('[ChatInput] Processing pending drop data');
+    Logger.log('ChatInput', 'Processing pending drop data');
     processDropData(pendingDropData);
 
     // Clear the pending data after processing
@@ -482,7 +483,7 @@ const ChatInput = forwardRef(({
       return;
     }
     
-    console.log('[ChatInput] Sending message:', trimmedMessage, 
+    Logger.log('ChatInput', 'Sending message:', trimmedMessage, 
       `with ${attachedImages.length} image(s) and ${attachedAudios.length} audio(s)`);
     
     onSend(
@@ -498,7 +499,7 @@ const ChatInput = forwardRef(({
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
-      console.log('[ChatInput] Escape pressed - closing');
+      Logger.log('ChatInput', 'Escape pressed - closing');
       onClose();
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -557,24 +558,24 @@ const ChatInput = forwardRef(({
    * Initialize drag-drop service
    */
   useEffect(() => {
-    console.log('[ChatInput] Drag-drop setup effect running', { 
+    Logger.log('ChatInput', 'Drag-drop setup effect running', { 
       isVisible, 
       hasContainer: !!containerRef.current 
     });
     
     if (!isVisible) {
-      console.log('[ChatInput] Skipping drag-drop setup - not visible');
+      Logger.log('ChatInput', 'Skipping drag-drop setup - not visible');
       return;
     }
 
     // Wait for the container to be rendered (after fade-in animation starts)
     const setupTimeout = setTimeout(() => {
       if (!containerRef.current) {
-        console.log('[ChatInput] Container still not available after delay');
+        Logger.log('ChatInput', 'Container still not available after delay');
         return;
       }
 
-      console.log('[ChatInput] Setting up drag-drop service');
+      Logger.log('ChatInput', 'Setting up drag-drop service');
 
       // Create service instance
       dragDropServiceRef.current = new DragDropService({
@@ -626,7 +627,7 @@ const ChatInput = forwardRef(({
     // Cleanup
     return () => {
       clearTimeout(setupTimeout);
-      console.log('[ChatInput] Cleaning up drag-drop service');
+      Logger.log('ChatInput', 'Cleaning up drag-drop service');
       if (dragDropServiceRef.current) {
         dragDropServiceRef.current.detach();
         dragDropServiceRef.current = null;
@@ -650,14 +651,14 @@ const ChatInput = forwardRef(({
 
     try {
       if (isVoiceMode) {
-        console.log('[ChatInput] Stopping voice conversation mode');
+        Logger.log('ChatInput', 'Stopping voice conversation mode');
         VoiceConversationService.stop();
         setIsVoiceMode(false);
         setVoiceState(ConversationStates.IDLE);
         
         if (onVoiceMode) onVoiceMode(false);
       } else {
-        console.log('[ChatInput] Starting voice conversation mode');
+        Logger.log('ChatInput', 'Starting voice conversation mode');
         TTSServiceProxy.stopPlayback();
         
         setAttachedImages([]);
@@ -670,7 +671,7 @@ const ChatInput = forwardRef(({
         if (onVoiceMode) onVoiceMode(true);
       }
     } catch (error) {
-      console.error('[ChatInput] Voice mode toggle error:', error);
+      Logger.error('ChatInput', 'Voice mode toggle error:', error);
       setRecordingError(error.message || 'Failed to start voice mode');
       setTimeout(() => setRecordingError(''), 3000);
       setIsVoiceMode(false);
@@ -678,7 +679,7 @@ const ChatInput = forwardRef(({
   };
 
   const handleInterrupt = () => {
-    console.log('[ChatInput] User interrupted');
+    Logger.log('ChatInput', 'User interrupted');
     
     // Dispatch event to trigger force-complete animation in ChatContainer
     const event = new CustomEvent('voiceInterrupt');
@@ -701,17 +702,17 @@ const ChatInput = forwardRef(({
     }
 
     if (isProcessingRecording) {
-      console.log('[ChatInput] Still processing, ignoring click');
+      Logger.log('ChatInput', 'Still processing, ignoring click');
       return;
     }
 
     try {
       if (isRecording) {
-        console.log('[ChatInput] Stopping recording');
+        Logger.log('ChatInput', 'Stopping recording');
         setIsProcessingRecording(true);
         STTServiceProxy.stopRecording();
       } else {
-        console.log('[ChatInput] Starting recording');
+        Logger.log('ChatInput', 'Starting recording');
         setIsProcessingRecording(true);
         TTSServiceProxy.stopPlayback();
         
@@ -719,7 +720,7 @@ const ChatInput = forwardRef(({
         await STTServiceProxy.startRecording();
       }
     } catch (error) {
-      console.error('[ChatInput] Microphone error:', error);
+      Logger.error('ChatInput', 'Microphone error:', error);
       setRecordingError(error.message || 'Microphone access denied');
       setTimeout(() => setRecordingError(''), 3000);
       setIsRecording(false);

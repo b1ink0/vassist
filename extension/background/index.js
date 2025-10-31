@@ -22,8 +22,9 @@ import summarizerService from '../../src/services/SummarizerService.js';
 import ChromeAIValidator from '../../src/services/ChromeAIValidator.js';
 import rewriterService from '../../src/services/RewriterService.js';
 import writerService from '../../src/services/WriterService.js';
+import Logger from '../../src/services/Logger';
 
-console.log('[Background] Service worker starting...');
+Logger.log('Background', 'Service worker starting...');
 
 /**
  * Register message handlers
@@ -123,14 +124,14 @@ async function registerHandlers() {
   // Storage handlers - CHAT namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_SAVE, async (message) => {
     const { chatId, data } = message.data;
-    console.log('[Background] STORAGE_CHAT_SAVE handler called for:', chatId);
-    console.log('[Background] Chat data keys:', Object.keys(data || {}));
+    Logger.log('Background', 'STORAGE_CHAT_SAVE handler called for:', chatId);
+    Logger.log('Background', 'Chat data keys:', Object.keys(data || {}));
     try {
       const result = await storageManager.chat.save(chatId, data);
-      console.log('[Background] STORAGE_CHAT_SAVE success, saved to IndexedDB:', chatId);
+      Logger.log('Background', 'STORAGE_CHAT_SAVE success, saved to IndexedDB:', chatId);
       return result;
     } catch (error) {
-      console.error('[Background] STORAGE_CHAT_SAVE failed:', error);
+      Logger.error('Background', 'STORAGE_CHAT_SAVE failed:', error);
       throw error;
     }
   });
@@ -161,12 +162,12 @@ async function registerHandlers() {
   // Storage handlers - FILES namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_SAVE, async (message) => {
     const { fileId, data, category } = message.data;
-    console.log('[Background] STORAGE_FILE_SAVE handler called for:', fileId);
+    Logger.log('Background', 'STORAGE_FILE_SAVE handler called for:', fileId);
     
     // Convert serialized data back to Blob if needed
     let storageData = data;
     if (data && typeof data === 'object' && Array.isArray(data.data)) {
-      console.log('[Background] Converting Uint8Array back to Blob for storage');
+      Logger.log('Background', 'Converting Uint8Array back to Blob for storage');
       const blobType = data._blobType || 'application/octet-stream';
       const uint8Array = new Uint8Array(data.data);
       const blob = new Blob([uint8Array], { type: blobType });
@@ -179,10 +180,10 @@ async function registerHandlers() {
     
     try {
       const result = await storageManager.files.save(fileId, storageData, category);
-      console.log('[Background] STORAGE_FILE_SAVE success:', fileId);
+      Logger.log('Background', 'STORAGE_FILE_SAVE success:', fileId);
       return result;
     } catch (error) {
-      console.error('[Background] STORAGE_FILE_SAVE failed:', error);
+      Logger.error('Background', 'STORAGE_FILE_SAVE failed:', error);
       throw error;
     }
   });
@@ -193,7 +194,7 @@ async function registerHandlers() {
     
     // Convert Blob to Array for message serialization (structured clone limitation)
     if (result && typeof result === 'object' && result.data instanceof Blob) {
-      console.log('[Background] Converting Blob to Uint8Array for transfer');
+      Logger.log('Background', 'Converting Blob to Uint8Array for transfer');
       const buffer = await result.data.arrayBuffer();
       result.data = Array.from(new Uint8Array(buffer));
       result._blobType = result._blobType || 'application/octet-stream';
@@ -293,9 +294,9 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.AI_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { config } = message.data;
-    console.log('[Background] AI_CONFIGURE called for tab:', tabId);
+    Logger.log('Background', 'AI_CONFIGURE called for tab:', tabId);
     await aiService.configure(config, tabId);
-    console.log('[Background] AI_CONFIGURE complete for tab:', tabId);
+    Logger.log('Background', 'AI_CONFIGURE complete for tab:', tabId);
     return { configured: true };
   });
 
@@ -312,7 +313,7 @@ async function registerHandlers() {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token }
-      }).catch(err => console.error('[Background] Failed to send stream token:', err));
+      }).catch(err => Logger.error('Background', 'Failed to send stream token:', err));
       
       fullResponse += token;
     }, tabId);
@@ -369,13 +370,13 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text } = message.data;
-    console.log('[Background] TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text?.substring(0, 50));
+    Logger.log('Background', 'TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text?.substring(0, 50));
     
     // Check if TTS is configured for this tab
     if (!ttsService.isConfigured(tabId)) {
-      console.error('[Background] TTS not configured for tab:', tabId);
+      Logger.error('Background', 'TTS not configured for tab:', tabId);
       const state = ttsService.tabStates?.get(tabId);
-      console.error('[Background] Tab state:', state);
+      Logger.error('Background', 'Tab state:', state);
       throw new Error(`TTS service not configured for tab ${tabId}`);
     }
     
@@ -385,7 +386,7 @@ async function registerHandlers() {
     
     // For Kokoro provider, bypass TTSService and use offscreen directly
     if (provider === 'kokoro') {
-      console.log('[Background] Kokoro provider detected, using offscreen directly');
+      Logger.log('Background', 'Kokoro provider detected, using offscreen directly');
       
       // Check if Kokoro is initialized, if not, initialize it automatically
       try {
@@ -395,7 +396,7 @@ async function registerHandlers() {
         });
         
         if (!statusCheck.data.initialized) {
-          console.log('[Background] Kokoro not initialized, auto-initializing...');
+          Logger.log('Background', 'Kokoro not initialized, auto-initializing...');
           
           const autoInitId = `auto_init_${Date.now()}`;
           offscreenManager.startLongRunningJob(autoInitId);
@@ -417,13 +418,13 @@ async function registerHandlers() {
               throw new Error('Failed to auto-initialize Kokoro model');
             }
             
-            console.log('[Background] Kokoro auto-initialized successfully');
+            Logger.log('Background', 'Kokoro auto-initialized successfully');
           } finally {
             offscreenManager.endLongRunningJob(autoInitId);
           }
         }
       } catch (initError) {
-        console.error('[Background] Kokoro auto-initialization failed:', initError);
+        Logger.error('Background', 'Kokoro auto-initialization failed:', initError);
         throw new Error(`Kokoro initialization failed: ${initError.message}`);
       }
       
@@ -447,7 +448,7 @@ async function registerHandlers() {
         // Convert ArrayBuffer to Array
         if (result.data.audioBuffer instanceof ArrayBuffer) {
           result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-          console.log('[Background] Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+          Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
         }
         
         return { audioBuffer: result.data.audioBuffer, mimeType: 'audio/wav' };
@@ -460,7 +461,7 @@ async function registerHandlers() {
     const result = await ttsService.generateSpeech(text, /*generateLipSync*/ false, tabId);
     
     if (!result) {
-      console.warn('[Background] TTS_GENERATE_SPEECH returned null/undefined - generation failed or stopped');
+      Logger.warn('Background', 'TTS_GENERATE_SPEECH returned null/undefined - generation failed or stopped');
       return { audioBuffer: null, mimeType: null }; // Generation was stopped
     }
     
@@ -468,12 +469,12 @@ async function registerHandlers() {
     // Chrome's sendMessage transfers both ArrayBuffers AND Uint8Arrays (detaches them)
     // Only plain arrays are guaranteed to be copied, not transferred
     if (!result.audioBuffer) {
-      console.error('[Background] TTS result has no audioBuffer:', result);
+      Logger.error('Background', 'TTS result has no audioBuffer:', result);
       return { audioBuffer: null, mimeType: null };
     }
     
     const audioData = Array.from(new Uint8Array(result.audioBuffer));
-    console.log('[Background] Converted ArrayBuffer to Array:', audioData.length, 'bytes');
+    Logger.log('Background', 'Converted ArrayBuffer to Array:', audioData.length, 'bytes');
     return { audioBuffer: audioData, mimeType: result.mimeType };
   });
 
@@ -507,7 +508,7 @@ async function registerHandlers() {
   // Kokoro TTS handlers
   backgroundBridge.registerHandler(MessageTypes.KOKORO_INIT, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    console.log('[Background] KOKORO_INIT called for tab:', tabId);
+    Logger.log('Background', 'KOKORO_INIT called for tab:', tabId);
     
     // CRITICAL: Mark as long-running job BEFORE forwarding
     // Kokoro model download can take 1-2 minutes, needs keepalive
@@ -529,7 +530,7 @@ async function registerHandlers() {
         chrome.tabs.sendMessage(sender.tab.id, {
           type: MessageTypes.KOKORO_DOWNLOAD_PROGRESS,
           data: offscreenResponse.data
-        }).catch(err => console.error('[Background] Failed to send Kokoro progress:', err));
+        }).catch(err => Logger.error('Background', 'Failed to send Kokoro progress:', err));
         
         // Each progress update keeps the document alive
         offscreenManager.keepAlive();
@@ -543,14 +544,14 @@ async function registerHandlers() {
     
     try {
       const result = await offscreenManager.sendToOffscreen(offscreenMessage);
-      console.log('[Background] KOKORO_INIT result from offscreen:', result);
+      Logger.log('Background', 'KOKORO_INIT result from offscreen:', result);
       
       // Load TTS config to get the configured voice for warmup
       const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
       const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
       
       // Warm up the model with a test generation (ensures it's fully ready)
-      console.log('[Background] Warming up Kokoro model with test generation...');
+      Logger.log('Background', 'Warming up Kokoro model with test generation...');
       try {
         await offscreenManager.sendToOffscreen({
           type: MessageTypes.KOKORO_GENERATE,
@@ -561,12 +562,12 @@ async function registerHandlers() {
             speed: ttsConfig.kokoro?.speed || 1.0
           }
         });
-        console.log('[Background] Kokoro model warmup complete');
+        Logger.log('Background', 'Kokoro model warmup complete');
       } catch (warmupError) {
         console.warn('[Background] Model warmup failed (continuing anyway):', warmupError);
       }
       
-      console.log('[Background] KOKORO_INIT returning data:', result?.data);
+      Logger.log('Background', 'KOKORO_INIT returning data:', result?.data);
       return result.data;
     } finally {
       // Clean up progress listener and end long-running job
@@ -577,7 +578,7 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_GENERATE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    console.log('[Background] KOKORO_GENERATE called for tab:', tabId);
+    Logger.log('Background', 'KOKORO_GENERATE called for tab:', tabId);
     
     // Mark as long-running job - generation can take 5-15 seconds for long text
     const requestId = message.requestId;
@@ -590,7 +591,7 @@ async function registerHandlers() {
       // Convert ArrayBuffer in result to Array for sending to main world
       if (result.data.audioBuffer instanceof ArrayBuffer) {
         result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-        console.log('[Background] Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+        Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
       }
       
       return result.data;
@@ -600,7 +601,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_CHECK_STATUS, async (message) => {
-    console.log('[Background] KOKORO_CHECK_STATUS');
+    Logger.log('Background', 'KOKORO_CHECK_STATUS');
     
     // Forward to offscreen for status check
     const result = await offscreenManager.sendToOffscreen(message);
@@ -608,7 +609,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_LIST_VOICES, async (message) => {
-    console.log('[Background] KOKORO_LIST_VOICES');
+    Logger.log('Background', 'KOKORO_LIST_VOICES');
     
     // Forward to offscreen for voice list
     const result = await offscreenManager.sendToOffscreen(message);
@@ -616,7 +617,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_GET_CACHE_SIZE, async (message) => {
-    console.log('[Background] KOKORO_GET_CACHE_SIZE');
+    Logger.log('Background', 'KOKORO_GET_CACHE_SIZE');
     
     // Forward to offscreen for cache size check
     const result = await offscreenManager.sendToOffscreen(message);
@@ -624,7 +625,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_CLEAR_CACHE, async (message) => {
-    console.log('[Background] KOKORO_CLEAR_CACHE');
+    Logger.log('Background', 'KOKORO_CLEAR_CACHE');
     
     // Forward to offscreen for cache clearing
     const result = await offscreenManager.sendToOffscreen(message);
@@ -650,7 +651,7 @@ async function registerHandlers() {
 
   // TTS Audio Processing with Lip Sync (via offscreen)
   backgroundBridge.registerHandler(MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC, async (message) => {
-    console.log('[Background] TTS_PROCESS_AUDIO_WITH_LIPSYNC');
+    Logger.log('Background', 'TTS_PROCESS_AUDIO_WITH_LIPSYNC');
     
     // Mark as long-running job - audio processing + VMD generation can take 10-30 seconds
     const requestId = message.requestId;
@@ -666,7 +667,7 @@ async function registerHandlers() {
         throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
       }
       
-      console.log('[Background] Forwarding Array to offscreen:', audioBuffer.length, 'bytes');
+      Logger.log('Background', 'Forwarding Array to offscreen:', audioBuffer.length, 'bytes');
       
       // Send as Array directly to offscreen
       const offscreenMessage = {
@@ -682,11 +683,11 @@ async function registerHandlers() {
       // Convert ArrayBuffer in result back to Array for sending to main world
       if (result.data.audioBuffer instanceof ArrayBuffer) {
         result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-        console.log('[Background] Converted result audioBuffer to Array');
+        Logger.log('Background', 'Converted result audioBuffer to Array');
       }
       if (result.data.bvmdData instanceof ArrayBuffer) {
         result.data.bvmdData = Array.from(new Uint8Array(result.data.bvmdData));
-        console.log('[Background] Converted result bvmdData to Array');
+        Logger.log('Background', 'Converted result bvmdData to Array');
       }
       
       return result.data; // Contains { audioBuffer: Array, bvmdData: Array|null }
@@ -713,7 +714,7 @@ async function registerHandlers() {
     }
     
     const arrayBuffer = new Uint8Array(audioBuffer).buffer;
-    console.log(`[Background] STT_TRANSCRIBE_AUDIO: converted Array (${audioBuffer.length} bytes) to ArrayBuffer`);
+    Logger.log('Background', `STT_TRANSCRIBE_AUDIO: converted Array (${audioBuffer.length} bytes) to ArrayBuffer`);
     
     const text = await sttService.transcribeAudio(arrayBuffer, mimeType, tabId);
     return { text };
@@ -737,7 +738,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, sourceLanguage, targetLanguage } = message.data;
-    console.log(`[Background] TRANSLATOR_TRANSLATE (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
+    Logger.log('Background', `TRANSLATOR_TRANSLATE (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     const translatedText = await translatorService.translate(text, sourceLanguage, targetLanguage, tabId);
     return { translatedText };
   });
@@ -745,7 +746,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, sourceLanguage, targetLanguage } = message.data;
-    console.log(`[Background] TRANSLATOR_TRANSLATE_STREAMING (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
+    Logger.log('Background', `TRANSLATOR_TRANSLATE_STREAMING (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     
     let fullTranslation = '';
     
@@ -756,7 +757,7 @@ async function registerHandlers() {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
-      }).catch(err => console.error('[Background] Failed to send translation stream token:', err));
+      }).catch(err => Logger.error('Background', 'Failed to send translation stream token:', err));
       
       fullTranslation += chunk;
     }
@@ -793,7 +794,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_DETECT, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text } = message.data;
-    console.log(`[Background] LANGUAGE_DETECTOR_DETECT:`, text.substring(0, 50));
+    Logger.log('Background', 'LANGUAGE_DETECTOR_DETECT:', text.substring(0, 50));
     const results = await languageDetectorService.detect(text, tabId);
     return { results };
   });
@@ -821,7 +822,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, options } = message.data;
-    console.log(`[Background] SUMMARIZER_SUMMARIZE (${options?.type || 'tldr'}):`, text.substring(0, 50));
+    Logger.log('Background', `SUMMARIZER_SUMMARIZE (${options?.type || 'tldr'}):`, text.substring(0, 50));
     const summary = await summarizerService.summarize(text, options, tabId);
     return { summary };
   });
@@ -829,7 +830,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, options } = message.data;
-    console.log(`[Background] SUMMARIZER_SUMMARIZE_STREAMING (${options?.type || 'tldr'}):`, text.substring(0, 50));
+    Logger.log('Background', `SUMMARIZER_SUMMARIZE_STREAMING (${options?.type || 'tldr'}):`, text.substring(0, 50));
     
     let fullSummary = '';
     
@@ -840,7 +841,7 @@ async function registerHandlers() {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
-      }).catch(err => console.error('[Background] Failed to send summary stream token:', err));
+      }).catch(err => Logger.error('Background', 'Failed to send summary stream token:', err));
       
       fullSummary += chunk;
     }
@@ -877,7 +878,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, options } = message.data;
-    console.log(`[Background] REWRITER_REWRITE (${options?.tone || 'as-is'}):`, text.substring(0, 50));
+    Logger.log('Background', `REWRITER_REWRITE (${options?.tone || 'as-is'}):`, text.substring(0, 50));
     const rewrittenText = await rewriterService.rewrite(text, options, tabId);
     return { rewrittenText };
   });
@@ -885,7 +886,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text, options } = message.data;
-    console.log(`[Background] REWRITER_REWRITE_STREAMING (${options?.tone || 'as-is'}):`, text.substring(0, 50));
+    Logger.log('Background', `REWRITER_REWRITE_STREAMING (${options?.tone || 'as-is'}):`, text.substring(0, 50));
     
     let fullRewrite = '';
     
@@ -896,7 +897,7 @@ async function registerHandlers() {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
-      }).catch(err => console.error('[Background] Failed to send rewrite stream token:', err));
+      }).catch(err => Logger.error('Background', 'Failed to send rewrite stream token:', err));
       
       fullRewrite += chunk;
     }
@@ -933,7 +934,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { sharedContext, options } = message.data;
-    console.log(`[Background] WRITER_WRITE (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
+    Logger.log('Background', `WRITER_WRITE (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
     const writtenText = await writerService.write(sharedContext, options, tabId);
     return { writtenText };
   });
@@ -941,7 +942,7 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { sharedContext, options } = message.data;
-    console.log(`[Background] WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
+    Logger.log('Background', `WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
     
     let fullWritten = '';
     
@@ -952,7 +953,7 @@ async function registerHandlers() {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
-      }).catch(err => console.error('[Background] Failed to send write stream token:', err));
+      }).catch(err => Logger.error('Background', 'Failed to send write stream token:', err));
       
       fullWritten += chunk;
     }
@@ -974,7 +975,7 @@ async function registerHandlers() {
 
   // Offscreen/Audio handlers
   backgroundBridge.registerHandler(MessageTypes.OFFSCREEN_AUDIO_PLAY, async (message) => {
-    console.log('[Background] OFFSCREEN_AUDIO_PLAY');
+    Logger.log('Background', 'OFFSCREEN_AUDIO_PLAY');
     
     // Audio playback is usually quick, but mark as job to prevent premature closure
     offscreenManager.startJob();
@@ -988,13 +989,13 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.OFFSCREEN_AUDIO_STOP, async (message) => {
-    console.log('[Background] OFFSCREEN_AUDIO_STOP');
+    Logger.log('Background', 'OFFSCREEN_AUDIO_STOP');
     const result = await offscreenManager.sendToOffscreen(message);
     return result.data;
   });
 
   backgroundBridge.registerHandler(MessageTypes.OFFSCREEN_VMD_GENERATE, async (message) => {
-    console.log('[Background] OFFSCREEN_VMD_GENERATE');
+    Logger.log('Background', 'OFFSCREEN_VMD_GENERATE');
     
     // Mark as long-running job - VMD generation can take 10-20 seconds
     const requestId = message.requestId;
@@ -1008,22 +1009,22 @@ async function registerHandlers() {
     }
   });
 
-  console.log('[Background] Handlers registered');
+  Logger.log('Background', 'Handlers registered');
 }
 
 /**
  * Handle extension installation
  */
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log('[Background] Extension installed:', details.reason);
+  Logger.log('Background', 'Extension installed:', details.reason);
   
   if (details.reason === 'install') {
     // First install
-    console.log('[Background] First install - setting up defaults');
+    Logger.log('Background', 'First install - setting up defaults');
     // TODO: Set default configuration
   } else if (details.reason === 'update') {
     // Update
-    console.log('[Background] Extension updated');
+    Logger.log('Background', 'Extension updated');
     // TODO: Handle migration if needed
   }
 });
@@ -1032,7 +1033,7 @@ chrome.runtime.onInstalled.addListener((details) => {
  * Handle browser action click (extension icon)
  */
 chrome.action.onClicked.addListener(async (tab) => {
-  console.log('[Background] Action clicked for tab:', tab.id);
+  Logger.log('Background', 'Action clicked for tab:', tab.id);
   
   try {
     // Send toggle message to content script (which is always loaded via manifest)
@@ -1040,9 +1041,9 @@ chrome.action.onClicked.addListener(async (tab) => {
       type: 'TOGGLE_ASSISTANT'
     });
     
-    console.log('[Background] Toggle response:', response);
+    Logger.log('Background', 'Toggle response:', response);
   } catch (error) {
-    console.error('[Background] Failed to toggle assistant:', error);
+    Logger.error('Background', 'Failed to toggle assistant:', error);
   }
 });
 
@@ -1062,7 +1063,7 @@ function startKeepAlive() {
     keepAliveInterval = setInterval(() => {
       const activeTabs = tabManager.getActiveTabs();
       if (activeTabs.length > 0) {
-        console.log('[Background] Keep alive -', activeTabs.length, 'active tabs');
+        Logger.log('Background', 'Keep alive -', activeTabs.length, 'active tabs');
         // Keep offscreen alive if there are active tabs
         offscreenManager.keepAlive();
       } else {
@@ -1083,4 +1084,4 @@ chrome.tabs.onCreated.addListener(() => {
 
 // Initialize
 registerHandlers();
-console.log('[Background] Service worker ready');
+Logger.log('Background', 'Service worker ready');

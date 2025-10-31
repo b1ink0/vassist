@@ -1,4 +1,5 @@
 import { Vector3, Matrix } from '@babylonjs/core';
+import Logger from '../../services/Logger';
 
 /**
  * CanvasInteractionManager - Click-through canvas with selective model interaction
@@ -50,7 +51,7 @@ export class CanvasInteractionManager {
     this.handleCanvasPointerMove = this.handleCanvasPointerMove.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
     
-    console.log('[CanvasInteractionManager] Initialized with pointer-events switching');
+    Logger.log('CanvasInteractionManager', 'Initialized with pointer-events switching');
   }
   
   /**
@@ -70,7 +71,7 @@ export class CanvasInteractionManager {
     this.canvas.addEventListener('pointerup', this.handleCanvasPointerUp);
     this.canvas.addEventListener('pointercancel', this.handleCanvasPointerUp);
     
-    console.log('[CanvasInteractionManager] Initialized - canvas starts as click-through');
+    Logger.log('CanvasInteractionManager', 'Initialized - canvas starts as click-through');
   }
   
   /**
@@ -148,7 +149,7 @@ export class CanvasInteractionManager {
         this.onDragStartCallback(event.clientX, event.clientY);
       }
       
-      console.log('[CanvasInteractionManager] Drag started');
+      Logger.log('CanvasInteractionManager', 'Drag started');
     }
   }
   
@@ -187,7 +188,7 @@ export class CanvasInteractionManager {
       this.onDragEndCallback(event.clientX, event.clientY);
     }
     
-    console.log('[CanvasInteractionManager] Drag ended');
+    Logger.log('CanvasInteractionManager', 'Drag ended');
   }
   
   /**
@@ -258,6 +259,6 @@ export class CanvasInteractionManager {
     this.canvas.style.pointerEvents = 'none';
     this.canvas.style.cursor = 'default';
     
-    console.log('[CanvasInteractionManager] Disposed');
+    Logger.log('CanvasInteractionManager', 'Disposed');
   }
 }

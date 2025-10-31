@@ -3,6 +3,7 @@ import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
+import Logger from '../services/Logger';
 
 const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
   const {
@@ -97,11 +98,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         if (preset === 'last-location' && positionConfig.lastLocation) {
           const { x, y } = positionConfig.lastLocation;
           targetPos = { x, y };
-          console.log('[ChatButton] Loading from last location:', targetPos);
+          Logger.log('ChatButton', 'Loading from last location:', targetPos);
         } else if (preset !== 'last-location') {
           // Use preset position (convert to button position)
           targetPos = getButtonPositionFromPreset(preset);
-          console.log('[ChatButton] Loading from preset:', preset, targetPos);
+          Logger.log('ChatButton', 'Loading from preset:', preset, targetPos);
         }
         
         // Bound check
@@ -113,7 +114,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         setButtonPos(validPos);
         buttonPosRef.current = validPos;
       } catch (err) {
-        console.error('[ChatButton] load position failed', err);
+        Logger.error('ChatButton', 'load position failed', err);
         setButtonPos(defaultPos);
         buttonPosRef.current = defaultPos;
       }
@@ -192,7 +193,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         try {
           modelPos = positionManagerRef.current.getPositionPixels();
         } catch (err) {
-          console.error('[ChatButton] getPositionPixels failed', err);
+          Logger.error('ChatButton', 'getPositionPixels failed', err);
           return;
         }
       } else return;
@@ -218,7 +219,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         lastSetPosition.current = { x: newX, y: newY };
         setButtonPos({ x: newX, y: newY });
       } catch (err) {
-        console.error('[ChatButton] updateFromModel failed', err);
+        Logger.error('ChatButton', 'updateFromModel failed', err);
       }
     };
 
@@ -274,7 +275,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     
     // Save position if preset is 'last-location'
     if (uiConfig.position?.preset === 'last-location') {
-      console.log('[ChatButton] Saving last location:', buttonPos);
+      Logger.log('ChatButton', 'Saving last location:', buttonPos);
       updateUIConfig('position.lastLocation', { 
         x: buttonPos.x, 
         y: buttonPos.y,
@@ -312,11 +313,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   // Attach drag-drop service to button so drops set pending data in AppContext
   useEffect(() => {
     if (!shouldRender) {
-      console.log('[ChatButton] Skipping drag-drop setup - not rendered');
+      Logger.log('ChatButton', 'Skipping drag-drop setup - not rendered');
       return;
     }
     
-    console.log('[ChatButton] Drag-drop setup effect running', {
+    Logger.log('ChatButton', 'Drag-drop setup effect running', {
       hasButton: !!buttonRef.current,
       shouldRender
     });
@@ -326,32 +327,32 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     // Wait a short moment for the element to be in DOM
     const setupTimeout = setTimeout(() => {
       if (!attached) {
-        console.log('[ChatButton] Cleanup called before setup completed');
+        Logger.log('ChatButton', 'Cleanup called before setup completed');
         return;
       }
       
       if (!buttonRef.current) {
-        console.log('[ChatButton] Button ref not available');
+        Logger.log('ChatButton', 'Button ref not available');
         return;
       }
       
-      console.log('[ChatButton] Setting up drag-drop service');
+      Logger.log('ChatButton', 'Setting up drag-drop service');
       
       import('../services/DragDropService').then(({ default: DragDropService }) => {
         if (!attached) {
-          console.log('[ChatButton] Cleanup called during async import');
+          Logger.log('ChatButton', 'Cleanup called during async import');
           return;
         }
         const el = buttonRef.current;
         if (!el) {
-          console.log('[ChatButton] Button ref lost during async import');
+          Logger.log('ChatButton', 'Button ref lost during async import');
           return;
         }
         
         dragDropServiceRef.current = new DragDropService({ maxImages: 3, maxAudios: 1 });
         dragDropServiceRef.current.attach(el, {
           onSetDragOver: (flag) => setIsDragOverButton(flag),
-          onShowError: (err) => console.error('[ChatButton] DragDrop error', err),
+          onShowError: (err) => Logger.error('ChatButton', 'DragDrop error', err),
           checkVoiceMode: null,
           getCurrentCounts: () => ({ images: 0, audios: 0 }),
           onProcessData: (data) => {
@@ -359,13 +360,13 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             setPendingDropData(data);
           }
         });
-      }).catch(err => console.error('[ChatButton] load DragDropService failed', err));
+      }).catch(err => Logger.error('ChatButton', 'load DragDropService failed', err));
     }, 50); // Short delay for DOM to be ready
     
     return () => { 
       attached = false;
       clearTimeout(setupTimeout);
-      console.log('[ChatButton] Cleaning up drag-drop service');
+      Logger.log('ChatButton', 'Cleaning up drag-drop service');
       if (dragDropServiceRef.current) {
         dragDropServiceRef.current.detach();
         dragDropServiceRef.current = null;

@@ -8,8 +8,9 @@
 
 import { ContentBridge } from './ContentBridge.js';
 import { MessageTypes } from '../shared/MessageTypes.js';
+import Logger from '../../src/services/Logger';
 
-console.log('[Content Script] Loading...');
+Logger.log('Content Script', 'Loading...');
 
 class VirtualAssistantInjector {
   constructor() {
@@ -25,7 +26,7 @@ class VirtualAssistantInjector {
   }
 
   async init() {
-    console.log('[Content Script] Initializing...');
+    Logger.log('Content Script', 'Initializing...');
     
     // Initialize tab in background
     const { promise } = this.bridge.sendMessage(MessageTypes.TAB_INIT, {});
@@ -42,34 +43,34 @@ class VirtualAssistantInjector {
       const uiConfig = await configPromise;
       const autoLoadEnabled = uiConfig?.autoLoadOnAllPages !== false; // Default to true if not set
       
-      console.log('[Content Script] Auto-load setting:', autoLoadEnabled);
-      console.log('[Content Script] Full uiConfig:', uiConfig);
+      Logger.log('Content Script', 'Auto-load setting:', autoLoadEnabled);
+      Logger.log('Content Script', 'Full uiConfig:', uiConfig);
       
       if (autoLoadEnabled) {
-        console.log('[Content Script] Auto-loading assistant...');
+        Logger.log('Content Script', 'Auto-loading assistant...');
         await this.injectAssistant();
       } else {
-        console.log('[Content Script] Auto-load disabled - waiting for manual trigger');
+        Logger.log('Content Script', 'Auto-load disabled - waiting for manual trigger');
       }
     } catch (error) {
-      console.error('[Content Script] Failed to check auto-load setting:', error);
+      Logger.error('Content Script', 'Failed to check auto-load setting:', error);
       // On error, don't auto-load (safer default)
     }
     
-    console.log('[Content Script] Ready');
+    Logger.log('Content Script', 'Ready');
   }
 
   async injectAssistant() {
     if (this.isInjected) {
-      console.log('[Content Script] Already injected');
+      Logger.log('Content Script', 'Already injected');
       return;
     }
 
-    console.log('[Content Script] Injecting Virtual Assistant...');
+    Logger.log('Content Script', 'Injecting Virtual Assistant...');
     
     try {
       // Create container element
-      console.log('[Content Script] Step 1: Creating container');
+      Logger.log('Content Script', 'Step 1: Creating container');
       this.container = document.createElement('div');
       this.container.id = 'virtual-assistant-extension-root';
       
@@ -85,44 +86,44 @@ class VirtualAssistantInjector {
       `;
       
       // Create Shadow DOM for complete isolation
-      console.log('[Content Script] Step 2: Creating Shadow DOM');
+      Logger.log('Content Script', 'Step 2: Creating Shadow DOM');
       this.shadowRoot = this.container.attachShadow({ mode: 'open' });
       
       // Inject styles into shadow DOM
-      console.log('[Content Script] Step 3: Injecting styles...');
+      Logger.log('Content Script', 'Step 3: Injecting styles...');
       await this.injectStyles();
-      console.log('[Content Script] Step 3: Styles injected ✓');
+      Logger.log('Content Script', 'Step 3: Styles injected ✓');
       
       // Inject React app into shadow DOM
-      console.log('[Content Script] Step 4: Injecting React app...');
+      Logger.log('Content Script', 'Step 4: Injecting React app...');
       await this.injectReactApp();
-      console.log('[Content Script] Step 4: React app injected ✓');
+      Logger.log('Content Script', 'Step 4: React app injected ✓');
       
       // Append to body
-      console.log('[Content Script] Step 5: Appending to body');
+      Logger.log('Content Script', 'Step 5: Appending to body');
       document.body.appendChild(this.container);
       
       this.isInjected = true;
       this.isVisible = true;
       
-      console.log('[Content Script] ✅ Virtual Assistant injected successfully');
+      Logger.log('Content Script', '✅ Virtual Assistant injected successfully');
       
     } catch (error) {
-      console.error('[Content Script] ❌ Failed to inject assistant:', error);
-      console.error('[Content Script] Error stack:', error.stack);
+      Logger.error('Content Script', '❌ Failed to inject assistant:', error);
+      Logger.error('Content Script', 'Error stack:', error.stack);
     }
   }
 
   async injectStyles() {
-    console.log('[Content Script] injectStyles: Creating link element');
+    Logger.log('Content Script', 'injectStyles: Creating link element');
     // Inject Tailwind and app styles into shadow DOM
     const style = document.createElement('link');
     style.rel = 'stylesheet';
     style.href = chrome.runtime.getURL('content-styles.css');
     
-    console.log('[Content Script] injectStyles: CSS URL:', style.href);
+    Logger.log('Content Script', 'injectStyles: CSS URL:', style.href);
     
-    console.log('[Content Script] injectStyles: Appending to shadow root');
+    Logger.log('Content Script', 'injectStyles: Appending to shadow root');
     this.shadowRoot.appendChild(style);
     
     // Wait for styles to load with a timeout fallback
@@ -133,14 +134,14 @@ class VirtualAssistantInjector {
       const finish = (source) => {
         if (!resolved) {
           resolved = true;
-          console.log('[Content Script] injectStyles: Finished via', source);
+          Logger.log('Content Script', 'injectStyles: Finished via', source);
           resolve();
         }
       };
       
       style.onload = () => finish('onload');
       style.onerror = (error) => {
-        console.warn('[Content Script] injectStyles: CSS load error:', error);
+        Logger.warn('Content Script', 'injectStyles: CSS load error:', error);
         finish('onerror');
       };
       
@@ -148,11 +149,11 @@ class VirtualAssistantInjector {
       setTimeout(() => finish('timeout'), 500);
     });
     
-    console.log('[Content Script] injectStyles: Complete');
+    Logger.log('Content Script', 'injectStyles: Complete');
   }
 
   async injectReactApp() {
-    console.log('[Content Script] injectReactApp: Creating root div');
+    Logger.log('Content Script', 'injectReactApp: Creating root div');
     // Create root div for React
     const root = document.createElement('div');
     root.id = 'react-root';
@@ -162,38 +163,38 @@ class VirtualAssistantInjector {
     `;
     
     this.shadowRoot.appendChild(root);
-    console.log('[Content Script] injectReactApp: Root div appended to shadow root');
+    Logger.log('Content Script', 'injectReactApp: Root div appended to shadow root');
     
     // Setup message bridge for cross-world communication
     this._setupMessageBridge();
     
     // Load React bundle in the main document
     const scriptUrl = chrome.runtime.getURL('content-app.js');
-    console.log('[Content Script] injectReactApp: Script URL:', scriptUrl);
+    Logger.log('Content Script', 'injectReactApp: Script URL:', scriptUrl);
     
     // Create script element in the main document
     this.scriptElement = document.createElement('script');
     this.scriptElement.src = scriptUrl;
     this.scriptElement.type = 'module';
     
-    console.log('[Content Script] injectReactApp: Waiting for script to load...');
+    Logger.log('Content Script', 'injectReactApp: Waiting for script to load...');
     
     // Wait for script to load
     await new Promise((resolve, reject) => {
       this.scriptElement.onload = () => {
-        console.log('[Content Script] injectReactApp: Script loaded successfully ✓');
+        Logger.log('Content Script', 'injectReactApp: Script loaded successfully ✓');
         resolve();
       };
       this.scriptElement.onerror = (error) => {
-        console.error('[Content Script] injectReactApp: Failed to load script ❌', error);
+        Logger.error('Content Script', 'injectReactApp: Failed to load script ❌', error);
         reject(error);
       };
       // Append to document head (not shadow root)
-      console.log('[Content Script] injectReactApp: Appending script to document.head');
+      Logger.log('Content Script', 'injectReactApp: Appending script to document.head');
       document.head.appendChild(this.scriptElement);
     });
     
-    console.log('[Content Script] injectReactApp: Complete');
+    Logger.log('Content Script', 'injectReactApp: Complete');
   }
 
   /**
@@ -214,7 +215,7 @@ class VirtualAssistantInjector {
         // Find which main world request this belongs to
         for (const [mainRequestId, bgRequestId] of streamingRequests.entries()) {
           if (message.requestId === bgRequestId) {
-            console.log('[Content Script Bridge] ✅ Forwarding stream token to main world:', message.data.token);
+            Logger.log('Content Script Bridge', '✅ Forwarding stream token to main world:', message.data.token);
             // Forward to main world with original requestId
             window.postMessage({
               __VASSIST_STREAM_TOKEN__: true,
@@ -228,7 +229,7 @@ class VirtualAssistantInjector {
       
       // Forward broadcast messages (like progress updates)
       if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
-        console.log('[Content Script Bridge] ✅ Forwarding Kokoro progress to main world');
+        Logger.log('Content Script Bridge', '✅ Forwarding Kokoro progress to main world');
         window.postMessage({
           __VASSIST_BROADCAST__: true,
           type: message.type,
@@ -245,7 +246,7 @@ class VirtualAssistantInjector {
       // Check for our message format
       if (event.data && event.data.__VASSIST_MESSAGE__) {
         const { type, payload, requestId, streaming, timeout } = event.data;
-        console.log('[Content Script Bridge] Received from main world:', type, streaming ? '(streaming)' : '', timeout ? `(timeout: ${timeout}ms)` : '');
+        Logger.log('Content Script Bridge', 'Received from main world:', type, streaming ? '(streaming)' : '', timeout ? `(timeout: ${timeout}ms)` : '');
         
         try {
           let response;
@@ -255,7 +256,7 @@ class VirtualAssistantInjector {
             // Generate URL using chrome.runtime.getURL
             const url = chrome.runtime.getURL(payload.path);
             response = { url };
-            console.log('[Content Script Bridge] Generated URL:', url, 'for path:', payload.path);
+            Logger.log('Content Script Bridge', 'Generated URL:', url, 'for path:', payload.path);
             
             // Send response back to main world
             window.postMessage({
@@ -270,7 +271,7 @@ class VirtualAssistantInjector {
             try {
               // Send request to background and get the actual background requestId
               const { requestId: bgRequestId, promise } = this.bridge.sendMessage(type, payload, { timeout });
-              console.log('[Content Script Bridge] Background requestId:', bgRequestId);
+              Logger.log('Content Script Bridge', 'Background requestId:', bgRequestId);
               
               // Map main world requestId to background requestId
               streamingRequests.set(requestId, bgRequestId);
@@ -278,7 +279,7 @@ class VirtualAssistantInjector {
               // Wait for stream to complete
               response = await promise;
               
-              console.log('[Content Script Bridge] Stream complete, response received');
+              Logger.log('Content Script Bridge', 'Stream complete, response received');
               
               // Send stream end to main world
               window.postMessage({
@@ -286,7 +287,7 @@ class VirtualAssistantInjector {
                 requestId
               }, '*');
             } catch (error) {
-              console.log('[Content Script Bridge] Stream error:', error);
+              Logger.log('Content Script Bridge', 'Stream error:', error);
               
               // Send stream error to main world
               window.postMessage({
@@ -298,14 +299,14 @@ class VirtualAssistantInjector {
               // Clean up mapping
               streamingRequests.delete(requestId);
               
-              console.log('[Content Script Bridge] Stream mapping cleaned up for request:', requestId);
+              Logger.log('Content Script Bridge', 'Stream mapping cleaned up for request:', requestId);
             }
           } else {
             // NON-STREAMING REQUEST
-            console.log('[Content Script Bridge] Sending non-streaming request to background:', type, timeout ? `(timeout: ${timeout}ms)` : '');
+            Logger.log('Content Script Bridge', 'Sending non-streaming request to background:', type, timeout ? `(timeout: ${timeout}ms)` : '');
             const { promise } = this.bridge.sendMessage(type, payload, { timeout });
             response = await promise;
-            console.log('[Content Script Bridge] Received response from background for', type, ':', response);
+            Logger.log('Content Script Bridge', 'Received response from background for', type, ':', response);
             
             // Send response back to main world
             window.postMessage({
@@ -313,7 +314,7 @@ class VirtualAssistantInjector {
               requestId,
               payload: response
             }, '*');
-            console.log('[Content Script Bridge] Forwarded response to main world for request:', requestId);
+            Logger.log('Content Script Bridge', 'Forwarded response to main world for request:', requestId);
           }
         } catch (error) {
           // Send error back to main world
@@ -326,13 +327,13 @@ class VirtualAssistantInjector {
       }
     });
     
-    console.log('[Content Script] Message bridge setup complete');
+    Logger.log('Content Script', 'Message bridge setup complete');
   }
 
   async toggle() {
     // If currently fading out, cancel the fade and show again
     if (this.isFadingOut) {
-      console.log('[Content Script] Cancelling fade-out, keeping assistant visible');
+      Logger.log('Content Script', 'Cancelling fade-out, keeping assistant visible');
       this.isFadingOut = false;
       // Restore opacity for both container and canvas
       if (this.container) {
@@ -366,7 +367,7 @@ class VirtualAssistantInjector {
       this.isVisible = true;
     }
     
-    console.log(`[Content Script] Assistant ${this.isVisible ? 'shown' : 'hidden'}`);
+    Logger.log('Content Script', `Assistant ${this.isVisible ? 'shown' : 'hidden'}`);
   }
 
   show() {
@@ -383,12 +384,12 @@ class VirtualAssistantInjector {
 
   async fadeOutAndCleanup() {
     if (this.isFadingOut) {
-      console.log('[Content Script] Already fading out');
+      Logger.log('Content Script', 'Already fading out');
       return;
     }
     
     this.isFadingOut = true;
-    console.log('[Content Script] Starting fade-out...');
+    Logger.log('Content Script', 'Starting fade-out...');
     
     // Fade out container
     if (this.container) {
@@ -406,7 +407,7 @@ class VirtualAssistantInjector {
     
     // Check if fade-out was cancelled (user clicked again)
     if (!this.isFadingOut) {
-      console.log('[Content Script] Fade-out was cancelled, skipping cleanup');
+      Logger.log('Content Script', 'Fade-out was cancelled, skipping cleanup');
       // Restore opacity if cancelled
       if (this.container) {
         this.container.style.opacity = '1';
@@ -423,7 +424,7 @@ class VirtualAssistantInjector {
   }
 
   async cleanup() {
-    console.log('[Content Script] Cleaning up...');
+    Logger.log('Content Script', 'Cleaning up...');
     
     // Notify background
     const { promise } = this.bridge.sendMessage(MessageTypes.TAB_CLEANUP, {});
@@ -431,18 +432,18 @@ class VirtualAssistantInjector {
     
     // Remove script element from document head
     if (this.scriptElement && this.scriptElement.parentNode) {
-      console.log('[Content Script] Removing script element...');
+      Logger.log('Content Script', 'Removing script element...');
       this.scriptElement.parentNode.removeChild(this.scriptElement);
       this.scriptElement = null;
-      console.log('[Content Script] Script element removed');
+      Logger.log('Content Script', 'Script element removed');
     }
     
     // Remove container from DOM - this removes shadow DOM and all its contents
     // (including React app, Babylon canvas, everything)
     if (this.container && this.container.parentNode) {
-      console.log('[Content Script] Removing container from DOM...');
+      Logger.log('Content Script', 'Removing container from DOM...');
       this.container.parentNode.removeChild(this.container);
-      console.log('[Content Script] Container removed');
+      Logger.log('Content Script', 'Container removed');
     }
     
     // Reset state - this allows re-injection
@@ -452,7 +453,7 @@ class VirtualAssistantInjector {
     this.isInjected = false;
     this.isVisible = false;
     
-    console.log('[Content Script] Cleanup complete');
+    Logger.log('Content Script', 'Cleanup complete');
   }
 }
 
@@ -461,7 +462,7 @@ const injector = new VirtualAssistantInjector();
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Content Script] Received message:', message);
+  Logger.log('Content Script', 'Received message:', message);
   
   const handleMessage = async () => {
     try {
@@ -486,7 +487,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return { success: false, error: 'Unknown message type' };
       }
     } catch (error) {
-      console.error('[Content Script] Error handling message:', error);
+      Logger.error('Content Script', 'Error handling message:', error);
       return { success: false, error: error.message };
     }
   };
@@ -504,4 +505,4 @@ window.addEventListener('beforeunload', () => {
 // Export for external control (if needed)
 window.__virtualAssistant = injector;
 
-console.log('[Content Script] Message listener registered');
+Logger.log('Content Script', 'Message listener registered');

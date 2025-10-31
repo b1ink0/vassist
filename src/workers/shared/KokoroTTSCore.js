@@ -9,6 +9,7 @@
  * Kokoro TTS Core Class
  * Singleton instance manages model lifecycle
  */
+import Logger from '../../services/Logger';
 export class KokoroTTSCore {
   constructor() {
     this.tts = null; // KokoroTTS instance
@@ -18,7 +19,7 @@ export class KokoroTTSCore {
     this.config = null;
     this.initPromise = null;
     
-    console.log('[KokoroTTSCore] Core initialized');
+    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -36,13 +37,13 @@ export class KokoroTTSCore {
   async initialize(config, progressCallback = null) {
     // If already initialized with same config, return success
     if (this.isInitialized && this.modelId === config.modelId) {
-      console.log('[KokoroTTSCore] Already initialized with model:', this.modelId);
+      Logger.log('KokoroTTSCore', 'Already initialized with model:', this.modelId);
       return true;
     }
 
     // If currently initializing, wait for it
     if (this.isInitializing && this.initPromise) {
-      console.log('[KokoroTTSCore] Initialization in progress, waiting...');
+      Logger.log('KokoroTTSCore', 'Initialization in progress, waiting...');
       return await this.initPromise;
     }
 
@@ -50,7 +51,7 @@ export class KokoroTTSCore {
     
     this.initPromise = (async () => {
       try {
-        console.log('[KokoroTTSCore] Initializing Kokoro TTS...', config);
+        Logger.log('KokoroTTSCore', 'Initializing Kokoro TTS...', config);
 
         // Dynamic import of kokoro-js
         // Note: transformers.js env should be configured BEFORE this import
@@ -58,7 +59,7 @@ export class KokoroTTSCore {
         // - In SharedWorker (dev): transformers.js auto-detects bundled WASM files in assets
         const { KokoroTTS } = await import('kokoro-js');
         
-        console.log('[KokoroTTSCore] Loaded kokoro-js');
+        Logger.log('KokoroTTSCore', 'Loaded kokoro-js');
         
         // Determine device backend
         let device = config.device || 'auto';
@@ -73,7 +74,7 @@ export class KokoroTTSCore {
               device = 'wasm';
             }
           } catch (error) {
-            console.warn('[KokoroTTSCore] WebGPU detection failed, using WASM:', error);
+            Logger.warn('KokoroTTSCore', 'WebGPU detection failed, using WASM:', error);
             device = 'wasm';
           }
         }
@@ -82,7 +83,7 @@ export class KokoroTTSCore {
         // WebGPU REQUIRES fp32, WASM works best with q8
         const dtype = device === 'webgpu' ? 'fp32' : 'q8';
         
-        console.log(`[KokoroTTSCore] Loading model with device=${device}, dtype=${dtype} (auto-mapped)`);
+        Logger.log('KokoroTTSCore', `Loading model with device=${device}, dtype=${dtype} (auto-mapped)`);
 
         // Load model with progress tracking and retry logic
         try {
@@ -92,7 +93,7 @@ export class KokoroTTSCore {
             progress_callback: (progress) => {
               // Safely handle progress object
               if (!progress || typeof progress !== 'object') {
-                console.warn('[KokoroTTSCore] Invalid progress object:', progress);
+                Logger.warn('KokoroTTSCore', 'Invalid progress object:', progress);
                 return;
               }
               
@@ -101,7 +102,7 @@ export class KokoroTTSCore {
               const total = progress.total || 0;
               const percent = total > 0 ? (loaded / total) * 100 : 0;
               
-              console.log(`[KokoroTTSCore] Download progress: ${percent.toFixed(1)}%`);
+              Logger.log('KokoroTTSCore', `Download progress: ${percent.toFixed(1)}%`);
               
               if (progressCallback) {
                 progressCallback({
@@ -114,11 +115,11 @@ export class KokoroTTSCore {
             }
           });
         } catch (deviceError) {
-          console.error(`[KokoroTTSCore] Failed with ${device} backend:`, deviceError);
+          Logger.error('KokoroTTSCore', 'Failed with ${device} backend:', deviceError);
           
           // Fallback: If WebGPU failed, try WASM with q8
           if (device === 'webgpu') {
-            console.log('[KokoroTTSCore] Falling back to WASM backend...');
+            Logger.log('KokoroTTSCore', 'Falling back to WASM backend...');
             device = 'wasm';
             
             this.tts = await KokoroTTS.from_pretrained(config.modelId, {
@@ -145,7 +146,7 @@ export class KokoroTTSCore {
               }
             });
             
-            console.log('[KokoroTTSCore] WASM fallback successful');
+            Logger.log('KokoroTTSCore', 'WASM fallback successful');
           } else {
             throw deviceError;
           }
@@ -156,20 +157,20 @@ export class KokoroTTSCore {
         this.isInitialized = true;
         this.isInitializing = false;
 
-        console.log('[KokoroTTSCore] Model loaded successfully with', device, 'backend');
+        Logger.log('KokoroTTSCore', 'Model loaded successfully with', device, 'backend');
       
         // Log available voices for debugging
         try {
           const voices = await this.tts.list_voices();
-          console.log('[KokoroTTSCore] Available voices:', voices);
+          Logger.log('KokoroTTSCore', 'Available voices:', voices);
         } catch (voiceError) {
-          console.warn('[KokoroTTSCore] Could not list voices:', voiceError);
+          Logger.warn('KokoroTTSCore', 'Could not list voices:', voiceError);
         }
       
         return true;
 
       } catch (error) {
-        console.error('[KokoroTTSCore] Initialization failed:', error);
+        Logger.error('KokoroTTSCore', 'Initialization failed:', error);
         this.isInitializing = false;
         this.isInitialized = false;
         this.tts = null;
@@ -208,7 +209,7 @@ export class KokoroTTSCore {
     }
 
     try {
-      console.log(`[KokoroTTSCore] Generating speech: "${text.substring(0, 50)}..." with voice=${options.voice}, speed=${options.speed}`);
+      Logger.log('KokoroTTSCore', `Generating speech: "${text.substring(0, 50)}..." with voice=${options.voice}, speed=${options.speed}`);
 
       // Generate audio - kokoro-js v1.2.1 returns RawAudio object
       const result = await this.tts.generate(text, {
@@ -216,7 +217,7 @@ export class KokoroTTSCore {
         speed: options.speed !== undefined ? options.speed : 1.0
       });
 
-      console.log(`[KokoroTTSCore] Raw result type:`, typeof result, result);
+      Logger.log('KokoroTTSCore', 'Raw result type:', typeof result, result);
       
       // IMPORTANT: The native .toBlob() creates 32-bit float WAV (audioFormat: 3)
       // which many browsers/audio players don't support properly.
@@ -238,28 +239,28 @@ export class KokoroTTSCore {
             if (audioSamples[i] < min) min = audioSamples[i];
             if (audioSamples[i] > max) max = audioSamples[i];
           }
-          console.log(`[KokoroTTSCore] Sample range: min=${min}, max=${max}`);
+          Logger.log('KokoroTTSCore', `Sample range: min=${min}, max=${max}`);
         } else if (result instanceof Float32Array) {
           // Direct Float32Array (older API)
           audioSamples = result;
         } else {
-          console.error('[KokoroTTSCore] Invalid audio format:', result);
+          Logger.error('KokoroTTSCore', 'Invalid audio format:', result);
           throw new Error(`Invalid audio format returned from kokoro-js. Expected RawAudio object or Float32Array, got ${typeof result}`);
         }
       } else {
-        console.error('[KokoroTTSCore] Invalid result type:', typeof result, result);
+        Logger.error('KokoroTTSCore', 'Invalid result type:', typeof result, result);
         throw new Error(`Invalid result type from kokoro-js: ${typeof result}`);
       }
 
       // Convert to WAV format for playback (16-bit PCM)
       const wavBuffer = this.float32ToWav(audioSamples, sampleRate);
       
-      console.log(`[KokoroTTSCore] Generated ${wavBuffer.byteLength} bytes of audio (${audioSamples.length} samples at ${sampleRate}Hz)`);
+      Logger.log('KokoroTTSCore', `Generated ${wavBuffer.byteLength} bytes of audio (${audioSamples.length} samples at ${sampleRate}Hz)`);
       
       return wavBuffer;
 
     } catch (error) {
-      console.error('[KokoroTTSCore] Generation failed:', error);
+      Logger.error('KokoroTTSCore', 'Generation failed:', error);
       throw new Error(`Kokoro speech generation failed: ${error.message}`);
     }
   }
@@ -277,7 +278,7 @@ export class KokoroTTSCore {
       const voices = await this.tts.list_voices();
       return voices;
     } catch (error) {
-      console.error('[KokoroTTSCore] Failed to list voices:', error);
+      Logger.error('KokoroTTSCore', 'Failed to list voices:', error);
       throw new Error(`Failed to list voices: ${error.message}`);
     }
   }
@@ -299,7 +300,7 @@ export class KokoroTTSCore {
    * Destroy the TTS model and free up memory
    */
   async destroy() {
-    console.log('[KokoroTTSCore] Destroying model...');
+    Logger.log('KokoroTTSCore', 'Destroying model...');
     
     this.tts = null;
     this.isInitialized = false;
@@ -308,7 +309,7 @@ export class KokoroTTSCore {
     this.config = null;
     this.initPromise = null;
     
-    console.log('[KokoroTTSCore] Model destroyed');
+    Logger.log('KokoroTTSCore', 'Model destroyed');
   }
 
   /**
@@ -326,7 +327,7 @@ export class KokoroTTSCore {
       // Just verify the TTS instance exists and is valid
       return this.tts !== null && this.isInitialized;
     } catch (error) {
-      console.warn('[KokoroTTSCore] Ping failed:', error);
+      Logger.warn('KokoroTTSCore', 'Ping failed:', error);
       return false;
     }
   }
@@ -336,7 +337,7 @@ export class KokoroTTSCore {
    * Called when user clears cache from UI
    */
   async clearCache() {
-    console.log('[KokoroTTSCore] Clearing cache and resetting model...');
+    Logger.log('KokoroTTSCore', 'Clearing cache and resetting model...');
     
     try {
       // First destroy the model instance
@@ -348,7 +349,7 @@ export class KokoroTTSCore {
         const databases = await indexedDB.databases();
         for (const db of databases) {
           if (db.name && db.name.includes('transformers')) {
-            console.log('[KokoroTTSCore] Deleting database:', db.name);
+            Logger.log('KokoroTTSCore', 'Deleting database:', db.name);
             await new Promise((resolve, reject) => {
               const request = indexedDB.deleteDatabase(db.name);
               request.onsuccess = resolve;
@@ -363,16 +364,16 @@ export class KokoroTTSCore {
         const cacheKeys = await caches.keys();
         for (const key of cacheKeys) {
           if (key.includes('transformers')) {
-            console.log('[KokoroTTSCore] Deleting cache:', key);
+            Logger.log('KokoroTTSCore', 'Deleting cache:', key);
             await caches.delete(key);
           }
         }
       }
       
-      console.log('[KokoroTTSCore] Cache cleared, model reset');
+      Logger.log('KokoroTTSCore', 'Cache cleared, model reset');
       return true;
     } catch (error) {
-      console.error('[KokoroTTSCore] Failed to clear cache:', error);
+      Logger.error('KokoroTTSCore', 'Failed to clear cache:', error);
       throw error;
     }
   }
@@ -418,7 +419,7 @@ export class KokoroTTSCore {
       
       return { usage: 0, quota: 0, databases: [] };
     } catch (error) {
-      console.error('[KokoroTTSCore] Failed to get cache size:', error);
+      Logger.error('KokoroTTSCore', 'Failed to get cache size:', error);
       return { usage: 0, quota: 0, databases: [] };
     }
   }

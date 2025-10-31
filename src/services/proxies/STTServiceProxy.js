@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import STTService from '../STTService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {
@@ -67,7 +68,7 @@ class STTServiceProxy extends ServiceProxy {
       // In extension mode, recording happens in content script
       // We use MediaRecorder directly here
       if (this._isRecording) {
-        console.warn('[STTServiceProxy] Already recording');
+        Logger.warn('STTServiceProxy', 'Already recording');
         return false;
       }
 
@@ -103,7 +104,7 @@ class STTServiceProxy extends ServiceProxy {
             const arrayBuffer = await audioBlob.arrayBuffer();
             const audioData = Array.from(new Uint8Array(arrayBuffer));
             
-            console.log(`[STTServiceProxy] Converted audio to Array: ${audioData.length} bytes`);
+            Logger.log('STTServiceProxy', `Converted audio to Array: ${audioData.length} bytes`);
             
             // Cleanup local resources
             this.cleanup();
@@ -128,7 +129,7 @@ class STTServiceProxy extends ServiceProxy {
               this.onRecordingStop();
             }
           } catch (error) {
-            console.error('[STTServiceProxy] Transcription failed:', error);
+            Logger.error('STTServiceProxy', 'Transcription failed:', error);
             if (this.onError) {
               this.onError(error);
             }
@@ -139,7 +140,7 @@ class STTServiceProxy extends ServiceProxy {
         };
 
         this.mediaRecorder.onerror = (error) => {
-          console.error('[STTServiceProxy] MediaRecorder error:', error);
+          Logger.error('STTServiceProxy', 'MediaRecorder error:', error);
           if (this.onError) {
             this.onError(error);
           }
@@ -156,7 +157,7 @@ class STTServiceProxy extends ServiceProxy {
         
         return true;
       } catch (error) {
-        console.error('[STTServiceProxy] Failed to start recording:', error);
+        Logger.error('STTServiceProxy', 'Failed to start recording:', error);
         this.cleanup();
         throw error;
       }
@@ -171,7 +172,7 @@ class STTServiceProxy extends ServiceProxy {
   stopRecording() {
     if (this.isExtension) {
       if (!this._isRecording || !this.mediaRecorder) {
-        console.warn('[STTServiceProxy] Not recording');
+        Logger.warn('STTServiceProxy', 'Not recording');
         return;
       }
 
@@ -194,7 +195,7 @@ class STTServiceProxy extends ServiceProxy {
       const audioData = Array.from(new Uint8Array(arrayBuffer));
       const mimeType = audioBlob.type || 'audio/webm';
       
-      console.log(`[STTServiceProxy] Transcribing audio: ${audioData.length} bytes, type: ${mimeType}`);
+      Logger.log('STTServiceProxy', `Transcribing audio: ${audioData.length} bytes, type: ${mimeType}`);
       
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('STTServiceProxy: Bridge not available');

@@ -11,6 +11,7 @@ import Toggle from '../common/Toggle';
 import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
+import Logger from '../../services/Logger';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -42,7 +43,7 @@ const UISettings = ({ isLightBackground }) => {
                 // Reload to start fresh
                 window.location.reload();
               } catch (error) {
-                console.error('Failed to reset setup:', error);
+                Logger.error('other', 'Failed to reset setup:', error);
                 alert('Failed to reset setup. Please try again.');
               } finally {
                 setIsResetting(false);

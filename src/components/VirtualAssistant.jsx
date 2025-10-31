@@ -10,6 +10,7 @@ import { AssistantState, getAnimationForEmotion } from '../config/animationConfi
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
+import Logger from '../services/Logger';
 
 const VirtualAssistant = forwardRef((props, ref) => {
   const { 
@@ -47,17 +48,17 @@ const VirtualAssistant = forwardRef((props, ref) => {
     // Prevent re-initializing the SAME scene (React Strict Mode protection)
     // But allow initializing a NEW scene (after cleanup + remount)
     if (initializedSceneRef.current === scene) {
-      console.log('[VirtualAssistant] Same scene already initialized, ignoring duplicate callback');
+      Logger.log('VirtualAssistant', 'Same scene already initialized, ignoring duplicate callback');
       return;
     }
     
     // Validate scene before proceeding
     if (!scene || !scene.metadata || !scene.metadata.animationManager) {
-      console.error('[VirtualAssistant] Invalid scene or missing metadata, cannot initialize');
+      Logger.error('VirtualAssistant', 'Invalid scene or missing metadata, cannot initialize');
       return;
     }
     
-    console.log('[VirtualAssistant] Scene ready, initializing...');
+    Logger.log('VirtualAssistant', 'Scene ready, initializing...');
     
     // Mark this specific scene as initialized
     initializedSceneRef.current = scene;
@@ -71,30 +72,30 @@ const VirtualAssistant = forwardRef((props, ref) => {
     setCurrentState(manager.getCurrentState());
     setIsReady(true);
     
-    console.log('[VirtualAssistant] AnimationManager initialized and ready');
-    console.log('[VirtualAssistant] PositionManager ready with position data');
+    Logger.log('VirtualAssistant', 'AnimationManager initialized and ready');
+    Logger.log('VirtualAssistant', 'PositionManager ready with position data');
     
     // Initialize TTS Service with BVMD converter and animation callback
     TTSServiceProxy.initializeBVMDConverter(scene);
     TTSServiceProxy.setSpeakCallback((text, bvmdUrl) => {
       // This will be called when audio starts playing
-      console.log('[VirtualAssistant] TTS triggering speak animation');
+      Logger.log('VirtualAssistant', 'TTS triggering speak animation');
       if (manager && bvmdUrl) {
         manager.speak(text, bvmdUrl, 'talking');
       }
     });
     TTSServiceProxy.setStopCallback(() => {
       // This will be called when TTS is stopped/interrupted
-      console.log('[VirtualAssistant] TTS stopped, returning to idle');
+      Logger.log('VirtualAssistant', 'TTS stopped, returning to idle');
       if (manager) {
         manager.returnToIdle();
       }
     });
-    console.log('[VirtualAssistant] TTS Service integrated with lip sync');
+    Logger.log('VirtualAssistant', 'TTS Service integrated with lip sync');
     
     // Call onReady callback if provided
     if (onReady) {
-      console.log('[VirtualAssistant] Calling onReady callback with managers');
+      Logger.log('VirtualAssistant', 'Calling onReady callback with managers');
       onReady({ 
         animationManager: manager, 
         positionManager: posMgr,
@@ -117,7 +118,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
           height: positionManager.modelHeightPx
         };
         
-        console.log('[VirtualAssistant] Saving last location:', currentPos);
+        Logger.log('VirtualAssistant', 'Saving last location:', currentPos);
         updateUIConfig('position.lastLocation', currentPos);
       }
     };
@@ -141,7 +142,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
           preset: uiConfig.position?.preset || 'bottom-right' // Save the preset too!
         };
         
-        console.log('[VirtualAssistant] Unmounting - saving position to context:', currentPos);
+        Logger.log('VirtualAssistant', 'Unmounting - saving position to context:', currentPos);
         
         // Save to context (in-memory, persists across unmount/remount)
         setSavedModelPosition(currentPos);
@@ -187,11 +188,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     speak: async (text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready, cannot speak');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot speak');
         return;
       }
 
-      console.log(`[VirtualAssistant] speak("${text}", emotionCategory="${emotionCategory}")`);
+      Logger.log('VirtualAssistant', `speak("${text}", emotionCategory="${emotionCategory}")`);
       
       // Simple pass-through to AnimationManager.speak()
       await animationManager.speak(text, mouthAnimationBlobUrl, emotionCategory, options);
@@ -204,11 +205,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     idle: async () => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready, cannot idle');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot idle');
         return;
       }
 
-      console.log('[VirtualAssistant] idle()');
+      Logger.log('VirtualAssistant', 'idle()');
       await animationManager.returnToIdle();
       setCurrentState(animationManager.getCurrentState());
     },
@@ -229,11 +230,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     setState: async (stateOrEmotion) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready, cannot setState');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot setState');
         return;
       }
 
-      console.log(`[VirtualAssistant] setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
+      Logger.log('VirtualAssistant', `setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
       
       // Check if it's a valid AssistantState
       if (Object.values(AssistantState).includes(stateOrEmotion)) {
@@ -243,10 +244,10 @@ const VirtualAssistant = forwardRef((props, ref) => {
         // It's probably an emotion - get animation and play it
         const emotionAnimation = getAnimationForEmotion(stateOrEmotion);
         if (emotionAnimation) {
-          console.log(`[VirtualAssistant] Playing animation for emotion/state "${stateOrEmotion}": ${emotionAnimation.name}`);
+          Logger.log('VirtualAssistant', `Playing animation for emotion/state "${stateOrEmotion}": ${emotionAnimation.name}`);
           await animationManager.playAnimation(emotionAnimation);
         } else {
-          console.warn(`[VirtualAssistant] Unknown state or emotion: "${stateOrEmotion}"`);
+          Logger.warn('VirtualAssistant', `Unknown state or emotion: "${stateOrEmotion}"`);
         }
       }
       
@@ -259,11 +260,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     triggerAction: async (action) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready, cannot triggerAction');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot triggerAction');
         return;
       }
 
-      console.log(`[VirtualAssistant] triggerAction("${action}")`);
+      Logger.log('VirtualAssistant', `triggerAction("${action}")`);
       await animationManager.triggerAction(action);
       setCurrentState(animationManager.getCurrentState());
     },
@@ -278,11 +279,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     playComposite: async (primaryAnimName, fillCategory = 'talking', options = {}) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready, cannot playComposite');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot playComposite');
         return;
       }
 
-      console.log(`[VirtualAssistant] playComposite("${primaryAnimName}", category="${fillCategory}", primaryWeight=${options.primaryWeight ?? 1.0}, fillWeight=${options.fillWeight ?? 0.5})`);
+      Logger.log('VirtualAssistant', `playComposite("${primaryAnimName}", category="${fillCategory}", primaryWeight=${options.primaryWeight ?? 1.0}, fillWeight=${options.fillWeight ?? 0.5})`);
       await animationManager.playComposite(primaryAnimName, fillCategory, options);
       setCurrentState(animationManager.getCurrentState());
     },
@@ -317,11 +318,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     setPosition: (preset) => {
       if (!positionManager) {
-        console.warn('[VirtualAssistant] PositionManager not ready, cannot setPosition');
+        Logger.warn('VirtualAssistant', 'PositionManager not ready, cannot setPosition');
         return;
       }
 
-      console.log(`[VirtualAssistant] setPosition("${preset}")`);
+      Logger.log('VirtualAssistant', `setPosition("${preset}")`);
       positionManager.applyPreset(preset);
     },
 
@@ -344,7 +345,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     queueAnimation: (animationName, force = false) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
       }
       animationManager.queueSimpleAnimation(animationName, force);
@@ -359,7 +360,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     queueComposite: (primaryAnimName, fillCategory = 'talking', options = {}, force = false) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
       }
       animationManager.queueCompositeAnimation(primaryAnimName, fillCategory, options, force);
@@ -375,7 +376,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     queueSpeak: (text, mouthBlobUrl, emotionCategory = 'talking', options = {}, force = false) => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
       }
       animationManager.queueSpeak(text, mouthBlobUrl, emotionCategory, options, force);
@@ -386,7 +387,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     clearQueue: () => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
       }
       animationManager.clearQueue();
@@ -398,7 +399,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      */
     getQueueStatus: () => {
       if (!animationManager) {
-        console.warn('[VirtualAssistant] AnimationManager not ready');
+        Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return { length: 0, isEmpty: true, items: [] };
       }
       return animationManager.getQueueStatus();

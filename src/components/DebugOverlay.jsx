@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from './icons';;
 import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../contexts/ConfigContext';
+import Logger from '../services/Logger';
 
 const DebugOverlay = ({ scene, positionManager }) => {
   const { uiConfig, updateUIConfig } = useConfig();
@@ -148,7 +149,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
       : currentSize - zoomAmount; // Zoom OUT = SMALLER (no limit)
     const newWidth = newSize * 0.6; // Maintain aspect ratio
     
-    console.log(`[DebugOverlay] Zooming ${direction}: ${currentSize}px → ${newSize}px`);
+    Logger.log('DebugOverlay', `Zooming ${direction}: ${currentSize}px → ${newSize}px`);
     
     // CRITICAL: Calculate current center position
     const oldCenterX = positionManager.positionX + currentWidth / 2;
@@ -169,7 +170,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
   const resetCamera = () => {
     if (!positionManager) return;
     
-    console.log('[DebugOverlay] Resetting camera to default');
+    Logger.log('DebugOverlay', 'Resetting camera to default');
     
     // Reset offset to 0,0
     positionManager.offset = { x: 0, y: 0 };
@@ -189,7 +190,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
     const arcRotateCamera = scene.metadata.arcRotateCamera;
     
     if (!mmdCamera || !arcRotateCamera) {
-      console.warn('[DebugOverlay] Cameras not found in scene metadata');
+      Logger.warn('DebugOverlay', 'Cameras not found in scene metadata');
       return;
     }
     
@@ -198,10 +199,10 @@ const DebugOverlay = ({ scene, positionManager }) => {
     
     if (newIs3DView) {
       scene.activeCamera = arcRotateCamera;
-      console.log('[DebugOverlay] Switched to 3D view camera');
+      Logger.log('DebugOverlay', 'Switched to 3D view camera');
     } else {
       scene.activeCamera = mmdCamera;
-      console.log('[DebugOverlay] Switched to MMD camera');
+      Logger.log('DebugOverlay', 'Switched to MMD camera');
     }
   };
 
@@ -212,7 +213,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
     setClipPlaneY(newY);
     // Update the clipping plane - normal pointing down (0,-1,0) clips below Y
     scene.clipPlane = new BABYLON.Plane(0, -1, 0, newY);
-    console.log(`[DebugOverlay] Updated clipping plane to Y = ${newY}`);
+    Logger.log('DebugOverlay', `Updated clipping plane to Y = ${newY}`);
   };
 
   // Update offset values

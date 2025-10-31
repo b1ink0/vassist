@@ -4,6 +4,7 @@
  * Uses window.postMessage for cross-world communication
  */
 
+import Logger from '../services/Logger';
 class ExtensionBridge {
   constructor() {
     this.requestId = 0;
@@ -11,7 +12,7 @@ class ExtensionBridge {
     this.messageListeners = new Set(); // Track message listeners
     this._setupMessageListener();
     
-    console.log('[ExtensionBridge] Initialized in main world');
+    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -29,7 +30,7 @@ class ExtensionBridge {
           try {
             listener(event.data);
           } catch (error) {
-            console.error('[ExtensionBridge] Listener error:', error);
+            Logger.error('ExtensionBridge', 'Listener error:', error);
           }
         });
         return;
@@ -41,7 +42,7 @@ class ExtensionBridge {
         
         const pending = this.pending.get(requestId);
         if (pending) {
-          console.log('[ExtensionBridge] ✅ Found pending promise, resolving for requestId:', requestId);
+          Logger.log('ExtensionBridge', '✅ Found pending promise, resolving for requestId:', requestId);
           this.pending.delete(requestId);
           
           if (error) {
@@ -50,7 +51,7 @@ class ExtensionBridge {
             pending.resolve(payload);
           }
         } else {
-          console.warn('[ExtensionBridge] ❌ No pending promise found for requestId:', requestId);
+          Logger.warn('ExtensionBridge', '❌ No pending promise found for requestId:', requestId);
         }
       }
       
@@ -60,7 +61,7 @@ class ExtensionBridge {
         
         const pending = this.pending.get(requestId);
         if (pending && pending.onChunk) {
-          console.log('[ExtensionBridge] ✅ Calling onChunk callback for token:', token);
+          Logger.log('ExtensionBridge', '✅ Calling onChunk callback for token:', token);
           // Reset timeout on each chunk
           if (pending.timeoutId) {
             clearTimeout(pending.timeoutId);
@@ -73,7 +74,7 @@ class ExtensionBridge {
           // Call chunk callback
           pending.onChunk(token);
         } else {
-          console.warn('[ExtensionBridge] ❌ No pending request found for requestId:', requestId, 'Available:', Array.from(this.pending.keys()));
+          Logger.warn('ExtensionBridge', '❌ No pending request found for requestId:', requestId, 'Available:', Array.from(this.pending.keys()));
         }
       }
       
@@ -154,7 +155,7 @@ class ExtensionBridge {
         timeout // Pass timeout to content script
       }, '*');
       
-      console.log('[ExtensionBridge] Sent to content script:', type);
+      Logger.log('ExtensionBridge', 'Sent to content script:', type);
     });
   }
 
@@ -205,7 +206,7 @@ class ExtensionBridge {
         timeout // Pass timeout to content script
       }, '*');
       
-      console.log('[ExtensionBridge] Sent streaming request:', type, 'requestId:', requestId);
+      Logger.log('ExtensionBridge', 'Sent streaming request:', type, 'requestId:', requestId);
     });
   }
 
@@ -228,7 +229,7 @@ class ExtensionBridge {
       const response = await this.sendMessage('GET_RESOURCE_URL', { path }, { timeout: 5000 });
       return response.url;
     } catch (error) {
-      console.error('[ExtensionBridge] Failed to get resource URL:', error);
+      Logger.error('ExtensionBridge', 'Failed to get resource URL:', error);
       return `/${path}`; // Fallback to relative path
     }
   }
@@ -243,7 +244,7 @@ class ExtensionBridge {
       throw new Error('Listener must be a function');
     }
     this.messageListeners.add(listener);
-    console.log('[ExtensionBridge] Added message listener, total:', this.messageListeners.size);
+    Logger.log('ExtensionBridge', 'Added message listener, total:', this.messageListeners.size);
   }
 
   /**
@@ -252,7 +253,7 @@ class ExtensionBridge {
    */
   removeMessageListener(listener) {
     this.messageListeners.delete(listener);
-    console.log('[ExtensionBridge] Removed message listener, total:', this.messageListeners.size);
+    Logger.log('ExtensionBridge', 'Removed message listener, total:', this.messageListeners.size);
   }
 }
 

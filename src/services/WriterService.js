@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import Logger from './Logger';
 
 class WriterService {
   constructor() {
@@ -13,14 +14,12 @@ class WriterService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[WriterService] Initialized (Extension mode - multi-tab)');
     } else {
       this.writerSessions = new Map(); // key: "tone-format-length-sharedContext", value: Writer session
       this.config = null;
       this.provider = null;
       this.llmClient = null;
       this.abortController = null;
-      console.log('[WriterService] Initialized (Dev mode)');
     }
   }
 
@@ -39,7 +38,7 @@ class WriterService {
         llmClient: null,
         abortController: null,
       });
-      console.log(`[WriterService] Tab ${tabId} initialized`);
+      Logger.log('WriterService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -64,11 +63,11 @@ class WriterService {
             session.destroy();
           }
         } catch (error) {
-          console.warn(`[WriterService] Error destroying session:`, error);
+          Logger.warn('WriterService', 'Error destroying session:', error);
         }
       }
       this.tabStates.delete(tabId);
-      console.log(`[WriterService] Tab ${tabId} cleaned up`);
+      Logger.log('WriterService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -99,7 +98,7 @@ class WriterService {
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
-    console.log(`${logPrefix} Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
     
     try {
       if (provider === 'chrome-ai') {
@@ -110,7 +109,7 @@ class WriterService {
         
         state.config = { provider: 'chrome-ai' };
         state.provider = 'chrome-ai';
-        console.log(`${logPrefix} Chrome AI Writer configured`);
+        Logger.log('other', `${logPrefix} Chrome AI Writer configured`);
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
@@ -125,7 +124,7 @@ class WriterService {
           temperature: openaiConfig.temperature || 0.7,
         };
         state.provider = 'openai';
-        console.log(`${logPrefix} OpenAI configured for writing`);
+        Logger.log('other', `${logPrefix} OpenAI configured for writing`);
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
@@ -141,7 +140,7 @@ class WriterService {
           temperature: ollamaConfig.temperature || 0.7,
         };
         state.provider = 'ollama';
-        console.log(`${logPrefix} Ollama configured for writing`);
+        Logger.log('other', `${logPrefix} Ollama configured for writing`);
       }
       else {
         throw new Error(`Unknown provider: ${provider}`);
@@ -149,7 +148,7 @@ class WriterService {
       
       return true;
     } catch (error) {
-      console.error(`${logPrefix} Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -176,7 +175,7 @@ class WriterService {
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
     if (state.abortController) {
-      console.log(`${logPrefix} Aborting write request`);
+      Logger.log('other', `${logPrefix} Aborting write request`);
       state.abortController.abort();
       state.abortController = null;
     }
@@ -202,10 +201,10 @@ class WriterService {
       
       try {
         const availability = await self.Writer.availability();
-        console.log(`${logPrefix} Writer availability:`, availability);
+        Logger.log('other', `${logPrefix} Writer availability:`, availability);
         return availability;
       } catch (error) {
-        console.error(`${logPrefix} Failed to check availability:`, error);
+        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
         return 'unavailable';
       }
     } else {
@@ -239,7 +238,7 @@ class WriterService {
     
     // Create new Chrome AI Writer session
     try {
-      console.log(`${logPrefix} Creating writer session: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Creating writer session: ${sessionKey}`);
       const session = await self.Writer.create({
         tone,
         format,
@@ -247,16 +246,16 @@ class WriterService {
         sharedContext,
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            console.log(`${logPrefix} Writer model download: ${(e.loaded * 100).toFixed(1)}%`);
+            Logger.log('other', `${logPrefix} Writer model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
       });
       
       state.writerSessions.set(sessionKey, session);
-      console.log(`${logPrefix} Writer session created: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Writer session created: ${sessionKey}`);
       return session;
     } catch (error) {
-      console.error(`${logPrefix} Failed to create writer session:`, error);
+      Logger.error('other', `${logPrefix} Failed to create writer session:`, error);
       throw error;
     }
   }
@@ -289,12 +288,12 @@ class WriterService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Writing (${tone}, ${format}, ${length}):`, prompt.substring(0, 50));
+    Logger.log('other', `${logPrefix} Writing (${tone}, ${format}, ${length}):`, prompt.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
       const written = await session.write(prompt, { context });
-      console.log(`${logPrefix} Write complete:`, written.substring(0, 50));
+      Logger.log('other', `${logPrefix} Write complete:`, written.substring(0, 50));
       return written;
     } 
     else if (state.provider === 'openai' || state.provider === 'ollama') {
@@ -327,7 +326,7 @@ class WriterService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Writing (streaming, ${tone}, ${format}, ${length}):`, prompt.substring(0, 50));
+    Logger.log('other', `${logPrefix} Writing (streaming, ${tone}, ${format}, ${length}):`, prompt.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
@@ -369,7 +368,7 @@ class WriterService {
       
       state.abortController = null;
       const written = response.choices[0].message.content.trim();
-      console.log(`${logPrefix} ${state.provider} write complete`);
+      Logger.log('other', `${logPrefix} ${state.provider} write complete`);
       return written;
     } catch (error) {
       state.abortController = null;
@@ -380,11 +379,11 @@ class WriterService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Write aborted by user`);
+        Logger.log('other', `${logPrefix} Write aborted by user`);
         throw new Error('Write cancelled');
       }
       
-      console.error(`${logPrefix} ${state.provider} write failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} write failed:`, error);
       throw error;
     }
   }
@@ -415,7 +414,7 @@ class WriterService {
       for await (const chunk of stream) {
         // Check if aborted
         if (!state.abortController) {
-          console.log(`${logPrefix} Streaming aborted by user`);
+          Logger.log('other', `${logPrefix} Streaming aborted by user`);
           return;
         }
         
@@ -435,11 +434,11 @@ class WriterService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Streaming write aborted by user`);
+        Logger.log('other', `${logPrefix} Streaming write aborted by user`);
         return;
       }
       
-      console.error(`${logPrefix} ${state.provider} streaming write failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} streaming write failed:`, error);
       throw error;
     }
   }
@@ -495,7 +494,7 @@ class WriterService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
-    console.log(`${logPrefix} Destroying all writer sessions`);
+    Logger.log('other', `${logPrefix} Destroying all writer sessions`);
     
     for (const [key, session] of state.writerSessions.entries()) {
       try {
@@ -503,12 +502,12 @@ class WriterService {
           session.destroy();
         }
       } catch (error) {
-        console.warn(`${logPrefix} Error destroying session ${key}:`, error);
+        Logger.warn('other', `${logPrefix} Error destroying session ${key}:`, error);
       }
     }
     
     state.writerSessions.clear();
-    console.log(`${logPrefix} All sessions destroyed`);
+    Logger.log('other', `${logPrefix} All sessions destroyed`);
   }
 }
 

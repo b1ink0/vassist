@@ -7,6 +7,7 @@
  */
 
 import { db } from './DatabaseSchema.js';
+import Logger from '../services/Logger';
 
 export class StorageAdapter {
   /**
@@ -32,7 +33,7 @@ export class StorageAdapter {
       // Other tables also use 'value' field
       return record?.value;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to get ${table}.${key}:`, error);
+      Logger.error('StorageAdapter', 'Failed to get ${table}.${key}:', error);
       throw error;
     }
   }
@@ -47,7 +48,7 @@ export class StorageAdapter {
     try {
       return await db.table(table).get(key);
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to get record ${table}.${key}:`, error);
+      Logger.error('StorageAdapter', 'Failed to get record ${table}.${key}:', error);
       throw error;
     }
   }
@@ -95,7 +96,7 @@ export class StorageAdapter {
       await db.table(table).put(record);
       return true;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to set ${table}.${key}:`, error);
+      Logger.error('StorageAdapter', 'Failed to set ${table}.${key}:', error);
       throw error;
     }
   }
@@ -111,7 +112,7 @@ export class StorageAdapter {
       await db.table(table).delete(key);
       return true;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to remove ${table}.${key}:`, error);
+      Logger.error('StorageAdapter', 'Failed to remove ${table}.${key}:', error);
       throw error;
     }
   }
@@ -138,7 +139,7 @@ export class StorageAdapter {
       const count = await query.equals(key).count();
       return count > 0;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to check existence ${table}.${key}:`, error);
+      Logger.error('StorageAdapter', 'Failed to check existence ${table}.${key}:', error);
       throw error;
     }
   }
@@ -158,7 +159,7 @@ export class StorageAdapter {
       });
       return result;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to get multiple from ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to get multiple from ${table}:', error);
       throw error;
     }
   }
@@ -184,7 +185,7 @@ export class StorageAdapter {
       await db.table(table).bulkPut(records);
       return true;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to set multiple in ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to set multiple in ${table}:', error);
       throw error;
     }
   }
@@ -199,7 +200,7 @@ export class StorageAdapter {
       await db.table(table).clear();
       return true;
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to clear ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to clear ${table}:', error);
       throw error;
     }
   }
@@ -228,7 +229,7 @@ export class StorageAdapter {
         });
       });
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to query ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to query ${table}:', error);
       throw error;
     }
   }
@@ -242,7 +243,7 @@ export class StorageAdapter {
     try {
       return await db.table(table).toArray();
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to get all from ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to get all from ${table}:', error);
       throw error;
     }
   }
@@ -256,7 +257,7 @@ export class StorageAdapter {
     try {
       return await db.table(table).count();
     } catch (error) {
-      console.error(`[StorageAdapter] Failed to count ${table}:`, error);
+      Logger.error('StorageAdapter', 'Failed to count ${table}:', error);
       throw error;
     }
   }
@@ -276,11 +277,11 @@ export class StorageAdapter {
       const count = expired.length;
       if (count > 0) {
         await db.table('cache').bulkDelete(expired.map(r => r.key));
-        console.log(`[StorageAdapter] Cleaned up ${count} expired cache entries`);
+        Logger.log('StorageAdapter', `Cleaned up ${count} expired cache entries`);
       }
       return count;
     } catch (error) {
-      console.error('[StorageAdapter] Failed to cleanup cache:', error);
+      Logger.error('StorageAdapter', 'Failed to cleanup cache:', error);
       throw error;
     }
   }
@@ -293,7 +294,7 @@ export class StorageAdapter {
     try {
       return await db.getStats();
     } catch (error) {
-      console.error('[StorageAdapter] Failed to get stats:', error);
+      Logger.error('StorageAdapter', 'Failed to get stats:', error);
       throw error;
     }
   }

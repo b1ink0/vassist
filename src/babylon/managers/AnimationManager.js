@@ -30,6 +30,7 @@ import {
 } from "../../config/animationConfig";
 import TTSService from "../../services/TTSService";
 import { resourceLoader } from "../../utils/ResourceLoader";
+import Logger from '../../services/Logger';
 
 /**
  * Helper function to get timestamp for logging
@@ -55,7 +56,7 @@ export class AnimationManager {
   constructor(scene, mmdRuntime, mmdModel, bvmdLoader) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`[AnimationManager ${this.instanceId}] 🆕 Creating new instance`);
+    Logger.log('AnimationManager ${this.instanceId}', '🆕 Creating new instance');
     
     // Core dependencies
     this.scene = scene;
@@ -143,7 +144,7 @@ export class AnimationManager {
     this.isProcessingQueue = false; // Prevent re-entry during queue processing
     this.justStartedFromQueue = false; // Track if we just started an animation from queue (prevent immediate re-check)
 
-    console.log('[AnimationManager] Created');
+    Logger.log('AnimationManager', 'Created');
   }
 
   /**
@@ -153,12 +154,12 @@ export class AnimationManager {
    */
   _createPickingBoundingBox(positionManager) {
     if (!this._introLocomotionOffset) {
-      console.warn('[AnimationManager] Cannot create picking box - no locomotion offset');
+      Logger.warn('AnimationManager', 'Cannot create picking box - no locomotion offset');
       return;
     }
     
     if (!positionManager) {
-      console.warn('[AnimationManager] Cannot create picking box - no positionManager');
+      Logger.warn('AnimationManager', 'Cannot create picking box - no positionManager');
       return;
     }
 
@@ -202,7 +203,7 @@ export class AnimationManager {
     if (isPortraitMode) {
       // In Portrait Mode: Position box so its BOTTOM aligns with clipping plane
       yPosition = clipPlaneY + (pickingHeightWorld / 2);
-      console.log(`[AnimationManager] Portrait Mode: Picking box bottom aligned with clip plane at Y=${clipPlaneY}`);
+      Logger.log('AnimationManager', `Portrait Mode: Picking box bottom aligned with clip plane at Y=${clipPlaneY}`);
     } else {
       // Normal mode: Box center at half height from ground (Y=0)
       yPosition = pickingHeightWorld / 2;
@@ -234,7 +235,7 @@ export class AnimationManager {
       heightPx: pickingHeightPx
     };
     
-    console.log('[AnimationManager] Created picking box:', {
+    Logger.log('AnimationManager', 'Created picking box:', {
       mode: isPortraitMode ? 'Portrait' : 'Normal',
       position: {
         x: this.pickingBox.position.x,
@@ -272,7 +273,7 @@ export class AnimationManager {
       this._needsPickingBox = false;
     } else if (this._needsPickingBox) {
       // Intro will load later, create box when it does
-      console.log('[AnimationManager] Will create picking box after intro loads');
+      Logger.log('AnimationManager', 'Will create picking box after intro loads');
     } else {
       this._introLocomotionOffset = { x: 0, y: 0, z: 0 };
       this._createPickingBoundingBox(positionManager);
@@ -287,16 +288,16 @@ export class AnimationManager {
    */
   async initialize(playIntro = true, positionPreset = 'bottom-right') {
     if (this.isInitialized) {
-      console.warn('[AnimationManager] Already initialized');
+      Logger.warn('AnimationManager', 'Already initialized');
       return;
     }
 
-    console.log('[AnimationManager] Initializing...');
+    Logger.log('AnimationManager', 'Initializing...');
     
     // Determine if we should flip animations based on position preset
     // Flip if preset contains 'left' (bottom-left, top-left)
     this._shouldFlipAnimations = positionPreset.includes('left');
-    console.log(`[AnimationManager] Position preset: ${positionPreset}, flip animations: ${this._shouldFlipAnimations}`);
+    Logger.log('AnimationManager', `Position preset: ${positionPreset}, flip animations: ${this._shouldFlipAnimations}`);
 
     // Create composite animation
     this.compositeAnimation = new MmdCompositeAnimation('assistantComposite');
@@ -313,12 +314,12 @@ export class AnimationManager {
 
     if (playIntro) {
       // Play intro animation using INTRO state (loop: false, autoReturn: IDLE)
-      console.log('[AnimationManager] Playing intro animation...');
+      Logger.log('AnimationManager', 'Playing intro animation...');
       const introAnim = getRandomAnimation('intro');
       
       if (introAnim) {
         // Load intro animation FIRST to read its locomotion
-        console.log('[AnimationManager] Loading intro animation to read locomotion...');
+        Logger.log('AnimationManager', 'Loading intro animation to read locomotion...');
         const loadedIntroAnim = await this.loadAnimation(introAnim);
         
         // Read intro's final locomotion offset
@@ -332,12 +333,12 @@ export class AnimationManager {
             const finalY = movableTrack.positions[lastFrameIndex * 3 + 1];
             const finalZ = movableTrack.positions[lastFrameIndex * 3 + 2] || 0; // Add Z coordinate
             
-            console.log('[AnimationManager] Intro locomotion:', { x: finalX, y: finalY, z: finalZ, frames: frameCount });
+            Logger.log('AnimationManager', 'Intro locomotion:', { x: finalX, y: finalY, z: finalZ, frames: frameCount });
             
             // Store the intro locomotion for later (PositionManager not initialized yet!)
             this._introLocomotionOffset = { x: finalX, y: finalY, z: finalZ };
             
-            console.log('[AnimationManager] Stored intro locomotion offset - will apply when PositionManager initializes');
+            Logger.log('AnimationManager', 'Stored intro locomotion offset - will apply when PositionManager initializes');
           }
         }
         
@@ -347,9 +348,9 @@ export class AnimationManager {
         // Store the intro animation reference
         this._currentIntroAnimation = this.currentLoadedAnimation;
         
-        console.log(`[AnimationManager] Intro animation started (${this.currentAnimationDuration} frames, ~${(this.currentAnimationDuration/30).toFixed(1)}s) - will auto-transition to IDLE`);
+        Logger.log('AnimationManager', `Intro animation started (${this.currentAnimationDuration} frames, ~${(this.currentAnimationDuration/30).toFixed(1)}s) - will auto-transition to IDLE`);
       } else {
-        console.warn('[AnimationManager] No intro animations found, starting with idle');
+        Logger.warn('AnimationManager', 'No intro animations found, starting with idle');
         await this.transitionToState(AssistantState.IDLE);
       }
     } else {
@@ -358,7 +359,7 @@ export class AnimationManager {
     }
 
     this.isInitialized = true;
-    console.log('[AnimationManager] Initialized successfully');
+    Logger.log('AnimationManager', 'Initialized successfully');
   }
 
   /**
@@ -374,22 +375,22 @@ export class AnimationManager {
 
     // 1. Already loaded? Return cached
     if (this.loadedAnimations.has(filePath)) {
-      console.log(`[AnimationManager] Using cached animation: ${name} (${filePath})`);
+      Logger.log('AnimationManager', `Using cached animation: ${name} (${filePath})`);
       return this.loadedAnimations.get(filePath);
     }
 
     // 2. Currently loading? Wait for existing promise
     if (this.loadingPromises.has(filePath)) {
-      console.log(`[AnimationManager] Waiting for in-flight load: ${name} (${filePath})`);
+      Logger.log('AnimationManager', `Waiting for in-flight load: ${name} (${filePath})`);
       return await this.loadingPromises.get(filePath);
     }
 
     // 3. Load for first time
-    console.log(`[AnimationManager] Loading animation: ${name} (${filePath})`);
+    Logger.log('AnimationManager', `Loading animation: ${name} (${filePath})`);
     
     // Resolve URL for extension mode
     const resolvedPath = await resourceLoader.getURLAsync(filePath);
-    console.log(`[AnimationManager] Resolved path: ${resolvedPath}`);
+    Logger.log('AnimationManager', `Resolved path: ${resolvedPath}`);
     
     const loadPromise = this.bvmdLoader.loadAsync(id, resolvedPath);
 
@@ -415,11 +416,11 @@ export class AnimationManager {
       // Cache the loaded animation
       this.loadedAnimations.set(filePath, animation);
 
-      console.log(`[AnimationManager] Loaded: ${name}, duration: ${animation.endFrame} frames`);
+      Logger.log('AnimationManager', `Loaded: ${name}, duration: ${animation.endFrame} frames`);
 
       return animation;
     } catch (error) {
-      console.error(`[AnimationManager] Failed to load animation: ${name}`, error);
+      Logger.error('AnimationManager', 'Failed to load animation: ${name}', error);
       throw error;
     } finally {
       // Clean up promise tracker
@@ -433,7 +434,7 @@ export class AnimationManager {
    * @param {Animation} animation - Animation to mirror
    */
   _flipAnimationXAxis(animation) {
-    console.log(`[AnimationManager] Mirroring animation "${animation.name}"...`);
+    Logger.log('AnimationManager', `Mirroring animation "${animation.name}"...`);
     
     // 1. Mirror movable bone tracks (positions)
     if (animation.movableBoneTracks) {
@@ -469,7 +470,7 @@ export class AnimationManager {
       }
     }
 
-    console.log(`[AnimationManager] Mirrored animation "${animation.name}" complete`);
+    Logger.log('AnimationManager', `Mirrored animation "${animation.name}" complete`);
   }
 
   /**
@@ -517,7 +518,7 @@ export class AnimationManager {
 
     // Safety check: ensure offset has x property, default z to 0 if missing
     if (typeof this._introLocomotionOffset.x === 'undefined') {
-      console.warn('[AnimationManager] Intro locomotion offset missing x property:', this._introLocomotionOffset);
+      Logger.warn('AnimationManager', 'Intro locomotion offset missing x property:', this._introLocomotionOffset);
       return;
     }
     
@@ -534,7 +535,7 @@ export class AnimationManager {
           positions[j] += offsetX;     // x - horizontal offset
           positions[j + 2] += offsetZ; // z - depth offset
         }
-        console.log(`[AnimationManager] Applied intro offset (X,Z only) to animation "${animation.name}": x=${offsetX.toFixed(2)}, z=${offsetZ.toFixed(2)}`);
+        Logger.log('AnimationManager', `Applied intro offset (X,Z only) to animation "${animation.name}": x=${offsetX.toFixed(2)}, z=${offsetZ.toFixed(2)}`);
         break;
       }
     }
@@ -561,7 +562,7 @@ export class AnimationManager {
           positions[j + 1] = 0; // y = 0
           positions[j + 2] = 0; // z = 0
         }
-        console.log(`[AnimationManager] Portrait Mode: Fixed root bone "${track.name}" position in animation "${animation.name}"`);
+        Logger.log('AnimationManager', `Portrait Mode: Fixed root bone "${track.name}" position in animation "${animation.name}"`);
         break;
       }
     }
@@ -590,18 +591,18 @@ export class AnimationManager {
   async loadAnimationFromBlob(blobUrl, animationId = `blob_${Date.now()}`) {
     // Check cache first
     if (this.loadedAnimations.has(blobUrl)) {
-      console.log(`[AnimationManager] Using cached blob animation: ${animationId}`);
+      Logger.log('AnimationManager', `Using cached blob animation: ${animationId}`);
       return this.loadedAnimations.get(blobUrl);
     }
 
     // Currently loading?
     if (this.loadingPromises.has(blobUrl)) {
-      console.log(`[AnimationManager] Waiting for in-flight blob load: ${animationId}`);
+      Logger.log('AnimationManager', `Waiting for in-flight blob load: ${animationId}`);
       return await this.loadingPromises.get(blobUrl);
     }
 
     // Load from blob URL
-    console.log(`[AnimationManager] Loading animation from blob: ${animationId}`);
+    Logger.log('AnimationManager', `Loading animation from blob: ${animationId}`);
     const loadPromise = this.bvmdLoader.loadAsync(animationId, blobUrl);
 
     this.loadingPromises.set(blobUrl, loadPromise);
@@ -623,10 +624,10 @@ export class AnimationManager {
       }
       
       this.loadedAnimations.set(blobUrl, animation);
-      console.log(`[AnimationManager] Loaded blob animation: ${animationId}, duration: ${animation.endFrame} frames`);
+      Logger.log('AnimationManager', `Loaded blob animation: ${animationId}, duration: ${animation.endFrame} frames`);
       return animation;
     } catch (error) {
-      console.error(`[AnimationManager] Failed to load blob animation: ${animationId}`, error);
+      Logger.error('AnimationManager', 'Failed to load blob animation: ${animationId}', error);
       throw error;
     } finally {
       this.loadingPromises.delete(blobUrl);
@@ -641,12 +642,12 @@ export class AnimationManager {
   async transitionToState(newState, customBehavior = null, customAnimation = null) {
     if (this.disposed) return;
     
-    console.log(`[AnimationManager] [TRANSITION START] ${this.currentState} -> ${newState}`);
+    Logger.log('AnimationManager', `[TRANSITION START] ${this.currentState} -> ${newState}`);
     
     // Detect when intro completes (first transition to IDLE)
     if (!this._introCompleted && newState === AssistantState.IDLE && this.previousState !== AssistantState.IDLE) {
       this._introCompleted = true;
-      console.log('[AnimationManager] [INTRO COMPLETE] Intro finished - locking model at final frame position');
+      Logger.log('AnimationManager', '[INTRO COMPLETE] Intro finished - locking model at final frame position');
 
       // Find the center bone (root locomotion bone) and save its final LOCAL position
       const centerBone = this.mmdModel.skeleton.bones.find(bone => bone.name === 'センター' || bone.name === 'center');
@@ -654,33 +655,33 @@ export class AnimationManager {
         // Save the locomotion offset from intro's final position
         this._introLocomotionOffset = centerBone.position.clone();
         
-        console.log('[AnimationManager] Intro locomotion offset saved:', { 
+        Logger.log('AnimationManager', 'Intro locomotion offset saved:', { 
           x: this._introLocomotionOffset.x, 
           y: this._introLocomotionOffset.y, 
           z: this._introLocomotionOffset.z,
           raw: this._introLocomotionOffset
         });
-        console.log('[AnimationManager] All future animations will have this offset added to their center bone positions');
+        Logger.log('AnimationManager', 'All future animations will have this offset added to their center bone positions');
         
         // Create picking box if we have positionManager, otherwise defer
         const positionManager = this.scene.metadata?.positionManager;
         if (positionManager) {
           this._createPickingBoundingBox(positionManager);
         } else {
-          console.log('[AnimationManager] Deferring picking box creation until PositionManager is available');
+          Logger.log('AnimationManager', 'Deferring picking box creation until PositionManager is available');
           this._needsPickingBox = true;
         }
       } else {
-        console.warn('[AnimationManager] Center bone not found - cannot save locomotion offset');
+        Logger.warn('AnimationManager', 'Center bone not found - cannot save locomotion offset');
       }
 
       // DO NOT reset camera - keep it at pre-shifted offset to show the locked bone position
-      console.log('[AnimationManager] Camera stays at pre-shifted offset to display locked bone position');
+      Logger.log('AnimationManager', 'Camera stays at pre-shifted offset to display locked bone position');
     }
     
     // Validate transition
     if (this.currentState !== newState && !isValidTransition(this.currentState, newState)) {
-      console.warn(`[AnimationManager] [TRANSITION INVALID] ${this.currentState} -> ${newState}`);
+      Logger.warn('AnimationManager', `[TRANSITION INVALID] ${this.currentState} -> ${newState}`);
       return;
     }
 
@@ -690,7 +691,7 @@ export class AnimationManager {
     // Use custom behavior if provided, otherwise use state behavior
     const behavior = customBehavior || StateBehavior[newState];
     if (!behavior) {
-      console.error(`[AnimationManager] [TRANSITION ERROR] No behavior defined for state: ${newState}`);
+      Logger.error('AnimationManager', `[TRANSITION ERROR] No behavior defined for state: ${newState}`);
       return;
     }
 
@@ -703,7 +704,7 @@ export class AnimationManager {
         const allowedCategories = behavior.allowedAnimations;
         const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
         animationConfig = getRandomAnimation(randomCategory);
-        console.log(`[AnimationManager] [TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
+        Logger.log('AnimationManager', `[TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
       } else {
         // Use first animation from first allowed category
         const firstCategory = behavior.allowedAnimations[0];
@@ -713,16 +714,16 @@ export class AnimationManager {
     }
 
     if (!animationConfig) {
-      console.error(`[AnimationManager] [TRANSITION ERROR] No animation found for state: ${newState}`);
+      Logger.error('AnimationManager', `[TRANSITION ERROR] No animation found for state: ${newState}`);
       return;
     }
 
-    console.log(`[AnimationManager] [TRANSITION] Loading animation: ${animationConfig.name}`);
+    Logger.log('AnimationManager', `[TRANSITION] Loading animation: ${animationConfig.name}`);
     
     // Load and play animation
     await this.playAnimation(animationConfig, behavior);
     
-    console.log(`[AnimationManager] [TRANSITION END] Animation loaded and playing: ${animationConfig.name}`);
+    Logger.log('AnimationManager', `[TRANSITION END] Animation loaded and playing: ${animationConfig.name}`);
   }
 
   /**
@@ -735,7 +736,7 @@ export class AnimationManager {
     
     const behavior = stateBehavior || StateBehavior[this.currentState];
     
-    console.log(`[AnimationManager ${this.instanceId}] Playing animation: ${animationConfig.name}`);
+    Logger.log('AnimationManager ${this.instanceId}', `Playing animation: ${animationConfig.name}`);
     
     // Load animation
     const loadedAnimation = await this.loadAnimation(animationConfig);
@@ -753,7 +754,7 @@ export class AnimationManager {
     // We should remove those immediately, not keep them for another transition!
     const oldSpans = allOldSpans.filter(span => {
       if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
-        console.log(`[AnimationManager] Removing span at offset ${span.offset} - already easing out from previous transition`);
+        Logger.log('AnimationManager', `Removing span at offset ${span.offset} - already easing out from previous transition`);
         this.compositeAnimation.removeSpan(span);
         return false; // Don't include in transition
       }
@@ -761,7 +762,7 @@ export class AnimationManager {
     });
     
     if (oldSpans.length > 0) {
-      console.log(`[AnimationManager] Keeping ${oldSpans.length} old spans for transition blending`);
+      Logger.log('AnimationManager', `Keeping ${oldSpans.length} old spans for transition blending`);
       
       // Apply ease-out to old spans
       // CRITICAL: We need to truncate the old span's endFrame to the current position + transition duration
@@ -795,7 +796,7 @@ export class AnimationManager {
           TransitionSettings.DEFAULT_EASING_CURVE.y2
         );
         
-        console.log(`[AnimationManager] Old span at offset ${span.offset}: originalEnd=${originalEndFrame}, currentFrame=${spanAnimationFrame.toFixed(2)}, newEnd=${span.endFrame}, easeOut=${span.easeOutFrameTime}`);
+        Logger.log('AnimationManager', `Old span at offset ${span.offset}: originalEnd=${originalEndFrame}, currentFrame=${spanAnimationFrame.toFixed(2)}, newEnd=${span.endFrame}, easeOut=${span.easeOutFrameTime}`);
         
         // Track when this span will actually end
         const spanEndTime = span.offset + span.endFrame;
@@ -808,7 +809,7 @@ export class AnimationManager {
       this.oldSpansToRemove = oldSpans;
       this.oldSpansRemovalFrame = latestSpanEndTime + 2;
       
-      console.log(`[AnimationManager] Scheduled old span removal at frame ${this.oldSpansRemovalFrame.toFixed(2)} (last span ends at ${latestSpanEndTime.toFixed(2)})`);
+      Logger.log('AnimationManager', `Scheduled old span removal at frame ${this.oldSpansRemovalFrame.toFixed(2)} (last span ends at ${latestSpanEndTime.toFixed(2)})`);
     
     }
     
@@ -833,7 +834,7 @@ export class AnimationManager {
     // Only update if we need more duration
     if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
       this.mmdRuntime.setManualAnimationDuration(requiredDuration);
-      console.log(`[AnimationManager] Set runtime duration to ${requiredDuration} frames (${initialCycles} cycle${initialCycles > 1 ? 's' : ''} buffer from frame ${this.animationStartFrame})`);
+      Logger.log('AnimationManager', `Set runtime duration to ${requiredDuration} frames (${initialCycles} cycle${initialCycles > 1 ? 's' : ''} buffer from frame ${this.animationStartFrame})`);
     }
     
     // Reset idle switch timer
@@ -849,7 +850,7 @@ export class AnimationManager {
     // Mark that we've started at least one animation (for smooth transitions)
     this.isFirstAnimationEver = false;
 
-    console.log(`[AnimationManager] Animation started: ${animationConfig.name}, duration: ${this.currentAnimationDuration} frames`);
+    Logger.log('AnimationManager', `Animation started: ${animationConfig.name}, duration: ${this.currentAnimationDuration} frames`);
   }
 
   /**
@@ -861,7 +862,7 @@ export class AnimationManager {
     if (this.disposed) return;
     
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
-      console.warn('[AnimationManager] No current animation to add cycle');
+      Logger.warn('AnimationManager', 'No current animation to add cycle');
       return;
     }
 
@@ -879,13 +880,13 @@ export class AnimationManager {
       cycleStartTime = this.animationStartFrame + (cycle * duration);
     }
 
-    console.log(`[AnimationManager] Adding cycle ${cycle} at frame ${cycleStartTime}, duration: ${duration} frames`);
+    Logger.log('AnimationManager', `Adding cycle ${cycle} at frame ${cycleStartTime}, duration: ${duration} frames`);
 
     const spans = [];
     
     // Check if we're in COMPOSITE state - create combined animation with body bones + mouth morphs
     if (this.currentState === AssistantState.COMPOSITE && this.compositePrimaryLoaded) {
-      console.log(`[AnimationManager] Creating composite cycle ${cycle} with merged body+morph animation`);
+      Logger.log('AnimationManager', `Creating composite cycle ${cycle} with merged body+morph animation`);
       
       // First, add all stitched fill segments as separate spans (body animations)
       // ALSO: Extend the last segment to provide transition buffer for smooth ease-out
@@ -911,7 +912,7 @@ export class AnimationManager {
           const extendedAnim = Object.assign(Object.create(Object.getPrototypeOf(segment.animation)), segment.animation);
           extendedAnim.endFrame = segment.animation.endFrame + transitionFrames;
           segmentAnimation = extendedAnim;
-          console.log(`[AnimationManager] Extended last body segment: ${segment.animation.endFrame}f → ${extendedAnim.endFrame}f (added ${transitionFrames}f buffer)`);
+          Logger.log('AnimationManager', `Extended last body segment: ${segment.animation.endFrame}f → ${extendedAnim.endFrame}f (added ${transitionFrames}f buffer)`);
         }
         
         // Create span at actual position (not overlapping position)
@@ -923,7 +924,7 @@ export class AnimationManager {
           this.compositeFillWeight ?? 1.0 // Use configured fill weight
         );
         
-        console.log(`[AnimationManager] Segment ${i} (${segment.config.name}): offset=${actualOffset.toFixed(2)}, duration=${segment.duration}f, same=${isSameAnimation}, loopTransition=${hasLoopTransition}, truncated=${segment.isTruncated}, applyEasing=${shouldApplyEasing}`);
+        Logger.log('AnimationManager', `Segment ${i} (${segment.config.name}): offset=${actualOffset.toFixed(2)}, duration=${segment.duration}f, same=${isSameAnimation}, loopTransition=${hasLoopTransition}, truncated=${segment.isTruncated}, applyEasing=${shouldApplyEasing}`);
         
         // Apply easing for first segment transitioning from previous animation
         if (cycle === 0 && i === 0 && !this.isFirstAnimationEver) {
@@ -934,7 +935,7 @@ export class AnimationManager {
             TransitionSettings.DEFAULT_EASING_CURVE.x2,
             TransitionSettings.DEFAULT_EASING_CURVE.y2
           );
-          console.log(`[AnimationManager] Applied ease-in to first segment (transitioning from previous animation)`);
+          Logger.log('AnimationManager', `Applied ease-in to first segment (transitioning from previous animation)`);
         }
         
         // Apply easing for segment-to-segment transitions
@@ -958,9 +959,9 @@ export class AnimationManager {
             );
           }
           
-          console.log(`[AnimationManager] Applied ease-in to segment ${i} and ease-out to segment ${i-1} (different animations or truncated)`);
+          Logger.log('AnimationManager', `Applied ease-in to segment ${i} and ease-out to segment ${i-1} (different animations or truncated)`);
         } else if (i > 0 && !shouldApplyEasing) {
-          console.log(`[AnimationManager] Skipped easing for segment ${i} (same perfect-loop animation, not truncated)`);
+          Logger.log('AnimationManager', `Skipped easing for segment ${i} (same perfect-loop animation, not truncated)`);
         }
         
         this.compositeAnimation.addSpan(fillSpan);
@@ -1023,7 +1024,7 @@ export class AnimationManager {
       this.compositeAnimation.addSpan(morphSpan);
       spans.push(...fillSpans, morphSpan);
       
-      console.log(`[AnimationManager] Added ${fillSpans.length} body segments + 1 morph overlay (extended by ${transitionBuffer}f for transition buffer)`);
+      Logger.log('AnimationManager', `Added ${fillSpans.length} body segments + 1 morph overlay (extended by ${transitionBuffer}f for transition buffer)`);
       
     } else {
       // Regular single animation - create one span
@@ -1037,7 +1038,7 @@ export class AnimationManager {
 
       // Apply easing based on context
       if (cycle === 0 && !this.isFirstAnimationEver) {
-        console.log(`[AnimationManager] Applying ease-in to cycle 0 (animation switch transition)`);
+        Logger.log('AnimationManager', `Applying ease-in to cycle 0 (animation switch transition)`);
         span.easeInFrameTime = transitionFrames;
         span.easingFunction = new BezierCurveEase(
           TransitionSettings.DEFAULT_EASING_CURVE.x1,
@@ -1046,7 +1047,7 @@ export class AnimationManager {
           TransitionSettings.DEFAULT_EASING_CURVE.y2
         );
       } else if (loopTransition && cycle > 0) {
-        console.log(`[AnimationManager] Applying ease-in to cycle ${cycle} (loop transition)`);
+        Logger.log('AnimationManager', `Applying ease-in to cycle ${cycle} (loop transition)`);
         span.easeInFrameTime = transitionFrames;
         span.easingFunction = new BezierCurveEase(
           TransitionSettings.DEFAULT_EASING_CURVE.x1,
@@ -1058,7 +1059,7 @@ export class AnimationManager {
         const previousCycle = cycle - 1;
         if (this.spanMap.has(previousCycle)) {
           const previousSpans = this.spanMap.get(previousCycle);
-          console.log(`[AnimationManager] Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
+          Logger.log('AnimationManager', `Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
           for (const prevSpan of previousSpans) {
             prevSpan.easeOutFrameTime = transitionFrames;
             prevSpan.easingFunction = new BezierCurveEase(
@@ -1084,10 +1085,10 @@ export class AnimationManager {
     
     if (requiredDuration > this.mmdRuntime.animationFrameTimeDuration) {
       this.mmdRuntime.setManualAnimationDuration(requiredDuration);
-      console.log(`[AnimationManager] Extended runtime duration to ${requiredDuration} frames (cycle ${cycle})`);
+      Logger.log('AnimationManager', `Extended runtime duration to ${requiredDuration} frames (cycle ${cycle})`);
     }
 
-    console.log(`[AnimationManager] Cycle ${cycle} added. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
+    Logger.log('AnimationManager', `Cycle ${cycle} added. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
   }
 
   /**
@@ -1105,7 +1106,7 @@ export class AnimationManager {
       this.spanMap.delete(cycleToRemove);
       this.firstActiveCycle = cycleToRemove + 1;
 
-      console.log(`[AnimationManager] Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
+      Logger.log('AnimationManager', `Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
     }
   }
 
@@ -1113,7 +1114,7 @@ export class AnimationManager {
    * Clear all spans (used when switching animations)
    */
   clearAllSpans() {
-    console.log('[AnimationManager] Clearing all spans');
+    Logger.log('AnimationManager', 'Clearing all spans');
 
     // Remove all spans
     for (const spans of this.spanMap.values()) {
@@ -1138,7 +1139,7 @@ export class AnimationManager {
       this.onBeforeRender();
     });
 
-    console.log('[AnimationManager] Render observer registered');
+    Logger.log('AnimationManager', 'Render observer registered');
   }
 
   /**
@@ -1158,7 +1159,7 @@ export class AnimationManager {
     
     // Check if we need to remove old spans from previous animation after transition
     if (this.oldSpansToRemove && absoluteFrame >= this.oldSpansRemovalFrame) {
-      console.log(`[AnimationManager] Removing ${this.oldSpansToRemove.length} old spans after transition complete`);
+      Logger.log('AnimationManager', `Removing ${this.oldSpansToRemove.length} old spans after transition complete`);
       for (const span of this.oldSpansToRemove) {
         this.compositeAnimation.removeSpan(span);
       }
@@ -1170,7 +1171,7 @@ export class AnimationManager {
     if (this.currentState === AssistantState.SPEAKING_HOLD && !this._isTransitioning) {
       const audioActive = TTSService.isAudioActive();
       if (!audioActive) {
-        console.log('[AnimationManager] SPEAKING_HOLD detected with no active audio - returning to IDLE immediately');
+        Logger.log('AnimationManager', 'SPEAKING_HOLD detected with no active audio - returning to IDLE immediately');
         this._isTransitioning = true;
         this.transitionToState(AssistantState.IDLE).finally(() => {
           this._isTransitioning = false;
@@ -1220,7 +1221,7 @@ export class AnimationManager {
       const safeFrameThreshold = shouldLoop ? 10 : (transitionStartFrame + 5);
       
       if (currentFrame > safeFrameThreshold) {
-        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Resetting justStartedFromQueue flag (frame=${currentFrame.toFixed(2)}, threshold=${safeFrameThreshold.toFixed(2)})`);
+        Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Resetting justStartedFromQueue flag (frame=${currentFrame.toFixed(2)}, threshold=${safeFrameThreshold.toFixed(2)})`);
         this.justStartedFromQueue = false;
         // Continue to queue check below
       } else {
@@ -1236,11 +1237,11 @@ export class AnimationManager {
     
     if (shouldCheckQueue && !this._isTransitioning) {
       const animType = shouldLoop ? 'looping' : 'non-looping';
-      console.log(`[AnimationManager] [AUTO-RETURN CHECK] ${animType} animation near cycle end: frame=${currentFrame.toFixed(2)}/${duration}, cycle=${this.currentCycle}, state=${this.currentState}, animName=${this.currentAnimationConfig.name}`);
+      Logger.log('AnimationManager', `[AUTO-RETURN CHECK] ${animType} animation near cycle end: frame=${currentFrame.toFixed(2)}/${duration}, cycle=${this.currentCycle}, state=${this.currentState}, animName=${this.currentAnimationConfig.name}`);
       
       // Check if queue should be processed
       if (this.shouldProcessQueue()) {
-        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Animation cycle ending, ${this.animationQueue.length} items in queue - processing next`);
+        Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Animation cycle ending, ${this.animationQueue.length} items in queue - processing next`);
         
         // Set flag to prevent re-entry
         this._isTransitioning = true;
@@ -1260,30 +1261,30 @@ export class AnimationManager {
           
           if (audioActive) {
             // Audio still playing or more chunks in queue - transition to SPEAKING_HOLD
-            console.log(`[${getTimestamp()}] [AnimationManager] [SPEAKING_HOLD] Speak animation ending, audio still active - transitioning to SPEAKING_HOLD`);
+            Logger.log('${getTimestamp()}', '[AnimationManager] [SPEAKING_HOLD] Speak animation ending, audio still active - transitioning to SPEAKING_HOLD');
             
             this._isTransitioning = true;
             this.transitionToState(AssistantState.SPEAKING_HOLD).finally(() => {
-              console.log('[AnimationManager] [SPEAKING_HOLD] Transition complete');
+              Logger.log('AnimationManager', '[SPEAKING_HOLD] Transition complete');
               this._isTransitioning = false;
             });
           } else {
             // No more audio - return to IDLE
-            console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] No active audio, transitioning to IDLE`);
+            Logger.log('AnimationManager', '[AUTO-RETURN TRIGGER] No active audio, transitioning to IDLE');
             
             this._isTransitioning = true;
             this.transitionToState(AssistantState.IDLE).finally(() => {
-              console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
+              Logger.log('AnimationManager', '[AUTO-RETURN COMPLETE] Transition to IDLE finished');
               this._isTransitioning = false;
             });
           }
         } else {
           // Not a speak animation - normal auto-return to IDLE
-          console.log(`[AnimationManager] [AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+          Logger.log('AnimationManager', `[AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
           
           this._isTransitioning = true;
           this.transitionToState(AssistantState.IDLE).finally(() => {
-            console.log('[AnimationManager] [AUTO-RETURN COMPLETE] Transition to IDLE finished');
+            Logger.log('AnimationManager', '[AUTO-RETURN COMPLETE] Transition to IDLE finished');
             this._isTransitioning = false;
           });
         }
@@ -1303,7 +1304,7 @@ export class AnimationManager {
         const extensionCycles = 10;
         const newDuration = this.mmdRuntime.animationFrameTimeDuration + (cycleDuration * extensionCycles);
         this.mmdRuntime.setManualAnimationDuration(newDuration);
-        console.log(`[AnimationManager] Extended runtime duration to ${newDuration} frames (+${extensionCycles} cycles, was approaching limit)`);
+        Logger.log('AnimationManager', `Extended runtime duration to ${newDuration} frames (+${extensionCycles} cycles, was approaching limit)`);
       }
     }
     
@@ -1311,7 +1312,7 @@ export class AnimationManager {
     // Use > not >= because we already added the initial cycle in playAnimation()
     // Only add next cycle if animation should loop
     if (shouldLoop && this.currentCycle > this.lastAddedCycle) {
-      console.log(`[AnimationManager ${this.instanceId}] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
+      Logger.log('AnimationManager ${this.instanceId}', `Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
       this.addNextCycle();
     }
 
@@ -1326,7 +1327,7 @@ export class AnimationManager {
       }
       this.spanMap.delete(cycleToRemove);
       this.firstActiveCycle = cycleToRemove + 1;
-      console.log(`[AnimationManager ${this.instanceId}] Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
+      Logger.log('AnimationManager ${this.instanceId}', `Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
     }
 
     // Handle idle animation auto-switching
@@ -1368,7 +1369,7 @@ export class AnimationManager {
         
         // Only switch if we have multiple idle animations
         if (idleAnimations.length <= 1) {
-          console.log('[AnimationManager] Only one idle animation available, skipping auto-switch');
+          Logger.log('AnimationManager', 'Only one idle animation available, skipping auto-switch');
           this.idleSwitchTimer = 0;
           return;
         }
@@ -1388,14 +1389,14 @@ export class AnimationManager {
         }
         
         if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
-          console.log(`[AnimationManager] Auto-switching idle animation: ${this.currentAnimationConfig?.name} -> ${newAnimation.name}`);
+          Logger.log('AnimationManager', `Auto-switching idle animation: ${this.currentAnimationConfig?.name} -> ${newAnimation.name}`);
           this.idleSwitchTimer = 0;
           this.lastSwitchFrame = currentFrame;
           
           // Play the new animation directly (already in IDLE state)
           this.playAnimation(newAnimation, behavior);
         } else {
-          console.log('[AnimationManager] Could not find different idle animation, skipping auto-switch');
+          Logger.log('AnimationManager', 'Could not find different idle animation, skipping auto-switch');
           this.idleSwitchTimer = 0;
         }
       }
@@ -1413,13 +1414,13 @@ export class AnimationManager {
     this.visibilityChangeHandler = () => {
       if (document.hidden) {
         // Tab is hidden - pause by setting playAnimation to false
-        console.log('[AnimationManager] Tab hidden - pausing animation');
+        Logger.log('AnimationManager', 'Tab hidden - pausing animation');
         if (this.mmdRuntime.playAnimation !== undefined) {
           this.mmdRuntime.playAnimation = false;
         }
       } else {
         // Tab is visible - resume by setting playAnimation to true
-        console.log('[AnimationManager] Tab visible - resuming animation');
+        Logger.log('AnimationManager', 'Tab visible - resuming animation');
         if (this.mmdRuntime.playAnimation !== undefined) {
           this.mmdRuntime.playAnimation = true;
         }
@@ -1427,7 +1428,7 @@ export class AnimationManager {
     };
 
     document.addEventListener('visibilitychange', this.visibilityChangeHandler);
-    console.log('[AnimationManager] Visibility change handler registered');
+    Logger.log('AnimationManager', 'Visibility change handler registered');
   }
 
   /**
@@ -1471,7 +1472,7 @@ export class AnimationManager {
    * @param {string} action - Action name: 'think', 'walk', 'celebrate', 'speak'
    */
   async triggerAction(action) {
-    console.log(`[AnimationManager] Triggering action: ${action}`);
+    Logger.log('AnimationManager', `Triggering action: ${action}`);
 
     switch (action) {
       case 'think':
@@ -1491,7 +1492,7 @@ export class AnimationManager {
         break;
       
       default:
-        console.warn(`[AnimationManager] Unknown action: ${action}`);
+        Logger.warn('AnimationManager', `Unknown action: ${action}`);
     }
   }
 
@@ -1508,7 +1509,7 @@ export class AnimationManager {
     const primaryWeight = options.primaryWeight ?? 1.0;
     const fillWeight = options.fillWeight ?? 0.5;
 
-    console.log(`[AnimationManager] playComposite: Primary="${primaryAnimNameOrBlob}", Fill="${fillCategory}", primaryWeight=${primaryWeight}, fillWeight=${fillWeight}`);
+    Logger.log('AnimationManager', `playComposite: Primary="${primaryAnimNameOrBlob}", Fill="${fillCategory}", primaryWeight=${primaryWeight}, fillWeight=${fillWeight}`);
 
     // CRITICAL: Set state to COMPOSITE immediately to prevent auto-switch interruption
     this.previousState = this.currentState;
@@ -1522,7 +1523,7 @@ export class AnimationManager {
     if (isBlobInput) {
       // Load from blob URL
       const { blobUrl, id } = primaryAnimNameOrBlob;
-      console.log(`[AnimationManager] Loading primary animation from blob URL: ${id}`);
+      Logger.log('AnimationManager', `Loading primary animation from blob URL: ${id}`);
       primaryLoaded = await this.loadAnimationFromBlob(blobUrl, id);
       
       // Create temporary config for blob animation
@@ -1538,7 +1539,7 @@ export class AnimationManager {
       // Load from animation registry by name
       const primaryAnim = getAnimationsByName(primaryAnimNameOrBlob);
       if (!primaryAnim) {
-        console.error(`[AnimationManager] Cannot find primary animation: ${primaryAnimNameOrBlob}`);
+        Logger.error('AnimationManager', `Cannot find primary animation: ${primaryAnimNameOrBlob}`);
         this.currentState = this.previousState;
         return;
       }
@@ -1549,19 +1550,19 @@ export class AnimationManager {
     // Get fill animations pool (body motions)
     const fillAnimations = getAnimationsByCategory(fillCategory);
     if (!fillAnimations || fillAnimations.length === 0) {
-      console.error(`[AnimationManager] No fill animations found in category: ${fillCategory}`);
+      Logger.error('AnimationManager', `No fill animations found in category: ${fillCategory}`);
       this.currentState = this.previousState;
       return;
     }
 
-    console.log(`[AnimationManager] Found ${fillAnimations.length} fill animations in category "${fillCategory}"`);
+    Logger.log('AnimationManager', `Found ${fillAnimations.length} fill animations in category "${fillCategory}"`);
 
     const targetDuration = primaryLoaded.endFrame;
-    console.log(`[AnimationManager] Primary animation duration: ${targetDuration} frames`);
+    Logger.log('AnimationManager', `Primary animation duration: ${targetDuration} frames`);
 
     // Build stitched fill timeline to match target duration
     const stitchedFillSpans = await this._buildStitchedTimeline(fillAnimations, targetDuration);
-    console.log(`[AnimationManager] Built stitched timeline with ${stitchedFillSpans.length} fill segments`);
+    Logger.log('AnimationManager', `Built stitched timeline with ${stitchedFillSpans.length} fill segments`);
 
     // Store composite info for addNextCycle
     this.compositePrimaryLoaded = primaryLoaded;
@@ -1606,7 +1607,7 @@ export class AnimationManager {
   async speak(text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) {
     if (this.disposed) return;
     
-    console.log(`[AnimationManager] speak: text="${text}", emotionCategory="${emotionCategory}"`);
+    Logger.log('AnimationManager', `speak: text="${text}", emotionCategory="${emotionCategory}"`);
 
     // Default options for speech: full morphs + full body
     const speakOptions = {
@@ -1643,7 +1644,7 @@ export class AnimationManager {
     let previousConfig = null; // Track previous animation for smart transitions
     const transitionFrames = TransitionSettings.DEFAULT_TRANSITION_FRAMES;
     
-    console.log(`[AnimationManager] Building stitched timeline for ${targetDuration} frames with ${fillAnimations.length} fill animations`);
+    Logger.log('AnimationManager', `Building stitched timeline for ${targetDuration} frames with ${fillAnimations.length} fill animations`);
 
     while (currentFrame < targetDuration) {
       // RANDOMLY pick fill animation from the pool
@@ -1669,12 +1670,12 @@ export class AnimationManager {
         // Truncate to fit exactly
         wouldExceed = true;
         segmentDuration = remainingFrames;
-        console.log(`[AnimationManager] Last segment (too long): ${animDuration}f → ${segmentDuration}f (remaining: ${remainingFrames}f)`);
+        Logger.log('AnimationManager', `Last segment (too long): ${animDuration}f → ${segmentDuration}f (remaining: ${remainingFrames}f)`);
       } else if (animDuration === remainingFrames) {
         // Perfect fit - this is the last segment
         wouldExceed = false;
         segmentDuration = animDuration;
-        console.log(`[AnimationManager] Last segment (perfect fit): ${segmentDuration}f`);
+        Logger.log('AnimationManager', `Last segment (perfect fit): ${segmentDuration}f`);
       } else {
         // Not last segment - use full animation duration
         segmentDuration = animDuration;
@@ -1690,7 +1691,7 @@ export class AnimationManager {
         isTruncated: wouldExceed // Track if this segment is truncated
       });
       
-      console.log(`[AnimationManager] Segment ${segments.length}: ${fillAnim.name} (full=${animDuration}f) at frame ${currentFrame}, using ${segmentDuration}f, sameAsPrevious: ${previousConfig?.id === fillAnim.id}, truncated: ${wouldExceed}`);
+      Logger.log('AnimationManager', `Segment ${segments.length}: ${fillAnim.name} (full=${animDuration}f) at frame ${currentFrame}, using ${segmentDuration}f, sameAsPrevious: ${previousConfig?.id === fillAnim.id}, truncated: ${wouldExceed}`);
       
       // Determine if we need transition overlap for next segment
       // CRITICAL: First segment NEVER has overlap (starts at frame 0)
@@ -1725,23 +1726,23 @@ export class AnimationManager {
         if (advancement <= 0) {
           // Force advance by at least 1 frame to prevent infinite loop
           currentFrame += Math.max(1, segmentDuration);
-          console.log(`[AnimationManager] Advanced (forced, segment too short for overlap): ${currentFrame}f`);
+          Logger.log('AnimationManager', `Advanced (forced, segment too short for overlap): ${currentFrame}f`);
         } else {
           currentFrame += advancement;
-          console.log(`[AnimationManager] Advanced with overlap: ${currentFrame}f (next segment will blend)`);
+          Logger.log('AnimationManager', `Advanced with overlap: ${currentFrame}f (next segment will blend)`);
         }
       } else {
         // No overlap - either first segment or perfect loop
         currentFrame += segmentDuration;
         if (isFirstSegment) {
-          console.log(`[AnimationManager] Advanced without overlap: ${currentFrame}f (first segment)`);
+          Logger.log('AnimationManager', `Advanced without overlap: ${currentFrame}f (first segment)`);
         } else {
-          console.log(`[AnimationManager] Advanced without overlap: ${currentFrame}f (same animation, perfect loop)`);
+          Logger.log('AnimationManager', `Advanced without overlap: ${currentFrame}f (same animation, perfect loop)`);
         }
       }
     }
     
-    console.log(`[AnimationManager] Built stitched timeline with ${segments.length} segments, total duration: ${targetDuration} frames`);
+    Logger.log('AnimationManager', `Built stitched timeline with ${segments.length} segments, total duration: ${targetDuration} frames`);
     
     return segments;
   }
@@ -1767,7 +1768,7 @@ export class AnimationManager {
     // Inject morph tracks from mouth animation
     if (morphAnimation.morphTracks && morphAnimation.morphTracks.length > 0) {
       morphOnly.morphTracks = morphAnimation.morphTracks;
-      console.log(`[AnimationManager] Created morph-only animation: 0 bone tracks + ${morphAnimation.morphTracks.length} morph tracks`);
+      Logger.log('AnimationManager', `Created morph-only animation: 0 bone tracks + ${morphAnimation.morphTracks.length} morph tracks`);
     }
     
     return morphOnly;
@@ -1777,7 +1778,7 @@ export class AnimationManager {
    * Return to idle state
    */
   async returnToIdle() {
-    console.log('[AnimationManager] Returning to idle');
+    Logger.log('AnimationManager', 'Returning to idle');
     await this.transitionToState(AssistantState.IDLE);
   }
 
@@ -1794,11 +1795,11 @@ export class AnimationManager {
    * @param {boolean} force - If true, interrupt current animation and play immediately
    */
   queueAnimation(queueEntry, force = false) {
-    console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Adding to queue (force=${force}):`, queueEntry.type);
+    Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Adding to queue (force=${force}):`, queueEntry.type);
     
     if (force) {
       // Force mode: interrupt current animation and play immediately
-      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Force mode - interrupting current animation`);
+      Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Force mode - interrupting current animation');
       
       // Clear queue and add this as only item
       this.animationQueue = [queueEntry];
@@ -1808,13 +1809,13 @@ export class AnimationManager {
     } else {
       // Normal mode: add to end of queue
       this.animationQueue.push(queueEntry);
-      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Added to queue. Queue length: ${this.animationQueue.length}`);
+      Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Added to queue. Queue length: ${this.animationQueue.length}`);
       
       // If nothing is currently playing AND this is the first item in queue,
       // start processing to kick off the queue sequence
       // CRITICAL: Only if we're truly idle (no animation playing at all)
       if (this.animationQueue.length === 1 && this.currentState === AssistantState.IDLE && !this.isProcessingQueue && !this.currentAnimationConfig) {
-        console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Queue was empty and idle, starting first queued animation`);
+        Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Queue was empty and idle, starting first queued animation');
         this.processQueue();
       }
     }
@@ -1827,13 +1828,13 @@ export class AnimationManager {
   async processQueue() {
     // Prevent re-entry
     if (this.isProcessingQueue) {
-      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Already processing, skipping`);
+      Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Already processing, skipping');
       return;
     }
 
     // Nothing in queue
     if (this.animationQueue.length === 0) {
-      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Queue empty, nothing to process`);
+      Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Queue empty, nothing to process');
       return;
     }
 
@@ -1841,7 +1842,7 @@ export class AnimationManager {
 
     try {
       const queueEntry = this.animationQueue.shift(); // Remove first item
-      console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Processing queue entry (type: ${queueEntry.type}). Remaining: ${this.animationQueue.length}`);
+      Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Processing queue entry (type: ${queueEntry.type}). Remaining: ${this.animationQueue.length}`);
 
       // Set flag to prevent immediate queue re-check
       this.justStartedFromQueue = true;
@@ -1856,12 +1857,12 @@ export class AnimationManager {
             ...queueEntry.animationConfig,
             loop: false  // Override loop setting - queued animations play once
           };
-          console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Playing queued animation: ${queuedAnimConfig.name} (forced non-looping)`);
+          Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Playing queued animation: ${queuedAnimConfig.name} (forced non-looping)`);
           
           // CRITICAL: If we're in COMPOSITE state, we need to exit it before playing simple animation
           // Reset composite state flags and restore previous state
           if (this.currentState === AssistantState.COMPOSITE) {
-            console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Exiting COMPOSITE state for simple animation`);
+            Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Exiting COMPOSITE state for simple animation');
             this.compositePrimaryLoaded = null;
             this.compositeStitchedFillSpans = [];
             // Restore to previous state (or IDLE if no previous state)
@@ -1887,10 +1888,10 @@ export class AnimationManager {
         }
 
         default:
-          console.error(`[${getTimestamp()}] [AnimationManager] [QUEUE] Unknown queue type: ${queueEntry.type}`);
+          Logger.error('${getTimestamp()}', `[AnimationManager] [QUEUE] Unknown queue type: ${queueEntry.type}`);
       }
     } catch (error) {
-      console.error(`[${getTimestamp()}] [AnimationManager] [QUEUE] Error processing queue:`, error);
+      Logger.error('${getTimestamp()}', '[AnimationManager] [QUEUE] Error processing queue:', error);
     } finally {
       this.isProcessingQueue = false;
     }
@@ -1900,7 +1901,7 @@ export class AnimationManager {
    * Clear all queued animations
    */
   clearQueue() {
-    console.log(`[${getTimestamp()}] [AnimationManager] [QUEUE] Clearing queue (${this.animationQueue.length} items)`);
+    Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Clearing queue (${this.animationQueue.length} items)`);
     this.animationQueue = [];
   }
 
@@ -1958,7 +1959,7 @@ export class AnimationManager {
       // Animation name - look up in registry
       animationConfig = getAnimationsByName(animationConfigOrName);
       if (!animationConfig) {
-        console.error(`[AnimationManager] Cannot find animation: ${animationConfigOrName}`);
+        Logger.error('AnimationManager', `Cannot find animation: ${animationConfigOrName}`);
         return;
       }
     } else {
@@ -2013,7 +2014,7 @@ export class AnimationManager {
    * Dispose and cleanup
    */
   dispose() {
-    console.log(`[AnimationManager ${this.instanceId}] ⚠️ DISPOSE CALLED - Shutting down AnimationManager`);
+    Logger.log('AnimationManager ${this.instanceId}', '⚠️ DISPOSE CALLED - Shutting down AnimationManager');
 
     // Set disposed flag to prevent further operations
     this.disposed = true;
@@ -2025,15 +2026,15 @@ export class AnimationManager {
     if (this.visibilityChangeHandler) {
       document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
       this.visibilityChangeHandler = null;
-      console.log('[AnimationManager] Visibility handler removed');
+      Logger.log('AnimationManager', 'Visibility handler removed');
     }
 
     // Remove render observer
     if (this.renderObserver) {
-      console.log('[AnimationManager] Removing render observer...');
+      Logger.log('AnimationManager', 'Removing render observer...');
       this.scene.onBeforeRenderObservable.remove(this.renderObserver);
       this.renderObserver = null;
-      console.log('[AnimationManager] Render observer removed');
+      Logger.log('AnimationManager', 'Render observer removed');
     }
 
     // Clear all spans
@@ -2043,7 +2044,7 @@ export class AnimationManager {
     this.loadedAnimations.clear();
     this.loadingPromises.clear();
 
-    console.log(`[AnimationManager ${this.instanceId}] ✅ DISPOSED - All resources cleaned up`);
+    Logger.log('AnimationManager ${this.instanceId}', '✅ DISPOSED - All resources cleaned up');
   }
 }
 

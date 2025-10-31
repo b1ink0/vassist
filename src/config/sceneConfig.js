@@ -8,6 +8,7 @@
  */
 
 import { resourceLoader } from '../utils/ResourceLoader.js';
+import Logger from '../services/Logger';
 
 /**
  * Default scene configuration
@@ -51,31 +52,31 @@ const SceneConfig = {
  * @returns {Promise<Object>} Configuration with resolved URLs
  */
 export async function resolveResourceURLs(config) {
-  console.log('[sceneConfig] resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
+  Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
   if (!resourceLoader.isExtensionMode()) {
     // Dev mode - URLs are already correct
-    console.log('[sceneConfig] Dev mode - returning config as-is');
+    Logger.log('sceneConfig', 'Dev mode - returning config as-is');
     return config;
   }
 
   // Extension mode - resolve URLs via ExtensionBridge
-  console.log('[sceneConfig] Extension mode - resolving URLs...');
+  Logger.log('sceneConfig', 'Extension mode - resolving URLs...');
   const resolvedConfig = { ...config };
   
   if (config.modelUrl) {
-    console.log('[sceneConfig] Resolving modelUrl:', config.modelUrl);
+    Logger.log('sceneConfig', 'Resolving modelUrl:', config.modelUrl);
     resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
-    console.log('[sceneConfig] Resolved modelUrl:', resolvedConfig.modelUrl);
+    Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
   }
   
   if (config.cameraAnimationUrl) {
-    console.log('[sceneConfig] Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
+    Logger.log('sceneConfig', 'Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
     resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
-    console.log('[sceneConfig] Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
+    Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
   }
   
-  console.log('[sceneConfig] Final resolved config:', resolvedConfig);
+  Logger.log('sceneConfig', 'Final resolved config:', resolvedConfig);
   return resolvedConfig;
 }
 
@@ -151,7 +152,7 @@ export function isFeatureEnabled(feature) {
     case 'transparentBackground':
       return SceneConfig.transparentBackground;
     default:
-      console.warn(`[SceneConfig] Unknown feature: ${feature}`);
+      Logger.warn('SceneConfig', `Unknown feature: ${feature}`);
       return false;
   }
 }

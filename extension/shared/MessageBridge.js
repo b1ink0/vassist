@@ -4,6 +4,7 @@
  */
 
 import { generateRequestId } from './MessageTypes.js';
+import Logger from '../../src/services/Logger';
 
 export class MessageBridge {
   constructor(name) {
@@ -11,7 +12,7 @@ export class MessageBridge {
     this.pendingRequests = new Map(); // requestId -> { resolve, reject, timeout }
     this.defaultTimeout = 30000; // 30 seconds
     
-    console.log(`[${this.name}] Message bridge initialized`);
+    Logger.log('${this.name}', 'Message bridge initialized');
   }
 
   /**
@@ -124,7 +125,7 @@ export class MessageBridge {
     const { requestId, type, data, error } = response;
     
     if (!requestId) {
-      console.warn(`[${this.name}] Response without requestId:`, response);
+      Logger.warn('${this.name}', 'Response without requestId:', response);
       return;
     }
     
@@ -169,7 +170,7 @@ export class MessageBridge {
    * Clean up pending requests (on disconnect, etc.)
    */
   cleanup() {
-    console.log(`[${this.name}] Cleaning up ${this.pendingRequests.size} pending requests`);
+    Logger.log('${this.name}', 'Cleaning up ${this.pendingRequests.size} pending requests');
     
     for (const [_requestId, pending] of this.pendingRequests.entries()) {
       clearTimeout(pending.timeout);

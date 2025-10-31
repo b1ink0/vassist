@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import Logger from './Logger';
 
 class TranslatorService {
   constructor() {
@@ -13,14 +14,12 @@ class TranslatorService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[TranslatorService] Initialized (Extension mode - multi-tab)');
     } else {
       this.translatorSessions = new Map(); // key: "sourceLanguage-targetLanguage", value: Translator session
       this.config = null;
       this.provider = null;
       this.llmClient = null;
       this.abortController = null;
-      console.log('[TranslatorService] Initialized (Dev mode)');
     }
   }
 
@@ -39,7 +38,7 @@ class TranslatorService {
         llmClient: null,
         abortController: null,
       });
-      console.log(`[TranslatorService] Tab ${tabId} initialized`);
+      Logger.log('TranslatorService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -64,11 +63,11 @@ class TranslatorService {
             session.destroy();
           }
         } catch (error) {
-          console.warn(`[TranslatorService] Error destroying session:`, error);
+          Logger.warn('TranslatorService', 'Error destroying session:', error);
         }
       }
       this.tabStates.delete(tabId);
-      console.log(`[TranslatorService] Tab ${tabId} cleaned up`);
+      Logger.log('TranslatorService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -99,7 +98,7 @@ class TranslatorService {
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
-    console.log(`${logPrefix} Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
     
     try {
       if (provider === 'chrome-ai') {
@@ -110,7 +109,7 @@ class TranslatorService {
         
         state.config = { provider: 'chrome-ai' };
         state.provider = 'chrome-ai';
-        console.log(`${logPrefix} Chrome AI Translator configured`);
+        Logger.log('other', `${logPrefix} Chrome AI Translator configured`);
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
@@ -125,7 +124,7 @@ class TranslatorService {
           temperature: openaiConfig.temperature || 0.3,
         };
         state.provider = 'openai';
-        console.log(`${logPrefix} OpenAI configured for translation`);
+        Logger.log('other', `${logPrefix} OpenAI configured for translation`);
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
@@ -141,7 +140,7 @@ class TranslatorService {
           temperature: ollamaConfig.temperature || 0.3,
         };
         state.provider = 'ollama';
-        console.log(`${logPrefix} Ollama configured for translation`);
+        Logger.log('other', `${logPrefix} Ollama configured for translation`);
       }
       else {
         throw new Error(`Unknown provider: ${provider}`);
@@ -149,7 +148,7 @@ class TranslatorService {
       
       return true;
     } catch (error) {
-      console.error(`${logPrefix} Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -176,7 +175,7 @@ class TranslatorService {
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
     if (state.abortController) {
-      console.log(`${logPrefix} Aborting translation request`);
+      Logger.log('other', `${logPrefix} Aborting translation request`);
       state.abortController.abort();
       state.abortController = null;
     }
@@ -207,10 +206,10 @@ class TranslatorService {
           sourceLanguage,
           targetLanguage
         });
-        console.log(`${logPrefix} Translator availability for ${sourceLanguage}->${targetLanguage}:`, availability);
+        Logger.log('other', `${logPrefix} Translator availability for ${sourceLanguage}->${targetLanguage}:`, availability);
         return availability;
       } catch (error) {
-        console.error(`${logPrefix} Failed to check availability:`, error);
+        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
         return 'unavailable';
       }
     } else {
@@ -242,22 +241,22 @@ class TranslatorService {
     
     // Create new Chrome AI Translator session
     try {
-      console.log(`${logPrefix} Creating translator session: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Creating translator session: ${sessionKey}`);
       const session = await self.Translator.create({
         sourceLanguage,
         targetLanguage,
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            console.log(`${logPrefix} Translation model download: ${(e.loaded * 100).toFixed(1)}%`);
+            Logger.log('other', `${logPrefix} Translation model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
       });
       
       state.translatorSessions.set(sessionKey, session);
-      console.log(`${logPrefix} Translator session created: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Translator session created: ${sessionKey}`);
       return session;
     } catch (error) {
-      console.error(`${logPrefix} Failed to create translator session:`, error);
+      Logger.error('other', `${logPrefix} Failed to create translator session:`, error);
       throw error;
     }
   }
@@ -278,12 +277,12 @@ class TranslatorService {
       throw new Error('TranslatorService not configured');
     }
     
-    console.log(`${logPrefix} Translating (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Translating (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(sourceLanguage, targetLanguage, tabId);
       const translated = await session.translate(text);
-      console.log(`${logPrefix} Translation complete:`, translated.substring(0, 50));
+      Logger.log('other', `${logPrefix} Translation complete:`, translated.substring(0, 50));
       return translated;
     } 
     else if (state.provider === 'openai' || state.provider === 'ollama') {
@@ -309,7 +308,7 @@ class TranslatorService {
       throw new Error('TranslatorService not configured');
     }
     
-    console.log(`${logPrefix} Translating (streaming, ${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Translating (streaming, ${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(sourceLanguage, targetLanguage, tabId);
@@ -351,7 +350,7 @@ class TranslatorService {
       
       state.abortController = null;
       const translated = response.choices[0].message.content.trim();
-      console.log(`${logPrefix} ${state.provider} translation complete`);
+      Logger.log('other', `${logPrefix} ${state.provider} translation complete`);
       return translated;
     } catch (error) {
       state.abortController = null;
@@ -362,11 +361,11 @@ class TranslatorService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Translation aborted by user`);
+        Logger.log('other', `${logPrefix} Translation aborted by user`);
         throw new Error('Translation cancelled');
       }
       
-      console.error(`${logPrefix} ${state.provider} translation failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} translation failed:`, error);
       throw error;
     }
   }
@@ -397,7 +396,7 @@ class TranslatorService {
       for await (const chunk of stream) {
         // Check if aborted
         if (!state.abortController) {
-          console.log(`${logPrefix} Streaming aborted by user`);
+          Logger.log('other', `${logPrefix} Streaming aborted by user`);
           return;
         }
         
@@ -417,11 +416,11 @@ class TranslatorService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Streaming translation aborted by user`);
+        Logger.log('other', `${logPrefix} Streaming translation aborted by user`);
         return;
       }
       
-      console.error(`${logPrefix} ${state.provider} streaming translation failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} streaming translation failed:`, error);
       throw error;
     }
   }
@@ -459,7 +458,7 @@ class TranslatorService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
-    console.log(`${logPrefix} Destroying all translator sessions`);
+    Logger.log('other', `${logPrefix} Destroying all translator sessions`);
     
     for (const [key, session] of state.translatorSessions.entries()) {
       try {
@@ -467,12 +466,12 @@ class TranslatorService {
           session.destroy();
         }
       } catch (error) {
-        console.warn(`${logPrefix} Error destroying session ${key}:`, error);
+        Logger.warn('other', `${logPrefix} Error destroying session ${key}:`, error);
       }
     }
     
     state.translatorSessions.clear();
-    console.log(`${logPrefix} All sessions destroyed`);
+    Logger.log('other', `${logPrefix} All sessions destroyed`);
   }
 }
 

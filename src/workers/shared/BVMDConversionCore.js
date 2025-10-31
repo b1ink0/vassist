@@ -5,6 +5,7 @@
  * Used by both offscreen worker and SharedWorker
  */
 
+import Logger from '../../services/Logger';
 export class BVMDConversionCore {
     /**
      * Convert VMD ArrayBuffer to BVMD ArrayBuffer
@@ -20,7 +21,7 @@ export class BVMDConversionCore {
             const { VmdLoader } = await import('babylon-mmd/esm/Loader/vmdLoader');
             const { BvmdConverter } = await import('babylon-mmd/esm/Loader/Optimized/bvmdConverter');
             
-            console.log(`[BVMDCore] Converting VMD to BVMD (${vmdData.byteLength} bytes)`);
+            Logger.log('BVMDCore', `Converting VMD to BVMD (${vmdData.byteLength} bytes)`);
             
             // Create VmdLoader
             const vmdLoader = new VmdLoader(scene);
@@ -33,17 +34,17 @@ export class BVMDConversionCore {
             // Load VMD using babylon-mmd's VmdLoader
             const animation = await vmdLoader.loadAsync(filename, [vmdFile]);
             
-            console.log('[BVMDCore] VMD loaded, converting to BVMD...');
+            Logger.log('BVMDCore', 'VMD loaded, converting to BVMD...');
             
             // Convert to BVMD using BvmdConverter
             const bvmdArrayBuffer = BvmdConverter.Convert(animation);
             
-            console.log(`[BVMDCore] BVMD created (${bvmdArrayBuffer.byteLength} bytes)`);
+            Logger.log('BVMDCore', `BVMD created (${bvmdArrayBuffer.byteLength} bytes)`);
             
             return bvmdArrayBuffer;
             
         } catch (error) {
-            console.error('[BVMDCore] Conversion failed:', error);
+            Logger.error('BVMDCore', 'Conversion failed:', error);
             throw new Error(`Failed to convert VMD to BVMD: ${error.message}`);
         }
     }
@@ -57,14 +58,14 @@ export class BVMDConversionCore {
             const { Scene } = await import('@babylonjs/core/scene');
             const { NullEngine } = await import('@babylonjs/core/Engines/nullEngine');
             
-            console.log('[BVMDCore] Creating NullEngine for worker context...');
+            Logger.log('BVMDCore', 'Creating NullEngine for worker context...');
             const engine = new NullEngine();
             const scene = new Scene(engine);
             
-            console.log('[BVMDCore] Worker scene created successfully');
+            Logger.log('BVMDCore', 'Worker scene created successfully');
             return scene;
         } catch (error) {
-            console.error('[BVMDCore] Failed to create worker scene:', error);
+            Logger.error('BVMDCore', 'Failed to create worker scene:', error);
             return null;
         }
     }

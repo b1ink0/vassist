@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import Logger from '../services/Logger';
 
 const UNMOUNT_DELAY_MS = 15000; // 15 seconds
 
@@ -21,27 +22,27 @@ export const useVisibilityUnmount = (enabled = true) => {
       if (document.hidden) {
         // Tab just became hidden - start timer
         hiddenTimeRef.current = Date.now();
-        console.log('[useVisibilityUnmount] Tab hidden, starting 15s unmount timer...');
+        Logger.log('useVisibilityUnmount', 'Tab hidden, starting 15s unmount timer...');
         
         unmountTimeoutRef.current = setTimeout(() => {
-          console.log('[useVisibilityUnmount] Tab hidden for 15s, unmounting to free resources...');
+          Logger.log('useVisibilityUnmount', 'Tab hidden for 15s, unmounting to free resources...');
           setShouldMount(false);
         }, UNMOUNT_DELAY_MS);
       } else {
         // Tab became visible again
         const wasHiddenFor = hiddenTimeRef.current ? Date.now() - hiddenTimeRef.current : 0;
-        console.log(`[useVisibilityUnmount] Tab visible again (was hidden for ${Math.round(wasHiddenFor / 1000)}s)`);
+        Logger.log('useVisibilityUnmount', `Tab visible again (was hidden for ${Math.round(wasHiddenFor / 1000)}s)`);
         
         // Clear the unmount timer if it hasn't fired yet
         if (unmountTimeoutRef.current) {
           clearTimeout(unmountTimeoutRef.current);
           unmountTimeoutRef.current = null;
-          console.log('[useVisibilityUnmount] Cancelled unmount timer');
+          Logger.log('useVisibilityUnmount', 'Cancelled unmount timer');
         }
         
         // If we unmounted while hidden, remount now
         if (!shouldMount) {
-          console.log('[useVisibilityUnmount] Remounting after being unmounted...');
+          Logger.log('useVisibilityUnmount', 'Remounting after being unmounted...');
           setShouldMount(true);
         }
         

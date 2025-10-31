@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import TranslatorService from '../TranslatorService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class TranslatorServiceProxy extends ServiceProxy {
   constructor() {
@@ -133,7 +134,7 @@ class TranslatorServiceProxy extends ServiceProxy {
       
       // If there was an error, throw it now
       if (streamError) {
-        console.error('[TranslatorServiceProxy] Streaming failed:', streamError);
+        Logger.error('TranslatorServiceProxy', 'Streaming failed:', streamError);
         throw streamError;
       }
     } else {
@@ -150,13 +151,13 @@ class TranslatorServiceProxy extends ServiceProxy {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
       if (!bridge) {
-        console.warn('[TranslatorServiceProxy] Bridge not available for abort');
+        Logger.warn('TranslatorServiceProxy', 'Bridge not available for abort');
         return;
       }
       try {
         await bridge.sendMessage(MessageTypes.TRANSLATOR_ABORT, {});
       } catch (error) {
-        console.error('[TranslatorServiceProxy] Abort failed:', error);
+        Logger.error('TranslatorServiceProxy', 'Abort failed:', error);
       }
     } else {
       // Dev mode: Call the service's abort method directly

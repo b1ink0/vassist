@@ -5,8 +5,11 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
+import Logger from '../Logger';
+
 export class ServiceProxy {
   constructor(name) {
+    // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     this.name = name;
     this.isExtension = __EXTENSION_MODE__;
     this._bridge = null;
@@ -17,16 +20,14 @@ export class ServiceProxy {
         // Import ExtensionBridge synchronously (it's already loaded in main.js)
         import('../../utils/ExtensionBridge.js').then(module => {
           this._bridge = module.extensionBridge;
-          console.log(`[${this.name}Proxy] Bridge loaded successfully`);
+          Logger.log('other', `[${this.name}Proxy] Bridge loaded successfully`);
         }).catch(err => {
-          console.error(`[${this.name}Proxy] Failed to load bridge:`, err);
+          Logger.error('other', `[${this.name}Proxy] Failed to load bridge:`, err);
         });
       } catch (e) {
-        console.error(`[${this.name}Proxy] Error loading bridge:`, e);
+        Logger.error('other', `[${this.name}Proxy] Error loading bridge:`, e);
       }
     }
-    
-    console.log(`[${this.name}Proxy] Mode: ${this.isExtension ? 'Extension' : 'Dev'}`);
   }
 
   /**
@@ -40,7 +41,7 @@ export class ServiceProxy {
     }
     
     if (typeof window === 'undefined') {
-      console.error(`[${this.name}Proxy] window is not defined, cannot get bridge`);
+      Logger.error('other', `[${this.name}Proxy] window is not defined, cannot get bridge`);
       return null;
     }
     
@@ -61,7 +62,7 @@ export class ServiceProxy {
       // Ignore errors during fallback
     }
     
-    console.error(`[${this.name}Proxy] Bridge is null! Make sure ExtensionBridge is loaded in main.js`);
+    Logger.error('other', `[${this.name}Proxy] Bridge is null! Make sure ExtensionBridge is loaded in main.js`);
     return null;
   }
 
@@ -80,7 +81,7 @@ export class ServiceProxy {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
-    console.error(`[${this.name}Proxy] Bridge not loaded after ${timeout}ms`);
+    Logger.error('other', `[${this.name}Proxy] Bridge not loaded after ${timeout}ms`);
     return null;
   }
 

@@ -15,6 +15,7 @@
  * Animation categories define the type/purpose of animations
  * Now we don't need this since categories are just the keys in AnimationRegistry
  */
+import Logger from '../services/Logger';
 export const AnimationCategory = {
   IDLE: 'idle',
   THINKING: 'thinking',
@@ -679,7 +680,7 @@ export const EmotionMapping = {
 export function getAnimationForEmotion(emotion) {
   // Handle null/undefined emotion
   if (!emotion) {
-    console.warn('[AnimationConfig] No emotion provided, using default (neutral)');
+    Logger.warn('AnimationConfig', 'No emotion provided, using default (neutral)');
     return getAnimationById(EmotionMapping.default);
   }
   
@@ -691,8 +692,8 @@ export function getAnimationForEmotion(emotion) {
   
   // If no mapping found, default to neutral
   if (!animationId) {
-    console.warn(`[AnimationConfig] Unknown emotion: "${emotion}", using default (neutral)`);
-    console.warn(`[AnimationConfig] Available emotions: ${Object.keys(EmotionMapping).join(', ')}`);
+    Logger.warn('AnimationConfig', `Unknown emotion: "${emotion}", using default (neutral)`);
+    Logger.warn('AnimationConfig', `Available emotions: ${Object.keys(EmotionMapping).join(', ')}`);
     return getAnimationById(EmotionMapping.default);
   }
   
@@ -701,8 +702,8 @@ export function getAnimationForEmotion(emotion) {
   
   // Fallback to neutral if animation not found (shouldn't happen if config is correct)
   if (!animation) {
-    console.error(`[AnimationConfig] Animation not found for emotion: "${emotion}" (ID: ${animationId})`);
-    console.error('[AnimationConfig] This indicates a configuration error - emotion maps to non-existent animation');
+    Logger.error('AnimationConfig', `Animation not found for emotion: "${emotion}" (ID: ${animationId})`);
+    Logger.error('AnimationConfig', 'This indicates a configuration error - emotion maps to non-existent animation');
     return getAnimationById(EmotionMapping.default);
   }
   
@@ -742,13 +743,13 @@ export function isValidEmotion(emotion) {
 export function sanitizeEmotion(emotion) {
   // Handle null/undefined
   if (!emotion) {
-    console.warn('[AnimationConfig] Emotion is null/undefined, using default');
+    Logger.warn('AnimationConfig', 'Emotion is null/undefined, using default');
     return 'default';
   }
   
   // Handle non-string types
   if (typeof emotion !== 'string') {
-    console.warn(`[AnimationConfig] Emotion is not a string (type: ${typeof emotion}), using default`);
+    Logger.warn('AnimationConfig', `Emotion is not a string (type: ${typeof emotion}), using default`);
     return 'default';
   }
   
@@ -757,7 +758,7 @@ export function sanitizeEmotion(emotion) {
   
   // Check if valid
   if (!(normalized in EmotionMapping)) {
-    console.warn(`[AnimationConfig] Invalid emotion "${emotion}" from LLM, using default`);
+    Logger.warn('AnimationConfig', `Invalid emotion "${emotion}" from LLM, using default`);
     return 'default';
   }
   

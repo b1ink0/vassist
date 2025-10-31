@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import Logger from './Logger';
 
 class SummarizerService {
   constructor() {
@@ -13,14 +14,12 @@ class SummarizerService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[SummarizerService] Initialized (Extension mode - multi-tab)');
     } else {
       this.summarizerSessions = new Map(); // key: "type-format-length", value: Summarizer session
       this.config = null;
       this.provider = null;
       this.llmClient = null;
       this.abortController = null;
-      console.log('[SummarizerService] Initialized (Dev mode)');
     }
   }
 
@@ -39,7 +38,7 @@ class SummarizerService {
         llmClient: null,
         abortController: null,
       });
-      console.log(`[SummarizerService] Tab ${tabId} initialized`);
+      Logger.log('SummarizerService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -64,11 +63,11 @@ class SummarizerService {
             session.destroy();
           }
         } catch (error) {
-          console.warn(`[SummarizerService] Error destroying session:`, error);
+          Logger.warn('SummarizerService', 'Error destroying session:', error);
         }
       }
       this.tabStates.delete(tabId);
-      console.log(`[SummarizerService] Tab ${tabId} cleaned up`);
+      Logger.log('SummarizerService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -99,7 +98,7 @@ class SummarizerService {
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
-    console.log(`${logPrefix} Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
     
     try {
       if (provider === 'chrome-ai') {
@@ -110,7 +109,7 @@ class SummarizerService {
         
         state.config = { provider: 'chrome-ai' };
         state.provider = 'chrome-ai';
-        console.log(`${logPrefix} Chrome AI Summarizer configured`);
+        Logger.log('other', `${logPrefix} Chrome AI Summarizer configured`);
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
@@ -125,7 +124,7 @@ class SummarizerService {
           temperature: openaiConfig.temperature || 0.5,
         };
         state.provider = 'openai';
-        console.log(`${logPrefix} OpenAI configured for summarization`);
+        Logger.log('other', `${logPrefix} OpenAI configured for summarization`);
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
@@ -141,7 +140,7 @@ class SummarizerService {
           temperature: ollamaConfig.temperature || 0.5,
         };
         state.provider = 'ollama';
-        console.log(`${logPrefix} Ollama configured for summarization`);
+        Logger.log('other', `${logPrefix} Ollama configured for summarization`);
       }
       else {
         throw new Error(`Unknown provider: ${provider}`);
@@ -149,7 +148,7 @@ class SummarizerService {
       
       return true;
     } catch (error) {
-      console.error(`${logPrefix} Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -176,7 +175,7 @@ class SummarizerService {
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
     if (state.abortController) {
-      console.log(`${logPrefix} Aborting summarization request`);
+      Logger.log('other', `${logPrefix} Aborting summarization request`);
       state.abortController.abort();
       state.abortController = null;
     }
@@ -202,10 +201,10 @@ class SummarizerService {
       
       try {
         const availability = await self.Summarizer.availability();
-        console.log(`${logPrefix} Summarizer availability:`, availability);
+        Logger.log('other', `${logPrefix} Summarizer availability:`, availability);
         return availability;
       } catch (error) {
-        console.error(`${logPrefix} Failed to check availability:`, error);
+        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
         return 'unavailable';
       }
     } else {
@@ -239,7 +238,7 @@ class SummarizerService {
     
     // Create new Chrome AI Summarizer session
     try {
-      console.log(`${logPrefix} Creating summarizer session: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Creating summarizer session: ${sessionKey}`);
       const session = await self.Summarizer.create({
         type,
         format,
@@ -247,16 +246,16 @@ class SummarizerService {
         sharedContext,
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            console.log(`${logPrefix} Summarizer model download: ${(e.loaded * 100).toFixed(1)}%`);
+            Logger.log('other', `${logPrefix} Summarizer model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
       });
       
       state.summarizerSessions.set(sessionKey, session);
-      console.log(`${logPrefix} Summarizer session created: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Summarizer session created: ${sessionKey}`);
       return session;
     } catch (error) {
-      console.error(`${logPrefix} Failed to create summarizer session:`, error);
+      Logger.error('other', `${logPrefix} Failed to create summarizer session:`, error);
       throw error;
     }
   }
@@ -289,12 +288,12 @@ class SummarizerService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Summarizing (${type}, ${format}, ${length}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Summarizing (${type}, ${format}, ${length}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(type, format, length, sharedContext, tabId);
       const summary = await session.summarize(text, { context });
-      console.log(`${logPrefix} Summarization complete:`, summary.substring(0, 50));
+      Logger.log('other', `${logPrefix} Summarization complete:`, summary.substring(0, 50));
       return summary;
     } 
     else if (state.provider === 'openai' || state.provider === 'ollama') {
@@ -316,7 +315,7 @@ class SummarizerService {
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
     if (!state.provider) {
-      console.error(`${logPrefix} Service not configured! State:`, {
+      Logger.error('other', `${logPrefix} Service not configured! State:`, {
         hasState: !!state,
         provider: state?.provider,
         config: state?.config,
@@ -335,7 +334,7 @@ class SummarizerService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Summarizing (streaming, ${type}, ${format}, ${length}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Summarizing (streaming, ${type}, ${format}, ${length}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(type, format, length, sharedContext, tabId);
@@ -377,10 +376,10 @@ class SummarizerService {
       
       state.abortController = null;
       const summary = response.choices[0].message.content.trim();
-      console.log(`${logPrefix} ${state.provider} summarization complete`);
+      Logger.log('other', `${logPrefix} ${state.provider} summarization complete`);
       return summary;
     } catch (error) {
-      console.error(`${logPrefix} ${state.provider} summarization failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} summarization failed:`, error);
       throw error;
     }
   }
@@ -411,7 +410,7 @@ class SummarizerService {
       for await (const chunk of stream) {
         // Check if aborted
         if (!state.abortController) {
-          console.log(`${logPrefix} Streaming aborted by user`);
+          Logger.log('other', `${logPrefix} Streaming aborted by user`);
           return;
         }
         
@@ -431,11 +430,11 @@ class SummarizerService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Streaming aborted by user`);
+        Logger.log('other', `${logPrefix} Streaming aborted by user`);
         return;
       }
       
-      console.error(`${logPrefix} ${state.provider} streaming summarization failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} streaming summarization failed:`, error);
       throw error;
     }
   }
@@ -509,7 +508,7 @@ class SummarizerService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
-    console.log(`${logPrefix} Destroying all summarizer sessions`);
+    Logger.log('other', `${logPrefix} Destroying all summarizer sessions`);
     
     for (const [key, session] of state.summarizerSessions.entries()) {
       try {
@@ -517,12 +516,12 @@ class SummarizerService {
           session.destroy();
         }
       } catch (error) {
-        console.warn(`${logPrefix} Error destroying session ${key}:`, error);
+        Logger.warn('other', `${logPrefix} Error destroying session ${key}:`, error);
       }
     }
     
     state.summarizerSessions.clear();
-    console.log(`${logPrefix} All sessions destroyed`);
+    Logger.log('other', `${logPrefix} All sessions destroyed`);
   }
 }
 

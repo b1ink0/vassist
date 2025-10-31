@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import Logger from './Logger';
 
 class RewriterService {
   constructor() {
@@ -13,14 +14,12 @@ class RewriterService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[RewriterService] Initialized (Extension mode - multi-tab)');
     } else {
       this.rewriterSessions = new Map(); // key: "tone-format-length-sharedContext", value: Rewriter session
       this.config = null;
       this.provider = null;
       this.llmClient = null;
       this.abortController = null;
-      console.log('[RewriterService] Initialized (Dev mode)');
     }
   }
 
@@ -39,7 +38,7 @@ class RewriterService {
         llmClient: null,
         abortController: null,
       });
-      console.log(`[RewriterService] Tab ${tabId} initialized`);
+      Logger.log('RewriterService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -64,11 +63,11 @@ class RewriterService {
             session.destroy();
           }
         } catch (error) {
-          console.warn(`[RewriterService] Error destroying session:`, error);
+          Logger.warn('RewriterService', 'Error destroying session:', error);
         }
       }
       this.tabStates.delete(tabId);
-      console.log(`[RewriterService] Tab ${tabId} cleaned up`);
+      Logger.log('RewriterService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -99,7 +98,7 @@ class RewriterService {
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
-    console.log(`${logPrefix} Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
     
     try {
       if (provider === 'chrome-ai') {
@@ -110,7 +109,7 @@ class RewriterService {
         
         state.config = { provider: 'chrome-ai' };
         state.provider = 'chrome-ai';
-        console.log(`${logPrefix} Chrome AI Rewriter configured`);
+        Logger.log('other', `${logPrefix} Chrome AI Rewriter configured`);
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
@@ -125,7 +124,7 @@ class RewriterService {
           temperature: openaiConfig.temperature || 0.7,
         };
         state.provider = 'openai';
-        console.log(`${logPrefix} OpenAI configured for rewriting`);
+        Logger.log('other', `${logPrefix} OpenAI configured for rewriting`);
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
@@ -141,7 +140,7 @@ class RewriterService {
           temperature: ollamaConfig.temperature || 0.7,
         };
         state.provider = 'ollama';
-        console.log(`${logPrefix} Ollama configured for rewriting`);
+        Logger.log('other', `${logPrefix} Ollama configured for rewriting`);
       }
       else {
         throw new Error(`Unknown provider: ${provider}`);
@@ -149,7 +148,7 @@ class RewriterService {
       
       return true;
     } catch (error) {
-      console.error(`${logPrefix} Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -176,7 +175,7 @@ class RewriterService {
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
     if (state.abortController) {
-      console.log(`${logPrefix} Aborting rewrite request`);
+      Logger.log('other', `${logPrefix} Aborting rewrite request`);
       state.abortController.abort();
       state.abortController = null;
     }
@@ -202,10 +201,10 @@ class RewriterService {
       
       try {
         const availability = await self.Rewriter.availability();
-        console.log(`${logPrefix} Rewriter availability:`, availability);
+        Logger.log('other', `${logPrefix} Rewriter availability:`, availability);
         return availability;
       } catch (error) {
-        console.error(`${logPrefix} Failed to check availability:`, error);
+        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
         return 'unavailable';
       }
     } else {
@@ -239,7 +238,7 @@ class RewriterService {
     
     // Create new Chrome AI Rewriter session
     try {
-      console.log(`${logPrefix} Creating rewriter session: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Creating rewriter session: ${sessionKey}`);
       const session = await self.Rewriter.create({
         tone,
         format,
@@ -247,16 +246,16 @@ class RewriterService {
         sharedContext,
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            console.log(`${logPrefix} Rewriter model download: ${(e.loaded * 100).toFixed(1)}%`);
+            Logger.log('other', `${logPrefix} Rewriter model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
       });
       
       state.rewriterSessions.set(sessionKey, session);
-      console.log(`${logPrefix} Rewriter session created: ${sessionKey}`);
+      Logger.log('other', `${logPrefix} Rewriter session created: ${sessionKey}`);
       return session;
     } catch (error) {
-      console.error(`${logPrefix} Failed to create rewriter session:`, error);
+      Logger.error('other', `${logPrefix} Failed to create rewriter session:`, error);
       throw error;
     }
   }
@@ -289,12 +288,12 @@ class RewriterService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Rewriting (${tone}, ${format}, ${length}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Rewriting (${tone}, ${format}, ${length}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
       const rewritten = await session.rewrite(text, { context });
-      console.log(`${logPrefix} Rewrite complete:`, rewritten.substring(0, 50));
+      Logger.log('other', `${logPrefix} Rewrite complete:`, rewritten.substring(0, 50));
       return rewritten;
     } 
     else if (state.provider === 'openai' || state.provider === 'ollama') {
@@ -327,7 +326,7 @@ class RewriterService {
       sharedContext = ''
     } = options;
     
-    console.log(`${logPrefix} Rewriting (streaming, ${tone}, ${format}, ${length}):`, text.substring(0, 50));
+    Logger.log('other', `${logPrefix} Rewriting (streaming, ${tone}, ${format}, ${length}):`, text.substring(0, 50));
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
@@ -369,7 +368,7 @@ class RewriterService {
       
       state.abortController = null;
       const rewritten = response.choices[0].message.content.trim();
-      console.log(`${logPrefix} ${state.provider} rewrite complete`);
+      Logger.log('other', `${logPrefix} ${state.provider} rewrite complete`);
       return rewritten;
     } catch (error) {
       state.abortController = null;
@@ -380,11 +379,11 @@ class RewriterService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Rewrite aborted by user`);
+        Logger.log('other', `${logPrefix} Rewrite aborted by user`);
         throw new Error('Rewrite cancelled');
       }
       
-      console.error(`${logPrefix} ${state.provider} rewrite failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} rewrite failed:`, error);
       throw error;
     }
   }
@@ -415,7 +414,7 @@ class RewriterService {
       for await (const chunk of stream) {
         // Check if aborted
         if (!state.abortController) {
-          console.log(`${logPrefix} Streaming aborted by user`);
+          Logger.log('other', `${logPrefix} Streaming aborted by user`);
           return;
         }
         
@@ -435,11 +434,11 @@ class RewriterService {
                       error.message?.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} Streaming rewrite aborted by user`);
+        Logger.log('other', `${logPrefix} Streaming rewrite aborted by user`);
         return;
       }
       
-      console.error(`${logPrefix} ${state.provider} streaming rewrite failed:`, error);
+      Logger.error('other', `${logPrefix} ${state.provider} streaming rewrite failed:`, error);
       throw error;
     }
   }
@@ -499,7 +498,7 @@ class RewriterService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
-    console.log(`${logPrefix} Destroying all rewriter sessions`);
+    Logger.log('other', `${logPrefix} Destroying all rewriter sessions`);
     
     for (const [key, session] of state.rewriterSessions.entries()) {
       try {
@@ -507,12 +506,12 @@ class RewriterService {
           session.destroy();
         }
       } catch (error) {
-        console.warn(`${logPrefix} Error destroying session ${key}:`, error);
+        Logger.warn('other', `${logPrefix} Error destroying session ${key}:`, error);
       }
     }
     
     state.rewriterSessions.clear();
-    console.log(`${logPrefix} All sessions destroyed`);
+    Logger.log('other', `${logPrefix} All sessions destroyed`);
   }
 }
 

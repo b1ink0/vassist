@@ -11,6 +11,7 @@ import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDev
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
 import Toggle from '../common/Toggle';
+import Logger from '../../services/Logger';
 
 const TTSSettings = ({ isLightBackground }) => {
   const [clearingCache, setClearingCache] = useState(false);
@@ -73,7 +74,7 @@ const TTSSettings = ({ isLightBackground }) => {
                   try {
                     await initializeKokoro();
                   } catch (error) {
-                    console.error('Kokoro initialization failed:', error);
+                    Logger.error('other', 'Kokoro initialization failed:', error);
                   }
                 }}
                 onCheckStatus={checkKokoroStatus}
@@ -94,7 +95,7 @@ const TTSSettings = ({ isLightBackground }) => {
                           const size = await TTSServiceProxy.getKokoroCacheSize();
                           setCacheSize(size);
                         } catch (error) {
-                          console.error('Failed to get cache size:', error);
+                          Logger.error('other', 'Failed to get cache size:', error);
                         }
                       }}
                       className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg flex items-center gap-1.5`}
@@ -113,7 +114,7 @@ const TTSSettings = ({ isLightBackground }) => {
                           setCacheSize(null);
                           await checkKokoroStatus();
                         } catch (error) {
-                          console.error('Failed to clear cache:', error);
+                          Logger.error('other', 'Failed to clear cache:', error);
                           alert('Failed to clear cache: ' + error.message);
                         } finally {
                           setClearingCache(false);

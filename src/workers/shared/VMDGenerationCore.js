@@ -6,6 +6,7 @@
 
 import { VMDFile } from '../../services/VMDHandler.js';
 import { AudioProcessingCore } from './AudioProcessingCore.js';
+import Logger from '../../services/Logger';
 
 export class VMDGenerationCore {
     static defaultConfig = {
@@ -37,13 +38,13 @@ export class VMDGenerationCore {
         try {
             const mergedConfig = { ...VMDGenerationCore.defaultConfig, ...config };
             
-            console.log(`[VMDGenCore] Generating VMD from PCM: ${audioData.length} samples @ ${sampleRate}Hz`);
+            Logger.log('VMDGenCore', `Generating VMD from PCM: ${audioData.length} samples @ ${sampleRate}Hz`);
             
             // Step 1: Compute spectrogram (async with yields)
             const frameRate = 30; // VMD uses 30 fps
             const spectrogram = await AudioProcessingCore.computeSpectrogram(audioData, sampleRate, frameRate);
             
-            console.log(`[VMDGenCore] Spectrogram computed: ${spectrogram.data.length} frames`);
+            Logger.log('VMDGenCore', `Spectrogram computed: ${spectrogram.data.length} frames`);
             
             // Calculate max energy for speech detection
             const maxEnergy = AudioProcessingCore.getMaxEnergy(spectrogram.data);
@@ -58,7 +59,7 @@ export class VMDGenerationCore {
             const smoothness = mergedConfig.smoothness || 15;
             const smoothedWeights = AudioProcessingCore.smoothVowelWeights(vowelWeights, smoothness);
             
-            console.log(`[VMDGenCore] Applied smoothing with window size: ${smoothness}`);
+            Logger.log('VMDGenCore', `Applied smoothing with window size: ${smoothness}`);
             
             // Step 4: Create VMD file with energy detection
             const vmd = new VMDFile(modelName);
@@ -98,12 +99,12 @@ export class VMDGenerationCore {
             // Step 6: Save VMD file
             const vmdData = vmd.save();
             
-            console.log(`[VMDGenCore] VMD generated: ${vmdData.byteLength} bytes, ${vmd.morphFrames.length} frames`);
+            Logger.log('VMDGenCore', `VMD generated: ${vmdData.byteLength} bytes, ${vmd.morphFrames.length} frames`);
             
             return vmdData;
             
         } catch (error) {
-            console.error('[VMDGenCore] Error generating VMD:', error);
+            Logger.error('VMDGenCore', 'Error generating VMD:', error);
             throw error;
         }
     }
@@ -161,6 +162,6 @@ export class VMDGenerationCore {
         // Update VMD with optimized frames
         vmd.morphFrames = optimizedFrames.sort((a, b) => a.frame - b.frame);
         
-        console.log(`[VMDGenCore] Optimized: ${vmd.morphFrames.length} frames kept`);
+        Logger.log('VMDGenCore', `Optimized: ${vmd.morphFrames.length} frames kept`);
     }
 }

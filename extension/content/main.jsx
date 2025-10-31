@@ -8,12 +8,13 @@ import { createRoot } from 'react-dom/client';
 // Import ExtensionBridge first to ensure it's initialized before any services
 import { extensionBridge } from '../../src/utils/ExtensionBridge.js';
 import App from '../../src/App.jsx';
+import Logger from '../../src/services/Logger';
 
 // Make bridge globally accessible
 window.__VASSIST_BRIDGE__ = extensionBridge;
 
-console.log('[Extension Content] Module loaded');
-console.log('[Extension Content] ExtensionBridge initialized:', !!extensionBridge);
+Logger.log('Extension Content', 'Module loaded');
+Logger.log('Extension Content', 'ExtensionBridge initialized:', !!extensionBridge);
 
 let isInitialized = false;
 let reactRoot = null;
@@ -29,12 +30,12 @@ const getShadowRoot = () => {
 
 const initReactApp = () => {
   if (isInitializing) {
-    console.log('[Extension Content] Already initializing, skipping...');
+    Logger.log('Extension Content', 'Already initializing, skipping...');
     return;
   }
   
   if (isInitialized && reactRoot) {
-    console.log('[Extension Content] Already initialized, skipping');
+    Logger.log('Extension Content', 'Already initialized, skipping');
     return;
   }
   
@@ -42,11 +43,11 @@ const initReactApp = () => {
     const rootElement = getShadowRoot();
     
     if (!rootElement) {
-      console.log('[Extension Content] React root element not found, skipping initialization');
+      Logger.log('Extension Content', 'React root element not found, skipping initialization');
       return;
     }
     
-    console.log('[Extension Content] Initializing React app in shadow DOM...');
+    Logger.log('Extension Content', 'Initializing React app in shadow DOM...');
     isInitializing = true;
     
     reactRoot = createRoot(rootElement);
@@ -58,11 +59,11 @@ const initReactApp = () => {
       </React.StrictMode>
     );
     
-    console.log('[Extension Content] React app rendered successfully');
+    Logger.log('Extension Content', 'React app rendered successfully');
     isInitializing = false;
     
   } catch (error) {
-    console.error('[Extension Content] Failed to initialize React app:', error);
+    Logger.error('Extension Content', 'Failed to initialize React app:', error);
     isInitializing = false;
   }
 };
@@ -71,7 +72,7 @@ const observer = new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
       if (node.id === 'virtual-assistant-extension-root') {
-        console.log('[Extension Content] Container detected, initializing...');
+        Logger.log('Extension Content', 'Container detected, initializing...');
         isInitialized = false;
         reactRoot = null;
         isInitializing = false;
@@ -81,10 +82,10 @@ const observer = new MutationObserver((mutations) => {
     
     for (const node of mutation.removedNodes) {
       if (node.id === 'virtual-assistant-extension-root') {
-        console.log('[Extension Content] Container removed, cleaning up...');
+        Logger.log('Extension Content', 'Container removed, cleaning up...');
         
         if (reactRoot) {
-          console.log('[Extension Content] Unmounting React app...');
+          Logger.log('Extension Content', 'Unmounting React app...');
           reactRoot.unmount();
         }
         
@@ -101,7 +102,7 @@ observer.observe(document.body, { childList: true, subtree: true });
 const checkExisting = () => {
   const existing = document.getElementById('virtual-assistant-extension-root');
   if (existing && existing.shadowRoot && !isInitialized) {
-    console.log('[Extension Content] Found existing container, initializing...');
+    Logger.log('Extension Content', 'Found existing container, initializing...');
     setTimeout(initReactApp, 100);
   }
 };

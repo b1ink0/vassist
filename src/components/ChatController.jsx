@@ -9,6 +9,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
+import Logger from '../services/Logger';
 
 const ChatController = ({ 
   modelDisabled = false
@@ -89,7 +90,7 @@ const ChatController = ({
     // Next time they clear chat, it will be deleted if it's marked as temp
     if (isTempChat && currentChatId) {
       chatHistoryService.markAsTempChat(currentChatId, true).catch(error => {
-        console.error('[ChatController] Failed to mark as temp:', error)
+        Logger.error('ChatController', 'Failed to mark as temp:', error)
       })
     }
   }, [isTempChat, currentChatId])
@@ -98,17 +99,17 @@ const ChatController = ({
    * Handle chat button click - toggle chat visibility
    */
   const handleChatButtonClick = useCallback(() => {
-    console.log('[ChatController] Chat button clicked')
+    Logger.log('ChatController', 'Chat button clicked')
     
     // If chat is open, close it
     if (isChatContainerVisible || isChatInputVisible) {
-      console.log('[ChatController] Closing chat')
+      Logger.log('ChatController', 'Closing chat')
       setIsChatInputVisible(false)
       setIsChatContainerVisible(false)
       TTSServiceProxy.stopPlayback()
     } else {
       // Otherwise, open it
-      console.log('[ChatController] Opening chat')
+      Logger.log('ChatController', 'Opening chat')
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
     }
@@ -119,7 +120,7 @@ const ChatController = ({
    */
   const handleChatOpen = useCallback(() => {
     if (!isChatInputVisible || !isChatContainerVisible) {
-      console.log('[ChatController] Opening chat from drag-drop')
+      Logger.log('ChatController', 'Opening chat from drag-drop')
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
     }
@@ -145,12 +146,12 @@ const ChatController = ({
    */
   useEffect(() => {
     const handleChatDragDropEvent = (event) => {
-      console.log('[ChatController] chatDragDrop event received:', event.detail)
+      Logger.log('ChatController', 'chatDragDrop event received:', event.detail)
       
       // If chat is visible, the event will be handled by ChatInput directly
       // If not visible, store it as pending data
       if (!isChatInputVisible) {
-        console.log('[ChatController] Storing drop data as pending (chat not open yet)')
+        Logger.log('ChatController', 'Storing drop data as pending (chat not open yet)')
         setPendingDropData(event.detail)
       }
       // If chat is visible, ChatInput will handle the event directly
@@ -167,7 +168,7 @@ const ChatController = ({
    * Handle chat input close - hide input and container with fade-out animation
    */
   const handleChatInputClose = () => {
-    console.log('[ChatController] Chat input closed')
+    Logger.log('ChatController', 'Chat input closed')
     
     const event = new CustomEvent('closeChat');
     window.dispatchEvent(event);
@@ -188,7 +189,7 @@ const ChatController = ({
       savedConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
       ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
     } catch (configError) {
-      console.warn('[ChatController] Failed to load config:', configError);
+      Logger.warn('ChatController', 'Failed to load config:', configError);
       savedConfig = DefaultAIConfig;
       ttsConfig = DefaultTTSConfig;
     }
@@ -197,8 +198,8 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt);
     const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured();
     
-    console.log('[ChatController] System prompt:', systemPrompt);
-    console.log('[ChatController] Messages to AI:', messages);
+    Logger.log('ChatController', 'System prompt:', systemPrompt);
+    Logger.log('ChatController', 'Messages to AI:', messages);
     
     // Resume TTS playback
     if (ttsEnabled) {
@@ -224,11 +225,11 @@ const ChatController = ({
       
       // Validate chunk text exists and is not empty
       if (!chunkText || typeof chunkText !== 'string' || chunkText.trim().length === 0) {
-        console.warn(`[ChatController] Skipping empty/invalid chunk ${chunkIndex}:`, chunkText);
+        Logger.warn('ChatController', 'Skipping empty/invalid chunk ${chunkIndex}:', chunkText);
         return;
       }
       
-      console.log(`[ChatController] Generating TTS for chunk ${chunkIndex}: "${chunkText.substring(0, 100)}..." (type: ${typeof chunkText}, length: ${chunkText.length})`);
+      Logger.log('ChatController', `Generating TTS for chunk ${chunkIndex}: "${chunkText.substring(0, 100)}..." (type: ${typeof chunkText}, length: ${chunkText.length})`);
       
       // Check if stopped
       if (TTSServiceProxy.isStopped) {
@@ -241,7 +242,7 @@ const ChatController = ({
         
         // Check if result is null or missing audio
         if (!result || !result.audio) {
-          console.warn(`[ChatController] TTS generation returned null for chunk ${chunkIndex}`);
+          Logger.warn('ChatController', `TTS generation returned null for chunk ${chunkIndex}`);
           return;
         }
         
@@ -259,7 +260,7 @@ const ChatController = ({
         // Queue audio with BVMD for synchronized lip sync
         TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, autoTTSSessionId);
       } catch (ttsError) {
-        console.warn(`[ChatController] TTS generation failed for chunk ${chunkIndex}:`, ttsError);
+        Logger.warn('ChatController', 'TTS generation failed for chunk ${chunkIndex}:', ttsError);
       }
     };
 
@@ -336,7 +337,7 @@ const ChatController = ({
 
     // Handle result - cancelled is normal flow, not an error
     if (result.cancelled) {
-      console.log('[ChatController] Generation cancelled by user');
+      Logger.log('ChatController', 'Generation cancelled by user');
       TTSServiceProxy.stopPlayback();
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
@@ -348,7 +349,7 @@ const ChatController = ({
     // Handle actual errors
     if (!result.success) {
       const errorMessage = result.error?.message || 'Unknown error occurred';
-      console.error('[ChatController] AI error:', result.error);
+      Logger.error('ChatController', 'AI error:', result.error);
       ChatService.addMessage('assistant', `Error: ${errorMessage}`);
       setChatMessages([...ChatService.getMessages()]);
       TTSServiceProxy.stopPlayback();
@@ -389,12 +390,12 @@ const ChatController = ({
     if (images && images.length > 0) attachmentInfo.push(`${images.length} image(s)`);
     if (audios && audios.length > 0) attachmentInfo.push(`${audios.length} audio(s)`);
     const attachmentStr = attachmentInfo.length > 0 ? ` with ${attachmentInfo.join(' and ')}` : '';
-    console.log('[ChatController] Message sent:', message, attachmentStr);
+    Logger.log('ChatController', 'Message sent:', message, attachmentStr);
 
     // Abort any ongoing AI generation BEFORE adding new message
     // This ensures forceComplete triggers synchronously and previous message completes instantly
     if (AIServiceProxy.isGenerating()) {
-      console.log('[ChatController] Aborting ongoing AI generation before adding new message');
+      Logger.log('ChatController', 'Aborting ongoing AI generation before adding new message');
       AIServiceProxy.abortRequest();
       // Brief delay to let abort process
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -418,17 +419,17 @@ const ChatController = ({
     }
 
     // Start thinking animation (continuous loop until interrupted by TTS)
-    console.log('[ChatController] Checking assistant ready state:', {
+    Logger.log('ChatController', 'Checking assistant ready state:', {
       hasRef: !!assistantRef.current,
       isReady: assistantRef.current?.isReady?.(),
     });
     
     if (assistantRef.current?.isReady()) {
-      console.log('[ChatController] Starting BUSY state (thinking animation)');
+      Logger.log('ChatController', 'Starting BUSY state (thinking animation)');
       await assistantRef.current.setState('BUSY');
-      console.log('[ChatController] BUSY state set successfully');
+      Logger.log('ChatController', 'BUSY state set successfully');
     } else {
-      console.warn('[ChatController] Assistant not ready, skipping BUSY state');
+      Logger.warn('ChatController', 'Assistant not ready, skipping BUSY state');
     }
 
     // Brief pause to show thinking
@@ -465,9 +466,9 @@ const ChatController = ({
           },
         });
 
-        console.log('[ChatController] Chat auto-saved after AI response:', chatId);
+        Logger.log('ChatController', 'Chat auto-saved after AI response:', chatId);
       } catch (error) {
-        console.error('[ChatController] Failed to auto-save chat:', error);
+        Logger.error('ChatController', 'Failed to auto-save chat:', error);
       }
     }
   };
@@ -477,10 +478,10 @@ const ChatController = ({
    * Called when VoiceConversationService transcribes user speech
    */
   const handleVoiceTranscription = async (text) => {
-    console.log('[ChatController] Voice transcription received:', text)
+    Logger.log('ChatController', 'Voice transcription received:', text)
     
     if (!text || !text.trim()) {
-      console.warn('[ChatController] Empty transcription, returning to listening')
+      Logger.warn('ChatController', 'Empty transcription, returning to listening')
       // Return to listening state if transcription is empty
       setTimeout(() => {
         if (VoiceConversationService.isConversationActive()) {
@@ -516,17 +517,17 @@ const ChatController = ({
     }
 
     // Start thinking animation (continuous loop until interrupted by TTS)
-    console.log('[ChatController] [Voice] Checking assistant ready state:', {
+    Logger.log('ChatController', '[Voice] Checking assistant ready state:', {
       hasRef: !!assistantRef.current,
       isReady: assistantRef.current?.isReady?.(),
     });
     
     if (assistantRef.current?.isReady()) {
-      console.log('[ChatController] [Voice] Starting BUSY state (thinking animation)')
+      Logger.log('ChatController', '[Voice] Starting BUSY state (thinking animation)')
       await assistantRef.current.setState('BUSY')
-      console.log('[ChatController] [Voice] BUSY state set successfully')
+      Logger.log('ChatController', '[Voice] BUSY state set successfully')
     } else {
-      console.warn('[ChatController] [Voice] Assistant not ready, skipping BUSY state')
+      Logger.warn('ChatController', '[Voice] Assistant not ready, skipping BUSY state')
     }
 
     // Load system prompt and TTS config
@@ -536,7 +537,7 @@ const ChatController = ({
       voiceAIConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
       voiceTTSConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
     } catch (error) {
-      console.error('[ChatController] Failed to load configs in handleVoiceAIResponse:', error);
+      Logger.error('ChatController', 'Failed to load configs in handleVoiceAIResponse:', error);
       voiceAIConfig = DefaultAIConfig;
       voiceTTSConfig = DefaultTTSConfig;
     }
@@ -572,14 +573,14 @@ const ChatController = ({
       
       try {
         const queueLength = TTSServiceProxy.getQueueLength()
-        console.log(`[ChatController] [Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
+        Logger.log('ChatController', `[Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
         
         // Generate TTS audio + lip sync (VMD -> BVMD)
         const result = await TTSServiceProxy.generateSpeech(chunkText, true)
         
         // Check if result is null or missing audio
         if (!result || !result.audio) {
-          console.warn(`[ChatController] [Voice] TTS generation returned null for chunk ${chunkIndex}`)
+          Logger.warn('ChatController', `[Voice] TTS generation returned null for chunk ${chunkIndex}`)
           return
         }
         
@@ -592,9 +593,9 @@ const ChatController = ({
         // Queue audio with BVMD for synchronized lip sync AND voice session ID
         TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, voiceTTSSessionId)
         
-        console.log(`[ChatController] [Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
+        Logger.log('ChatController', `[Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
       } catch (error) {
-        console.error(`[ChatController] [Voice] TTS chunk ${chunkIndex} failed:`, error)
+        Logger.error('ChatController', '[Voice] TTS chunk ${chunkIndex} failed:', error)
       }
     }
 
@@ -637,7 +638,7 @@ const ChatController = ({
 
       // If TTS disabled, trigger speak animation after some text (no audio to sync with)
       if (!ttsEnabled && !hasSwitchedToSpeaking && fullResponse.length > 10 && assistantRef.current?.isReady()) {
-        console.log('[ChatController] [Voice] Starting speaking animation (no TTS)')
+        Logger.log('ChatController', '[Voice] Starting speaking animation (no TTS)')
         assistantRef.current.triggerAction('speak')
         hasSwitchedToSpeaking = true
       }
@@ -662,7 +663,7 @@ const ChatController = ({
 
     // Handle result - cancelled is normal
     if (result.cancelled) {
-      console.log('[ChatController] Voice generation cancelled by user')
+      Logger.log('ChatController', 'Voice generation cancelled by user')
       VoiceConversationService.changeState(ConversationStates.LISTENING)
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
@@ -673,7 +674,7 @@ const ChatController = ({
 
     // Handle actual errors
     if (!result.success) {
-      console.error('[ChatController] Voice AI error:', result.error);
+      Logger.error('ChatController', 'Voice AI error:', result.error);
       ChatService.addMessage('assistant', `Error: ${result.error.message}`);
       setChatMessages([...ChatService.getMessages()]);
       VoiceConversationService.changeState(ConversationStates.LISTENING)
@@ -684,7 +685,7 @@ const ChatController = ({
       return
     }
 
-    console.log('[ChatController] [Voice] AI response complete:', fullResponse)
+    Logger.log('ChatController', '[Voice] AI response complete:', fullResponse)
 
     // Handle remaining text in buffer
     if (ttsEnabled && textBuffer.trim().length > 0) {
@@ -695,15 +696,15 @@ const ChatController = ({
 
     // Wait for all chunks to be generated (they're generating in parallel)
     if (ttsEnabled && allChunks.length > 0) {
-      console.log(`[ChatController] [Voice] Waiting for ${allChunks.length} TTS chunks...`)
+      Logger.log('ChatController', `[Voice] Waiting for ${allChunks.length} TTS chunks...`)
       
       while (nextChunkToGenerate < allChunks.length) {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
       
-      console.log('[ChatController] [Voice] All TTS generations complete')
+      Logger.log('ChatController', '[Voice] All TTS generations complete')
     } else {
-      console.warn('[ChatController] [Voice] No TTS generated, returning to listening')
+      Logger.warn('ChatController', '[Voice] No TTS generated, returning to listening')
       VoiceConversationService.changeState(ConversationStates.LISTENING)
     }
 
@@ -714,7 +715,7 @@ const ChatController = ({
    * Handle voice mode toggle
    */
   const handleVoiceModeChange = useCallback((active) => {
-    console.log('[ChatController] Voice mode changed:', active)
+    Logger.log('ChatController', 'Voice mode changed:', active)
     setIsVoiceMode(active)
   }, [setIsVoiceMode])
 
@@ -723,7 +724,7 @@ const ChatController = ({
    * This forwards the dropped content to ChatInput
    */
   const handleDragDrop = useCallback((dropData) => {
-    console.log('[ChatController] Drag drop received:', dropData);
+    Logger.log('ChatController', 'Drag drop received:', dropData);
     
     // Ensure all fields exist with defaults
     const normalizedData = {
@@ -745,7 +746,7 @@ const ChatController = ({
    * This reuses the core streaming function
    */
   const handleRegenerateWithStreaming = async () => {
-    console.log('[ChatController] Regenerating with streaming');
+    Logger.log('ChatController', 'Regenerating with streaming');
     
     setIsProcessing(true);
     TTSServiceProxy.stopPlayback();

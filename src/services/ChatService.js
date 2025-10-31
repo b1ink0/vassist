@@ -2,6 +2,7 @@
  * ChatService - chat conversation management
  */
 
+import Logger from './Logger';
 class ChatService {
   constructor() {
     // Tree structure
@@ -10,8 +11,6 @@ class ChatService {
     
     // Context limits
     this.maxMessages = 20;
-    
-    console.log('[ChatService] Initialized');
   }
 
   /**
@@ -95,7 +94,7 @@ class ChatService {
 
     const imageInfo = images && images.length > 0 ? ` with ${images.length} image(s)` : '';
     const audioInfo = audios && audios.length > 0 ? ` with ${audios.length} audio(s)` : '';
-    console.log(`[ChatService] Added ${role} message${imageInfo}${audioInfo}`);
+    Logger.log('ChatService', `Added ${role} message${imageInfo}${audioInfo}`);
 
     return newMessage.id;
   }
@@ -134,7 +133,7 @@ class ChatService {
    */
   updateLastMessage(content) {
     if (this.activePath.length < 2) {
-      console.warn('[ChatService] No messages to update');
+      Logger.warn('ChatService', 'No messages to update');
       return;
     }
 
@@ -163,7 +162,7 @@ class ChatService {
       );
     }
     
-    console.log(`[ChatService] Set ${messages.length} messages from flat array`);
+    Logger.log('ChatService', `Set ${messages.length} messages from flat array`);
   }
 
   /**
@@ -314,7 +313,7 @@ class ChatService {
       this.activePath.push(newMessage.id);
     }
 
-    console.log('[ChatService] Edited message:', messageId, '→', newMessage.id);
+    Logger.log('ChatService', 'Edited message:', messageId, '→', newMessage.id);
     return newMessage.id;
   }
 
@@ -335,7 +334,7 @@ class ChatService {
       this.activePath = this.activePath.slice(0, messageIndex);
     }
 
-    console.log('[ChatService] Created regeneration point at:', node.parentId);
+    Logger.log('ChatService', 'Created regeneration point at:', node.parentId);
     return node.parentId;
   }
 
@@ -371,7 +370,7 @@ class ChatService {
       }
     }
 
-    console.log('[ChatService] Switched to branch', branchIndex, 'at node', nodeId);
+    Logger.log('ChatService', 'Switched to branch', branchIndex, 'at node', nodeId);
   }
 
   /**
@@ -455,7 +454,7 @@ class ChatService {
 
     this.tree = data.tree;
     this.activePath = data.activePath;
-    console.log('[ChatService] Imported tree with', this.activePath.length - 1, 'messages');
+    Logger.log('ChatService', 'Imported tree with', this.activePath.length - 1, 'messages');
   }
 
   /**
@@ -464,7 +463,7 @@ class ChatService {
   clear() {
     this.tree = this._createRoot();
     this.activePath = ['root'];
-    console.log('[ChatService] Cleared');
+    Logger.log('ChatService', 'Cleared');
   }
 
   /**

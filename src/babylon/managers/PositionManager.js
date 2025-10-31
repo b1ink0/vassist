@@ -13,6 +13,7 @@
  */
 
 import { PositionPresets } from '../../config/uiConfig.js';
+import Logger from '../../services/Logger';
 
 export class PositionManager {
   /**
@@ -67,7 +68,7 @@ export class PositionManager {
     // Constants
     this.RESIZE_DEBOUNCE_MS = 150; // Debounce window resize to prevent 60fps updates
     
-    console.log('[PositionManager] Created with options:', {
+    Logger.log('PositionManager', 'Created with options:', {
       boundaryPadding: this.boundaryPadding,
       allowPartialOffscreen: this.allowPartialOffscreen,
       partialOffscreenAmount: this.partialOffscreenAmount,
@@ -81,7 +82,7 @@ export class PositionManager {
    * @param {string} savedPreset - Optional saved preset from settings (default: 'bottom-right')
    */
   initialize(savedPreset = 'bottom-right') {
-    console.log('[PositionManager] Initializing...');
+    Logger.log('PositionManager', 'Initializing...');
     
     this.updateCanvasDimensions();
     this.setupResizeHandler();
@@ -90,14 +91,14 @@ export class PositionManager {
     // This will trigger modelPositionChange event
     this.applyPreset(savedPreset);
     
-    console.log('[PositionManager] Initialized with preset:', savedPreset, {
+    Logger.log('PositionManager', 'Initialized with preset:', savedPreset, {
       canvas: { width: this.canvasWidth, height: this.canvasHeight }
     });
     
     // CRITICAL: Force emit initial position event after a microtask delay
     // This ensures all listeners are attached before the event fires
     Promise.resolve().then(() => {
-      console.log('[PositionManager] Emitting initial position change event');
+      Logger.log('PositionManager', 'Emitting initial position change event');
       window.dispatchEvent(new CustomEvent('modelPositionChange', {
         detail: {
           x: this.positionX,
@@ -116,7 +117,7 @@ export class PositionManager {
     const animationManager = this.scene.metadata?.animationManager;
     
     if (!shouldSkipIntro && animationManager && animationManager._introLocomotionOffset) {
-      console.log('[PositionManager] Applying intro locomotion offset stored by AnimationManager');
+      Logger.log('PositionManager', 'Applying intro locomotion offset stored by AnimationManager');
       
       const { x, y } = animationManager._introLocomotionOffset;
       const currentOffset = this.offset || { x: 0, y: 0 };
@@ -126,7 +127,7 @@ export class PositionManager {
         y: currentOffset.y - y
       };
       
-      console.log('[PositionManager] PRE-SHIFTING camera for intro:', {
+      Logger.log('PositionManager', 'PRE-SHIFTING camera for intro:', {
         from: currentOffset,
         to: preShiftedOffset,
         locomotion: { x, y }
@@ -143,19 +144,19 @@ export class PositionManager {
         preShiftedOffset
       );
       
-      console.log('[PositionManager] Camera pre-shifted - intro will play with model walking in from offscreen');
+      Logger.log('PositionManager', 'Camera pre-shifted - intro will play with model walking in from offscreen');
       // Record original/pre-shifted offsets on the AnimationManager so it can schedule resets
       try {
         if (animationManager) {
           animationManager._cameraOriginalOffset = currentOffset;
           animationManager._cameraPreShiftedOffset = preShiftedOffset;
-          console.log('[PositionManager] Recorded original and pre-shift offsets on AnimationManager');
+          Logger.log('PositionManager', 'Recorded original and pre-shift offsets on AnimationManager');
         }
       } catch (e) {
-        console.warn('[PositionManager] Failed to record camera offsets on AnimationManager', e);
+        Logger.warn('PositionManager', 'Failed to record camera offsets on AnimationManager', e);
       }
     } else if (shouldSkipIntro) {
-      console.log('[PositionManager] Skipping intro locomotion offset (center position, last-location, or Portrait Mode)');
+      Logger.log('PositionManager', 'Skipping intro locomotion offset (center position, last-location, or Portrait Mode)');
     }
   }
   
@@ -167,7 +168,7 @@ export class PositionManager {
     this.canvasWidth = this.canvas.clientWidth;
     this.canvasHeight = this.canvas.clientHeight;
     
-    console.log('[PositionManager] Canvas dimensions:', {
+    Logger.log('PositionManager', 'Canvas dimensions:', {
       width: this.canvasWidth,
       height: this.canvasHeight
     });
@@ -182,7 +183,7 @@ export class PositionManager {
     const presetConfig = PositionPresets[preset];
     
     if (!presetConfig) {
-      console.warn(`[PositionManager] Unknown preset: ${preset}, using center`);
+      Logger.warn('PositionManager', `Unknown preset: ${preset}, using center`);
       preset = 'center';
     }
     
@@ -211,7 +212,7 @@ export class PositionManager {
       
       this.effectiveHeightRatio = 1.0;
       
-      console.log(`[PositionManager] Portrait Mode: Camera height=${cameraHeight}px (zoom), Effective height=${effectiveHeight}px (positioning)`);
+      Logger.log('PositionManager', `Portrait Mode: Camera height=${cameraHeight}px (zoom), Effective height=${effectiveHeight}px (positioning)`);
     } else {
       this.effectiveHeightRatio = 1.0;
     }
@@ -231,10 +232,10 @@ export class PositionManager {
     const isPortrait = this.scene.metadata?.isPortraitMode;
     if (isPortrait && config.portraitCustomBoundaries) {
       this.customBoundaries = { ...config.portraitCustomBoundaries };
-      console.log(`[PositionManager] Applied Portrait Mode custom boundaries from preset '${preset}':`, this.customBoundaries);
+      Logger.log('PositionManager', `Applied Portrait Mode custom boundaries from preset '${preset}':`, this.customBoundaries);
     } else if (config.customBoundaries) {
       this.customBoundaries = { ...config.customBoundaries };
-      console.log(`[PositionManager] Applied custom boundaries from preset '${preset}':`, this.customBoundaries);
+      Logger.log('PositionManager', `Applied custom boundaries from preset '${preset}':`, this.customBoundaries);
     } else {
       // Clear custom boundaries if preset doesn't define them
       this.customBoundaries = null;
@@ -286,7 +287,7 @@ export class PositionManager {
         pixelY = (this.canvasHeight - effectiveHeight) / 2;
     }
     
-    console.log(`[PositionManager] Applying preset: ${preset}`, {
+    Logger.log('PositionManager', 'Applying preset: ${preset}', {
       isPortraitMode: isPortraitMode,
       pixelPosition: { x: pixelX, y: pixelY },
       modelSize: { width: modelWidth, height: modelHeight },
@@ -341,7 +342,7 @@ export class PositionManager {
     });
     
     if (!validated.valid) {
-      console.warn('[PositionManager] Position adjusted to prevent cutoff', {
+      Logger.warn('PositionManager', 'Position adjusted to prevent cutoff', {
         requested: { x, y },
         adjusted: { x: validated.adjustedX, y: validated.adjustedY }
       });
@@ -430,7 +431,7 @@ export class PositionManager {
       
       // Set new timeout - only fire after resize stops
       this.resizeTimeout = setTimeout(() => {
-        console.log('[PositionManager] Window resize complete, updating position');
+        Logger.log('PositionManager', 'Window resize complete, updating position');
         
         const oldWidth = this.canvasWidth;
         const oldHeight = this.canvasHeight;
@@ -442,7 +443,7 @@ export class PositionManager {
         // This maintains the same relative position
         this.updateCameraFrustum();
         
-        console.log('[PositionManager] Resize complete', {
+        Logger.log('PositionManager', 'Resize complete', {
           from: { width: oldWidth, height: oldHeight },
           to: { width: this.canvasWidth, height: this.canvasHeight }
         });
@@ -452,7 +453,7 @@ export class PositionManager {
     // Listen to window resize
     window.addEventListener('resize', this.resizeHandler);
     
-    console.log('[PositionManager] Resize handler setup with debounce:', this.RESIZE_DEBOUNCE_MS, 'ms');
+    Logger.log('PositionManager', 'Resize handler setup with debounce:', this.RESIZE_DEBOUNCE_MS, 'ms');
   }
   
   /**
@@ -563,7 +564,7 @@ export class PositionManager {
    */
   setCustomBoundaries(boundaries) {
     this.customBoundaries = boundaries;
-    console.log('[PositionManager] Custom boundaries manually set (overriding preset):', boundaries);
+    Logger.log('PositionManager', 'Custom boundaries manually set (overriding preset):', boundaries);
     
     // Revalidate current position with new boundaries
     const validated = this.validatePosition(this.positionX, this.positionY);
@@ -571,7 +572,7 @@ export class PositionManager {
       this.positionX = validated.adjustedX;
       this.positionY = validated.adjustedY;
       this.updateCameraFrustum();
-      console.log('[PositionManager] Position adjusted due to new boundaries');
+      Logger.log('PositionManager', 'Position adjusted due to new boundaries');
     }
   }
   
@@ -581,7 +582,7 @@ export class PositionManager {
    */
   clearCustomBoundaries() {
     this.customBoundaries = null;
-    console.log('[PositionManager] Custom boundaries cleared, using uniform padding');
+    Logger.log('PositionManager', 'Custom boundaries cleared, using uniform padding');
   }
   
   /**
@@ -634,6 +635,6 @@ export class PositionManager {
     }
     this.pendingPositionUpdate = null;
     
-    console.log('[PositionManager] Disposed');
+    Logger.log('PositionManager', 'Disposed');
   }
 }

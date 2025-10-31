@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from './icons';
+import Logger from '../services/Logger';
 
 const ChatBubble = ({ 
   positionManagerRef, 
@@ -49,13 +50,13 @@ const ChatBubble = ({
         
         setBubblePos({ x: bubbleX, y: bubbleY });
         
-        console.log('[ChatBubble] Position updated:', {
+        Logger.log('ChatBubble', 'Position updated:', {
           modelPos,
           bubblePos: { x: bubbleX, y: bubbleY },
           side: shouldBeOnLeft ? 'left' : 'right'
         });
       } catch (error) {
-        console.error('[ChatBubble] Failed to update position:', error);
+        Logger.error('ChatBubble', 'Failed to update position:', error);
       }
     };
 
@@ -122,7 +123,7 @@ const ChatBubble = ({
 
       // Auto-hide after 10 seconds
       hideTimeoutRef.current = setTimeout(() => {
-        console.log('[ChatBubble] Auto-hiding after delay');
+        Logger.log('ChatBubble', 'Auto-hiding after delay');
         onHide?.();
       }, 10000);
 

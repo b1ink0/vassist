@@ -4,6 +4,7 @@ import { AIServiceProxy } from '../../../services/proxies';
 import ProviderSelection from '../shared/ProviderSelection';
 import Icon from '../../icons/Icon';
 import StatusMessage from '../../common/StatusMessage';
+import Logger from '../../../services/Logger';
 
 // Copy button component for Chrome flags
 const FlagCopyButton = ({ flagUrl, flagValue }) => {
@@ -83,7 +84,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
   useEffect(() => {
     if (initialLoadRef.current) return; // Don't save on initial load
     
-    console.log('[LLMProviderStep] Saving provider config:', selectedProvider);
+    Logger.log('LLMProviderStep', 'Saving provider config:', selectedProvider);
     
     const llmConfig = {
       provider: selectedProvider,
@@ -148,7 +149,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
   const handleDownloadModel = async () => {
     const newAttempts = chromeAIStatus.downloadAttempts + 1;
     
-    console.log('[LLMProviderStep] Download attempt:', newAttempts);
+    Logger.log('LLMProviderStep', 'Download attempt:', newAttempts);
     
     setChromeAIStatus(prev => ({ 
       ...prev, 

@@ -2,6 +2,7 @@
  * Service for extracting media elements (images, audios) from DOM/HTML
  * Used by both AIToolbar (selection) and DragDropService (HTML drops)
  */
+import Logger from './Logger';
 class MediaExtractionService {
   /**
    * MAIN METHOD: Process and extract media from any input source
@@ -114,13 +115,13 @@ class MediaExtractionService {
             type: item.type
           });
         } catch (error) {
-          console.error(`[MediaExtractionService] Failed to convert ${item.type}:`, error);
+          Logger.error('MediaExtractionService', 'Failed to convert ${item.type}:', error);
           // Silently skip failed items
         }
       }
 
     } catch (error) {
-      console.error('[MediaExtractionService] Error processing input:', error);
+      Logger.error('MediaExtractionService', 'Error processing input:', error);
       result.errors.push('Failed to process content');
     }
 
@@ -193,7 +194,7 @@ class MediaExtractionService {
         reader.readAsDataURL(blob);
       });
     } catch (error) {
-      console.error('[MediaExtractionService] Failed to convert URL to dataURL:', error);
+      Logger.error('MediaExtractionService', 'Failed to convert URL to dataURL:', error);
       return url;
     }
   }

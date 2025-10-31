@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import TTSService from '../TTSService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class TTSServiceProxy extends ServiceProxy {
   constructor() {
@@ -157,7 +158,7 @@ class TTSServiceProxy extends ServiceProxy {
       
       // Check if audio generation was cancelled or failed
       if (!response || !response.audioBuffer) {
-        console.log('[TTSServiceProxy] TTS generation cancelled or failed');
+        Logger.log('TTSServiceProxy', 'TTS generation cancelled or failed');
         return null;
       }
       
@@ -166,7 +167,7 @@ class TTSServiceProxy extends ServiceProxy {
       if (Array.isArray(response.audioBuffer)) {
         // Check if array is empty (stopped during generation)
         if (response.audioBuffer.length === 0) {
-          console.log('[TTSServiceProxy] TTS generation returned empty audio (likely stopped)');
+          Logger.log('TTSServiceProxy', 'TTS generation returned empty audio (likely stopped)');
           return null;
         }
         const uint8Array = new Uint8Array(response.audioBuffer);
@@ -182,7 +183,7 @@ class TTSServiceProxy extends ServiceProxy {
       
       // Validate audio buffer is not empty
       if (!audioBuffer || audioBuffer.byteLength === 0) {
-        console.log('[TTSServiceProxy] Audio buffer is empty, skipping');
+        Logger.log('TTSServiceProxy', 'Audio buffer is empty, skipping');
         return null;
       }
       
@@ -217,7 +218,7 @@ class TTSServiceProxy extends ServiceProxy {
             mimeType: response.mimeType
           };
         } catch (error) {
-          console.error('[TTSServiceProxy] Lip sync processing failed:', error);
+          Logger.error('TTSServiceProxy', 'Lip sync processing failed:', error);
           // Return audio without lip sync
           return {
             audio: audioBuffer,
@@ -273,7 +274,7 @@ class TTSServiceProxy extends ServiceProxy {
         
         // Skip if generation was cancelled (null result or empty audio)
         if (!result || !result.audio) {
-          console.log(`[TTSServiceProxy] Chunk ${i + 1} generation cancelled or failed`);
+          Logger.log('TTSServiceProxy', `Chunk ${i + 1} generation cancelled or failed`);
           continue;
         }
         
@@ -283,7 +284,7 @@ class TTSServiceProxy extends ServiceProxy {
           : (Array.isArray(result.audio) ? result.audio.length : 0);
           
         if (audioSize === 0) {
-          console.log(`[TTSServiceProxy] Chunk ${i + 1} has empty audio data, skipping`);
+          Logger.log('TTSServiceProxy', `Chunk ${i + 1} has empty audio data, skipping`);
           continue;
         }
         
@@ -291,7 +292,7 @@ class TTSServiceProxy extends ServiceProxy {
         const audioBlob = new Blob([result.audio], { type: result.mimeType || 'audio/mpeg' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        console.log('[TTSServiceProxy] Created audio blob URL:', audioUrl, 'MIME:', result.mimeType);
+        Logger.log('TTSServiceProxy', 'Created audio blob URL:', audioUrl, 'MIME:', result.mimeType);
         
         // Push item in format expected by playAudioSequence
         results.push({
@@ -388,7 +389,7 @@ class TTSServiceProxy extends ServiceProxy {
       if (bridge) {
         bridge.sendMessage(MessageTypes.TTS_STOP_PLAYBACK, {})
           .catch(error => {
-            console.error('[TTSServiceProxy] Stop playback failed:', error);
+            Logger.error('TTSServiceProxy', 'Stop playback failed:', error);
           });
       }
     }
@@ -414,7 +415,7 @@ class TTSServiceProxy extends ServiceProxy {
       if (bridge) {
         bridge.sendMessage(MessageTypes.TTS_RESUME_PLAYBACK, {})
           .catch(error => {
-            console.error('[TTSServiceProxy] Resume playback failed:', error);
+            Logger.error('TTSServiceProxy', 'Resume playback failed:', error);
           });
       }
     }
@@ -433,10 +434,10 @@ class TTSServiceProxy extends ServiceProxy {
       // Determine config source: use lastConfigured if available, otherwise load from storage
       let kokoroConfig;
       if (this.lastConfigured && this.lastConfigured.kokoro) {
-        console.log('[TTSServiceProxy] Using lastConfigured for initialization:', this.lastConfigured.kokoro);
+        Logger.log('TTSServiceProxy', 'Using lastConfigured for initialization:', this.lastConfigured.kokoro);
         kokoroConfig = this.lastConfigured.kokoro;
       } else {
-        console.log('[TTSServiceProxy] Loading config from storage for initialization');
+        Logger.log('TTSServiceProxy', 'Loading config from storage for initialization');
         const { default: StorageServiceProxy } = await import('./StorageServiceProxy.js');
         const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
         const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
@@ -598,7 +599,7 @@ class TTSServiceProxy extends ServiceProxy {
       
       return true;
     } catch (error) {
-      console.error('[TTSServiceProxy] Test connection failed:', error);
+      Logger.error('TTSServiceProxy', 'Test connection failed:', error);
       throw error;
     }
   }

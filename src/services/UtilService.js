@@ -4,6 +4,7 @@
  * Singleton utility service for common operations across the app.
  */
 
+import Logger from './Logger';
 class UtilService {
   constructor() {
     if (UtilService.instance) {
@@ -22,7 +23,7 @@ class UtilService {
       // Modern Clipboard API (preferred)
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
-        console.log('[UtilService] Text copied using Clipboard API');
+        Logger.log('UtilService', 'Text copied using Clipboard API');
         return true;
       }
       
@@ -41,19 +42,19 @@ class UtilService {
         document.body.removeChild(textArea);
         
         if (successful) {
-          console.log('[UtilService] Text copied using execCommand fallback');
+          Logger.log('UtilService', 'Text copied using execCommand fallback');
           return true;
         } else {
-          console.error('[UtilService] execCommand copy failed');
+          Logger.error('UtilService', 'execCommand copy failed');
           return false;
         }
       } catch (err) {
         document.body.removeChild(textArea);
-        console.error('[UtilService] Fallback copy failed:', err);
+        Logger.error('UtilService', 'Fallback copy failed:', err);
         return false;
       }
     } catch (error) {
-      console.error('[UtilService] Copy to clipboard failed:', error);
+      Logger.error('UtilService', 'Copy to clipboard failed:', error);
       return false;
     }
   }

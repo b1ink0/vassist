@@ -27,6 +27,7 @@ import {
   validateSTTConfig 
 } from '../config/aiConfig';
 import { DefaultUIConfig } from '../config/uiConfig';
+import Logger from '../services/Logger';
 
 const ConfigContext = createContext(null);
 
@@ -102,7 +103,7 @@ export const ConfigProvider = ({ children }) => {
         // Load UI config
         const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
         setUiConfig(savedUiConfig);
-        console.log('[ConfigContext] UI config loaded:', savedUiConfig);
+        Logger.log('ConfigContext', 'UI config loaded:', savedUiConfig);
 
         // Load AI config
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
@@ -110,45 +111,45 @@ export const ConfigProvider = ({ children }) => {
         try {
           if (savedAiConfig.provider) {
             await AIServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] AI Service configured');
+            Logger.log('ConfigContext', 'AI Service configured');
           } else {
-            console.log('[ConfigContext] Skipping AI Service configuration - no provider set');
+            Logger.log('ConfigContext', 'Skipping AI Service configuration - no provider set');
           }
           
           // Configure AI Features services if enabled
           if (savedAiConfig.aiFeatures?.translator?.enabled) {
             await TranslatorServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] Translator Service configured');
+            Logger.log('ConfigContext', 'Translator Service configured');
           }
           if (savedAiConfig.aiFeatures?.languageDetector?.enabled) {
             await LanguageDetectorServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] Language Detector Service configured');
+            Logger.log('ConfigContext', 'Language Detector Service configured');
           }
           if (savedAiConfig.aiFeatures?.summarizer?.enabled) {
             await SummarizerServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] Summarizer Service configured');
+            Logger.log('ConfigContext', 'Summarizer Service configured');
           }
           if (savedAiConfig.aiFeatures?.rewriter?.enabled) {
             await RewriterServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] Rewriter Service configured');
+            Logger.log('ConfigContext', 'Rewriter Service configured');
           }
           if (savedAiConfig.aiFeatures?.writer?.enabled) {
             await WriterServiceProxy.configure(savedAiConfig);
-            console.log('[ConfigContext] Writer Service configured');
+            Logger.log('ConfigContext', 'Writer Service configured');
           }
         } catch (error) {
-          console.warn('[ConfigContext] Failed to configure AI Service:', error);
+          Logger.warn('ConfigContext', 'Failed to configure AI Service:', error);
         }
 
         // Load TTS config
         const savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
-        console.log('[ConfigContext] TTS config loaded from storage:', JSON.stringify(savedTtsConfig.kokoro, null, 2));
+        Logger.log('ConfigContext', 'TTS config loaded from storage:', JSON.stringify(savedTtsConfig.kokoro, null, 2));
         setTtsConfig(savedTtsConfig);
         try {
           TTSServiceProxy.configure(savedTtsConfig);
-          console.log('[ConfigContext] TTS Service configured');
+          Logger.log('ConfigContext', 'TTS Service configured');
         } catch (error) {
-          console.warn('[ConfigContext] Failed to configure TTS Service:', error);
+          Logger.warn('ConfigContext', 'Failed to configure TTS Service:', error);
         }
 
         // Load STT config
@@ -156,12 +157,12 @@ export const ConfigProvider = ({ children }) => {
         setSttConfig(savedSttConfig);
         try {
           STTServiceProxy.configure(savedSttConfig);
-          console.log('[ConfigContext] STT Service configured');
+          Logger.log('ConfigContext', 'STT Service configured');
         } catch (error) {
-          console.warn('[ConfigContext] Failed to configure STT Service:', error);
+          Logger.warn('ConfigContext', 'Failed to configure STT Service:', error);
         }
       } catch (error) {
-        console.error('[ConfigContext] Failed to load configs:', error);
+        Logger.error('ConfigContext', 'Failed to load configs:', error);
       } finally {
         // Mark loading as complete
         setIsConfigLoading(false);
@@ -215,9 +216,9 @@ export const ConfigProvider = ({ children }) => {
         }));
         
         setTimeout(() => setAiConfigSaved(false), 2000);
-        console.log('[ConfigContext] AI config auto-saved');
+        Logger.log('ConfigContext', 'AI config auto-saved');
       } catch (error) {
-        console.error('[ConfigContext] AI config auto-save failed:', error);
+        Logger.error('ConfigContext', 'AI config auto-save failed:', error);
       }
     }, 500);
   }, [aiConfig]);
@@ -235,14 +236,14 @@ export const ConfigProvider = ({ children }) => {
       if (!validation.valid) return;
       
       try {
-        console.log('[ConfigContext] Auto-saving TTS config, device:', ttsConfig.kokoro?.device);
+        Logger.log('ConfigContext', 'Auto-saving TTS config, device:', ttsConfig.kokoro?.device);
         await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
         setTtsConfigSaved(true);
         TTSServiceProxy.configure(ttsConfig);
         setTimeout(() => setTtsConfigSaved(false), 2000);
-        console.log('[ConfigContext] TTS config auto-saved successfully');
+        Logger.log('ConfigContext', 'TTS config auto-saved successfully');
       } catch (error) {
-        console.error('[ConfigContext] TTS config auto-save failed:', error);
+        Logger.error('ConfigContext', 'TTS config auto-save failed:', error);
       }
     }, 500);
   }, [ttsConfig]);
@@ -264,9 +265,9 @@ export const ConfigProvider = ({ children }) => {
         setSttConfigSaved(true);
         STTServiceProxy.configure(sttConfig);
         setTimeout(() => setSttConfigSaved(false), 2000);
-        console.log('[ConfigContext] STT config auto-saved');
+        Logger.log('ConfigContext', 'STT config auto-saved');
       } catch (error) {
-        console.error('[ConfigContext] STT config auto-save failed:', error);
+        Logger.error('ConfigContext', 'STT config auto-save failed:', error);
       }
     }, 500);
   }, [sttConfig]);
@@ -290,9 +291,9 @@ export const ConfigProvider = ({ children }) => {
         }));
         
         setTimeout(() => setUiConfigSaved(false), 2000);
-        console.log('[ConfigContext] UI config auto-saved');
+        Logger.log('ConfigContext', 'UI config auto-saved');
       } catch (error) {
-        console.error('[ConfigContext] UI config auto-save failed:', error);
+        Logger.error('ConfigContext', 'UI config auto-save failed:', error);
       }
     }, 500);
   }, [uiConfig]);
@@ -301,7 +302,7 @@ export const ConfigProvider = ({ children }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       initialLoadRef.current = false;
-      console.log('[ConfigContext] Initial load complete - auto-save enabled');
+      Logger.log('ConfigContext', 'Initial load complete - auto-save enabled');
     }, 1000);
     return () => clearTimeout(timer);
   }, []);
@@ -332,11 +333,11 @@ export const ConfigProvider = ({ children }) => {
       // Notify other components
       window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: uiConfig }));
       
-      console.log('[ConfigContext] UI config saved successfully');
+      Logger.log('ConfigContext', 'UI config saved successfully');
       setTimeout(() => setUiConfigSaved(false), 2000);
     } catch (error) {
       setUiConfigError('Failed to save configuration: ' + error.message);
-      console.error('[ConfigContext] UI config save error:', error);
+      Logger.error('ConfigContext', 'UI config save error:', error);
     }
   }, [uiConfig]);
 
@@ -372,38 +373,38 @@ export const ConfigProvider = ({ children }) => {
       
       try {
         AIServiceProxy.configure(aiConfig);
-        console.log('[ConfigContext] AI Service configured successfully');
+        Logger.log('ConfigContext', 'AI Service configured successfully');
         
         // Configure AI Features services
         if (aiConfig.aiFeatures?.translator?.enabled) {
           await TranslatorServiceProxy.configure(aiConfig);
-          console.log('[ConfigContext] Translator Service configured');
+          Logger.log('ConfigContext', 'Translator Service configured');
         }
         if (aiConfig.aiFeatures?.languageDetector?.enabled) {
           await LanguageDetectorServiceProxy.configure(aiConfig);
-          console.log('[ConfigContext] Language Detector Service configured');
+          Logger.log('ConfigContext', 'Language Detector Service configured');
         }
         if (aiConfig.aiFeatures?.summarizer?.enabled) {
           await SummarizerServiceProxy.configure(aiConfig);
-          console.log('[ConfigContext] Summarizer Service configured');
+          Logger.log('ConfigContext', 'Summarizer Service configured');
         }
         if (aiConfig.aiFeatures?.rewriter?.enabled) {
           await RewriterServiceProxy.configure(aiConfig);
-          console.log('[ConfigContext] Rewriter Service configured');
+          Logger.log('ConfigContext', 'Rewriter Service configured');
         }
         if (aiConfig.aiFeatures?.writer?.enabled) {
           await WriterServiceProxy.configure(aiConfig);
-          console.log('[ConfigContext] Writer Service configured');
+          Logger.log('ConfigContext', 'Writer Service configured');
         }
         
         setTimeout(() => setAiConfigSaved(false), 2000);
       } catch (error) {
         setAiConfigError('Failed to configure AI service: ' + error.message);
-        console.error('[ConfigContext] AI configuration failed:', error);
+        Logger.error('ConfigContext', 'AI configuration failed:', error);
       }
     } catch (error) {
       setAiConfigError('Failed to save configuration: ' + error.message);
-      console.error('[ConfigContext] AI config save error:', error);
+      Logger.error('ConfigContext', 'AI config save error:', error);
     }
   }, [aiConfig]);
 
@@ -456,15 +457,15 @@ export const ConfigProvider = ({ children }) => {
       
       try {
         TTSServiceProxy.configure(ttsConfig);
-        console.log('[ConfigContext] TTS Service configured successfully');
+        Logger.log('ConfigContext', 'TTS Service configured successfully');
         setTimeout(() => setTtsConfigSaved(false), 2000);
       } catch (error) {
         setTtsConfigError('Failed to configure TTS service: ' + error.message);
-        console.error('[ConfigContext] TTS configuration failed:', error);
+        Logger.error('ConfigContext', 'TTS configuration failed:', error);
       }
     } catch (error) {
       setTtsConfigError('Failed to save configuration: ' + error.message);
-      console.error('[ConfigContext] TTS config save error:', error);
+      Logger.error('ConfigContext', 'TTS config save error:', error);
     }
   }, [ttsConfig]);
 
@@ -485,11 +486,11 @@ export const ConfigProvider = ({ children }) => {
         downloading: false,
       });
       
-      console.log('[ConfigContext] Kokoro status:', status);
+      Logger.log('ConfigContext', 'Kokoro status:', status);
       
       return status;
     } catch (error) {
-      console.log('[ConfigContext] Kokoro status check failed:', error);
+      Logger.log('ConfigContext', 'Kokoro status check failed:', error);
       setKokoroStatus({
         checking: false,
         initialized: false,
@@ -508,7 +509,7 @@ export const ConfigProvider = ({ children }) => {
       setKokoroStatus(prev => ({ ...prev, downloading: true, progress: 0, state: 'downloading' }));
       
       // Ensure TTS service is configured with current config before initializing
-      console.log('[ConfigContext] Initializing Kokoro with device:', ttsConfig.kokoro?.device, 'Full kokoro config:', ttsConfig.kokoro);
+      Logger.log('ConfigContext', 'Initializing Kokoro with device:', ttsConfig.kokoro?.device, 'Full kokoro config:', ttsConfig.kokoro);
       await TTSServiceProxy.configure(ttsConfig);
       
       // Debounce progress updates to avoid UI thrashing
@@ -527,7 +528,7 @@ export const ConfigProvider = ({ children }) => {
         if (shouldUpdate) {
           lastUpdateTime = now;
           
-          console.log(`[ConfigContext] Kokoro download progress:`, { 
+          Logger.log('ConfigContext', 'Kokoro download progress:', { 
             percent: percent.toFixed(2) + '%', 
             file 
           });
@@ -545,7 +546,7 @@ export const ConfigProvider = ({ children }) => {
       
       return initialized;
     } catch (error) {
-      console.error('[ConfigContext] Kokoro initialization failed:', error);
+      Logger.error('ConfigContext', 'Kokoro initialization failed:', error);
       setKokoroStatus(prev => ({ 
         ...prev, 
         downloading: false,
@@ -574,7 +575,7 @@ export const ConfigProvider = ({ children }) => {
         if (!status.initialized) {
           // Auto-initialize if not initialized
           setTtsConfigError('hourglass:Initializing Kokoro model (first time may take a moment)...');
-          console.log('[ConfigContext] Auto-initializing Kokoro for test TTS');
+          Logger.log('ConfigContext', 'Auto-initializing Kokoro for test TTS');
           
           try {
             await initializeKokoro();
@@ -647,15 +648,15 @@ export const ConfigProvider = ({ children }) => {
       
       try {
         STTServiceProxy.configure(sttConfig);
-        console.log('[ConfigContext] STT Service configured successfully');
+        Logger.log('ConfigContext', 'STT Service configured successfully');
         setTimeout(() => setSttConfigSaved(false), 2000);
       } catch (error) {
         setSttConfigError('Failed to configure STT service: ' + error.message);
-        console.error('[ConfigContext] STT configuration failed:', error);
+        Logger.error('ConfigContext', 'STT configuration failed:', error);
       }
     } catch (error) {
       setSttConfigError('Failed to save configuration: ' + error.message);
-      console.error('[ConfigContext] STT config save error:', error);
+      Logger.error('ConfigContext', 'STT config save error:', error);
     }
   }, [sttConfig]);
 
@@ -697,11 +698,11 @@ export const ConfigProvider = ({ children }) => {
         flags: status.flags,
       });
       
-      console.log('[ConfigContext] Chrome AI status:', status);
+      Logger.log('ConfigContext', 'Chrome AI status:', status);
       
       return status;
     } catch (error) {
-      console.log('[ConfigContext] Chrome AI check failed:', error);
+      Logger.log('ConfigContext', 'Chrome AI check failed:', error);
       setChromeAiStatus({
         checking: false,
         available: false,
@@ -721,7 +722,7 @@ export const ConfigProvider = ({ children }) => {
       const status = await checkChromeAIAvailability();
       
       if (status.state !== 'downloadable' && status.state !== 'after-download') {
-        console.log('[ConfigContext] Model not in downloadable state:', status.state);
+        Logger.log('ConfigContext', 'Model not in downloadable state:', status.state);
         return;
       }
       
@@ -729,7 +730,7 @@ export const ConfigProvider = ({ children }) => {
       setChromeAiStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
       
       await ChromeAIValidator.monitorDownload((progress) => {
-        console.log(`[ConfigContext] Chrome AI download progress: ${progress.toFixed(1)}%`);
+        Logger.log('ConfigContext', `Chrome AI download progress: ${progress.toFixed(1)}%`);
         setChromeAiStatus(prev => ({ ...prev, progress }));
       });
       
@@ -737,7 +738,7 @@ export const ConfigProvider = ({ children }) => {
       await checkChromeAIAvailability();
       
     } catch (error) {
-      console.error('[ConfigContext] Chrome AI download failed:', error);
+      Logger.error('ConfigContext', 'Chrome AI download failed:', error);
       setChromeAiStatus(prev => ({ 
         ...prev, 
         downloading: false,
@@ -789,7 +790,7 @@ export const ConfigProvider = ({ children }) => {
       // Only proceed if TTS is enabled AND provider is Kokoro AND keepModelLoaded is enabled
       if (ttsConfig.enabled && ttsConfig.provider === 'kokoro' && ttsConfig.kokoro?.keepModelLoaded !== false) {
         try {
-          console.log('[ConfigContext] Pre-initializing Kokoro before scene loads...');
+          Logger.log('ConfigContext', 'Pre-initializing Kokoro before scene loads...');
           setKokoroStatus(prev => ({ ...prev, preInitializing: true }));
           
           // Check current status
@@ -797,24 +798,24 @@ export const ConfigProvider = ({ children }) => {
           
           if (!status.initialized && !status.initializing) {
             // Model needs initialization - do it now
-            console.log('[ConfigContext] Initializing Kokoro model...');
+            Logger.log('ConfigContext', 'Initializing Kokoro model...');
             await initializeKokoro();
-            console.log('[ConfigContext] Kokoro initialization complete with warmup');
+            Logger.log('ConfigContext', 'Kokoro initialization complete with warmup');
           } else if (status.initialized) {
             // Model already initialized - just do a warmup ping to ensure it's fully ready
-            console.log('[ConfigContext] Kokoro already initialized, doing warmup ping...');
+            Logger.log('ConfigContext', 'Kokoro already initialized, doing warmup ping...');
             try {
               await TTSServiceProxy.pingKokoro();
-              console.log('[ConfigContext] Kokoro warmup ping complete');
+              Logger.log('ConfigContext', 'Kokoro warmup ping complete');
             } catch (pingError) {
-              console.warn('[ConfigContext] Warmup ping failed:', pingError);
+              Logger.warn('ConfigContext', 'Warmup ping failed:', pingError);
             }
           }
           
-          console.log('[ConfigContext] Kokoro pre-initialization complete');
+          Logger.log('ConfigContext', 'Kokoro pre-initialization complete');
           setKokoroStatus(prev => ({ ...prev, preInitializing: false }));
         } catch (error) {
-          console.error('[ConfigContext] Kokoro pre-initialization failed:', error);
+          Logger.error('ConfigContext', 'Kokoro pre-initialization failed:', error);
           setKokoroStatus(prev => ({ ...prev, preInitializing: false }));
         }
       }

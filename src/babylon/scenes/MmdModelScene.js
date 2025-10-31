@@ -32,6 +32,7 @@ import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
 import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
+import Logger from '../../services/Logger';
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -201,14 +202,14 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   let cameraAnimation = null;
   if (finalConfig.enableCameraAnimation && finalConfig.cameraAnimationUrl) {
     try {
-      console.log('[MmdModelScene] Loading camera animation:', finalConfig.cameraAnimationUrl);
+      Logger.log('MmdModelScene', 'Loading camera animation:', finalConfig.cameraAnimationUrl);
       cameraAnimation = await bvmdLoader.loadAsync(
         "camera",
         finalConfig.cameraAnimationUrl
       );
-      console.log('[MmdModelScene] Camera animation loaded successfully');
+      Logger.log('MmdModelScene', 'Camera animation loaded successfully');
     } catch (error) {
-      console.warn('[MmdModelScene] Failed to load camera animation:', error);
+      Logger.warn('MmdModelScene', 'Failed to load camera animation:', error);
       // Continue without camera animation
     }
   }
@@ -217,7 +218,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // MODEL LOADING (ASYNC WITH PROGRESS)
   // ========================================
   
-  console.log('[MmdModelScene] Loading model from:', finalConfig.modelUrl);
+  Logger.log('MmdModelScene', 'Loading model from:', finalConfig.modelUrl);
   
   let modelMesh = null;
   let mmdModel = null;
@@ -239,7 +240,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
         onProgress: (event) => {
           if (event.lengthComputable) {
             const progress = (event.loaded / event.total) * 100;
-            console.log(`[MmdModelScene] Model loading: ${progress.toFixed(1)}%`);
+            Logger.log('MmdModelScene', `Model loading: ${progress.toFixed(1)}%`);
             
             // Call user's progress callback
             if (finalConfig.onLoadProgress) {
@@ -250,13 +251,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       }
     );
     
-    console.log('[MmdModelScene] Model loaded, adding to scene...');
+    Logger.log('MmdModelScene', 'Model loaded, adding to scene...');
     
     // Add model to scene
     result.addAllToScene();
     modelMesh = result.meshes[0];
     
-    console.log('[MmdModelScene] Model added to scene successfully');
+    Logger.log('MmdModelScene', 'Model added to scene successfully');
     
     // Call user's model loaded callback
     if (finalConfig.onModelLoaded) {
@@ -264,7 +265,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
     
   } catch (error) {
-    console.error('[MmdModelScene] Failed to load model:', error);
+    Logger.error('MmdModelScene', 'Failed to load model:', error);
     throw new Error(`Failed to load MMD model: ${error.message}`);
   }
 
@@ -273,11 +274,11 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // ========================================
   
   if (finalConfig.enablePhysics) {
-    console.log('[MmdModelScene] Initializing physics...');
+    Logger.log('MmdModelScene', 'Initializing physics...');
     const havokInstance = await havokPhysics();
     const havokPlugin = new HavokPlugin(true, havokInstance);
     scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
-    console.log('[MmdModelScene] Physics initialized');
+    Logger.log('MmdModelScene', 'Physics initialized');
   }
 
   // ========================================
@@ -288,7 +289,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     mmdRuntime.setCamera(mmdCamera);
     mmdCamera.addAnimation(cameraAnimation);
     mmdCamera.setAnimation("camera");
-    console.log('[MmdModelScene] Camera animation applied');
+    Logger.log('MmdModelScene', 'Camera animation applied');
   }
 
   // ========================================
@@ -310,13 +311,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     buildPhysics: finalConfig.enablePhysics,
   });
   
-  console.log('[MmdModelScene] MMD model created');
+  Logger.log('MmdModelScene', 'MMD model created');
 
   // ========================================
   // ANIMATION MANAGER INTEGRATION
   // ========================================
   
-  console.log('[MmdModelScene] Initializing AnimationManager...');
+  Logger.log('MmdModelScene', 'Initializing AnimationManager...');
   
   const animationManager = new AnimationManager(
     scene,
@@ -348,7 +349,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     const presetData = PositionPresets[actualPreset];
     const clipPlaneY = presetData?.portraitClipPlaneY ?? 6.5; // Default to 6.5 if not specified
     
-    console.log(`[MmdModelScene] Portrait Mode enabled - setting up clipping plane at Y = ${clipPlaneY}`);
+    Logger.log('MmdModelScene', `Portrait Mode enabled - setting up clipping plane at Y = ${clipPlaneY}`);
     
     // Create a clipping plane at specified height
     // Normal pointing DOWN (0,-1,0) clips everything BELOW the Y coordinate
@@ -361,7 +362,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // Store Portrait Mode flag in scene metadata
     scene.metadata.isPortraitMode = true;
     
-    console.log(`[MmdModelScene] Portrait Mode: Clipping plane set at Y = ${clipPlaneY}`);
+    Logger.log('MmdModelScene', `Portrait Mode: Clipping plane set at Y = ${clipPlaneY}`);
   }
   
   // Determine if we should skip intro
@@ -371,20 +372,20 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     || isPortraitMode 
     || finalConfig.savedModelPosition !== null; // Skip intro if model already loaded in this session
   
-  console.log(`[MmdModelScene] Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}${finalConfig.savedModelPosition ? ' (has saved position)' : ''}`);
+  Logger.log('MmdModelScene', `Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}${finalConfig.savedModelPosition ? ' (has saved position)' : ''}`);
 
   // Initialize animation system
   // Skip intro for center positions (model just appears in place)
   // Pass position preset so intro can be flipped for left-side positions
   await animationManager.initialize(!shouldSkipIntro, actualPreset);
 
-  console.log('[MmdModelScene] AnimationManager initialized and running');
+  Logger.log('MmdModelScene', 'AnimationManager initialized and running');
 
   // ========================================
   // POSITION MANAGER INTEGRATION
   // ========================================
   
-  console.log('[MmdModelScene] Initializing PositionManager...');
+  Logger.log('MmdModelScene', 'Initializing PositionManager...');
   
   const positionManager = new PositionManager(
     scene,
@@ -398,9 +399,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   scene.metadata.positionManager = positionManager;
 
   // Initialize positioning system with saved preset/location from uiConfig
-  console.log('[MmdModelScene] Initializing PositionManager with config:', positionConfig);
-  console.log('[MmdModelScene] uiConfig:', finalConfig.uiConfig);
-  console.log('[MmdModelScene] savedModelPosition from context:', finalConfig.savedModelPosition);
+  Logger.log('MmdModelScene', 'Initializing PositionManager with config:', positionConfig);
+  Logger.log('MmdModelScene', 'uiConfig:', finalConfig.uiConfig);
+  Logger.log('MmdModelScene', 'savedModelPosition from context:', finalConfig.savedModelPosition);
   
   // Priority: savedModelPosition from context > lastLocation from config > preset
   // savedModelPosition persists across unmount/remount (tab visibility changes)
@@ -408,7 +409,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   if (finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation)) {
     const savedPos = finalConfig.savedModelPosition || positionConfig.lastLocation;
     const { x, y, width, height, preset: savedPreset } = savedPos;
-    console.log('[MmdModelScene] Loading saved position:', savedPos);
+    Logger.log('MmdModelScene', 'Loading saved position:', savedPos);
     
     // Setup PositionManager manually (without calling applyPreset which would fire wrong position event)
     positionManager.updateCanvasDimensions();
@@ -439,15 +440,15 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       effectiveHeight = finalHeight;    // 500px for positioning
     }
     
-    console.log(`[MmdModelScene] Restoring position (${x}, ${y}) with size ${finalWidth}x${finalHeight}, preset: ${presetToUse}, offset:`, offset);
+    Logger.log('MmdModelScene', `Restoring position (${x}, ${y}) with size ${finalWidth}x${finalHeight}, preset: ${presetToUse}, offset:`, offset);
     positionManager.setPositionPixels(x, y, finalWidth, cameraHeight, effectiveHeight, offset);
   } else {
     // Use preset
-    console.log('[MmdModelScene] Using preset:', actualPreset);
+    Logger.log('MmdModelScene', 'Using preset:', actualPreset);
     positionManager.initialize(actualPreset);
   }
 
-  console.log('[MmdModelScene] PositionManager initialized');
+  Logger.log('MmdModelScene', 'PositionManager initialized');
   
   // Notify AnimationManager about PositionManager (for picking box creation)
   animationManager.setPositionManager(positionManager);
@@ -476,7 +477,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // CANVAS INTERACTION MANAGER
   // ========================================
   
-  console.log('[MmdModelScene] Initializing CanvasInteractionManager...');
+  Logger.log('MmdModelScene', 'Initializing CanvasInteractionManager...');
   
   const interactionManager = new CanvasInteractionManager(scene, canvas, modelMesh);
   interactionManager.initialize();
@@ -485,7 +486,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   interactionManager.setDragCallbacks(
     // onDragStart
     (startX, startY) => {
-      console.log('[MmdModelScene] Drag started at', startX, startY);
+      Logger.log('MmdModelScene', 'Drag started at', startX, startY);
     },
     // onDrag
     (deltaX, deltaY) => {
@@ -502,18 +503,18 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     },
     // onDragEnd
     (endX, endY) => {
-      console.log('[MmdModelScene] Drag completed at', endX, endY);
+      Logger.log('MmdModelScene', 'Drag completed at', endX, endY);
     }
   );
   
-  console.log('[MmdModelScene] CanvasInteractionManager initialized');
+  Logger.log('MmdModelScene', 'CanvasInteractionManager initialized');
 
   // ========================================
   // START ANIMATION
   // ========================================
   
   mmdRuntime.playAnimation();
-  console.log('[MmdModelScene] Animation playback started');
+  Logger.log('MmdModelScene', 'Animation playback started');
 
   // ========================================
   // SCENE METADATA (FOR EXTERNAL ACCESS)
@@ -533,17 +534,17 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Cleanup on scene dispose
   scene.onDisposeObservable.add(() => {
-    console.log('[MmdModelScene] Scene disposing, cleaning up managers');
+    Logger.log('MmdModelScene', 'Scene disposing, cleaning up managers');
     animationManager.dispose();
     positionManager.dispose();
     interactionManager.dispose();
   });
 
-  console.log('[MmdModelScene] Scene build complete');
-  console.log('[MmdModelScene] - AnimationManager accessible via scene.metadata.animationManager');
-  console.log('[MmdModelScene] - PositionManager accessible via scene.metadata.positionManager');
-  console.log('[MmdModelScene] - CanvasInteractionManager accessible via scene.metadata.interactionManager');
-  console.log('[MmdModelScene] - Model accessible via scene.metadata.modelMesh and scene.metadata.mmdModel');
+  Logger.log('MmdModelScene', 'Scene build complete');
+  Logger.log('MmdModelScene', '- AnimationManager accessible via scene.metadata.animationManager');
+  Logger.log('MmdModelScene', '- PositionManager accessible via scene.metadata.positionManager');
+  Logger.log('MmdModelScene', '- CanvasInteractionManager accessible via scene.metadata.interactionManager');
+  Logger.log('MmdModelScene', '- Model accessible via scene.metadata.modelMesh and scene.metadata.mmdModel');
 
   // Call user's scene ready callback
   if (finalConfig.onSceneReady) {

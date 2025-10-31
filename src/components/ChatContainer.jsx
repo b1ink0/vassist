@@ -13,6 +13,7 @@ import ChatMessage from './ChatMessage';
 import chatHistoryService from '../services/ChatHistoryService';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
+import Logger from '../services/Logger';
 
 const ChatContainer = ({ 
   modelDisabled = false,
@@ -111,7 +112,7 @@ const ChatContainer = ({
       const lastMessage = messages[messages.length - 1];
       if (lastMessage && !lastMessage.isUser && !streamedMessageIdsRef.current.has(lastMessage.id)) {
         streamedMessageIdsRef.current.add(lastMessage.id);
-        console.log('[ChatContainer] Tracking streamed message:', lastMessage.id);
+        Logger.log('ChatContainer', 'Tracking streamed message:', lastMessage.id);
       }
     }
     
@@ -124,7 +125,7 @@ const ChatContainer = ({
     
     if (stoppedGenerating && messageCountIncreased) {
       // User interrupted AI by sending new message - force complete the streaming animation
-      console.log('[ChatContainer] AI interrupted by user, forcing completion');
+      Logger.log('ChatContainer', 'AI interrupted by user, forcing completion');
       setShouldForceComplete(true);
       setIsWaitingForAnimation(true);
       
@@ -155,7 +156,7 @@ const ChatContainer = ({
     if (messages.length === 0 && isVisible) {
       // Clear tracked message IDs when starting a new chat
       streamedMessageIdsRef.current.clear();
-      console.log('[ChatContainer] Cleared streamed message tracking for new chat');
+      Logger.log('ChatContainer', 'Cleared streamed message tracking for new chat');
       
       // Dispatch event for ChatInput to focus
       const event = new CustomEvent('focusChatInput');
@@ -169,7 +170,7 @@ const ChatContainer = ({
   useEffect(() => {
     const handleVoiceInterrupt = () => {
       if (isGenerating) {
-        console.log('[ChatContainer] Voice interrupt detected, forcing instant completion');
+        Logger.log('ChatContainer', 'Voice interrupt detected, forcing instant completion');
         
         // Trigger force-complete to instantly show remaining text
         setShouldForceComplete(true);
@@ -238,7 +239,7 @@ const ChatContainer = ({
         
         return { x: containerX, y: containerY };
       } catch (error) {
-        console.error('[ChatContainer] Failed to calculate model position:', error);
+        Logger.error('ChatContainer', 'Failed to calculate model position:', error);
         return { x: 0, y: 0 };
       }
     }
@@ -259,7 +260,7 @@ const ChatContainer = ({
         buttonInitializedRef.current = true;
         setContainerPos(calculateContainerPosition());
       } catch (error) {
-        console.error('[ChatContainer] Failed to load button position:', error);
+        Logger.error('ChatContainer', 'Failed to load button position:', error);
         buttonInitializedRef.current = true;
       }
     };
@@ -339,7 +340,7 @@ const ChatContainer = ({
       // Attach with simple callbacks that forward to ChatInput
       dragDropServiceRef.current.attach(messagesContainerRef.current, {
         onSetDragOver: (isDragging) => setIsDragOver(isDragging),
-        onShowError: (error) => console.error('[ChatContainer] Drag-drop error:', error),
+        onShowError: (error) => Logger.error('ChatContainer', 'Drag-drop error:', error),
         checkVoiceMode: null,
         getCurrentCounts: () => ({ images: 0, audios: 0 }),
         onProcessData: (data) => {
@@ -387,7 +388,7 @@ const ChatContainer = ({
   const handleSelectChat = useCallback((chat) => {
     // Clear tracked message IDs when loading from history
     streamedMessageIdsRef.current.clear();
-    console.log('[ChatContainer] Cleared streamed message tracking for history load');
+    Logger.log('ChatContainer', 'Cleared streamed message tracking for history load');
     
     loadChatFromHistory(chat);
     setIsHistoryPanelClosing(true);
@@ -406,7 +407,7 @@ const ChatContainer = ({
   const handleEditDialogSave = useCallback(async (chatId, newTitle) => {
     try {
       await chatHistoryService.updateChatTitle(chatId, newTitle);
-      console.log('[ChatContainer] Updated chat title:', chatId, newTitle);
+      Logger.log('ChatContainer', 'Updated chat title:', chatId, newTitle);
       
       // Close dialog with animation
       setIsEditDialogClosing(true);
@@ -416,7 +417,7 @@ const ChatContainer = ({
         setIsEditDialogClosing(false);
       }, 200);
     } catch (error) {
-      console.error('[ChatContainer] Failed to update chat title:', error);
+      Logger.error('ChatContainer', 'Failed to update chat title:', error);
     }
   }, []);
 
@@ -437,7 +438,7 @@ const ChatContainer = ({
   const handleDeleteDialogConfirm = useCallback(async (chatId) => {
     try {
       await chatHistoryService.deleteChat(chatId);
-      console.log('[ChatContainer] Deleted chat:', chatId);
+      Logger.log('ChatContainer', 'Deleted chat:', chatId);
       
       // Close dialog with animation
       setIsDeleteDialogClosing(true);
@@ -446,7 +447,7 @@ const ChatContainer = ({
         setIsDeleteDialogClosing(false);
       }, 200);
     } catch (error) {
-      console.error('[ChatContainer] Failed to delete chat:', error);
+      Logger.error('ChatContainer', 'Failed to delete chat:', error);
     }
   }, []);
 
@@ -474,7 +475,7 @@ const ChatContainer = ({
    */
   const handleStopGeneration = useCallback(() => {
     if (isGenerating) {
-      console.log('[ChatContainer] Stop button clicked, forcing instant completion');
+      Logger.log('ChatContainer', 'Stop button clicked, forcing instant completion');
       
       // Trigger force-complete to instantly show remaining text
       setShouldForceComplete(true);
@@ -499,7 +500,7 @@ const ChatContainer = ({
         const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
         setTtsConfig(config);
       } catch (error) {
-        console.error('[ChatContainer] Failed to load TTS config:', error);
+        Logger.error('ChatContainer', 'Failed to load TTS config:', error);
         setTtsConfig(DefaultTTSConfig);
       }
     };
@@ -593,7 +594,7 @@ const ChatContainer = ({
     let voiceMonitoringStarted = false;
     
     TTSServiceProxy.setAudioStartCallback((sessionId) => {
-      console.log('[ChatContainer] Audio started playing for session:', sessionId);
+      Logger.log('ChatContainer', 'Audio started playing for session:', sessionId);
       
       // Extract message index from session ID if it's a manual session
       if (sessionId?.startsWith('manual_')) {
@@ -632,7 +633,7 @@ const ChatContainer = ({
         // Start TTS playback monitoring for voice conversation mode
         if (!voiceMonitoringStarted) {
           voiceMonitoringStarted = true;
-          console.log('[ChatContainer] Starting TTS playback monitoring for voice mode');
+          Logger.log('ChatContainer', 'Starting TTS playback monitoring for voice mode');
           // Import VoiceConversationService dynamically to avoid circular deps
           import('../services/VoiceConversationService').then(({ default: VoiceConversationService }) => {
             VoiceConversationService.monitorTTSPlayback();
@@ -643,7 +644,7 @@ const ChatContainer = ({
 
     // Set up audio end callback for resetting UI when audio finishes
     TTSServiceProxy.setAudioEndCallback((sessionId) => {
-      console.log('[ChatContainer] Audio finished playing for session:', sessionId);
+      Logger.log('ChatContainer', 'Audio finished playing for session:', sessionId);
       
       // Only clear if this is still the current session
       if (currentSessionRef.current === sessionId) {
@@ -655,7 +656,7 @@ const ChatContainer = ({
     // Listen for custom events from ChatController (voice mode)
     const handleTTSAudioStart = (event) => {
       const { messageIndex, sessionId } = event.detail
-      console.log('[ChatContainer] Custom TTS audio start event:', messageIndex, sessionId)
+      Logger.log('ChatContainer', 'Custom TTS audio start event:', messageIndex, sessionId)
       setLoadingMessageIndex(null)
       setPlayingMessageIndex(messageIndex)
       currentSessionRef.current = sessionId
@@ -663,7 +664,7 @@ const ChatContainer = ({
 
     const handleTTSAudioEnd = (event) => {
       const { sessionId } = event.detail
-      console.log('[ChatContainer] Custom TTS audio end event:', sessionId)
+      Logger.log('ChatContainer', 'Custom TTS audio end event:', sessionId)
       if (currentSessionRef.current === sessionId) {
         setPlayingMessageIndex(null)
         currentSessionRef.current = null
@@ -796,10 +797,10 @@ const ChatContainer = ({
   const handleRewriteMessage = useCallback(async (message) => {
     if (message?.id && message?.role === 'assistant') {
       try {
-        console.log('[ChatContainer] Regenerating AI message:', message.id);
+        Logger.log('ChatContainer', 'Regenerating AI message:', message.id);
         await regenerateAIMessage(message.id);
       } catch (error) {
-        console.error('[ChatContainer] Failed to regenerate message:', error);
+        Logger.error('ChatContainer', 'Failed to regenerate message:', error);
       }
     }
   }, [regenerateAIMessage]);
@@ -852,11 +853,11 @@ const ChatContainer = ({
     try {
       ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
       if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
-        console.warn('[ChatContainer] TTS not enabled or configured');
+        Logger.warn('ChatContainer', 'TTS not enabled or configured');
         return;
       }
     } catch (error) {
-      console.error('[ChatContainer] Failed to load TTS config:', error);
+      Logger.error('ChatContainer', 'Failed to load TTS config:', error);
       return;
     }
 
@@ -891,7 +892,7 @@ const ChatContainer = ({
       );
 
       if (audioUrls.length === 0) {
-        console.warn('[ChatContainer] No audio generated');
+        Logger.warn('ChatContainer', 'No audio generated');
         setLoadingMessageIndex(null);
         return;
       }
@@ -909,7 +910,7 @@ const ChatContainer = ({
       // This ensures proper cleanup even if playback is interrupted
 
     } catch (error) {
-      console.error('[ChatContainer] TTS playback failed:', error);
+      Logger.error('ChatContainer', 'TTS playback failed:', error);
       setLoadingMessageIndex(null);
       setPlayingMessageIndex(null);
       currentSessionRef.current = null;

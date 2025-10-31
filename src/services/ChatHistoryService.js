@@ -16,6 +16,7 @@
 import storageServiceProxy from './proxies/StorageServiceProxy.js';
 import AIServiceProxy from './proxies/AIServiceProxy.js';
 import ChatService from './ChatService.js';
+import Logger from './Logger';
 
 class ChatHistoryService {
   constructor() {
@@ -27,7 +28,6 @@ class ChatHistoryService {
     // Use proxy in extension mode, direct service in dev mode
     this.aiService = AIServiceProxy;
     this.MAX_TITLE_CACHE = 100;
-    console.log('[ChatHistoryService] Initialized (using StorageServiceProxy for dual-mode support)');
   }
 
   /**
@@ -55,7 +55,7 @@ class ChatHistoryService {
 
       // Don't save temporary chats
       if (isTemp) {
-        console.log('[ChatHistoryService] Skipping save for temporary chat:', chatId);
+        Logger.log('ChatHistoryService', 'Skipping save for temporary chat:', chatId);
         return chatId;
       }
 
@@ -64,19 +64,19 @@ class ChatHistoryService {
 
       // Handle tree structure
       if (chatService) {
-        console.log('[ChatHistoryService] Saving chat with tree structure');
+        Logger.log('ChatHistoryService', 'Saving chat with tree structure');
         treeData = chatService.exportTree();
         finalMessages = chatService.getMessages(); // For title generation and backward compatibility
       } else {
         // Backward compatibility: flat array
-        console.log('[ChatHistoryService] Saving chat with flat messages (backward compatibility)');
+        Logger.log('ChatHistoryService', 'Saving chat with flat messages (backward compatibility)');
         finalMessages = messages;
       }
 
       // Generate title if not provided or is default
       let finalTitle = title;
       if (!finalTitle || finalTitle === 'Untitled Chat') {
-        console.log('[ChatHistoryService] Generating title for chat:', chatId);
+        Logger.log('ChatHistoryService', 'Generating title for chat:', chatId);
         finalTitle = await this._generateTitleFromMessages(finalMessages);
       }
 
@@ -106,10 +106,10 @@ class ChatHistoryService {
       // Cache it
       this.cache.chats.set(chatId, chatRecord);
 
-      console.log('[ChatHistoryService] Chat saved:', chatId, 'with title:', finalTitle, 'Tree:', !!processedTree);
+      Logger.log('ChatHistoryService', 'Chat saved:', chatId, 'with title:', finalTitle, 'Tree:', !!processedTree);
       return chatId;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to save chat:', error);
+      Logger.error('ChatHistoryService', 'Failed to save chat:', error);
       throw error;
     }
   }
@@ -148,7 +148,7 @@ class ChatHistoryService {
           );
           processedNode.imageFileIds.push(fileId);
         } catch (error) {
-          console.error('[ChatHistoryService] Failed to save image:', error);
+          Logger.error('ChatHistoryService', 'Failed to save image:', error);
         }
       }
       delete processedNode.images;
@@ -166,7 +166,7 @@ class ChatHistoryService {
           );
           processedNode.audioFileIds.push(fileId);
         } catch (error) {
-          console.error('[ChatHistoryService] Failed to save audio:', error);
+          Logger.error('ChatHistoryService', 'Failed to save audio:', error);
         }
       }
       delete processedNode.audios;
@@ -206,7 +206,7 @@ class ChatHistoryService {
             );
             processedMsg.imageFileIds.push(fileId);
           } catch (error) {
-            console.error('[ChatHistoryService] Failed to save image:', error);
+            Logger.error('ChatHistoryService', 'Failed to save image:', error);
           }
         }
         // Remove image data from message to save space
@@ -225,7 +225,7 @@ class ChatHistoryService {
             );
             processedMsg.audioFileIds.push(fileId);
           } catch (error) {
-            console.error('[ChatHistoryService] Failed to save audio:', error);
+            Logger.error('ChatHistoryService', 'Failed to save audio:', error);
           }
         }
         // Remove audio data from message
@@ -263,10 +263,10 @@ class ChatHistoryService {
         type // category
       );
 
-      console.log('[ChatHistoryService] Media file saved:', fullFileId);
+      Logger.log('ChatHistoryService', 'Media file saved:', fullFileId);
       return fullFileId;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to save media file:', error);
+      Logger.error('ChatHistoryService', 'Failed to save media file:', error);
       throw error;
     }
   }
@@ -305,10 +305,10 @@ class ChatHistoryService {
       // Cache it
       this.cache.chats.set(chatId, chatData);
 
-      console.log('[ChatHistoryService] Chat loaded:', chatId, 'Has tree:', !!chatData.chatService);
+      Logger.log('ChatHistoryService', 'Chat loaded:', chatId, 'Has tree:', !!chatData.chatService);
       return restoredChat;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to load chat:', error);
+      Logger.error('ChatHistoryService', 'Failed to load chat:', error);
       throw error;
     }
   }
@@ -331,7 +331,7 @@ class ChatHistoryService {
       ChatService.importTree(restored.chatService);
       restored.chatServiceData = restored.chatService;
       
-      console.log('[ChatHistoryService] Restored chat service tree');
+      Logger.log('ChatHistoryService', 'Restored chat service tree');
     } else if (restored.messageTree) {
       // Backward compatibility: old format
       restored.chatService = {
@@ -342,13 +342,13 @@ class ChatHistoryService {
       ChatService.importTree(restored.chatService);
       restored.chatServiceData = restored.chatService;
       
-      console.log('[ChatHistoryService] Restored message tree (backward compatibility)');
+      Logger.log('ChatHistoryService', 'Restored message tree (backward compatibility)');
     }
 
     // Restore flat messages (backward compatibility)
     if (restored.messages && restored.messages.length > 0) {
       restored.messages = await this._restoreMessagesMedia(restored.messages);
-      console.log('[ChatHistoryService] Restored flat messages');
+      Logger.log('ChatHistoryService', 'Restored flat messages');
     }
 
     return restored;
@@ -374,7 +374,7 @@ class ChatHistoryService {
             restored.images.push(imageUrl);
           }
         } catch (error) {
-          console.warn('[ChatHistoryService] Failed to restore image:', fileId, error);
+          Logger.warn('ChatHistoryService', 'Failed to restore image:', fileId, error);
         }
       }
       delete restored.imageFileIds;
@@ -393,7 +393,7 @@ class ChatHistoryService {
             restored.audios.push(audioUrl);
           }
         } catch (error) {
-          console.warn('[ChatHistoryService] Failed to restore audio:', fileId, error);
+          Logger.warn('ChatHistoryService', 'Failed to restore audio:', fileId, error);
         }
       }
       delete restored.audioFileIds;
@@ -433,7 +433,7 @@ class ChatHistoryService {
               restoredMsg.images.push(imageUrl);
             }
           } catch (error) {
-            console.warn('[ChatHistoryService] Failed to restore image:', fileId, error);
+            Logger.warn('ChatHistoryService', 'Failed to restore image:', fileId, error);
           }
         }
         delete restoredMsg.imageFileIds;
@@ -452,7 +452,7 @@ class ChatHistoryService {
               restoredMsg.audios.push(audioUrl);
             }
           } catch (error) {
-            console.warn('[ChatHistoryService] Failed to restore audio:', fileId, error);
+            Logger.warn('ChatHistoryService', 'Failed to restore audio:', fileId, error);
           }
         }
         delete restoredMsg.audioFileIds;
@@ -492,9 +492,9 @@ class ChatHistoryService {
         cached.updatedAt = chatData.updatedAt;
       }
 
-      console.log('[ChatHistoryService] Chat title updated:', chatId, newTitle);
+      Logger.log('ChatHistoryService', 'Chat title updated:', chatId, newTitle);
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to update chat title:', error);
+      Logger.error('ChatHistoryService', 'Failed to update chat title:', error);
       throw error;
     }
   }
@@ -529,7 +529,7 @@ class ChatHistoryService {
               try {
                 await this.storageProxy.fileRemove(fileId);
               } catch {
-                console.warn('[ChatHistoryService] Failed to delete image file:', fileId);
+                Logger.warn('ChatHistoryService', 'Failed to delete image file:', fileId);
               }
             }
           }
@@ -538,7 +538,7 @@ class ChatHistoryService {
               try {
                 await this.storageProxy.fileRemove(fileId);
               } catch {
-                console.warn('[ChatHistoryService] Failed to delete audio file:', fileId);
+                Logger.warn('ChatHistoryService', 'Failed to delete audio file:', fileId);
               }
             }
           }
@@ -552,9 +552,9 @@ class ChatHistoryService {
       this.cache.chats.delete(chatId);
       this.cache.titles.delete(chatId);
 
-      console.log('[ChatHistoryService] Chat deleted:', chatId);
+      Logger.log('ChatHistoryService', 'Chat deleted:', chatId);
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to delete chat:', error);
+      Logger.error('ChatHistoryService', 'Failed to delete chat:', error);
       throw error;
     }
   }
@@ -580,10 +580,10 @@ class ChatHistoryService {
       // Apply pagination
       const paginated = chatsArray.slice(offset, offset + limit);
 
-      console.log(`[ChatHistoryService] Retrieved ${paginated.length} chats (limit: ${limit}, offset: ${offset})`);
+      Logger.log('ChatHistoryService', `Retrieved ${paginated.length} chats (limit: ${limit}, offset: ${offset})`);
       return paginated;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to get all chats:', error);
+      Logger.error('ChatHistoryService', 'Failed to get all chats:', error);
       throw error;
     }
   }
@@ -624,10 +624,10 @@ class ChatHistoryService {
           return timeB - timeA;
         });
 
-      console.log(`[ChatHistoryService] Found ${results.length} chats matching: "${query}"`);
+      Logger.log('ChatHistoryService', `Found ${results.length} chats matching: "${query}"`);
       return results;
     } catch (error) {
-      console.error('[ChatHistoryService] Search failed:', error);
+      Logger.error('ChatHistoryService', 'Search failed:', error);
       throw error;
     }
   }
@@ -642,7 +642,7 @@ class ChatHistoryService {
       const tempChats = await this.storageProxy.dataGetByCategory('tempChats');
       return tempChats && tempChats[chatId] === true;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to check temp chat status:', error);
+      Logger.error('ChatHistoryService', 'Failed to check temp chat status:', error);
       return false;
     }
   }
@@ -656,13 +656,13 @@ class ChatHistoryService {
     try {
       if (isTemp) {
         await this.storageProxy.dataSave(chatId, true, 'tempChats');
-        console.log('[ChatHistoryService] Chat marked as temporary:', chatId);
+        Logger.log('ChatHistoryService', 'Chat marked as temporary:', chatId);
       } else {
         await this.storageProxy.dataRemove(chatId);
-        console.log('[ChatHistoryService] Chat unmarked as temporary:', chatId);
+        Logger.log('ChatHistoryService', 'Chat unmarked as temporary:', chatId);
       }
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to mark temp chat:', error);
+      Logger.error('ChatHistoryService', 'Failed to mark temp chat:', error);
       throw error;
     }
   }
@@ -691,11 +691,11 @@ class ChatHistoryService {
         const titlePromise = (async () => {
           const prompt = `Generate a very short title (max 50 characters) for this chat based on the first user message. Only return the title, nothing else.\n\nUser message: "${firstUserMsg.content}"`;
           
-          console.log('[ChatHistoryService] Sending prompt to AIService for title generation');
+          Logger.log('ChatHistoryService', 'Sending prompt to AIService for title generation');
           const response = await this.aiService.sendMessage([
             { role: 'user', content: prompt }
           ]);
-          console.log('[ChatHistoryService] AIService response:', response);
+          Logger.log('ChatHistoryService', 'AIService response:', response);
           return response;
         })();
 
@@ -708,22 +708,22 @@ class ChatHistoryService {
 
         if (response?.success && response?.response) {
           const title = response.response.trim().substring(0, 50);
-          console.log('[ChatHistoryService] Generated title:', title);
+          Logger.log('ChatHistoryService', 'Generated title:', title);
           this.cache.titles.set(firstUserMsg.content, title);
           return title;
         } else {
-          console.warn('[ChatHistoryService] LLM returned no text:', response);
+          Logger.warn('ChatHistoryService', 'LLM returned no text:', response);
         }
       } catch (error) {
-        console.warn('[ChatHistoryService] LLM title generation failed, using fallback:', error.message);
+        Logger.warn('ChatHistoryService', 'LLM title generation failed, using fallback:', error.message);
       }
 
       // Fallback: use truncated first message
       const fallbackTitle = firstUserMsg.content.substring(0, 50).trim();
-      console.log('[ChatHistoryService] Using fallback title:', fallbackTitle);
+      Logger.log('ChatHistoryService', 'Using fallback title:', fallbackTitle);
       return fallbackTitle || 'New Chat';
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to generate title:', error);
+      Logger.error('ChatHistoryService', 'Failed to generate title:', error);
       return 'New Chat';
     }
   }
@@ -737,7 +737,7 @@ class ChatHistoryService {
       const allChats = await this.storageProxy.chatGetAll();
       return Object.keys(allChats).length;
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to get chat count:', error);
+      Logger.error('ChatHistoryService', 'Failed to get chat count:', error);
       return 0;
     }
   }
@@ -748,14 +748,14 @@ class ChatHistoryService {
    */
   async clearAll() {
     try {
-      console.warn('[ChatHistoryService] Clearing all chats and media files...');
+      Logger.warn('ChatHistoryService', 'Clearing all chats and media files...');
       await this.storageProxy.chatClear();
       await this.storageProxy.filesClear();
       this.cache.chats.clear();
       this.cache.titles.clear();
-      console.log('[ChatHistoryService] All chats cleared');
+      Logger.log('ChatHistoryService', 'All chats cleared');
     } catch (error) {
-      console.error('[ChatHistoryService] Failed to clear all chats:', error);
+      Logger.error('ChatHistoryService', 'Failed to clear all chats:', error);
       throw error;
     }
   }

@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import RewriterService from '../RewriterService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class RewriterServiceProxy extends ServiceProxy {
   constructor() {
@@ -129,7 +130,7 @@ class RewriterServiceProxy extends ServiceProxy {
       
       // If there was an error, throw it now
       if (streamError) {
-        console.error('[RewriterServiceProxy] Streaming failed:', streamError);
+        Logger.error('RewriterServiceProxy', 'Streaming failed:', streamError);
         throw streamError;
       }
     } else {
@@ -146,13 +147,13 @@ class RewriterServiceProxy extends ServiceProxy {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
       if (!bridge) {
-        console.warn('[RewriterServiceProxy] Bridge not available for abort');
+        Logger.warn('RewriterServiceProxy', 'Bridge not available for abort');
         return;
       }
       try {
         await bridge.sendMessage(MessageTypes.REWRITER_ABORT, {});
       } catch (error) {
-        console.error('[RewriterServiceProxy] Abort failed:', error);
+        Logger.error('RewriterServiceProxy', 'Abort failed:', error);
       }
     } else {
       // Dev mode: Call the service's abort method directly

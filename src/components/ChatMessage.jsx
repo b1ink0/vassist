@@ -4,6 +4,7 @@ import { TTSServiceProxy } from '../services/proxies';
 import AudioPlayer from './AudioPlayer';
 import StreamingText from './common/StreamingText';
 import StreamingContainer from './common/StreamingContainer';
+import Logger from '../services/Logger';
 
 /**
  * ChatMessage Component
@@ -74,7 +75,7 @@ const ChatMessage = ({
    */
   const handleStartEdit = useCallback(() => {
     if (message?.id && message?.role === 'user') {
-      console.log('[ChatMessage] Starting edit for message:', message.id);
+      Logger.log('ChatMessage', 'Starting edit for message:', message.id);
       setIsEditing(true);
       setEditingContent(message.content);
       setEditingImages(message.images || []);
@@ -95,14 +96,14 @@ const ChatMessage = ({
     }
 
     try {
-      console.log('[ChatMessage] Saving edited message:', message.id);
+      Logger.log('ChatMessage', 'Saving edited message:', message.id);
       await onEditUserMessage(message.id, editingContent.trim(), editingImages, editingAudios);
       setIsEditing(false);
       setEditingContent('');
       setEditingImages([]);
       setEditingAudios([]);
     } catch (error) {
-      console.error('[ChatMessage] Failed to save edit:', error);
+      Logger.error('ChatMessage', 'Failed to save edit:', error);
     }
   }, [message.id, editingContent, editingImages, editingAudios, onEditUserMessage]);
 

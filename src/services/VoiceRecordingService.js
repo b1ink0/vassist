@@ -13,6 +13,7 @@
  */
 
 import { STTServiceProxy } from './proxies';
+import Logger from './Logger';
 
 class VoiceRecordingService {
   constructor() {
@@ -42,7 +43,7 @@ class VoiceRecordingService {
     this.onRecordingStop = null; // () => void - Called when recording stops (VAD detected silence)
     this.onVolumeChange = null; // (volume: number) => void - Real-time volume feedback
     
-    console.log('[VoiceRecording] Service initialized');
+    Logger.log('VoiceRecording', 'Service initialized');
   }
 
   /**
@@ -51,12 +52,12 @@ class VoiceRecordingService {
    */
   async start(callbacks = {}) {
     if (this.isActive) {
-      console.warn('[VoiceRecording] Already active');
+      Logger.warn('VoiceRecording', 'Already active');
       return;
     }
 
     try {
-      console.log('[VoiceRecording] Starting VAD monitoring...');
+      Logger.log('VoiceRecording', 'Starting VAD monitoring...');
       
       // Set callbacks
       this.onTranscription = callbacks.onTranscription || null;
@@ -89,10 +90,10 @@ class VoiceRecordingService {
       // Start VAD monitoring loop
       this.startVADMonitoring();
       
-      console.log('[VoiceRecording] Started successfully');
+      Logger.log('VoiceRecording', 'Started successfully');
       
     } catch (error) {
-      console.error('[VoiceRecording] Failed to start:', error);
+      Logger.error('VoiceRecording', 'Failed to start:', error);
       if (this.onError) {
         this.onError(error);
       }
@@ -104,7 +105,7 @@ class VoiceRecordingService {
    * Stop VAD monitoring and recording system
    */
   stop() {
-    console.log('[VoiceRecording] Stopping...');
+    Logger.log('VoiceRecording', 'Stopping...');
     
     // Stop any ongoing recording
     this.stopRecording();
@@ -139,7 +140,7 @@ class VoiceRecordingService {
     this.onRecordingStop = null;
     this.onVolumeChange = null;
     
-    console.log('[VoiceRecording] Stopped');
+    Logger.log('VoiceRecording', 'Stopped');
   }
 
   /**
@@ -167,7 +168,7 @@ class VoiceRecordingService {
       
       // Debug: Log volume occasionally
       if (Math.random() < 0.01) { // Log ~1% of the time
-        console.log(`[VoiceRecording] Volume: ${volume.toFixed(1)}, Threshold: ${this.vadThreshold}, Recording: ${this.isRecording}`);
+        Logger.log('VoiceRecording', `Volume: ${volume.toFixed(1)}, Threshold: ${this.vadThreshold}, Recording: ${this.isRecording}`);
       }
       
       // Speech detected
@@ -182,7 +183,7 @@ class VoiceRecordingService {
     };
     
     checkVoiceActivity();
-    console.log('[VoiceRecording] VAD monitoring loop started');
+    Logger.log('VoiceRecording', 'VAD monitoring loop started');
   }
 
   /**
@@ -208,7 +209,7 @@ class VoiceRecordingService {
     
     // Start recording if not already
     if (!this.isRecording && this.isActive) {
-      console.log('[VoiceRecording] Speech detected - starting recording');
+      Logger.log('VoiceRecording', 'Speech detected - starting recording');
       this.startRecording();
     }
     
@@ -224,7 +225,7 @@ class VoiceRecordingService {
     // Start silence timer if recording
     if (this.isRecording && !this.silenceTimer) {
       this.silenceTimer = setTimeout(() => {
-        console.log('[VoiceRecording] Silence detected - stopping recording');
+        Logger.log('VoiceRecording', 'Silence detected - stopping recording');
         this.stopRecording();
         this.isSpeechDetected = false;
       }, this.silenceThreshold);
@@ -260,10 +261,10 @@ class VoiceRecordingService {
         this.onRecordingStart();
       }
       
-      console.log('[VoiceRecording] Recording started');
+      Logger.log('VoiceRecording', 'Recording started');
       
     } catch (error) {
-      console.error('[VoiceRecording] Failed to start recording:', error);
+      Logger.error('VoiceRecording', 'Failed to start recording:', error);
       if (this.onError) {
         this.onError(error);
       }
@@ -276,7 +277,7 @@ class VoiceRecordingService {
   stopRecording() {
     if (!this.isRecording || !this.mediaRecorder) return;
     
-    console.log('[VoiceRecording] Stopping recording...');
+    Logger.log('VoiceRecording', 'Stopping recording...');
     this.mediaRecorder.stop();
     this.isRecording = false;
     
@@ -296,27 +297,27 @@ class VoiceRecordingService {
       const audioBlob = new Blob(this.audioChunks, { type: mimeType });
       this.audioChunks = [];
       
-      console.log(`[VoiceRecording] Processing audio (${audioBlob.size} bytes)...`);
+      Logger.log('VoiceRecording', `Processing audio (${audioBlob.size} bytes)...`);
       
       // Check if blob has content
       if (audioBlob.size === 0) {
-        console.warn('[VoiceRecording] Empty audio blob, skipping transcription');
+        Logger.warn('VoiceRecording', 'Empty audio blob, skipping transcription');
         return;
       }
       
       // Check if STT is configured
       if (!STTServiceProxy.isConfigured()) {
-        console.error('[VoiceRecording] STT not configured!');
+        Logger.error('VoiceRecording', 'STT not configured!');
         if (this.onError) {
           this.onError(new Error('STT not configured. Please configure in Control Panel.'));
         }
         return;
       }
       
-      console.log('[VoiceRecording] Calling STTServiceProxy.transcribeAudio...');
+      Logger.log('VoiceRecording', 'Calling STTServiceProxy.transcribeAudio...');
       // Transcribe audio
       const transcription = await STTServiceProxy.transcribeAudio(audioBlob);
-      console.log(`[VoiceRecording] Transcription received: "${transcription}"`);
+      Logger.log('VoiceRecording', `Transcription received: "${transcription}"`);
       
       // Notify transcription
       if (this.onTranscription) {
@@ -324,7 +325,7 @@ class VoiceRecordingService {
       }
       
     } catch (error) {
-      console.error('[VoiceRecording] Processing failed:', error);
+      Logger.error('VoiceRecording', 'Processing failed:', error);
       if (this.onError) {
         this.onError(error);
       }
@@ -372,11 +373,11 @@ class VoiceRecordingService {
   updateVADSettings({ vadThreshold, silenceThreshold }) {
     if (vadThreshold !== undefined) {
       this.vadThreshold = vadThreshold;
-      console.log(`[VoiceRecording] VAD threshold updated to ${vadThreshold}`);
+      Logger.log('VoiceRecording', `VAD threshold updated to ${vadThreshold}`);
     }
     if (silenceThreshold !== undefined) {
       this.silenceThreshold = silenceThreshold;
-      console.log(`[VoiceRecording] Silence threshold updated to ${silenceThreshold}ms`);
+      Logger.log('VoiceRecording', `Silence threshold updated to ${silenceThreshold}ms`);
     }
   }
 }

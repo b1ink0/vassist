@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import { STTProviders, DefaultSTTConfig } from '../config/aiConfig';
 import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
+import Logger from './Logger';
 
 class STTService {
   constructor() {
@@ -16,7 +17,6 @@ class STTService {
 
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[STTService] Initialized (Extension mode - multi-tab)');
     } else {
       this.client = null;
       this.provider = null;
@@ -34,8 +34,6 @@ class STTService {
       this.onError = null;
       this.onRecordingStart = null;
       this.onRecordingStop = null;
-
-      console.log('[STTService] Initialized');
     }
   }
 
@@ -48,14 +46,14 @@ class STTService {
         enabled: false,
         chromeAISession: null,
       });
-      console.log(`[STTService] Tab ${tabId} initialized`);
+      Logger.log('STTService', `Tab ${tabId} initialized`);
     }
   }
 
   cleanupTab(tabId) {
     if (this.tabStates.has(tabId)) {
       this.tabStates.delete(tabId);
-      console.log(`[STTService] Tab ${tabId} cleaned up`);
+      Logger.log('STTService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -80,11 +78,11 @@ class STTService {
     state.enabled = enabled;
     
     if (!enabled) {
-      console.log(`${logPrefix} - STT is disabled`);
+      Logger.log('other', `${logPrefix} - STT is disabled`);
       return true;
     }
     
-    console.log(`${logPrefix} - Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} - Configuring provider: ${provider}`);
 
     try {
       if (provider === STTProviders.CHROME_AI_MULTIMODAL) {
@@ -98,7 +96,7 @@ class STTService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - Chrome AI Multimodal configured:`, state.config);
+        Logger.log('other', `${logPrefix} - Chrome AI Multimodal configured:`, state.config);
       } else if (provider === STTProviders.OPENAI) {
         state.client = new OpenAI({
           apiKey: config.openai.apiKey,
@@ -112,7 +110,7 @@ class STTService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - OpenAI Whisper configured:`, state.config);
+        Logger.log('other', `${logPrefix} - OpenAI Whisper configured:`, state.config);
       } else if (provider === STTProviders.OPENAI_COMPATIBLE) {
         // Normalize endpoint to ensure /v1 is present (OpenAI SDK appends /audio/transcriptions to baseURL)
         let endpoint = config['openai-compatible'].endpoint;
@@ -133,14 +131,14 @@ class STTService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - Generic STT configured:`, { baseURL: endpoint });
+        Logger.log('other', `${logPrefix} - Generic STT configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown STT provider: ${provider}`);
       }
 
       return true;
     } catch (error) {
-      console.error(`${logPrefix} - Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} - Configuration failed:`, error);
       state.client = null;
       state.config = null;
       state.provider = null;
@@ -177,12 +175,12 @@ class STTService {
     }
 
     if (this.isRecording) {
-      console.warn('[STTService] Already recording');
+      Logger.warn('STTService', 'Already recording');
       return false;
     }
 
     try {
-      console.log('[STTService] Requesting microphone access...');
+      Logger.log('STTService', 'Requesting microphone access...');
       
       // Request microphone access
       this.audioStream = await navigator.mediaDevices.getUserMedia({ 
@@ -206,12 +204,12 @@ class STTService {
       };
 
       this.mediaRecorder.onstop = async () => {
-        console.log('[STTService] Recording stopped, processing...');
+        Logger.log('STTService', 'Recording stopped, processing...');
         
         try {
           // Create audio blob
           const audioBlob = new Blob(this.audioChunks, { type: mimeType });
-          console.log(`[STTService] Audio blob created: ${audioBlob.size} bytes`);
+          Logger.log('STTService', `Audio blob created: ${audioBlob.size} bytes`);
 
           // Cleanup audio resources immediately
           this.cleanup();
@@ -224,10 +222,10 @@ class STTService {
             const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
             switchDelay = sttConfig.audioDeviceSwitchDelay || 300;
           } catch (error) {
-            console.error('[STTService] Failed to load STT config:', error);
+            Logger.error('STTService', 'Failed to load STT config:', error);
           }
           
-          console.log(`[STTService] Waiting ${switchDelay}ms for audio device switch...`);
+          Logger.log('STTService', `Waiting ${switchDelay}ms for audio device switch...`);
           await new Promise(resolve => setTimeout(resolve, switchDelay));
 
           // Transcribe - this is the slow part
@@ -243,7 +241,7 @@ class STTService {
             this.onRecordingStop();
           }
         } catch (error) {
-          console.error('[STTService] Transcription failed:', error);
+          Logger.error('STTService', 'Transcription failed:', error);
           this.cleanup();
           if (this.onError) {
             this.onError(error);
@@ -256,7 +254,7 @@ class STTService {
       };
 
       this.mediaRecorder.onerror = (error) => {
-        console.error('[STTService] MediaRecorder error:', error);
+        Logger.error('STTService', 'MediaRecorder error:', error);
         if (this.onError) {
           this.onError(error);
         }
@@ -267,7 +265,7 @@ class STTService {
       this.mediaRecorder.start();
       this.isRecording = true;
       
-      console.log('[STTService] Recording started');
+      Logger.log('STTService', 'Recording started');
       
       if (this.onRecordingStart) {
         this.onRecordingStart();
@@ -276,7 +274,7 @@ class STTService {
       return true;
       
     } catch (error) {
-      console.error('[STTService] Failed to start recording:', error);
+      Logger.error('STTService', 'Failed to start recording:', error);
       this.cleanup();
       throw error;
     }
@@ -287,11 +285,11 @@ class STTService {
    */
   stopRecording() {
     if (!this.isRecording || !this.mediaRecorder) {
-      console.warn('[STTService] Not recording');
+      Logger.warn('STTService', 'Not recording');
       return;
     }
 
-    console.log('[STTService] Stopping recording...');
+    Logger.log('STTService', 'Stopping recording...');
     this.mediaRecorder.stop();
     this.isRecording = false;
   }
@@ -317,10 +315,10 @@ class STTService {
       const arrayBuffer = input;
       const mimeType = maybeMimeOrTabId;
       audioBlob = new Blob([arrayBuffer], { type: mimeType });
-      console.log(`${logPrefix} - Transcribing audio (${arrayBuffer.byteLength} bytes) with ${state.provider}...`);
+      Logger.log('other', `${logPrefix} - Transcribing audio (${arrayBuffer.byteLength} bytes) with ${state.provider}...`);
     } else {
       audioBlob = input;
-      console.log(`${logPrefix} - Transcribing audio (${audioBlob.size} bytes) with ${state.provider}...`);
+      Logger.log('other', `${logPrefix} - Transcribing audio (${audioBlob.size} bytes) with ${state.provider}...`);
     }
 
     if (state.provider === STTProviders.CHROME_AI_MULTIMODAL || state.provider === 'chrome-ai-multimodal') {
@@ -344,10 +342,10 @@ class STTService {
       const transcription = await state.client.audio.transcriptions.create(params);
       const text = transcription.text.trim();
       
-      console.log(`${logPrefix} - Transcription complete: "${text}"`);
+      Logger.log('other', `${logPrefix} - Transcription complete: "${text}"`);
       return text;
     } catch (error) {
-      console.error(`${logPrefix} - Transcription API error:`, error);
+      Logger.error('other', `${logPrefix} - Transcription API error:`, error);
       
       if (error.message?.includes('401')) {
         throw new Error('Invalid STT API key. Please check your configuration.');
@@ -376,24 +374,24 @@ class STTService {
         arrayBuffer = input;
       } else {
         arrayBuffer = await input.arrayBuffer();
-        console.log(`[STTService] Audio converted to ArrayBuffer (${arrayBuffer.byteLength} bytes)`);
-        console.log(`[STTService] Audio blob type: ${input.type}`);
+        Logger.log('STTService', `Audio converted to ArrayBuffer (${arrayBuffer.byteLength} bytes)`);
+        Logger.log('STTService', `Audio blob type: ${input.type}`);
       }
 
       const params = await self.LanguageModel.params();
 
       const state = this.isExtensionMode ? this._getState(tabId) : this;
       if (!state.chromeAISession) {
-        console.log('[STTService] Creating Chrome AI multimodal session...');
+        Logger.log('STTService', 'Creating Chrome AI multimodal session...');
         state.chromeAISession = await self.LanguageModel.create({
           expectedInputs: [{ type: 'audio' }],
           temperature: 0.1,
           topK: params.defaultTopK,
         });
-        console.log('[STTService] Chrome AI multimodal session created');
+        Logger.log('STTService', 'Chrome AI multimodal session created');
       }
 
-      console.log('[STTService] Sending prompt to Chrome AI...');
+      Logger.log('STTService', 'Sending prompt to Chrome AI...');
       const stream = state.chromeAISession.promptStreaming([
         {
           role: 'user',
@@ -410,10 +408,10 @@ class STTService {
       }
 
       const text = fullResponse.trim();
-      console.log(`[STTService] Chrome AI transcription complete: "${text}"`);
+      Logger.log('STTService', `Chrome AI transcription complete: "${text}"`);
       return text;
     } catch (error) {
-      console.error('[STTService] Chrome AI transcription error:', error);
+      Logger.error('STTService', 'Chrome AI transcription error:', error);
       const state = this.isExtensionMode ? this._getState(tabId) : this;
       if (state.chromeAISession) {
         try {
@@ -480,12 +478,12 @@ class STTService {
     
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
-        console.log(`[STTService] Using MIME type: ${type}`);
+        Logger.log('STTService', `Using MIME type: ${type}`);
         return type;
       }
     }
     
-    console.warn('[STTService] No preferred MIME type supported, using default');
+    Logger.warn('STTService', 'No preferred MIME type supported, using default');
     return '';
   }
 
@@ -493,13 +491,13 @@ class STTService {
    * Cleanup recording resources
    */
   cleanup() {
-    console.log('[STTService] Cleaning up recording resources...');
+    Logger.log('STTService', 'Cleaning up recording resources...');
     
     if (this.audioStream) {
       // Stop all tracks to release microphone
       this.audioStream.getTracks().forEach(track => {
         track.stop();
-        console.log(`[STTService] Stopped audio track: ${track.kind}`);
+        Logger.log('STTService', `Stopped audio track: ${track.kind}`);
       });
       this.audioStream = null;
     }
@@ -508,7 +506,7 @@ class STTService {
     this.audioChunks = [];
     this.isRecording = false;
     
-    console.log('[STTService] Cleanup complete');
+    Logger.log('STTService', 'Cleanup complete');
   }
 
   /**

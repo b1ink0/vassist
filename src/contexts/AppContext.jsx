@@ -17,6 +17,7 @@ import {
 } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
+import Logger from '../services/Logger';
 
 const AppContext = createContext(null);
 
@@ -107,52 +108,52 @@ export const AppProvider = ({ children }) => {
       try {
         // Load UI config
         const loadedUIConfig = await StorageServiceProxy.configLoad('uiConfig', { enableModelLoading: true, enableAIToolbar: true });
-        console.log('[AppContext] UI Config loaded:', loadedUIConfig);
+        Logger.log('AppContext', 'UI Config loaded:', loadedUIConfig);
         setUIConfig(loadedUIConfig);
         setEnableModelLoading(loadedUIConfig.enableModelLoading);
         
         // Load AI config
         const loadedAIConfig = await StorageServiceProxy.configLoad('aiConfig', {});
-        console.log('[AppContext] AI Config loaded:', loadedAIConfig);
+        Logger.log('AppContext', 'AI Config loaded:', loadedAIConfig);
         setAIConfig(loadedAIConfig);
         
         // Configure services (only if provider is set)
         try {
           if (loadedAIConfig.provider) {
             await AIServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] AI Service configured');
+            Logger.log('AppContext', 'AI Service configured');
           } else {
-            console.log('[AppContext] Skipping AI Service configuration - no provider set');
+            Logger.log('AppContext', 'Skipping AI Service configuration - no provider set');
           }
           
           // Configure AI Features services if enabled (only if we have a provider)
           if (loadedAIConfig.provider) {
             if (loadedAIConfig.aiFeatures?.translator?.enabled !== false) {
               await TranslatorServiceProxy.configure(loadedAIConfig);
-              console.log('[AppContext] Translator Service configured');
+              Logger.log('AppContext', 'Translator Service configured');
             }
             if (loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false) {
               await LanguageDetectorServiceProxy.configure(loadedAIConfig);
-              console.log('[AppContext] Language Detector Service configured');
+              Logger.log('AppContext', 'Language Detector Service configured');
             }
             if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
               await SummarizerServiceProxy.configure(loadedAIConfig);
-              console.log('[AppContext] Summarizer Service configured');
+              Logger.log('AppContext', 'Summarizer Service configured');
             }
           }
           if (loadedAIConfig.aiFeatures?.rewriter?.enabled !== false) {
             await RewriterServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] Rewriter Service configured');
+            Logger.log('AppContext', 'Rewriter Service configured');
           }
           if (loadedAIConfig.aiFeatures?.writer?.enabled !== false) {
             await WriterServiceProxy.configure(loadedAIConfig);
-            console.log('[AppContext] Writer Service configured');
+            Logger.log('AppContext', 'Writer Service configured');
           }
         } catch (error) {
-          console.warn('[AppContext] Failed to configure services:', error);
+          Logger.warn('AppContext', 'Failed to configure services:', error);
         }
       } catch (error) {
-        console.error('[AppContext] Failed to load configs:', error);
+        Logger.error('AppContext', 'Failed to load configs:', error);
         setEnableModelLoading(true);
       }
     };
@@ -163,11 +164,11 @@ export const AppProvider = ({ children }) => {
     const handleConfigChange = async (event) => {
       if (event.detail?.type === 'aiConfig') {
         const updatedConfig = event.detail.config;
-        console.log('[AppContext] AI Config updated from settings:', updatedConfig);
+        Logger.log('AppContext', 'AI Config updated from settings:', updatedConfig);
         setAIConfig(updatedConfig);
       } else if (event.detail?.type === 'uiConfig') {
         const updatedConfig = event.detail.config;
-        console.log('[AppContext] UI Config updated from settings:', updatedConfig);
+        Logger.log('AppContext', 'UI Config updated from settings:', updatedConfig);
         setUIConfig(updatedConfig);
         setEnableModelLoading(updatedConfig.enableModelLoading);
       }
@@ -186,7 +187,7 @@ export const AppProvider = ({ children }) => {
       const timer = setTimeout(() => {
         setIsAssistantReady(true);
         setIsChatUIReady(true);
-        console.log('[AppContext] Running in chat-only mode (no 3D model)');
+        Logger.log('AppContext', 'Running in chat-only mode (no 3D model)');
       }, 800);
       
       return () => clearTimeout(timer);
@@ -198,14 +199,14 @@ export const AppProvider = ({ children }) => {
    */
   // eslint-disable-next-line no-unused-vars
   const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
-    console.log('[AppContext] VirtualAssistant ready!');
+    Logger.log('AppContext', 'VirtualAssistant ready!');
     setIsAssistantReady(true);
     setIsChatUIReady(true);
     
     positionManagerRef.current = positionManager;
     sceneRef.current = scene;
     
-    console.log('[AppContext] Position manager ref set, ready for position tracking');
+    Logger.log('AppContext', 'Position manager ref set, ready for position tracking');
   }, []);
 
   // ========================================
@@ -286,7 +287,7 @@ export const AppProvider = ({ children }) => {
           sourceLang = detectionResults[0].detectedLanguage;
         }
       } catch (err) {
-        console.warn('[AppContext] Language detection failed:', err);
+        Logger.warn('AppContext', 'Language detection failed:', err);
         throw new Error('Could not detect source language');
       }
     }
@@ -303,7 +304,7 @@ export const AppProvider = ({ children }) => {
    * Add content to chat (using existing drag-drop flow)
    */
   const handleAddToChat = useCallback((data) => {
-    console.log('[AppContext] Add to chat:', data);
+    Logger.log('AppContext', 'Add to chat:', data);
     
     // Open chat if closed
     if (!isChatContainerVisible || !isChatInputVisible) {
@@ -329,7 +330,7 @@ export const AppProvider = ({ children }) => {
    * Toggle chat visibility
    */
   const toggleChat = useCallback(() => {
-    console.log('[AppContext] Toggle chat');
+    Logger.log('AppContext', 'Toggle chat');
     
     if (isChatContainerVisible || isChatInputVisible) {
       setIsChatInputVisible(false);
@@ -345,7 +346,7 @@ export const AppProvider = ({ children }) => {
    * Open chat (without toggle)
    */
   const openChat = useCallback(() => {
-    console.log('[AppContext] Open chat');
+    Logger.log('AppContext', 'Open chat');
     setIsChatInputVisible(true);
     setIsChatContainerVisible(true);
   }, []);
@@ -354,7 +355,7 @@ export const AppProvider = ({ children }) => {
    * Close chat
    */
   const closeChat = useCallback(() => {
-    console.log('[AppContext] Close chat');
+    Logger.log('AppContext', 'Close chat');
     setIsChatInputVisible(false);
     setIsChatContainerVisible(false);
     TTSServiceProxy.stopPlayback();
@@ -364,15 +365,15 @@ export const AppProvider = ({ children }) => {
    * Clear chat
    */
   const clearChat = useCallback(async () => {
-    console.log('[AppContext] Clear chat');
+    Logger.log('AppContext', 'Clear chat');
     
     // If temp, delete from history
     if (isTempChat && currentChatId) {
       try {
         await chatHistoryService.deleteChat(currentChatId);
-        console.log('[AppContext] Temp chat deleted:', currentChatId);
+        Logger.log('AppContext', 'Temp chat deleted:', currentChatId);
       } catch (error) {
-        console.error('[AppContext] Failed to delete temp chat:', error);
+        Logger.error('AppContext', 'Failed to delete temp chat:', error);
       }
     }
     
@@ -401,7 +402,7 @@ export const AppProvider = ({ children }) => {
    * Stop generation/TTS
    */
   const stopGeneration = useCallback(() => {
-    console.log('[AppContext] Stop generation');
+    Logger.log('AppContext', 'Stop generation');
     
     AIServiceProxy.abortRequest();
     TTSServiceProxy.stopPlayback();
@@ -421,7 +422,7 @@ export const AppProvider = ({ children }) => {
    * Load chat from history
    */
   const loadChatFromHistory = useCallback(async (chatData) => {
-    console.log('[AppContext] Loading chat from history:', chatData.chatId);
+    Logger.log('AppContext', 'Loading chat from history:', chatData.chatId);
     
     try {
       // Stop ongoing operations
@@ -436,12 +437,12 @@ export const AppProvider = ({ children }) => {
         ChatService.importTree(fullChat.chatServiceData);
         const messages = ChatService.getMessages();
         setChatMessages(messages);
-        console.log('[AppContext] Loaded chat with tree structure');
+        Logger.log('AppContext', 'Loaded chat with tree structure');
       } else if (fullChat.messages) {
         // Backward compatibility: set flat messages
         ChatService.setMessages(fullChat.messages);
         setChatMessages(fullChat.messages);
-        console.log('[AppContext] Loaded flat messages');
+        Logger.log('AppContext', 'Loaded flat messages');
       }
       
       // Set current chat ID
@@ -460,9 +461,9 @@ export const AppProvider = ({ children }) => {
       // Reset processing state
       setIsProcessing(false);
       
-      console.log('[AppContext] Chat loaded successfully');
+      Logger.log('AppContext', 'Chat loaded successfully');
     } catch (error) {
-      console.error('[AppContext] Failed to load chat:', error);
+      Logger.error('AppContext', 'Failed to load chat:', error);
     }
   }, [isChatContainerVisible]);
 
@@ -481,7 +482,7 @@ export const AppProvider = ({ children }) => {
    * Edit a user message (creates new branch, regenerates AI response with streaming)
    */
   const editUserMessage = useCallback(async (messageId, newContent, newImages = null, newAudios = null) => {
-    console.log('[AppContext] Editing user message:', messageId);
+    Logger.log('AppContext', 'Editing user message:', messageId);
     
     try {
       // Edit in tree (creates new branch)
@@ -495,7 +496,7 @@ export const AppProvider = ({ children }) => {
       if (editWithStreamingRef.current) {
         await editWithStreamingRef.current(newMessageId);
       } else {
-        console.warn('[AppContext] Streaming handler not available, using fallback');
+        Logger.warn('AppContext', 'Streaming handler not available, using fallback');
         // Fallback to non-streaming
         const conversationContext = updatedMessages.slice(0, updatedMessages.findIndex(m => m.id === newMessageId) + 1);
         const aiResponse = await AIServiceProxy.sendMessage(conversationContext);
@@ -508,7 +509,7 @@ export const AppProvider = ({ children }) => {
       
       return newMessageId;
     } catch (error) {
-      console.error('[AppContext] Failed to edit message:', error);
+      Logger.error('AppContext', 'Failed to edit message:', error);
       setIsProcessing(false);
       throw error;
     }
@@ -518,7 +519,7 @@ export const AppProvider = ({ children }) => {
    * Regenerate AI response
    */
   const regenerateAIMessage = useCallback(async (messageId) => {
-    console.log('[AppContext] Regenerating AI message:', messageId);
+    Logger.log('AppContext', 'Regenerating AI message:', messageId);
     
     try {
       // Create regeneration point (removes this AI message and everything after)
@@ -532,7 +533,7 @@ export const AppProvider = ({ children }) => {
       if (regenerateWithStreamingRef.current) {
         await regenerateWithStreamingRef.current();
       } else {
-        console.warn('[AppContext] Streaming handler not available, using fallback');
+        Logger.warn('AppContext', 'Streaming handler not available, using fallback');
         // Fallback to non-streaming
         setIsProcessing(true);
         const aiResponse = await AIServiceProxy.sendMessage(updatedMessages);
@@ -544,7 +545,7 @@ export const AppProvider = ({ children }) => {
         setIsProcessing(false);
       }
     } catch (error) {
-      console.error('[AppContext] Failed to regenerate message:', error);
+      Logger.error('AppContext', 'Failed to regenerate message:', error);
       setIsProcessing(false);
       throw error;
     }
@@ -554,7 +555,7 @@ export const AppProvider = ({ children }) => {
    * Switch to a different branch
    */
   const switchToBranch = useCallback((parentId, branchIndex) => {
-    console.log('[AppContext] Switching to branch:', branchIndex, 'at parent:', parentId);
+    Logger.log('AppContext', 'Switching to branch:', branchIndex, 'at parent:', parentId);
     
     try {
       ChatService.switchBranch(parentId, branchIndex);
@@ -563,9 +564,9 @@ export const AppProvider = ({ children }) => {
       const updatedMessages = ChatService.getMessages();
       setChatMessages(updatedMessages);
       
-      console.log('[AppContext] Branch switched successfully');
+      Logger.log('AppContext', 'Branch switched successfully');
     } catch (error) {
-      console.error('[AppContext] Failed to switch branch:', error);
+      Logger.error('AppContext', 'Failed to switch branch:', error);
       throw error;
     }
   }, []);
@@ -574,7 +575,7 @@ export const AppProvider = ({ children }) => {
    * Navigate to previous branch
    */
   const previousBranch = useCallback((messageId) => {
-    console.log('[AppContext] Navigating to previous branch');
+    Logger.log('AppContext', 'Navigating to previous branch');
     
     try {
       ChatService.previousBranch(messageId);
@@ -583,7 +584,7 @@ export const AppProvider = ({ children }) => {
       const updatedMessages = ChatService.getMessages();
       setChatMessages(updatedMessages);
     } catch (error) {
-      console.error('[AppContext] Failed to navigate to previous branch:', error);
+      Logger.error('AppContext', 'Failed to navigate to previous branch:', error);
     }
   }, []);
 
@@ -591,7 +592,7 @@ export const AppProvider = ({ children }) => {
    * Navigate to next branch
    */
   const nextBranch = useCallback((messageId) => {
-    console.log('[AppContext] Navigating to next branch');
+    Logger.log('AppContext', 'Navigating to next branch');
     
     try {
       ChatService.nextBranch(messageId);
@@ -600,7 +601,7 @@ export const AppProvider = ({ children }) => {
       const updatedMessages = ChatService.getMessages();
       setChatMessages(updatedMessages);
     } catch (error) {
-      console.error('[AppContext] Failed to navigate to next branch:', error);
+      Logger.error('AppContext', 'Failed to navigate to next branch:', error);
     }
   }, []);
 
@@ -673,7 +674,7 @@ export const AppProvider = ({ children }) => {
     const autoSaveTimer = setTimeout(async () => {
       try {
         if (isTempChat) {
-          console.log('[AppContext] Skipping save - temp mode enabled');
+          Logger.log('AppContext', 'Skipping save - temp mode enabled');
           return;
         }
 
@@ -681,7 +682,7 @@ export const AppProvider = ({ children }) => {
         if (!chatId) {
           chatId = chatHistoryService.generateChatId();
           setCurrentChatId(chatId);
-          console.log('[AppContext] New chat created for auto-save:', chatId);
+          Logger.log('AppContext', 'New chat created for auto-save:', chatId);
         }
 
         const sourceUrl = window.location.href;
@@ -696,9 +697,9 @@ export const AppProvider = ({ children }) => {
           },
         });
 
-        console.log('[AppContext] Chat auto-saved (debounced):', chatId);
+        Logger.log('AppContext', 'Chat auto-saved (debounced):', chatId);
       } catch (error) {
-        console.error('[AppContext] Failed to auto-save chat (debounced):', error);
+        Logger.error('AppContext', 'Failed to auto-save chat (debounced):', error);
       }
     }, 2000);
 

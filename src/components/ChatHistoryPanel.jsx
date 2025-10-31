@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef, memo } from 'react'
 import { Icon } from './icons';;
 import chatHistoryService from '../services/ChatHistoryService';
+import Logger from '../services/Logger';
 
 const ChatHistoryPanel = ({
   isLightBackground = false,
@@ -62,7 +63,7 @@ const ChatHistoryPanel = ({
       setHasMoreBelow(initialChats.length === WINDOW_SIZE);
       setHasMoreAbove(false); // No chats above at start
     } catch (error) {
-      console.error('[ChatHistoryPanel] Failed to load chats:', error);
+      Logger.error('ChatHistoryPanel', 'Failed to load chats:', error);
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +79,7 @@ const ChatHistoryPanel = ({
           const results = await chatHistoryService.searchChats(searchQuery);
           setFilteredChats(results);
         } catch (error) {
-          console.error('[ChatHistoryPanel] Search failed:', error);
+          Logger.error('ChatHistoryPanel', 'Search failed:', error);
           setFilteredChats([]);
         }
       }
@@ -146,7 +147,7 @@ const ChatHistoryPanel = ({
         setHasMoreBelow(false);
       }
     } catch (error) {
-      console.error('[ChatHistoryPanel] Failed to load more chats below:', error);
+      Logger.error('ChatHistoryPanel', 'Failed to load more chats below:', error);
     } finally {
       setIsLoadingMore(false);
     }
@@ -198,7 +199,7 @@ const ChatHistoryPanel = ({
         setHasMoreAbove(false);
       }
     } catch (error) {
-      console.error('[ChatHistoryPanel] Failed to load more chats above:', error);
+      Logger.error('ChatHistoryPanel', 'Failed to load more chats above:', error);
     } finally {
       setIsLoadingMore(false);
     }

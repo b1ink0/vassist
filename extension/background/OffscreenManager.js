@@ -6,6 +6,7 @@
 
 /* global chrome */
 
+import Logger from '../../src/services/Logger';
 export class OffscreenManager {
   constructor() {
     this.isOffscreenOpen = false;
@@ -15,7 +16,7 @@ export class OffscreenManager {
     this.keepaliveInterval = null;
     this.longRunningJobs = new Set(); // Track long-running operations by requestId
     
-    console.log('[OffscreenManager] Initialized with 10-minute idle timeout');
+    Logger.log('OffscreenManager', 'Initialized with 10-minute idle timeout');
   }
 
   /**
@@ -28,7 +29,7 @@ export class OffscreenManager {
     }
 
     try {
-      console.log('[OffscreenManager] Creating offscreen document...');
+      Logger.log('OffscreenManager', 'Creating offscreen document...');
 
       await chrome.offscreen.createDocument({
         url: 'offscreen.html',
@@ -43,15 +44,15 @@ export class OffscreenManager {
       this.isOffscreenOpen = true;
       this.resetCloseTimer();
       
-      console.log('[OffscreenManager] Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER');
+      Logger.log('OffscreenManager', 'Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER');
     } catch (error) {
       // Document might already exist
       if (error.message.includes('Only a single offscreen')) {
-        console.log('[OffscreenManager] Offscreen already exists');
+        Logger.log('OffscreenManager', 'Offscreen already exists');
         this.isOffscreenOpen = true;
         this.resetCloseTimer();
       } else {
-        console.error('[OffscreenManager] Failed to create offscreen:', error);
+        Logger.error('OffscreenManager', 'Failed to create offscreen:', error);
         throw error;
       }
     }
@@ -63,7 +64,7 @@ export class OffscreenManager {
   async closeOffscreen() {
     // Don't close if there are active jobs!
     if (this.activeJobs > 0) {
-      console.log(`[OffscreenManager] Skipping close - ${this.activeJobs} active jobs`);
+      Logger.log('OffscreenManager', 'Skipping close - ${this.activeJobs} active jobs');
       this.resetCloseTimer(); // Reset timer for later
       return;
     }
@@ -71,17 +72,17 @@ export class OffscreenManager {
     if (!this.isOffscreenOpen) return;
 
     try {
-      console.log('[OffscreenManager] Closing offscreen document...');
+      Logger.log('OffscreenManager', 'Closing offscreen document...');
       await chrome.offscreen.closeDocument();
       this.isOffscreenOpen = false;
-      console.log('[OffscreenManager] Offscreen document closed');
+      Logger.log('OffscreenManager', 'Offscreen document closed');
     } catch (error) {
       // If no current document, it's already closed - not an error
       if (error.message.includes('No current offscreen')) {
-        console.log('[OffscreenManager] Offscreen already closed');
+        Logger.log('OffscreenManager', 'Offscreen already closed');
         this.isOffscreenOpen = false;
       } else {
-        console.error('[OffscreenManager] Failed to close offscreen:', error);
+        Logger.error('OffscreenManager', 'Failed to close offscreen:', error);
       }
     }
   }
@@ -107,7 +108,7 @@ export class OffscreenManager {
       const response = await chrome.runtime.sendMessage(offscreenMessage);
       return response;
     } catch (error) {
-      console.error('[OffscreenManager] Failed to send message:', error);
+      Logger.error('OffscreenManager', 'Failed to send message:', error);
       
       // If receiving end doesn't exist, offscreen was closed
       if (error.message.includes('Receiving end does not exist')) {
@@ -123,7 +124,7 @@ export class OffscreenManager {
           const response = await chrome.runtime.sendMessage(offscreenMessage);
           return response;
         } catch (retryError) {
-          console.error('[OffscreenManager] Retry failed:', retryError);
+          Logger.error('OffscreenManager', 'Retry failed:', retryError);
           throw retryError;
         }
       }
@@ -137,7 +138,7 @@ export class OffscreenManager {
    */
   startJob() {
     this.activeJobs++;
-    console.log(`[OffscreenManager] Job started, active jobs: ${this.activeJobs}`);
+    Logger.log('OffscreenManager', 'Job started, active jobs: ${this.activeJobs}');
     this.startKeepalive();
     this.resetCloseTimer();
   }
@@ -147,7 +148,7 @@ export class OffscreenManager {
    */
   endJob() {
     this.activeJobs = Math.max(0, this.activeJobs - 1);
-    console.log(`[OffscreenManager] Job ended, active jobs: ${this.activeJobs}`);
+    Logger.log('OffscreenManager', 'Job ended, active jobs: ${this.activeJobs}');
     
     if (this.activeJobs === 0) {
       this.stopKeepalive();
@@ -164,7 +165,7 @@ export class OffscreenManager {
   startLongRunningJob(requestId) {
     this.longRunningJobs.add(requestId);
     this.startJob();
-    console.log(`[OffscreenManager] Long-running job started: ${requestId}`);
+    Logger.log('OffscreenManager', 'Long-running job started: ${requestId}');
   }
 
   /**
@@ -175,7 +176,7 @@ export class OffscreenManager {
     if (this.longRunningJobs.has(requestId)) {
       this.longRunningJobs.delete(requestId);
       this.endJob();
-      console.log(`[OffscreenManager] Long-running job ended: ${requestId}`);
+      Logger.log('OffscreenManager', 'Long-running job ended: ${requestId}');
     }
   }
 
@@ -190,7 +191,7 @@ export class OffscreenManager {
     console.log('[OffscreenManager] Starting keepalive pings (every 20s)');
     this.keepaliveInterval = setInterval(() => {
       if (this.activeJobs > 0 || this.longRunningJobs.size > 0) {
-        console.log(`[OffscreenManager] Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running`);
+        Logger.log('OffscreenManager', 'Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running');
         this.keepAlive();
       } else {
         // No active work, stop keepalive
@@ -204,7 +205,7 @@ export class OffscreenManager {
    */
   stopKeepalive() {
     if (this.keepaliveInterval) {
-      console.log('[OffscreenManager] Stopping keepalive pings');
+      Logger.log('OffscreenManager', 'Stopping keepalive pings');
       clearInterval(this.keepaliveInterval);
       this.keepaliveInterval = null;
     }

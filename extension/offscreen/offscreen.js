@@ -15,10 +15,11 @@ import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 // Configure transformers.js to use WASM files from assets BEFORE importing KokoroTTSCore
 import { env } from '@huggingface/transformers';
 env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('assets/');
-console.log('[Offscreen] Configured transformers.js to use WASM files from:', chrome.runtime.getURL('assets/'));
+Logger.log('Offscreen', 'Configured transformers.js to use WASM files from:', chrome.runtime.getURL('assets/'));
 
 // Now import KokoroTTSCore (it will use the configured paths)
 import KokoroTTSCore from '../../src/workers/shared/KokoroTTSCore.js';
+import Logger from '../../src/services/Logger';
 
 class OffscreenWorker {
   constructor() {
@@ -33,20 +34,20 @@ class OffscreenWorker {
   }
 
   async init() {
-    console.log('[OffscreenWorker] Initializing...');
+    Logger.log('OffscreenWorker', 'Initializing...');
     
     // Initialize AudioContext (offscreen has access to AudioContext for best performance)
     this.audioContext = new AudioContext();
-    console.log('[OffscreenWorker] AudioContext initialized');
+    Logger.log('OffscreenWorker', 'AudioContext initialized');
     
     // Initialize minimal Babylon scene for BVMD conversion
     try {
-      console.log('[OffscreenWorker] Creating NullEngine for BVMD conversion...');
+      Logger.log('OffscreenWorker', 'Creating NullEngine for BVMD conversion...');
       const engine = new NullEngine();
       this.scene = new Scene(engine);
-      console.log('[OffscreenWorker] BVMD converter initialized');
+      Logger.log('OffscreenWorker', 'BVMD converter initialized');
     } catch (error) {
-      console.error('[OffscreenWorker] Failed to initialize BVMD converter:', error);
+      Logger.error('OffscreenWorker', 'Failed to initialize BVMD converter:', error);
     }
     
     // Set up message handlers
@@ -64,7 +65,7 @@ class OffscreenWorker {
       this.handleMessage(message, sender)
         .then(sendResponse)
         .catch(error => {
-          console.error('[OffscreenWorker] Error:', error);
+          Logger.error('OffscreenWorker', 'Error:', error);
           sendResponse({
             type: MessageTypes.ERROR,
             requestId: message.requestId,
@@ -74,7 +75,7 @@ class OffscreenWorker {
       return true;
     });
     
-    console.log('[OffscreenWorker] Ready with AudioContext:', this.audioContext.state);
+    Logger.log('OffscreenWorker', 'Ready with AudioContext:', this.audioContext.state);
   }
 
   /**
@@ -109,20 +110,20 @@ class OffscreenWorker {
   async handleMessage(message, sender) {
     const { type, requestId } = message;
     
-    console.log(`[OffscreenWorker] Received ${type}, request ${requestId}`);
+    Logger.log('OffscreenWorker', 'Received ${type}, request ${requestId}');
     
     // Only handle messages intended for offscreen
     // Ignore messages for background/content scripts
     const handler = this.messageHandlers.get(type);
     if (!handler) {
       // Not an error - just not for us
-      console.log(`[OffscreenWorker] Ignoring message type: ${type} (not for offscreen)`);
+      Logger.log('OffscreenWorker', `Ignoring message type: ${type} (not for offscreen)`);
       return; // Return undefined (no response needed)
     }
     
     const data = await handler(message, sender);
     
-    console.log(`[OffscreenWorker] Handler completed, returning response for ${requestId}`);
+    Logger.log('OffscreenWorker', 'Handler completed, returning response for ${requestId}');
     
     return {
       type: MessageTypes.SUCCESS,
@@ -165,7 +166,7 @@ class OffscreenWorker {
       const audioData = decodedAudio.getChannelData(0); // Use first channel (mono)
       const sampleRate = decodedAudio.sampleRate;
       
-      console.log(`[OffscreenWorker] Audio decoded: ${decodedAudio.duration.toFixed(2)}s @ ${sampleRate}Hz`);
+      Logger.log('OffscreenWorker', `Audio decoded: ${decodedAudio.duration.toFixed(2)}s @ ${sampleRate}Hz`);
       
       // Step 2: Generate VMD from PCM using shared core
       const vmdData = await VMDGenerationCore.generateVMDFromPCM(audioData, sampleRate);
@@ -180,8 +181,8 @@ class OffscreenWorker {
       };
       
     } catch (error) {
-      console.error('[OffscreenWorker] Processing failed:', error);
-      console.error('[OffscreenWorker] Error details:', error.name, error.message);
+      Logger.error('OffscreenWorker', 'Processing failed:', error);
+      Logger.error('OffscreenWorker', 'Error details:', error.name, error.message);
       // Return audio without lip sync on error
       let errorArray = audioBuffer;
       if (!Array.isArray(audioBuffer)) {
@@ -198,12 +199,12 @@ class OffscreenWorker {
    * Handle Kokoro TTS initialization
    */
   async handleKokoroInit(message) {
-    console.log('[OffscreenWorker] handleKokoroInit received message:', JSON.stringify(message, null, 2));
+    Logger.log('OffscreenWorker', 'handleKokoroInit received message:', JSON.stringify(message, null, 2));
     
     const { modelId, device } = message.data || {};
     
     try {
-      console.log('[OffscreenWorker] Initializing Kokoro TTS...', { modelId, device });
+      Logger.log('OffscreenWorker', 'Initializing Kokoro TTS...', { modelId, device });
       
       // Pass config directly to KokoroTTSCore - it handles device/dtype mapping internally
       const initialized = await KokoroTTSCore.initialize({
@@ -228,7 +229,7 @@ class OffscreenWorker {
         message: initialized ? 'Kokoro TTS initialized successfully' : 'Initialization failed'
       };
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro initialization failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro initialization failed:', error);
       throw new Error(`Kokoro initialization failed: ${error.message}`);
     }
   }
@@ -240,7 +241,7 @@ class OffscreenWorker {
     const { text, voice, speed } = message.data;
     
     try {
-      console.log(`[OffscreenWorker] Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
+      Logger.log('OffscreenWorker', `Generating Kokoro speech for: "${text.substring(0, 50)}..."`);
       
       // Generate audio using KokoroTTSCore
       const audioBuffer = await KokoroTTSCore.generate(text, {
@@ -248,7 +249,7 @@ class OffscreenWorker {
         speed: speed !== undefined ? speed : 1.0
       });
       
-      console.log(`[OffscreenWorker] Generated audio buffer: ${audioBuffer.byteLength} bytes`);
+      Logger.log('OffscreenWorker', 'Generated audio buffer: ${audioBuffer.byteLength} bytes');
       
       // Convert to Array for transfer
       const audioArray = Array.from(new Uint8Array(audioBuffer));
@@ -260,7 +261,7 @@ class OffscreenWorker {
         sampleRate: 24000
       };
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro generation failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro generation failed:', error);
       throw new Error(`Kokoro generation failed: ${error.message}`);
     }
   }
@@ -273,7 +274,7 @@ class OffscreenWorker {
       const status = KokoroTTSCore.getStatus();
       return status;
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro status check failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro status check failed:', error);
       throw new Error(`Kokoro status check failed: ${error.message}`);
     }
   }
@@ -286,7 +287,7 @@ class OffscreenWorker {
       const voices = await KokoroTTSCore.listVoices();
       return { voices };
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro list voices failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro list voices failed:', error);
       throw new Error(`Failed to list voices: ${error.message}`);
     }
   }
@@ -327,10 +328,10 @@ class OffscreenWorker {
   async handleKokoroGetCacheSize() {
     try {
       const sizeInfo = await KokoroTTSCore.getCacheSize();
-      console.log('[OffscreenWorker] Kokoro cache size:', sizeInfo);
+      Logger.log('OffscreenWorker', 'Kokoro cache size:', sizeInfo);
       return sizeInfo;
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro get cache size failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro get cache size failed:', error);
       throw new Error(`Failed to get cache size: ${error.message}`);
     }
   }
@@ -343,7 +344,7 @@ class OffscreenWorker {
       await KokoroTTSCore.clearCache();
       return { cleared: true };
     } catch (error) {
-      console.error('[OffscreenWorker] Kokoro clear cache failed:', error);
+      Logger.error('OffscreenWorker', 'Kokoro clear cache failed:', error);
       throw new Error(`Failed to clear cache: ${error.message}`);
     }
   }
@@ -376,7 +377,7 @@ class OffscreenWorker {
         spectrogramFrames: spectrogram.data.length
       };
     } catch (error) {
-      console.error('[OffscreenWorker] Audio processing failed:', error);
+      Logger.error('OffscreenWorker', 'Audio processing failed:', error);
       throw error;
     }
   }
@@ -387,7 +388,7 @@ class OffscreenWorker {
   async handleVMDGenerate(message) {
     const { audioBuffer, modelName } = message.data;
     
-    console.log('[OffscreenWorker] Generating VMD from audio...');
+    Logger.log('OffscreenWorker', 'Generating VMD from audio...');
     
     try {
       // Decode audio using AudioContext
@@ -398,14 +399,14 @@ class OffscreenWorker {
       // Generate VMD using shared core
       const vmdData = await VMDGenerationCore.generateVMDFromPCM(audioData, sampleRate, modelName);
       
-      console.log(`[OffscreenWorker] VMD generated: ${vmdData.byteLength} bytes`);
+      Logger.log('OffscreenWorker', 'VMD generated: ${vmdData.byteLength} bytes');
       
       return {
         vmdData,
         modelName: modelName || 'Model'
       };
     } catch (error) {
-      console.error('[OffscreenWorker] VMD generation failed:', error);
+      Logger.error('OffscreenWorker', 'VMD generation failed:', error);
       throw error;
     }
   }

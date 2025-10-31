@@ -5,6 +5,7 @@ import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
 import { StorageServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
+import Logger from '../services/Logger';
 
 const ControlPanel = ({ 
   isAssistantReady,
@@ -25,6 +26,11 @@ const ControlPanel = ({
   const [hasDragged, setHasDragged] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
+  
+  // Logger states
+  const [loggerEnabled, setLoggerEnabled] = useState(false);
+  const [logCategories, setLogCategories] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Track blob URLs for cleanup later.
   const blobUrlsRef = useRef([]);
@@ -48,7 +54,7 @@ const ControlPanel = ({
           await StorageServiceProxy.configSave('devControlPanelButtonPosition', validPos);
         }
       } catch (error) {
-        console.error('[ControlPanel] Failed to load button position:', error);
+        Logger.error('ControlPanel', 'Failed to load button position:', error);
         const defaultPos = { x: window.innerWidth - 180, y: 20 };
         setButtonPos(defaultPos);
       }
@@ -70,7 +76,7 @@ const ControlPanel = ({
         try {
           await StorageServiceProxy.configSave('devControlPanelButtonPosition', newPos);
         } catch (error) {
-          console.error('[ControlPanel] Failed to save button position on resize:', error);
+          Logger.error('ControlPanel', 'Failed to save button position on resize:', error);
         }
       }
     };
@@ -78,6 +84,21 @@ const ControlPanel = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [buttonPos]);
+
+  // Load logger state
+  useEffect(() => {
+    const loadLoggerState = () => {
+      setLoggerEnabled(Logger.isEnabled());
+      setLogCategories(Logger.getCategories());
+    };
+
+    loadLoggerState();
+    
+    // Refresh categories when tab becomes visible
+    if (isVisible && activeTab === 'logs') {
+      loadLoggerState();
+    }
+  }, [isVisible, activeTab]);
 
   // Drag handlers for button
   const handleButtonMouseDown = (e) => {
@@ -126,7 +147,7 @@ const ControlPanel = ({
         setPerfData({ fps: actualFps, meshes, particles, drawCalls });
       } catch (err) {
         // tolerate sampling errors
-        console.warn('[ControlPanel] perf sampler error', err);
+        Logger.warn('ControlPanel', 'perf sampler error', err);
       }
     };
 
@@ -170,7 +191,7 @@ const ControlPanel = ({
       if (hasDragged) {
         // Save position after drag
         StorageServiceProxy.configSave('devControlPanelButtonPosition', buttonPos).catch(error => {
-          console.error('[ControlPanel] Failed to save button position after drag:', error);
+          Logger.error('ControlPanel', 'Failed to save button position after drag:', error);
         });
         
         // Reset hasDragged after a short delay to prevent click from firing
@@ -196,7 +217,7 @@ const ControlPanel = ({
   // Load AI config on mount
   const triggerAction = async (action) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     await assistantRef.current.triggerAction(action);
@@ -208,7 +229,7 @@ const ControlPanel = ({
    */
   const returnToIdle = async () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     await assistantRef.current.idle();
@@ -220,7 +241,7 @@ const ControlPanel = ({
    */
   const testEmotion = async (emotionCategory, text) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     
@@ -246,7 +267,7 @@ const ControlPanel = ({
       
       // TODO: Implement proper cleanup strategy
     } catch (error) {
-      console.error('[ControlPanel] Failed to load placeholder animation:', error);
+      Logger.error('ControlPanel', 'Failed to load placeholder animation:', error);
     }
   };
 
@@ -255,7 +276,7 @@ const ControlPanel = ({
    */
   const changePosition = (preset) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     assistantRef.current.setPosition(preset);
@@ -266,7 +287,7 @@ const ControlPanel = ({
    */
   const playComposite = async (primaryAnimName, fillCategory = 'talking', options = {}) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
 
@@ -286,11 +307,11 @@ const ControlPanel = ({
    */
   const queueSimple = (animationName, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     assistantRef.current.queueAnimation(animationName, force);
-    console.log(`[ControlPanel] Queued animation: ${animationName} (force: ${force})`);
+    Logger.log('ControlPanel', `Queued animation: ${animationName} (force: ${force})`);
     updateQueueStatus();
   };
 
@@ -299,7 +320,7 @@ const ControlPanel = ({
    */
   const queueMultiple = async () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     
@@ -308,7 +329,7 @@ const ControlPanel = ({
     queueSimple('Thinking 1', false);          // Thinking category
     queueSimple('Celebrating Clap', false);    // Celebrating category
     queueSimple('Yawn 1', false);              // Idle category - yawn
-    console.log('[ControlPanel] Queued 4-animation sequence');
+    Logger.log('ControlPanel', 'Queued 4-animation sequence');
   };
 
   /**
@@ -316,7 +337,7 @@ const ControlPanel = ({
    */
   const queueSpeakTest = async (emotionCategory, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     
@@ -334,10 +355,10 @@ const ControlPanel = ({
         {},
         force
       );
-      console.log(`[ControlPanel] Queued speak: ${emotionCategory} (force: ${force})`);
+      Logger.log('ControlPanel', `Queued speak: ${emotionCategory} (force: ${force})`);
       updateQueueStatus();
     } catch (error) {
-      console.error('[ControlPanel] Failed to queue speak:', error);
+      Logger.error('ControlPanel', 'Failed to queue speak:', error);
     }
   };
 
@@ -346,11 +367,11 @@ const ControlPanel = ({
    */
   const clearQueue = () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
-      console.warn('[ControlPanel] VirtualAssistant not ready');
+      Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
     }
     assistantRef.current.clearQueue();
-    console.log('[ControlPanel] Queue cleared');
+    Logger.log('ControlPanel', 'Queue cleared');
     updateQueueStatus();
   };
 
@@ -516,6 +537,16 @@ const ControlPanel = ({
           }`}
         >
           🔧 Debug
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
+            activeTab === 'logs' 
+              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          📝 Logs
         </button>
       </div>
 
@@ -875,6 +906,128 @@ const ControlPanel = ({
               positionManager={positionManagerRef.current}
               embedded={true}
             />
+          </div>
+        )}
+
+        {/* Logs Tab */}
+        {activeTab === 'logs' && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-400 mb-3">Control console logging by category</p>
+            
+            {/* Master Toggle */}
+            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+              <div>
+                <div className="text-sm font-semibold text-white">Master Logging</div>
+                <div className="text-[11px] text-gray-400">Enable/disable all console logs</div>
+              </div>
+              <button
+                onClick={async () => {
+                  const newState = !loggerEnabled;
+                  setLoggerEnabled(newState);
+                  await Logger.setEnabled(newState);
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  loggerEnabled
+                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                }`}
+              >
+                {loggerEnabled ? '✓ Enabled' : '✗ Disabled'}
+              </button>
+            </div>
+
+            {/* Bulk Actions */}
+            {loggerEnabled && (
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    await Logger.enableAllCategories();
+                    setLogCategories(Logger.getCategories());
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-blue-500 text-white border-none rounded cursor-pointer text-xs hover:bg-blue-600 transition-colors"
+                >
+                  ✓ Enable All
+                </button>
+                <button
+                  onClick={async () => {
+                    await Logger.disableAllCategories();
+                    setLogCategories(Logger.getCategories());
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-gray-600 text-white border-none rounded cursor-pointer text-xs hover:bg-gray-700 transition-colors"
+                >
+                  ✗ Disable All
+                </button>
+              </div>
+            )}
+
+            {/* Search */}
+            {loggerEnabled && (
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Category List */}
+            {loggerEnabled && (
+              <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-2">
+                {logCategories
+                  .filter(cat => 
+                    searchTerm === '' || 
+                    cat.category.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map(({ category, enabled, color }) => (
+                    <div
+                      key={category}
+                      className="flex items-center justify-between p-2 bg-white/5 rounded hover:bg-white/10 transition-colors border border-white/5"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: color }}
+                          title={`Color: ${color}`}
+                        />
+                        <span className="text-xs text-white font-mono truncate" title={category}>
+                          {category}
+                        </span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await Logger.setCategoryEnabled(category, !enabled);
+                          setLogCategories(Logger.getCategories());
+                        }}
+                        className={`px-3 py-1 rounded text-[10px] font-medium transition-colors flex-shrink-0 ml-2 ${
+                          enabled
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                            : 'bg-gray-600/20 text-gray-400 border border-gray-600/30 hover:bg-gray-600/30'
+                        }`}
+                      >
+                        {enabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                  ))}
+                {logCategories.filter(cat => 
+                  searchTerm === '' || 
+                  cat.category.toLowerCase().includes(searchTerm.toLowerCase())
+                ).length === 0 && (
+                  <div className="text-center text-xs text-gray-500 py-4">
+                    {searchTerm ? 'No categories match your search' : 'No categories found'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Disabled State Message */}
+            {!loggerEnabled && (
+              <div className="text-center text-xs text-gray-500 py-8">
+                Enable master logging to configure categories
+              </div>
+            )}
           </div>
         )}
       </div>

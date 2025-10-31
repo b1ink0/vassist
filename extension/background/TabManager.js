@@ -3,10 +3,11 @@
  * Manages per-tab state and lifecycle
  */
 
+import Logger from '../../src/services/Logger';
 export class TabManager {
   constructor() {
     this.tabs = new Map(); // tabId -> tabState
-    console.log('[TabManager] Initialized');
+    Logger.log('TabManager', 'Initialized');
   }
 
   /**
@@ -17,7 +18,7 @@ export class TabManager {
       return this.tabs.get(tabId);
     }
 
-    console.log(`[TabManager] Initializing tab ${tabId}`);
+    Logger.log('TabManager', 'Initializing tab ${tabId}');
 
     const tabState = {
       id: tabId,
@@ -56,7 +57,7 @@ export class TabManager {
    * Clean up tab
    */
   cleanupTab(tabId) {
-    console.log(`[TabManager] Cleaning up tab ${tabId}`);
+    Logger.log('TabManager', 'Cleaning up tab ${tabId}');
 
     const tab = this.tabs.get(tabId);
     if (!tab) return;
@@ -66,7 +67,7 @@ export class TabManager {
       try {
         controller.abort();
       } catch (error) {
-        console.warn('[TabManager] Error aborting controller:', error);
+        Logger.warn('TabManager', 'Error aborting controller:', error);
       }
     }
 

@@ -9,6 +9,8 @@ import OpenAICompatibleSTTConfig from '../../settings/stt/OpenAICompatibleSTTCon
 import ChromeAISTTConfig from '../../settings/stt/ChromeAISTTConfig';
 import { TTSProviders, STTProviders, DefaultTTSConfig } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
+import Logger from '../../../services/Logger';
+import { Icon } from '../../icons';
 
 const TTSProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
@@ -97,7 +99,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   useEffect(() => {
     if (initialLoadRef.current) return;
     
-    console.log('[TTSProviderStep] Saving TTS/STT config');
+    Logger.log('TTSProviderStep', 'Saving TTS/STT config');
     
     const ttsData = {
       enabled: true,
@@ -219,7 +221,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       
       setKokoroStatus({ initialized: true, downloading: false, progress: 100, details: 'Complete!' });
     } catch (error) {
-      console.error('Kokoro init failed:', error);
+      Logger.error('other', 'Kokoro init failed:', error);
       setKokoroStatus({ initialized: false, downloading: false, error: error.message, progress: 0, details: '' });
     }
   };
@@ -230,7 +232,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       const status = await TTSServiceProxy.checkKokoroStatus();
       setKokoroStatus(prev => ({ ...prev, initialized: status.initialized || false }));
     } catch (error) {
-      console.error('Check status failed:', error);
+      Logger.error('other', 'Check status failed:', error);
     }
   };
 
@@ -248,7 +250,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       // Generate and play test speech
       await TTSServiceProxy.testConnection('Hello! This is a test of the Kokoro voice.');
     } catch (error) {
-      console.error('Voice test failed:', error);
+      Logger.error('other', 'Voice test failed:', error);
     } finally {
       setTestingVoice(false);
     }
@@ -300,13 +302,13 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
   // Chrome AI STT Status Check
   const handleCheckChromeAISTTStatus = async () => {
-    console.log('[TTSProviderStep] Checking Chrome AI STT status...');
+    Logger.log('TTSProviderStep', 'Checking Chrome AI STT status...');
     setChromeAiSTTStatus({ checking: true });
     
     try {
       // Use regular Chrome AI availability check (same API, just with audio support)
       const result = await AIServiceProxy.checkChromeAIAvailability();
-      console.log('[TTSProviderStep] Chrome AI STT status result:', result);
+      Logger.log('TTSProviderStep', 'Chrome AI STT status result:', result);
       
       setChromeAiSTTStatus({
         checking: false,
@@ -317,7 +319,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         downloading: result.state === 'downloading',
       });
     } catch (error) {
-      console.error('[TTSProviderStep] Chrome AI STT status check failed:', error);
+      Logger.error('TTSProviderStep', 'Chrome AI STT status check failed:', error);
       setChromeAiSTTStatus({
         checking: false,
         available: false,
@@ -330,14 +332,14 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
   // Chrome AI STT Download
   const handleStartChromeAISTTDownload = async () => {
-    console.log('[TTSProviderStep] Starting Chrome AI model download...');
+    Logger.log('TTSProviderStep', 'Starting Chrome AI model download...');
     setChromeAiSTTStatus(prev => ({ ...prev, downloading: true }));
     
     try {
       await AIServiceProxy.startChromeAIDownload();
       await handleCheckChromeAISTTStatus();
     } catch (error) {
-      console.error('[TTSProviderStep] Chrome AI download failed:', error);
+      Logger.error('TTSProviderStep', 'Chrome AI download failed:', error);
       setChromeAiSTTStatus(prev => ({
         ...prev,
         downloading: false,

@@ -9,6 +9,7 @@
 /* global chrome */
 
 import { MessageTypes, generateRequestId } from '../../extension/shared/MessageTypes.js';
+import Logger from '../services/Logger';
 
 export class AudioWorkerClient {
   constructor() {
@@ -20,7 +21,7 @@ export class AudioWorkerClient {
     this.audioContext = null;
     this.isReady = false;
     
-    console.log(`[AudioWorkerClient] Mode: ${this.mode}`);
+    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -39,13 +40,13 @@ export class AudioWorkerClient {
    */
   async init() {
     if (this.isReady) {
-      console.log('[AudioWorkerClient] Already initialized');
+      Logger.log('AudioWorkerClient', 'Already initialized');
       return;
     }
     
     if (this.mode === 'extension') {
       // Extension mode uses offscreen document, no init needed here
-      console.log('[AudioWorkerClient] Extension mode detected, skipping SharedWorker init');
+      Logger.log('AudioWorkerClient', 'Extension mode detected, skipping SharedWorker init');
       this.isReady = true;
       return;
     }
@@ -66,7 +67,7 @@ export class AudioWorkerClient {
         };
         
         this.port.onmessageerror = (error) => {
-          console.error('[AudioWorkerClient] Message error:', error);
+          Logger.error('AudioWorkerClient', 'Message error:', error);
         };
         
         // Start port (required for SharedWorker)
@@ -74,15 +75,15 @@ export class AudioWorkerClient {
         
         // Create AudioContext for main thread operations (dev mode only)
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('[AudioWorkerClient] AudioContext created for dev mode');
+        Logger.log('AudioWorkerClient', 'AudioContext created for dev mode');
         
         // Mark as ready
         this.isReady = true;
-        console.log('[AudioWorkerClient] SharedWorker initialized');
+        Logger.log('AudioWorkerClient', 'SharedWorker initialized');
         resolve();
         
       } catch (error) {
-        console.error('[AudioWorkerClient] Initialization failed:', error);
+        Logger.error('AudioWorkerClient', 'Initialization failed:', error);
         reject(error);
       }
     });
@@ -104,7 +105,7 @@ export class AudioWorkerClient {
         try {
           this._kokoroProgressCallback(data || {});
         } catch (err) {
-          console.warn('[AudioWorkerClient] Progress callback error:', err);
+          Logger.warn('AudioWorkerClient', 'Progress callback error:', err);
         }
       }
       return;
@@ -114,7 +115,7 @@ export class AudioWorkerClient {
     if (!pending) {
       // Don't warn for progress messages that might arrive after cleanup
       if (type !== MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
-        console.warn(`[AudioWorkerClient] No pending request for ${requestId}`);
+        Logger.warn('AudioWorkerClient', `No pending request for ${requestId}`);
       }
       return;
     }
@@ -214,7 +215,7 @@ export class AudioWorkerClient {
    */
   async processAudioWithLipSync(audioBuffer) {
     try {
-      console.log(`[AudioWorkerClient] Processing audio with lip sync (${this.mode} mode)...`);
+      Logger.log('AudioWorkerClient', `Processing audio with lip sync (${this.mode} mode)...`);
       
       if (this.mode === 'dev') {
         // Dev mode: Decode on main thread, send PCM to SharedWorker
@@ -226,7 +227,7 @@ export class AudioWorkerClient {
         // Step 1: Decode audio on main thread (AudioContext required)
         const audioContextBuffer = await this.audioContext.decodeAudioData(audioBuffer.slice(0));
         
-        console.log(`[AudioWorkerClient] Audio decoded: ${audioContextBuffer.duration.toFixed(2)}s`);
+        Logger.log('AudioWorkerClient', `Audio decoded: ${audioContextBuffer.duration.toFixed(2)}s`);
         
         // Step 2: Extract Float32Array (raw audio data)
         const audioData = audioContextBuffer.getChannelData(0); // First channel
@@ -244,7 +245,7 @@ export class AudioWorkerClient {
           { timeout: 120000 }
         );
         
-        console.log('[AudioWorkerClient] Processing complete');
+        Logger.log('AudioWorkerClient', 'Processing complete');
         
         return response;
         
@@ -255,7 +256,7 @@ export class AudioWorkerClient {
       }
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Processing failed:', error);
+      Logger.error('AudioWorkerClient', 'Processing failed:', error);
       throw error;
     }
   }
@@ -299,7 +300,7 @@ export class AudioWorkerClient {
       return response;
       
     } catch (error) {
-      console.error('[AudioWorkerClient] VMD generation failed:', error);
+      Logger.error('AudioWorkerClient', 'VMD generation failed:', error);
       throw error;
     }
   }
@@ -315,13 +316,13 @@ export class AudioWorkerClient {
    */
   async initKokoro(config, progressCallback = null) {
     try {
-      console.log(`[AudioWorkerClient] Initializing Kokoro (${this.mode} mode)...`, config);
+      Logger.log('AudioWorkerClient', `Initializing Kokoro (${this.mode} mode)...`, config);
       
       if (!this.isReady) {
         await this.init();
       }
       
-      console.log('[AudioWorkerClient] initKokoro called with config:', JSON.stringify(config, null, 2));
+      Logger.log('AudioWorkerClient', 'initKokoro called with config:', JSON.stringify(config, null, 2));
       
       // Store progress callback for handleMessage to use
       if (progressCallback) {
@@ -334,7 +335,7 @@ export class AudioWorkerClient {
         // NOTE: dtype is auto-determined in KokoroTTSCore based on device (q8 for wasm, fp32 for webgpu)
       };
       
-      console.log('[AudioWorkerClient] Sending KOKORO_INIT message with:', JSON.stringify(messageData, null, 2));
+      Logger.log('AudioWorkerClient', 'Sending KOKORO_INIT message with:', JSON.stringify(messageData, null, 2));
       
       const response = await this.sendMessage(
         MessageTypes.KOKORO_INIT,
@@ -347,7 +348,7 @@ export class AudioWorkerClient {
         delete this._kokoroProgressCallback;
       }
       
-      console.log('[AudioWorkerClient] Kokoro initialized:', response);
+      Logger.log('AudioWorkerClient', 'Kokoro initialized:', response);
       return response;
       
     } catch (error) {
@@ -355,7 +356,7 @@ export class AudioWorkerClient {
       if (this._kokoroProgressCallback) {
         delete this._kokoroProgressCallback;
       }
-      console.error('[AudioWorkerClient] Kokoro initialization failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro initialization failed:', error);
       throw error;
     }
   }
@@ -370,13 +371,13 @@ export class AudioWorkerClient {
    */
   async generateKokoroSpeech(text, options = {}) {
     try {
-      console.log(`[AudioWorkerClient] generateKokoroSpeech called (${this.mode} mode) with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
+      Logger.log('AudioWorkerClient', `generateKokoroSpeech called (${this.mode} mode) with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
       
       if (!this.isReady) {
         await this.init();
       }
       
-      console.log(`[AudioWorkerClient] Sending message to worker with text:`, typeof text, text?.substring?.(0, 50));
+      Logger.log('AudioWorkerClient', 'Sending message to worker with text:', typeof text, text?.substring?.(0, 50));
       
       const response = await this.sendMessage(
         MessageTypes.KOKORO_GENERATE,
@@ -397,7 +398,7 @@ export class AudioWorkerClient {
       return response.audioBuffer;
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Kokoro generation failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro generation failed:', error);
       throw error;
     }
   }
@@ -421,7 +422,7 @@ export class AudioWorkerClient {
       return response;
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Kokoro status check failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro status check failed:', error);
       throw error;
     }
   }
@@ -445,7 +446,7 @@ export class AudioWorkerClient {
       return response.voices || [];
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Kokoro list voices failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro list voices failed:', error);
       throw error;
     }
   }
@@ -494,7 +495,7 @@ export class AudioWorkerClient {
       return response || { usage: 0, quota: 0, databases: [] };
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Kokoro cache size check failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro cache size check failed:', error);
       throw error;
     }
   }
@@ -518,7 +519,7 @@ export class AudioWorkerClient {
       return response.cleared || false;
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Kokoro cache clear failed:', error);
+      Logger.error('AudioWorkerClient', 'Kokoro cache clear failed:', error);
       throw error;
     }
   }
@@ -560,7 +561,7 @@ export class AudioWorkerClient {
       return response;
       
     } catch (error) {
-      console.error('[AudioWorkerClient] Audio analysis failed:', error);
+      Logger.error('AudioWorkerClient', 'Audio analysis failed:', error);
       throw error;
     }
   }
@@ -583,7 +584,7 @@ export class AudioWorkerClient {
     this.isReady = false;
     this.pendingRequests.clear();
     
-    console.log('[AudioWorkerClient] Cleaned up');
+    Logger.log('AudioWorkerClient', 'Cleaned up');
   }
 }
 

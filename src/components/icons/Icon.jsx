@@ -2,6 +2,7 @@ import React from 'react';
 import { iconMap } from './iconMap.jsx';
 import { getIconColor } from './iconColors.js';
 import { useApp } from '../../contexts/AppContext';
+import Logger from '../../services/Logger';
 
 /**
  * Universal Icon Component (Heroicons)
@@ -29,7 +30,7 @@ const Icon = ({
   const IconComponent = iconMap[name];
 
   if (!IconComponent) {
-    console.warn(`Icon "${name}" not found in iconMap`);
+    Logger.warn('other', `Icon "${name}" not found in iconMap`);
     return null;
   }
 

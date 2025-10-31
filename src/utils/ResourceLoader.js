@@ -4,6 +4,7 @@
  * Uses chrome-extension:// URLs in extension mode, relative paths in dev mode
  */
 
+import Logger from '../services/Logger';
 class ResourceLoader {
   constructor() {
     // Check multiple ways to detect extension mode
@@ -12,7 +13,7 @@ class ResourceLoader {
     // 3. Check if running from chrome-extension:// URL
     this.isExtension = this._detectExtensionMode();
     
-    console.log(`[ResourceLoader] Mode: ${this.isExtension ? 'Extension' : 'Development'}`);
+    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -24,7 +25,7 @@ class ResourceLoader {
     // When running as extension, import.meta.url will be chrome-extension://...
     // In dev mode with Vite, it will be http://localhost:5173/...
     const isExtension = import.meta.url.startsWith('chrome-extension://');
-    console.log('[ResourceLoader] Mode:', isExtension ? 'Extension' : 'Development');
+    // Note: Don't log here as this is called from constructor
     return isExtension;
   }
 
@@ -34,7 +35,7 @@ class ResourceLoader {
    */
   setMode(isExtension) {
     this.isExtension = isExtension;
-    console.log(`[ResourceLoader] Mode set to: ${this.isExtension ? 'Extension' : 'Development'}`);
+    Logger.log('ResourceLoader', `Mode set to: ${this.isExtension ? 'Extension' : 'Development'}`);
   }
 
   /**
@@ -58,7 +59,7 @@ class ResourceLoader {
     
     // For now, return a promise that will resolve to the URL
     // This makes the function async in extension mode
-    console.warn('[ResourceLoader] getURL in extension mode - this should use async getURLAsync instead');
+    Logger.warn('ResourceLoader', 'getURL in extension mode - this should use async getURLAsync instead');
     return `/${path}`; // Temporary fallback
   }
 

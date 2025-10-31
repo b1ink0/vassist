@@ -5,13 +5,12 @@
  */
 
 import { ChromeAIFlags, ChromeAIAvailability } from '../config/aiConfig';
+import Logger from './Logger';
 
 class ChromeAIValidator {
   constructor() {
     this.lastCheck = null;
     this.downloadProgress = 0;
-    
-    console.log('[ChromeAIValidator] Initialized');
   }
 
   /**
@@ -39,7 +38,7 @@ class ChromeAIValidator {
    */
   isSupported() {
     const supported = 'LanguageModel' in self;
-    console.log('[ChromeAIValidator] LanguageModel API supported:', supported);
+    Logger.log('ChromeAIValidator', 'LanguageModel API supported:', supported);
     return supported;
   }
 
@@ -48,7 +47,7 @@ class ChromeAIValidator {
    * @returns {Promise<Object>} Status object
    */
   async checkAvailability() {
-    console.log('[ChromeAIValidator] Checking availability...');
+    Logger.log('ChromeAIValidator', 'Checking availability...');
     
     if (!this.isSupported()) {
       const status = {
@@ -67,7 +66,7 @@ class ChromeAIValidator {
     try {
       const availability = await self.LanguageModel.availability();
       
-      console.log('[ChromeAIValidator] Availability state:', availability);
+      Logger.log('ChromeAIValidator', 'Availability state:', availability);
       
       let status = {
         available: false,
@@ -122,7 +121,7 @@ class ChromeAIValidator {
       return status;
       
     } catch (error) {
-      console.error('[ChromeAIValidator] Availability check failed:', error);
+      Logger.error('ChromeAIValidator', 'Availability check failed:', error);
       
       const status = {
         available: false,
@@ -152,7 +151,7 @@ class ChromeAIValidator {
       throw new Error('Chrome AI not supported');
     }
 
-    console.log('[ChromeAIValidator] Starting download monitor...');
+    Logger.log('ChromeAIValidator', 'Starting download monitor...');
 
     try {
       const validator = this;
@@ -160,13 +159,13 @@ class ChromeAIValidator {
       const session = await self.LanguageModel.create({
         language: 'en',
         monitor(m) {
-          console.log('[ChromeAIValidator] Monitor callback called');
+          Logger.log('ChromeAIValidator', 'Monitor callback called');
           
           m.ondownloadprogress = (e) => {
             const progress = e.loaded * 100;
             const details = `Downloading model: ${progress.toFixed(1)}%`;
             
-            console.log(`[ChromeAIValidator] Download progress: ${progress.toFixed(1)}%`);
+            Logger.log('ChromeAIValidator', `Download progress: ${progress.toFixed(1)}%`);
             
             validator.downloadProgress = progress;
             
@@ -177,11 +176,11 @@ class ChromeAIValidator {
         }
       });
 
-      console.log('[ChromeAIValidator] Session created, download complete or in progress');
+      Logger.log('ChromeAIValidator', 'Session created, download complete or in progress');
       session.destroy();
       
     } catch (error) {
-      console.error('[ChromeAIValidator] Download monitor error:', error);
+      Logger.error('ChromeAIValidator', 'Download monitor error:', error);
       throw error;
     }
   }
@@ -284,7 +283,7 @@ class ChromeAIValidator {
     try {
       const params = await self.LanguageModel.params();
       
-      console.log('[ChromeAIValidator] Model params:', params);
+      Logger.log('ChromeAIValidator', 'Model params:', params);
       
       return {
         defaultTopK: params.defaultTopK,
@@ -295,7 +294,7 @@ class ChromeAIValidator {
       };
       
     } catch (error) {
-      console.error('[ChromeAIValidator] Failed to get model params:', error);
+      Logger.error('ChromeAIValidator', 'Failed to get model params:', error);
       return null;
     }
   }
@@ -305,7 +304,7 @@ class ChromeAIValidator {
    * @returns {Promise<Object>} Test result
    */
   async testConnection() {
-    console.log('[ChromeAIValidator] Testing connection...');
+    Logger.log('ChromeAIValidator', 'Testing connection...');
     
     const status = await this.checkAvailability();
     
@@ -326,7 +325,7 @@ class ChromeAIValidator {
 
       const response = await session.prompt('Say "OK" if you can hear me.');
       
-      console.log('[ChromeAIValidator] Test response:', response);
+      Logger.log('ChromeAIValidator', 'Test response:', response);
       
       session.destroy();
       
@@ -338,7 +337,7 @@ class ChromeAIValidator {
       };
       
     } catch (error) {
-      console.error('[ChromeAIValidator] Test failed:', error);
+      Logger.error('ChromeAIValidator', 'Test failed:', error);
       
       return {
         success: false,

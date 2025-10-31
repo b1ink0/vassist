@@ -13,6 +13,7 @@ import ModelLoadingOverlay from './ModelLoadingOverlay';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
+import Logger from '../services/Logger';
 
 function AppContent({ mode = 'development' }) {
   const [currentState, setCurrentState] = useState('IDLE');
@@ -45,13 +46,13 @@ function AppContent({ mode = 'development' }) {
    * Wrapped in useCallback to prevent infinite re-renders
    */
   const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
-    console.log(`[AppContent ${mode}] VirtualAssistant ready!`);
+    Logger.log('AppContent ${mode}', 'VirtualAssistant ready!');
     setCurrentState(animationManager.getCurrentState());
     
     // Call context handler to update global state
     contextHandleAssistantReady({ animationManager, positionManager, scene });
     
-    console.log(`[AppContent ${mode}] Position manager ref set, ready for position tracking`);
+    Logger.log('AppContent ${mode}', 'Position manager ref set, ready for position tracking');
   }, [mode, contextHandleAssistantReady]);
 
   // Memoize VirtualAssistant to prevent unmount on parent re-renders (e.g., ConfigContext updates)
@@ -64,11 +65,11 @@ function AppContent({ mode = 'development' }) {
       return null; // Model disabled
     }
     if (shouldWaitForKokoro) {
-      console.log('[AppContent] Waiting for Kokoro pre-initialization before loading model...');
+      Logger.log('AppContent', 'Waiting for Kokoro pre-initialization before loading model...');
       return null; // Wait for Kokoro to pre-initialize
     }
     if (!shouldMountModel) {
-      console.log('[AppContent] Model unmounted due to prolonged tab inactivity');
+      Logger.log('AppContent', 'Model unmounted due to prolonged tab inactivity');
       return null; // Unmounted to free resources while tab is hidden
     }
     return (

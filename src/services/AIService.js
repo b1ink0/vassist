@@ -7,6 +7,7 @@
 import OpenAI from 'openai';
 import { AIProviders } from '../config/aiConfig';
 import ChromeAIValidator from './ChromeAIValidator';
+import Logger from './Logger';
 
 class AIService {
   constructor() {
@@ -14,14 +15,12 @@ class AIService {
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[AIService] Initialized (Extension mode - multi-tab)');
     } else {
       this.client = null;
       this.provider = null;
       this.config = null;
       this.abortController = null;
       this.chromeAISession = null;
-      console.log('[AIService] Initialized (Dev mode - single instance)');
     }
   }
 
@@ -40,7 +39,7 @@ class AIService {
         abortController: null,
         chromeAISession: null,
       });
-      console.log(`[AIService] Tab ${tabId} initialized`);
+      Logger.log('AIService', `Tab ${tabId} initialized`);
     }
   }
 
@@ -57,7 +56,7 @@ class AIService {
         state.abortController.abort();
       }
       this.tabStates.delete(tabId);
-      console.log(`[AIService] Tab ${tabId} cleaned up`);
+      Logger.log('AIService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -86,7 +85,7 @@ class AIService {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
-    console.log(`${logPrefix} - Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} - Configuring provider: ${provider}`);
     
     try {
       if (provider === AIProviders.CHROME_AI || provider === 'chrome-ai') {
@@ -106,11 +105,11 @@ class AIService {
         
         // If image or audio support changed, destroy existing session to force recreation
         if ((imageSupportChanged || audioSupportChanged) && state.chromeAISession) {
-          console.log(`${logPrefix} - Multi-modal support changed, destroying existing session`);
+          Logger.log('other', `${logPrefix} - Multi-modal support changed, destroying existing session`);
           try {
             state.chromeAISession.destroy();
           } catch (error) {
-            console.warn(`${logPrefix} - Error destroying session:`, error);
+            Logger.warn('other', `${logPrefix} - Error destroying session:`, error);
           }
           state.chromeAISession = null;
         }
@@ -122,7 +121,7 @@ class AIService {
           enableAudioSupport: newAudioSupport,
         };
         
-        console.log(`${logPrefix} - Chrome AI configured:`, state.config);
+        Logger.log('other', `${logPrefix} - Chrome AI configured:`, state.config);
       }
       else if (provider === AIProviders.OPENAI || provider === 'openai') {
         const openaiConfig = config.openai || config;
@@ -139,7 +138,7 @@ class AIService {
           enableAudioSupport: openaiConfig.enableAudioSupport !== false,
         };
         
-        console.log(`${logPrefix} - OpenAI configured:`, {
+        Logger.log('other', `${logPrefix} - OpenAI configured:`, {
           model: state.config.model,
           temperature: state.config.temperature,
           maxTokens: state.config.maxTokens,
@@ -161,7 +160,7 @@ class AIService {
           enableAudioSupport: ollamaConfig.enableAudioSupport !== false,
         };
         
-        console.log(`${logPrefix} - Ollama configured:`, {
+        Logger.log('other', `${logPrefix} - Ollama configured:`, {
           endpoint: ollamaConfig.endpoint,
           model: state.config.model,
         });
@@ -173,7 +172,7 @@ class AIService {
       return true;
       
     } catch (error) {
-      console.error(`${logPrefix} - Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} - Configuration failed:`, error);
       state.client = null;
       state.config = null;
       state.provider = null;
@@ -343,7 +342,7 @@ class AIService {
     // Check if any message contains images
     const hasImages = messages.some(m => m.images && m.images.length > 0);
     
-    console.log(`${logPrefix} - Sending message to ${state.provider}:`, {
+    Logger.log('other', `${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
       model: state.config.model || 'chrome-ai',
       hasImages,
@@ -377,7 +376,7 @@ class AIService {
       for await (const chunk of stream) {
         // Check if request was aborted - return cancelled, don't throw
         if (!state.abortController) {
-          console.log(`${logPrefix} - Streaming aborted by user`);
+          Logger.log('other', `${logPrefix} - Streaming aborted by user`);
           state.abortController = null;
           return { success: false, response: fullResponse, cancelled: true, error: null };
         }
@@ -394,7 +393,7 @@ class AIService {
         }
       }
 
-      console.log(`${logPrefix} - Response received (${fullResponse.length} chars)`);
+      Logger.log('other', `${logPrefix} - Response received (${fullResponse.length} chars)`);
       state.abortController = null;
       
       return { success: true, response: fullResponse, cancelled: false, error: null };
@@ -409,11 +408,11 @@ class AIService {
                       errorMsg.includes('cancel');
       
       if (isAbort) {
-        console.log(`${logPrefix} - Request aborted by user`);
+        Logger.log('other', `${logPrefix} - Request aborted by user`);
         return { success: false, response: null, cancelled: true, error: null };
       }
       
-      console.error(`${logPrefix} - Request failed:`, error);
+      Logger.error('other', `${logPrefix} - Request failed:`, error);
       
       // Return error result with enhanced message
       let errorMessage = error.message;
@@ -440,7 +439,7 @@ class AIService {
   async _sendMessageChromeAI(state, messages, onStream, logPrefix) {
     try {
       if (!state.chromeAISession) {
-        console.log(`${logPrefix} - Creating Chrome AI session...`);
+        Logger.log('other', `${logPrefix} - Creating Chrome AI session...`);
         
         const systemPrompts = messages.filter(m => m.role === 'system');
         const conversationMsgs = messages.filter(m => m.role !== 'system');
@@ -476,13 +475,13 @@ class AIService {
         }
         
         state.chromeAISession = await self.LanguageModel.create(sessionConfig);
-        console.log(`${logPrefix} - Chrome AI session created ${imageSupport ? 'with image support' : ''}`);
+        Logger.log('other', `${logPrefix} - Chrome AI session created ${imageSupport ? 'with image support' : ''}`);
         
         messages = conversationMsgs;
       }
 
       const lastMessage = messages[messages.length - 1];
-      console.log(`${logPrefix} - Chrome AI prompting with ${messages.length} message(s)`);
+      Logger.log('other', `${logPrefix} - Chrome AI prompting with ${messages.length} message(s)`);
 
       // For multi-modal messages (content is array), pass as message object with role
       // For text-only messages (content is string), pass just the string
@@ -497,7 +496,7 @@ class AIService {
         for await (const chunk of stream) {
           // Check if session was destroyed (aborted) - return cancelled
           if (!state.chromeAISession) {
-            console.log(`${logPrefix} - Chrome AI streaming aborted by user`);
+            Logger.log('other', `${logPrefix} - Chrome AI streaming aborted by user`);
             return { success: false, response: fullResponse, cancelled: true, error: null };
           }
           
@@ -512,17 +511,17 @@ class AIService {
         fullResponse = await state.chromeAISession.prompt(promptInput);
       }
 
-      console.log(`${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);
+      Logger.log('other', `${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);
       return { success: true, response: fullResponse, cancelled: false, error: null };
 
     } catch (error) {
-      console.error(`${logPrefix} - Chrome AI error:`, error);
+      Logger.error('other', `${logPrefix} - Chrome AI error:`, error);
       
       if (state.chromeAISession) {
         try {
           state.chromeAISession.destroy();
         } catch (destroyError) {
-          console.warn('Failed to destroy session:', destroyError);
+          Logger.warn('other', 'Failed to destroy session:', destroyError);
         }
         state.chromeAISession = null;
       }
@@ -548,18 +547,18 @@ class AIService {
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
     
     if (state && (state.provider === 'chrome-ai' || state.provider === AIProviders.CHROME_AI) && state.chromeAISession) {
-      console.log(`${logPrefix} - Destroying Chrome AI session`);
+      Logger.log('other', `${logPrefix} - Destroying Chrome AI session`);
       try {
         state.chromeAISession.destroy();
       } catch (destroyError) {
-        console.warn('Failed to destroy session:', destroyError);
+        Logger.warn('other', 'Failed to destroy session:', destroyError);
       }
       state.chromeAISession = null;
       return true;
     }
     
     if (state && state.abortController) {
-      console.log(`${logPrefix} - Aborting current request`);
+      Logger.log('other', `${logPrefix} - Aborting current request`);
       state.abortController.abort();
       state.abortController = null;
       return true;
@@ -593,7 +592,7 @@ class AIService {
 
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
-    console.log(`${logPrefix} - Testing connection to ${state.provider}...`);
+    Logger.log('other', `${logPrefix} - Testing connection to ${state.provider}...`);
 
     if ((state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') && !this.isExtensionMode) {
       const result = await ChromeAIValidator.testConnection();
@@ -610,11 +609,11 @@ class AIService {
 
       const response = await this.sendMessage(testMessages, null, tabId);
       
-      console.log(`${logPrefix} - Connection test successful:`, response);
+      Logger.log('other', `${logPrefix} - Connection test successful:`, response);
       return true;
       
     } catch (error) {
-      console.error(`${logPrefix} - Connection test failed:`, error);
+      Logger.error('other', `${logPrefix} - Connection test failed:`, error);
       throw error;
     }
   }

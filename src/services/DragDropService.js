@@ -7,6 +7,7 @@
  */
 
 import MediaExtractionService from './MediaExtractionService';
+import Logger from './Logger';
 
 class DragDropService {
   constructor(options = {}) {
@@ -31,7 +32,7 @@ class DragDropService {
     this._handleDragLeave = this._handleDragLeave.bind(this);
     this._handleDrop = this._handleDrop.bind(this);
     
-    console.log('[DragDropService] Instance created');
+    Logger.log('DragDropService', 'Instance created');
   }
 
   /**
@@ -56,8 +57,6 @@ class DragDropService {
     this.element.addEventListener('dragover', this._handleDragOver);
     this.element.addEventListener('dragleave', this._handleDragLeave);
     this.element.addEventListener('drop', this._handleDrop);
-    
-    console.log('[DragDropService] Attached to element');
   }
 
   /**
@@ -71,7 +70,7 @@ class DragDropService {
       this.element.removeEventListener('drop', this._handleDrop);
       
       this.element = null;
-      console.log('[DragDropService] Detached from element');
+      Logger.log('DragDropService', 'Detached from element');
     }
   }
 
@@ -91,7 +90,7 @@ class DragDropService {
   _handleDragEnter(e) {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[DragDropService] Drag enter');
+    Logger.log('DragDropService', 'Drag enter');
     this._setDragState(true);
   }
 
@@ -111,7 +110,7 @@ class DragDropService {
     const isLeavingContainer = !e.relatedTarget || !this.element.contains(e.relatedTarget);
     
     if (isLeavingContainer) {
-      console.log('[DragDropService] Drag leave (exiting container)');
+      Logger.log('DragDropService', 'Drag leave (exiting container)');
       this._setDragState(false);
     }
   }
@@ -127,7 +126,7 @@ class DragDropService {
       return;
     }
 
-    console.log('[DragDropService] Drop event received');
+    Logger.log('DragDropService', 'Drop event received');
 
     // Get current counts
     const counts = this.getCurrentCounts();
@@ -152,7 +151,7 @@ class DragDropService {
   _setDragState(isDragOver) {
     if (this.isDragOver !== isDragOver) {
       this.isDragOver = isDragOver;
-      console.log('[DragDropService] Drag state changed:', isDragOver);
+      Logger.log('DragDropService', 'Drag state changed:', isDragOver);
       if (this.onSetDragOver) {
         this.onSetDragOver(isDragOver);
       }
@@ -172,7 +171,7 @@ class DragDropService {
    * Parse dropped data from drag event
    */
   async _parseDrop(e, currentCounts = { images: 0, audios: 0 }) {
-    console.log('[DragDropService] Processing drop event');
+    Logger.log('DragDropService', 'Processing drop event');
 
     // Prepare input for MediaExtractionService
     const input = {};
@@ -180,21 +179,21 @@ class DragDropService {
     // Add files if present
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       input.files = e.dataTransfer.files;
-      console.log('[DragDropService] Drop contains files:', e.dataTransfer.files.length);
+      Logger.log('DragDropService', 'Drop contains files:', e.dataTransfer.files.length);
     }
     
     // Add HTML if present
     const htmlData = e.dataTransfer.getData('text/html');
     if (htmlData) {
       input.htmlString = htmlData;
-      console.log('[DragDropService] Drop contains HTML');
+      Logger.log('DragDropService', 'Drop contains HTML');
     }
     
     // Add text if present (and no HTML)
     const textData = e.dataTransfer.getData('text/plain');
     if (textData && !htmlData) {
       input.textString = textData;
-      console.log('[DragDropService] Drop contains text');
+      Logger.log('DragDropService', 'Drop contains text');
     }
 
     // Call single extraction method with limits
@@ -205,7 +204,7 @@ class DragDropService {
       currentAudioCount: currentCounts.audios
     });
 
-    console.log('[DragDropService] Parse result:', {
+    Logger.log('DragDropService', 'Parse result:', {
       textLength: result.text.length,
       imageCount: result.images.length,
       audioCount: result.audios.length,

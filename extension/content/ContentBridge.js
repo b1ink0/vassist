@@ -7,6 +7,7 @@
 /* global chrome */
 
 import { MessageBridge } from '../shared/MessageBridge.js';
+import Logger from '../../src/services/Logger';
 
 export class ContentBridge extends MessageBridge {
   constructor() {
@@ -29,15 +30,15 @@ export class ContentBridge extends MessageBridge {
    */
   async _sendMessageImpl(message) {
     try {
-      console.log(`[${this.name}] Sending message to background:`, message.type, message.requestId);
+      Logger.log('${this.name}', 'Sending message to background:', message.type, message.requestId);
       const response = await chrome.runtime.sendMessage(message);
-      console.log(`[${this.name}] Received response from background:`, response?.type, response?.requestId);
+      Logger.log('${this.name}', 'Received response from background:', response?.type, response?.requestId);
       // Handle the response to resolve the pending promise
       if (response) {
         this.handleResponse(response);
       }
     } catch (error) {
-      console.error(`[${this.name}] Failed to send message:`, error);
+      Logger.error('${this.name}', 'Failed to send message:', error);
       throw new Error('Failed to communicate with background service');
     }
   }
@@ -59,7 +60,7 @@ export class ContentBridge extends MessageBridge {
    */
   async reconnect() {
     // Extension context cannot reconnect - page needs reload
-    console.error(`[${this.name}] Extension context invalidated - page reload required`);
+    Logger.error('${this.name}', 'Extension context invalidated - page reload required');
     throw new Error('Extension context invalidated');
   }
 }

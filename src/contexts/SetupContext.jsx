@@ -7,6 +7,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import StorageServiceProxy from '../services/proxies/StorageServiceProxy';
+import Logger from '../services/Logger';
 
 const SetupContext = createContext(null);
 
@@ -119,10 +120,10 @@ export function SetupProvider({ children }) {
     const loadSetupState = async () => {
       try {
         const savedState = await StorageServiceProxy.configLoad('setupState', DEFAULT_SETUP_STATE);
-        console.log('[SetupContext] Loaded setup state from storage:', savedState);
+        Logger.log('SetupContext', 'Loaded setup state from storage:', savedState);
         setSetupState(savedState);
       } catch (error) {
-        console.error('[SetupContext] Failed to load setup state:', error);
+        Logger.error('SetupContext', 'Failed to load setup state:', error);
         setSetupState(DEFAULT_SETUP_STATE);
       } finally {
         setIsLoading(false);
@@ -139,11 +140,11 @@ export function SetupProvider({ children }) {
 
     const timeoutId = setTimeout(async () => {
       try {
-        console.log('[SetupContext] Saving setup state to storage:', setupState);
+        Logger.log('SetupContext', 'Saving setup state to storage:', setupState);
         await StorageServiceProxy.configSave('setupState', setupState);
-        console.log('[SetupContext] Setup state saved successfully');
+        Logger.log('SetupContext', 'Setup state saved successfully');
       } catch (error) {
-        console.error('[SetupContext] Failed to save setup state:', error);
+        Logger.error('SetupContext', 'Failed to save setup state:', error);
       }
     }, 500);
 
@@ -167,7 +168,7 @@ export function SetupProvider({ children }) {
    */
   const nextStep = useCallback(() => {
     setSetupState(prev => {
-      console.log('[SetupContext] nextStep called - current:', prev.currentStep, 'going to:', prev.currentStep + 1);
+      Logger.log('SetupContext', 'nextStep called - current:', prev.currentStep, 'going to:', prev.currentStep + 1);
       if (prev.currentStep < TOTAL_STEPS) {
         return {
           ...prev,
@@ -183,7 +184,7 @@ export function SetupProvider({ children }) {
    */
   const previousStep = useCallback(() => {
     setSetupState(prev => {
-      console.log('[SetupContext] previousStep called - current:', prev.currentStep, 'going to:', prev.currentStep - 1);
+      Logger.log('SetupContext', 'previousStep called - current:', prev.currentStep, 'going to:', prev.currentStep - 1);
       if (prev.currentStep > 1) {
         return {
           ...prev,
@@ -238,7 +239,7 @@ export function SetupProvider({ children }) {
       
       // Save to storage immediately
       StorageServiceProxy.configSave('setupState', updated).catch(err => {
-        console.error('[SetupContext] Failed to save setupState:', err);
+        Logger.error('SetupContext', 'Failed to save setupState:', err);
       });
       
       return updated;
@@ -250,7 +251,7 @@ export function SetupProvider({ children }) {
    */
   const completeSetup = useCallback(async () => {
     try {
-      console.log('[SetupContext] Completing setup with data:', setupState.setupData);
+      Logger.log('SetupContext', 'Completing setup with data:', setupState.setupData);
       
       // Save AI/LLM config - match ConfigContext structure
       const aiConfig = {
@@ -290,7 +291,7 @@ export function SetupProvider({ children }) {
           summarizer: { enabled: true, defaultType: 'tldr', defaultFormat: 'plain-text', defaultLength: 'medium' },
         },
       };
-      console.log('[SetupContext] Saving aiConfig:', aiConfig);
+      Logger.log('SetupContext', 'Saving aiConfig:', aiConfig);
       await StorageServiceProxy.configSave('aiConfig', aiConfig);
       
       // Save TTS config - match ConfigContext structure
@@ -320,7 +321,7 @@ export function SetupProvider({ children }) {
         chunkSize: 500,
         minChunkSize: 100,
       };
-      console.log('[SetupContext] Saving ttsConfig:', ttsConfig);
+      Logger.log('SetupContext', 'Saving ttsConfig:', ttsConfig);
       await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
       
       // Save STT config - match ConfigContext structure
@@ -349,7 +350,7 @@ export function SetupProvider({ children }) {
         maxRecordingDuration: 60,
         audioDeviceSwitchDelay: 300,
       };
-      console.log('[SetupContext] Saving sttConfig:', sttConfig);
+      Logger.log('SetupContext', 'Saving sttConfig:', sttConfig);
       await StorageServiceProxy.configSave('sttConfig', sttConfig);
       
       // Save UI config - match ConfigContext structure
@@ -367,7 +368,7 @@ export function SetupProvider({ children }) {
         enableVoiceInput: false,
         theme: 'dark',
       };
-      console.log('[SetupContext] Saving uiConfig:', uiConfig);
+      Logger.log('SetupContext', 'Saving uiConfig:', uiConfig);
       await StorageServiceProxy.configSave('uiConfig', uiConfig);
       
       // Mark setup as completed
@@ -378,7 +379,7 @@ export function SetupProvider({ children }) {
       setSetupState(completedState);
       await StorageServiceProxy.configSave('setupState', completedState);
       
-      console.log('[SetupContext] Setup completed successfully - all configs saved');
+      Logger.log('SetupContext', 'Setup completed successfully - all configs saved');
       
       // Reload page to apply all configurations
       setTimeout(() => {
@@ -386,7 +387,7 @@ export function SetupProvider({ children }) {
       }, 500);
       
     } catch (error) {
-      console.error('[SetupContext] Failed to complete setup:', error);
+      Logger.error('SetupContext', 'Failed to complete setup:', error);
       throw error;
     }
   }, [setupState]);
@@ -396,15 +397,15 @@ export function SetupProvider({ children }) {
    */
   const resetSetup = useCallback(async () => {
     try {
-      console.log('[SetupContext] Resetting setup...');
+      Logger.log('SetupContext', 'Resetting setup...');
       
       // Reset to default state
       setSetupState(DEFAULT_SETUP_STATE);
       await StorageServiceProxy.configSave('setupState', DEFAULT_SETUP_STATE);
       
-      console.log('[SetupContext] Setup reset complete');
+      Logger.log('SetupContext', 'Setup reset complete');
     } catch (error) {
-      console.error('[SetupContext] Failed to reset setup:', error);
+      Logger.error('SetupContext', 'Failed to reset setup:', error);
       throw error;
     }
   }, []);

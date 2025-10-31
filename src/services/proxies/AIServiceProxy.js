@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import AIService from '../AIService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class AIServiceProxy extends ServiceProxy {
   constructor() {
@@ -152,7 +153,7 @@ class AIServiceProxy extends ServiceProxy {
       if (bridge) {
         bridge.sendMessage(MessageTypes.AI_ABORT, {})
           .catch(error => {
-            console.warn('[AIServiceProxy] Abort failed:', error);
+            Logger.warn('AIServiceProxy', 'Abort failed:', error);
           });
       }
       return true;

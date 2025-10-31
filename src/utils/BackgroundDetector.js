@@ -1,5 +1,6 @@
 import { StorageServiceProxy } from '../services/proxies';
 import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
+import Logger from '../services/Logger';
 
 /**
  * Singleton utility for detecting background brightness
@@ -23,7 +24,7 @@ class BackgroundDetector {
       const config = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
       this.cachedUIConfig = config;
     } catch (error) {
-      console.error('[BackgroundDetector] Failed to load UI config:', error);
+      Logger.error('BackgroundDetector', 'Failed to load UI config:', error);
       this.cachedUIConfig = DefaultUIConfig;
     }
   }
@@ -90,7 +91,7 @@ class BackgroundDetector {
       }
       
       if (allBrightness.length === 0) {
-        console.warn(`${logPrefix} No valid samples found`);
+        Logger.warn('other', `${logPrefix} No valid samples found`);
         return { isLight: false, brightness: 0, debugMarkers: [] };
       }
       
@@ -112,7 +113,7 @@ class BackgroundDetector {
         sampleCount: allBrightness.length,
       };
     } catch (error) {
-      console.error(`${logPrefix} Detection failed:`, error);
+      Logger.error('other', `${logPrefix} Detection failed:`, error);
       return { isLight: false, brightness: 0, debugMarkers: [] };
     }
   }
@@ -274,7 +275,7 @@ class BackgroundDetector {
       
       return avgBrightness;
     } catch (error) {
-      console.warn('[BackgroundDetector] Failed to parse gradient:', error);
+      Logger.warn('BackgroundDetector', 'Failed to parse gradient:', error);
       return null;
     }
   }

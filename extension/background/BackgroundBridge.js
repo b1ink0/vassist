@@ -7,6 +7,7 @@
 /* global chrome */
 
 import { MessageTypes } from '../shared/MessageTypes.js';
+import Logger from '../../src/services/Logger';
 
 export class BackgroundBridge {
   constructor() {
@@ -16,7 +17,7 @@ export class BackgroundBridge {
     this.offscreenReady = false;
     
     this.setupListeners();
-    console.log('[BackgroundBridge] Initialized');
+    Logger.log('BackgroundBridge', 'Initialized');
   }
 
   /**
@@ -42,7 +43,7 @@ export class BackgroundBridge {
       this.handleMessage(message, sender)
         .then(sendResponse)
         .catch(error => {
-          console.error('[BackgroundBridge] Message handling error:', error);
+          Logger.error('BackgroundBridge', 'Message handling error:', error);
           sendResponse({
             type: MessageTypes.ERROR,
             requestId: message.requestId,
@@ -59,7 +60,7 @@ export class BackgroundBridge {
       this.cleanupTab(tabId);
     });
 
-    console.log('[BackgroundBridge] Listeners set up');
+    Logger.log('BackgroundBridge', 'Listeners set up');
   }
 
   /**
@@ -69,7 +70,7 @@ export class BackgroundBridge {
    */
   registerHandler(messageType, handler) {
     this.messageHandlers.set(messageType, handler);
-    console.log(`[BackgroundBridge] Registered handler for ${messageType}`);
+    Logger.log('BackgroundBridge', 'Registered handler for ${messageType}');
   }
 
   /**
@@ -82,7 +83,7 @@ export class BackgroundBridge {
     const { type, requestId, tabId: messageTabId } = message;
     const tabId = messageTabId || sender.tab?.id;
 
-    console.log(`[BackgroundBridge] Received ${type} from tab ${tabId}, request ${requestId}`);
+    Logger.log('BackgroundBridge', 'Received ${type} from tab ${tabId}, request ${requestId}');
 
     // Initialize tab state if needed
     if (tabId && !this.tabStates.has(tabId)) {
@@ -105,7 +106,7 @@ export class BackgroundBridge {
         data
       };
     } catch (error) {
-      console.error(`[BackgroundBridge] Handler error for ${type}:`, error);
+      Logger.error('BackgroundBridge', 'Handler error for ${type}:', error);
       throw error;
     }
   }
@@ -119,7 +120,7 @@ export class BackgroundBridge {
     try {
       await chrome.tabs.sendMessage(tabId, message);
     } catch (error) {
-      console.error(`[BackgroundBridge] Failed to send to tab ${tabId}:`, error);
+      Logger.error('BackgroundBridge', 'Failed to send to tab ${tabId}:', error);
     }
   }
 
@@ -133,7 +134,7 @@ export class BackgroundBridge {
       const response = await chrome.runtime.sendMessage(message);
       return response;
     } catch (error) {
-      console.error('[BackgroundBridge] Failed to send to offscreen:', error);
+      Logger.error('BackgroundBridge', 'Failed to send to offscreen:', error);
       throw error;
     }
   }
@@ -143,7 +144,7 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    */
   initializeTab(tabId) {
-    console.log(`[BackgroundBridge] Initializing tab ${tabId}`);
+    Logger.log('BackgroundBridge', 'Initializing tab ${tabId}');
     
     this.tabStates.set(tabId, {
       chatState: {
@@ -182,7 +183,7 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    */
   cleanupTab(tabId) {
-    console.log(`[BackgroundBridge] Cleaning up tab ${tabId}`);
+    Logger.log('BackgroundBridge', 'Cleaning up tab ${tabId}');
     
     const state = this.tabStates.get(tabId);
     if (state) {

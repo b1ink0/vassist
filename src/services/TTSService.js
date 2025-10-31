@@ -8,6 +8,7 @@
 import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
 import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
+import Logger from './Logger';
 
 class TTSService {
   constructor() {
@@ -25,7 +26,7 @@ class TTSService {
 
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      console.log('[TTSService] Initialized (Extension mode - multi-tab)');
+      // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     } else {
       this.client = null;
       this.provider = null;
@@ -48,7 +49,7 @@ class TTSService {
       this.kokoroHeartbeatInterval = null;
       this.kokoroHeartbeatEnabled = false;
 
-      console.log('[TTSService] Initialized with lip sync support');
+      // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     }
   }
 
@@ -63,14 +64,14 @@ class TTSService {
         isStopped: false,
         blobUrls: new Map(),
       });
-      console.log(`[TTSService] Tab ${tabId} initialized`);
+      Logger.log('TTSService', `Tab ${tabId} initialized`);
     }
   }
 
   cleanupTab(tabId) {
     if (this.tabStates.has(tabId)) {
       this.tabStates.delete(tabId);
-      console.log(`[TTSService] Tab ${tabId} cleaned up`);
+      Logger.log('TTSService', `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -95,11 +96,11 @@ class TTSService {
     state.enabled = enabled;
     
     if (!enabled) {
-      console.log(`${logPrefix} - TTS is disabled`);
+      Logger.log('other', `${logPrefix} - TTS is disabled`);
       return true;
     }
     
-    console.log(`${logPrefix} - Configuring provider: ${provider}`);
+    Logger.log('other', `${logPrefix} - Configuring provider: ${provider}`);
 
     try {
       if (provider === TTSProviders.KOKORO) {
@@ -107,7 +108,7 @@ class TTSService {
         // Merge with defaults if kokoro config is missing
         const kokoroConfig = config.kokoro || {};
         
-        console.log(`${logPrefix} - Kokoro config received:`, kokoroConfig);
+        Logger.log('other', `${logPrefix} - Kokoro config received:`, kokoroConfig);
         
         state.config = {
           modelId: kokoroConfig.modelId || 'onnx-community/Kokoro-82M-v1.0-ONNX',
@@ -120,7 +121,7 @@ class TTSService {
         state.provider = provider;
         state.client = 'kokoro'; // Marker to indicate Kokoro is configured
 
-        console.log(`${logPrefix} - Kokoro TTS configured:`, state.config);
+        Logger.log('other', `${logPrefix} - Kokoro TTS configured:`, state.config);
       } else if (provider === TTSProviders.OPENAI) {
         state.client = new OpenAI({
           apiKey: config.openai.apiKey,
@@ -134,7 +135,7 @@ class TTSService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - OpenAI TTS configured:`, state.config);
+        Logger.log('other', `${logPrefix} - OpenAI TTS configured:`, state.config);
       } else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
         // Normalize endpoint URL - ensure it ends with /v1 (SDK appends /audio/speech)
         let endpoint = config['openai-compatible'].endpoint;
@@ -156,14 +157,14 @@ class TTSService {
         };
         state.provider = provider;
 
-        console.log(`${logPrefix} - Generic TTS configured:`, { baseURL: endpoint });
+        Logger.log('other', `${logPrefix} - Generic TTS configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }
 
       return true;
     } catch (error) {
-      console.error(`${logPrefix} - Configuration failed:`, error);
+      Logger.error('other', `${logPrefix} - Configuration failed:`, error);
       state.client = null;
       state.config = null;
       state.provider = null;
@@ -189,7 +190,7 @@ class TTSService {
   initializeBVMDConverter() {
     // In dev mode, worker handles BVMD conversion
     // This method is kept for compatibility but does nothing
-    console.log('[TTSService] BVMD conversion handled by SharedWorker');
+    Logger.log('TTSService', 'BVMD conversion handled by SharedWorker');
   }
 
   /**
@@ -198,7 +199,7 @@ class TTSService {
    */
   setSpeakCallback(callback) {
     this.onSpeakCallback = callback;
-    console.log('[TTSService] Speak callback registered');
+    Logger.log('TTSService', 'Speak callback registered');
   }
 
   /**
@@ -207,7 +208,7 @@ class TTSService {
    */
   setAudioFinishedCallback(callback) {
     this.onAudioFinishedCallback = callback;
-    console.log('[TTSService] Audio finished callback registered');
+    Logger.log('TTSService', 'Audio finished callback registered');
   }
 
   /**
@@ -216,7 +217,7 @@ class TTSService {
    */
   setStopCallback(callback) {
     this.onStopCallback = callback;
-    console.log('[TTSService] Stop callback registered');
+    Logger.log('TTSService', 'Stop callback registered');
   }
 
   /**
@@ -225,7 +226,7 @@ class TTSService {
    */
   setLipSyncEnabled(enabled) {
     this.lipSyncEnabled = enabled;
-    console.log(`[TTSService] Lip sync generation ${enabled ? 'enabled' : 'disabled'}`);
+    Logger.log('TTSService', `Lip sync generation ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -239,7 +240,7 @@ class TTSService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
     
-    console.log(`${logPrefix} - generateSpeech called with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
+    Logger.log('other', `${logPrefix} - generateSpeech called with text:`, typeof text, `"${text?.substring?.(0, 50)}..."`);
     
     if (!this.isConfigured(tabId)) {
       throw new Error('TTSService not configured or disabled');
@@ -247,7 +248,7 @@ class TTSService {
 
     // Validate text parameter
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      console.error(`${logPrefix} - Invalid text for speech generation:`, text);
+      Logger.error('other', `${logPrefix} - Invalid text for speech generation:`, text);
       throw new Error(`Invalid text parameter for TTS: ${JSON.stringify(text)}`);
     }
 
@@ -262,7 +263,7 @@ class TTSService {
       
       const status = await audioWorkerClient.checkKokoroStatus();
       if (!status.initialized && !status.initializing) {
-        console.log(`${logPrefix} - Auto-initializing Kokoro...`);
+        Logger.log('other', `${logPrefix} - Auto-initializing Kokoro...`);
         await this.initializeKokoro(null, tabId);
       }
       
@@ -274,7 +275,7 @@ class TTSService {
       state.isGenerating = true;
 
       try {
-        console.log(`${logPrefix} - Generating speech (${text.length} chars)`);
+        Logger.log('other', `${logPrefix} - Generating speech (${text.length} chars)`);
         const response = await state.client.audio.speech.create({
           model: state.config.model,
           voice: state.config.voice,
@@ -291,11 +292,11 @@ class TTSService {
         let contentType = response.headers?.get('content-type') || response.type || 'audio/mpeg';
 
         state.isGenerating = false;
-        console.log(`${logPrefix} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`);
+        Logger.log('other', `${logPrefix} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`);
         return { audioBuffer: arrayBuffer, mimeType: contentType };
       } catch (error) {
         state.isGenerating = false;
-        console.error(`${logPrefix} - Speech generation failed:`, error);
+        Logger.error('other', `${logPrefix} - Speech generation failed:`, error);
         throw error;
       }
     }
@@ -307,7 +308,7 @@ class TTSService {
 
     state.activeRequests++;
     try {
-      console.log(`${logPrefix} - Generating speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
+      Logger.log('other', `${logPrefix} - Generating speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
 
       const response = await state.client.audio.speech.create({
         model: state.config.model,
@@ -327,7 +328,7 @@ class TTSService {
           if (state.isStopped) return null;
           
           // Use SharedWorker for audio processing in dev mode
-          console.log(`${logPrefix} - Processing audio with lip sync via SharedWorker...`);
+          Logger.log('other', `${logPrefix} - Processing audio with lip sync via SharedWorker...`);
           
           // Initialize worker client if needed
           if (!audioWorkerClient.isReady) {
@@ -342,17 +343,17 @@ class TTSService {
             const bvmdUint8 = new Uint8Array(result.bvmdData);
             const bvmdBlob = new Blob([bvmdUint8], { type: 'application/octet-stream' });
             bvmdUrl = URL.createObjectURL(bvmdBlob);
-            console.log(`${logPrefix} - BVMD generated via SharedWorker:`, bvmdUrl);
+            Logger.log('other', `${logPrefix} - BVMD generated via SharedWorker:`, bvmdUrl);
           }
           
         } catch (e) {
-          console.error(`${logPrefix} - Lip sync generation failed:`, e);
+          Logger.error('other', `${logPrefix} - Lip sync generation failed:`, e);
         }
       }
 
       return { audio: blob, bvmdUrl };
     } catch (error) {
-      console.error(`${logPrefix} - Speech generation failed:`, error);
+      Logger.error('other', `${logPrefix} - Speech generation failed:`, error);
       throw error;
     } finally {
       state.activeRequests--;
@@ -408,7 +409,7 @@ class TTSService {
       chunks.push(currentChunk.trim());
     }
 
-    console.log(`[TTSService] Text chunked into ${chunks.length} parts:`, chunks.map(c => c.substring(0, 50) + '...'));
+    Logger.log('TTSService', 'Text chunked into ${chunks.length} parts:', chunks.map(c => c.substring(0, 50) + '...'));
     
     return chunks;
   }
@@ -435,7 +436,7 @@ class TTSService {
           if (onChunkReady) await onChunkReady(result.audioBuffer, i);
           generatedCount++;
         } catch (error) {
-          console.error(`[TTSService] Tab ${tabId} - Failed to generate chunk ${i + 1}:`, error);
+          Logger.error('TTSService', 'Tab ${tabId} - Failed to generate chunk ${i + 1}:', error);
         }
       }
       return generatedCount;
@@ -443,14 +444,14 @@ class TTSService {
 
     // Dev mode: existing behavior
     if (!this.isConfigured()) {
-      console.warn('[TTSService] TTS not configured, skipping speech generation');
+      Logger.warn('TTSService', 'TTS not configured, skipping speech generation');
       return [];
     }
 
     const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
     const results = [];
 
-    console.log(`[TTSService] Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''} [Session: ${sessionId}]`);
+    Logger.log('TTSService', `Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''} [Session: ${sessionId}]`);
 
     for (let i = 0; i < chunks.length; i++) {
       try {
@@ -463,7 +464,7 @@ class TTSService {
         results.push(chunkResult);
         if (onChunkReady) onChunkReady(chunks[i], audioUrl, bvmdUrl, i, chunks.length);
       } catch (error) {
-        console.error(`[TTSService] Failed to generate chunk ${i + 1}:`, error);
+        Logger.error('TTSService', 'Failed to generate chunk ${i + 1}:', error);
       }
     }
 
@@ -499,13 +500,13 @@ class TTSService {
     
     // If this is a NEW session (different from current), stop the current one
     if (sessionId && this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
-      console.log(`[TTSService] New session ${sessionId} requested, stopping current session ${this.currentPlaybackSession}`);
+      Logger.log('TTSService', `New session ${sessionId} requested, stopping current session ${this.currentPlaybackSession}`);
       this.stopPlayback();
     }
     
     // Don't queue if stopped AND it's not a new session starting
     if (this.isStopped && !sessionId) {
-      console.log('[TTSService] Audio not queued - playback stopped');
+      Logger.log('TTSService', 'Audio not queued - playback stopped');
       return;
     }
     
@@ -516,7 +517,7 @@ class TTSService {
     }
     
     this.audioQueue.push({ text, audioUrl, bvmdUrl, sessionId: effectiveSessionId });
-    console.log(`[TTSService] Audio queued (${this.audioQueue.length} in queue)${bvmdUrl ? ' with lip sync' : ''} [Session: ${effectiveSessionId}]`);
+    Logger.log('TTSService', `Audio queued (${this.audioQueue.length} in queue)${bvmdUrl ? ' with lip sync' : ''} [Session: ${effectiveSessionId}]`);
     
     // Start playing if not already playing
     if (!this.isPlaying) {
@@ -531,7 +532,7 @@ class TTSService {
     // Check if stopped
     if (this.isStopped) {
       this.isPlaying = false;
-      console.log('[TTSService] Playback stopped by flag');
+      Logger.log('TTSService', 'Playback stopped by flag');
       return;
     }
     
@@ -539,7 +540,7 @@ class TTSService {
       this.isPlaying = false;
       const finishedSessionId = this.currentPlaybackSession; // Save before clearing
       this.currentPlaybackSession = null; // Clear session when queue is empty
-      console.log('[TTSService] Queue empty, playback stopped');
+      Logger.log('TTSService', 'Queue empty, playback stopped');
       
       // Trigger audio end callback when entire session finishes
       if (this.onAudioEndCallback && finishedSessionId) {
@@ -561,13 +562,13 @@ class TTSService {
     try {
       await this.playAudio(text, audioUrl, bvmdUrl, sessionId);
     } catch (error) {
-      console.error('[TTSService] Playback error:', error);
+      Logger.error('TTSService', 'Playback error:', error);
     }
 
     // Check again if stopped (in case stop was called while playing)
     if (this.isStopped) {
       this.isPlaying = false;
-      console.log('[TTSService] Playback stopped, not playing next');
+      Logger.log('TTSService', 'Playback stopped, not playing next');
       return;
     }
 
@@ -594,7 +595,7 @@ class TTSService {
     return new Promise((resolve, reject) => {
       // Check if this audio belongs to the current session
       if (sessionId && this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
-        console.log(`[TTSService] Skipping audio from old session ${sessionId} (current: ${this.currentPlaybackSession})`);
+        Logger.log('TTSService', `Skipping audio from old session ${sessionId} (current: ${this.currentPlaybackSession})`);
         resolve(); // Don't reject, just skip
         return;
       }
@@ -604,7 +605,7 @@ class TTSService {
 
       // Trigger callbacks when audio starts playing
       audio.addEventListener('play', () => {
-        console.log('[TTSService] Audio playing, triggering callbacks');
+        Logger.log('TTSService', 'Audio playing, triggering callbacks');
         
         // Trigger speak callback for animation synchronization
         if (bvmdUrl && this.onSpeakCallback) {
@@ -618,21 +619,21 @@ class TTSService {
       }, { once: true });
 
       audio.onended = () => {
-        console.log('[TTSService] Audio playback finished');
+        Logger.log('TTSService', 'Audio playback finished');
         this.currentAudio = null;
         
         resolve();
       };
 
       audio.onerror = (error) => {
-        console.error('[TTSService] Audio playback error:', error);
+        Logger.error('TTSService', 'Audio playback error:', error);
         this.currentAudio = null;
         
         reject(error);
       };
 
       audio.play().catch(reject);
-      console.log('[TTSService] Audio playback started' + (bvmdUrl ? ' with lip sync' : ''));
+      Logger.log('TTSService', 'Audio playback started' + (bvmdUrl ? ' with lip sync' : ''));
     });
   }
 
@@ -643,13 +644,13 @@ class TTSService {
    * @returns {Promise<void>} Resolves when all audio finishes
    */
   async playAudioSequence(items, sessionId = null) {
-    console.log(`[TTSService] Playing ${items.length} audio chunks sequentially [Session: ${sessionId}]`);
+    Logger.log('TTSService', `Playing ${items.length} audio chunks sequentially [Session: ${sessionId}]`);
     
     // Set current session if provided
     if (sessionId) {
       // If there's a different session playing, stop it first
       if (this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
-        console.log(`[TTSService] Stopping current session ${this.currentPlaybackSession} for new session ${sessionId}`);
+        Logger.log('TTSService', `Stopping current session ${this.currentPlaybackSession} for new session ${sessionId}`);
         this.stopPlayback();
       }
       this.currentPlaybackSession = sessionId;
@@ -666,12 +667,12 @@ class TTSService {
         
         await this.playAudio(text, audioUrl, bvmdUrl, itemSessionId);
       } catch (error) {
-        console.error('[TTSService] Error playing audio chunk:', error);
+        Logger.error('TTSService', 'Error playing audio chunk:', error);
         // Continue with next chunk
       }
     }
     
-    console.log('[TTSService] Sequence playback complete');
+    Logger.log('TTSService', 'Sequence playback complete');
     
     // Clear session when sequence is complete
     if (sessionId === this.currentPlaybackSession) {
@@ -684,7 +685,7 @@ class TTSService {
    * Returns a Promise that resolves when stop is complete
    */
   stopPlayback() {
-    console.log('[TTSService] Stopping playback...');
+    Logger.log('TTSService', 'Stopping playback...');
     
     // Save current session ID before clearing
     const stoppedSessionId = this.currentPlaybackSession;
@@ -707,7 +708,7 @@ class TTSService {
     // Clear current session
     this.currentPlaybackSession = null;
     
-    console.log('[TTSService] Playback stopped and queue cleared');
+    Logger.log('TTSService', 'Playback stopped and queue cleared');
     
     // Trigger audio end callback for UI cleanup (important for resetting speaker icon)
     // Do this BEFORE stop callback so UI updates happen in right order
@@ -726,7 +727,7 @@ class TTSService {
    * Call this before starting new TTS generation
    */
   resumePlayback() {
-    console.log('[TTSService] Resuming playback (clearing stopped flag)');
+    Logger.log('TTSService', 'Resuming playback (clearing stopped flag)');
     this.isStopped = false;
   }
 
@@ -761,7 +762,7 @@ class TTSService {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
-      console.log(`${logPrefix} - Generating Kokoro speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
+      Logger.log('other', `${logPrefix} - Generating Kokoro speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
 
       if (state.isStopped) return null;
 
@@ -781,7 +782,7 @@ class TTSService {
         try {
           if (state.isStopped) return null;
           
-          console.log(`${logPrefix} - Processing Kokoro audio with lip sync...`);
+          Logger.log('other', `${logPrefix} - Processing Kokoro audio with lip sync...`);
           
           // Process audio in worker for lip sync
           const result = await audioWorkerClient.processAudioWithLipSync(audioBuffer);
@@ -796,18 +797,18 @@ class TTSService {
               this.blobUrls.add(bvmdUrl);
             }
             
-            console.log(`${logPrefix} - BVMD generated:`, bvmdUrl);
+            Logger.log('other', `${logPrefix} - BVMD generated:`, bvmdUrl);
           }
         } catch (lipSyncError) {
-          console.error(`${logPrefix} - Lip sync generation failed (continuing without it):`, lipSyncError);
+          Logger.error('other', `${logPrefix} - Lip sync generation failed (continuing without it):`, lipSyncError);
         }
       }
 
-      console.log(`${logPrefix} - Kokoro speech generated successfully`);
+      Logger.log('other', `${logPrefix} - Kokoro speech generated successfully`);
       return { audio: blob, bvmdUrl };
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro speech generation failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro speech generation failed:`, error);
       throw error;
     }
   }
@@ -831,7 +832,7 @@ class TTSService {
     }
 
     try {
-      console.log(`${logPrefix} - Initializing Kokoro TTS...`);
+      Logger.log('other', `${logPrefix} - Initializing Kokoro TTS...`);
 
       // Dev mode: Initialize worker client for SharedWorker
       // Extension mode: This method is NOT called - TTSServiceProxy handles it directly
@@ -846,30 +847,30 @@ class TTSService {
         // NOTE: dtype is auto-determined in KokoroTTSCore based on device
       }, progressCallback);
 
-      console.log(`${logPrefix} - Kokoro TTS initialized:`, result.message);
+      Logger.log('other', `${logPrefix} - Kokoro TTS initialized:`, result.message);
       
       // Generate a test audio to fully warm up the model (ensures it's truly ready)
-      console.log(`${logPrefix} - Warming up model with test generation...`);
+      Logger.log('other', `${logPrefix} - Warming up model with test generation...`);
       try {
         await audioWorkerClient.generateKokoroSpeech('ready', {
           voice: state.config.voice,
           speed: state.config.speed
         });
-        console.log(`${logPrefix} - Model warmup complete, fully initialized`);
+        Logger.log('other', `${logPrefix} - Model warmup complete, fully initialized`);
       } catch (warmupError) {
-        console.warn(`${logPrefix} - Model warmup failed (continuing anyway):`, warmupError);
+        Logger.warn('other', `${logPrefix} - Model warmup failed (continuing anyway):`, warmupError);
       }
       
       // Start heartbeat if keepModelLoaded is enabled
       if (state.config.keepModelLoaded !== false) {
-        console.log(`${logPrefix} - Starting Kokoro heartbeat (keepModelLoaded: true)`);
+        Logger.log('other', `${logPrefix} - Starting Kokoro heartbeat (keepModelLoaded: true)`);
         this.startKokoroHeartbeat(10000); // 10 seconds
       }
       
       return result.initialized;
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro initialization failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro initialization failed:`, error);
       throw error;
     }
   }
@@ -889,11 +890,11 @@ class TTSService {
       }
 
       const status = await audioWorkerClient.checkKokoroStatus();
-      console.log(`${logPrefix} - Kokoro status:`, status);
+      Logger.log('other', `${logPrefix} - Kokoro status:`, status);
       return status;
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro status check failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro status check failed:`, error);
       throw error;
     }
   }
@@ -913,11 +914,11 @@ class TTSService {
       }
 
       const voices = await audioWorkerClient.listKokoroVoices();
-      console.log(`${logPrefix} - Kokoro voices:`, voices.length);
+      Logger.log('other', `${logPrefix} - Kokoro voices:`, voices.length);
       return voices;
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro list voices failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro list voices failed:`, error);
       throw error;
     }
   }
@@ -937,11 +938,11 @@ class TTSService {
       }
 
       const sizeInfo = await audioWorkerClient.getKokoroCacheSize();
-      console.log(`${logPrefix} - Kokoro cache size:`, sizeInfo);
+      Logger.log('other', `${logPrefix} - Kokoro cache size:`, sizeInfo);
       return sizeInfo;
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro cache size check failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro cache size check failed:`, error);
       throw error;
     }
   }
@@ -997,11 +998,11 @@ class TTSService {
       }
 
       const cleared = await audioWorkerClient.clearKokoroCache();
-      console.log(`${logPrefix} - Kokoro cache cleared:`, cleared);
+      Logger.log('other', `${logPrefix} - Kokoro cache cleared:`, cleared);
       return cleared;
 
     } catch (error) {
-      console.error(`${logPrefix} - Kokoro cache clear failed:`, error);
+      Logger.error('other', `${logPrefix} - Kokoro cache clear failed:`, error);
       throw error;
     }
   }
@@ -1014,11 +1015,11 @@ class TTSService {
    */
   startKokoroHeartbeat(intervalMs = 10000) {
     if (this.kokoroHeartbeatInterval) {
-      console.log('[TTSService] Kokoro heartbeat already running');
+      Logger.log('TTSService', 'Kokoro heartbeat already running');
       return;
     }
 
-    console.log(`[TTSService] Starting Kokoro heartbeat (interval: ${intervalMs}ms)`);
+    Logger.log('TTSService', `Starting Kokoro heartbeat (interval: ${intervalMs}ms)`);
     this.kokoroHeartbeatEnabled = true;
 
     this.kokoroHeartbeatInterval = setInterval(async () => {
@@ -1040,7 +1041,7 @@ class TTSService {
    */
   stopKokoroHeartbeat() {
     if (this.kokoroHeartbeatInterval) {
-      console.log('[TTSService] Stopping Kokoro heartbeat');
+      Logger.log('TTSService', 'Stopping Kokoro heartbeat');
       clearInterval(this.kokoroHeartbeatInterval);
       this.kokoroHeartbeatInterval = null;
       this.kokoroHeartbeatEnabled = false;
@@ -1059,7 +1060,7 @@ class TTSService {
         urls.forEach(url => {
           URL.revokeObjectURL(url);
         });
-        console.log(`[TTSService] Revoked ${urls.length} blob URLs`);
+        Logger.log('TTSService', `Revoked ${urls.length} blob URLs`);
       }
     } else {
       // Dev mode: track and manage blob URLs
@@ -1068,10 +1069,10 @@ class TTSService {
           URL.revokeObjectURL(url);
           this.blobUrls.delete(url);
         });
-        console.log(`[TTSService] Cleaned up ${urls.length} blob URLs`);
+        Logger.log('TTSService', `Cleaned up ${urls.length} blob URLs`);
       } else {
         this.blobUrls.forEach(url => URL.revokeObjectURL(url));
-        console.log(`[TTSService] Cleaned up all ${this.blobUrls.size} blob URLs`);
+        Logger.log('TTSService', `Cleaned up all ${this.blobUrls.size} blob URLs`);
         this.blobUrls.clear();
       }
     }
@@ -1103,17 +1104,17 @@ class TTSService {
     }
 
     if (!this.isConfigured()) throw new Error('TTSService not configured or disabled');
-    console.log('[TTSService] Testing TTS connection...');
+    Logger.log('TTSService', 'Testing TTS connection...');
     try {
       const { audio, bvmdUrl } = await this.generateSpeech(testText, this.lipSyncEnabled);
       const audioUrl = URL.createObjectURL(audio);
       await this.playAudio(testText, audioUrl, bvmdUrl);
       URL.revokeObjectURL(audioUrl);
       if (bvmdUrl) URL.revokeObjectURL(bvmdUrl); // Clean up BVMD URL
-      console.log('[TTSService] TTS test successful' + (bvmdUrl ? ' with lip sync' : ''));
+      Logger.log('TTSService', 'TTS test successful' + (bvmdUrl ? ' with lip sync' : ''));
       return true;
     } catch (error) {
-      console.error('[TTSService] TTS test failed:', error);
+      Logger.error('TTSService', 'TTS test failed:', error);
       throw error;
     }
   }

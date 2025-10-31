@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import WriterService from '../WriterService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class WriterServiceProxy extends ServiceProxy {
   constructor() {
@@ -129,7 +130,7 @@ class WriterServiceProxy extends ServiceProxy {
       
       // If there was an error, throw it now
       if (streamError) {
-        console.error('[WriterServiceProxy] Streaming failed:', streamError);
+        Logger.error('WriterServiceProxy', 'Streaming failed:', streamError);
         throw streamError;
       }
     } else {
@@ -146,13 +147,13 @@ class WriterServiceProxy extends ServiceProxy {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
       if (!bridge) {
-        console.warn('[WriterServiceProxy] Bridge not available for abort');
+        Logger.warn('WriterServiceProxy', 'Bridge not available for abort');
         return;
       }
       try {
         await bridge.sendMessage(MessageTypes.WRITER_ABORT, {});
       } catch (error) {
-        console.error('[WriterServiceProxy] Abort failed:', error);
+        Logger.error('WriterServiceProxy', 'Abort failed:', error);
       }
     } else {
       // Dev mode: Call the service's abort method directly

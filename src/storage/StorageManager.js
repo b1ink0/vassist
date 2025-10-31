@@ -15,6 +15,7 @@
  */
 
 import { storageAdapter } from './StorageAdapter.js';
+import Logger from '../services/Logger';
 
 export class StorageManager {
   constructor() {
@@ -86,7 +87,7 @@ export class StorageManager {
     // Direct database adapter access for advanced usage
     this.db = this.adapter;
 
-    console.log('[UnifiedStorageManager] Initialized');
+    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

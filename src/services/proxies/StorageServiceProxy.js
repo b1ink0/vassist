@@ -8,6 +8,7 @@
 
 import { ServiceProxy } from './ServiceProxy.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 // In dev mode, we need StorageManager, so use a lazy-loaded module reference
 // In extension mode, this will never be used
@@ -25,7 +26,7 @@ const initDevStorageManager = async () => {
   devStorageManagerPromise = import('../../storage/StorageManager.js')
     .then(module => module.storageManager)
     .catch(err => {
-      console.error('Failed to load StorageManager:', err);
+      Logger.error('other', 'Failed to load StorageManager:', err);
       return null;
     });
   
@@ -49,7 +50,7 @@ class StorageServiceProxy extends ServiceProxy {
     // Return the promise for backwards compatibility
     // Methods that sync-accessed this will get a Promise instead
     // So we need to handle this differently
-    console.warn('[StorageServiceProxy] Synchronous access to devStorageManager - should use async');
+    Logger.warn('StorageServiceProxy', 'Synchronous access to devStorageManager - should use async');
     return null;
   }
 

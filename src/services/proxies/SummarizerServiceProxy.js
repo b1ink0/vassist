@@ -8,6 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import SummarizerService from '../SummarizerService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import Logger from '../Logger';
 
 class SummarizerServiceProxy extends ServiceProxy {
   constructor() {
@@ -129,7 +130,7 @@ class SummarizerServiceProxy extends ServiceProxy {
       
       // If there was an error, throw it now
       if (streamError) {
-        console.error('[SummarizerServiceProxy] Streaming failed:', streamError);
+        Logger.error('SummarizerServiceProxy', 'Streaming failed:', streamError);
         throw streamError;
       }
     } else {
@@ -146,13 +147,13 @@ class SummarizerServiceProxy extends ServiceProxy {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
       if (!bridge) {
-        console.warn('[SummarizerServiceProxy] Bridge not available for abort');
+        Logger.warn('SummarizerServiceProxy', 'Bridge not available for abort');
         return;
       }
       try {
         await bridge.sendMessage(MessageTypes.SUMMARIZER_ABORT, {});
       } catch (error) {
-        console.error('[SummarizerServiceProxy] Abort failed:', error);
+        Logger.error('SummarizerServiceProxy', 'Abort failed:', error);
       }
     } else {
       // Dev mode: Call the service's abort method directly
