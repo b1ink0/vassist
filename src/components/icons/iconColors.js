@@ -134,7 +134,7 @@ export const iconColors = {
  */
 export const getIconColor = (iconName, enableColored = false) => {
   if (!enableColored) {
-    return 'text-gray-200'; // Default monochrome color
+    return 'text-gray-300'; // Default monochrome color (ChatGPT style)
   }
   
   return iconColors[iconName] || iconColors['default'];

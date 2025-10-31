@@ -130,9 +130,19 @@ const BabylonScene = ({
     console.log('[BabylonScene] Starting initialization for new canvas...');
     canvas.dataset.babylonInitializing = 'true';
 
+    // Cancellation flag to stop async initialization
+    let cancelled = false;
+
     const initEngine = async () => {
       // Use double RAF to ensure canvas is fully laid out
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      
+      // Check cancellation after RAF wait
+      if (cancelled) {
+        console.log('[BabylonScene] Initialization cancelled after RAF');
+        delete canvas.dataset.babylonInitializing;
+        return null;
+      }
       
       // Check if canvas was removed during RAF wait
       if (!canvas.parentNode) {
@@ -192,6 +202,22 @@ const BabylonScene = ({
         // Resolve resource URLs for extension mode
         finalConfig = await resolveResourceURLs(finalConfig);
         scene = await sceneBuilder(canvas, engine, finalConfig);
+        
+        // Check cancellation after scene building
+        if (cancelled) {
+          console.log('[BabylonScene] Initialization cancelled after scene building');
+          if (scene?.metadata?.animationManager) {
+            scene.metadata.animationManager.dispose();
+          }
+          if (scene?.metadata?.positionManager) {
+            scene.metadata.positionManager.dispose?.();
+          }
+          if (scene) {
+            scene.dispose();
+          }
+          engine.dispose();
+          return null;
+        }
       } else {
         // Create the default scene
         scene = new Scene(engine);
@@ -269,6 +295,16 @@ const BabylonScene = ({
           engine.stopRenderLoop();
         }
         
+        // Dispose AnimationManager and PositionManager before scene disposal
+        if (scene?.metadata?.animationManager) {
+          console.log('[BabylonScene] Disposing AnimationManager...');
+          scene.metadata.animationManager.dispose();
+        }
+        if (scene?.metadata?.positionManager) {
+          console.log('[BabylonScene] Disposing PositionManager...');
+          scene.metadata.positionManager.dispose?.();
+        }
+        
         // Dispose scene and engine
         if (scene) {
           scene.dispose();
@@ -290,12 +326,17 @@ const BabylonScene = ({
     // Start initialization and store cleanup function
     const cleanupPromise = initEngine();
     cleanupPromise.then(cleanupFn => {
-      cleanupFnRef.current = cleanupFn;
+      if (!cancelled && cleanupFn) {
+        cleanupFnRef.current = cleanupFn;
+      }
     });
     
     // Cleanup effect
     return () => {
       console.log('[BabylonScene] Effect cleanup triggered');
+      
+      // Set cancellation flag to stop async initialization
+      cancelled = true;
       
       // Cancel initialization if still in progress
       if (canvas.dataset.babylonInitializing === 'true') {

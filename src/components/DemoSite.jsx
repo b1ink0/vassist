@@ -10,6 +10,8 @@ import AIServiceProxy from '../services/proxies/AIServiceProxy';
 import SummarizerServiceProxy from '../services/proxies/SummarizerServiceProxy';
 import TranslatorServiceProxy from '../services/proxies/TranslatorServiceProxy';
 import LanguageDetectorServiceProxy from '../services/proxies/LanguageDetectorServiceProxy';
+import RewriterServiceProxy from '../services/proxies/RewriterServiceProxy';
+import WriterServiceProxy from '../services/proxies/WriterServiceProxy';
 import { TranslationLanguages } from '../config/aiConfig';
 
 const DemoSite = () => {
@@ -21,7 +23,17 @@ const DemoSite = () => {
   
   // Editable demo text state
   const [improveText, setImproveText] = useState('hey can u help me with this thing? its kinda urgent and i need it done asap thx');
+  const [rewriteTone, setRewriteTone] = useState('more-formal');
+  const [rewriteLength, setRewriteLength] = useState('as-is');
+  const [rewriteResponse, setRewriteResponse] = useState('');
+  const [isRewriteLoading, setIsRewriteLoading] = useState(false);
+  
   const [writerPrompt, setWriterPrompt] = useState('Write a product review for wireless headphones');
+  const [writerTone, setWriterTone] = useState('casual');
+  const [writerLength, setWriterLength] = useState('medium');
+  const [writerResponse, setWriterResponse] = useState('');
+  const [isWriterLoading, setIsWriterLoading] = useState(false);
+  
   const [promptText, setPromptText] = useState('Explain quantum computing in simple terms');
   const [promptResponse, setPromptResponse] = useState('');
   const [isPromptLoading, setIsPromptLoading] = useState(false);
@@ -134,6 +146,50 @@ const DemoSite = () => {
       setDetectResponse('Error: ' + (error.message || 'Failed to detect language'));
     } finally {
       setIsDetectLoading(false);
+    }
+  };
+
+  const handleRewrite = async () => {
+    if (isRewriteLoading || !improveText.trim()) return;
+    
+    setIsRewriteLoading(true);
+    setRewriteResponse('');
+    
+    try {
+      let fullRewrite = '';
+      const options = { tone: rewriteTone, length: rewriteLength };
+      const stream = await RewriterServiceProxy.rewriteStreaming(improveText, options);
+      
+      for await (const chunk of stream) {
+        fullRewrite += chunk;
+        setRewriteResponse(fullRewrite);
+      }
+    } catch (error) {
+      setRewriteResponse('Error: ' + (error.message || 'Failed to rewrite'));
+    } finally {
+      setIsRewriteLoading(false);
+    }
+  };
+
+  const handleWriter = async () => {
+    if (isWriterLoading || !writerPrompt.trim()) return;
+    
+    setIsWriterLoading(true);
+    setWriterResponse('');
+    
+    try {
+      let fullContent = '';
+      const options = { tone: writerTone, length: writerLength };
+      const stream = await WriterServiceProxy.writeStreaming(writerPrompt, options);
+      
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        setWriterResponse(fullContent);
+      }
+    } catch (error) {
+      setWriterResponse('Error: ' + (error.message || 'Failed to generate content'));
+    } finally {
+      setIsWriterLoading(false);
     }
   };
 
@@ -386,15 +442,14 @@ const DemoSite = () => {
               <textarea
                 value={summarizeText}
                 onChange={(e) => setSummarizeText(e.target.value)}
-                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
-                rows={4}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
                 placeholder="Enter text to summarize..."
               />
               
-              <div className="flex gap-2 flex-wrap mb-3">
+              <div className="flex justify-between gap-2 mb-3">
                 <button
                   onClick={() => setSummarizeType('tl;dr')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     summarizeType === 'tl;dr'
                       ? `${theme.purpleTag} ring-2 ${isDark ? 'ring-purple-400' : 'ring-purple-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -404,7 +459,7 @@ const DemoSite = () => {
                 </button>
                 <button
                   onClick={() => setSummarizeType('key-points')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     summarizeType === 'key-points'
                       ? `${theme.purpleTag} ring-2 ${isDark ? 'ring-purple-400' : 'ring-purple-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -414,7 +469,7 @@ const DemoSite = () => {
                 </button>
                 <button
                   onClick={() => setSummarizeType('headline')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     summarizeType === 'headline'
                       ? `${theme.purpleTag} ring-2 ${isDark ? 'ring-purple-400' : 'ring-purple-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -456,15 +511,14 @@ const DemoSite = () => {
               <textarea
                 value={translateText}
                 onChange={(e) => setTranslateText(e.target.value)}
-                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
-                rows={3}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
                 placeholder="Enter text to translate..."
               />
               
-              <div className="flex gap-2 flex-wrap mb-3">
+              <div className="flex justify-between gap-2 mb-3">
                 <button
                   onClick={() => setTargetLanguage('es')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     targetLanguage === 'es'
                       ? `${theme.blueTag} ring-2 ${isDark ? 'ring-blue-400' : 'ring-blue-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -474,7 +528,7 @@ const DemoSite = () => {
                 </button>
                 <button
                   onClick={() => setTargetLanguage('fr')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     targetLanguage === 'fr'
                       ? `${theme.blueTag} ring-2 ${isDark ? 'ring-blue-400' : 'ring-blue-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -484,7 +538,7 @@ const DemoSite = () => {
                 </button>
                 <button
                   onClick={() => setTargetLanguage('ja')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     targetLanguage === 'ja'
                       ? `${theme.blueTag} ring-2 ${isDark ? 'ring-blue-400' : 'ring-blue-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -494,7 +548,7 @@ const DemoSite = () => {
                 </button>
                 <button
                   onClick={() => setTargetLanguage('de')}
-                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
                     targetLanguage === 'de'
                       ? `${theme.blueTag} ring-2 ${isDark ? 'ring-blue-400' : 'ring-blue-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
@@ -525,7 +579,7 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Dictionary Demo */}
+            {/* Language Detector Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <span className="text-2xl sm:text-3xl">📖</span>
@@ -536,10 +590,24 @@ const DemoSite = () => {
               <textarea
                 value={detectText}
                 onChange={(e) => setDetectText(e.target.value)}
-                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
-                rows={3}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
                 placeholder="Enter text in any language..."
               />
+              
+              <div className="flex justify-between gap-2 mb-3">
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Auto
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Fast
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Accurate
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  100+ Lang
+                </span>
+              </div>
               
               <button
                 onClick={handleDetectLanguage}
@@ -554,24 +622,12 @@ const DemoSite = () => {
               </button>
               
               {(detectResponse || isDetectLoading) && (
-                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 min-h-[60px]`}>
+                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg min-h-[60px]`}>
                   <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'} whitespace-pre-wrap`}>
                     {isDetectLoading && !detectResponse ? 'Detecting...' : detectResponse}
                   </p>
                 </div>
               )}
-              
-              <div className="flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
-                  Auto Detect
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
-                  Confidence Score
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
-                  Multi-language
-                </span>
-              </div>
             </div>
 
             {/* Rewriter Demo */}
@@ -580,28 +636,77 @@ const DemoSite = () => {
                 <span className="text-2xl sm:text-3xl">✨</span>
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Rewriter</h3>
               </div>
-              <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Type or edit the text below to rewrite it:</p>
+              <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Edit text and select rewrite options:</p>
+              
               <textarea
                 value={improveText}
                 onChange={(e) => setImproveText(e.target.value)}
-                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all custom-scrollbar`}
-                rows={3}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all custom-scrollbar mb-3`}
                 placeholder="Type something to rewrite..."
               />
-              <div className="mt-3 sm:mt-4 flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.orangeTag}`}>
-                  More Formal
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.orangeTag}`}>
-                  More Casual
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.orangeTag}`}>
+              
+              <div className="flex justify-between gap-2 mb-3">
+                <button
+                  onClick={() => setRewriteTone('more-formal')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    rewriteTone === 'more-formal'
+                      ? `${theme.orangeTag} ring-2 ${isDark ? 'ring-orange-400' : 'ring-orange-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Formal
+                </button>
+                <button
+                  onClick={() => setRewriteTone('more-casual')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    rewriteTone === 'more-casual'
+                      ? `${theme.orangeTag} ring-2 ${isDark ? 'ring-orange-400' : 'ring-orange-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Casual
+                </button>
+                <button
+                  onClick={() => setRewriteLength('shorter')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    rewriteLength === 'shorter'
+                      ? `${theme.orangeTag} ring-2 ${isDark ? 'ring-orange-400' : 'ring-orange-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
                   Shorter
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.orangeTag}`}>
+                </button>
+                <button
+                  onClick={() => setRewriteLength('longer')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    rewriteLength === 'longer'
+                      ? `${theme.orangeTag} ring-2 ${isDark ? 'ring-orange-400' : 'ring-orange-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
                   Longer
-                </span>
+                </button>
               </div>
+              
+              <button
+                onClick={handleRewrite}
+                disabled={isRewriteLoading || !improveText.trim()}
+                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                  isRewriteLoading || !improveText.trim()
+                    ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
+                    : `${theme.ctaGradient} hover:scale-105`
+                }`}
+              >
+                {isRewriteLoading ? 'Rewriting...' : 'Rewrite Text'}
+              </button>
+              
+              {(rewriteResponse || isRewriteLoading) && (
+                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg min-h-[60px]`}>
+                  <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'} whitespace-pre-wrap`}>
+                    {isRewriteLoading && !rewriteResponse ? 'Rewriting...' : rewriteResponse}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Writer Demo */}
@@ -610,28 +715,77 @@ const DemoSite = () => {
                 <span className="text-2xl sm:text-3xl">✍️</span>
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Writer</h3>
               </div>
-              <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Enter a prompt to generate content:</p>
+              <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Enter a prompt and select writing options:</p>
+              
               <textarea
                 value={writerPrompt}
                 onChange={(e) => setWriterPrompt(e.target.value)}
-                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all custom-scrollbar`}
-                rows={3}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} leading-relaxed text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all custom-scrollbar mb-3`}
                 placeholder="Write a prompt for content generation..."
               />
-              <div className="mt-3 sm:mt-4 flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.pinkTag}`}>
-                  Casual Tone
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.pinkTag}`}>
-                  Formal Tone
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.pinkTag}`}>
-                  Short Length
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.pinkTag}`}>
-                  Long Length
-                </span>
+              
+              <div className="flex justify-between gap-2 mb-3">
+                <button
+                  onClick={() => setWriterTone('casual')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    writerTone === 'casual'
+                      ? `${theme.pinkTag} ring-2 ${isDark ? 'ring-pink-400' : 'ring-pink-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Casual
+                </button>
+                <button
+                  onClick={() => setWriterTone('formal')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    writerTone === 'formal'
+                      ? `${theme.pinkTag} ring-2 ${isDark ? 'ring-pink-400' : 'ring-pink-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Formal
+                </button>
+                <button
+                  onClick={() => setWriterLength('short')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    writerLength === 'short'
+                      ? `${theme.pinkTag} ring-2 ${isDark ? 'ring-pink-400' : 'ring-pink-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Short
+                </button>
+                <button
+                  onClick={() => setWriterLength('long')}
+                  className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
+                    writerLength === 'long'
+                      ? `${theme.pinkTag} ring-2 ${isDark ? 'ring-pink-400' : 'ring-pink-500'}`
+                      : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
+                  }`}
+                >
+                  Long
+                </button>
               </div>
+              
+              <button
+                onClick={handleWriter}
+                disabled={isWriterLoading || !writerPrompt.trim()}
+                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                  isWriterLoading || !writerPrompt.trim()
+                    ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
+                    : `${theme.ctaGradient} hover:scale-105`
+                }`}
+              >
+                {isWriterLoading ? 'Writing...' : 'Generate Content'}
+              </button>
+              
+              {(writerResponse || isWriterLoading) && (
+                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg min-h-[60px]`}>
+                  <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'} whitespace-pre-wrap`}>
+                    {isWriterLoading && !writerResponse ? 'Generating...' : writerResponse}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Prompt API Demo */}
@@ -643,52 +797,50 @@ const DemoSite = () => {
               <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Ask anything - custom AI prompting:</p>
               
               {/* Input Area */}
-              <div className="flex gap-2 mb-3">
-                <input
-                  type="text"
-                  value={promptText}
-                  onChange={(e) => setPromptText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handlePromptSubmit()}
-                  className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg flex-1 ${isDark ? 'text-white/90' : 'text-slate-900'} text-xs sm:text-sm focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all`}
-                  placeholder="Ask the AI anything..."
-                  disabled={isPromptLoading}
-                />
-                <button
-                  onClick={handlePromptSubmit}
-                  disabled={isPromptLoading || !promptText.trim()}
-                  className={`px-4 sm:px-6 py-3 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
-                    isPromptLoading || !promptText.trim() 
-                      ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
-                      : `${theme.ctaGradient} hover:scale-105`
-                  }`}
-                >
-                  {isPromptLoading ? '...' : 'Send'}
-                </button>
+              <textarea
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handlePromptSubmit())}
+                className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg w-full h-24 ${isDark ? 'text-white/90' : 'text-slate-900'} text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 ${isDark ? 'focus:ring-purple-500' : 'focus:ring-purple-400'} transition-all mb-3 custom-scrollbar`}
+                placeholder="Ask the AI anything..."
+                disabled={isPromptLoading}
+              />
+              
+              <div className="flex justify-between gap-2 mb-3">
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Custom
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Stream
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Context
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Multi-turn
+                </span>
               </div>
+              
+              <button
+                onClick={handlePromptSubmit}
+                disabled={isPromptLoading || !promptText.trim()}
+                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                  isPromptLoading || !promptText.trim() 
+                    ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
+                    : `${theme.ctaGradient} hover:scale-105`
+                }`}
+              >
+                {isPromptLoading ? 'Thinking...' : 'Send'}
+              </button>
               
               {/* Response Area */}
               {(promptResponse || isPromptLoading) && (
-                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 min-h-[80px]`}>
+                <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg min-h-[80px]`}>
                   <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'} whitespace-pre-wrap`}>
                     {isPromptLoading && !promptResponse ? 'Thinking...' : promptResponse}
                   </p>
                 </div>
               )}
-              
-              <div className="flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.tealTag}`}>
-                  Custom Prompts
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.tealTag}`}>
-                  Streaming
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.tealTag}`}>
-                  Context Aware
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.tealTag}`}>
-                  Multi-turn
-                </span>
-              </div>
             </div>
 
             {/* Dictionary Demo */}
@@ -699,7 +851,7 @@ const DemoSite = () => {
               </div>
               <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Look up word definitions:</p>
               
-              <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 text-center`}>
+              <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 min-h-[96px] flex flex-col justify-center text-center`}>
                 <p className={`text-base sm:text-lg font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} mb-2`}>serendipity</p>
                 <p className={`text-xs sm:text-sm ${isDark ? 'text-white/70 italic' : 'text-slate-600 italic'} mb-2`}>noun</p>
                 <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
@@ -707,15 +859,18 @@ const DemoSite = () => {
                 </p>
               </div>
               
-              <div className="flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.indigoTag}`}>
-                  Definitions
+              <div className="flex justify-between gap-2">
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Define
                 </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.indigoTag}`}>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                   Synonyms
                 </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.indigoTag}`}>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                   Examples
+                </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Audio
                 </span>
               </div>
             </div>
@@ -728,7 +883,7 @@ const DemoSite = () => {
               </div>
               <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Voice to text - speak and type:</p>
               
-              <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 text-center`}>
+              <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg mb-3 min-h-[96px] flex flex-col justify-center text-center`}>
                 <div className="flex items-center justify-center gap-3 mb-3">
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${theme.ctaGradient}`}>
                     <span className="text-2xl">🎙️</span>
@@ -742,17 +897,24 @@ const DemoSite = () => {
                 </p>
               </div>
               
-              <div className="flex gap-2 flex-wrap">
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
+              <div className="flex justify-between gap-2">
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                   Real-time
                 </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
-                  Auto-insert
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Auto
                 </span>
-                <span className={`px-3 py-1.5 rounded-lg text-xs border ${theme.greenTag}`}>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                   Hands-free
                 </span>
+                <span className={`px-2 py-1.5 rounded-lg text-xs border whitespace-nowrap flex-1 text-center ${isDark ? 'bg-white/5 text-white/50 border-white/10' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                  Smart
+                </span>
               </div>
+            </div>
+
+            {/* Placeholder Card - Coming Soon */}
+            <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
             </div>
           </div>
 

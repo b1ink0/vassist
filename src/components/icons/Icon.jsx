@@ -4,7 +4,7 @@ import { getIconColor } from './iconColors.js';
 import { useApp } from '../../contexts/AppContext';
 
 /**
- * Universal Icon Component
+ * Universal Icon Component (Heroicons)
  * 
  * Usage:
  * <Icon name="close" size={24} className="text-white" />
@@ -14,7 +14,6 @@ import { useApp } from '../../contexts/AppContext';
  * @param {string} name - Icon name from iconMap
  * @param {number} size - Icon size in pixels (default: 16)
  * @param {string} className - Additional CSS classes
- * @param {number} strokeWidth - Stroke width for outline icons (default: 3)
  * @param {string} context - Icon context ('toolbar', 'chat', 'general') for conditional coloring
  * @param {object} style - Inline styles
  */
@@ -22,15 +21,14 @@ const Icon = ({
   name, 
   size = 16, 
   className = '', 
-  strokeWidth = 3,
   context = 'general',
   style = {},
   ...props 
 }) => {
   const { uiConfig } = useApp();
-  const IconSVG = iconMap[name];
+  const IconComponent = iconMap[name];
 
-  if (!IconSVG) {
+  if (!IconComponent) {
     console.warn(`Icon "${name}" not found in iconMap`);
     return null;
   }
@@ -51,19 +49,20 @@ const Icon = ({
     ? `icon icon-${name} ${className}` 
     : `icon icon-${name} ${iconColor} ${className}`;
 
-  // Clone the icon element and pass props
-  return React.cloneElement(IconSVG, {
-    width: size,
-    height: size,
-    className: finalClassName,
-    strokeWidth: IconSVG.props?.strokeWidth || strokeWidth,
-    style: {
-      display: 'block',
-      flexShrink: 0,
-      ...style
-    },
-    ...props
-  });
+  // Render Heroicons component
+  return (
+    <IconComponent
+      className={finalClassName}
+      style={{
+        width: size,
+        height: size,
+        display: 'block',
+        flexShrink: 0,
+        ...style
+      }}
+      {...props}
+    />
+  );
 };
 
 export default Icon;

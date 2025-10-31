@@ -53,6 +53,10 @@ export class AnimationManager {
    * @param {BvmdLoader} bvmdLoader - BVMD loader instance for loading animations
    */
   constructor(scene, mmdRuntime, mmdModel, bvmdLoader) {
+    // Generate unique instance ID for tracking
+    this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[AnimationManager ${this.instanceId}] 🆕 Creating new instance`);
+    
     // Core dependencies
     this.scene = scene;
     this.mmdRuntime = mmdRuntime;
@@ -364,6 +368,8 @@ export class AnimationManager {
    * @returns {Promise<Animation>} Loaded animation
    */
   async loadAnimation(animationConfig) {
+    if (this.disposed) return null;
+    
     const { filePath, id, name } = animationConfig;
 
     // 1. Already loaded? Return cached
@@ -633,6 +639,8 @@ export class AnimationManager {
    * @param {string} newState - Target state from AssistantState
    */
   async transitionToState(newState, customBehavior = null, customAnimation = null) {
+    if (this.disposed) return;
+    
     console.log(`[AnimationManager] [TRANSITION START] ${this.currentState} -> ${newState}`);
     
     // Detect when intro completes (first transition to IDLE)
@@ -723,9 +731,11 @@ export class AnimationManager {
    * @param {Object} stateBehavior - State behavior config (optional, uses current state if not provided)
    */
   async playAnimation(animationConfig, stateBehavior = null) {
+    if (this.disposed) return;
+    
     const behavior = stateBehavior || StateBehavior[this.currentState];
     
-    console.log(`[AnimationManager] Playing animation: ${animationConfig.name}`);
+    console.log(`[AnimationManager ${this.instanceId}] Playing animation: ${animationConfig.name}`);
     
     // Load animation
     const loadedAnimation = await this.loadAnimation(animationConfig);
@@ -848,6 +858,8 @@ export class AnimationManager {
    * With loopTransition: true, creates smooth overlap between cycles
    */
   addNextCycle() {
+    if (this.disposed) return;
+    
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
       console.warn('[AnimationManager] No current animation to add cycle');
       return;
@@ -1133,6 +1145,11 @@ export class AnimationManager {
    * Called every frame - handles dynamic span management
    */
   onBeforeRender() {
+    // Don't process if disposed
+    if (this.disposed) {
+      return;
+    }
+    
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
       return;
     }
@@ -1294,7 +1311,7 @@ export class AnimationManager {
     // Use > not >= because we already added the initial cycle in playAnimation()
     // Only add next cycle if animation should loop
     if (shouldLoop && this.currentCycle > this.lastAddedCycle) {
-      console.log(`[AnimationManager] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
+      console.log(`[AnimationManager ${this.instanceId}] Frame: ${currentFrame.toFixed(2)}, Cycle: ${this.currentCycle}, LastAdded: ${this.lastAddedCycle}, Animation: "${this.currentAnimationConfig.name}" (${this.currentAnimationConfig.filePath}), Duration: ${duration} frames, LoopTransition: ${loopTransition}`);
       this.addNextCycle();
     }
 
@@ -1309,7 +1326,7 @@ export class AnimationManager {
       }
       this.spanMap.delete(cycleToRemove);
       this.firstActiveCycle = cycleToRemove + 1;
-      console.log(`[AnimationManager] Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
+      console.log(`[AnimationManager ${this.instanceId}] Cleaned up cycle ${cycleToRemove}. Active cycles: ${this.firstActiveCycle} to ${this.lastAddedCycle}`);
     }
 
     // Handle idle animation auto-switching
@@ -1587,6 +1604,8 @@ export class AnimationManager {
    * - Context tracking for conversation flow
    */
   async speak(text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) {
+    if (this.disposed) return;
+    
     console.log(`[AnimationManager] speak: text="${text}", emotionCategory="${emotionCategory}"`);
 
     // Default options for speech: full morphs + full body
@@ -1994,7 +2013,10 @@ export class AnimationManager {
    * Dispose and cleanup
    */
   dispose() {
-    console.log('[AnimationManager] Disposing...');
+    console.log(`[AnimationManager ${this.instanceId}] ⚠️ DISPOSE CALLED - Shutting down AnimationManager`);
+
+    // Set disposed flag to prevent further operations
+    this.disposed = true;
 
     // Clear animation queue
     this.clearQueue();
@@ -2008,8 +2030,10 @@ export class AnimationManager {
 
     // Remove render observer
     if (this.renderObserver) {
+      console.log('[AnimationManager] Removing render observer...');
       this.scene.onBeforeRenderObservable.remove(this.renderObserver);
       this.renderObserver = null;
+      console.log('[AnimationManager] Render observer removed');
     }
 
     // Clear all spans
@@ -2019,7 +2043,7 @@ export class AnimationManager {
     this.loadedAnimations.clear();
     this.loadingPromises.clear();
 
-    console.log('[AnimationManager] Disposed');
+    console.log(`[AnimationManager ${this.instanceId}] ✅ DISPOSED - All resources cleaned up`);
   }
 }
 
