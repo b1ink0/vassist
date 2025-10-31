@@ -4,7 +4,6 @@
  */
 
 export const PromptConfig = {
-  // System Prompt Personalities
   systemPrompts: {
     default: {
       name: 'Default',
@@ -36,11 +35,10 @@ export const PromptConfig = {
     },
     custom: {
       name: 'Custom',
-      prompt: '', // User-defined prompt
+      prompt: '',
     },
   },
 
-  // Dictionary Prompts
   dictionary: {
     define: (word) => `Provide a concise dictionary definition for the word: "${word}"
 
@@ -203,40 +201,26 @@ ${text}`,
 ${text}`,
   },
 
-  // Writer Prompts (Chrome AI Writer API compatible)
-  // Supports tone: 'formal', 'neutral', 'casual'
-  // Supports format: 'plain-text', 'markdown'
-  // Supports length: 'short', 'medium', 'long'
   writer: {
-    // General writing prompt
     write: (prompt) => `${prompt}`,
 
-    // Formal tone
     formal: (prompt) => `Write in a formal, professional tone:\n\n${prompt}`,
 
-    // Neutral tone
     neutral: (prompt) => `Write in a neutral, balanced tone:\n\n${prompt}`,
 
-    // Casual tone
     casual: (prompt) => `Write in a casual, conversational tone:\n\n${prompt}`,
 
-    // Short length
     short: (prompt) => `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
 
-    // Medium length
     medium: (prompt) => `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
 
-    // Long length
     long: (prompt) => `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
 
-    // Plain text format
     plainText: (prompt) => `Write using plain text only, no markdown:\n\n${prompt}`,
 
-    // Markdown format
     markdown: (prompt) => `Write using markdown formatting:\n\n${prompt}`,
   },
 
-  // Image Analysis Prompts
   image: {
     describe: (imageCount) => 
       imageCount === 1
@@ -254,7 +238,6 @@ ${text}`,
         : `Identify and list all objects visible in these ${imageCount} images.`,
   },
 
-  // Audio Analysis Prompts
   audio: {
     transcribe: 'Transcribe this audio accurately. Return only the transcription.',
     

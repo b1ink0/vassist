@@ -1,7 +1,5 @@
 /**
- * AppContent Component
- * Main application content shared between dev mode and extension mode
- * This component contains all the core UI logic without the background gradient
+ * @fileoverview Main application content component.
  */
 
 import { useState, useCallback, useMemo } from 'react';
@@ -15,10 +13,16 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
 import Logger from '../services/Logger';
 
+/**
+ * Main application content component shared between development and extension modes.
+ * 
+ * @param {Object} props
+ * @param {string} props.mode - Application mode ('development'|'extension')
+ * @returns {JSX.Element}
+ */
 function AppContent({ mode = 'development' }) {
   const [currentState, setCurrentState] = useState('IDLE');
   
-  // Get shared state from AppContext
   const {
     isAssistantReady,
     isChatUIReady,
@@ -29,48 +33,46 @@ function AppContent({ mode = 'development' }) {
     handleAssistantReady: contextHandleAssistantReady,
   } = useApp();
 
-  // Get Kokoro status from ConfigContext
   const { kokoroStatus, ttsConfig } = useConfig();
   
-  // Auto-unmount when tab is hidden for 15+ seconds
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
   
-  // Check if we should wait for Kokoro pre-initialization
   const shouldWaitForKokoro = ttsConfig.enabled && 
                               ttsConfig.provider === 'kokoro' && 
                               ttsConfig.kokoro?.keepModelLoaded !== false &&
                               kokoroStatus.preInitializing;
   
   /**
-   * Handle VirtualAssistant ready
-   * Wrapped in useCallback to prevent infinite re-renders
+   * Handles VirtualAssistant ready event.
+   * 
+   * @param {Object} params
+   * @param {Object} params.animationManager - Animation manager instance
+   * @param {Object} params.positionManager - Position manager instance
+   * @param {Object} params.scene - Babylon.js scene instance
    */
   const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
     Logger.log('AppContent ${mode}', 'VirtualAssistant ready!');
     setCurrentState(animationManager.getCurrentState());
     
-    // Call context handler to update global state
     contextHandleAssistantReady({ animationManager, positionManager, scene });
     
     Logger.log('AppContent ${mode}', 'Position manager ref set, ready for position tracking');
-  }, [mode, contextHandleAssistantReady]);
+  }, [contextHandleAssistantReady]);
 
-  // Memoize VirtualAssistant to prevent unmount on parent re-renders (e.g., ConfigContext updates)
-  // This is CRITICAL - without this, ConfigContext state changes cause VirtualAssistant to unmount/remount
   const virtualAssistantComponent = useMemo(() => {
     if (enableModelLoading === null) {
-      return null; // Still loading config
+      return null;
     }
     if (!enableModelLoading) {
-      return null; // Model disabled
+      return null;
     }
     if (shouldWaitForKokoro) {
       Logger.log('AppContent', 'Waiting for Kokoro pre-initialization before loading model...');
-      return null; // Wait for Kokoro to pre-initialize
+      return null;
     }
     if (!shouldMountModel) {
       Logger.log('AppContent', 'Model unmounted due to prolonged tab inactivity');
-      return null; // Unmounted to free resources while tab is hidden
+      return null;
     }
     return (
       <VirtualAssistant 
@@ -83,15 +85,12 @@ function AppContent({ mode = 'development' }) {
   
   return (
     <div className="relative">
-      {/* Don't render anything until config is loaded to prevent mount/unmount cycles */}
       {enableModelLoading === null || shouldWaitForKokoro ? (
         <LoadingIndicator isVisible={true} />
       ) : (
         <>
-          {/* Transparent 3D canvas overlay - memoized to survive parent re-renders */}
           {virtualAssistantComponent}
 
-          {/* Unified Control Panel */}
           <ControlPanel
             isAssistantReady={isAssistantReady}
             currentState={currentState}
@@ -101,19 +100,16 @@ function AppContent({ mode = 'development' }) {
             onStateChange={setCurrentState}
           />
 
-          {/* Chat System - handles all chat logic with fade-in transition */}
           <div className={`transition-opacity duration-700 ${isChatUIReady ? 'opacity-100' : 'opacity-0'}`}>
             <ChatController
               modelDisabled={!enableModelLoading}
             />
           </div>
           
-          {/* Loading indicator for chat-only mode */}
           {!enableModelLoading && !isChatUIReady && (
             <LoadingIndicator isVisible={true} />
           )}
 
-          {/* Model loading overlay */}
           <ModelLoadingOverlay />
         </>
       )}

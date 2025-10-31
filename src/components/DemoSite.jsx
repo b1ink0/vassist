@@ -1,7 +1,6 @@
 /**
- * DemoSite Component
- * Modern landing page showcasing all VAssist features
- * Replaces the simple gradient background in dev mode
+ * @fileoverview Demo landing page component showcasing VAssist features and Chrome AI APIs.
+ * Provides interactive demos, installation guide, and feature overview with theme switching.
  */
 
 import { useState } from 'react';
@@ -15,14 +14,18 @@ import RewriterServiceProxy from '../services/proxies/RewriterServiceProxy';
 import WriterServiceProxy from '../services/proxies/WriterServiceProxy';
 import { TranslationLanguages } from '../config/aiConfig';
 
+/**
+ * Demo landing page component with interactive feature demonstrations.
+ * 
+ * @component
+ * @returns {JSX.Element} The demo site layout with navigation, feature sections, and interactive demos
+ */
 const DemoSite = () => {
   const [activeSection, setActiveSection] = useState('hero');
   const { openChat } = useApp();
 
-  // Theme state: controls the overall page background (dark | light)
   const [pageTheme, setPageTheme] = useState('dark');
   
-  // Editable demo text state
   const [improveText, setImproveText] = useState('hey can u help me with this thing? its kinda urgent and i need it done asap thx');
   const [rewriteTone, setRewriteTone] = useState('more-formal');
   const [rewriteLength, setRewriteLength] = useState('as-is');
@@ -39,37 +42,37 @@ const DemoSite = () => {
   const [promptResponse, setPromptResponse] = useState('');
   const [isPromptLoading, setIsPromptLoading] = useState(false);
   
-  // Summarizer state
   const [summarizeText, setSummarizeText] = useState('Artificial intelligence (AI) is transforming the way we live and work. From virtual assistants to self-driving cars, AI is becoming increasingly integrated into our daily lives. Machine learning algorithms can now recognize patterns, make predictions, and even create art. However, with great power comes great responsibility, and we must ensure AI is developed ethically and transparently.');
   const [summarizeType, setSummarizeType] = useState('tl;dr');
   const [summarizeResponse, setSummarizeResponse] = useState('');
   const [isSummarizeLoading, setIsSummarizeLoading] = useState(false);
   
-  // Translator state
   const [translateText, setTranslateText] = useState('Hello! How are you doing today? I hope you are having a wonderful day.');
   const [targetLanguage, setTargetLanguage] = useState('es');
   const [translateResponse, setTranslateResponse] = useState('');
   const [isTranslateLoading, setIsTranslateLoading] = useState(false);
   
-  // Language Detector state
   const [detectText, setDetectText] = useState('Bonjour! Comment allez-vous?');
   const [detectResponse, setDetectResponse] = useState('');
   const [isDetectLoading, setIsDetectLoading] = useState(false);
   
-  // Toolbar demo state
   const [toolbarRewriteText, setToolbarRewriteText] = useState('i think ai is really cool and it can do alot of stuff like writing and translating it makes things easier and faster which is good for everyone who uses computers and the internet everyday');
-  const [toolbarWriterText, setToolbarWriterText] = useState(''); // Empty by default - user clicks button to write
+  const [toolbarWriterText, setToolbarWriterText] = useState('');
   
+  /**
+   * Handles opening chat and triggering voice mode after a delay.
+   */
   const handleVoiceChatClick = () => {
-    // Open chat first
     openChat();
-    // Dispatch event to trigger voice mode after chat opens
     setTimeout(() => {
       const event = new CustomEvent('startVoiceMode');
       window.dispatchEvent(event);
-    }, 300); // Wait for chat to be fully visible
+    }, 300);
   };
 
+  /**
+   * Handles submitting a prompt to the AI service.
+   */
   const handlePromptSubmit = async () => {
     if (!promptText.trim() || isPromptLoading) return;
     
@@ -92,6 +95,9 @@ const DemoSite = () => {
     }
   };
 
+  /**
+   * Handles summarizing text using the summarizer service.
+   */
   const handleSummarize = async () => {
     if (isSummarizeLoading || !summarizeText.trim()) return;
     
@@ -114,6 +120,9 @@ const DemoSite = () => {
     }
   };
 
+  /**
+   * Handles translating text to the selected target language.
+   */
   const handleTranslate = async () => {
     if (isTranslateLoading || !translateText.trim()) return;
     
@@ -130,6 +139,9 @@ const DemoSite = () => {
     }
   };
 
+  /**
+   * Handles detecting the language of the provided text.
+   */
   const handleDetectLanguage = async () => {
     if (isDetectLoading || !detectText.trim()) return;
     
@@ -140,7 +152,6 @@ const DemoSite = () => {
       const results = await LanguageDetectorServiceProxy.detect(detectText);
       if (results && results.length > 0) {
         const topResult = results[0];
-        // Find the language name from the code
         const languageInfo = TranslationLanguages.find(lang => lang.code === topResult.detectedLanguage);
         const languageName = languageInfo ? languageInfo.name : topResult.detectedLanguage;
         setDetectResponse(`Language: ${languageName} (${Math.round(topResult.confidence * 100)}% confidence)`);
@@ -154,6 +165,9 @@ const DemoSite = () => {
     }
   };
 
+  /**
+   * Handles rewriting text with specified tone and length options.
+   */
   const handleRewrite = async () => {
     if (isRewriteLoading || !improveText.trim()) return;
     
@@ -176,6 +190,9 @@ const DemoSite = () => {
     }
   };
 
+  /**
+   * Handles generating content using the writer service.
+   */
   const handleWriter = async () => {
     if (isWriterLoading || !writerPrompt.trim()) return;
     
@@ -207,7 +224,6 @@ const DemoSite = () => {
     badge: isDark ? 'bg-white/10 text-white/90 border border-white/20' : 'bg-slate-100 text-slate-900 border border-slate-200',
     subtleBg: isDark ? 'bg-black/20' : 'bg-slate-100',
     ctaGradient: isDark ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white',
-    // Demo tags
     purpleTag: isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300',
     blueTag: isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-100 text-blue-700 border-blue-300',
     greenTag: isDark ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-green-100 text-green-700 border-green-300',
@@ -256,6 +272,11 @@ const DemoSite = () => {
     },
   ];
 
+  /**
+   * Scrolls to the specified section on the page.
+   * 
+   * @param {string} section - The section ID to scroll to
+   */
   const handleScrollToSection = (section) => {
     const element = document.getElementById(section);
     if (element) {
@@ -266,10 +287,8 @@ const DemoSite = () => {
 
   return (
     <div className={`absolute inset-0 overflow-auto custom-scrollbar transition-all duration-500 ${pageTheme === 'dark' ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'}`}>
-      {/* Background decoration */}
       <div className={`fixed inset-0 opacity-40 ${isDark ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] " : "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgwLDAsMCwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')]"}`}></div>
       
-      {/* Fixed navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-40 backdrop-blur-md border-b transition-all duration-500 ${pageTheme === 'dark' ? 'bg-slate-900/80 border-white/10' : 'bg-white/80 border-slate-200'}`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -309,7 +328,6 @@ const DemoSite = () => {
             </button>
           </div>
           
-          {/* Theme controls */}
           <div className="flex items-center gap-2 sm:gap-3">
             <div className={`inline-flex rounded-md p-0.5 sm:p-1 border transition-all ${isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'}`}>
               <button
@@ -339,10 +357,8 @@ const DemoSite = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
       <section id="hero" className="relative min-h-screen flex items-center justify-center px-3 sm:px-6 pt-20 sm:pt-24 pb-12 sm:pb-20">
         <div className="max-w-6xl mx-auto text-center space-y-6 sm:space-y-8 relative z-10">
-          {/* Animated gradient orb */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-gradient-to-r from-purple-500/30 to-pink-500/30 rounded-full blur-3xl animate-pulse"></div>
           
           <div className="relative">
@@ -375,7 +391,6 @@ const DemoSite = () => {
               </button>
             </div>
             
-            {/* Feature badges */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm px-2">
               <span className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full ${theme.badge} flex items-center gap-1.5`}>
                 <Icon name="cpu" size={14} /> Chrome Extension
@@ -393,7 +408,6 @@ const DemoSite = () => {
           </div>
         </div>
         
-        {/* Scroll indicator */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
           <div className="w-6 h-10 border-2 border-white/30 rounded-full flex items-start justify-center p-2">
             <div className="w-1.5 h-3 bg-white/50 rounded-full"></div>
@@ -401,7 +415,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Features Grid */}
       <section id="features" className="relative py-16 sm:py-24 px-3 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12 sm:mb-16">
@@ -427,7 +440,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Interactive AI Toolbar Demo */}
       <section className="relative py-16 sm:py-24 px-3 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12 sm:mb-16">
@@ -436,7 +448,6 @@ const DemoSite = () => {
           </div>
 
           <div className={`max-w-5xl mx-auto space-y-8`}>
-            {/* Summarize Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="note" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
@@ -474,7 +485,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Translate Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="globe" size={28} className={isDark ? 'text-green-400' : 'text-green-600'} />
@@ -510,7 +520,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Rewrite Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="write" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
@@ -534,10 +543,8 @@ const DemoSite = () => {
                 onClick={() => {
                   const element = document.getElementById('rewrite-text');
                   if (element) {
-                    // For textarea, use select() method and trigger focus
                     element.focus();
                     element.select();
-                    // Trigger selectionchange event manually
                     document.dispatchEvent(new Event('selectionchange'));
                   }
                 }}
@@ -547,7 +554,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Writer Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="edit" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
@@ -571,7 +577,6 @@ const DemoSite = () => {
                 onClick={() => {
                   const element = document.getElementById('writer-text');
                   if (element) {
-                    // Just focus the element - handleInputFocus will show toolbar
                     element.focus();
                   }
                 }}
@@ -581,7 +586,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Language Detector Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="search" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
@@ -614,7 +618,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Dictation Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="microphone" size={28} className={isDark ? 'text-red-500' : 'text-red-600'} />
@@ -646,7 +649,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Dictionary Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="book" size={28} className={isDark ? 'text-orange-400' : 'text-orange-600'} />
@@ -673,7 +675,6 @@ const DemoSite = () => {
                     selection?.removeAllRanges();
                     selection?.addRange(range);
                     
-                    // Dispatch selectionchange event
                     const event = new Event('selectionchange', { bubbles: true });
                     document.dispatchEvent(event);
                   }
@@ -684,7 +685,6 @@ const DemoSite = () => {
               </button>
             </div>
 
-            {/* Image Analysis Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="image" size={28} className={isDark ? 'text-pink-400' : 'text-pink-600'} />
@@ -722,7 +722,6 @@ const DemoSite = () => {
               </div>
             </div>
 
-            {/* Colored Icons Settings Info */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl border-2 ${isDark ? 'border-purple-500/30' : 'border-purple-300/50'}`}>
               <div className="flex items-center gap-3 mb-4">
                 <Icon name="settings" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
@@ -750,7 +749,6 @@ const DemoSite = () => {
               </div>
             </div>
 
-            {/* Info Box */}
             <div className={`p-6 rounded-xl ${isDark ? 'bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20' : 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200'}`}>
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0">
@@ -774,7 +772,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Interactive Demos Section */}
       <section id="demos" className="relative py-16 sm:py-24 px-3 sm:px-6 bg-gradient-to-b from-transparent via-purple-900/20 to-transparent">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12 sm:mb-16">
@@ -783,7 +780,6 @@ const DemoSite = () => {
           </div>
           
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {/* Summarize Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="write" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
@@ -852,7 +848,6 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Translate Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="globe" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
@@ -931,7 +926,6 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Language Detector Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="language" size={28} className={isDark ? 'text-cyan-400' : 'text-cyan-600'} />
@@ -982,7 +976,6 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Rewriter Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="ai" size={28} className={isDark ? 'text-pink-400' : 'text-pink-600'} />
@@ -1061,7 +1054,6 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Writer Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="pen" size={28} className={isDark ? 'text-green-400' : 'text-green-600'} />
@@ -1140,7 +1132,6 @@ const DemoSite = () => {
               )}
             </div>
 
-            {/* Prompt API Demo */}
             <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl ${theme.cardHover}`}>
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Icon name="ai" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
@@ -1148,7 +1139,6 @@ const DemoSite = () => {
               </div>
               <p className={`${theme.textMuted} mb-3 sm:mb-4 text-xs sm:text-sm`}>Ask anything - custom AI prompting:</p>
               
-              {/* Input Area */}
               <textarea
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
@@ -1185,7 +1175,6 @@ const DemoSite = () => {
                 {isPromptLoading ? 'Thinking...' : 'Send'}
               </button>
               
-              {/* Response Area */}
               {(promptResponse || isPromptLoading) && (
                 <div className={`${theme.subtleBg} p-3 sm:p-4 rounded-lg min-h-[80px]`}>
                   <p className={`text-xs sm:text-sm ${isDark ? 'text-white/90' : 'text-slate-900'} whitespace-pre-wrap`}>
@@ -1198,7 +1187,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Theme Demo: light background showcase */}
       <section id="theme-demo" className="relative py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-8">
@@ -1276,7 +1264,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* How It Works Section */}
       <section id="how-it-works" className="relative py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -1284,7 +1271,6 @@ const DemoSite = () => {
             <p className={`text-xl ${theme.textMuted}`}>Follow these simple steps to install VAssist</p>
           </div>
           
-          {/* Installation Steps */}
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             <div className={`p-6 ${theme.card} rounded-2xl`}>
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white">
@@ -1327,7 +1313,6 @@ const DemoSite = () => {
             </div>
           </div>
 
-          {/* How to Use After Installation */}
           <div className="text-center mb-12 mt-16">
             <h2 className={`text-4xl font-bold ${theme.textPrimary} mb-4`}>How to Use</h2>
             <p className={`text-lg ${theme.textMuted}`}>Once installed, VAssist works on every website you visit</p>
@@ -1359,7 +1344,6 @@ const DemoSite = () => {
             </div>
           </div>
 
-          {/* Chat Demo Call-to-Action */}
           <div className={`mt-16 p-12 rounded-3xl border text-center transition-all duration-300 ${isDark ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-white/20' : 'bg-white shadow-sm border-slate-200'}`}>
             <h3 className={`text-4xl font-bold mb-4 ${theme.textPrimary}`}>Try It Now</h3>
             <p className={`text-xl mb-8 max-w-2xl mx-auto ${isDark ? 'text-white/80' : 'text-slate-700'}`}>
@@ -1384,7 +1368,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Use Cases Section */}
       <section className="relative py-24 px-6 bg-gradient-to-b from-transparent via-purple-900/20 to-transparent">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -1428,7 +1411,6 @@ const DemoSite = () => {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="relative py-12 px-6 border-t border-white/10">
         <div className="max-w-7xl mx-auto text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-6">

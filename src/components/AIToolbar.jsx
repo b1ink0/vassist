@@ -1,8 +1,5 @@
 /**
- * AIToolbar Component
- * 
- * Floating toolbar that appears when user selects text or images on the page.
- * Provides quick actions: Summarize, Translate, Add to Chat.
+ * @fileoverview Floating AI toolbar for text and image operations.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -26,85 +23,75 @@ const AIToolbar = () => {
   const { ttsConfig } = useConfig();
   
   const [isVisible, setIsVisible] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false); // Local control for render during animation
-  const [isClosing, setIsClosing] = useState(false); // Track closing animation
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [lockedPosition, setLockedPosition] = useState(null); // Lock position when result is showing
-  const [resultPanelActive, setResultPanelActive] = useState(false); // Track if result panel is showing (prevents toolbar from hiding when selection lost)
-  const [shouldRenderResultPanel, setShouldRenderResultPanel] = useState(false); // Control result panel render during animation
-  const [isResultPanelClosing, setIsResultPanelClosing] = useState(false); // Track result panel closing animation
+  const [lockedPosition, setLockedPosition] = useState(null);
+  const [resultPanelActive, setResultPanelActive] = useState(false);
+  const [shouldRenderResultPanel, setShouldRenderResultPanel] = useState(false);
+  const [isResultPanelClosing, setIsResultPanelClosing] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedAudios, setSelectedAudios] = useState([]);
   const [hoveredImageElement, setHoveredImageElement] = useState(null);
-  const savedCursorPositionRef = useRef(null); // Save cursor position before toolbar interaction // Store hovered image element for later extraction
+  const savedCursorPositionRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [action, setAction] = useState(null); // 'summarize-*', 'translate', 'image-*', 'dictionary-*', 'rewrite-*', 'write-*', or null
+  const [action, setAction] = useState(null);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [isLightBackgroundToolbar, setIsLightBackgroundToolbar] = useState(false);
   const [isLightBackgroundPanel, setIsLightBackgroundPanel] = useState(false);
-  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null); // For translation override
-  const [detectedLanguageName, setDetectedLanguageName] = useState(null); // Full language name for display
+  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null);
+  const [detectedLanguageName, setDetectedLanguageName] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false); // TTS playback state
-  const [isTTSGenerating, setIsTTSGenerating] = useState(false); // TTS generation state (before playback)
-  const [currentSessionId, setCurrentSessionId] = useState(null); // TTS session ID
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTTSGenerating, setIsTTSGenerating] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   
-  // Writer state
-  const [writerPrompt, setWriterPrompt] = useState(''); // User prompt for writer
-  const [showWriterInput, setShowWriterInput] = useState(false); // Show writer input panel
+  const [writerPrompt, setWriterPrompt] = useState('');
+  const [showWriterInput, setShowWriterInput] = useState(false);
   
-  // Dictation (STT) state
-  const [isRecording, setIsRecording] = useState(false); // STT recording state
-  const [recordingDuration, setRecordingDuration] = useState(0); // Recording duration in seconds
-  const [dictationMode, setDictationMode] = useState(null); // 'manual' (with selection) or 'auto-insert' (no selection)
-  const [accumulatedTranscription, setAccumulatedTranscription] = useState(''); // Accumulated transcription for continuous dictation
-  const recordingIntervalRef = useRef(null); // Timer interval for recording duration
-  const isProcessingRef = useRef(false); // Prevent multiple simultaneous processings
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [dictationMode, setDictationMode] = useState(null);
+  const [accumulatedTranscription, setAccumulatedTranscription] = useState('');
+  const recordingIntervalRef = useRef(null);
+  const isProcessingRef = useRef(false);
   
-  const [isEditableContent, setIsEditableContent] = useState(false); // Is selection in editable element
-  const [editableElement, setEditableElement] = useState(null); // Reference to editable element
-  const [originalContent, setOriginalContent] = useState(null); // Original content for undo
-  const [editableType, setEditableType] = useState(null); // 'input', 'textarea', or 'contenteditable'
-  const [editableSelectionStart, setEditableSelectionStart] = useState(0); // Selection start position
-  const [editableSelectionEnd, setEditableSelectionEnd] = useState(0); // Selection end position
-  const [hasInserted, setHasInserted] = useState(false); // Track if content was inserted (for undo/redo toggle)
-  const [improvedContent, setImprovedContent] = useState(null); // Store improved content for redo
+  const [isEditableContent, setIsEditableContent] = useState(false);
+  const [editableElement, setEditableElement] = useState(null);
+  const [originalContent, setOriginalContent] = useState(null);
+  const [editableType, setEditableType] = useState(null);
+  const [editableSelectionStart, setEditableSelectionStart] = useState(0);
+  const [editableSelectionEnd, setEditableSelectionEnd] = useState(0);
+  const [hasInserted, setHasInserted] = useState(false);
+  const [improvedContent, setImprovedContent] = useState(null);
   
   const toolbarRef = useRef(null);
   const resultPanelRef = useRef(null);
   const selectionTimeoutRef = useRef(null);
-  const abortControllerRef = useRef(null); // For aborting streaming
-  const hasInsertedRef = useRef(false); // Ref to track insert state for callbacks
-  const showingFromInputFocusRef = useRef(false); // Track if toolbar was shown by input focus (prevent immediate hide)
-  const showingFromImageHoverRef = useRef(false); // Track if toolbar was shown by image hover (prevent immediate hide)
-  const pendingResultRef = useRef(null); // Pending result for batched update
-  const resultUpdateRafRef = useRef(null); // RAF ID for batched updates
-  const resultPanelCloseTimeoutRef = useRef(null); // Timeout for result panel close animation
+  const abortControllerRef = useRef(null);
+  const hasInsertedRef = useRef(false);
+  const showingFromInputFocusRef = useRef(false);
+  const showingFromImageHoverRef = useRef(false);
+  const pendingResultRef = useRef(null);
+  const resultUpdateRafRef = useRef(null);
+  const resultPanelCloseTimeoutRef = useRef(null);
   
-  // Refs for result, error, isLoading to prevent handleSelectionChange recreation
   const resultRef = useRef('');
   const errorRef = useRef('');
   const isLoadingRef = useRef(false);
   const lockedPositionRef = useRef(null);
   const isVisibleRef = useRef(false);
-  const showWriterInputRef = useRef(false); // Ref for showWriterInput to use in handleSelectionChange
+  const showWriterInputRef = useRef(false);
   
-  /**
-   * Throttled setResult to prevent excessive re-renders during streaming
-   * Batches rapid updates using requestAnimationFrame
-   */
   const setResultThrottled = useCallback((newResult) => {
-    // Store the latest result
     pendingResultRef.current = newResult;
     
-    // If update is already scheduled, don't schedule another
     if (resultUpdateRafRef.current !== null) {
       return;
     }
     
-    // Schedule update on next animation frame (60fps max)
     resultUpdateRafRef.current = requestAnimationFrame(() => {
       if (pendingResultRef.current !== null) {
         setResult(pendingResultRef.current);
@@ -114,9 +101,6 @@ const AIToolbar = () => {
     });
   }, []);
 
-  /**
-   * Sync refs with state values to prevent callback recreations
-   */
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
@@ -157,16 +141,14 @@ const AIToolbar = () => {
    */
   useEffect(() => {
     if (isVisible) {
-      // Opening - render immediately
       setShouldRender(true);
       setIsClosing(false);
     } else if (shouldRender) {
-      // Closing - set closing state and delay unmount
       setIsClosing(true);
       const timeout = setTimeout(() => {
         setShouldRender(false);
         setIsClosing(false);
-      }, 300); // 300ms to match fade-in duration
+      }, 300);
       return () => clearTimeout(timeout);
     }
   }, [isVisible, shouldRender]);
@@ -190,13 +172,12 @@ const AIToolbar = () => {
    * Calculate if result panel should be above or below toolbar based on available space
    */
   const shouldShowPanelAbove = useMemo(() => {
-    const toolbarHeight = 50; // Approximate toolbar height
-    const estimatedPanelHeight = 300; // Estimated result panel height
+    const toolbarHeight = 50;
+    const estimatedPanelHeight = 300;
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - (position.y + toolbarHeight);
     const spaceAbove = position.y;
     
-    // If not enough space below but more space above, show above
     return spaceBelow < estimatedPanelHeight && spaceAbove > spaceBelow;
   }, [position.y]);
 
@@ -205,8 +186,6 @@ const AIToolbar = () => {
    */
   useEffect(() => {
     if (hasResultFlag && !shouldRenderResultPanel) {
-      // Result appeared and panel not showing - render immediately
-      // Clear any pending close animation
       if (resultPanelCloseTimeoutRef.current) {
         clearTimeout(resultPanelCloseTimeoutRef.current);
         resultPanelCloseTimeoutRef.current = null;
@@ -214,7 +193,6 @@ const AIToolbar = () => {
       setShouldRenderResultPanel(true);
       setIsResultPanelClosing(false);
     } else if (!hasResultFlag && shouldRenderResultPanel) {
-      // Result disappeared and panel is showing - start closing animation
       setIsResultPanelClosing(true);
       resultPanelCloseTimeoutRef.current = setTimeout(() => {
         setShouldRenderResultPanel(false);
@@ -246,22 +224,16 @@ const AIToolbar = () => {
       return { isSingleWord: false, wordCount: 0 };
     }
     
-    // Count words (split by whitespace and filter empty strings)
     const words = text.trim().split(/\s+/).filter(w => w.length > 0);
     const wordCount = words.length;
     
     return {
-      isSingleWord: wordCount <= 2, // 1-2 words
+      isSingleWord: wordCount <= 2,
       wordCount,
     };
   }, []);
 
-  /**
-   * Check if selection is inside editable content
-   * Returns: { isEditable, element, originalContent, selectionStart, selectionEnd }
-   */
   const checkEditableContent = useCallback(() => {
-    // First check if active element is input/textarea with selection
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
@@ -270,7 +242,6 @@ const AIToolbar = () => {
     if (isInputOrTextarea) {
       const element = activeElement;
       
-      // Check if input type is excluded
       if (element.tagName === 'INPUT') {
         const type = element.type.toLowerCase();
         const excludedTypes = ['password', 'email', 'number', 'date', 'time', 'datetime-local', 
@@ -281,7 +252,6 @@ const AIToolbar = () => {
         }
       }
       
-      // Check if there's a selection
       const start = element.selectionStart;
       const end = element.selectionEnd;
       
@@ -299,7 +269,6 @@ const AIToolbar = () => {
       return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
     }
     
-    // For contenteditable and other elements, use window.getSelection()
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
@@ -309,19 +278,15 @@ const AIToolbar = () => {
     const startContainer = range.startContainer;
     const endContainer = range.endContainer;
 
-    // Get the parent elements for both start and end of selection
     const startElement = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer;
     const endElement = endContainer.nodeType === 3 ? endContainer.parentElement : endContainer;
 
-    // Helper to check if element is contenteditable
     const findContentEditableAncestor = (element) => {
       let current = element;
       while (current && current !== document.body) {
-        // Check for standard contenteditable
         if (current.isContentEditable || current.getAttribute('contenteditable') === 'true') {
           return current;
         }
-        // Check for Gmail's g_editable attribute
         if (current.getAttribute('g_editable') === 'true') {
           return current;
         }
@@ -333,7 +298,6 @@ const AIToolbar = () => {
     const startEditable = findContentEditableAncestor(startElement);
     const endEditable = findContentEditableAncestor(endElement);
 
-    // Both start and end must be in the same contenteditable element
     if (!startEditable || !endEditable || startEditable !== endEditable) {
       return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
     }
@@ -352,7 +316,6 @@ const AIToolbar = () => {
    * Set up TTS callbacks for speaker icon
    */
   useEffect(() => {
-    // Set up TTS playback callbacks
     TTSServiceProxy.setAudioStartCallback((sessionId) => {
       Logger.log('AIToolbar', 'TTS audio started:', sessionId);
       if (sessionId === currentSessionId) {
@@ -368,7 +331,6 @@ const AIToolbar = () => {
     });
 
     return () => {
-      // Cleanup callbacks
       TTSServiceProxy.setAudioStartCallback(null);
       TTSServiceProxy.setAudioEndCallback(null);
     };
@@ -392,14 +354,12 @@ const AIToolbar = () => {
   const onSpeakerClick = async () => {
     if (!result || !(action?.startsWith('summarize-') || action?.startsWith('image-') || action?.startsWith('rewrite-') || action?.startsWith('write-') || action?.startsWith('dictionary-') || action === 'dictation' || action === 'translate')) return;
 
-    // Check if TTS is configured and enabled
     if (!ttsConfig?.enabled) {
       Logger.warn('AIToolbar', 'TTS is not enabled');
       setError('Text-to-Speech is disabled in settings');
       return;
     }
 
-    // If generating or playing, stop everything
     if (isTTSGenerating || isSpeaking) {
       Logger.log('AIToolbar', 'Cancelling TTS (generating:', isTTSGenerating, ', speaking:', isSpeaking, ')');
       TTSServiceProxy.stopPlayback();
@@ -409,25 +369,21 @@ const AIToolbar = () => {
       return;
     }
 
-    // Start playback
     try {
       Logger.log('AIToolbar', 'Starting TTS');
       
-      // Generate unique session ID
       const sessionId = `toolbar_${Date.now()}`;
       setCurrentSessionId(sessionId);
-      setIsTTSGenerating(true); // Mark as generating
+      setIsTTSGenerating(true);
 
-      // Generate and play audio chunks
       const audioChunks = await TTSServiceProxy.generateChunkedSpeech(
         result,
-        null, // onChunkReady callback
-        500,  // maxChunkSize
-        100,  // minChunkSize
+        null,
+        500,
+        100,
         sessionId
       );
 
-      // Check if generation was stopped
       if (audioChunks.length === 0) {
         Logger.log('AIToolbar', 'TTS generation was stopped');
         setIsTTSGenerating(false);
@@ -436,14 +392,11 @@ const AIToolbar = () => {
         return;
       }
 
-      // Generation complete, now playing
       setIsTTSGenerating(false);
       setIsSpeaking(true);
 
-      // Play audio sequence
       await TTSServiceProxy.playAudioSequence(audioChunks, sessionId);
 
-      // Playback complete
       setIsSpeaking(false);
       setCurrentSessionId(null);
     } catch (err) {
@@ -459,23 +412,19 @@ const AIToolbar = () => {
    * Close result panel
    */
   const closeResult = useCallback(async () => {
-    // Cancel ongoing request if loading
     if (isLoading) {
       Logger.log('AIToolbar', 'Aborting ongoing streaming request...');
       
-      // Abort streaming via abort controller
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       
-      // Also call service abort methods to stop generation at source
       try {
         if (action?.startsWith('summarize-')) {
           await SummarizerServiceProxy.abort();
         } else if (action === 'translate' || action === 'detect-language') {
           await TranslatorServiceProxy.abort();
         } else if (action?.startsWith('image-')) {
-          // Use correct method name: abortRequest() not abort()
           await AIServiceProxy.abortRequest();
         }
       } catch (error) {
@@ -484,13 +433,11 @@ const AIToolbar = () => {
       
       setIsLoading(false);
       
-      // Clear abort controller after a short delay to allow abort to propagate
       setTimeout(() => {
         abortControllerRef.current = null;
       }, 100);
     }
     
-    // Stop TTS if playing
     if (isSpeaking && currentSessionId) {
       Logger.log('AIToolbar', 'Stopping TTS playback');
       TTSServiceProxy.stopPlayback();
@@ -498,7 +445,6 @@ const AIToolbar = () => {
       setCurrentSessionId(null);
     }
     
-    // Delay clearing states UNTIL AFTER fade-out animation completes (500ms to be safe)
     setTimeout(() => {
       setResult('');
       setError('');
@@ -511,17 +457,12 @@ const AIToolbar = () => {
     }, 500);
   }, [isLoading, action, isSpeaking, currentSessionId]);
 
-  /**
-   * Get selection and images from the page
-   */
   const getSelection = useCallback(() => {
-    // Check if the active element is an input or textarea
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
       (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
     
-    // Handle input/textarea selection separately
     if (isInputOrTextarea) {
       const element = activeElement;
       const start = element.selectionStart;
@@ -540,7 +481,6 @@ const AIToolbar = () => {
       return { text: '', images: [], audios: [], selection: window.getSelection() };
     }
     
-    // Handle regular selection (for contenteditable and other elements)
     const selection = window.getSelection();
     
     if (!selection || selection.rangeCount === 0) {
@@ -550,10 +490,8 @@ const AIToolbar = () => {
     const range = selection.getRangeAt(0);
     const container = range.commonAncestorContainer;
     
-    // Find container element
     const containerEl = container.nodeType === 3 ? container.parentElement : container;
     
-    // Use MediaExtractionService single method - synchronous extraction only
     const media = MediaExtractionService._extractMediaFromContainer(containerEl, selection);
     
     return { 
@@ -568,7 +506,6 @@ const AIToolbar = () => {
    * Calculate optimal position for toolbar at selection start
    */
   const calculatePosition = useCallback((selection) => {
-    // Check if the active element is an input or textarea
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
@@ -577,11 +514,9 @@ const AIToolbar = () => {
     let rect;
     
     if (isInputOrTextarea) {
-      // For input/textarea, calculate approximate cursor position
       const element = activeElement;
       const start = element.selectionStart || 0;
       
-      // Create a temporary span to measure text width
       const tempSpan = document.createElement('span');
       tempSpan.style.font = window.getComputedStyle(element).font;
       tempSpan.style.visibility = 'hidden';
@@ -593,18 +528,14 @@ const AIToolbar = () => {
       const textWidth = tempSpan.offsetWidth;
       document.body.removeChild(tempSpan);
       
-      // Get element position
       const elemRect = element.getBoundingClientRect();
       
-      // Calculate cursor X position (approximate)
-      // Account for padding and scrollLeft
       const computedStyle = window.getComputedStyle(element);
       const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
       const scrollLeft = element.scrollLeft || 0;
       
       const cursorX = elemRect.left + paddingLeft + textWidth - scrollLeft;
       
-      // Create a rect-like object for cursor position
       rect = {
         left: cursorX,
         top: elemRect.top,
@@ -613,7 +544,6 @@ const AIToolbar = () => {
         height: elemRect.height
       };
     } else {
-      // For regular selection
       if (!selection || selection.rangeCount === 0) return null;
       
       const range = selection.getRangeAt(0);
@@ -622,30 +552,23 @@ const AIToolbar = () => {
     
     if (!rect || rect.height === 0) return null;
     
-    // Toolbar dimensions - use actual toolbar width if available, otherwise estimate
-    const toolbarWidth = toolbarRef.current ? toolbarRef.current.offsetWidth : 400; // More conservative estimate
+    const toolbarWidth = toolbarRef.current ? toolbarRef.current.offsetWidth : 400;
     const toolbarHeight = toolbarRef.current ? toolbarRef.current.offsetHeight : 50;
     const offset = 8;
     
-    // Use viewport coordinates (getBoundingClientRect already gives us these)
-    // Position at selection start (left edge)
     let x = rect.left;
     let y = rect.top - toolbarHeight - offset;
     
-    // Ensure toolbar never goes off-screen horizontally
     const viewportWidth = window.innerWidth;
     
-    // Check if would go off-screen on the right
     if (x + toolbarWidth > viewportWidth - 10) {
       x = viewportWidth - toolbarWidth - 10;
     }
     
-    // Check if would go off-screen on the left
     if (x < 10) {
       x = 10;
     }
-    
-    // Adjust if too close to top (show below instead)
+
     if (y < 10) {
       y = rect.bottom + offset;
     }
@@ -659,41 +582,34 @@ const AIToolbar = () => {
   const handleSelectionChange = useCallback(() => {
     if (!isEnabled) return;
     
-    // Clear existing timeout
     if (selectionTimeoutRef.current) {
       clearTimeout(selectionTimeoutRef.current);
     }
     
-    // Debounce selection change
     selectionTimeoutRef.current = setTimeout(() => {
       const { text, images, audios, selection } = getSelection();
       
-      // Check if active element is inside our toolbar or panels - if so, ignore completely
       const activeElement = document.activeElement;
       if (activeElement && (resultPanelRef.current || toolbarRef.current)) {
         if (
           (resultPanelRef.current && resultPanelRef.current.contains(activeElement)) ||
           (toolbarRef.current && toolbarRef.current.contains(activeElement))
         ) {
-          // Focus is inside our UI, ignore this change completely
           Logger.log('AIToolbar', 'Focus inside toolbar/panel (element:', activeElement.tagName, '), ignoring selection change');
           return;
         }
       }
       
-      // Also check if selection is inside result panel OR toolbar
       if ((resultPanelRef.current || toolbarRef.current) && selection) {
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         if (range) {
           const container = range.commonAncestorContainer;
           const containerEl = container.nodeType === 3 ? container.parentElement : container;
           if (containerEl) {
-            // Check if selection is inside toolbar or result panel
             if (
               (resultPanelRef.current && resultPanelRef.current.contains(containerEl)) ||
               (toolbarRef.current && toolbarRef.current.contains(containerEl))
             ) {
-              // Selection is inside our UI, ignore this change completely
               Logger.log('AIToolbar', 'Selection inside toolbar/panel, ignoring');
               return;
             }
@@ -701,8 +617,6 @@ const AIToolbar = () => {
         }
       }
       
-      // If no selection but result panel is active, keep toolbar visible
-      // This prevents toolbar from closing when selection is lost (scroll, click result panel, etc.)
       if (!text && images.length === 0 && audios.length === 0) {
         Logger.log('AIToolbar', 'No selection detected, checking if should hide toolbar...');
         Logger.log('AIToolbar', '- showingFromInputFocusRef:', showingFromInputFocusRef.current);
@@ -710,19 +624,16 @@ const AIToolbar = () => {
         Logger.log('AIToolbar', '- showWriterInputRef:', showWriterInputRef.current);
         Logger.log('AIToolbar', '- resultPanelActive:', resultPanelActive);
         
-        // ALSO: Don't hide if toolbar was just shown by input focus or image hover
         if (showingFromInputFocusRef.current || showingFromImageHoverRef.current) {
           Logger.log('AIToolbar', 'No selection but showing from input focus or image hover, keeping toolbar visible');
           return;
         }
         
-        // ALSO: Don't hide if writer input panel is showing
         if (showWriterInputRef.current) {
           Logger.log('AIToolbar', 'No selection but writer input panel is showing, keeping toolbar visible');
           return;
         }
         
-        // Only hide if result panel is not active
         if (!resultPanelActive) {
           Logger.log('AIToolbar', 'No selection and result panel not active, HIDING TOOLBAR');
           setIsVisible(false);
@@ -739,18 +650,16 @@ const AIToolbar = () => {
           setEditableSelectionStart(0);
           setEditableSelectionEnd(0);
           setHasInserted(false);
-          hasInsertedRef.current = false; // Clear ref
-          setImprovedContent(null); // Clear improved content
+          hasInsertedRef.current = false;
+          setImprovedContent(null);
         } else {
           Logger.log('AIToolbar', 'No selection but result panel active, keeping toolbar visible');
         }
         return;
       }
       
-      // Calculate position
       const pos = calculatePosition(selection);
       if (!pos) {
-        // No valid position but we have content - keep visible at current position
         if (resultRef.current || errorRef.current || isLoadingRef.current) {
           Logger.log('AIToolbar', 'No position but result active, keeping toolbar at current position');
           return;
@@ -759,10 +668,8 @@ const AIToolbar = () => {
         return;
       }
       
-      // Check if selection is in editable content
       const editableInfo = checkEditableContent();
       
-      // Don't update editable state if we just inserted (preserve original for undo)
       if (!hasInsertedRef.current) {
         setIsEditableContent(editableInfo.isEditable);
         setEditableElement(editableInfo.element);
@@ -772,29 +679,23 @@ const AIToolbar = () => {
         setEditableSelectionEnd(editableInfo.selectionEnd || 0);
       }
       
-      // Update state (only reset result/error/action if not already showing results)
       setSelectedText(text);
       setSelectedImages(images);
       setSelectedAudios(audios);
       
-      // Clear hoveredImageElement if we have a new selection (user selected something else)
       if ((text || images.length > 0 || audios.length > 0) && !showingFromImageHoverRef.current) {
         setHoveredImageElement(null);
       }
       
-      // Lock position when result/error/loading is active to prevent drift
       if (!resultRef.current && !errorRef.current && !isLoadingRef.current) {
         setPosition(pos);
-        setLockedPosition(null); // Clear lock when no result
+        setLockedPosition(null);
       } else if (!lockedPositionRef.current) {
-        // First time showing result - lock position
         setPosition(pos);
         setLockedPosition(pos);
       }
-      // If lockedPosition exists, keep using it (don't update position)
       
       setIsVisible(true);
-      // Don't clear result/error/action here - they should only be cleared by closeResult or new action
     }, 150);
   }, [isEnabled, getSelection, calculatePosition, checkEditableContent, resultPanelActive]);
 
@@ -806,19 +707,15 @@ const AIToolbar = () => {
   }, [handleSelectionChange]);
 
   /**
-   * Handle scroll - update toolbar position instantly to follow selection
-   * BUT: Don't update if result/error/loading is showing (locked position)
+   * Handles scroll events to update toolbar position or hide it
    */
   const handleScroll = useCallback(() => {
     if (!isVisibleRef.current) return;
     
-    // If position is locked (result showing), don't update position on scroll
     if (lockedPositionRef.current) {
       return;
     }
     
-    // If toolbar is shown from image hover, hide it on scroll
-    // (because the image position changes and toolbar would be misaligned)
     if (showingFromImageHoverRef.current) {
       setIsVisible(false);
       setHoveredImageElement(null);
@@ -826,37 +723,30 @@ const AIToolbar = () => {
       return;
     }
     
-    // Update position instantly - no delay, no RAF
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0) {
       const pos = calculatePosition(selection);
       if (pos) {
         setPosition(pos);
       } else {
-        // Selection no longer visible, hide toolbar
         setIsVisible(false);
       }
     }
   }, [calculatePosition]);
 
   /**
-   * Hide toolbar when clicking outside
-   * Uses composedPath() to work correctly in shadow DOM (extension mode)
+   * Hides toolbar when clicking outside using shadow DOM-compatible event path checking
    */
   const handleClickOutside = useCallback((e) => {
-    // Get the full event path including shadow DOM elements
     const path = e.composedPath ? e.composedPath() : (e.path || [e.target]);
     
-    // Check if any element in the path is our toolbar, result panel, or any dropdown/popup elements
     const clickedInside = path.some(el => {
       if (el === toolbarRef.current || el === resultPanelRef.current) {
         return true;
       }
-      // Check for common popup/dropdown classes that might be portaled
-      if (el.nodeType === 1) { // Element node
+      if (el.nodeType === 1) {
         const classList = el.classList || [];
         const classStr = Array.from(classList).join(' ');
-        // Check for dropdown menus, select options, portals, etc.
         if (
           classStr.includes('dropdown') ||
           classStr.includes('menu') ||
@@ -875,10 +765,9 @@ const AIToolbar = () => {
     });
     
     if (clickedInside) {
-      return; // Click is inside our components or related UI
+      return;
     }
     
-    // Don't hide if user is clicking on selected text
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
@@ -886,33 +775,29 @@ const AIToolbar = () => {
       const containerEl = container.nodeType === 3 ? container.parentElement : container;
       
       if (containerEl && path.includes(containerEl)) {
-        return; // User clicked on selection, keep toolbar visible
+        return;
       }
     }
     
-    // Stop dictation if running
     if (isRecording) {
       Logger.log('AIToolbar', 'Stopping dictation on click outside');
       VoiceRecordingService.stop();
       setIsRecording(false);
     }
     
-    // Hide toolbar immediately AND close result panel
     setIsVisible(false);
-    setResultPanelActive(false); // Deactivate result panel
+    setResultPanelActive(false);
     
-    // Clear input focus and image hover flags
     showingFromInputFocusRef.current = false;
     showingFromImageHoverRef.current = false;
     
-    // Close result panel if open (this will also abort streaming and stop TTS)
     if (result || error || isLoading) {
       closeResult();
     }
   }, [result, error, isLoading, closeResult, isRecording]);
 
   /**
-   * Handle input focus - show toolbar with dictation
+   * Handles input/textarea focus to show toolbar with dictation action
    */
   const handleInputFocus = useCallback((e) => {
     Logger.log('AIToolbar', 'handleInputFocus triggered', {
@@ -923,7 +808,6 @@ const AIToolbar = () => {
       uiConfig: uiConfig
     });
     
-    // Default to true if not explicitly set to false
     if (uiConfig?.aiToolbar?.showOnInputFocus === false) {
       Logger.log('AIToolbar', 'Input focus disabled in settings');
       return;
@@ -931,7 +815,6 @@ const AIToolbar = () => {
     
     const target = e.target;
     
-    // Ignore if focus is inside our own toolbar or result panel
     if (toolbarRef.current?.contains(target) || resultPanelRef.current?.contains(target)) {
       Logger.log('AIToolbar', 'Focus inside toolbar/panel, ignoring');
       return;
@@ -945,7 +828,6 @@ const AIToolbar = () => {
     if (isInput || isContentEditable) {
       Logger.log('AIToolbar', 'Input focused, showing toolbar with dictation');
       
-      // CRITICAL: Save cursor position BEFORE showing toolbar (clicking toolbar will remove focus)
       if (isInput) {
         savedCursorPositionRef.current = {
           element: target,
@@ -954,7 +836,6 @@ const AIToolbar = () => {
         };
         Logger.log('AIToolbar', 'Saved cursor position:', savedCursorPositionRef.current);
       } else {
-        // For contenteditable, save selection
         const selection = window.getSelection();
         if (selection.rangeCount > 0) {
           savedCursorPositionRef.current = {
@@ -964,20 +845,16 @@ const AIToolbar = () => {
         }
       }
       
-      // Calculate position at cursor or caret
       const rect = target.getBoundingClientRect();
       const toolbarHeight = 50;
       const toolbarWidth = 150;
       
-      // Use viewport coordinates directly (no scrollX/Y) because toolbar uses fixed positioning
       let x = rect.left;
-      let y = rect.top - toolbarHeight - 10; // 10px above input
+      let y = rect.top - toolbarHeight - 10;
       
-      // Smart positioning - check if would go off-screen
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       
-      // Adjust horizontal position if would go off-screen
       if (x + toolbarWidth > viewportWidth) {
         x = viewportWidth - toolbarWidth - 10;
       }
@@ -985,34 +862,28 @@ const AIToolbar = () => {
         x = 10;
       }
       
-      // Adjust vertical position if would go off-screen at top
       if (y < 0) {
-        // Position below input instead
         y = rect.bottom + 10;
       }
       
       Logger.log('AIToolbar', 'Setting position', { x, y, rect, viewport: { width: viewportWidth, height: viewportHeight } });
       
-      // Clear hoveredImageElement since we're showing toolbar for input focus
       setHoveredImageElement(null);
       
       setPosition({ x, y });
       setIsVisible(true);
-      setAction('dictation'); // Pre-select dictation action
+      setAction('dictation');
       setIsEditableContent(true);
       setEditableElement(target);
       setEditableType(isContentEditable ? 'contenteditable' : 'input');
       
-      // Save initial selection for dictation
       if (!isContentEditable) {
         setEditableSelectionStart(target.selectionStart);
         setEditableSelectionEnd(target.selectionEnd);
       }
       
-      // Set flag to prevent handleSelectionChange from immediately hiding toolbar
       showingFromInputFocusRef.current = true;
       
-      // DON'T clear the flag automatically - let user interaction clear it
       Logger.log('AIToolbar', 'Set showingFromInputFocusRef to true, will clear on hide');
     } else {
       Logger.log('AIToolbar', 'Not an input element, ignoring');
@@ -1020,7 +891,7 @@ const AIToolbar = () => {
   }, [uiConfig]);
 
   /**
-   * Handle image hover - show toolbar with image actions
+   * Handles image hover to show toolbar with image analysis actions
    */
   const handleImageHover = useCallback((e) => {
     Logger.log('AIToolbar', 'handleImageHover triggered', {
@@ -1029,14 +900,12 @@ const AIToolbar = () => {
       src: e.target.src
     });
     
-    // Default to true if not explicitly set to false
     if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
     
     const target = e.target;
     if (target.tagName === 'IMG') {
       Logger.log('AIToolbar', 'Image hovered, showing toolbar (will extract on button click)');
       
-      // If hovering a different image, clear previous results
       if (hoveredImageElement && hoveredImageElement !== target) {
         Logger.log('AIToolbar', 'Different image hovered, clearing previous results');
         setResult('');
@@ -1045,42 +914,31 @@ const AIToolbar = () => {
         setResultPanelActive(false);
       }
       
-      // Clear input focus flag when showing toolbar for image
-      // This ensures we show image buttons (not dictation button)
       showingFromInputFocusRef.current = false;
       
-      // Clear editable content state to hide dictation button
       setIsEditableContent(false);
       setEditableElement(null);
       setEditableType(null);
       
-      // Calculate smart position - check if toolbar would go off-screen
       const rect = target.getBoundingClientRect();
-      const toolbarWidth = 400; // Approximate toolbar width
-      const toolbarHeight = 50; // Approximate toolbar height
+      const toolbarWidth = 400;
+      const toolbarHeight = 50;
       const viewportWidth = window.innerWidth;
       
       let x, y;
       
-      // Use viewport coordinates directly (no scrollX/Y) because toolbar uses fixed positioning
-      // Horizontal positioning - prefer right side, but flip to left if would go off-screen
       if (rect.right + toolbarWidth - 120 > viewportWidth) {
-        // Would go off-screen on right, position on left side
         x = rect.left;
       } else {
-        // Position on right side
         x = rect.right - 120;
       }
       
-      // Vertical positioning - prefer top, but flip to bottom if would go off-screen
       const topY = rect.top - toolbarHeight - 10;
       const bottomY = rect.bottom + 10;
       
       if (topY < 0) {
-        // Top would be off-screen, use bottom
         y = bottomY;
       } else {
-        // Use top
         y = topY;
       }
       
@@ -1089,16 +947,13 @@ const AIToolbar = () => {
       setPosition({ x, y });
       setIsVisible(true);
       
-      // Store the hovered image element for extraction when user clicks button
       setHoveredImageElement(target);
-      setSelectedImages([]); // Clear selection-based images
-      setSelectedText(''); // Clear text selection
+      setSelectedImages([]);
+      setSelectedText('');
       setSelectedAudios([]);
       
-      // Set flag to prevent handleSelectionChange from hiding toolbar
       showingFromImageHoverRef.current = true;
       
-      // DON'T clear the flag automatically - let user interaction clear it
       Logger.log('AIToolbar', 'Set showingFromImageHoverRef to true, will clear on hide');
     }
   }, [uiConfig, hoveredImageElement]);
@@ -1106,28 +961,24 @@ const AIToolbar = () => {
   /**
    * Handle image leave - only hide if result panel not active
    */
+  /**
+   * Handles image mouse leave - keeps toolbar visible to prevent flickering
+   */
   const handleImageLeave = useCallback((e) => {
     Logger.log('AIToolbar', 'handleImageLeave triggered', {
       enabled: uiConfig?.aiToolbar?.showOnImageHover,
       resultPanelActive: resultPanelActive
     });
     
-    // Default to true if not explicitly set to false
     if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
     
     const target = e.target;
     if (target.tagName === 'IMG') {
-      // Don't hide - let handleClickOutside or user action close it
-      // This prevents flickering when moving from image to toolbar
       Logger.log('AIToolbar', 'Image unhovered, but keeping toolbar visible');
     }
   }, [uiConfig, resultPanelActive]);
 
-  /**
-   * Set up event listeners
-   */
   useEffect(() => {
-    // Default to true if not explicitly set to false
     const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus !== false;
     const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover !== false;
     
@@ -1139,24 +990,20 @@ const AIToolbar = () => {
     document.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('selectionchange', handleSelectionChange);
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true); // Use capture to catch all scroll events
+    window.addEventListener('scroll', handleScroll, true);
     
-    // Input focus listener
     if (showOnInputFocus) {
       document.addEventListener('focusin', handleInputFocus);
     }
     
-    // Image hover listeners + MutationObserver
     let observer;
     if (showOnImageHover) {
-      // Add event listeners to all existing images
       const images = document.querySelectorAll('img');
       images.forEach(img => {
         img.addEventListener('mouseenter', handleImageHover);
         img.addEventListener('mouseleave', handleImageLeave);
       });
       
-      // Use MutationObserver to handle dynamically added images
       observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
@@ -1194,7 +1041,6 @@ const AIToolbar = () => {
           img.removeEventListener('mouseleave', handleImageLeave);
         });
         
-        // Disconnect MutationObserver
         if (observer) {
           observer.disconnect();
         }
@@ -1204,15 +1050,13 @@ const AIToolbar = () => {
         clearTimeout(selectionTimeoutRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEnabled, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover]);
+  }, [isEnabled, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave]);
 
   /**
-   * Clear flags and stop dictation when toolbar becomes invisible
+   * Clears flags and stops dictation when toolbar becomes invisible
    */
   useEffect(() => {
     if (!isVisible) {
-      // Clear all flags when toolbar is hidden
       showingFromInputFocusRef.current = false;
       showingFromImageHoverRef.current = false;
       savedCursorPositionRef.current = null;
@@ -1224,7 +1068,6 @@ const AIToolbar = () => {
         setAccumulatedTranscription('');
       }
       
-      // Clear the recording timer interval to prevent timer glitch
       if (recordingIntervalRef.current) {
         Logger.log('AIToolbar', 'Clearing recording timer interval');
         clearInterval(recordingIntervalRef.current);
@@ -1235,8 +1078,7 @@ const AIToolbar = () => {
   }, [isVisible, isRecording]);
 
   /**
-   * Track cursor position changes in editable element
-   * Update savedCursorPositionRef whenever user clicks or moves cursor
+   * Tracks cursor position changes in editable element
    */
   useEffect(() => {
     if (!editableElement || !isEditableContent) return;
@@ -1252,7 +1094,6 @@ const AIToolbar = () => {
           Logger.log('AIToolbar', 'Updated cursor position (contenteditable)');
         }
       } else {
-        // Input/textarea
         savedCursorPositionRef.current = {
           element: editableElement,
           start: editableElement.selectionStart,
@@ -1265,7 +1106,6 @@ const AIToolbar = () => {
       }
     };
     
-    // Listen for click, keyup, and select events to track cursor changes
     editableElement.addEventListener('click', updateCursorPosition);
     editableElement.addEventListener('keyup', updateCursorPosition);
     editableElement.addEventListener('select', updateCursorPosition);
@@ -1294,8 +1134,7 @@ const AIToolbar = () => {
   }, [result, error, isLoading]);
 
   /**
-   * Detect background brightness for toolbar and result panel
-   * Only re-detect when panel visibility or position changes, NOT when result content changes
+   * Detects background brightness for toolbar and result panel
    */
   useEffect(() => {
     if (!isVisible) return;
@@ -1305,7 +1144,6 @@ const AIToolbar = () => {
       const toolbar = toolbarRef.current;
       const panel = resultPanelRef.current;
       
-      // Detect toolbar background
       if (toolbar) {
         const elementsToDisable = [canvas, toolbar].filter(Boolean);
         const toolbarResult = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
@@ -1326,7 +1164,6 @@ const AIToolbar = () => {
         setIsLightBackgroundToolbar(toolbarResult.isLight);
       }
       
-      // Detect result panel background (only if panel should be visible)
       if (panel && shouldRenderResultPanel) {
         const elementsToDisable = [canvas, panel].filter(Boolean);
         const panelResult = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
@@ -1348,14 +1185,12 @@ const AIToolbar = () => {
       }
     };
     
-    // Initial detection
     detectBackgrounds();
     
-    // Re-detect on position change (debounced)
     const timeoutId = setTimeout(detectBackgrounds, 400);
     
     return () => clearTimeout(timeoutId);
-  }, [isVisible, position, shouldRenderResultPanel]); // Only depend on visibility and position, NOT result content
+  }, [isVisible, position, shouldRenderResultPanel]);
 
   /**
    * Handle Summarize action with streaming
@@ -1370,7 +1205,6 @@ const AIToolbar = () => {
       return;
     }
     
-    // Cancel any ongoing request first
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
@@ -1380,16 +1214,13 @@ const AIToolbar = () => {
     const type = summaryType || 'tldr';
     setAction(`summarize-${type}`);
     setError('');
-    // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
     
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
     
     try {
-      // Check if explicitly disabled
       if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
         throw new Error('Summarizer is disabled in settings');
       }
@@ -1402,9 +1233,7 @@ const AIToolbar = () => {
       
       let fullSummary = '';
       
-      // Use streaming API
       for await (const chunk of SummarizerServiceProxy.summarizeStreaming(selectedText, options)) {
-        // Check if aborted before processing chunk
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Summarize streaming aborted');
           break;
@@ -1412,20 +1241,17 @@ const AIToolbar = () => {
         
         fullSummary += chunk;
         
-        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullSummary);
         }
       }
       
-      // Ensure final result is set
       if (!abortControllerRef.current?.signal.aborted && fullSummary) {
         setResult(fullSummary);
       }
       
       Logger.log('AIToolbar', 'Summary streaming complete');
     } catch (err) {
-      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Summarize failed:', err);
         setError('Summarization failed: ' + (err.message || 'Unknown error'));
@@ -1445,7 +1271,6 @@ const AIToolbar = () => {
       return;
     }
     
-    // Cancel any ongoing request first
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
@@ -1469,7 +1294,6 @@ const AIToolbar = () => {
         
         setDetectedLanguageName(languageName);
         
-        // Show result
         const confidencePercent = detected.confidence ? (detected.confidence * 100).toFixed(1) : 'N/A';
         setResult(`Language: ${languageName}\nConfidence: ${confidencePercent}%`);
       } else {
@@ -1497,14 +1321,11 @@ const AIToolbar = () => {
       return;
     }
     
-    // Cancel any ongoing request first
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
     }
     
-    // Reset undo/redo state when translate is clicked
-    // (This prevents showing undo button after translate when previously using rewrite)
     setHasInserted(false);
     hasInsertedRef.current = false;
     setOriginalContent(null);
@@ -1513,23 +1334,19 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction('translate');
     setError('');
-    // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
     
     const targetLanguage = targetLang || selectedTargetLanguage || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
     
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
     
     try {
-      // Check if explicitly disabled
       if (aiConfig?.aiFeatures?.translator?.enabled === false) {
         throw new Error('Translator is disabled in settings');
       }
       
-      // Auto-detect source language if enabled
       let sourceLang = null;
       if (useAutoDetect) {
         try {
@@ -1538,7 +1355,6 @@ const AIToolbar = () => {
           if (detectionResults && detectionResults.length > 0) {
             sourceLang = detectionResults[0].detectedLanguage;
             
-            // Find and store full language name for display
             const langInfo = TranslationLanguages.find(l => l.code === sourceLang);
             setDetectedLanguageName(langInfo ? langInfo.name : sourceLang.toUpperCase());
           }
@@ -1548,7 +1364,6 @@ const AIToolbar = () => {
         }
       }
       
-      // Don't translate if source and target are the same
       if (sourceLang === targetLanguage) {
         setResult(selectedText);
         setIsLoading(false);
@@ -1557,9 +1372,7 @@ const AIToolbar = () => {
       
       let fullTranslation = '';
       
-      // Use streaming API
       for await (const chunk of TranslatorServiceProxy.translateStreaming(selectedText, sourceLang, targetLanguage)) {
-        // Check if aborted before processing chunk
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Translate streaming aborted');
           break;
@@ -1567,20 +1380,17 @@ const AIToolbar = () => {
         
         fullTranslation += chunk;
         
-        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullTranslation);
         }
       }
       
-      // Ensure final result is set
       if (!abortControllerRef.current?.signal.aborted && fullTranslation) {
         setResult(fullTranslation);
       }
       
       Logger.log('AIToolbar', 'Translation streaming complete');
     } catch (err) {
-      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Translate failed:', err);
         setError('Translation failed: ' + (err.message || 'Unknown error'));
@@ -1596,13 +1406,11 @@ const AIToolbar = () => {
    * @param {string} analysisType - 'describe', 'extract-text', or 'analyze'
    */
   const onImageAnalysisClick = async (analysisType, skipClearResult = false) => {
-    // Check if we have any image source (hoveredImageElement OR selectedImages)
     if (!hoveredImageElement && (!selectedImages || selectedImages.length === 0)) {
       setError('No images selected');
       return;
     }
     
-    // Cancel any ongoing request first
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
@@ -1611,29 +1419,22 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`image-${analysisType}`);
     setError('');
-    // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
     
     Logger.log('AIToolbar', `Image Analysis clicked (${analysisType}, streaming)`);
     
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
     
     try {
       let processedMedia = null;
       
-      // Check if we have hoveredImageElement from image hover feature
       if (hoveredImageElement) {
-        // Extract the hovered image using MediaExtractionService
         Logger.log('AIToolbar', 'Extracting hovered image for analysis');
         
-        // If hoveredImageElement is an IMG element itself, we need to pass its parent
-        // and create a fake selection that contains only this image
         const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
         
-        // Create a fake selection that contains only the hovered image
         const fakeSelection = {
           containsNode: (node) => node === hoveredImageElement,
           toString: () => ''
@@ -1644,8 +1445,6 @@ const AIToolbar = () => {
           selection: fakeSelection
         });
       } else {
-        // Extract from selection
-        // Use existing getSelection method to get container and selection
         const { selection } = getSelection();
         
         if (!selection || selection.rangeCount === 0) {
@@ -1658,7 +1457,6 @@ const AIToolbar = () => {
         const container = range.commonAncestorContainer;
         const containerEl = container.nodeType === 3 ? container.parentElement : container;
         
-        // Convert image URLs to data URLs using MediaExtractionService
         processedMedia = await MediaExtractionService.processAndExtract({
           container: containerEl,
           selection: selection
@@ -1671,7 +1469,6 @@ const AIToolbar = () => {
         return;
       }
       
-      // Build prompt based on analysis type using PromptConfig
       let prompt;
       const imageCount = processedMedia.images.length;
       switch (analysisType) {
@@ -1688,21 +1485,17 @@ const AIToolbar = () => {
           prompt = PromptConfig.image.describe(1);
       }
 
-      // Format message with images for AIService
-      // Use simple format that AIService will convert based on provider
       const messages = [
         {
           role: 'user',
           content: prompt,
-          images: processedMedia.images.map(img => img.dataUrl) // Array of data URLs
+          images: processedMedia.images.map(img => img.dataUrl)
         }
       ];
       
       let fullResponse = '';
       
-      // Use AIServiceProxy sendMessage with streaming callback
       const response = await AIServiceProxy.sendMessage(messages, (chunk) => {
-        // Check if aborted before processing chunk
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Image analysis streaming aborted');
           return;
@@ -1710,13 +1503,11 @@ const AIToolbar = () => {
         
         fullResponse += chunk;
         
-        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullResponse);
         }
       });
       
-      // Handle final response if not streaming - ensure final result is always set
       if (!abortControllerRef.current?.signal.aborted) {
         if (response.response) {
           setResult(response.response);
@@ -1727,7 +1518,6 @@ const AIToolbar = () => {
       
       Logger.log('AIToolbar', 'Image analysis streaming complete');
     } catch (err) {
-      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Image analysis failed:', err);
         setError('Image analysis failed: ' + (err.message || 'Unknown error'));
@@ -1750,7 +1540,6 @@ const AIToolbar = () => {
       return;
     }
     
-    // Cancel any ongoing request first
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
       await abortPreviousRequest();
@@ -1759,7 +1548,6 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`dictionary-${actionType}`);
     setError('');
-    // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
@@ -1791,13 +1579,11 @@ const AIToolbar = () => {
       Logger.log('AIToolbar', '${actionName} response object:', response);
       Logger.log('AIToolbar', '${actionName} fullResponse:', fullResponse);
       
-      // Check if request was cancelled
       if (response?.cancelled) {
         Logger.log('AIToolbar', `${actionName} request was cancelled`);
         return;
       }
       
-      // Check for errors
       if (!response?.success) {
         const errorMsg = response?.error?.message || 'AI request failed';
         Logger.error('AIToolbar', '${actionName} request failed:', response?.error);
@@ -1805,7 +1591,6 @@ const AIToolbar = () => {
         return;
       }
       
-      // Handle non-streaming response - ensure final result is always set
       if (response?.response) {
         Logger.log('AIToolbar', 'Using non-streaming response');
         setResult(response.response);
@@ -1813,7 +1598,6 @@ const AIToolbar = () => {
         setResult(fullResponse);
       }
       
-      // If we still have no result, show error
       if (!fullResponse && !response?.response) {
         Logger.error('AIToolbar', 'No response received from AI');
         setError('No response received from AI service');
@@ -1873,7 +1657,6 @@ const AIToolbar = () => {
    * @param {Object} rewriteOptions - RewriterService options (tone, format, length)
    */
   const handleRewrite = async (actionType, actionName, rewriteOptions = {}, skipClearResult = false) => {
-    // Close writer input if open
     if (showWriterInput) {
       setShowWriterInput(false);
     }
@@ -1891,20 +1674,18 @@ const AIToolbar = () => {
     setIsLoading(true);
     setAction(`rewrite-${actionType}`);
     setError('');
-    // Don't clear result if regenerating (keep panel visible)
     if (!skipClearResult) {
       setResult('');
     }
-    setHasInserted(false); // Reset insert state for new rewrite
-    hasInsertedRef.current = false; // Reset ref for new rewrite
-    setImprovedContent(null); // Clear improved content on new rewrite
+    setHasInserted(false);
+    hasInsertedRef.current = false;
+    setImprovedContent(null);
     
     Logger.log('AIToolbar', `${actionName} clicked (streaming)`);
     
     abortControllerRef.current = new AbortController();
     
     try {
-      // Check if explicitly disabled
       if (aiConfig?.aiFeatures?.rewriter?.enabled === false) {
         throw new Error('Rewriter is disabled in settings');
       }
@@ -1912,9 +1693,7 @@ const AIToolbar = () => {
       const text = selectedText.trim();
       let fullRewrite = '';
       
-      // Use RewriterServiceProxy streaming API
       for await (const chunk of RewriterServiceProxy.rewriteStreaming(text, rewriteOptions)) {
-        // Check if aborted before processing chunk
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Rewrite streaming aborted');
           break;
@@ -1922,20 +1701,17 @@ const AIToolbar = () => {
         
         fullRewrite += chunk;
         
-        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullRewrite);
         }
       }
       
-      // Ensure final result is set
       if (!abortControllerRef.current?.signal.aborted && fullRewrite) {
         setResult(fullRewrite);
       }
       
       Logger.log('AIToolbar', `${actionName} streaming complete`);
     } catch (err) {
-      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', '${actionName} failed:', err);
         setError(`${actionName} failed: ` + (err.message || 'Unknown error'));
@@ -2084,17 +1860,15 @@ const AIToolbar = () => {
 
     Logger.log('AIToolbar', 'Custom rewrite with instructions:', customInstructions);
     
-    // Hide input panel when starting rewrite
     setShowWriterInput(false);
     
     await handleRewrite('custom', 'Custom Rewrite', {
       tone: 'as-is',
       format: 'as-is',
       length: 'as-is',
-      context: customInstructions // Use user's custom instructions as context
+      context: customInstructions
     }, skipClearResult);
     
-    // Clear the input after successful rewrite
     setWriterPrompt('');
   };
 
@@ -2106,40 +1880,33 @@ const AIToolbar = () => {
       setResult('');
     }
     setError('');
-    // Don't hide input yet - wait until streaming starts
     setAction('write');
     setIsLoading(true);
-    setResultPanelActive(true); // Keep toolbar visible during write operation
+    setResultPanelActive(true);
     
     Logger.log('AIToolbar', 'Write clicked (streaming)');
     
     abortControllerRef.current = new AbortController();
     
     try {
-      // Check if explicitly disabled
       if (aiConfig?.aiFeatures?.writer?.enabled === false) {
         throw new Error('Writer is disabled in settings');
       }
       
-      // Check if user provided a prompt
       if (!writerPrompt || writerPrompt.trim().length === 0) {
         throw new Error('Please enter what you want to write');
       }
       
-      // Use writer prompt as shared context
       const sharedContext = writerPrompt.trim();
       let fullWritten = '';
       let isFirstChunk = true;
       
-      // Use WriterServiceProxy streaming API
       for await (const chunk of WriterServiceProxy.writeStreaming(sharedContext, writerOptions)) {
-        // Hide input panel on first chunk
         if (isFirstChunk) {
           setShowWriterInput(false);
           isFirstChunk = false;
         }
         
-        // Check if aborted before processing chunk
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Write streaming aborted');
           break;
@@ -2147,25 +1914,22 @@ const AIToolbar = () => {
         
         fullWritten += chunk;
         
-        // Only update result if not aborted - use throttled update to prevent max depth exceeded
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullWritten);
         }
       }
       
-      // Ensure final result is set
       if (!abortControllerRef.current?.signal.aborted && fullWritten) {
         setResult(fullWritten);
-        setWriterPrompt(''); // Clear prompt after successful generation
+        setWriterPrompt('');
       }
       
       Logger.log('AIToolbar', 'Write streaming complete');
     } catch (err) {
-      // Don't show error if user aborted
       if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Write failed:', err);
         setError('Write failed: ' + (err.message || 'Unknown error'));
-        setShowWriterInput(true); // Show input again on error
+        setShowWriterInput(true);
       }
     } finally {
       setIsLoading(false);
@@ -2273,7 +2037,6 @@ const AIToolbar = () => {
           break;
       }
     } else if (action === 'write') {
-      // Regenerate write action
       await handleWrite(aiConfig?.aiFeatures?.writer || { tone: 'neutral', format: 'plain-text', length: 'medium' });
     }
   };
@@ -2284,23 +2047,18 @@ const AIToolbar = () => {
   const onAddToChatClick = async () => {
     Logger.log('AIToolbar', 'Add to Chat clicked');
     
-    // Check if we have hoveredImageElement or selection
     if (!hoveredImageElement && !selectedText && selectedImages.length === 0 && selectedAudios.length === 0) {
       setError('Nothing selected');
       return;
     }
     
-    // Get selection again to get container (only if not using hoveredImageElement)
     let result;
     
     if (hoveredImageElement) {
       Logger.log('AIToolbar', 'Extracting hovered image for Add to Chat');
       
-      // If hoveredImageElement is an IMG element itself, we need to pass its parent
-      // and create a fake selection that contains only this image
       const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
       
-      // Create a fake selection that contains only the hovered image
       const fakeSelection = {
         containsNode: (node) => node === hoveredImageElement,
         toString: () => ''
@@ -2321,7 +2079,6 @@ const AIToolbar = () => {
       const container = range.commonAncestorContainer;
       const containerEl = container.nodeType === 3 ? container.parentElement : container;
       
-      // Use single MediaExtractionService method
       result = await MediaExtractionService.processAndExtract({
         container: containerEl,
         selection: selection
@@ -2330,14 +2087,12 @@ const AIToolbar = () => {
     
     Logger.log('AIToolbar', 'Extracted data:', result);
     
-    // Use AppContext method
     handleAddToChat({
       text: result.text || selectedText || '',
       images: result.images,
       audios: result.audios
     });
     
-    // Hide toolbar
     setIsVisible(false);
   };
 
@@ -2369,22 +2124,17 @@ const AIToolbar = () => {
     let selectionStart = 0;
     let selectionEnd = 0;
     
-    // Determine the operation specifics
     if (operation === 'insert') {
       if (!result) return;
       newContent = result;
-      // Insert will select the new content
     } else if (operation === 'toggle') {
-      // Toggle between original and improved content
       if (hasInserted) {
-        // Currently showing improved - switch to original
         if (!originalContent) return;
         newContent = originalContent;
         restoreSelection = true;
         selectionStart = editableSelectionStart;
         selectionEnd = editableSelectionEnd;
       } else {
-        // Currently showing original - switch to improved
         if (!improvedContent) return;
         newContent = improvedContent;
       }
@@ -2396,47 +2146,38 @@ const AIToolbar = () => {
     
     try {
       if (editableType === 'input' || editableType === 'textarea') {
-        // Update the value based on operation
         if (operation === 'insert') {
-          // For insert, replace only the selected portion
           const currentValue = editableElement.value;
           const start = editableSelectionStart;
           const end = editableSelectionEnd;
           const improvedValue = currentValue.substring(0, start) + newContent + currentValue.substring(end);
           
-          // Store improved content for toggling
           setImprovedContent(improvedValue);
           
           editableElement.value = improvedValue;
           selectionStart = start;
           selectionEnd = start + newContent.length;
         } else {
-          // For toggle, replace entire value
           editableElement.value = newContent;
           if (!hasInserted) {
-            // Switching to improved - select the improved portion
             selectionStart = editableSelectionStart;
             selectionEnd = editableSelectionStart + (improvedContent.length - originalContent.length + (editableSelectionEnd - editableSelectionStart));
           }
         }
         
-        // Trigger events
         editableElement.dispatchEvent(new Event('input', { bubbles: true }));
         editableElement.dispatchEvent(new Event('change', { bubbles: true }));
         
-        // Handle selection
         editableElement.focus();
         editableElement.setSelectionRange(selectionStart, selectionEnd);
         
       } else if (editableType === 'contenteditable') {
         if (operation === 'insert') {
-          // For insert, work with current selection
           const selection = window.getSelection();
           if (selection && selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             range.deleteContents();
             
-            // Insert the new text (convert newlines to <br>)
             const fragment = document.createDocumentFragment();
             const lines = newContent.split('\n');
             lines.forEach((line, index) => {
@@ -2450,13 +2191,10 @@ const AIToolbar = () => {
             const lastNode = fragment.lastChild;
             range.insertNode(fragment);
             
-            // Store improved content for toggling
             setImprovedContent(editableElement.innerHTML);
             
-            // Trigger input event
             editableElement.dispatchEvent(new Event('input', { bubbles: true }));
             
-            // Select the inserted text
             if (firstNode && lastNode) {
               range.setStartBefore(firstNode);
               range.setEndAfter(lastNode);
@@ -2465,18 +2203,15 @@ const AIToolbar = () => {
             }
           }
         } else {
-          // For toggle, replace innerHTML
           editableElement.innerHTML = newContent;
           editableElement.dispatchEvent(new Event('input', { bubbles: true }));
           editableElement.focus();
           
-          // Handle selection based on toggle direction
           try {
             const selection = window.getSelection();
             const range = document.createRange();
             
             if (hasInserted && restoreSelection && selectedText) {
-              // Switching to original - try to restore original selection
               const textNodes = [];
               const walk = document.createTreeWalker(editableElement, NodeFilter.SHOW_TEXT, null);
               let node;
@@ -2518,7 +2253,6 @@ const AIToolbar = () => {
                 }
               }
             } else {
-              // Switching to improved - select all content
               range.selectNodeContents(editableElement);
               selection.removeAllRanges();
               selection.addRange(range);
@@ -2529,7 +2263,6 @@ const AIToolbar = () => {
         }
       }
       
-      // Update state based on operation
       if (operation === 'insert') {
         setHasInserted(true);
         hasInsertedRef.current = true;
@@ -2537,7 +2270,7 @@ const AIToolbar = () => {
         setError('');
         Logger.log('AIToolbar', 'Text inserted successfully and selected, panel closed');
       } else if (operation === 'toggle') {
-        setHasInserted(!hasInserted); // Toggle state
+        setHasInserted(!hasInserted);
         hasInsertedRef.current = !hasInsertedRef.current;
         Logger.log('AIToolbar', `Toggled to ${hasInserted ? 'original' : 'improved'} content`);
       }
@@ -2552,7 +2285,6 @@ const AIToolbar = () => {
    * Handle Insert - insert improved text
    */
   const onInsertClick = async () => {
-    // Stop dictation recording if active
     if (action === 'dictation' && isRecording) {
       Logger.log('AIToolbar', 'Stopping dictation on Insert click');
       VoiceRecordingService.stop();
@@ -2568,13 +2300,11 @@ const AIToolbar = () => {
   const onUndoClick = async () => {
     if (!hasInserted || !originalContent || !editableElement) return;
     
-    // Restore original content
     if (editableType === 'contenteditable') {
       editableElement.innerHTML = originalContent;
       editableElement.dispatchEvent(new Event('input', { bubbles: true }));
       editableElement.focus();
       
-      // Restore selection for contenteditable
       try {
         const selection = window.getSelection();
         const range = document.createRange();
@@ -2582,7 +2312,6 @@ const AIToolbar = () => {
         selection.removeAllRanges();
         selection.addRange(range);
         
-        // Update selected text state to keep toolbar visible
         setSelectedText(editableElement.textContent || editableElement.innerText);
       } catch (err) {
         Logger.warn('AIToolbar', 'Could not restore selection after undo:', err);
@@ -2592,16 +2321,14 @@ const AIToolbar = () => {
       editableElement.dispatchEvent(new Event('input', { bubbles: true }));
       editableElement.focus();
       
-      // Restore selection for input/textarea
       editableElement.setSelectionRange(0, originalContent.length);
       
-      // Update selected text state to keep toolbar visible
       setSelectedText(originalContent);
     }
     
     setHasInserted(false);
     hasInsertedRef.current = false;
-    setResultPanelActive(true); // Keep result panel active to prevent toolbar from disappearing
+    setResultPanelActive(true);
     Logger.log('AIToolbar', 'Undo: Restored original content with selection');
   };
 
@@ -2611,13 +2338,11 @@ const AIToolbar = () => {
   const onRedoClick = async () => {
     if (hasInserted || !improvedContent || !editableElement) return;
     
-    // Restore improved content
     if (editableType === 'contenteditable') {
       editableElement.innerHTML = improvedContent;
       editableElement.dispatchEvent(new Event('input', { bubbles: true }));
       editableElement.focus();
       
-      // Restore selection for contenteditable
       try {
         const selection = window.getSelection();
         const range = document.createRange();
@@ -2625,7 +2350,6 @@ const AIToolbar = () => {
         selection.removeAllRanges();
         selection.addRange(range);
         
-        // Update selected text state to keep toolbar visible
         setSelectedText(editableElement.textContent || editableElement.innerText);
       } catch (err) {
         Logger.warn('AIToolbar', 'Could not restore selection after redo:', err);
@@ -2635,16 +2359,14 @@ const AIToolbar = () => {
       editableElement.dispatchEvent(new Event('input', { bubbles: true }));
       editableElement.focus();
       
-      // Restore selection for input/textarea
       editableElement.setSelectionRange(0, improvedContent.length);
       
-      // Update selected text state to keep toolbar visible
       setSelectedText(improvedContent);
     }
     
     setHasInserted(true);
     hasInsertedRef.current = true;
-    setResultPanelActive(true); // Keep result panel active to prevent toolbar from disappearing
+    setResultPanelActive(true);
     Logger.log('AIToolbar', 'Redo: Restored improved content with selection');
   };
 
@@ -2662,42 +2384,34 @@ const AIToolbar = () => {
         setDictationMode(mode);
         setIsRecording(true);
         setRecordingDuration(0);
-        setAccumulatedTranscription(''); // Clear previous transcription
-        setAction('dictation'); // Set action to show result panel
-        setResult(''); // Clear previous result
+        setAccumulatedTranscription('');
+        setAction('dictation');
+        setResult('');
         setError('');
         isProcessingRef.current = false;
         
         Logger.log('AIToolbar', `Starting dictation session in ${mode} mode with VAD`);
         
-        // Start duration timer
         const startTime = Date.now();
         recordingIntervalRef.current = setInterval(() => {
           setRecordingDuration(Math.floor((Date.now() - startTime) / 1000));
         }, 100);
         
-        // Start VoiceRecordingService with VAD
-        // VAD will auto-detect speech and silence, transcribing each sentence
         await VoiceRecordingService.start({
           onTranscription: (transcription) => {
             Logger.log('AIToolbar', `VAD transcription received: "${transcription}"`);
             
             if (mode === 'auto-insert') {
-              // ========== AUTO-INSERT MODE ==========
-              // Insert each sentence at cursor as it's transcribed
               if (editableElement && isEditableContent) {
-                const separator = accumulatedTranscription ? ' ' : ''; // Add space between sentences
+                const separator = accumulatedTranscription ? ' ' : '';
                 
-                // Restore focus to input if lost
                 if (document.activeElement !== editableElement) {
                   editableElement.focus();
                 }
                 
                 if (editableType === 'contenteditable') {
-                  // ContentEditable handling
                   let range;
                   if (savedCursorPositionRef.current?.range) {
-                    // Use saved cursor position
                     range = savedCursorPositionRef.current.range;
                   } else {
                     const selection = window.getSelection();
@@ -2710,11 +2424,9 @@ const AIToolbar = () => {
                     range.deleteContents();
                     range.insertNode(document.createTextNode(separator + transcription));
                     range.collapse(false);
-                    // Update saved position for next insertion
                     savedCursorPositionRef.current = { element: editableElement, range: range.cloneRange() };
                   }
                 } else {
-                  // Input/textarea handling - use saved cursor position or current position
                   const currentValue = editableElement.value;
                   const cursorPos = savedCursorPositionRef.current?.start ?? editableElement.selectionStart ?? editableSelectionStart;
                   const newValue = 
@@ -2724,26 +2436,21 @@ const AIToolbar = () => {
                   editableElement.value = newValue;
                   const newCursorPos = cursorPos + separator.length + transcription.length;
                   editableElement.setSelectionRange(newCursorPos, newCursorPos);
-                  // Trigger input event for React
                   editableElement.dispatchEvent(new Event('input', { bubbles: true }));
                   
-                  // Update cursor position for next insertion
                   setEditableSelectionStart(newCursorPos);
                   setEditableSelectionEnd(newCursorPos);
-                  // Update saved position
                   savedCursorPositionRef.current = { element: editableElement, start: newCursorPos, end: newCursorPos };
                 }
                 
-                // Update accumulated transcription (for display/tracking)
                 setAccumulatedTranscription(prev => prev + separator + transcription);
                 Logger.log('AIToolbar', `Auto-inserted sentence: "${transcription}" at cursor position`);
               }
             } else {
-              // Accumulate each sentence in result panel for later insert
               setAccumulatedTranscription(prev => {
                 const separator = prev ? ' ' : '';
                 const newText = prev + separator + transcription;
-                setResult(newText); // Update result panel with all accumulated text
+                setResult(newText);
                 Logger.log('AIToolbar', `Added sentence to result panel. Total: "${newText}"`);
                 return newText;
               });
@@ -2760,16 +2467,11 @@ const AIToolbar = () => {
           },
           onRecordingStart: () => {
             Logger.log('AIToolbar', 'VAD detected speech - recording started');
-            // Visual feedback could be added here (pulsing mic icon)
           },
           onRecordingStop: () => {
             Logger.log('AIToolbar', 'VAD detected silence - recording stopped, processing transcription...');
-            // Each pause triggers transcription, which calls onTranscription above
-            // No need to change isRecording state - VAD will continue monitoring
           },
           onVolumeChange: (volume) => {
-            // Could use for visual feedback (volume meter)
-            // Logger.log('other', `Volume: ${volume}`);
           }
         });
         
@@ -2781,7 +2483,6 @@ const AIToolbar = () => {
           clearInterval(recordingIntervalRef.current);
           recordingIntervalRef.current = null;
         }
-        // IMPORTANT: Toolbar stays open with accumulated transcription
         Logger.log('AIToolbar', 'Dictation session ended, toolbar remains open');
       }
     } catch (error) {
@@ -2795,7 +2496,6 @@ const AIToolbar = () => {
     }
   };
 
-  // Cleanup recording timer on unmount
   useEffect(() => {
     return () => {
       if (recordingIntervalRef.current) {
@@ -2808,10 +2508,8 @@ const AIToolbar = () => {
     return null;
   }
 
-  // Determine selection type for conditional rendering
   const { isSingleWord } = getSelectionType(selectedText);
   
-  // Check if we have text selection (not just images)
   const hasTextSelection = selectedText && selectedText.trim().length > 0;
 
   return (
@@ -2819,9 +2517,6 @@ const AIToolbar = () => {
       {shouldRender && (
         <div
           ref={toolbarRef}
-          onMouseEnter={() => {
-            // Toolbar is visible, no need for timeout cleanup
-          }}
           className={`
             fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px] 
             border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform

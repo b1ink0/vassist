@@ -22,7 +22,6 @@ export const AnimationCategory = {
   CELEBRATING: 'celebrating',
   WALKING: 'walking',
   TALKING: 'talking',
-  // Add more as needed
 };
 
 /**
@@ -49,11 +48,8 @@ export const AssistantState = {
  * - Bezier easing: (0.25, 0.1, 0.75, 0.9) for smooth S-curve
  */
 export const TransitionSettings = {
-  // Default transition duration in frames (30fps)
   DEFAULT_TRANSITION_FRAMES: 30,
   
-  // Bezier curve control points for smooth easing
-  // Format: (x1, y1, x2, y2)
   DEFAULT_EASING_CURVE: {
     x1: 0.25,
     y1: 0.1,
@@ -61,10 +57,8 @@ export const TransitionSettings = {
     y2: 0.9,
   },
   
-  // Quick transition for subtle changes
   QUICK_TRANSITION_FRAMES: 15,
   
-  // Slow transition for dramatic changes
   SLOW_TRANSITION_FRAMES: 60,
 };
 
@@ -90,7 +84,6 @@ export const TransitionSettings = {
  * This ensures compatibility with both dev mode and extension mode.
  */
 export const AnimationRegistry = {
-  // ===== IDLE =====
   idle: [
     {
       id: 'idle_1',
@@ -185,16 +178,15 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== THINKING =====
   thinking: [
     {
       id: 'thinking_1',
       name: 'Thinking 1',
       filePath: 'res/assets/motion/think1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,           // Animation itself doesn't loop
-      loopTransition: true,  // When state loops, use smooth transition
-      autoReturn: null,      // Don't auto-return - let BUSY state control it
+      loop: false,
+      loopTransition: true,
+      autoReturn: null,
       weight: 1.0,
       metadata: {
         description: 'Thoughtful pose - considering something',
@@ -206,9 +198,9 @@ export const AnimationRegistry = {
       name: 'Thinking 2',
       filePath: 'res/assets/motion/think2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,           // Animation itself doesn't loop
-      loopTransition: true,  // When state loops, use smooth transition
-      autoReturn: null,      // Don't auto-return - let BUSY state control it
+      loop: false,
+      loopTransition: true,
+      autoReturn: null,
       weight: 1.0,
       metadata: {
         description: 'Alternative thinking animation',
@@ -217,7 +209,6 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== CELEBRATING =====
   celebrating: [
     {
       id: 'clap_1',
@@ -234,8 +225,6 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== INTRO =====
-  // Used only for app initialization intro animations
   intro: [
     {
       id: 'intro_1',
@@ -243,8 +232,8 @@ export const AnimationRegistry = {
       filePath: 'res/assets/motion/intro1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false, // Don't loop intro - play once and return to idle
-      autoReturn: AssistantState.IDLE, // Auto-return to idle after intro completes
+      loopTransition: false,
+      autoReturn: AssistantState.IDLE,
       weight: 1.0,
       metadata: {
         description: 'Entrance animation - walks from left to right and greets',
@@ -257,8 +246,8 @@ export const AnimationRegistry = {
       filePath: 'res/assets/motion/intro2.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
-      loopTransition: false, // Don't loop intro - play once and return to idle
-      autoReturn: AssistantState.IDLE, // Auto-return to idle after intro completes
+      loopTransition: false,
+      autoReturn: AssistantState.IDLE,
       weight: 1.0,
       metadata: {
         description: 'Alternative entrance animation - walks in and greets',
@@ -267,8 +256,6 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== TALKING =====
-  // Body animations for talking (used with lip-sync composite)
   talking: [
     {
       id: 'talk_excited',
@@ -324,13 +311,11 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== WALKING =====
-  // Placeholder animations for testing (no actual walking animations yet)
   walking: [
     {
       id: 'walking_placeholder',
       name: 'Walking (Placeholder)',
-      filePath: 'res/assets/motion/idle1.bvmd', // Using idle as placeholder
+      filePath: 'res/assets/motion/idle1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: true,
       loopTransition: true,
@@ -342,8 +327,6 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== LIP SYNC =====
-  // For debug panel testing only - not used in production
   lipSync: [
     {
       id: 'audio_1',
@@ -360,13 +343,11 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== HAPPY/EXCITED =====
-  // Placeholder animations for testing
   happy: [
     {
       id: 'happy_placeholder',
       name: 'Happy (Placeholder)',
-      filePath: 'res/assets/motion/clap1.bvmd', // Using clap as placeholder
+      filePath: 'res/assets/motion/clap1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       loopTransition: true,
@@ -382,7 +363,7 @@ export const AnimationRegistry = {
     {
       id: 'excited_placeholder',
       name: 'Excited (Placeholder)',
-      filePath: 'res/assets/motion/clap1.bvmd', // Using clap as placeholder
+      filePath: 'res/assets/motion/clap1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       loopTransition: true,
@@ -394,13 +375,11 @@ export const AnimationRegistry = {
     },
   ],
   
-  // ===== ERROR/FOCUS =====
-  // Placeholder animations for testing
   error: [
     {
       id: 'error_placeholder',
       name: 'Error (Placeholder)',
-      filePath: 'res/assets/motion/think1.bvmd', // Using think as placeholder
+      filePath: 'res/assets/motion/think1.bvmd',
       transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
       loop: false,
       loopTransition: true,
@@ -678,29 +657,23 @@ export const EmotionMapping = {
  * @returns {Object|null} Animation config for the emotion, or default idle if not found
  */
 export function getAnimationForEmotion(emotion) {
-  // Handle null/undefined emotion
   if (!emotion) {
     Logger.warn('AnimationConfig', 'No emotion provided, using default (neutral)');
     return getAnimationById(EmotionMapping.default);
   }
   
-  // Normalize emotion string (lowercase, trim)
   const normalizedEmotion = emotion.toLowerCase().trim();
   
-  // Get animation ID from emotion mapping
   const animationId = EmotionMapping[normalizedEmotion];
   
-  // If no mapping found, default to neutral
   if (!animationId) {
     Logger.warn('AnimationConfig', `Unknown emotion: "${emotion}", using default (neutral)`);
     Logger.warn('AnimationConfig', `Available emotions: ${Object.keys(EmotionMapping).join(', ')}`);
     return getAnimationById(EmotionMapping.default);
   }
   
-  // Get animation config by ID
   const animation = getAnimationById(animationId);
   
-  // Fallback to neutral if animation not found (shouldn't happen if config is correct)
   if (!animation) {
     Logger.error('AnimationConfig', `Animation not found for emotion: "${emotion}" (ID: ${animationId})`);
     Logger.error('AnimationConfig', 'This indicates a configuration error - emotion maps to non-existent animation');
@@ -741,22 +714,18 @@ export function isValidEmotion(emotion) {
  * @returns {string} Valid emotion string
  */
 export function sanitizeEmotion(emotion) {
-  // Handle null/undefined
   if (!emotion) {
     Logger.warn('AnimationConfig', 'Emotion is null/undefined, using default');
     return 'default';
   }
   
-  // Handle non-string types
   if (typeof emotion !== 'string') {
     Logger.warn('AnimationConfig', `Emotion is not a string (type: ${typeof emotion}), using default`);
     return 'default';
   }
   
-  // Normalize
   const normalized = emotion.toLowerCase().trim();
   
-  // Check if valid
   if (!(normalized in EmotionMapping)) {
     Logger.warn('AnimationConfig', `Invalid emotion "${emotion}" from LLM, using default`);
     return 'default';

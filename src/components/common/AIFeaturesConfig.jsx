@@ -1,7 +1,7 @@
 /**
- * AIFeaturesConfig - Shared Component
- * Reusable AI Features configuration used in both Settings and Setup Wizard
- * Handles Translator, Language Detector, Summarizer, and Rewriter
+ * @fileoverview Shared AI Features configuration component.
+ * Reusable component used in both Settings and Setup Wizard.
+ * Handles Translator, Language Detector, Summarizer, and Rewriter.
  */
 
 import React, { useState } from 'react';
@@ -11,7 +11,15 @@ import StreamingContainer from './StreamingContainer';
 import StreamingText from './StreamingText';
 import { TranslationLanguages } from '../../config/aiConfig';
 
-// Reusable component to show test results
+/**
+ * Displays test results with streaming animation.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.status - Test status: 'idle', 'loading', 'success', 'error'
+ * @param {string} props.message - Test result message
+ * @returns {JSX.Element|null} Test result component
+ */
 const TestResult = ({ status, message }) => {
   if (!status || status === 'idle') return null;
 
@@ -34,20 +42,23 @@ const TestResult = ({ status, message }) => {
 };
 
 /**
- * AIFeaturesConfig Component
- * @param {Object} props
- * @param {Object} props.features - Current feature states { translator: { enabled: bool }, languageDetector: { enabled: bool }, summarizer: { enabled: bool }, rewriter: { enabled: bool } }
- * @param {Function} props.onFeatureChange - Callback(featureName, enabled) when feature toggle changes
- * @param {Function} props.onTargetLanguageChange - Callback(languageCode) when target language changes
- * @param {string} props.defaultTargetLanguage - Default target language code (default: 'en')
- * @param {Function} props.testTranslator - async (text, sourceLang, targetLang) => Promise<string>
- * @param {Function} props.testLanguageDetector - async (text) => Promise<Array<{detectedLanguage: string, confidence: number}>>
- * @param {Function} props.testSummarizer - async (text, options) => Promise<string>
- * @param {Function} props.testRewriter - async (text, options) => Promise<string>
- * @param {boolean} props.isChromeAI - Whether using Chrome AI provider
- * @param {boolean} props.needsFlags - Whether Chrome flags are needed (Chrome < 138)
- * @param {boolean} props.showTesting - Whether to show test buttons (default: true)
- * @param {boolean} props.isLightBackground - Whether to use dark theme buttons
+ * AI Features configuration panel.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Object} props.features - Feature flags object with translator, languageDetector, summarizer, rewriter properties
+ * @param {Function} props.onFeatureChange - Callback when feature toggle changes (featureName, enabled)
+ * @param {Function} [props.onTargetLanguageChange] - Optional callback when target language changes
+ * @param {string} [props.defaultTargetLanguage='en'] - Default target language code
+ * @param {Function} [props.testTranslator] - Optional translator test function
+ * @param {Function} [props.testLanguageDetector] - Optional language detector test function
+ * @param {Function} [props.testSummarizer] - Optional summarizer test function
+ * @param {Function} [props.testRewriter] - Optional rewriter test function
+ * @param {boolean} [props.isChromeAI=false] - Whether Chrome AI is being used
+ * @param {Object} [props.needsFlags] - Object indicating which features need Chrome flags enabled
+ * @param {boolean} [props.showTesting=true] - Whether to show testing sections
+ * @param {boolean} [props.isLightBackground=false] - Whether background is light themed
+ * @returns {JSX.Element} AI Features configuration panel
  */
 const AIFeaturesConfig = ({ 
   features = {}, 
@@ -63,7 +74,6 @@ const AIFeaturesConfig = ({
   showTesting = true,
   isLightBackground = false
 }) => {
-  // Local test states
   const [translatorTest, setTranslatorTest] = useState({ status: 'idle', message: '' });
   const [targetLanguage, setTargetLanguage] = useState(defaultTargetLanguage);
   const [languageDetectorTest, setLanguageDetectorTest] = useState({ status: 'idle', message: '' });
@@ -78,7 +88,9 @@ const AIFeaturesConfig = ({
     }
   };
 
-  // Test wrappers
+  /**
+   * Tests translator functionality.
+   */
   const runTranslatorTest = async () => {
     if (!testTranslator) return;
     try {
@@ -91,6 +103,9 @@ const AIFeaturesConfig = ({
     }
   };
 
+  /**
+   * Tests language detector functionality.
+   */
   const runLanguageDetectorTest = async () => {
     if (!testLanguageDetector) return;
     try {
@@ -110,6 +125,9 @@ const AIFeaturesConfig = ({
     }
   };
 
+  /**
+   * Tests summarizer functionality.
+   */
   const runSummarizerTest = async () => {
     if (!testSummarizer) return;
     try {
@@ -125,6 +143,9 @@ const AIFeaturesConfig = ({
     }
   };
 
+  /**
+   * Tests rewriter functionality.
+   */
   const runRewriterTest = async () => {
     if (!testRewriter) return;
     try {

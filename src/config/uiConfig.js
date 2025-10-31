@@ -152,47 +152,36 @@ export const FPSLimitOptions = {
  * Default UI Configuration
  */
 export const DefaultUIConfig = {
-  // Model loading behavior
   enableModelLoading: true,
   
-  // Portrait Mode - Upper body framing with closer camera
   enablePortraitMode: false,
   
-  // FPS Limit - Performance optimization
-  fpsLimit: FPSLimitOptions.FPS_60, // Default to 60fps for best balance
+  fpsLimit: FPSLimitOptions.FPS_60,
   
-  // Extension auto-load behavior
-  autoLoadOnAllPages: true, // Auto-load extension on all pages (extension mode only)
+  autoLoadOnAllPages: true,
   
-  // AI Toolbar
   enableAIToolbar: true,
   
-  // AI Toolbar Advanced Settings
   aiToolbar: {
-    showOnInputFocus: true, // Auto-show toolbar when focusing input fields (for dictation)
-    showOnImageHover: true, // Show toolbar when hovering over images
+    showOnInputFocus: true,
+    showOnImageHover: true,
   },
   
-  // Icon Settings
-  enableColoredIcons: false, // Use colored icons instead of monochrome
-  enableColoredIconsToolbarOnly: false, // Apply colored icons only to toolbar (when enableColoredIcons is true)
+  enableColoredIcons: false,
+  enableColoredIconsToolbarOnly: false,
   
-  // Debug panel
   enableDebugPanel: true,
   
-  // Position settings (used by both model and chat-only mode)
   position: {
-    preset: 'bottom-right', // 'bottom-right', 'bottom-left', 'bottom-center', 'center', 'top-right', 'top-left', 'last-location'
-    lastLocation: null, // { x, y, width, height } - saved when user drags model/chat
+    preset: 'bottom-right',
+    lastLocation: null,
   },
   
-  // Background detection and theming
   backgroundDetection: {
     mode: BackgroundThemeModes.ADAPTIVE,
-    sampleGridSize: 5, // 5x5 grid = 25 sample points
+    sampleGridSize: 5,
     showDebug: false,
   },
   
-  // Smooth streaming response animation (performance impact)
-  smoothStreamingAnimation: false, // Enable smooth height animation for streaming text (disabled by default for performance)
+  smoothStreamingAnimation: false,
 };

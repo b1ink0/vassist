@@ -32,9 +32,8 @@ const DEFAULT_SETUP_STATE = {
   currentStep: 1,
   completedSteps: [],
   setupData: {
-    // LLM Configuration
     llm: {
-      provider: 'chrome-ai', // 'chrome-ai', 'openai', 'ollama'
+      provider: 'chrome-ai',
       chromeAi: {
         enableImageSupport: true,
         enableAudioSupport: true,
@@ -49,10 +48,9 @@ const DEFAULT_SETUP_STATE = {
       },
     },
     
-    // TTS Configuration
     tts: {
       enabled: false,
-      provider: 'kokoro', // 'kokoro', 'openai', 'openai-compatible'
+      provider: 'kokoro',
       kokoro: {
         voice: 'af_heart',
         speed: 1.0,
@@ -64,7 +62,6 @@ const DEFAULT_SETUP_STATE = {
       },
     },
     
-    // STT Configuration - stores full config from STTConfigStep
     sttConfig: {
       chromeAi: {
         temperature: 0.1,
@@ -86,13 +83,11 @@ const DEFAULT_SETUP_STATE = {
       },
     },
     
-    // STT provider selection
     stt: {
       enabled: false,
       provider: 'chrome-ai-multimodal',
     },
     
-    // AI Features
     aiFeatures: {
       translator: { enabled: true },
       languageDetector: { enabled: true },
@@ -100,7 +95,6 @@ const DEFAULT_SETUP_STATE = {
       rewriter: { enabled: true },
     },
     
-    // UI Configuration
     ui: {
       enableModelLoading: true,
       enablePortraitMode: false,
@@ -115,7 +109,6 @@ export function SetupProvider({ children }) {
   const [setupState, setSetupState] = useState(DEFAULT_SETUP_STATE);
   const initialLoadRef = useRef(false);
 
-  // Load setup state from storage on mount
   useEffect(() => {
     const loadSetupState = async () => {
       try {
@@ -134,9 +127,8 @@ export function SetupProvider({ children }) {
     loadSetupState();
   }, []);
 
-  // Save setup state to storage whenever it changes (debounced)
   useEffect(() => {
-    if (!initialLoadRef.current) return; // Skip initial load
+    if (!initialLoadRef.current) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -218,14 +210,12 @@ export function SetupProvider({ children }) {
     setSetupState(prev => {
       const updated = { ...prev };
       
-      // If first argument is an object, merge it into setupData
       if (typeof pathOrData === 'object' && pathOrData !== null && value === undefined) {
         updated.setupData = {
           ...updated.setupData,
           ...pathOrData
         };
       } else {
-        // Otherwise treat as path string
         const parts = pathOrData.split('.');
         let current = updated.setupData;
         
@@ -237,7 +227,6 @@ export function SetupProvider({ children }) {
         current[parts[parts.length - 1]] = value;
       }
       
-      // Save to storage immediately
       StorageServiceProxy.configSave('setupState', updated).catch(err => {
         Logger.error('SetupContext', 'Failed to save setupState:', err);
       });
@@ -253,7 +242,6 @@ export function SetupProvider({ children }) {
     try {
       Logger.log('SetupContext', 'Completing setup with data:', setupState.setupData);
       
-      // Save AI/LLM config - match ConfigContext structure
       const aiConfig = {
         provider: setupState.setupData.llm?.provider || 'chrome-ai',
         chromeAi: {
@@ -294,7 +282,6 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Saving aiConfig:', aiConfig);
       await StorageServiceProxy.configSave('aiConfig', aiConfig);
       
-      // Save TTS config - match ConfigContext structure
       const ttsConfig = {
         enabled: setupState.setupData.tts?.enabled ?? false,
         provider: setupState.setupData.tts?.provider || 'kokoro',
@@ -324,7 +311,6 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Saving ttsConfig:', ttsConfig);
       await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
       
-      // Save STT config - match ConfigContext structure
       const sttConfig = {
         enabled: setupState.setupData.stt?.enabled ?? false,
         provider: setupState.setupData.stt?.provider || 'chrome-ai-multimodal',
@@ -353,12 +339,11 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Saving sttConfig:', sttConfig);
       await StorageServiceProxy.configSave('sttConfig', sttConfig);
       
-      // Save UI config - match ConfigContext structure
       const uiConfig = {
         enableModelLoading: setupState.setupData.ui?.enableModelLoading ?? true,
         enablePortraitMode: setupState.setupData.ui?.enablePortraitMode ?? false,
-        enablePhysics: true, // Enable physics by default
-        fpsLimit: 60, // Set default to 60 FPS
+        enablePhysics: true,
+        fpsLimit: 60,
         position: {
           preset: setupState.setupData.ui?.position || 'bottom-right',
           custom: { x: 0, y: 0 },
@@ -371,7 +356,6 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Saving uiConfig:', uiConfig);
       await StorageServiceProxy.configSave('uiConfig', uiConfig);
       
-      // Mark setup as completed
       const completedState = {
         ...setupState,
         setupCompleted: true,
@@ -381,7 +365,6 @@ export function SetupProvider({ children }) {
       
       Logger.log('SetupContext', 'Setup completed successfully - all configs saved');
       
-      // Reload page to apply all configurations
       setTimeout(() => {
         window.location.reload();
       }, 500);
@@ -399,7 +382,6 @@ export function SetupProvider({ children }) {
     try {
       Logger.log('SetupContext', 'Resetting setup...');
       
-      // Reset to default state
       setSetupState(DEFAULT_SETUP_STATE);
       await StorageServiceProxy.configSave('setupState', DEFAULT_SETUP_STATE);
       
@@ -411,7 +393,6 @@ export function SetupProvider({ children }) {
   }, []);
 
   const value = {
-    // State
     isLoading,
     setupCompleted: setupState.setupCompleted,
     currentStep: setupState.currentStep,
@@ -419,7 +400,6 @@ export function SetupProvider({ children }) {
     setupData: setupState.setupData,
     totalSteps: TOTAL_STEPS,
     
-    // Actions
     goToStep,
     nextStep,
     previousStep,

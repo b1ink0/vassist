@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Draggable chat button component with positioning logic.
+ */
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
@@ -5,6 +9,17 @@ import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/Logger';
 
+/**
+ * Draggable chat button component with automatic positioning.
+ * 
+ * @param {Object} props
+ * @param {Function} props.onClick - Click handler
+ * @param {boolean} props.isVisible - Visibility state
+ * @param {boolean} props.modelDisabled - Whether 3D model is disabled
+ * @param {boolean} props.isChatOpen - Whether chat is open
+ * @param {Object} props.chatInputRef - Reference to chat input
+ * @returns {JSX.Element|null}
+ */
 const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
   const {
     positionManagerRef,

@@ -1,11 +1,26 @@
+/**
+ * @fileoverview Chat bubble component for displaying messages near the assistant.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from './icons';
 import Logger from '../services/Logger';
 
+/**
+ * Chat bubble component for displaying messages near the virtual assistant.
+ * 
+ * @param {Object} props
+ * @param {Object} props.positionManagerRef - Reference to position manager
+ * @param {string} props.message - Message text to display
+ * @param {string} props.type - Message type ('user'|'assistant')
+ * @param {boolean} props.isVisible - Visibility state
+ * @param {Function} props.onHide - Hide callback
+ * @returns {JSX.Element|null}
+ */
 const ChatBubble = ({ 
   positionManagerRef, 
   message, 
-  type = 'assistant', // 'user' or 'assistant'
+  type = 'assistant',
   isVisible = false,
   onHide 
 }) => {
@@ -16,10 +31,6 @@ const ChatBubble = ({
   const hideTimeoutRef = useRef(null);
   const typingIntervalRef = useRef(null);
 
-  /**
-   * Update bubble position based on model position
-   * Similar logic to ChatButton but positioned above model
-   */
   useEffect(() => {
     const updatePosition = () => {
       if (!positionManagerRef?.current) return;
@@ -27,24 +38,20 @@ const ChatBubble = ({
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
         
-        const bubbleWidth = 350; // Max bubble width
-        const bubbleHeight = 120; // Estimated height
+        const bubbleWidth = 350;
+        const bubbleHeight = 120;
         const offsetX = 20;
-        const offsetY = 20; // Distance above model
+        const offsetY = 20;
         
-        // Calculate potential positions
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - bubbleWidth - offsetX;
         
-        // Check boundaries
         const windowWidth = window.innerWidth;
         const wouldOverflowRight = rightX + bubbleWidth > windowWidth - 10;
         
-        // Decide which side (prioritize right unless it overflows)
         const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
         setIsOnLeft(shouldBeOnLeft);
         
-        // Calculate final position (above model)
         const bubbleX = shouldBeOnLeft ? leftX : rightX;
         const bubbleY = modelPos.y - bubbleHeight - offsetY;
         
@@ -72,9 +79,6 @@ const ChatBubble = ({
     }
   }, [positionManagerRef, isVisible]);
 
-  /**
-   * Typewriter effect for streaming text
-   */
   useEffect(() => {
     if (!isVisible || !message) {
       setDisplayText('');
@@ -82,7 +86,6 @@ const ChatBubble = ({
       return;
     }
 
-    // If message is the same as display, don't retype
     if (message === displayText) {
       setIsTyping(false);
       return;
@@ -101,27 +104,21 @@ const ChatBubble = ({
         setIsTyping(false);
         clearInterval(typingIntervalRef.current);
       }
-    }, 20); // Fast typewriter effect (20ms per character)
+    }, 20);
 
     return () => {
       if (typingIntervalRef.current) {
         clearInterval(typingIntervalRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message, isVisible]);
+  }, [message, isVisible, displayText]);
 
-  /**
-   * Auto-hide after delay when typing is complete
-   */
   useEffect(() => {
     if (isVisible && !isTyping && displayText && type === 'assistant') {
-      // Clear any existing timeout
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
 
-      // Auto-hide after 10 seconds
       hideTimeoutRef.current = setTimeout(() => {
         Logger.log('ChatBubble', 'Auto-hiding after delay');
         onHide?.();
@@ -137,11 +134,9 @@ const ChatBubble = ({
 
   if (!isVisible || !message) return null;
 
-  // Check if message is an error
   const isError = message.toLowerCase().startsWith('error:');
   const isUser = type === 'user';
 
-  // Different styles for user vs assistant vs error messages
   const bubbleClasses = isError
     ? 'glass-error'
     : isUser
@@ -166,7 +161,6 @@ const ChatBubble = ({
       }}
       className={`${bubbleClasses} glass-accelerated rounded-2xl p-4 shadow-2xl`}
     >
-      {/* Message text */}
       <div className="glass-text text-sm leading-relaxed">
         {displayText}
         {isTyping && (
@@ -174,7 +168,6 @@ const ChatBubble = ({
         )}
       </div>
 
-      {/* Triangle pointer pointing to model */}
       <div
         style={{
           position: 'absolute',
@@ -188,7 +181,6 @@ const ChatBubble = ({
         }}
       />
 
-      {/* Close button (only for assistant messages) */}
       {type === 'assistant' && (
         <button
           onClick={onHide}

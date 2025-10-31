@@ -40,7 +40,6 @@ export const useConfig = () => {
 };
 
 export const ConfigProvider = ({ children }) => {
-  // Track if initial load is complete to prevent auto-save during load
   const initialLoadRef = useRef(true);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
 
@@ -613,7 +612,6 @@ export const ConfigProvider = ({ children }) => {
     } finally {
       setTtsTesting(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ttsConfig, initializeKokoro]);
 
   // STT Config handlers

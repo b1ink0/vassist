@@ -34,23 +34,18 @@ const Icon = ({
     return null;
   }
 
-  // Determine if we should use colored icons
   const enableColored = uiConfig?.enableColoredIcons || false;
   const toolbarOnly = uiConfig?.enableColoredIconsToolbarOnly || false;
   
-  // Apply colored icons based on settings and context
   const shouldUseColor = enableColored && (!toolbarOnly || context === 'toolbar');
   
-  // Get the appropriate color based on settings
   const iconColor = getIconColor(name, shouldUseColor);
   
-  // If className already includes a text-* color class, use that instead
   const hasCustomColor = className.includes('text-');
   const finalClassName = hasCustomColor 
     ? `icon icon-${name} ${className}` 
     : `icon icon-${name} ${iconColor} ${className}`;
 
-  // Render Heroicons component
   return (
     <IconComponent
       className={finalClassName}

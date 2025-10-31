@@ -1,18 +1,18 @@
 /**
- * ModelLoadingOverlay Component
- * 
- * Displays a loading indicator over the model position when:
- * - Tab becomes hidden (model will unmount)
- * - Model is loading after tab becomes visible again
+ * @fileoverview Loading overlay component for 3D model loading states.
  */
 
 import { useApp } from '../contexts/AppContext';
 import LoadingIndicator from './LoadingIndicator';
 
+/**
+ * Loading overlay displayed over model position during loading states.
+ * 
+ * @returns {JSX.Element|null}
+ */
 const ModelLoadingOverlay = () => {
   const { showModelLoadingOverlay, modelOverlayPos } = useApp();
 
-  // Don't render if not showing or position not set yet
   if (!showModelLoadingOverlay || modelOverlayPos.width === 0) {
     return null;
   }

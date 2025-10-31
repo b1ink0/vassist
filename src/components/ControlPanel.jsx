@@ -1,3 +1,6 @@
+/**
+ * @fileoverview Developer control panel for debugging assistant behavior, animations, and performance.
+ */
 
 import { useState, useRef, useEffect } from 'react'
 import { Icon } from './icons';;
@@ -7,6 +10,19 @@ import { StorageServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/Logger';
 
+/**
+ * Developer control panel component with debug tools and performance metrics.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {boolean} props.isAssistantReady - Whether assistant is ready
+ * @param {string} props.currentState - Current assistant state
+ * @param {Object} props.assistantRef - Reference to VirtualAssistant
+ * @param {Object} props.sceneRef - Reference to Babylon scene
+ * @param {Object} props.positionManagerRef - Reference to PositionManager
+ * @param {Function} props.onStateChange - Callback when state changes
+ * @returns {JSX.Element} Control panel component
+ */
 const ControlPanel = ({ 
   isAssistantReady,
   currentState,
@@ -27,22 +43,18 @@ const ControlPanel = ({
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
   
-  // Logger states
   const [loggerEnabled, setLoggerEnabled] = useState(false);
   const [logCategories, setLogCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Track blob URLs for cleanup later.
   const blobUrlsRef = useRef([]);
 
-  // Load saved button position or use default
   useEffect(() => {
     const loadButtonPosition = async () => {
-      const defaultPos = { x: window.innerWidth - 180, y: 20 }; // Top-right by default
+      const defaultPos = { x: window.innerWidth - 180, y: 20 };
       try {
         const savedPos = await StorageServiceProxy.configLoad('devControlPanelButtonPosition', defaultPos);
         
-        // Ensure button is within viewport bounds
         const buttonSize = 48;
         const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
         const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
@@ -63,7 +75,6 @@ const ControlPanel = ({
     loadButtonPosition();
   }, []);
 
-  // Handle window resize
   useEffect(() => {
     const handleResize = async () => {
       const buttonSize = 48;
@@ -85,7 +96,6 @@ const ControlPanel = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [buttonPos]);
 
-  // Load logger state
   useEffect(() => {
     const loadLoggerState = () => {
       setLoggerEnabled(Logger.isEnabled());
@@ -94,15 +104,16 @@ const ControlPanel = ({
 
     loadLoggerState();
     
-    // Refresh categories when tab becomes visible
     if (isVisible && activeTab === 'logs') {
       loadLoggerState();
     }
   }, [isVisible, activeTab]);
 
-  // Drag handlers for button
+  /**
+   * Handles mouse down on drag button.
+   */
   const handleButtonMouseDown = (e) => {
-    if (e.button !== 0) return; // Only left click
+    if (e.button !== 0) return;
     
     setIsDragging(true);
     setHasDragged(false);
@@ -113,7 +124,6 @@ const ControlPanel = ({
     e.stopPropagation();
   };
 
-  // Lightweight perf sampler when overlay is enabled
   useEffect(() => {
     if (!showPerf) return;
 
@@ -132,7 +142,7 @@ const ControlPanel = ({
         const currentTime = performance.now();
         const elapsed = currentTime - lastTime;
         
-        if (elapsed >= 1000) { // Update every second
+        if (elapsed >= 1000) {
           actualFps = Math.round((frameCount * 1000) / elapsed);
           frameCount = 0;
           lastTime = currentTime;
@@ -146,12 +156,10 @@ const ControlPanel = ({
         
         setPerfData({ fps: actualFps, meshes, particles, drawCalls });
       } catch (err) {
-        // tolerate sampling errors
         Logger.warn('ControlPanel', 'perf sampler error', err);
       }
     };
 
-    // Use scene's render observable to count actual rendered frames
     const scene = sceneRef.current;
     let observer = null;
     if (scene && scene.onAfterRenderObservable) {
@@ -177,7 +185,6 @@ const ControlPanel = ({
       const newX = dragStartButtonPos.current.x + deltaX;
       const newY = dragStartButtonPos.current.y + deltaY;
       
-      // Keep button within viewport bounds
       const buttonSize = 48;
       const boundedX = Math.max(10, Math.min(newX, window.innerWidth - buttonSize - 10));
       const boundedY = Math.max(10, Math.min(newY, window.innerHeight - buttonSize - 10));
@@ -189,12 +196,10 @@ const ControlPanel = ({
       setIsDragging(false);
       
       if (hasDragged) {
-        // Save position after drag
         StorageServiceProxy.configSave('devControlPanelButtonPosition', buttonPos).catch(error => {
           Logger.error('ControlPanel', 'Failed to save button position after drag:', error);
         });
         
-        // Reset hasDragged after a short delay to prevent click from firing
         setTimeout(() => setHasDragged(false), 100);
       }
     };
@@ -214,7 +219,11 @@ const ControlPanel = ({
     }
   };
 
-  // Load AI config on mount
+  /**
+   * Triggers an action on the assistant.
+   * 
+   * @param {string} action - Action to trigger
+   */
   const triggerAction = async (action) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
@@ -225,7 +234,7 @@ const ControlPanel = ({
   };
 
   /**
-   * Return to idle
+   * Returns assistant to idle state.
    */
   const returnToIdle = async () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -237,7 +246,10 @@ const ControlPanel = ({
   };
 
   /**
-   * Test emotion-based animations with new speak API
+   * Tests emotion-based animations with speak API.
+   * 
+   * @param {string} emotionCategory - Emotion category for body animation
+   * @param {string} text - Text to speak
    */
   const testEmotion = async (emotionCategory, text) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -245,34 +257,27 @@ const ControlPanel = ({
       return;
     }
     
-    // TODO: Replace with actual TTS→VMD generation
-    // For now, use the existing audio.bvmd as placeholder mouth animation
-    // This demonstrates the API structure before TTS integration
     const placeholderMouthAnimationUrl = await ResourceLoader.getURLAsync('res/private_test/motion/audio.bvmd');
     
-    // Convert file path to blob URL for testing
-    // In production, this will be a blob URL from TTS→VMD generation
     try {
       const response = await fetch(placeholderMouthAnimationUrl);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       
-      // Store blob URL for later cleanup (don't revoke immediately - breaks async loading)
       blobUrlsRef.current.push(blobUrl);
       
-      // Use new speak API with emotion category
-      // emotionCategory determines the body animation ('talking', 'idle', 'thinking', etc.)
       await assistantRef.current.speak(text, blobUrl, emotionCategory);
       onStateChange(assistantRef.current.getState());
       
-      // TODO: Implement proper cleanup strategy
     } catch (error) {
       Logger.error('ControlPanel', 'Failed to load placeholder animation:', error);
     }
   };
 
   /**
-   * Change position preset
+   * Changes assistant position preset.
+   * 
+   * @param {string} preset - Position preset name
    */
   const changePosition = (preset) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -283,7 +288,11 @@ const ControlPanel = ({
   };
 
   /**
-   * Play composite animation with stitched fill
+   * Plays composite animation with stitched fill.
+   * 
+   * @param {string} primaryAnimName - Primary animation name
+   * @param {string} fillCategory - Fill category for stitched animation
+   * @param {Object} options - Additional options
    */
   const playComposite = async (primaryAnimName, fillCategory = 'talking', options = {}) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -291,19 +300,16 @@ const ControlPanel = ({
       return;
     }
 
-    // Use the new playComposite API from VirtualAssistant
     await assistantRef.current.playComposite(primaryAnimName, fillCategory, options);
     
     onStateChange(assistantRef.current.getState());
   };
 
-  // ========================================
-  // ========================================
-  // QUEUE FUNCTIONS
-  // ========================================
-
   /**
-   * Queue a simple animation
+   * Queues a simple animation.
+   * 
+   * @param {string} animationName - Animation name to queue
+   * @param {boolean} force - Whether to force play
    */
   const queueSimple = (animationName, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -316,7 +322,7 @@ const ControlPanel = ({
   };
 
   /**
-   * Queue multiple animations for testing
+   * Queues multiple animations for testing.
    */
   const queueMultiple = async () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -324,16 +330,18 @@ const ControlPanel = ({
       return;
     }
     
-    // Queue a sequence of animations - use actual animation names from config
-    queueSimple('Hi 1', false);                // Idle category - waving
-    queueSimple('Thinking 1', false);          // Thinking category
-    queueSimple('Celebrating Clap', false);    // Celebrating category
-    queueSimple('Yawn 1', false);              // Idle category - yawn
+    queueSimple('Hi 1', false);
+    queueSimple('Thinking 1', false);
+    queueSimple('Celebrating Clap', false);
+    queueSimple('Yawn 1', false);
     Logger.log('ControlPanel', 'Queued 4-animation sequence');
   };
 
   /**
-   * Queue speak animations (using placeholder blob for now)
+   * Queues speak animation for testing.
+   * 
+   * @param {string} emotionCategory - Emotion category for body animation
+   * @param {boolean} force - Whether to force play
    */
   const queueSpeakTest = async (emotionCategory, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -363,7 +371,7 @@ const ControlPanel = ({
   };
 
   /**
-   * Clear the queue
+   * Clears animation queue.
    */
   const clearQueue = () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -376,7 +384,7 @@ const ControlPanel = ({
   };
 
   /**
-   * Update queue status
+   * Updates queue status display.
    */
   const updateQueueStatus = () => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
@@ -387,9 +395,7 @@ const ControlPanel = ({
     setQueueStatus(status);
   };
 
-  // Update queue status when tab changes to queue
   if (activeTab === 'queue' && assistantRef.current && assistantRef.current.isReady()) {
-    // Check every render when on queue tab
     const status = assistantRef.current.getQueueStatus();
     if (status.length !== queueStatus.length) {
       setQueueStatus(status);
@@ -398,18 +404,15 @@ const ControlPanel = ({
 
   if (!isAssistantReady) return null;
 
-  // Calculate panel position (below and to the left of button)
-  const panelX = Math.max(10, Math.min(buttonPos.x - 450, window.innerWidth - 530)); // Panel width ~520px
-  const panelY = Math.min(buttonPos.y + 60, window.innerHeight - 600); // Panel height ~600px
+  const panelX = Math.max(10, Math.min(buttonPos.x - 450, window.innerWidth - 530));
+  const panelY = Math.min(buttonPos.y + 60, window.innerHeight - 600);
 
-  // Don't render if developer tools are disabled
   if (!uiConfig.enableDebugPanel) {
     return null;
   }
 
   return (
     <>
-      {/* Draggable Button */}
       <button
         onMouseDown={handleButtonMouseDown}
         onClick={handleButtonClick}
@@ -425,7 +428,6 @@ const ControlPanel = ({
         title="Drag to reposition | Click to toggle panel"
       ><Icon name="tools" size={16} /></button>
 
-      {/* Control Panel */}
       {isVisible && (
         <div
           style={{
@@ -436,14 +438,12 @@ const ControlPanel = ({
           }}
           className="pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm w-[520px]"
         >
-      {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-white/20">
         <div className="flex items-center gap-1">
           <h3 className="m-0 text-base font-semibold text-white">Dev Control Panel</h3>
           <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
             {currentState}
           </span>
-          {/* Performance Stats Toggle (internal lightweight panel) */}
           <button
             onClick={() => setShowPerf((s) => !s)}
             className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors border border-blue-500/30"
@@ -476,7 +476,6 @@ const ControlPanel = ({
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b border-white/20 bg-black/50">
         <button
           onClick={() => setActiveTab('actions')}
@@ -550,9 +549,7 @@ const ControlPanel = ({
         </button>
       </div>
 
-      {/* Content */}
       <div className="p-4 max-h-[60vh] overflow-y-auto">
-        {/* Actions Tab */}
         {activeTab === 'actions' && (
           <div className="space-y-2">
             <p className="text-xs text-gray-400 mb-3">Trigger assistant actions</p>
@@ -589,7 +586,6 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Positions Tab */}
         {activeTab === 'positions' && (
           <div className="space-y-2">
             <p className="text-xs text-gray-400 mb-3">Test different screen positions</p>
@@ -638,10 +634,9 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Emotions Tab */}
         {activeTab === 'emotions' && (
           <div className="space-y-2">
-            <p className="text-xs text-gray-400 mb-3">Test emotion-based body language (uses placeholder mouth animation)</p>
+            <p className="text-xs text-gray-400 mb-3">Test emotion-based body language</p>
             <button
               onClick={() => testEmotion('talking', 'I am speaking normally!')}
               className="w-full px-3 py-2 bg-blue-500 text-white border-none rounded cursor-pointer text-xs text-left hover:bg-blue-600 transition-colors"
@@ -681,12 +676,10 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Queue Tab */}
         {activeTab === 'queue' && (
           <div className="space-y-3">
             <p className="text-xs text-gray-400 mb-3">Queue animations to play sequentially</p>
             
-            {/* Queue Status */}
             <div className="bg-white/5 rounded p-3 mb-3">
               <p className="text-xs text-white font-semibold mb-2">Queue Status</p>
               <p className="text-xs text-gray-300">
@@ -703,7 +696,6 @@ const ControlPanel = ({
               )}
             </div>
 
-            {/* Queue Actions */}
             <div className="space-y-2">
               <p className="text-xs text-white font-semibold">Queue Idle Animations</p>
               <div className="grid grid-cols-3 gap-2">
@@ -752,7 +744,6 @@ const ControlPanel = ({
               </div>
             </div>
 
-            {/* Queue Action Animations */}
             <div className="space-y-2 border-t border-white/20 pt-3">
               <p className="text-xs text-white font-semibold">Queue Action Animations</p>
               <div className="grid grid-cols-2 gap-2">
@@ -783,7 +774,6 @@ const ControlPanel = ({
               </div>
             </div>
 
-            {/* Batch Queue */}
             <div className="space-y-2 border-t border-white/20 pt-3">
               <p className="text-xs text-white font-semibold">Batch Queue Tests</p>
               <button
@@ -794,7 +784,6 @@ const ControlPanel = ({
               </button>
             </div>
 
-            {/* Queue Speak Tests */}
             <div className="space-y-2 border-t border-white/20 pt-3">
               <p className="text-xs text-white font-semibold">Queue Speak Tests</p>
               <button
@@ -811,7 +800,6 @@ const ControlPanel = ({
               </button>
             </div>
 
-            {/* Force Mode */}
             <div className="space-y-2 border-t border-white/20 pt-3">
               <p className="text-xs text-white font-semibold">Force Mode (Interrupt Current)</p>
               <button
@@ -828,7 +816,6 @@ const ControlPanel = ({
               </button>
             </div>
 
-            {/* Clear Queue */}
             <button
               onClick={clearQueue}
               className="w-full px-3 py-2 bg-gray-700 text-white border-none rounded cursor-pointer text-xs hover:bg-gray-600 transition-colors mt-3"
@@ -836,7 +823,6 @@ const ControlPanel = ({
               🗑️ Clear Queue
             </button>
 
-            {/* Info */}
             <div className="border-t border-white/20 mt-3 pt-3">
               <p className="text-[10px] text-gray-500 mb-2">ℹ️ Queue System Guide:</p>
               <p className="text-[10px] text-gray-400 leading-relaxed">
@@ -849,12 +835,10 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Composite Tab */}
         {activeTab === 'composite' && (
           <div className="space-y-3">
             <p className="text-xs text-gray-400 mb-3">Primary animation + stitched fill animations</p>
             
-            {/* Preset Composites */}
             <div className="space-y-2">
               <p className="text-xs text-white font-semibold">Lip Sync + Body Animations</p>
               <button
@@ -897,7 +881,6 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Debug Tab */}
         {activeTab === 'debug' && (
           <div>
             <p className="text-xs text-gray-400 mb-3">Camera and visualization controls</p>
@@ -909,12 +892,10 @@ const ControlPanel = ({
           </div>
         )}
 
-        {/* Logs Tab */}
         {activeTab === 'logs' && (
           <div className="space-y-3">
             <p className="text-xs text-gray-400 mb-3">Control console logging by category</p>
             
-            {/* Master Toggle */}
             <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
               <div>
                 <div className="text-sm font-semibold text-white">Master Logging</div>
@@ -936,7 +917,6 @@ const ControlPanel = ({
               </button>
             </div>
 
-            {/* Bulk Actions */}
             {loggerEnabled && (
               <div className="flex gap-2">
                 <button
@@ -960,7 +940,6 @@ const ControlPanel = ({
               </div>
             )}
 
-            {/* Search */}
             {loggerEnabled && (
               <div className="relative">
                 <input
@@ -973,7 +952,6 @@ const ControlPanel = ({
               </div>
             )}
 
-            {/* Category List */}
             {loggerEnabled && (
               <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-2">
                 {logCategories
@@ -1022,7 +1000,6 @@ const ControlPanel = ({
               </div>
             )}
 
-            {/* Disabled State Message */}
             {!loggerEnabled && (
               <div className="text-center text-xs text-gray-500 py-8">
                 Enable master logging to configure categories

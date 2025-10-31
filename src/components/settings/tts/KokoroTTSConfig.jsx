@@ -45,9 +45,8 @@ const getVoiceGroups = () => {
     }
   });
 
-  // Convert to array format for rendering
   return Object.entries(groups)
-    .filter(([, voices]) => voices.length > 0) // Only include non-empty groups
+    .filter(([, voices]) => voices.length > 0)
     .map(([label, voices]) => ({ label, voices }));
 };
 
@@ -85,7 +84,6 @@ const KokoroTTSConfig = ({
     onChange(field, value);
   };
 
-  // Get voice groups and device options from config
   const voiceGroups = getVoiceGroups();
   const deviceOptions = getDeviceOptions();
 

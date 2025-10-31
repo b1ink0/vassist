@@ -1,9 +1,26 @@
 /**
- * StreamingContainer Component
+ * @fileoverview Container component with smooth expand/collapse animation.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+/**
+ * Container with streaming expand/collapse animation.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {React.ReactNode} props.children - Child content
+ * @param {boolean} props.active - Whether container is active
+ * @param {boolean} props.autoActivate - Auto-activate when children exist
+ * @param {string} props.speed - Animation speed: 'fast', 'normal', 'slow'
+ * @param {string} props.variant - Variant style: 'container', 'panel'
+ * @param {boolean} props.disabled - Disable animation
+ * @param {Function} props.onExpand - Callback when expansion completes
+ * @param {Function} props.onCollapse - Callback when collapse completes
+ * @param {string} props.className - Additional CSS classes
+ * @param {Object} props.style - Additional inline styles
+ * @returns {JSX.Element} Streaming container component
+ */
 const StreamingContainer = ({
   children,
   active = false,

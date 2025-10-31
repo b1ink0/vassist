@@ -1,24 +1,24 @@
 /**
- * DebugOverlay - All-in-one debug component for camera controls and visualization
- * 
- * Features:
- * - Camera movement controls (up/down/left/right)
- * - Zoom controls (in/out)
- * - Toggle axis visualization
- * - Toggle coordinate display
- * - Toggle bounding box
- * - Smooth camera movement (no reloading)
+ * @fileoverview Debug overlay component for camera controls and scene visualization.
  */
 
 import { useState, useEffect } from 'react'
-import { Icon } from './icons';;
+import { Icon } from './icons';
 import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/Logger';
 
+/**
+ * Debug overlay component providing camera controls and visualization tools.
+ * 
+ * @param {Object} props
+ * @param {BABYLON.Scene} props.scene - Babylon.js scene instance
+ * @param {Object} props.positionManager - Position manager for camera controls
+ * @returns {JSX.Element}
+ */
 const DebugOverlay = ({ scene, positionManager }) => {
   const { uiConfig, updateUIConfig } = useConfig();
-  const [activeTab, setActiveTab] = useState('debug'); // 'debug' or 'config'
+  const [activeTab, setActiveTab] = useState('debug');
   const [showAxis, setShowAxis] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
   const [showPickingBox, setShowPickingBox] = useState(false);
@@ -26,7 +26,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
   const [clipPlaneY, setClipPlaneY] = useState(6.5);
   const [coords, setCoords] = useState({ x: 0, y: 0, scale: 12 });
   
-  // Preset editing states
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [boundaryLeft, setBoundaryLeft] = useState(0);
@@ -34,10 +33,8 @@ const DebugOverlay = ({ scene, positionManager }) => {
   const [boundaryTop, setBoundaryTop] = useState(0);
   const [boundaryBottom, setBoundaryBottom] = useState(0);
   
-  // Refs for visualization objects
   const [axisHelper, setAxisHelper] = useState(null);
 
-  // Update coordinates display
   useEffect(() => {
     if (!positionManager || !showCoords) return;
     
@@ -52,15 +49,12 @@ const DebugOverlay = ({ scene, positionManager }) => {
     return () => clearInterval(interval);
   }, [positionManager, showCoords]);
 
-  // Axis visualization
   useEffect(() => {
     if (!scene) return;
     
     if (showAxis && !axisHelper) {
-      // Create axis lines
       const axisSize = 20;
       
-      // X-axis (red)
       const xAxis = BABYLON.MeshBuilder.CreateLines("xAxis", {
         points: [
           new BABYLON.Vector3(-axisSize, 0, 0),
@@ -69,7 +63,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
       }, scene);
       xAxis.color = new BABYLON.Color3(1, 0, 0);
       
-      // Y-axis (green)
       const yAxis = BABYLON.MeshBuilder.CreateLines("yAxis", {
         points: [
           new BABYLON.Vector3(0, -axisSize, 0),
@@ -78,7 +71,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
       }, scene);
       yAxis.color = new BABYLON.Color3(0, 1, 0);
       
-      // Z-axis (blue)
       const zAxis = BABYLON.MeshBuilder.CreateLines("zAxis", {
         points: [
           new BABYLON.Vector3(0, 0, -axisSize),
@@ -89,7 +81,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
       
       setAxisHelper({ xAxis, yAxis, zAxis });
     } else if (!showAxis && axisHelper) {
-      // Remove axis
       axisHelper.xAxis?.dispose();
       axisHelper.yAxis?.dispose();
       axisHelper.zAxis?.dispose();
@@ -97,21 +88,24 @@ const DebugOverlay = ({ scene, positionManager }) => {
     }
   }, [showAxis, scene, axisHelper]);
 
-  // Picking box visibility
   useEffect(() => {
     if (!scene) return;
     
     const animationManager = scene.metadata?.animationManager;
     if (!animationManager || !animationManager.pickingBox) return;
     
-    // Toggle wireframe visibility via alpha (keeps it pickable)
     const material = animationManager.pickingBox.material;
     if (material) {
-      material.alpha = showPickingBox ? 0.3 : 0; // 0.3 = visible, 0 = invisible
+      material.alpha = showPickingBox ? 0.3 : 0;
     }
   }, [showPickingBox, scene]);
 
-  // Camera movement functions
+  /**
+   * Moves camera in specified direction.
+   * 
+   * @param {string} direction - Direction to move ('up'|'down'|'left'|'right')
+   * @param {number} amount - Amount to move in world units
+   */
   const moveCamera = (direction, amount = 1) => {
     if (!positionManager) return;
     
@@ -120,69 +114,72 @@ const DebugOverlay = ({ scene, positionManager }) => {
     
     switch(direction) {
       case 'up':
-        newOffset.y -= amount; // Negative = camera down = model up
+        newOffset.y -= amount;
         break;
       case 'down':
-        newOffset.y += amount; // Positive = camera up = model down
+        newOffset.y += amount;
         break;
       case 'left':
-        newOffset.x += amount; // Positive = camera right = model left
+        newOffset.x += amount;
         break;
       case 'right':
-        newOffset.x -= amount; // Negative = camera left = model right
+        newOffset.x -= amount;
         break;
     }
     
-    // Update position manager offset
     positionManager.offset = newOffset;
     positionManager.updateCameraFrustum();
   };
 
+  /**
+   * Adjusts camera zoom by modifying model size.
+   * 
+   * @param {string} direction - Zoom direction ('in'|'out')
+   */
   const zoom = (direction) => {
     if (!positionManager) return;
     
     const currentSize = positionManager.modelHeightPx || 500;
     const currentWidth = positionManager.modelWidthPx || 300;
-    const zoomAmount = 50; // Change size by 50px
+    const zoomAmount = 50;
     const newSize = direction === 'in' 
-      ? currentSize + zoomAmount  // Zoom IN = BIGGER (no limit)
-      : currentSize - zoomAmount; // Zoom OUT = SMALLER (no limit)
-    const newWidth = newSize * 0.6; // Maintain aspect ratio
+      ? currentSize + zoomAmount
+      : currentSize - zoomAmount;
+    const newWidth = newSize * 0.6;
     
     Logger.log('DebugOverlay', `Zooming ${direction}: ${currentSize}px → ${newSize}px`);
     
-    // CRITICAL: Calculate current center position
     const oldCenterX = positionManager.positionX + currentWidth / 2;
     const oldCenterY = positionManager.positionY + currentSize / 2;
     
-    // Update model size
     positionManager.modelHeightPx = newSize;
     positionManager.modelWidthPx = newWidth;
     
-    // CRITICAL: Recalculate position to keep center in same place
     positionManager.positionX = oldCenterX - newWidth / 2;
     positionManager.positionY = oldCenterY - newSize / 2;
     
-    // Update camera frustum with new size AND position
     positionManager.updateCameraFrustum();
   };
 
+  /**
+   * Resets camera to default position and zoom.
+   */
   const resetCamera = () => {
     if (!positionManager) return;
     
     Logger.log('DebugOverlay', 'Resetting camera to default');
     
-    // Reset offset to 0,0
     positionManager.offset = { x: 0, y: 0 };
     
-    // Reset size to 500px (default)
     positionManager.modelHeightPx = 500;
     positionManager.modelWidthPx = 300;
     
     positionManager.updateCameraFrustum();
   };
 
-  // Toggle 3D view camera
+  /**
+   * Toggles between MMD camera and 3D arc-rotate camera.
+   */
   const toggle3DView = () => {
     if (!scene || !scene.metadata) return;
     
@@ -206,17 +203,25 @@ const DebugOverlay = ({ scene, positionManager }) => {
     }
   };
 
-  // Update clipping plane Y value (Portrait Mode)
+  /**
+   * Updates clipping plane Y value for portrait mode.
+   * 
+   * @param {number} newY - New Y coordinate for clipping plane
+   */
   const updateClipPlaneY = (newY) => {
     if (!scene || !scene.clipPlane) return;
     
     setClipPlaneY(newY);
-    // Update the clipping plane - normal pointing down (0,-1,0) clips below Y
     scene.clipPlane = new BABYLON.Plane(0, -1, 0, newY);
     Logger.log('DebugOverlay', `Updated clipping plane to Y = ${newY}`);
   };
 
-  // Update offset values
+  /**
+   * Updates camera offset value for given axis.
+   * 
+   * @param {string} axis - Axis to update ('x'|'y')
+   * @param {number} value - New offset value
+   */
   const updateOffset = (axis, value) => {
     if (!positionManager) return;
     
@@ -226,7 +231,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
     if (axis === 'x') setOffsetX(value);
     if (axis === 'y') setOffsetY(value);
     
-    // Apply new offset
     positionManager.setPositionPixels(
       positionManager.positionX,
       positionManager.positionY,
@@ -237,7 +241,12 @@ const DebugOverlay = ({ scene, positionManager }) => {
     );
   };
 
-  // Update boundary values
+  /**
+   * Updates boundary padding value for given edge.
+   * 
+   * @param {string} edge - Edge to update ('left'|'right'|'top'|'bottom')
+   * @param {number} value - New boundary value
+   */
   const updateBoundary = (edge, value) => {
     if (!positionManager) return;
     
@@ -252,14 +261,12 @@ const DebugOverlay = ({ scene, positionManager }) => {
     positionManager.setCustomBoundaries(newBoundaries);
   };
 
-  // Initialize clipPlaneY from scene metadata
   useEffect(() => {
     if (scene?.metadata?.portraitClipPlaneY) {
       setClipPlaneY(scene.metadata.portraitClipPlaneY);
     }
   }, [scene]);
 
-  // Initialize offset and boundary values from positionManager
   useEffect(() => {
     if (!positionManager) return;
     
@@ -278,7 +285,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
 
   return (
     <>
-      {/* Coordinate Display */}
       {showCoords && (
         <div className="mb-4 p-2.5 bg-black/70 text-green-500 font-mono text-xs rounded border border-green-500/30">
           <div>Camera Offset X: {coords.x}</div>
@@ -287,7 +293,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setActiveTab('debug')}
@@ -311,10 +316,8 @@ const DebugOverlay = ({ scene, positionManager }) => {
         </button>
       </div>
 
-      {/* Debug Tab Content */}
       {activeTab === 'debug' && (
         <>
-            {/* Camera Movement Controls */}
             <div className="mb-4">
               <div className="text-xs mb-2 text-gray-400">Camera Movement</div>
               <div className="grid grid-cols-3 gap-1.5 w-[190px]">
@@ -349,7 +352,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
               </div>
         </div>
 
-        {/* Zoom Controls */}
         <div className="mb-4">
           <div className="text-xs mb-2 text-gray-400">Zoom</div>
           <div className="flex gap-1.5">
@@ -368,7 +370,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
           </div>
         </div>
 
-        {/* Visualization Toggles */}
         <div>
           <div className="text-xs mb-2 text-gray-400">Visualization</div>
           <div className="flex flex-col gap-1.5">
@@ -424,14 +425,12 @@ const DebugOverlay = ({ scene, positionManager }) => {
               3D View (Debug Camera)
             </label>
           </div>
-        </div>
+          </div>
           </>
         )}
 
-        {/* Preset Config Tab Content */}
         {activeTab === 'config' && (
           <>
-            {/* Portrait Mode Clipping Plane Control */}
             {scene?.clipPlane && (
               <div className="mb-4">
                 <div className="text-xs mb-2 text-gray-400">Portrait Mode Clipping</div>
@@ -455,7 +454,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
               </div>
             )}
 
-            {/* Preset Offset Controls */}
             <div className="mb-4">
           <div className="text-xs mb-2 text-gray-400">
             {scene?.metadata?.isPortraitMode ? 'Portrait Offset' : 'Offset'}
@@ -487,7 +485,6 @@ const DebugOverlay = ({ scene, positionManager }) => {
           </div>
         </div>
 
-        {/* Preset Boundary Controls */}
         <div className="mt-4">
           <div className="text-xs mb-2 text-gray-400">
             {scene?.metadata?.isPortraitMode ? 'Portrait Boundaries' : 'Boundaries'}
@@ -537,13 +534,12 @@ const DebugOverlay = ({ scene, positionManager }) => {
           <div className="text-[10px] text-gray-500 mt-1">
             Boundary padding (+ = more restrictive, - = less)
           </div>
-        </div>
+          </div>
           </>
         )}
 
-        {/* Instructions */}
         <div className="mt-4 pt-2.5 border-t border-gray-600 text-[10px] text-gray-500">
-          💡 Arrow keys move model, zoom adjusts size
+          Arrow keys move model, zoom adjusts size
         </div>
     </>
   );

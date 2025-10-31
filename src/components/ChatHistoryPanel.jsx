@@ -1,12 +1,5 @@
 /**
- * ChatHistoryPanel Component
- * 
- * Displays chat history with:
- * - Infinite scroll (loads more as user scrolls)
- * - Search functionality
- * - Delete with confirmation
- * - Sorted by most recent first
- * - Click to load a chat
+ * @fileoverview Chat history panel with infinite scroll, search, and chat management.
  */
 
 import { useState, useEffect, useRef, memo } from 'react'
@@ -14,54 +7,68 @@ import { Icon } from './icons';;
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/Logger';
 
+/**
+ * Chat history panel component with infinite scroll and search.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {boolean} props.isLightBackground - Whether background is light
+ * @param {Function} props.onSelectChat - Callback when chat is selected
+ * @param {Function} props.onClose - Callback to close panel
+ * @param {string} props.animationClass - CSS animation class
+ * @param {Function} props.onRequestEditDialog - Callback to show edit dialog
+ * @param {Function} props.onRequestDeleteDialog - Callback to show delete dialog
+ * @returns {JSX.Element} Chat history panel component
+ */
 const ChatHistoryPanel = ({
   isLightBackground = false,
-  onSelectChat = null, // Callback when user clicks a chat
+  onSelectChat = null,
   onClose = null,
-  animationClass = '', // Animation class for entrance/exit
-  onRequestEditDialog = null, // Callback to request showing edit dialog
-  onRequestDeleteDialog = null, // Callback to request showing delete dialog
+  animationClass = '',
+  onRequestEditDialog = null,
+  onRequestDeleteDialog = null,
 }) => {
-  const [displayedChats, setDisplayedChats] = useState([]); // Only 20 chats to display at a time
+  const [displayedChats, setDisplayedChats] = useState([]);
   const [filteredChats, setFilteredChats] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [topOffset, setTopOffset] = useState(0); // Offset of first chat in displayedChats
-  const [hasMoreAbove, setHasMoreAbove] = useState(false); // Can scroll up for more
-  const [hasMoreBelow, setHasMoreBelow] = useState(true); // Can scroll down for more
+  const [topOffset, setTopOffset] = useState(0);
+  const [hasMoreAbove, setHasMoreAbove] = useState(false);
+  const [hasMoreBelow, setHasMoreBelow] = useState(true);
   const [deletingChatId, setDeletingChatId] = useState(null);
   
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
   const searchInputRef = useRef(null);
-  const scrollTimeoutRef = useRef(null); // Throttle scroll events
-  const prevScrollHeightRef = useRef(0); // Track scroll height for position preservation
-  const WINDOW_SIZE = 30; // Always show 30 chats (increased per request)
-  const LOAD_SIZE = 5; // Load 5 at a time when scrolling
-  const LOAD_THRESHOLD = 300; // px from edge to start pre-loading
+  const scrollTimeoutRef = useRef(null);
+  const prevScrollHeightRef = useRef(0);
+  const WINDOW_SIZE = 30;
+  const LOAD_SIZE = 5;
+  const LOAD_THRESHOLD = 300;
 
-  // Load initial chats
   useEffect(() => {
     loadInitialChats();
   }, []);
 
-  // Initialize scroll height tracking after chats are loaded
   useEffect(() => {
     if (scrollRef.current && displayedChats.length > 0) {
       prevScrollHeightRef.current = scrollRef.current.scrollHeight;
     }
   }, [displayedChats.length]);
 
+  /**
+   * Loads initial batch of chats.
+   */
   const loadInitialChats = async () => {
     try {
       setIsLoading(true);
       const initialChats = await chatHistoryService.getAllChats(WINDOW_SIZE, 0);
       setDisplayedChats(initialChats);
-      setFilteredChats(initialChats); // Sync filtered chats on initial load
+      setFilteredChats(initialChats);
       setTopOffset(0);
       setHasMoreBelow(initialChats.length === WINDOW_SIZE);
-      setHasMoreAbove(false); // No chats above at start
+      setHasMoreAbove(false);
     } catch (error) {
       Logger.error('ChatHistoryPanel', 'Failed to load chats:', error);
     } finally {
@@ -69,7 +76,6 @@ const ChatHistoryPanel = ({
     }
   };
 
-  // Handle search with debouncing
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchQuery.trim() === '') {
@@ -88,7 +94,6 @@ const ChatHistoryPanel = ({
     return () => clearTimeout(timer);
   }, [searchQuery, displayedChats]);
 
-  // Preserve scroll position when prepending items (loading from above)
   useEffect(() => {
     if (!scrollRef.current) return;
     
@@ -96,53 +101,46 @@ const ChatHistoryPanel = ({
     const newScrollHeight = scrollContainer.scrollHeight;
     const prevScrollHeight = prevScrollHeightRef.current;
     
-    // Only adjust if scroll height increased AND we were just loading
-    // This prevents constant adjustments during normal scrolling
     if (newScrollHeight > prevScrollHeight && prevScrollHeight > 0 && !isLoadingMore) {
       const heightDiff = newScrollHeight - prevScrollHeight;
       scrollContainer.scrollTop += heightDiff;
       prevScrollHeightRef.current = newScrollHeight;
     }
-  }, [isLoadingMore]); // Only trigger when loading state changes
+  }, [isLoadingMore]);
 
-  // Load more chats from below (when scrolling to bottom)
+  /**
+   * Loads more chats when scrolling to bottom.
+   */
   const loadMoreBelow = async () => {
     if (isLoadingMore || !hasMoreBelow) return;
     
     try {
       setIsLoadingMore(true);
-      // Calculate new offset: current top offset + current window size
       const newOffset = topOffset + displayedChats.length;
       const moreChats = await chatHistoryService.getAllChats(LOAD_SIZE, newOffset);
       
       if (moreChats.length > 0) {
-        // Add new chats at bottom, remove from top to keep window size constant
         setDisplayedChats(prev => {
-          // Deduplicate: create a set of existing chat IDs
           const existingIds = new Set(prev.map(c => c.chatId));
-          // Filter out new chats that already exist
           const uniqueNewChats = moreChats.filter(c => !existingIds.has(c.chatId));
           
           const updated = [...prev, ...uniqueNewChats];
-          // If we exceed window size, remove from the beginning
           if (updated.length > WINDOW_SIZE) {
             const removed = updated.length - WINDOW_SIZE;
             setTopOffset(prevOffset => prevOffset + removed);
             const result = updated.slice(removed);
-            // Sync filtered chats if search is empty (inline, not in effect)
             if (searchQuery.trim() === '') {
               setFilteredChats(result);
             }
             return result;
           }
-          // Sync filtered chats if search is empty (inline, not in effect)
           if (searchQuery.trim() === '') {
             setFilteredChats(updated);
           }
           return updated;
         });
-        setHasMoreAbove(true); // Now we can scroll up
-        setHasMoreBelow(moreChats.length === LOAD_SIZE); // More below if we got full batch
+        setHasMoreAbove(true);
+        setHasMoreBelow(moreChats.length === LOAD_SIZE);
       } else {
         setHasMoreBelow(false);
       }
@@ -153,48 +151,42 @@ const ChatHistoryPanel = ({
     }
   };
 
-  // Load more chats from above (when scrolling to top)
+  /**
+   * Loads more chats when scrolling to top.
+   */
   const loadMoreAbove = async () => {
     if (isLoadingMore || !hasMoreAbove || topOffset === 0) return;
     
     try {
       setIsLoadingMore(true);
-      // Record current scroll height before state update to preserve position
       if (scrollRef.current) {
         prevScrollHeightRef.current = scrollRef.current.scrollHeight;
       }
       
-      // Load chats before the current top offset
       const newOffset = Math.max(0, topOffset - LOAD_SIZE);
       const moreChats = await chatHistoryService.getAllChats(LOAD_SIZE, newOffset);
       
       if (moreChats.length > 0) {
-        // Add new chats at top, remove from bottom to keep window size constant
         setDisplayedChats(prev => {
-          // Deduplicate: create a set of existing chat IDs
           const existingIds = new Set(prev.map(c => c.chatId));
-          // Filter out new chats that already exist
           const uniqueNewChats = moreChats.filter(c => !existingIds.has(c.chatId));
           
           const updated = [...uniqueNewChats, ...prev];
-          // If we exceed window size, remove from the end
           if (updated.length > WINDOW_SIZE) {
             const result = updated.slice(0, WINDOW_SIZE);
-            // Sync filtered chats if search is empty (inline, not in effect)
             if (searchQuery.trim() === '') {
               setFilteredChats(result);
             }
             return result;
           }
-          // Sync filtered chats if search is empty (inline, not in effect)
           if (searchQuery.trim() === '') {
             setFilteredChats(updated);
           }
           return updated;
         });
-        setTopOffset(newOffset); // Update the offset to where we loaded from
-        setHasMoreBelow(true); // Now we can scroll down again
-        setHasMoreAbove(newOffset > 0); // More above if offset > 0
+        setTopOffset(newOffset);
+        setHasMoreBelow(true);
+        setHasMoreAbove(newOffset > 0);
       } else {
         setHasMoreAbove(false);
       }
@@ -205,12 +197,14 @@ const ChatHistoryPanel = ({
     }
   };
 
-  // Handle scroll to load more (scroll detection)
+  /**
+   * Handles scroll events to trigger infinite loading.
+   * 
+   * @param {Event} e - Scroll event
+   */
   const handleScroll = async (e) => {
-    // If searching, don't load more
     if (searchQuery.trim() !== '') return;
 
-    // Throttle scroll events to prevent rapid triggers
     if (scrollTimeoutRef.current) return;
     scrollTimeoutRef.current = setTimeout(() => {
       clearTimeout(scrollTimeoutRef.current);
@@ -224,31 +218,43 @@ const ChatHistoryPanel = ({
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     const distanceFromTop = scrollTop;
 
-    // If scrolled near bottom (preload earlier), load more chats from below
     if (distanceFromBottom < LOAD_THRESHOLD && hasMoreBelow && !isLoadingMore) {
       await loadMoreBelow();
     }
 
-    // If scrolled near top (preload earlier), load more chats from above
     if (distanceFromTop < LOAD_THRESHOLD && hasMoreAbove && !isLoadingMore) {
       await loadMoreAbove();
     }
   };
 
-  // Handle delete chat
+  /**
+   * Handles delete chat button click.
+   * 
+   * @param {string} chatId - ID of chat to delete
+   */
   const handleDeleteClick = (chatId) => {
     if (onRequestDeleteDialog) {
       onRequestDeleteDialog(chatId);
     }
   };
 
-  // Handle edit title
+  /**
+   * Handles edit title button click.
+   * 
+   * @param {Object} chat - Chat object
+   */
   const handleEditTitle = (chat) => {
     if (onRequestEditDialog) {
       onRequestEditDialog(chat.chatId, chat.title || 'Untitled Chat');
     }
   };
 
+  /**
+   * Formats URL for display.
+   * 
+   * @param {string} url - URL to format
+   * @returns {string} Formatted URL
+   */
   const formatUrl = (url) => {
     try {
       const urlObj = new URL(url);
@@ -258,6 +264,12 @@ const ChatHistoryPanel = ({
     }
   };
 
+  /**
+   * Formats date for display.
+   * 
+   * @param {string} isoString - ISO date string
+   * @returns {string} Formatted date
+   */
   const formatDate = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
@@ -274,6 +286,12 @@ const ChatHistoryPanel = ({
     }
   };
 
+  /**
+   * Gets preview text from first user message.
+   * 
+   * @param {Object} chat - Chat object
+   * @returns {string} Preview text
+   */
   const getChatPreview = (chat) => {
     if (!chat.messages || chat.messages.length === 0) return 'No messages';
     
@@ -333,7 +351,6 @@ const ChatHistoryPanel = ({
         className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth"
       >
         {isLoading ? (
-          // Loading state
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-white/60">
               <div className="animate-spin text-2xl mb-2"><Icon name="hourglass" size={16} /></div>
@@ -341,7 +358,6 @@ const ChatHistoryPanel = ({
             </div>
           </div>
         ) : filteredChats.length === 0 ? (
-          // Empty state
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-white/60">
               <div className="text-3xl mb-2"><Icon name="empty" size={16} /></div>

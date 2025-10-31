@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Chat input component with voice recording, multimodal attachments, and drag-and-drop support.
+ */
+
 import { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
 import { STTServiceProxy } from '../services/proxies';
 import { TTSServiceProxy } from '../services/proxies';
@@ -8,13 +12,24 @@ import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import Logger from '../services/Logger';
 
+/**
+ * Chat input component with text, voice, and attachment capabilities.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Function} props.onSend - Callback when message is sent
+ * @param {Function} props.onClose - Callback when input is closed
+ * @param {Function} props.onVoiceTranscription - Callback for voice transcription
+ * @param {Function} props.onVoiceMode - Callback when voice mode changes
+ * @param {Object} ref - Forwarded ref
+ * @returns {JSX.Element} Chat input component
+ */
 const ChatInput = forwardRef(({ 
   onSend, 
   onClose, 
   onVoiceTranscription, 
   onVoiceMode, 
 }, ref) => {
-  // Get shared state from AppContext
   const {
     isChatInputVisible: isVisible,
     pendingDropData,
@@ -27,8 +42,8 @@ const ChatInput = forwardRef(({
   const textareaRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
-  const [isClosing, setIsClosing] = useState(false); // Track closing animation state
-  const [shouldRender, setShouldRender] = useState(isVisible); // Local control for render during animation
+  const [isClosing, setIsClosing] = useState(false);
+  const [shouldRender, setShouldRender] = useState(isVisible);
   
   useEffect(() => {
     if (ref) {
@@ -40,16 +55,11 @@ const ChatInput = forwardRef(({
     }
   }, [ref]);
 
-  /**
-   * Sync shouldRender with isVisible, but delay when closing for animation
-   */
   useEffect(() => {
     if (isVisible) {
-      // Opening - render immediately
       setShouldRender(true);
       setIsClosing(false);
     } else if (shouldRender) {
-      // Closing - set closing state and delay unmount
       setIsClosing(true);
       const timeout = setTimeout(() => {
         setShouldRender(false);
@@ -59,22 +69,19 @@ const ChatInput = forwardRef(({
     }
   }, [isVisible, shouldRender]);
   
-  // Voice conversation mode
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
   
-  // Multi-modal support
   const [attachedImages, setAttachedImages] = useState([]);
   const [attachedAudios, setAttachedAudios] = useState([]);
   const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
   
-  // Drag and drop state
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDropServiceRef = useRef(null);
 
   /**
-   * Auto-resize textarea
+   * Auto-resizes textarea based on content.
    */
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
@@ -85,9 +92,6 @@ const ChatInput = forwardRef(({
     }
   };
 
-  /**
-   * Detect background color brightness
-   */
   useEffect(() => {
     if (!isVisible) return;
     
@@ -144,7 +148,6 @@ const ChatInput = forwardRef(({
     };
   }, [isVisible]);
 
-  // Auto-focus and adjust height when visible
   useEffect(() => {
     if (isVisible && textareaRef.current && !isVoiceMode) {
       textareaRef.current.focus();
@@ -157,12 +160,10 @@ const ChatInput = forwardRef(({
     }
   }, [isVisible, isVoiceMode]);
 
-  // Adjust height when message changes
   useEffect(() => {
     adjustTextareaHeight();
   }, [message]);
 
-  // Setup STT callbacks
   useEffect(() => {
     STTServiceProxy.setTranscriptionCallback((text) => {
       Logger.log('ChatInput', 'Transcription received:', text);
@@ -202,7 +203,6 @@ const ChatInput = forwardRef(({
     };
   }, []);
 
-  // Setup Voice Conversation callbacks
   useEffect(() => {
     VoiceConversationService.setStateChangeCallback((state) => {
       Logger.log('ChatInput', 'Voice state changed:', state);
@@ -228,7 +228,6 @@ const ChatInput = forwardRef(({
     };
   }, [onVoiceTranscription]);
 
-  // Listen for external voice mode start event
   useEffect(() => {
     const handleStartVoiceMode = async () => {
       if (!isVoiceMode && isVisible) {
@@ -267,32 +266,31 @@ const ChatInput = forwardRef(({
   }, [isVoiceMode, isVisible, onVoiceMode]);
 
   /**
-   * Process drop data - shared logic for both event listener and pending data
+   * Processes drag-and-drop data (text, images, audios).
+   * 
+   * @param {Object} dropData - Drop data containing text, images, audios, and errors
    */
   const processDropData = useCallback((dropData) => {
     if (!dropData) return;
 
     const { text, images, audios, errors } = dropData;
     
-    Logger.log('ChatInput', 'Processing drop data:', { 
+    Logger.log('ChatInput', 'Processing drop data:', {
       textLength: text?.length || 0,
       imageCount: images?.length || 0,
       audioCount: audios?.length || 0,
       errorCount: errors?.length || 0
     });
 
-    // Show errors if any
     if (errors && errors.length > 0) {
       setRecordingError(errors[0]);
       setTimeout(() => setRecordingError(''), 3000);
     }
 
-    // Add text to message
     if (text && text.trim()) {
       setMessage(prev => prev ? prev + '\n' + text : text);
     }
 
-    // Add images
     if (images && images.length > 0) {
       setAttachedImages(prev => {
         const newImages = [...prev, ...images];
@@ -306,7 +304,6 @@ const ChatInput = forwardRef(({
       });
     }
 
-    // Add audios
     if (audios && audios.length > 0) {
       setAttachedAudios(prev => {
         const newAudios = [...prev, ...audios];
@@ -320,7 +317,6 @@ const ChatInput = forwardRef(({
       });
     }
 
-    // Focus textarea after adding content
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -329,7 +325,6 @@ const ChatInput = forwardRef(({
     }, 0);
   }, []);
 
-  // Listen for drag-drop events when chat is already open
   useEffect(() => {
     const handleChatDragDrop = (e) => {
       if (!isVisible || isVoiceMode) return;
@@ -343,20 +338,15 @@ const ChatInput = forwardRef(({
     };
   }, [isVisible, isVoiceMode, processDropData]);
 
-  // Process pending drop data when chat opens
   useEffect(() => {
     if (!pendingDropData || !isVisible || isVoiceMode) return;
 
     Logger.log('ChatInput', 'Processing pending drop data');
     processDropData(pendingDropData);
 
-    // Clear the pending data after processing
     setPendingDropData(null);
   }, [pendingDropData, isVisible, isVoiceMode, processDropData, setPendingDropData]);
 
-  /**
-   * Listen for focus event (e.g., when new chat is created)
-   */
   useEffect(() => {
     const handleFocusInput = () => {
       if (textareaRef.current && isVisible && !isVoiceMode) {
@@ -372,6 +362,11 @@ const ChatInput = forwardRef(({
   }, [isVisible, isVoiceMode]);
 
 
+  /**
+   * Handles image file selection.
+   * 
+   * @param {Event} e - Change event
+   */
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     const MAX_IMAGES = 5;
@@ -419,6 +414,11 @@ const ChatInput = forwardRef(({
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
+  /**
+   * Handles audio file selection.
+   * 
+   * @param {Event} e - Change event
+   */
   const handleAudioSelect = (e) => {
     const files = Array.from(e.target.files);
     const MAX_AUDIOS = 3;
@@ -466,14 +466,29 @@ const ChatInput = forwardRef(({
     if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
+  /**
+   * Removes image from attachments.
+   * 
+   * @param {number} index - Index of image to remove
+   */
   const handleRemoveImage = (index) => {
     setAttachedImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  /**
+   * Removes audio from attachments.
+   * 
+   * @param {number} index - Index of audio to remove
+   */
   const handleRemoveAudio = (index) => {
     setAttachedAudios(prev => prev.filter((_, i) => i !== index));
   };
 
+  /**
+   * Handles message submission.
+   * 
+   * @param {Event} e - Submit event
+   */
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     
@@ -497,6 +512,11 @@ const ChatInput = forwardRef(({
     setAttachedAudios([]);
   };
 
+  /**
+   * Handles keyboard shortcuts.
+   * 
+   * @param {KeyboardEvent} e - Keyboard event
+   */
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       Logger.log('ChatInput', 'Escape pressed - closing');
@@ -568,7 +588,6 @@ const ChatInput = forwardRef(({
       return;
     }
 
-    // Wait for the container to be rendered (after fade-in animation starts)
     const setupTimeout = setTimeout(() => {
       if (!containerRef.current) {
         Logger.log('ChatInput', 'Container still not available after delay');
@@ -577,13 +596,11 @@ const ChatInput = forwardRef(({
 
       Logger.log('ChatInput', 'Setting up drag-drop service');
 
-      // Create service instance
       dragDropServiceRef.current = new DragDropService({
         maxImages: 3,
         maxAudios: 1
       });
 
-      // Attach with simple action callbacks
       dragDropServiceRef.current.attach(containerRef.current, {
         onSetDragOver: (isDragging) => setIsDragOver(isDragging),
         onShowError: (error) => {
@@ -598,22 +615,18 @@ const ChatInput = forwardRef(({
         onProcessData: (data) => {
           const { text, images, audios } = data;
           
-          // Add text if present
           if (text && text.trim()) {
             setMessage(prev => prev ? prev + '\n' + text : text);
           }
           
-          // Add images if present
           if (images && images.length > 0) {
             setAttachedImages(prev => [...prev, ...images]);
           }
           
-          // Add audios if present
           if (audios && audios.length > 0) {
             setAttachedAudios(prev => [...prev, ...audios]);
           }
           
-          // Focus textarea after processing
           setTimeout(() => {
             if (textareaRef.current) {
               textareaRef.current.focus();
@@ -622,9 +635,8 @@ const ChatInput = forwardRef(({
           }, 0);
         }
       });
-    }, 100); // Wait 100ms for element to render
+    }, 100);
 
-    // Cleanup
     return () => {
       clearTimeout(setupTimeout);
       Logger.log('ChatInput', 'Cleaning up drag-drop service');
@@ -634,8 +646,11 @@ const ChatInput = forwardRef(({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible]); // Only re-run when visibility changes. Callbacks use closures for latest values.
+  }, [isVisible]);
 
+  /**
+   * Toggles voice conversation mode.
+   */
   const handleVoiceModeToggle = async () => {
     if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
@@ -677,17 +692,21 @@ const ChatInput = forwardRef(({
       setIsVoiceMode(false);
     }
   };
-
+  /**
+   * Handles user interrupt during voice conversation.
+   */
   const handleInterrupt = () => {
     Logger.log('ChatInput', 'User interrupted');
     
-    // Dispatch event to trigger force-complete animation in ChatContainer
     const event = new CustomEvent('voiceInterrupt');
     window.dispatchEvent(event);
     
     VoiceConversationService.interrupt();
   };
 
+  /**
+   * Handles microphone button click for voice recording.
+   */
   const handleMicClick = async () => {
     if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
@@ -756,11 +775,9 @@ const ChatInput = forwardRef(({
         ref={containerRef}
         className="relative p-4 w-full max-w-3xl pointer-events-auto"
         style={{
-          // Ensure drop events are captured
           touchAction: 'none'
         }}
       >
-        {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
         {!isVoiceMode && isDragOver && (
           <div 
             className="absolute z-10 pointer-events-none flex items-center justify-center rounded-xl"

@@ -6,7 +6,6 @@
 import * as HeroIconsSolid from '@heroicons/react/24/solid';
 import * as HeroIconsOutline from '@heroicons/react/24/outline';
 
-// Map custom icon names to Heroicons components (using solid/filled by default)
 export const iconMap = {
   'close': HeroIconsSolid.XMarkIcon,
   'stop': HeroIconsSolid.StopIcon,

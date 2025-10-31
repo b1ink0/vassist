@@ -13,13 +13,11 @@ import Toggle from '../common/Toggle';
 
 const STTSettings = ({ isLightBackground, hasChromeAI }) => {
   const {
-    // STT Config
     sttConfig,
     sttTesting,
     updateSTTConfig,
     testSTTRecording,
     
-    // Chrome AI Status
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,

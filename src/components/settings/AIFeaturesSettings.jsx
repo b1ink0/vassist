@@ -12,27 +12,22 @@ import AIFeaturesConfig from '../common/AIFeaturesConfig';
 
 const AIFeaturesSettings = ({ isLightBackground }) => {
   const {
-    // AI Config
     aiConfig,
     updateAIConfig,
     
-    // AI Features Tests
     testTranslator,
     testLanguageDetector,
     testSummarizer,
     testRewriter,
   } = useConfig();
 
-  // Check Chrome version - flags only needed for versions < 138
   const chromeVersion = ChromeAIValidator.getChromeVersion();
   const needsFlags = chromeVersion > 0 && chromeVersion < 138;
 
-  // Handle feature toggle
   const handleFeatureChange = (featureName, enabled) => {
     updateAIConfig(`aiFeatures.${featureName}.enabled`, enabled);
   };
 
-  // Handle target language change
   const handleTargetLanguageChange = (languageCode) => {
     updateAIConfig('aiFeatures.translator.defaultTargetLanguage', languageCode);
   };

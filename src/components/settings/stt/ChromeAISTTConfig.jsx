@@ -18,10 +18,8 @@ const ChromeAISTTConfig = ({
   isLightBackground,
   isSetupMode = false
 }) => {
-  // Track if we've already checked status on mount
   const hasCheckedRef = useRef(false);
 
-  // Auto-check status on mount
   useEffect(() => {
     if (onCheckStatus && !hasCheckedRef.current) {
       Logger.log('ChromeAISTTConfig', 'Auto-checking status on mount');
@@ -29,9 +27,8 @@ const ChromeAISTTConfig = ({
       onCheckStatus();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, []);
 
-  // Language options from config
   const languageOptions = [
     { code: ChromeAILanguages.ENGLISH, name: 'English' },
     { code: ChromeAILanguages.SPANISH, name: 'Spanish' },

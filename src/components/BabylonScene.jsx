@@ -9,76 +9,83 @@ import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 import Logger from '../services/Logger';
 
+/**
+ * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
+ * Manages scene initialization, rendering, cleanup, and drag-drop overlay positioning.
+ */
+
+/**
+ * BabylonScene component.
+ * 
+ * @component
+ * @param {Object} props
+ * @param {Function} [props.sceneBuilder] - Custom scene builder function
+ * @param {Function} [props.onSceneReady] - Callback when scene is ready
+ * @param {Function} [props.onLoadProgress] - Callback for loading progress updates
+ * @param {Object} [props.sceneConfig={}] - Scene configuration object
+ * @param {Object} [props.positionManagerRef] - Ref to position manager instance
+ * @param {boolean} [props.isPreview=false] - Render as inline preview instead of portal
+ * @param {string} [props.previewWidth='100%'] - Width for preview mode
+ * @param {string} [props.previewHeight='100%'] - Height for preview mode
+ * @param {string} [props.previewClassName=''] - Additional CSS classes for preview mode
+ */
 const BabylonScene = ({ 
   sceneBuilder, 
   onSceneReady, 
   onLoadProgress, 
   sceneConfig = {}, 
   positionManagerRef,
-  isPreview = false, // NEW: Preview mode renders inline instead of portal
-  previewWidth = '100%', // NEW: Width for preview mode
-  previewHeight = '100%', // NEW: Height for preview mode
-  previewClassName = '' // NEW: Additional classes for preview mode
+  isPreview = false,
+  previewWidth = '100%',
+  previewHeight = '100%',
+  previewClassName = ''
 }) => {
   const canvasRef = useRef(null);
-  const canvasElementRef = useRef(null); // Track actual canvas DOM element
+  const canvasElementRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0); // Track loading progress for preview mode
-  const cleanupFnRef = useRef(null); // Store cleanup function
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const cleanupFnRef = useRef(null);
   
-  // Get FPS limit from config
   const { uiConfig } = useConfig();
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
-  // Drag-drop overlay state (only in non-preview mode)
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
   
-  // Model overlay state from context (shared with AppContent) - skip in preview mode
   const { modelOverlayPos, setModelOverlayPos, setShowModelLoadingOverlay, setPendingDropData, openChat } = useApp();
   
-  // Track if this is first mount
   const isFirstMountRef = useRef(true);
   
-  // Store callbacks in refs to avoid dependency-related re-initialization
   const onSceneReadyRef = useRef(onSceneReady);
   const onLoadProgressRef = useRef(onLoadProgress);
   const sceneConfigRef = useRef(sceneConfig);
   
-  // Update refs when callbacks change (but don't trigger re-init)
   useEffect(() => {
     onSceneReadyRef.current = onSceneReady;
     onLoadProgressRef.current = onLoadProgress;
     sceneConfigRef.current = sceneConfig;
   }, [onSceneReady, onLoadProgress, sceneConfig]);
 
-  // Track component mount/unmount for tab visibility (skip in preview mode)
   useEffect(() => {
-    if (isPreview) return; // Skip loading overlay management in preview mode
+    if (isPreview) return;
     
-    // On mount
     if (isFirstMountRef.current) {
-      // First mount - don't show loading
       isFirstMountRef.current = false;
       Logger.log('BabylonScene', 'First mount - no loading overlay');
     } else {
-      // Remount after unmount (tab was hidden) - show loading immediately
       Logger.log('BabylonScene', 'Remounting after tab hide - showing loading');
       setShowModelLoadingOverlay(true);
     }
 
-    // Track visibility changes to show overlay BEFORE unmount
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab becoming hidden - show loading overlay immediately as placeholder
         Logger.log('BabylonScene', 'Tab hidden - showing loading overlay');
         setShowModelLoadingOverlay(true);
       } else if (isReady) {
-        // Tab becoming visible and scene is ready - hide loading overlay
         Logger.log('BabylonScene', 'Tab visible and scene ready - hiding loading overlay');
         setShowModelLoadingOverlay(false);
       }
@@ -92,9 +99,8 @@ const BabylonScene = ({
     };
   }, [setShowModelLoadingOverlay, isReady, isPreview]);
 
-  // Hide loading when scene is ready (only if we're showing loading) - skip in preview mode
   useEffect(() => {
-    if (isPreview) return; // Skip in preview mode
+    if (isPreview) return;
     
     if (isReady) {
       Logger.log('BabylonScene', 'Scene ready - hiding loading');
@@ -111,41 +117,32 @@ const BabylonScene = ({
     
     Logger.log('BabylonScene', 'Canvas ref ready, checking if in DOM...', canvas.parentNode ? 'YES' : 'NO');
     
-    // Store canvas element for cleanup
     canvasElementRef.current = canvas;
     
-    // Check if this canvas is actually in the DOM (not orphaned from previous mount)
     if (!canvas.parentNode) {
       Logger.log('BabylonScene', 'Canvas not in DOM yet, skipping initialization');
       return;
     }
     
-    // Prevent double initialization - check if THIS specific canvas is already initialized
-    // We need to track per-canvas, not globally, because Strict Mode creates multiple canvases
     if (canvas.dataset.babylonInitialized === 'true') {
       Logger.log('BabylonScene', 'This canvas already initialized, skipping');
       return;
     }
     
-    // Mark as initializing to prevent race conditions
     Logger.log('BabylonScene', 'Starting initialization for new canvas...');
     canvas.dataset.babylonInitializing = 'true';
 
-    // Cancellation flag to stop async initialization
     let cancelled = false;
 
     const initEngine = async () => {
-      // Use double RAF to ensure canvas is fully laid out
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       
-      // Check cancellation after RAF wait
       if (cancelled) {
         Logger.log('BabylonScene', 'Initialization cancelled after RAF');
         delete canvas.dataset.babylonInitializing;
         return null;
       }
       
-      // Check if canvas was removed during RAF wait
       if (!canvas.parentNode) {
         Logger.log('BabylonScene', 'Canvas removed from DOM during initialization, aborting');
         delete canvas.dataset.babylonInitializing;
@@ -154,25 +151,21 @@ const BabylonScene = ({
       
       Logger.log('BabylonScene', 'Canvas in DOM, creating engine...');
       
-      // Mark this specific canvas as initialized
       canvas.dataset.babylonInitialized = 'true';
       delete canvas.dataset.babylonInitializing;
       
-      // Create the Babylon.js engine
       const engine = new Engine(canvas, true, {
         preserveDrawingBuffer: true,
         stencil: true,
-        alpha: true, // Enable alpha channel for transparency
+        alpha: true,
       });
       
-      // Set FPS limit
       if (fpsLimit !== FPSLimitOptions.NATIVE && fpsLimit !== 'native') {
         const targetFPS = typeof fpsLimit === 'number' ? fpsLimit : 60;
         try {
           engine.maxFPS = targetFPS;
           Logger.log('BabylonScene', `Set engine.maxFPS to ${targetFPS}`);
         } catch (err) {
-          // Fallback: if maxFPS isn't available, try engine.fps (legacy/alternate)
           try {
             engine.fps = targetFPS;
             Logger.log('BabylonScene', `engine.maxFPS not available, set engine.fps to ${targetFPS}`);
@@ -186,25 +179,19 @@ const BabylonScene = ({
 
       let scene;
 
-      // If a scene builder is provided, use it, otherwise create default scene
       if (sceneBuilder) {
-        // Merge user config with defaults from sceneConfig.js
         let finalConfig = createSceneConfig({
           ...sceneConfigRef.current,
-          // Pass progress callback to scene builder - use ref to avoid dependency changes
-          // Wrap to also update local state for preview mode
           onLoadProgress: (progress) => {
-            setLoadingProgress(progress); // Update state for preview mode
+            setLoadingProgress(progress);
             if (onLoadProgressRef.current) {
-              onLoadProgressRef.current(progress); // Call parent callback
+              onLoadProgressRef.current(progress);
             }
           },
         });
-        // Resolve resource URLs for extension mode
         finalConfig = await resolveResourceURLs(finalConfig);
         scene = await sceneBuilder(canvas, engine, finalConfig);
         
-        // Check cancellation after scene building
         if (cancelled) {
           Logger.log('BabylonScene', 'Initialization cancelled after scene building');
           if (scene?.metadata?.animationManager) {
@@ -220,10 +207,8 @@ const BabylonScene = ({
           return null;
         }
       } else {
-        // Create the default scene
         scene = new Scene(engine);
 
-        // Create a camera
         const camera = new ArcRotateCamera(
           'camera',
           -Math.PI / 2,
@@ -234,11 +219,9 @@ const BabylonScene = ({
         );
         camera.attachControl(canvas, true);
 
-        // Create a light
         const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene);
         light.intensity = 0.7;
 
-        // Create a sphere
         const sphere = MeshBuilder.CreateSphere(
           'sphere',
           { diameter: 2, segments: 32 },
@@ -246,7 +229,6 @@ const BabylonScene = ({
         );
         sphere.position.y = 1;
 
-        // Create a ground
         MeshBuilder.CreateGround(
           'ground',
           { width: 6, height: 6 },
@@ -256,34 +238,28 @@ const BabylonScene = ({
 
       sceneRef.current = scene;
       
-      // Scene is now fully initialized
       Logger.log('BabylonScene', 'Initialization complete, scene mounted');
 
-      // Notify parent component that scene is ready - use ref to avoid dependency changes
       if (onSceneReadyRef.current) {
         onSceneReadyRef.current(scene);
       }
 
-      // Run the render loop
       engine.runRenderLoop(() => {
         scene.render();
       });
 
       setTimeout(() => {
         setIsReady(true);
-      }, 800); // 800ms delay - longer to ensure intro animation has started
+      }, 800);
 
-      // Handle window resize
       const handleResize = () => {
         engine.resize();
       };
       window.addEventListener('resize', handleResize);
 
-      // Cleanup function for Babylon resources
       const cleanupBabylon = () => {
         Logger.log('BabylonScene', 'Cleaning up Babylon resources...');
         
-        // Clear canvas initialization flags
         if (canvas) {
           delete canvas.dataset.babylonInitialized;
           delete canvas.dataset.babylonInitializing;
@@ -291,12 +267,10 @@ const BabylonScene = ({
         
         window.removeEventListener('resize', handleResize);
         
-        // Stop render loop
         if (engine) {
           engine.stopRenderLoop();
         }
         
-        // Dispose AnimationManager and PositionManager before scene disposal
         if (scene?.metadata?.animationManager) {
           Logger.log('BabylonScene', 'Disposing AnimationManager...');
           scene.metadata.animationManager.dispose();
@@ -306,7 +280,6 @@ const BabylonScene = ({
           scene.metadata.positionManager.dispose?.();
         }
         
-        // Dispose scene and engine
         if (scene) {
           scene.dispose();
         }
@@ -314,7 +287,6 @@ const BabylonScene = ({
           engine.dispose();
         }
         
-        // Clear refs
         engineRef.current = null;
         sceneRef.current = null;
         
@@ -324,7 +296,6 @@ const BabylonScene = ({
       return cleanupBabylon;
     };
 
-    // Start initialization and store cleanup function
     const cleanupPromise = initEngine();
     cleanupPromise.then(cleanupFn => {
       if (!cancelled && cleanupFn) {
@@ -332,34 +303,24 @@ const BabylonScene = ({
       }
     });
     
-    // Cleanup effect
     return () => {
       Logger.log('BabylonScene', 'Effect cleanup triggered');
       
-      // Set cancellation flag to stop async initialization
       cancelled = true;
       
-      // Cancel initialization if still in progress
       if (canvas.dataset.babylonInitializing === 'true') {
         Logger.log('BabylonScene', 'Cancelling initialization');
         delete canvas.dataset.babylonInitializing;
       }
       
-      // Execute Babylon cleanup if we have the function
       if (cleanupFnRef.current) {
         cleanupFnRef.current();
         cleanupFnRef.current = null;
       }
       
-      // CRITICAL: DON'T remove canvas immediately in Strict Mode
-      // Delay removal to allow second mount to find the canvas
-      // If second mount happens, it will reuse the canvas
-      // If not (true unmount), canvas will be removed after delay
       const canvasToRemove = canvasElementRef.current;
       if (canvasToRemove && canvasToRemove.parentNode) {
-        // Use setTimeout(0) to defer removal until after second mount attempt
         setTimeout(() => {
-          // Only remove if canvas is still orphaned (not reused by second mount)
           if (canvasToRemove.dataset.babylonInitialized !== 'true' && 
               canvasToRemove.dataset.babylonInitializing !== 'true' &&
               canvasToRemove.parentNode) {
@@ -370,10 +331,8 @@ const BabylonScene = ({
         canvasElementRef.current = null;
       }
     };
-    // onSceneReady and onLoadProgress stored in refs to prevent re-initialization
   }, [sceneBuilder, fpsLimit]);
 
-  // Detect when user starts dragging content anywhere on the page
   useEffect(() => {
     const handleDragStart = () => setIsDragging(true);
     const handleDragEnd = () => {
@@ -392,7 +351,6 @@ const BabylonScene = ({
     };
   }, []);
 
-  // Update overlay position to match model position
   useEffect(() => {
     if (!positionManagerRef?.current || !isReady) return;
 
@@ -410,10 +368,8 @@ const BabylonScene = ({
       }
     };
 
-    // Initial update
     updatePosition();
 
-    // Listen for position changes
     window.addEventListener('modelPositionChange', updatePosition);
     window.addEventListener('resize', updatePosition);
 
@@ -423,9 +379,8 @@ const BabylonScene = ({
     };
   }, [positionManagerRef, isReady, setModelOverlayPos]);
 
-  // Setup drag-drop service for the overlay (skip in preview mode)
   useEffect(() => {
-    if (isPreview) return; // Skip drag-drop in preview mode
+    if (isPreview) return;
     if (!overlayRef.current || !isReady) return;
 
     dragDropServiceRef.current = new DragDropService({
@@ -436,16 +391,13 @@ const BabylonScene = ({
       dragDropServiceRef.current.attach(overlayRef.current, {
       onSetDragOver: (isDragging) => {
         setIsDragOver(isDragging);
-        // DON'T open chat here - only on drop
       },
       onShowError: (error) => Logger.error('BabylonScene', 'Drag-drop error:', error),
       checkVoiceMode: null,
       getCurrentCounts: () => ({ images: 0, audios: 0 }),
       onProcessData: (data) => {
-        // Open chat when content is DROPPED (not just dragged over)
         Logger.log('BabylonScene', 'Opening chat from model drop with data:', data);
         openChat();
-        // Pass all data at once so nothing gets lost
         setPendingDropData(data);
       }
     });
@@ -457,14 +409,12 @@ const BabylonScene = ({
     };
   }, [isReady, openChat, setPendingDropData, isPreview]);
 
-  // Render canvas content
   const canvasContent = (
     <>
       <canvas
         id={isPreview ? undefined : "vassist-babylon-canvas"}
         ref={canvasRef}
         style={isPreview ? {
-          // Preview mode: inline rendering
           width: previewWidth,
           height: previewHeight,
           display: 'block',
@@ -474,7 +424,6 @@ const BabylonScene = ({
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         } : {
-          // Normal mode: full-screen portal
           width: '100%',
           height: '100vh',
           display: 'block',
@@ -490,7 +439,6 @@ const BabylonScene = ({
         }}
       />
       
-      {/* Drag-drop overlay positioned over the model (only in normal mode) */}
       {!isPreview && isReady && (
         <div
           ref={overlayRef}
@@ -500,12 +448,11 @@ const BabylonScene = ({
             top: `${modelOverlayPos.y}px`,
             width: `${modelOverlayPos.width}px`,
             height: `${modelOverlayPos.height}px`,
-            zIndex: 10000, // Above canvas (9999) but below chat button (9999+)
+            zIndex: 10000,
             pointerEvents: isDragging ? 'auto' : 'none',
             borderRadius: '24px'
           }}
         >
-          {/* Drag-drop visual feedback */}
           {isDragOver && (
             <div 
               style={{
@@ -555,12 +502,10 @@ const BabylonScene = ({
     </>
   );
 
-  // In preview mode, render inline with loading indicator
   if (isPreview) {
     return (
       <div className={`relative ${previewClassName}`} style={{ width: previewWidth, height: previewHeight }}>
         {canvasContent}
-        {/* Loading overlay for preview mode */}
         {!isReady && (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl">
             <div className="text-center">
@@ -575,8 +520,6 @@ const BabylonScene = ({
     );
   }
 
-  // Normal mode: Use portal to render canvas AND drag-drop overlay directly to document.body
-  // Canvas MUST be outside Shadow DOM for Babylon.js WebGL context to work
   return createPortal(
     canvasContent,
     document.body

@@ -18,12 +18,10 @@ const TTSSettings = ({ isLightBackground }) => {
   const [cacheSize, setCacheSize] = useState(null);
   
   const {
-    // TTS Config
     ttsConfig,
     ttsTesting,
     updateTTSConfig,
     testTTSConnection,
-    // Kokoro Status
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,

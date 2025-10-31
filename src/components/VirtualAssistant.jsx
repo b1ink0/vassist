@@ -1,5 +1,5 @@
 /**
- * VirtualAssistant - High-level wrapper component for the virtual assistant
+ * @fileoverview High-level wrapper component for the virtual assistant with 3D scene, animations, and position management.
  */
 
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef, useEffect } from 'react';
@@ -12,47 +12,62 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
 import Logger from '../services/Logger';
 
+/**
+ * Virtual assistant component with 3D model, animations, and TTS integration.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Function} props.onReady - Callback when assistant is initialized
+ * @param {boolean} props.isPreview - Enable preview mode for setup wizard
+ * @param {string} props.previewWidth - Width for preview mode
+ * @param {string} props.previewHeight - Height for preview mode
+ * @param {string} props.previewClassName - Additional CSS classes for preview
+ * @param {boolean} props.portraitMode - Enable portrait mode in preview
+ * @param {string} props.previewPosition - Position preset for preview mode
+ * @param {React.Ref} ref - Forwarded ref for imperative API
+ * @returns {JSX.Element} Virtual assistant component
+ */
 const VirtualAssistant = forwardRef((props, ref) => {
   const { 
     onReady,
-    isPreview = false, // NEW: Preview mode for setup wizard
-    previewWidth = '100%', // NEW: Width for preview mode
-    previewHeight = '100%', // NEW: Height for preview mode
-    previewClassName = '', // NEW: Additional classes for preview mode
-    portraitMode = false, // NEW: Enable portrait mode in preview
-    previewPosition = 'bottom-center' // NEW: Position preset for preview mode
+    isPreview = false,
+    previewWidth = '100%',
+    previewHeight = '100%',
+    previewClassName = '',
+    portraitMode = false,
+    previewPosition = 'bottom-center'
   } = props;
-  const { uiConfig, updateUIConfig, isConfigLoading } = useConfig(); // Get uiConfig, update function, and loading state
-  const { savedModelPosition, setSavedModelPosition } = useApp(); // Get saved position from context
+  const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
+  const { savedModelPosition, setSavedModelPosition } = useApp();
   
   const [animationManager, setAnimationManager] = useState(null);
   const [positionManager, setPositionManager] = useState(null);
   const [currentState, setCurrentState] = useState(AssistantState.IDLE);
   const [isReady, setIsReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const initializedSceneRef = useRef(null); // Track which scene we initialized
-  const positionManagerRef = useRef(null); // Ref to pass to BabylonScene
+  const initializedSceneRef = useRef(null);
+  const positionManagerRef = useRef(null);
 
   /**
-   * Handle model loading progress
+   * Handles model loading progress updates.
+   * 
+   * @param {number} progress - Loading progress (0-100)
    */
   const handleLoadProgress = useCallback((progress) => {
     setLoadingProgress(progress);
   }, []);
 
   /**
-   * Handle scene initialization
-   * Called when BabylonScene is ready
+   * Handles scene initialization when BabylonScene is ready.
+   * 
+   * @param {Object} scene - Babylon.js scene object
    */
   const handleSceneReady = useCallback((scene) => {
-    // Prevent re-initializing the SAME scene (React Strict Mode protection)
-    // But allow initializing a NEW scene (after cleanup + remount)
     if (initializedSceneRef.current === scene) {
       Logger.log('VirtualAssistant', 'Same scene already initialized, ignoring duplicate callback');
       return;
     }
     
-    // Validate scene before proceeding
     if (!scene || !scene.metadata || !scene.metadata.animationManager) {
       Logger.error('VirtualAssistant', 'Invalid scene or missing metadata, cannot initialize');
       return;
@@ -60,7 +75,6 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     Logger.log('VirtualAssistant', 'Scene ready, initializing...');
     
-    // Mark this specific scene as initialized
     initializedSceneRef.current = scene;
     
     const manager = scene.metadata.animationManager;
@@ -68,7 +82,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     setAnimationManager(manager);
     setPositionManager(posMgr);
-    positionManagerRef.current = posMgr; // Update ref for BabylonScene
+    positionManagerRef.current = posMgr;
     setCurrentState(manager.getCurrentState());
     setIsReady(true);
     
@@ -194,14 +208,13 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
       Logger.log('VirtualAssistant', `speak("${text}", emotionCategory="${emotionCategory}")`);
       
-      // Simple pass-through to AnimationManager.speak()
       await animationManager.speak(text, mouthAnimationBlobUrl, emotionCategory, options);
       
       setCurrentState(animationManager.getCurrentState());
     },
 
     /**
-     * Return assistant to idle state
+     * Returns assistant to idle state.
      */
     idle: async () => {
       if (!animationManager) {
@@ -215,18 +228,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Set assistant state directly
-     * Can use either state (IDLE, BUSY, etc.) or emotion (happy, thinking, etc.)
+     * Sets assistant state directly using state or emotion.
      * 
      * @param {string} stateOrEmotion - State from AssistantState enum OR emotion string
-     * 
-     * States:
-     * - IDLE: Relaxed, breathing, occasional looking around
-     * - BUSY: Thinking, working on something
-     * - SPEAKING: Currently talking
-     * - CELEBRATING: Happy, excited gesture
-     * 
-     * Emotions: happy, thinking, neutral, calm, curious, etc.
      */
     setState: async (stateOrEmotion) => {
       if (!animationManager) {
@@ -236,12 +240,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
       Logger.log('VirtualAssistant', `setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
       
-      // Check if it's a valid AssistantState
       if (Object.values(AssistantState).includes(stateOrEmotion)) {
-        // It's a state - use state transition
         await animationManager.transitionToState(stateOrEmotion);
       } else {
-        // It's probably an emotion - get animation and play it
         const emotionAnimation = getAnimationForEmotion(stateOrEmotion);
         if (emotionAnimation) {
           Logger.log('VirtualAssistant', `Playing animation for emotion/state "${stateOrEmotion}": ${emotionAnimation.name}`);
@@ -255,7 +256,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Trigger specific action (legacy support, prefer speak/idle/setState)
+     * Triggers specific action.
+     * 
      * @param {string} action - Action name: 'think', 'walk', 'celebrate', 'speak'
      */
     triggerAction: async (action) => {
@@ -270,12 +272,11 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Play composite animation (blend two animations)
-     * @param {string} anim1Name - First animation name
-     * Play composite animation with stitched fill
-     * @param {string} primaryAnimName - Primary animation (sets duration, e.g., mouth VMD)
-     * @param {string} fillCategory - Category for fill animations (e.g., 'talking')
-     * @param {Object} options - { primaryWeight: 1.0, fillWeight: 0.5 }
+     * Plays composite animation with stitched fill.
+     * 
+     * @param {string} primaryAnimName - Primary animation name
+     * @param {string} fillCategory - Category for fill animations
+     * @param {Object} options - Composite options with primaryWeight and fillWeight
      */
     playComposite: async (primaryAnimName, fillCategory = 'talking', options = {}) => {
       if (!animationManager) {
@@ -289,7 +290,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Get current state
+     * Gets current assistant state.
+     * 
      * @returns {string} Current assistant state
      */
     getState: () => {
@@ -297,7 +299,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Check if assistant is ready
+     * Checks if assistant is ready.
+     * 
      * @returns {boolean} True if AnimationManager is initialized
      */
     isReady: () => {
@@ -305,7 +308,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Get direct access to AnimationManager (advanced usage)
+     * Gets direct access to AnimationManager.
+     * 
      * @returns {AnimationManager|null} AnimationManager instance
      */
     getAnimationManager: () => {
@@ -313,8 +317,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Set model position using preset
-     * @param {string} preset - Position preset: 'center', 'bottom-right', 'bottom-left', 'bottom-center', 'top-center', 'top-left', 'top-right'
+     * Sets model position using preset.
+     * 
+     * @param {string} preset - Position preset
      */
     setPosition: (preset) => {
       if (!positionManager) {
@@ -327,19 +332,17 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Get direct access to PositionManager (advanced usage)
+     * Gets direct access to PositionManager.
+     * 
      * @returns {PositionManager|null} PositionManager instance
      */
     getPositionManager: () => {
       return positionManager;
     },
 
-    // ========================================
-    // ANIMATION QUEUE API
-    // ========================================
-
     /**
-     * Queue a simple animation to play after current animation finishes
+     * Queues a simple animation to play after current animation finishes.
+     * 
      * @param {string} animationName - Animation name from registry
      * @param {boolean} force - If true, interrupt current animation and play immediately
      */
@@ -352,7 +355,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Queue a composite animation
+     * Queues a composite animation.
+     * 
      * @param {string} primaryAnimName - Primary animation name
      * @param {string} fillCategory - Fill animation category
      * @param {Object} options - Composite options
@@ -367,7 +371,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Queue a speak animation
+     * Queues a speak animation.
+     * 
      * @param {string} text - Text to speak
      * @param {string} mouthBlobUrl - Mouth animation blob URL
      * @param {string} emotionCategory - Emotion category
@@ -383,7 +388,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Clear all queued animations
+     * Clears all queued animations.
      */
     clearQueue: () => {
       if (!animationManager) {
@@ -394,8 +399,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
     },
 
     /**
-     * Get queue status
-     * @returns {Object} Queue information { length, isEmpty, items }
+     * Gets queue status.
+     * 
+     * @returns {Object} Queue information with length, isEmpty, and items
      */
     getQueueStatus: () => {
       if (!animationManager) {
@@ -408,10 +414,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
   return (
     <>
-      {/* Custom loading indicator - shown while model loads OR config loads (skip in preview mode) */}
       {!isPreview && <LoadingIndicator isVisible={!isReady || isConfigLoading} progress={loadingProgress} />}
       
-      {/* Only render Babylon scene after config is loaded */}
       {!isConfigLoading && (
         <BabylonScene 
           sceneBuilder={buildMmdModelScene} 
@@ -424,9 +428,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
           previewClassName={previewClassName}
           sceneConfig={{ 
             uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
-            // Pass physics setting from uiConfig (defaults to true if not set, disable in preview for performance)
             enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
-            // Pass saved position (from context) to override preset on remount - NOT in preview mode
             savedModelPosition: isPreview ? null : savedModelPosition
           }}
         />

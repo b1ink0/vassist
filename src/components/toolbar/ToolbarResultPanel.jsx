@@ -40,14 +40,12 @@ const ToolbarResultPanel = forwardRef(({
 
   const contentRef = useRef(null);
 
-  // Auto-scroll to bottom when content updates during streaming
   useEffect(() => {
     if (contentRef.current && isLoading) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
   }, [result, isLoading]);
 
-  // Get action title with icon
   const getActionInfo = () => {
     if (action?.startsWith('summarize-')) return { icon: 'note', label: 'Summary' };
     if (action === 'translate') return { icon: 'globe', label: 'Translation' };

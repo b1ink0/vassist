@@ -1,9 +1,19 @@
 /**
- * ChatDeleteDialog Component
- * 
- * Confirmation dialog for deleting a chat
+ * @fileoverview Confirmation dialog for deleting a chat.
  */
 
+/**
+ * Confirmation dialog for deleting a chat.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.chatId - ID of chat to delete
+ * @param {boolean} props.isLightBackground - Whether background is light
+ * @param {string} props.animationClass - CSS animation class
+ * @param {Function} props.onConfirm - Callback when delete is confirmed
+ * @param {Function} props.onCancel - Callback when cancel is clicked
+ * @returns {JSX.Element} Chat delete dialog component
+ */
 const ChatDeleteDialog = ({
   chatId,
   isLightBackground = false,

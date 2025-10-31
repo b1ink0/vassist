@@ -49,7 +49,6 @@ export const OpenAIVoices = {
  * High-quality neural voices supporting multiple languages
  */
 export const KokoroVoices = {
-  // American English - Female
   AF_HEART: 'af_heart',
   AF_ALLOY: 'af_alloy',
   AF_AOEDE: 'af_aoede',
@@ -62,7 +61,6 @@ export const KokoroVoices = {
   AF_SARAH: 'af_sarah',
   AF_SKY: 'af_sky',
   
-  // American English - Male
   AM_ADAM: 'am_adam',
   AM_ECHO: 'am_echo',
   AM_ERIC: 'am_eric',
@@ -73,13 +71,11 @@ export const KokoroVoices = {
   AM_PUCK: 'am_puck',
   AM_SANTA: 'am_santa',
   
-  // British English - Female
   BF_ALICE: 'bf_alice',
   BF_EMMA: 'bf_emma',
   BF_ISABELLA: 'bf_isabella',
   BF_LILY: 'bf_lily',
   
-  // British English - Male
   BM_DANIEL: 'bm_daniel',
   BM_FABLE: 'bm_fable',
   BM_GEORGE: 'bm_george',
@@ -223,34 +219,33 @@ export const DefaultAIConfig = {
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
   },
   
-  systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.', // Deprecated - use provider-specific systemPrompt instead
+  systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
   
-  // AI Features Configuration (Available for all providers)
   aiFeatures: {
     translator: {
-      enabled: true, // Enable translator feature
-      defaultTargetLanguage: 'en', // Default language for translations
+      enabled: true,
+      defaultTargetLanguage: 'en',
     },
     languageDetector: {
-      enabled: true, // Enable language detector feature
+      enabled: true,
     },
     summarizer: {
-      enabled: true, // Enable summarizer feature
-      defaultType: 'tldr', // 'tldr', 'key-points', 'teaser', 'headline'
-      defaultFormat: 'plain-text', // 'plain-text' or 'markdown'
-      defaultLength: 'medium', // 'short', 'medium', 'long'
+      enabled: true,
+      defaultType: 'tldr',
+      defaultFormat: 'plain-text',
+      defaultLength: 'medium',
     },
     rewriter: {
-      enabled: true, // Enable rewriter feature
-      defaultTone: 'as-is', // 'as-is', 'more-formal', 'more-casual'
-      defaultFormat: 'as-is', // 'as-is', 'plain-text', 'markdown'
-      defaultLength: 'as-is', // 'as-is', 'shorter', 'longer'
+      enabled: true,
+      defaultTone: 'as-is',
+      defaultFormat: 'as-is',
+      defaultLength: 'as-is',
     },
     writer: {
-      enabled: true, // Enable writer feature
-      defaultTone: 'neutral', // 'formal', 'neutral', 'casual'
-      defaultFormat: 'plain-text', // 'plain-text', 'markdown'
-      defaultLength: 'medium', // 'short', 'medium', 'long'
+      enabled: true,
+      defaultTone: 'neutral',
+      defaultFormat: 'plain-text',
+      defaultLength: 'medium',
     },
   },
 };
@@ -262,41 +257,35 @@ export const DefaultAIConfig = {
  * Similar pattern to AI config for consistency.
  */
 export const DefaultTTSConfig = {
-  // Enable/disable TTS
   enabled: false,
   
-  // Active TTS provider
   provider: TTSProviders.KOKORO,
   
-  // Kokoro TTS Settings
   kokoro: {
-    modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX', // HuggingFace model ID
-    voice: KokoroVoices.AF_HEART, // Default voice
-    speed: 1.0, // 0.5 to 2.0 recommended
-    device: KokoroDevice.AUTO, // Auto-detect best backend (quantization is automatic)
-    keepModelLoaded: true, // Keep model in memory with periodic heartbeat (prevents unload, enabled by default)
+    modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+    voice: KokoroVoices.AF_HEART,
+    speed: 1.0,
+    device: KokoroDevice.AUTO,
+    keepModelLoaded: true,
   },
   
-  // OpenAI TTS Settings
   openai: {
-    apiKey: '', // Can share with AI or be separate
-    model: 'tts-1', // tts-1 or tts-1-hd
+    apiKey: '',
+    model: 'tts-1',
     voice: OpenAIVoices.NOVA,
-    speed: 1.0, // 0.25 to 4.0
+    speed: 1.0,
   },
   
-  // Generic OpenAI-Compatible TTS Settings
   'openai-compatible': {
-    endpoint: 'http://localhost:8000', // Base URL only, service will append /v1/audio/speech
-    apiKey: '', // Optional API key
-    model: 'tts', // Model name
+    endpoint: 'http://localhost:8000',
+    apiKey: '',
+    model: 'tts',
     voice: 'default',
     speed: 1.0,
   },
   
-  // Chunking settings for natural-sounding speech
-  chunkSize: 500, // Characters per chunk (approximate)
-  minChunkSize: 100, // Minimum chunk size before forced split
+  chunkSize: 500,
+  minChunkSize: 100,
 };
 
 /**
@@ -380,7 +369,6 @@ export function validateAIConfig(config) {
     }
   }
   
-  // Validate AI Features
   if (config.aiFeatures) {
     const validTypes = ['tldr', 'key-points', 'teaser', 'headline'];
     const validFormats = ['plain-text', 'markdown'];
@@ -416,7 +404,6 @@ export function validateTTSConfig(config) {
   const errors = [];
   
   if (!config.enabled) {
-    // If TTS is disabled, no validation needed
     return { valid: true, errors: [] };
   }
   
@@ -425,9 +412,7 @@ export function validateTTSConfig(config) {
   }
   
   if (config.provider === TTSProviders.KOKORO) {
-    // Kokoro validation - use defaults if not set
     if (!config.kokoro) {
-      // Kokoro config missing, but that's okay - will use defaults
       return { valid: true, errors: [] };
     }
     if (config.kokoro.modelId && config.kokoro.modelId.trim() === '') {
@@ -476,7 +461,6 @@ export function validateSTTConfig(config) {
   const errors = [];
   
   if (!config.enabled) {
-    // If STT is disabled, no validation needed
     return { valid: true, errors: [] };
   }
   

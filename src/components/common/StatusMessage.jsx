@@ -1,5 +1,5 @@
 /**
- * StatusMessage - Universal message parser for status displays
+ * @fileoverview Universal message parser for status displays.
  * 
  * Parses message strings with prefixes like:
  * - "success:Message text" → Green with check icon
@@ -12,15 +12,29 @@
 
 import { Icon } from '../icons';
 
+/**
+ * Status message component with prefix parsing.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.message - Message text with optional prefix
+ * @param {string} props.className - Additional CSS classes
+ * @param {boolean} props.isLightBackground - Whether background is light
+ * @returns {JSX.Element|null} Status message component
+ */
 const StatusMessage = ({ message, className = '', isLightBackground = false }) => {
   if (!message) return null;
 
-  // Parse message prefix
+  /**
+   * Parses message prefix to determine styling.
+   * 
+   * @param {string} msg - Message to parse
+   * @returns {Object} Parsed message config
+   */
   const parseMessage = (msg) => {
     const prefixMatch = msg.match(/^(success|warning|error):\s*(.+)$/i);
     
     if (!prefixMatch) {
-      // No prefix - return as plain message
       return {
         type: 'info',
         text: msg,

@@ -1,11 +1,22 @@
 /**
- * ChatEditDialog Component
- * 
- * Dialog for editing chat title
+ * @fileoverview Dialog for editing chat title.
  */
 
 import { useState } from 'react';
 
+/**
+ * Dialog component for editing chat title.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.chatId - ID of chat to edit
+ * @param {string} props.initialTitle - Initial title value
+ * @param {boolean} props.isLightBackground - Whether background is light
+ * @param {string} props.animationClass - CSS animation class
+ * @param {Function} props.onSave - Callback when save is clicked
+ * @param {Function} props.onCancel - Callback when cancel is clicked
+ * @returns {JSX.Element} Chat edit dialog component
+ */
 const ChatEditDialog = ({
   chatId,
   initialTitle,
@@ -17,6 +28,9 @@ const ChatEditDialog = ({
   const [editingTitle, setEditingTitle] = useState(initialTitle || '');
   const [isSaving, setIsSaving] = useState(false);
 
+  /**
+   * Handles save button click.
+   */
   const handleSave = async () => {
     if (!editingTitle.trim()) return;
     

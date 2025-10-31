@@ -14,35 +14,28 @@ import Logger from '../services/Logger';
  * Default scene configuration
  */
 const SceneConfig = {
-  // General configuration
-  enableModelLoading: true,  // Set to false to disable 3D model loading (chat-only mode)
+  enableModelLoading: true,
   
-  // Model configuration - these will be resolved at runtime
-  // In extension mode, URLs are fetched via ExtensionBridge.getResourceURL()
   modelUrl: "res/assets/model/default1.bpmx",
   cameraAnimationUrl: "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   
-  // Camera settings
-  orthoHeight: 12,          // Orthographic height (zoom level)
-  cameraDistance: -30,      // Camera distance from origin
+  orthoHeight: 12,
+  cameraDistance: -30,
   
-  // Position manager settings
   positionConfig: {
     boundaryPadding: 0,
     allowPartialOffscreen: false,
     partialOffscreenAmount: 0
   },
   
-  // Scene settings
-  transparentBackground: true,  // Transparent or solid background
-  enablePhysics: true,          // Enable Havok physics
-  enableShadows: true,          // Enable shadow rendering
+  transparentBackground: true,
+  enablePhysics: true,
+  enableShadows: true,
   
-  // Loading callbacks (set by consumer)
-  onLoadProgress: null,  // (progress: number) => void
-  onModelLoaded: null,   // (modelMesh) => void
-  onSceneReady: null,    // (scene) => void
+  onLoadProgress: null,
+  onModelLoaded: null,
+  onSceneReady: null,
 };
 
 /**
@@ -55,12 +48,10 @@ export async function resolveResourceURLs(config) {
   Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
   if (!resourceLoader.isExtensionMode()) {
-    // Dev mode - URLs are already correct
     Logger.log('sceneConfig', 'Dev mode - returning config as-is');
     return config;
   }
 
-  // Extension mode - resolve URLs via ExtensionBridge
   Logger.log('sceneConfig', 'Extension mode - resolving URLs...');
   const resolvedConfig = { ...config };
   
@@ -166,7 +157,6 @@ export function createSceneConfig(customConfig = {}) {
   return {
     ...SceneConfig,
     ...customConfig,
-    // Deep merge positionConfig if provided
     positionConfig: {
       ...SceneConfig.positionConfig,
       ...(customConfig.positionConfig || {})
@@ -182,12 +172,10 @@ export function createSceneConfig(customConfig = {}) {
 export function validateSceneConfig(config) {
   const errors = [];
   
-  // Check required fields
   if (!config.modelUrl) {
     errors.push('modelUrl is required');
   }
   
-  // Validate camera settings
   if (typeof config.orthoHeight !== 'number' || config.orthoHeight <= 0) {
     errors.push('orthoHeight must be a positive number');
   }
@@ -196,7 +184,6 @@ export function validateSceneConfig(config) {
     errors.push('cameraDistance must be a number');
   }
   
-  // Validate position config
   if (config.positionConfig) {
     if (typeof config.positionConfig.boundaryPadding !== 'number' || config.positionConfig.boundaryPadding < 0) {
       errors.push('positionConfig.boundaryPadding must be a non-negative number');

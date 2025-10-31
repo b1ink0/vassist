@@ -1,17 +1,16 @@
 /**
- * LoadingIndicator - Custom loading spinner for bottom-right corner
- * 
- * Replaces the full-page Babylon loading screen with a non-intrusive
- * loading indicator that doesn't block the page.
- * 
- * Features:
- * - Bottom-right corner positioning (or centered in container)
- * - Glassmorphism design with Tailwind
- * - Optional progress percentage display
- * - Smooth fade in/out transitions
- * - Custom circular loading animation (no icon dependency)
+ * @fileoverview Custom loading spinner component.
  */
 
+/**
+ * Loading indicator component for bottom-right corner or centered positioning.
+ * 
+ * @param {Object} props
+ * @param {boolean} props.isVisible - Visibility state
+ * @param {number|null} props.progress - Progress percentage (0-100)
+ * @param {boolean} props.centered - Whether to center in container
+ * @returns {JSX.Element|null}
+ */
 const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }) => {
   if (!isVisible) return null;
 
@@ -23,9 +22,7 @@ const LoadingIndicator = ({ isVisible = false, progress = null, centered = false
         WebkitBackdropFilter: 'blur(16px)',
       }}
     >
-      {/* Custom circular loading spinner with percentage inside */}
       <div className="relative w-8 h-8 flex items-center justify-center">
-        {/* Spinning circle */}
         <svg 
           className="animate-spin" 
           width="32" 

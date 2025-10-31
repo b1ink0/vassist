@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Root application component with setup wizard and context providers.
+ */
+
 import AppContent from './components/AppContent'
 import DemoSite from './components/DemoSite'
 import SetupWizard from './components/setup/SetupWizard'
@@ -6,23 +10,34 @@ import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
 
+/**
+ * Application wrapper component that handles setup flow.
+ * 
+ * @param {Object} props
+ * @param {string} props.mode - Application mode ('development'|'extension')
+ * @returns {JSX.Element}
+ */
 function AppWithSetup({ mode = 'development' }) {
   const { setupCompleted, isLoading } = useSetup();
   
-  // Show loading indicator while checking setup status
   if (isLoading) {
     return <LoadingIndicator isVisible={true} />;
   }
   
-  // Show setup wizard if setup not completed
   if (!setupCompleted) {
     return <SetupWizard />;
   }
   
-  // Setup completed, show normal app
   return <AppContent mode={mode} />;
 }
 
+/**
+ * Root application component.
+ * 
+ * @param {Object} props
+ * @param {string} props.mode - Application mode ('development'|'extension')
+ * @returns {JSX.Element}
+ */
 function App({ mode = 'development' }) {
   return (
     <SetupProvider>

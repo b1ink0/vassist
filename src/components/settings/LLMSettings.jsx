@@ -10,7 +10,6 @@ import { PromptConfig } from '../../config/promptConfig';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
 
-// Reusable Image Support Component
 const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
   <div className="space-y-2">
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
@@ -29,7 +28,6 @@ const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalN
   </div>
 );
 
-// Reusable Audio Support Component
 const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
   <div className="space-y-2">
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
@@ -48,7 +46,6 @@ const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalN
   </div>
 );
 
-// Reusable System Prompt Section Component
 const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, aiConfig }) => {
   const providerConfig = aiConfig[providerKey] || {};
   const currentType = providerConfig.systemPromptType || 'default';
@@ -64,7 +61,6 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
           onChange={(e) => {
             const newType = e.target.value;
             updateAIConfig(`${providerKey}.systemPromptType`, newType);
-            // If switching to non-custom, clear custom prompt
             if (newType !== 'custom') {
               updateAIConfig(`${providerKey}.systemPrompt`, '');
             }
@@ -96,7 +92,6 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
           }
           onChange={(e) => {
             const newValue = e.target.value;
-            // If user edits a preset prompt, switch to custom
             if (currentType !== 'custom') {
               updateAIConfig(`${providerKey}.systemPromptType`, 'custom');
             }
@@ -116,13 +111,11 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
 
 const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
   const {
-    // AI Config
     aiConfig,
     aiTesting,
     updateAIConfig,
     testAIConnection,
     
-    // Chrome AI Status
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,

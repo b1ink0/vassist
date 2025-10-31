@@ -15,7 +15,6 @@ import Logger from '../../services/Logger';
 
 const UISettings = ({ isLightBackground }) => {
   const {
-    // UI Config
     uiConfig,
     updateUIConfig,
   } = useConfig();
@@ -23,7 +22,6 @@ const UISettings = ({ isLightBackground }) => {
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);
 
-  // Check if running as extension
   const isExtensionMode = ExtensionBridge.isExtensionMode();
 
   return (
@@ -40,7 +38,6 @@ const UISettings = ({ isLightBackground }) => {
               try {
                 setIsResetting(true);
                 await resetSetup();
-                // Reload to start fresh
                 window.location.reload();
               } catch (error) {
                 Logger.error('other', 'Failed to reset setup:', error);

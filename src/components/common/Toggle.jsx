@@ -1,9 +1,17 @@
 /**
- * Toggle Component
- * 
- * Custom toggle switch for settings
+ * @fileoverview Custom toggle switch for settings.
  */
 
+/**
+ * Toggle switch component.
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {boolean} props.checked - Whether toggle is checked
+ * @param {Function} props.onChange - Callback when toggle changes
+ * @param {boolean} props.disabled - Whether toggle is disabled
+ * @returns {JSX.Element} Toggle component
+ */
 const Toggle = ({ checked, onChange, disabled = false }) => {
   return (
     <button
