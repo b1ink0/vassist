@@ -82,8 +82,11 @@ const SetupWizard = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden" data-setup-wizard>
+      {/* Backdrop with blur */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-md"></div>
+      
       {/* Main setup container */}
-      <div ref={containerRef} className="relative w-full max-w-3xl h-[95vh] mx-2 sm:mx-4 flex flex-col">
+      <div ref={containerRef} className="relative w-full max-w-3xl h-[95vh] mx-2 sm:mx-4 flex flex-col z-10">
         {/* Compact Header */}
         <div className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} rounded-t-xl p-3 sm:p-4 flex-shrink-0`}>
           {/* Step indicator */}
