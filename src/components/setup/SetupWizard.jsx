@@ -7,8 +7,7 @@
 
 import { useSetup } from '../../contexts/SetupContext';
 import { Icon } from '../icons';
-import { useEffect, useRef, useState } from 'react';
-import BackgroundDetector from '../../utils/BackgroundDetector';
+import { useEffect, useRef } from 'react';
 
 // Import step components
 import WelcomeStep from './steps/WelcomeStep';
@@ -31,39 +30,7 @@ const SetupWizard = () => {
   const contentRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Background detection state
-  const [isLightBackground, setIsLightBackground] = useState(false);
-
-  // Detect background brightness
-  useEffect(() => {
-    const detectBackground = () => {
-      if (!containerRef.current) return;
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const result = BackgroundDetector.detectBrightness({
-        sampleArea: {
-          type: 'grid',
-          x: rect.left,
-          y: rect.top,
-          width: rect.width,
-          height: rect.height,
-          padding: 60,
-        },
-        elementsToIgnore: [containerRef.current],
-        logPrefix: '[SetupWizard]',
-      });
-
-      setIsLightBackground(result.isLight);
-    };
-
-    // Initial detection
-    setTimeout(detectBackground, 100);
-
-    // Re-detect on interval
-    const interval = setInterval(detectBackground, 4000);
-
-    return () => clearInterval(interval);
-  }, [currentStep]);
+  const isLightBackground = true;
 
   // Scroll to top whenever step changes
   useEffect(() => {
@@ -114,11 +81,11 @@ const SetupWizard = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden" data-setup-wizard>
       {/* Main setup container */}
       <div ref={containerRef} className="relative w-full max-w-3xl h-[95vh] mx-2 sm:mx-4 flex flex-col">
         {/* Compact Header */}
-        <div className={`glass-container ${isLightBackground ? 'glass-dark' : ''} rounded-t-xl p-3 sm:p-4 flex-shrink-0`}>
+        <div className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} rounded-t-xl p-3 sm:p-4 flex-shrink-0`}>
           {/* Step indicator */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -146,7 +113,7 @@ const SetupWizard = () => {
         {/* Content area */}
         <div 
           ref={contentRef}
-          className={`glass-container ${isLightBackground ? 'glass-dark' : ''} flex-1 overflow-y-auto p-4 sm:p-6`}
+          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-4 sm:p-6`}
           style={{ 
             scrollbarWidth: 'thin', 
             scrollbarColor: isLightBackground 
@@ -158,7 +125,7 @@ const SetupWizard = () => {
         </div>
 
         {/* Compact Navigation footer */}
-        <div className={`glass-container ${isLightBackground ? 'glass-dark' : ''} rounded-b-xl p-3 sm:p-4 flex-shrink-0`}>
+        <div className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} rounded-b-xl p-3 sm:p-4 flex-shrink-0`}>
           <div className="flex items-center justify-between gap-2">
             {/* Previous button */}
             <button
