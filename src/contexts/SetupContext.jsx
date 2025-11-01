@@ -22,7 +22,7 @@ export const useSetup = () => {
 /**
  * Total number of setup steps
  */
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5; // Reduced from 6 - Tutorial step disabled (no GIFs yet)
 
 /**
  * Default setup state

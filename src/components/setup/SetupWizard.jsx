@@ -16,7 +16,7 @@ import CharacterIntroStep from './steps/CharacterIntroStep';
 import LLMProviderStep from './steps/LLMProviderStep';
 import TTSProviderStep from './steps/TTSProviderStep';
 import AIFeaturesOverviewStep from './steps/AIFeaturesOverviewStep';
-import TutorialStep from './steps/TutorialStep';
+// import TutorialStep from './steps/TutorialStep'; // Disabled - no GIFs yet
 
 const SetupWizard = () => {
   const {
@@ -80,7 +80,7 @@ const SetupWizard = () => {
       case 3: return <LLMProviderStep isLightBackground={isLightBackground} />;
       case 4: return <TTSProviderStep isLightBackground={isLightBackground} />;
       case 5: return <AIFeaturesOverviewStep isLightBackground={isLightBackground} />;
-      case 6: return <TutorialStep isLightBackground={isLightBackground} />;
+      // case 6: return <TutorialStep isLightBackground={isLightBackground} />; // Disabled - no GIFs yet
       default: return <WelcomeStep isLightBackground={isLightBackground} />;
     }
   };
@@ -93,7 +93,7 @@ const SetupWizard = () => {
       case 3: return 'AI Configuration';
       case 4: return 'Voice';
       case 5: return 'AI+ Features';
-      case 6: return 'Tutorial';
+      // case 6: return 'Tutorial'; // Disabled - no GIFs yet
       default: return 'Setup';
     }
   };
@@ -105,7 +105,7 @@ const SetupWizard = () => {
   // Handle Next/Finish button click
   const handleNextClick = () => {
     if (isLastStep) {
-      // On last step (Tutorial), complete setup
+      // On last step (AI Features Overview), complete setup
       completeSetup();
     } else {
       // Regular next step

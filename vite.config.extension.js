@@ -12,10 +12,12 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
+import archiver from 'archiver';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isProduction = process.argv.includes('--mode=production');
+const shouldZip = process.env.ZIP === 'true';
 
 /**
  * Recursively copy directory
@@ -152,8 +154,51 @@ function copyAssetsPlugin() {
       }
       
       console.log('[copy-assets] Asset copying complete!');
+      
+      // Create zip if --zip flag is passed
+      if (shouldZip) {
+        console.log('[zip-extension] Creating extension zip file...');
+        createExtensionZip(distDir);
+      }
     }
   };
+}
+
+/**
+ * Create zip file of the extension
+ */
+function createExtensionZip(distDir) {
+  const buildDir = path.join(__dirname, 'build');
+  fs.mkdirSync(buildDir, { recursive: true });
+  const outputFile = path.join(buildDir, 'vassist-extension.zip');
+  const output = fs.createWriteStream(outputFile);
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Maximum compression
+  });
+
+  output.on('close', () => {
+    const sizeInMB = (archive.pointer() / 1024 / 1024).toFixed(2);
+    console.log('[zip-extension] Extension packaged successfully!');
+    console.log(`[zip-extension] File: ${outputFile}`);
+    console.log(`[zip-extension] Size: ${sizeInMB} MB (${archive.pointer()} bytes)`);
+  });
+
+  archive.on('warning', (err) => {
+    if (err.code === 'ENOENT') {
+      console.warn('[zip-extension] Warning:', err);
+    } else {
+      throw err;
+    }
+  });
+
+  archive.on('error', (err) => {
+    console.error('[zip-extension] Error:', err);
+    throw err;
+  });
+
+  archive.pipe(output);
+  archive.directory(distDir, false);
+  archive.finalize();
 }
 
 export default defineConfig({

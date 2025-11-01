@@ -62,6 +62,13 @@ Just hover over any image to:
 #### 🎤 Voice Dictation
 Talk instead of type. **Multimodal Input API** lets you dictate directly into text fields.
 
+#### 📄 Document Interaction
+Work smarter with web content:
+- **Page Context** - Ask questions about the current page you're viewing
+- **Smart Summaries** - Get instant summaries of articles and documents
+- **Content Analysis** - Understand complex content with AI assistance
+- Works seamlessly with Chrome's built-in AI
+
 ---
 
 ### Chat With Your Assistant

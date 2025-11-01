@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+build
 dist*
 dist-ssr
 *.local
@@ -23,7 +24,8 @@ dist-ssr
 *.sln
 *.sw?
 
-public/res
 docs
 *.patch
 *.diff
+private_test
+*.zip
