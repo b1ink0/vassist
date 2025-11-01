@@ -246,4 +246,25 @@ ${text}`,
     translate: (targetLanguage) => 
       `Transcribe this audio and translate it to ${targetLanguage}. Provide both the original transcription and the translation.`,
   },
+
+  documentInteraction: {
+    analyzerSystemPrompt: `You are a context analyzer. Your job is to analyze user queries and determine what TEXT information from the current webpage would be helpful to answer the query.
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "needsContext": true/false,
+  "contextType": "text|links|all|none",
+  "selector": "CSS selector or description of what to extract",
+  "reason": "Brief explanation of why this context is needed"
+}
+
+Examples:
+- "What is this page about?" -> {"needsContext": true, "contextType": "text", "selector": "main, article, body", "reason": "Need page content to summarize"}
+- "Summarize the main heading" -> {"needsContext": true, "contextType": "text", "selector": "h1, h2", "reason": "User wants headings"}
+- "What time is it?" -> {"needsContext": false, "contextType": "none", "selector": "", "reason": "General knowledge question"}
+- "What links are on this page?" -> {"needsContext": true, "contextType": "links", "selector": "a[href]", "reason": "User wants to know about links"}
+- "Tell me everything on this page" -> {"needsContext": true, "contextType": "all", "selector": "", "reason": "User wants complete page overview"}`,
+
+    analyzeQuery: (userQuery) => `Analyze this user query and determine what page context is needed:\n\n"${userQuery}"`,
+  },
 };

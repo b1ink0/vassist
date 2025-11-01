@@ -5,6 +5,7 @@
 
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
+import logo from '../../../assets/VA.svg';
 
 const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { nextStep } = useSetup();
@@ -15,15 +16,15 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
       <div className="flex items-center justify-center mb-2 sm:mb-4">
         <div className="relative w-24 h-24 sm:w-32 sm:h-32">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-full blur-xl"></div>
-          <div className="relative w-full h-full glass-container rounded-full flex items-center justify-center">
-            <Icon name="sparkles" size={48} className="text-purple-400" />
+          <div className="relative w-full h-full glass-container rounded-full flex items-center justify-center overflow-hidden">
+            <img src={logo} alt="VAssist Logo" className="w-full h-full object-contain" />
           </div>
         </div>
       </div>
 
       {/* Title */}
       <div className="space-y-2">
-        <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h1 className="text-3xl sm:text-4xl font-bold text-white">
           Quick Start
         </h1>
         <p className="text-sm sm:text-base text-white/90 max-w-md mx-auto px-4">

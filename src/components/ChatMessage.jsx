@@ -7,6 +7,7 @@ import { Icon } from './icons';;
 import { TTSServiceProxy } from '../services/proxies';
 import AudioPlayer from './AudioPlayer';
 import StreamingText from './common/StreamingText';
+import MarkdownText from './common/MarkdownText';
 import StreamingContainer from './common/StreamingContainer';
 import Logger from '../services/Logger';
 
@@ -327,8 +328,8 @@ const ChatMessage = ({
                 <>
                   {!isUser && !isError ? (
                     shouldDisableStreaming ? (
-                      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                        <span>{message.content}</span>
+                      <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
+                        <MarkdownText text={message.content} />
                       </div>
                     ) : (
                       <StreamingContainer 
@@ -336,22 +337,28 @@ const ChatMessage = ({
                         speed="normal"
                         disabled={false}
                       >
-                        <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                          <StreamingText 
-                            text={message.content}
-                            wordsPerSecond={40}
-                            showCursor={false}
-                            disabled={false}
-                            forceComplete={shouldForceCompleteThis}
-                            smoothHeightAnimation={smoothStreamingAnimation}
-                            onComplete={handleStreamingComplete}
-                          />
-                        </div>
+                        {hasCompletedStreaming ? (
+                          <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
+                            <MarkdownText text={message.content} />
+                          </div>
+                        ) : (
+                          <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words max-w-full overflow-hidden">
+                            <StreamingText 
+                              text={message.content}
+                              wordsPerSecond={40}
+                              showCursor={false}
+                              disabled={false}
+                              forceComplete={shouldForceCompleteThis}
+                              smoothHeightAnimation={smoothStreamingAnimation}
+                              onComplete={handleStreamingComplete}
+                            />
+                          </div>
+                        )}
                       </StreamingContainer>
                     )
                   ) : (
-                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                      {message.content}
+                    <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
+                      <MarkdownText text={message.content} />
                     </div>
                   )}
                 </>

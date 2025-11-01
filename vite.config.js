@@ -12,6 +12,7 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  publicDir: 'public',
   define: {
     // Build-time constants for mode detection
     __EXTENSION_MODE__: JSON.stringify(false),
@@ -25,6 +26,7 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 50000,
+    copyPublicDir: true,
   },
   worker: {
     format: 'es', // Use ES modules for workers

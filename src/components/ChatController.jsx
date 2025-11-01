@@ -9,6 +9,7 @@ import ChatContainer from './ChatContainer'
 import AIToolbar from './AIToolbar'
 import ChatService from '../services/ChatService'
 import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
+import DocumentInteractionService from '../services/DocumentInteractionService'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
@@ -184,6 +185,35 @@ const ChatController = ({
     
     const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt;
     const messages = ChatService.getFormattedMessages(systemPrompt);
+    
+    // DOCUMENT INTERACTION: Extract page context based on user query
+    const lastUserMessage = ChatService.getLastUserMessage();
+    if (lastUserMessage && lastUserMessage.content) {
+      try {
+        // Create AI send function for the analyzer
+        const aiSendMessage = async (messages, onStream) => {
+          return await AIServiceProxy.sendMessage(messages, onStream);
+        };
+        
+        const pageContext = await DocumentInteractionService.getContextForQuery(
+          lastUserMessage.content, 
+          aiSendMessage
+        );
+        
+        if (pageContext) {
+          Logger.log('ChatController', 'Injecting page context into AI prompt');
+          // Add context to the last user message
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage && lastMessage.role === 'user') {
+            lastMessage.content = pageContext + lastMessage.content;
+          }
+        }
+      } catch (error) {
+        Logger.warn('ChatController', 'Failed to extract page context:', error);
+        // Continue without context - non-critical error
+      }
+    }
+    
     const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured();
     
     Logger.log('ChatController', 'System prompt:', systemPrompt);
@@ -497,6 +527,32 @@ const ChatController = ({
     const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured()
 
     const messages = ChatService.getFormattedMessages(systemPrompt)
+
+    // DOCUMENT INTERACTION: Extract page context for voice queries too
+    const lastUserMessage = ChatService.getLastUserMessage();
+    if (lastUserMessage && lastUserMessage.content) {
+      try {
+        // Create AI send function for the analyzer
+        const aiSendMessage = async (messages, onStream) => {
+          return await AIServiceProxy.sendMessage(messages, onStream);
+        };
+        
+        const pageContext = await DocumentInteractionService.getContextForQuery(
+          lastUserMessage.content,
+          aiSendMessage
+        );
+        
+        if (pageContext) {
+          Logger.log('ChatController', '[Voice] Injecting page context into AI prompt');
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage && lastMessage.role === 'user') {
+            lastMessage.content = pageContext + lastMessage.content;
+          }
+        }
+      } catch (error) {
+        Logger.warn('ChatController', '[Voice] Failed to extract page context:', error);
+      }
+    }
 
     if (ttsEnabled) {
       TTSServiceProxy.resumePlayback()

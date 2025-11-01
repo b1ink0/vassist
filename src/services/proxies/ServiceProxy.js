@@ -5,8 +5,6 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
-import Logger from '../Logger';
-
 export class ServiceProxy {
   constructor(name) {
     // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
@@ -20,12 +18,11 @@ export class ServiceProxy {
         // Import ExtensionBridge synchronously (it's already loaded in main.js)
         import('../../utils/ExtensionBridge.js').then(module => {
           this._bridge = module.extensionBridge;
-          Logger.log('other', `[${this.name}Proxy] Bridge loaded successfully`);
-        }).catch(err => {
-          Logger.error('other', `[${this.name}Proxy] Failed to load bridge:`, err);
+        }).catch(() => {
+          // Silently fail - will retry via waitForBridge
         });
-      } catch (e) {
-        Logger.error('other', `[${this.name}Proxy] Error loading bridge:`, e);
+      } catch {
+        // Silently fail - will retry via waitForBridge
       }
     }
   }
@@ -40,8 +37,15 @@ export class ServiceProxy {
       return null;
     }
     
+    // Check if we're in a service worker context (no window object)
+    const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+    
+    if (isServiceWorker) {
+      // In service worker, we don't need a bridge - services run directly here
+      return null;
+    }
+    
     if (typeof window === 'undefined') {
-      Logger.error('other', `[${this.name}Proxy] window is not defined, cannot get bridge`);
       return null;
     }
     
@@ -62,7 +66,6 @@ export class ServiceProxy {
       // Ignore errors during fallback
     }
     
-    Logger.error('other', `[${this.name}Proxy] Bridge is null! Make sure ExtensionBridge is loaded in main.js`);
     return null;
   }
 
@@ -81,7 +84,6 @@ export class ServiceProxy {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
-    Logger.error('other', `[${this.name}Proxy] Bridge not loaded after ${timeout}ms`);
     return null;
   }
 

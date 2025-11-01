@@ -8,10 +8,11 @@
  * - Streaming indicator
  */
 
-import { forwardRef, useRef, useEffect } from 'react'
+import { forwardRef, useRef, useEffect, useState } from 'react'
 import { Icon } from '../icons';;
 import { TranslationLanguages } from '../../config/aiConfig';
 import StreamingText from '../common/StreamingText';
+import MarkdownText from '../common/MarkdownText';
 import StreamingContainer from '../common/StreamingContainer';
 
 const ToolbarResultPanel = forwardRef(({
@@ -39,6 +40,19 @@ const ToolbarResultPanel = forwardRef(({
 }, ref) => {
 
   const contentRef = useRef(null);
+  const [hasCompletedStreaming, setHasCompletedStreaming] = useState(false);
+
+  // Reset streaming state when result changes
+  useEffect(() => {
+    setHasCompletedStreaming(false);
+  }, [result]);
+
+  // Mark as completed when loading stops
+  useEffect(() => {
+    if (!isLoading && result) {
+      setHasCompletedStreaming(true);
+    }
+  }, [isLoading, result]);
 
   useEffect(() => {
     if (contentRef.current && isLoading) {
@@ -218,14 +232,20 @@ const ToolbarResultPanel = forwardRef(({
         >
           <StreamingContainer autoActivate speed="fast">
             <div>
-              <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 ${isLightBackground ? 'text-white' : 'text-white'}`}>
-                <StreamingText 
-                  text={result}
-                  wordsPerSecond={40}
-                  showCursor={false}
-                  disabled={false}
-                />
-              </div>
+              {hasCompletedStreaming ? (
+                <div className={`text-[13px] leading-6 opacity-90 max-w-full overflow-hidden ${isLightBackground ? 'text-white' : 'text-white'}`}>
+                  <MarkdownText text={result} />
+                </div>
+              ) : (
+                <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 max-w-full overflow-hidden ${isLightBackground ? 'text-white' : 'text-white'}`}>
+                  <StreamingText 
+                    text={result}
+                    wordsPerSecond={40}
+                    showCursor={false}
+                    disabled={false}
+                  />
+                </div>
+              )}
               {/* Show streaming indicator while loading */}
               {isLoading && (
                 <div className="flex items-center gap-1 mt-2 text-white/50">

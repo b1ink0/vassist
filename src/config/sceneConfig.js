@@ -16,7 +16,7 @@ import Logger from '../services/Logger';
 const SceneConfig = {
   enableModelLoading: true,
   
-  modelUrl: "res/assets/model/default1.bpmx",
+  modelUrl: "res/assets/model/vassist_default1.bpmx",
   cameraAnimationUrl: "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   

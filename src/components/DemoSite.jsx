@@ -14,6 +14,12 @@ import RewriterServiceProxy from '../services/proxies/RewriterServiceProxy';
 import WriterServiceProxy from '../services/proxies/WriterServiceProxy';
 import { TranslationLanguages } from '../config/aiConfig';
 
+// Import demo images
+import berriesImg from '../assets/demo/berries.jpg';
+import kittenImg from '../assets/demo/kitten.jpg';
+import peopleImg from '../assets/demo/people.jpg';
+import textImg from '../assets/demo/text.jpg';
+
 /**
  * Demo landing page component with interactive feature demonstrations.
  * 
@@ -695,22 +701,22 @@ const DemoSite = () => {
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
                 <img 
-                  src="/src/assets/demo/berries.jpg" 
+                  src={berriesImg}
                   alt="Berries" 
                   className="aspect-square rounded-lg object-cover cursor-pointer hover:scale-105 transition-transform shadow-md"
                 />
                 <img 
-                  src="/src/assets/demo/kitten.jpg" 
+                  src={kittenImg}
                   alt="Kitten" 
                   className="aspect-square rounded-lg object-cover cursor-pointer hover:scale-105 transition-transform shadow-md"
                 />
                 <img 
-                  src="/src/assets/demo/people.jpg" 
+                  src={peopleImg}
                   alt="People" 
                   className="aspect-square rounded-lg object-cover cursor-pointer hover:scale-105 transition-transform shadow-md"
                 />
                 <img 
-                  src="/src/assets/demo/text.jpg" 
+                  src={textImg}
                   alt="Text document" 
                   className="aspect-square rounded-lg object-cover cursor-pointer hover:scale-105 transition-transform shadow-md"
                 />

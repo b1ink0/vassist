@@ -123,11 +123,11 @@ const SetupWizard = () => {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                <Icon name="settings" size={16} className={isLightBackground ? 'text-gray-800' : 'text-white'} />
+                <Icon name="settings" size={16} className='text-white' />
               </div>
               <div>
-                <h1 className={`text-sm sm:text-base font-bold ${isLightBackground ? 'text-gray-800' : 'text-white'}`}>Setup</h1>
-                <p className={`text-xs ${isLightBackground ? 'text-gray-600' : 'text-white/70'}`}>
+                <h1 className='text-sm sm:text-base font-bold ${isLightBackground text-white'>Setup</h1>
+                <p className='text-xs text-white/70'>
                   {currentStep}/{totalSteps}: {getStepTitle()}
                 </p>
               </div>
@@ -135,13 +135,9 @@ const SetupWizard = () => {
           </div>
 
           {/* Progress bar */}
-          <div className={`w-full h-1.5 ${isLightBackground ? 'bg-gray-800/20' : 'bg-white/20'} rounded-full overflow-hidden backdrop-blur-sm`}>
+          <div className='w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm'>
             <div
-              className={`h-full transition-all duration-500 ease-out ${
-                isLightBackground 
-                  ? 'bg-gradient-to-r from-gray-800/40 via-gray-800/60 to-gray-800/40 shadow-[0_0_10px_rgba(0,0,0,0.3)]'
-                  : 'bg-gradient-to-r from-white/40 via-white/60 to-white/40 shadow-[0_0_10px_rgba(255,255,255,0.5)]'
-              }`}
+              className='h-full transition-all duration-500 ease-out bg-gradient-to-r from-white/40 via-white/60 to-white/40 shadow-[0_0_10px_rgba(255,255,255,0.5)]'
               style={{ width: `${progress}%` }}
             />
           </div>

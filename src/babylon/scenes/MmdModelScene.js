@@ -1,6 +1,7 @@
 import "@babylonjs/core/Loading/loadingScreen";
 import "@babylonjs/core/Rendering/depthRendererSceneComponent";
 import "babylon-mmd/esm/Loader/Optimized/bpmxLoader";
+import "babylon-mmd/esm/Loader/mmdOutlineRenderer";
 import "babylon-mmd/esm/Runtime/Animation/mmdCompositeRuntimeCameraAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdCompositeRuntimeModelAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
@@ -189,11 +190,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const bvmdLoader = new BvmdLoader(scene);
   bvmdLoader.loggingEnabled = false;
 
-  // Material builder
+  // Material builder with outline support
   const materialBuilder = new MmdStandardMaterialBuilder();
-  materialBuilder.loadOutlineRenderingProperties = () => {
-    /* do nothing */
-  };
+  // Let it load outline properties from the model
 
   // ========================================
   // CAMERA ANIMATION LOADING (OPTIONAL)
@@ -311,7 +310,18 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     buildPhysics: finalConfig.enablePhysics,
   });
   
-  Logger.log('MmdModelScene', 'MMD model created');
+  // Enable and configure outline rendering on all materials
+  for (const mesh of modelMesh.metadata.meshes) {
+    const material = mesh.material;
+    if (material) {
+      material.renderOutline = true;
+      material.outlineWidth = 0.5; // Increase thickness (default is 0.01)
+      material.outlineColor.set(0, 0, 0); // Black outline
+      material.outlineAlpha = 1.0; // Full opacity
+    }
+  }
+  
+  Logger.log('MmdModelScene', 'MMD model created with outlines enabled');
 
   // ========================================
   // ANIMATION MANAGER INTEGRATION

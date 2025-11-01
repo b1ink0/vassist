@@ -8,6 +8,8 @@
  * - Persistent storage of log preferences
  */
 
+/* global chrome */
+
 import { StorageServiceProxy } from './proxies';
 
 class LoggerService {
@@ -31,16 +33,28 @@ class LoggerService {
     if (this.initialized) return;
 
     try {
-      // Load master switch state
-      this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
-
-      // Load category preferences
-      const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
+      // Check if we're in a service worker context (background script)
+      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
-      // Merge with defaults
-      Object.entries(savedCategories).forEach(([category, config]) => {
-        this.categories.set(category, config);
-      });
+      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
+        // In service worker, use chrome.storage.local directly
+        const result = await chrome.storage.local.get(['loggerEnabled', 'loggerCategories']);
+        this.enabled = result.loggerEnabled || false;
+        
+        if (result.loggerCategories) {
+          Object.entries(result.loggerCategories).forEach(([category, config]) => {
+            this.categories.set(category, config);
+          });
+        }
+      } else {
+        // In normal context, use StorageServiceProxy
+        this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
+        const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
+        
+        Object.entries(savedCategories).forEach(([category, config]) => {
+          this.categories.set(category, config);
+        });
+      }
 
       this.initialized = true;
     } catch (error) {
@@ -104,7 +118,13 @@ class LoggerService {
   async setEnabled(enabled) {
     this.enabled = enabled;
     try {
-      await StorageServiceProxy.configSave('loggerEnabled', enabled);
+      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+      
+      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
+        await chrome.storage.local.set({ loggerEnabled: enabled });
+      } else {
+        await StorageServiceProxy.configSave('loggerEnabled', enabled);
+      }
     } catch (error) {
       console.error('Failed to save logger enabled state:', error);
     }
@@ -137,7 +157,17 @@ class LoggerService {
       categoriesObj[category] = config;
     });
 
-    await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
+    try {
+      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+      
+      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
+        await chrome.storage.local.set({ loggerCategories: categoriesObj });
+      } else {
+        await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
+      }
+    } catch (error) {
+      console.error('Failed to save logger categories:', error);
+    }
   }
 
   /**
