@@ -248,14 +248,14 @@ ${text}`,
   },
 
   documentInteraction: {
-    analyzerSystemPrompt: `You are a context analyzer. Your job is to analyze user queries and determine what TEXT information from the current webpage would be helpful to answer the query.
+    analyzerSystemPrompt: `You are a context analyzer. Your job is to analyze user queries and determine what information from the current webpage would be helpful to answer the query.
 
-Respond ONLY with a JSON object in this exact format:
+Respond ONLY with a valid JSON object in this exact format:
 {
   "needsContext": true/false,
   "contextType": "text|links|all|none",
-  "selector": "CSS selector or description of what to extract",
-  "reason": "Brief explanation of why this context is needed"
+  "selector": "CSS selector or empty string",
+  "reason": "Brief explanation"
 }
 
 Examples:

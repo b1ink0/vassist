@@ -61,15 +61,16 @@ class AIServiceProxy extends ServiceProxy {
    * Send message with streaming support
    * @param {Array} messages - Array of message objects (OpenAI format)
    * @param {Function} onStream - Callback for streaming tokens
+   * @param {Object} options - Additional options { useUtilitySession: boolean }
    * @returns {Promise<string>} Full response text
    */
-  async sendMessage(messages, onStream = null) {
+  async sendMessage(messages, onStream = null, options = {}) {
     if (this.isExtension) {
       // Extension mode: streaming via message bridge
-      return await this.sendMessageViabridge(messages, onStream);
+      return await this.sendMessageViabridge(messages, onStream, options);
     } else {
       // Dev mode: direct service call
-      return await this.directService.sendMessage(messages, onStream);
+      return await this.directService.sendMessage(messages, onStream, null, options);
     }
   }
 
@@ -77,9 +78,10 @@ class AIServiceProxy extends ServiceProxy {
    * Send message via bridge (extension mode) with streaming
    * @param {Array} messages - Message array
    * @param {Function} onStream - Stream callback
+   * @param {Object} options - Additional options { useUtilitySession: boolean }
    * @returns {Promise<{success: boolean, response: string, cancelled: boolean, error: Error|null}>} Result object
    */
-  async sendMessageViabridge(messages, onStream) {
+  async sendMessageViabridge(messages, onStream, options = {}) {
     const bridge = await this.waitForBridge();
     if (!bridge) {
       throw new Error('AIServiceProxy: Bridge not available');
@@ -92,7 +94,7 @@ class AIServiceProxy extends ServiceProxy {
         
         await bridge.sendStreamingMessage(
           MessageTypes.AI_SEND_MESSAGE,
-          { messages },
+          { messages, options },
           (chunk) => {
             fullResponse += chunk;
             onStream(chunk);
@@ -106,7 +108,7 @@ class AIServiceProxy extends ServiceProxy {
         // Non-streaming mode
         const response = await bridge.sendMessage(
           MessageTypes.AI_SEND_MESSAGE,
-          { messages },
+          { messages, options },
           { timeout: 60000 } // 1 minute timeout
         );
         

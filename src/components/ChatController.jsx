@@ -190,9 +190,9 @@ const ChatController = ({
     const lastUserMessage = ChatService.getLastUserMessage();
     if (lastUserMessage && lastUserMessage.content) {
       try {
-        // Create AI send function for the analyzer
-        const aiSendMessage = async (messages, onStream) => {
-          return await AIServiceProxy.sendMessage(messages, onStream);
+        // Create AI send function for the analyzer (with utility session option)
+        const aiSendMessage = async (messages, onStream, options) => {
+          return await AIServiceProxy.sendMessage(messages, onStream, options);
         };
         
         const pageContext = await DocumentInteractionService.getContextForQuery(
@@ -532,9 +532,9 @@ const ChatController = ({
     const lastUserMessage = ChatService.getLastUserMessage();
     if (lastUserMessage && lastUserMessage.content) {
       try {
-        // Create AI send function for the analyzer
-        const aiSendMessage = async (messages, onStream) => {
-          return await AIServiceProxy.sendMessage(messages, onStream);
+        // Create AI send function for the analyzer (with utility session option)
+        const aiSendMessage = async (messages, onStream, options) => {
+          return await AIServiceProxy.sendMessage(messages, onStream, options);
         };
         
         const pageContext = await DocumentInteractionService.getContextForQuery(

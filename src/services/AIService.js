@@ -21,6 +21,7 @@ class AIService {
       this.config = null;
       this.abortController = null;
       this.chromeAISession = null;
+      this.chromeAIUtilitySession = null; // Separate session for utility calls (analyzer, etc.)
     }
   }
 
@@ -31,13 +32,14 @@ class AIService {
   initTab(tabId) {
     if (!this.isExtensionMode) return;
     
-    if (!this.tabStates.has(tabId)) {
+    if (this.isExtensionMode) {
       this.tabStates.set(tabId, {
         client: null,
         config: null,
         provider: null,
         abortController: null,
         chromeAISession: null,
+        chromeAIUtilitySession: null, // Separate session for utility calls (analyzer, etc.)
       });
       Logger.log('AIService', `Tab ${tabId} initialized`);
     }
@@ -328,9 +330,10 @@ class AIService {
    * @param {Array} messages - Array of message objects
    * @param {Function|null} onStream - Callback for streaming tokens
    * @param {number|null} tabId - Tab ID (extension mode only)
+   * @param {Object} options - Additional options { useUtilitySession: boolean }
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
-  async sendMessage(messages, onStream = null, tabId = null) {
+  async sendMessage(messages, onStream = null, tabId = null, options = {}) {
     const state = this._getState(tabId);
     
     if (!this.isConfigured(tabId)) {
@@ -346,6 +349,7 @@ class AIService {
       messageCount: messages.length,
       model: state.config.model || 'chrome-ai',
       hasImages,
+      useUtilitySession: options.useUtilitySession || false,
     });
 
     // Format messages for multi-modal if needed
@@ -355,7 +359,7 @@ class AIService {
 
     // Chrome AI implementation
     if (state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') {
-      return await this._sendMessageChromeAI(state, formattedMessages, onStream, logPrefix);
+      return await this._sendMessageChromeAI(state, formattedMessages, onStream, logPrefix, options.useUtilitySession);
     }
 
     // Create new abort controller for this request
@@ -434,15 +438,20 @@ class AIService {
    * @param {Array} messages - Message array {role, content}
    * @param {Function} onStream - Streaming callback
    * @param {string} logPrefix - Log prefix
+   * @param {boolean} useUtilitySession - Use utility session instead of main session
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
-  async _sendMessageChromeAI(state, messages, onStream, logPrefix) {
+  async _sendMessageChromeAI(state, messages, onStream, logPrefix, useUtilitySession = false) {
     try {
-      if (!state.chromeAISession) {
-        Logger.log('other', `${logPrefix} - Creating Chrome AI session...`);
-        
-        const systemPrompts = messages.filter(m => m.role === 'system');
-        const conversationMsgs = messages.filter(m => m.role !== 'system');
+      const systemPrompts = messages.filter(m => m.role === 'system');
+      const conversationMsgs = messages.filter(m => m.role !== 'system');
+      
+      // Choose which session to use
+      const sessionKey = useUtilitySession ? 'chromeAIUtilitySession' : 'chromeAISession';
+      let sessionToUse = state[sessionKey];
+      
+      if (!sessionToUse) {
+        Logger.log('other', `${logPrefix} - Creating Chrome AI ${useUtilitySession ? 'utility' : 'main'} session...`);
         
         if (!self.LanguageModel) {
           throw new Error('Chrome AI LanguageModel not available');
@@ -474,8 +483,10 @@ class AIService {
           }
         }
         
-        state.chromeAISession = await self.LanguageModel.create(sessionConfig);
-        Logger.log('other', `${logPrefix} - Chrome AI session created ${imageSupport ? 'with image support' : ''}`);
+        sessionToUse = await self.LanguageModel.create(sessionConfig);
+        state[sessionKey] = sessionToUse;
+        
+        Logger.log('other', `${logPrefix} - Chrome AI ${useUtilitySession ? 'utility' : 'main'} session created`);
         
         messages = conversationMsgs;
       }
@@ -491,11 +502,11 @@ class AIService {
       let fullResponse = '';
 
       if (onStream) {
-        const stream = state.chromeAISession.promptStreaming(promptInput);
+        const stream = sessionToUse.promptStreaming(promptInput);
         
         for await (const chunk of stream) {
           // Check if session was destroyed (aborted) - return cancelled
-          if (!state.chromeAISession) {
+          if (!state[sessionKey]) {
             Logger.log('other', `${logPrefix} - Chrome AI streaming aborted by user`);
             return { success: false, response: fullResponse, cancelled: true, error: null };
           }
@@ -508,7 +519,7 @@ class AIService {
           }
         }
       } else {
-        fullResponse = await state.chromeAISession.prompt(promptInput);
+        fullResponse = await sessionToUse.prompt(promptInput);
       }
 
       Logger.log('other', `${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);

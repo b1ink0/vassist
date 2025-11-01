@@ -33,7 +33,8 @@ class DocumentInteractionService {
         { role: 'user', content: PromptConfig.documentInteraction.analyzeQuery(userQuery) }
       ];
       
-      const result = await aiServiceSendMessage(messages, null);
+      // Use utility session for analysis (separate from main chat)
+      const result = await aiServiceSendMessage(messages, null, { useUtilitySession: true });
       
       if (!result.success || !result.response) {
         Logger.warn('other', `${logPrefix} Analysis failed:`, result.error);
