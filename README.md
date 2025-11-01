@@ -119,8 +119,8 @@ Once you've enabled all five flags, hit the **Relaunch** button at the bottom of
 ### Install VAssist Extension
 
 **From Release (Recommended)**
-1. Head to the [latest release page](https://github.com/b1ink0/vassist/releases/latest)
-2. Download the `vassist-extension.zip` file
+1. Head to the [GitHub releases page](https://github.com/b1ink0/vassist/releases)
+2. Download the latest `vassist-extension.zip` file
 3. Extract the zip file somewhere on your computer
 4. Open Chrome and go to `chrome://extensions`
 5. Turn on **Developer mode** (toggle in top-right corner)

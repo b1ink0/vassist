@@ -389,7 +389,7 @@ const DemoSite = () => {
               </button>
               
               <button 
-                onClick={() => {/* TODO: Add GitHub releases URL */}}
+                onClick={() => window.open('https://github.com/b1ink0/vassist/releases', '_blank')}
                 className={`w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg transition-all border ${isDark ? 'bg-white/10 backdrop-blur-sm text-white border-white/20 hover:bg-white/20' : 'bg-slate-100 text-slate-900 border-slate-200 hover:bg-slate-200'} flex items-center justify-center gap-2`}
               >
                 <Icon name="download" size={20} />
@@ -1284,7 +1284,15 @@ const DemoSite = () => {
               </div>
               <h3 className={`text-xl font-bold ${theme.textPrimary} mb-3 text-center`}>Download</h3>
               <p className={`${theme.textMuted} text-sm text-center`}>
-                Download the latest <span className="font-semibold">vassist-extension.zip</span> from the GitHub releases page
+                Download the latest <span className="font-semibold">vassist-extension.zip</span> from the{' '}
+                <a 
+                  href="https://github.com/b1ink0/vassist/releases" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-400 underline font-semibold"
+                >
+                  GitHub releases page
+                </a>
               </p>
             </div>
             
