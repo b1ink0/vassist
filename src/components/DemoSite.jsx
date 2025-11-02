@@ -19,6 +19,7 @@ import berriesImg from '../assets/demo/berries.jpg';
 import kittenImg from '../assets/demo/kitten.jpg';
 import peopleImg from '../assets/demo/people.jpg';
 import textImg from '../assets/demo/text.jpg';
+import logoSvg from '../assets/VA.svg';
 
 /**
  * Demo landing page component with interactive feature demonstrations.
@@ -136,7 +137,18 @@ const DemoSite = () => {
     setTranslateResponse('');
     
     try {
-      const result = await TranslatorServiceProxy.translate(translateText, 'en', targetLanguage);
+      // Detect source language first since user can edit the text
+      let sourceLanguage = 'en'; // fallback
+      try {
+        const detectionResults = await LanguageDetectorServiceProxy.detect(translateText);
+        if (detectionResults && detectionResults.length > 0) {
+          sourceLanguage = detectionResults[0].detectedLanguage;
+        }
+      } catch (detectError) {
+        setTranslateResponse('Error: ' + (detectError.message || 'Failed to detect source language'));
+      }
+      
+      const result = await TranslatorServiceProxy.translate(translateText, sourceLanguage, targetLanguage);
       setTranslateResponse(result);
     } catch (error) {
       setTranslateResponse('Error: ' + (error.message || 'Failed to translate'));
@@ -292,15 +304,17 @@ const DemoSite = () => {
   };
 
   return (
-    <div className={`absolute inset-0 overflow-auto custom-scrollbar transition-all duration-500 ${pageTheme === 'dark' ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'}`}>
+    <div className={`absolute inset-0 overflow-auto custom-scrollbar transition-all duration-500 ${pageTheme === 'dark' ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 bg-white'}`}>
       <div className={`fixed inset-0 opacity-40 ${isDark ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] " : "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgwLDAsMCwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')]"}`}></div>
       
       <nav className={`fixed top-0 left-0 right-0 z-40 backdrop-blur-md border-b transition-all duration-500 ${pageTheme === 'dark' ? 'bg-slate-900/80 border-white/10' : 'bg-white/80 border-slate-200'}`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Icon name="ai" size={24} className="text-white" />
-            </div>
+            <img 
+              src={logoSvg} 
+              alt="VAssist Logo" 
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+            />
             <div>
               <h1 className={`text-base sm:text-xl font-bold ${theme.textPrimary}`}>VAssist</h1>
               <p className={`text-[10px] sm:text-xs ${pageTheme === 'dark' ? 'text-purple-300' : 'text-purple-600'}`}>AI-Powered Companion</p>
@@ -1428,9 +1442,11 @@ const DemoSite = () => {
       <footer className="relative py-12 px-6 border-t border-white/10">
         <div className="max-w-7xl mx-auto text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Icon name="ai" size={24} className="text-white" />
-            </div>
+            <img 
+              src={logoSvg} 
+              alt="VAssist Logo" 
+              className="w-12 h-12 object-contain"
+            />
             <span className={`text-2xl font-bold ${theme.textPrimary}`}>VAssist</span>
           </div>
           
@@ -1453,7 +1469,7 @@ const DemoSite = () => {
               Features
             </button>
             <button 
-              onClick={() => {/* TODO: Add GitHub URL */}}
+              onClick={() => {window.open('https://github.com/b1ink0/vassist', '_blank')}}
               className={`${isDark ? 'text-white/70 hover:text-white' : 'text-slate-700 hover:text-slate-900'} transition-colors text-sm`}
             >
               GitHub
@@ -1464,10 +1480,6 @@ const DemoSite = () => {
             >
               Chrome AI Demos
             </button>
-          </div>
-          
-          <div className={`pt-6 ${isDark ? 'text-white/40' : 'text-slate-500'} text-xs`}>
-            © 2025 VAssist. Built for Chrome AI Challenge.
           </div>
         </div>
       </footer>

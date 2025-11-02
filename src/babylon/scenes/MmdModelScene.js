@@ -194,24 +194,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const materialBuilder = new MmdStandardMaterialBuilder();
   // Let it load outline properties from the model
 
-  // ========================================
-  // CAMERA ANIMATION LOADING (OPTIONAL)
-  // ========================================
-  
-  let cameraAnimation = null;
-  if (finalConfig.enableCameraAnimation && finalConfig.cameraAnimationUrl) {
-    try {
-      Logger.log('MmdModelScene', 'Loading camera animation:', finalConfig.cameraAnimationUrl);
-      cameraAnimation = await bvmdLoader.loadAsync(
-        "camera",
-        finalConfig.cameraAnimationUrl
-      );
-      Logger.log('MmdModelScene', 'Camera animation loaded successfully');
-    } catch (error) {
-      Logger.warn('MmdModelScene', 'Failed to load camera animation:', error);
-      // Continue without camera animation
-    }
-  }
 
   // ========================================
   // MODEL LOADING (ASYNC WITH PROGRESS)
@@ -278,17 +260,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     const havokPlugin = new HavokPlugin(true, havokInstance);
     scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
     Logger.log('MmdModelScene', 'Physics initialized');
-  }
-
-  // ========================================
-  // CAMERA ANIMATION SETUP
-  // ========================================
-  
-  if (cameraAnimation) {
-    mmdRuntime.setCamera(mmdCamera);
-    mmdCamera.addAnimation(cameraAnimation);
-    mmdCamera.setAnimation("camera");
-    Logger.log('MmdModelScene', 'Camera animation applied');
   }
 
   // ========================================

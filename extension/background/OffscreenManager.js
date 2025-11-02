@@ -187,11 +187,11 @@ export class OffscreenManager {
    */
   startKeepalive() {
     if (this.keepaliveInterval) return; // Already running
-    
-    console.log('[OffscreenManager] Starting keepalive pings (every 20s)');
+
+    Logger.log('OffscreenManager', 'Starting keepalive pings (every 20s)');
     this.keepaliveInterval = setInterval(() => {
       if (this.activeJobs > 0 || this.longRunningJobs.size > 0) {
-        Logger.log('OffscreenManager', 'Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running');
+        Logger.log('OffscreenManager', `Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running`);
         this.keepAlive();
       } else {
         // No active work, stop keepalive

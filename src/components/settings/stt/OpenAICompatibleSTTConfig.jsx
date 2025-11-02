@@ -4,6 +4,17 @@
  */
 
 const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
+  const handleFieldChange = (field, value) => {
+    if (onChange.length === 2) {
+      onChange(field, value);
+    } else {
+      onChange({
+        ...config,
+        [field]: value
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Endpoint URL */}
@@ -14,7 +25,7 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
         <input
           type="text"
           value={config.endpoint || ''}
-          onChange={(e) => onChange('endpoint', e.target.value)}
+          onChange={(e) => handleFieldChange('endpoint', e.target.value)}
           placeholder="http://localhost:8000"
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         />
@@ -29,7 +40,7 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
         <input
           type="password"
           value={config.apiKey || ''}
-          onChange={(e) => onChange('apiKey', e.target.value)}
+          onChange={(e) => handleFieldChange('apiKey', e.target.value)}
           placeholder="Leave empty if not required"
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         />
@@ -44,7 +55,7 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
         <input
           type="text"
           value={config.model || ''}
-          onChange={(e) => onChange('model', e.target.value)}
+          onChange={(e) => handleFieldChange('model', e.target.value)}
           placeholder="whisper"
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         />

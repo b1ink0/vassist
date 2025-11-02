@@ -24,7 +24,11 @@ import rewriterService from '../../src/services/RewriterService.js';
 import writerService from '../../src/services/WriterService.js';
 import Logger from '../../src/services/Logger';
 
-Logger.log('Background', 'Service worker starting...');
+console.log('Background: Service worker starting...');
+
+// Logger auto-initializes and loads settings from storage
+// To enable all logging for debugging, uncomment:
+// Logger.init().then(() => Logger.enableAll());
 
 /**
  * Register message handlers
@@ -303,22 +307,20 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.AI_SEND_MESSAGE, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     
-    const { messages } = message.data;
-    let fullResponse = '';
+    const { messages, options = {} } = message.data;
     
-    // Stream response back to content script (messages, onStream, tabId)
-    await aiService.sendMessage(messages, (token) => {
+    // Stream response back to content script (messages, onStream, tabId, options)
+    const result = await aiService.sendMessage(messages, (token) => {
       // Send streaming token back to content script
       chrome.tabs.sendMessage(sender.tab.id, {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token }
       }).catch(err => Logger.error('Background', 'Failed to send stream token:', err));
-      
-      fullResponse += token;
-    }, tabId);
+    }, tabId, options);
     
-    return { response: fullResponse };
+    // Return the result object (includes success, response, cancelled, error)
+    return result.success ? { response: result.response } : result;
   });
 
   backgroundBridge.registerHandler(MessageTypes.AI_ABORT, async (_message, _sender, tabId) => {
@@ -564,7 +566,7 @@ async function registerHandlers() {
         });
         Logger.log('Background', 'Kokoro model warmup complete');
       } catch (warmupError) {
-        console.warn('[Background] Model warmup failed (continuing anyway):', warmupError);
+        Logger.warn('Background', 'Kokoro model warmup failed (continuing anyway):', warmupError);
       }
       
       Logger.log('Background', 'KOKORO_INIT returning data:', result?.data);
@@ -1082,6 +1084,7 @@ chrome.tabs.onCreated.addListener(() => {
   startKeepAlive();
 });
 
-// Initialize
+// Initialize handlers
 registerHandlers();
-Logger.log('Background', 'Service worker ready');
+
+console.log('Background: Service worker initialized');

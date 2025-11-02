@@ -211,7 +211,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       description: 'Cloud-based AI with GPT models',
       iconName: 'ai',
       available: true,
-      recommended: !chromeAIAvailable, // Recommend if Chrome AI not available
+      recommended: false, // Recommend if Chrome AI not available
       requirements: 'API key required (paid service)',
       pros: ['Most capable models', 'Works on any browser', 'Regular updates', 'Reliable'],
       cons: ['Requires API key', 'Costs money per request', 'Needs internet', 'Data sent to OpenAI']

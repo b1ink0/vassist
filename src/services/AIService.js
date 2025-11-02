@@ -32,7 +32,7 @@ class AIService {
   initTab(tabId) {
     if (!this.isExtensionMode) return;
     
-    if (this.isExtensionMode) {
+    if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
         client: null,
         config: null,
@@ -523,6 +523,10 @@ class AIService {
       }
 
       Logger.log('other', `${logPrefix} - Chrome AI response (${fullResponse.length} chars)`);
+      
+      // Clean up excessive whitespace and newlines
+      fullResponse = fullResponse.trim().replace(/\n\s*\n\s*\n/g, '\n\n');
+      
       return { success: true, response: fullResponse, cancelled: false, error: null };
 
     } catch (error) {
@@ -618,9 +622,13 @@ class AIService {
         { role: 'user', content: 'Say "OK" if you can hear me.' }
       ];
 
-      const response = await this.sendMessage(testMessages, null, tabId);
+      const result = await this.sendMessage(testMessages, null, tabId);
       
-      Logger.log('other', `${logPrefix} - Connection test successful:`, response);
+      if (!result.success) {
+        throw result.error || new Error('Connection test failed');
+      }
+      
+      Logger.log('other', `${logPrefix} - Connection test successful:`, result.response);
       return true;
       
     } catch (error) {

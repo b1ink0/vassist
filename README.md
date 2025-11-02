@@ -10,7 +10,7 @@ VAssist brings an interactive 3D character to your browser, powered by Chrome's 
 
 ## Try Before Installing
 
-Want to see what VAssist can do before installing? Check out our [demo site](https://vassist-demo.vercel.app) and play around with all the features. No installation needed, just open it in Chrome and start chatting.
+Want to see what VAssist can do before installing? Check out [demo site](https://vassist-demo.vercel.app) and play around with all the features. No installation needed, just open it in Chrome and start chatting.
 
 ---
 

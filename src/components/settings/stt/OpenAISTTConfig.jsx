@@ -4,6 +4,17 @@
  */
 
 const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
+  const handleFieldChange = (field, value) => {
+    if (onChange.length === 2) {
+      onChange(field, value);
+    } else {
+      onChange({
+        ...config,
+        [field]: value
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* API Key */}
@@ -14,7 +25,7 @@ const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
         <input
           type="password"
           value={config.apiKey || ''}
-          onChange={(e) => onChange('apiKey', e.target.value)}
+          onChange={(e) => handleFieldChange('apiKey', e.target.value)}
           placeholder="sk-..."
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         />
@@ -37,7 +48,7 @@ const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
         <input
           type="text"
           value={config.model || 'whisper-1'}
-          onChange={(e) => onChange('model', e.target.value)}
+          onChange={(e) => handleFieldChange('model', e.target.value)}
           placeholder="whisper-1"
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         />

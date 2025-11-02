@@ -120,9 +120,6 @@ class ExtensionBridge {
       const requestId = ++this.requestId;
       const timeout = options.timeout || 30000;
       
-      // Store promise callbacks
-      this.pending.set(requestId, { resolve, reject });
-      
       // Set timeout for request
       const timeoutId = setTimeout(() => {
         if (this.pending.has(requestId)) {
@@ -131,22 +128,19 @@ class ExtensionBridge {
         }
       }, timeout);
       
-      // Clean up timeout on resolution
-      const originalResolve = resolve;
-      const originalReject = reject;
-      
+      // Store promise callbacks with timeout cleanup (do this BEFORE sending message)
       this.pending.set(requestId, {
         resolve: (value) => {
           clearTimeout(timeoutId);
-          originalResolve(value);
+          resolve(value);
         },
         reject: (error) => {
           clearTimeout(timeoutId);
-          originalReject(error);
+          reject(error);
         }
       });
       
-      // Send message to content script
+      // Send message to content script (after pending is set)
       window.postMessage({
         __VASSIST_MESSAGE__: true,
         type,

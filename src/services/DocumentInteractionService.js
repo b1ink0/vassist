@@ -20,10 +20,12 @@ class DocumentInteractionService {
    * Uses the configured AIService (works with any provider)
    * @param {string} userQuery - The user's message
    * @param {Function} aiServiceSendMessage - AIService.sendMessage function
+   * @param {number} retryCount - Number of retries attempted (internal)
    * @returns {Promise<Object|null>} Analysis result or null
    */
-  async analyzeQuery(userQuery, aiServiceSendMessage) {
+  async analyzeQuery(userQuery, aiServiceSendMessage, retryCount = 0) {
     const logPrefix = '[DocumentInteractionService]';
+    const maxRetries = 2; // Allow up to 2 retries
     
     try {
       Logger.log('other', `${logPrefix} Analyzing query:`, userQuery.substring(0, 50));
@@ -37,28 +39,143 @@ class DocumentInteractionService {
       const result = await aiServiceSendMessage(messages, null, { useUtilitySession: true });
       
       if (!result.success || !result.response) {
-        Logger.warn('other', `${logPrefix} Analysis failed:`, result.error);
+        // Don't log as error if it's just not configured (normal during initialization)
+        if (result.error?.message?.includes('not configured')) {
+          Logger.log('other', `${logPrefix} AI not configured yet, skipping analysis`);
+        } else {
+          Logger.warn('other', `${logPrefix} Analysis failed:`, result.error);
+        }
         return null;
       }
       
-      const response = result.response;
+      // Parse the JSON response with error handling
+      const analysis = this._parseAnalysisResponse(result.response);
       
-      // Extract JSON from response (handle markdown code blocks)
-      let jsonStr = response.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```\n?$/g, '');
+      if (!analysis) {
+        // Parsing failed - retry if we haven't exhausted retries
+        if (retryCount < maxRetries) {
+          Logger.warn('other', `${logPrefix} Parsing failed, retrying (${retryCount + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay before retry
+          return this.analyzeQuery(userQuery, aiServiceSendMessage, retryCount + 1);
+        }
+        
+        Logger.error('other', `${logPrefix} Failed to parse analysis after ${maxRetries} retries`);
+        return null;
       }
       
-      const analysis = JSON.parse(jsonStr);
       this.lastAnalysis = analysis;
-      
       Logger.log('other', `${logPrefix} Analysis result:`, analysis);
       return analysis;
       
     } catch (error) {
-      Logger.error('other', `${logPrefix} Analysis failed:`, error);
+      // On error, retry if we haven't exhausted retries
+      if (retryCount < maxRetries) {
+        Logger.warn('other', `${logPrefix} Analysis error, retrying (${retryCount + 1}/${maxRetries}):`, error.message);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return this.analyzeQuery(userQuery, aiServiceSendMessage, retryCount + 1);
+      }
+      
+      Logger.error('other', `${logPrefix} Analysis failed after ${maxRetries} retries:`, error);
       return null;
     }
+  }
+
+  /**
+   * Parse and validate the analysis response from AI
+   * Handles various JSON formats and validates structure
+   * @private
+   * @param {string} response - Raw AI response
+   * @returns {Object|null} Parsed analysis or null if invalid
+   */
+  _parseAnalysisResponse(response) {
+    const logPrefix = '[DocumentInteractionService]';
+    
+    try {
+      // Trim whitespace and remove excessive newlines
+      let jsonStr = response.trim().replace(/\n\s*\n/g, '\n');
+      
+      // Remove markdown code blocks if present
+      if (jsonStr.includes('```')) {
+        jsonStr = jsonStr.replace(/```json?\n?/gi, '').replace(/```\n?$/g, '');
+        jsonStr = jsonStr.trim();
+      }
+      
+      // Remove any leading/trailing text before/after JSON object
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[0];
+      }
+      
+      // Try to fix common JSON issues
+      jsonStr = this._sanitizeJSON(jsonStr);
+      
+      // Parse JSON
+      const analysis = JSON.parse(jsonStr);
+      
+      // Validate structure
+      if (!this._validateAnalysis(analysis)) {
+        Logger.error('other', `${logPrefix} Invalid analysis structure:`, analysis);
+        return null;
+      }
+      
+      return analysis;
+      
+    } catch (error) {
+      Logger.error('other', `${logPrefix} JSON parsing failed:`, error.message);
+      Logger.error('other', `${logPrefix} Raw response:`, response.substring(0, 200));
+      return null;
+    }
+  }
+
+  /**
+   * Sanitize JSON string to fix common issues
+   * @private
+   */
+  _sanitizeJSON(jsonStr) {
+    // Remove control characters (eslint-disable-next-line)
+    // eslint-disable-next-line no-control-regex
+    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, '');
+    
+    // Fix unescaped quotes in strings (basic attempt)
+    // This is tricky and not perfect, but helps with common cases
+    
+    // Remove trailing commas before closing braces/brackets
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+    
+    return jsonStr;
+  }
+
+  /**
+   * Validate analysis object structure
+   * @private
+   */
+  _validateAnalysis(analysis) {
+    if (!analysis || typeof analysis !== 'object') {
+      return false;
+    }
+    
+    // Required fields
+    if (typeof analysis.needsContext !== 'boolean') {
+      return false;
+    }
+    
+    // contextType must be one of the valid values
+    const validTypes = ['text', 'links', 'all', 'none'];
+    if (!validTypes.includes(analysis.contextType)) {
+      return false;
+    }
+    
+    // selector must be a string (can be empty)
+    if (typeof analysis.selector !== 'string') {
+      return false;
+    }
+    
+    // reason must be a string
+    if (typeof analysis.reason !== 'string') {
+      return false;
+    }
+    
+    return true;
   }
 
   /**

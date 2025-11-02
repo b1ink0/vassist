@@ -8,8 +8,6 @@
  * - Persistent storage of log preferences
  */
 
-/* global chrome */
-
 import { StorageServiceProxy } from './proxies';
 
 class LoggerService {
@@ -22,45 +20,89 @@ class LoggerService {
     this.categories = new Map(); // category -> { enabled: boolean, color: string }
     this.defaultColor = '#888888';
     this.initialized = false;
+    this.initPromise = null;
     
     LoggerService.instance = this;
   }
 
   /**
-   * Initialize logger with saved preferences
+   * Initialize logger with saved preferences from storage
    */
   async init() {
     if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
 
-    try {
-      // Check if we're in a service worker context (background script)
-      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-      
-      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
-        // In service worker, use chrome.storage.local directly
-        const result = await chrome.storage.local.get(['loggerEnabled', 'loggerCategories']);
-        this.enabled = result.loggerEnabled || false;
+    this.initPromise = (async () => {
+      try {
+        // Check if we're in service worker (background script)
+        const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
         
-        if (result.loggerCategories) {
-          Object.entries(result.loggerCategories).forEach(([category, config]) => {
-            this.categories.set(category, config);
+        if (isServiceWorker) {
+          const { default: storageManager } = await import('../storage/StorageManager.js');
+          
+          this.enabled = await storageManager.config.load('loggerEnabled', false);
+          const savedCategories = await storageManager.config.load('loggerCategories', {});
+          
+          Object.entries(savedCategories).forEach(([category, config]) => {
+            if (this.categories.has(category)) {
+              const existing = this.categories.get(category);
+              existing.enabled = config.enabled;
+              if (config.color) existing.color = config.color;
+            } else {
+              this.categories.set(category, config);
+            }
           });
+        } else {
+          // Main world or dev mode - use StorageServiceProxy
+          try {
+            this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
+            const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
+            
+            Object.entries(savedCategories).forEach(([category, config]) => {
+              if (this.categories.has(category)) {
+                const existing = this.categories.get(category);
+                existing.enabled = config.enabled;
+                if (config.color) existing.color = config.color;
+              } else {
+                this.categories.set(category, config);
+              }
+            });
+          } catch (error) {
+            // Bridge not ready yet, that's fine - use defaults
+            console.log('Logger: Storage not ready yet, using defaults');
+          }
         }
-      } else {
-        // In normal context, use StorageServiceProxy
-        this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
-        const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
         
-        Object.entries(savedCategories).forEach(([category, config]) => {
-          this.categories.set(category, config);
-        });
+        this.initialized = true;
+        console.log('Logger: Initialized from storage, enabled:', this.enabled);
+      } catch (error) {
+        console.error('Failed to initialize Logger:', error);
+        this.initialized = true; // Continue with defaults
       }
+    })();
 
-      this.initialized = true;
-    } catch (error) {
-      console.error('Failed to initialize Logger:', error);
-      this.initialized = true; // Continue anyway
-    }
+    return this.initPromise;
+  }
+
+  /**
+   * Apply configuration (alternative to loading from storage)
+   * @param {boolean} enabled - Master enable/disable
+   * @param {Object} categories - Category configuration {categoryName: {enabled: boolean, color: string}}
+   */
+  applyConfig(enabled, categories = {}) {
+    this.enabled = enabled;
+    
+    Object.entries(categories).forEach(([category, config]) => {
+      if (this.categories.has(category)) {
+        const existing = this.categories.get(category);
+        existing.enabled = config.enabled;
+        if (config.color) existing.color = config.color;
+      } else {
+        this.categories.set(category, config);
+      }
+    });
+    
+    console.log('Logger: Config applied, enabled:', this.enabled);
   }
 
   /**
@@ -113,15 +155,16 @@ class LoggerService {
   }
 
   /**
-   * Set master enable/disable
+   * Set master enable/disable and save to storage
    */
   async setEnabled(enabled) {
     this.enabled = enabled;
     try {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
-      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
-        await chrome.storage.local.set({ loggerEnabled: enabled });
+      if (isServiceWorker) {
+        const { default: storageManager } = await import('../storage/StorageManager.js');
+        await storageManager.config.save('loggerEnabled', enabled);
       } else {
         await StorageServiceProxy.configSave('loggerEnabled', enabled);
       }
@@ -131,7 +174,7 @@ class LoggerService {
   }
 
   /**
-   * Set category enable/disable
+   * Set category enable/disable and save to storage
    */
   async setCategoryEnabled(category, enabled) {
     if (!this.categories.has(category)) {
@@ -160,8 +203,9 @@ class LoggerService {
     try {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
-      if (isServiceWorker && typeof chrome !== 'undefined' && chrome.storage) {
-        await chrome.storage.local.set({ loggerCategories: categoriesObj });
+      if (isServiceWorker) {
+        const { default: storageManager } = await import('../storage/StorageManager.js');
+        await storageManager.config.save('loggerCategories', categoriesObj);
       } else {
         await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
       }
@@ -183,8 +227,14 @@ class LoggerService {
 
   /**
    * Check if logging is enabled for a category
+   * Triggers lazy initialization if needed
    */
   shouldLog(category) {
+    // Lazy init in extension mode
+    if (!this.initialized) {
+      this.init().catch(() => {}); // Fire and forget
+    }
+    
     if (!this.enabled) return false;
     if (!this.categories.has(category)) {
       this.registerCategory(category);
@@ -241,7 +291,7 @@ class LoggerService {
   }
 
   /**
-   * Enable all categories
+   * Enable all categories and save
    */
   async enableAllCategories() {
     this.categories.forEach((config) => {
@@ -251,7 +301,7 @@ class LoggerService {
   }
 
   /**
-   * Disable all categories
+   * Disable all categories and save
    */
   async disableAllCategories() {
     this.categories.forEach((config) => {
@@ -294,7 +344,9 @@ knownCategories.forEach(category => {
   Logger.registerCategory(category, null, false); // false = disabled by default
 });
 
-// Initialize on load
-Logger.init();
+// Auto-initialize Logger asynchronously in all modes
+Logger.init().catch(error => {
+  console.warn('Logger initialization failed, using defaults:', error);
+});
 
 export default Logger;

@@ -10,280 +10,93 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import path from 'path';
-import archiver from 'archiver';
+import { wrapContentScriptPlugin, copyAssetsPlugin } from './tools/vite-plugins/extension-plugins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const isProduction = process.argv.includes('--mode=production');
-const shouldZip = process.env.ZIP === 'true';
 
-/**
- * Recursively copy directory
- */
-function copyDir(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
+export default defineConfig(({ mode }) => {
+  const isProduction = mode === 'production';
+  const shouldZip = process.env.ZIP === 'true';
   
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    
-    if (entry.isDirectory()) {
-      copyDir(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-/**
- * Plugin to wrap content script as IIFE
- */
-function wrapContentScriptPlugin() {
   return {
-    name: 'wrap-content-script',
-    writeBundle() {
-      const distDir = path.join(__dirname, 'dist-extension');
-      const contentFile = path.join(distDir, 'content.js');
-      
-      if (!fs.existsSync(contentFile)) {
-        console.warn('[wrap-content] Warning: content.js not found');
-        return;
-      }
-      
-      console.log('[wrap-content] Wrapping content.js as IIFE...');
-      const content = fs.readFileSync(contentFile, 'utf-8');
-      
-      const wrapped = `/**
- * Content Script Entry Point (IIFE)
- * Loads the ES module content script
- */
-(function() {
-  'use strict';
-  
-  console.log('[Content Script IIFE] Initializing...');
-  
-  // Import the ES module content script
-  import(chrome.runtime.getURL('content-module.js'))
-    .then(() => {
-      console.log('[Content Script IIFE] Module loaded successfully');
-    })
-    .catch((error) => {
-      console.error('[Content Script IIFE] Failed to load module:', error);
-    });
-})();
-`;
-      
-      fs.writeFileSync(path.join(distDir, 'content-module.js'), content);
-      fs.writeFileSync(contentFile, wrapped);
-      console.log('[wrap-content] Content script wrapped successfully');
-    }
-  };
-}
-
-/**
- * Plugin to copy assets to extension build
- */
-function copyAssetsPlugin() {
-  return {
-    name: 'copy-assets',
-    closeBundle() {
-      const rootDir = __dirname;
-      const publicDir = path.join(rootDir, 'public');
-      const resDir = path.join(publicDir, 'res');
-      const iconsDir = path.join(rootDir, 'extension', 'icons');
-      const manifestFile = path.join(rootDir, 'extension', 'manifest.json');
-      const distDir = path.join(rootDir, 'dist-extension');
-      const distResDir = path.join(distDir, 'res');
-      const distIconsDir = path.join(distDir, 'icons');
-      const distManifestFile = path.join(distDir, 'manifest.json');
-      
-      console.log('[copy-assets] Copying assets to dist-extension...');
-      
-      if (fs.existsSync(resDir)) {
-        console.log(`[copy-assets] Copying ${resDir} to ${distResDir}`);
-        copyDir(resDir, distResDir);
-      }
-      
-      if (fs.existsSync(iconsDir)) {
-        console.log(`[copy-assets] Copying ${iconsDir} to ${distIconsDir}`);
-        copyDir(iconsDir, distIconsDir);
-      }
-      
-      if (fs.existsSync(manifestFile)) {
-        console.log(`[copy-assets] Copying ${manifestFile} to ${distManifestFile}`);
-        fs.copyFileSync(manifestFile, distManifestFile);
-      }
-      
-      // Copy ONNX Runtime WASM files from @huggingface/transformers to assets
-      const transformersPath = path.join(rootDir, 'node_modules', '@huggingface', 'transformers', 'dist');
-      const wasmDestDir = path.join(distDir, 'assets');
-      
-      if (fs.existsSync(transformersPath)) {
-        console.log('[copy-assets] Copying ONNX Runtime WASM files to assets...');
-        fs.mkdirSync(wasmDestDir, { recursive: true });
-        
-        // Only copy the 2 files we actually need
-        const wasmFiles = [
-          'ort-wasm-simd-threaded.jsep.wasm',
-          'ort-wasm-simd-threaded.jsep.mjs',
-        ];
-        
-        wasmFiles.forEach(file => {
-          const srcFile = path.join(transformersPath, file);
-          const destFile = path.join(wasmDestDir, file);
-          if (fs.existsSync(srcFile)) {
-            fs.copyFileSync(srcFile, destFile);
-            console.log(`[copy-assets] Copied ${file} to assets/`);
-          }
-        });
-      }
-      
-      // Move offscreen.html from extension/offscreen/ to root
-      const nestedOffscreenHtml = path.join(distDir, 'extension', 'offscreen', 'offscreen.html');
-      const rootOffscreenHtml = path.join(distDir, 'offscreen.html');
-      
-      if (fs.existsSync(nestedOffscreenHtml)) {
-        console.log('[copy-assets] Moving offscreen.html to root...');
-        fs.copyFileSync(nestedOffscreenHtml, rootOffscreenHtml);
-        // Remove the nested directory structure
-        fs.rmSync(path.join(distDir, 'extension'), { recursive: true, force: true });
-        console.log('[copy-assets] offscreen.html moved to root');
-      }
-      
-      console.log('[copy-assets] Asset copying complete!');
-      
-      // Create zip if --zip flag is passed
-      if (shouldZip) {
-        console.log('[zip-extension] Creating extension zip file...');
-        createExtensionZip(distDir);
-      }
-    }
-  };
-}
-
-/**
- * Create zip file of the extension
- */
-function createExtensionZip(distDir) {
-  const buildDir = path.join(__dirname, 'build');
-  fs.mkdirSync(buildDir, { recursive: true });
-  const outputFile = path.join(buildDir, 'vassist-extension.zip');
-  const output = fs.createWriteStream(outputFile);
-  const archive = archiver('zip', {
-    zlib: { level: 9 } // Maximum compression
-  });
-
-  output.on('close', () => {
-    const sizeInMB = (archive.pointer() / 1024 / 1024).toFixed(2);
-    console.log('[zip-extension] Extension packaged successfully!');
-    console.log(`[zip-extension] File: ${outputFile}`);
-    console.log(`[zip-extension] Size: ${sizeInMB} MB (${archive.pointer()} bytes)`);
-  });
-
-  archive.on('warning', (err) => {
-    if (err.code === 'ENOENT') {
-      console.warn('[zip-extension] Warning:', err);
-    } else {
-      throw err;
-    }
-  });
-
-  archive.on('error', (err) => {
-    console.error('[zip-extension] Error:', err);
-    throw err;
-  });
-
-  archive.pipe(output);
-  archive.directory(distDir, false);
-  archive.finalize();
-}
-
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    wrapContentScriptPlugin(), // Wrap content script as IIFE
-    copyAssetsPlugin(), // Copy assets and manifest to dist-extension
-  ],
-  
-  define: {
-    // Build-time constants for mode detection
-    __EXTENSION_MODE__: JSON.stringify(true),
-    __DEV_MODE__: JSON.stringify(false),
-  },
-  
-  build: {
-    outDir: 'dist-extension',
-    emptyOutDir: true,
+    plugins: [
+      react(),
+      tailwindcss(),
+      wrapContentScriptPlugin(), // Wrap content script as IIFE
+      copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
+    ],
     
-    rollupOptions: {
-      input: {
-        // Background service worker
-        background: resolve(__dirname, 'extension/background/index.js'),
-        
-        // Content script
-        content: resolve(__dirname, 'extension/content/index.js'),
-        
-        // Content script React app (main entry point)
-        'content-app': resolve(__dirname, 'extension/content/main.jsx'),
-        
-        // Content script styles (for shadow DOM)
-        'content-styles': resolve(__dirname, 'extension/content/styles.css'),
-        
-        // Offscreen document HTML (will automatically bundle the referenced offscreen.js)
-        'offscreen': resolve(__dirname, 'extension/offscreen/offscreen.html'),
-      },
+    define: {
+      // Build-time constants for mode detection
+      __EXTENSION_MODE__: JSON.stringify(true),
+      __DEV_MODE__: JSON.stringify(!isProduction),
+    },
+    
+    build: {
+      outDir: 'dist-extension',
+      emptyOutDir: true,
       
-      output: {
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js', // Same as entry to force inlining
-        assetFileNames: (assetInfo) => {
-          // Don't hash content-styles.css for easy loading
-          if (assetInfo.name === 'content-styles.css') {
-            return 'content-styles.css';
-          }
-          return 'assets/[name][extname]';
+      // Minify for production using esbuild
+      minify: isProduction ? 'esbuild' : false,
+      
+      rollupOptions: {
+        input: {
+          // Background service worker
+          background: resolve(__dirname, 'extension/background/index.js'),
+          
+          // Content script
+          content: resolve(__dirname, 'extension/content/index.js'),
+          
+          // Content script React app (main entry point)
+          'content-app': resolve(__dirname, 'extension/content/main.jsx'),
+          
+          // Content script styles (for shadow DOM)
+          'content-styles': resolve(__dirname, 'extension/content/styles.css'),
+          
+          // Offscreen document HTML (will automatically bundle the referenced offscreen.js)
+          'offscreen': resolve(__dirname, 'extension/offscreen/offscreen.html'),
         },
-        format: 'es',
         
-        // Force all shared code into entry files
-        manualChunks: () => null,
-        inlineDynamicImports: true,
+        output: {
+          entryFileNames: '[name].js',
+          chunkFileNames: '[name].js',
+          assetFileNames: (assetInfo) => {
+            // Don't hash content-styles.css for easy loading
+            if (assetInfo.name === 'content-styles.css') {
+              return 'content-styles.css';
+            }
+            return 'assets/[name][extname]';
+          },
+          format: 'es',
+          
+          // Prevent code splitting - inline everything
+          manualChunks: undefined,
+        },
+      },
+      
+      // Source maps for debugging
+      sourcemap: !isProduction,
+      
+      // Disable code splitting
+      chunkSizeWarningLimit: 50000,
+    },
+    
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'),
+        '@services': resolve(__dirname, './src/services'),
+        '@components': resolve(__dirname, './src/components'),
+        '@utils': resolve(__dirname, './src/utils'),
+        '@extension': resolve(__dirname, './extension'),
       },
     },
     
-    // Source maps for debugging
-    sourcemap: !isProduction,
-    
-    // Minify for production
-    minify: isProduction ? 'terser' : false,
-    
-    // Disable code splitting
-    chunkSizeWarningLimit: 50000,
-    
-    terserOptions: {
-      compress: {
-        drop_console: isProduction,
-      },
+    // Server config for dev mode (not used in extension build)
+    server: {
+      port: 3000,
+      open: true,
     },
-  },
-  
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-      '@services': resolve(__dirname, './src/services'),
-      '@components': resolve(__dirname, './src/components'),
-      '@utils': resolve(__dirname, './src/utils'),
-      '@extension': resolve(__dirname, './extension'),
-    },
-  },
-  
-  // Server config for dev mode (not used in extension build)
-  server: {
-    port: 3000,
-    open: true,
-  },
+  };
 });

@@ -60,6 +60,13 @@ const DEFAULT_SETUP_STATE = {
         apiKey: '',
         voice: 'nova',
       },
+      'openai-compatible': {
+        endpoint: 'http://localhost:8000',
+        apiKey: '',
+        model: 'tts',
+        voice: 'default',
+        speed: 1.0,
+      },
     },
     
     sttConfig: {
@@ -112,11 +119,33 @@ export function SetupProvider({ children }) {
   useEffect(() => {
     const loadSetupState = async () => {
       try {
-        const savedState = await StorageServiceProxy.configLoad('setupState', DEFAULT_SETUP_STATE);
-        Logger.log('SetupContext', 'Loaded setup state from storage:', savedState);
+        // Retry logic for extension mode where bridge might not be ready immediately
+        let retries = 0;
+        const maxRetries = 3;
+        let savedState = null;
+        
+        while (retries < maxRetries) {
+          try {
+            savedState = await StorageServiceProxy.configLoad('setupState', DEFAULT_SETUP_STATE);
+            Logger.log('SetupContext', 'Loaded setup state from storage:', savedState);
+            break; // Success - exit retry loop
+          } catch (error) {
+            retries++;
+            if (retries < maxRetries) {
+              Logger.warn('SetupContext', `Failed to load setup state (attempt ${retries}/${maxRetries}), retrying...`, error.message);
+              // Wait before retrying (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retries - 1)));
+            } else {
+              Logger.error('SetupContext', 'Failed to load setup state after all retries:', error);
+              // Use default state on final failure
+              savedState = DEFAULT_SETUP_STATE;
+            }
+          }
+        }
+        
         setSetupState(savedState);
       } catch (error) {
-        Logger.error('SetupContext', 'Failed to load setup state:', error);
+        Logger.error('SetupContext', 'Unexpected error in loadSetupState:', error);
         setSetupState(DEFAULT_SETUP_STATE);
       } finally {
         setIsLoading(false);
@@ -160,11 +189,12 @@ export function SetupProvider({ children }) {
    */
   const nextStep = useCallback(() => {
     setSetupState(prev => {
-      Logger.log('SetupContext', 'nextStep called - current:', prev.currentStep, 'going to:', prev.currentStep + 1);
-      if (prev.currentStep < TOTAL_STEPS) {
+      const currentStep = prev?.currentStep ?? 1;
+      Logger.log('SetupContext', 'nextStep called - current:', currentStep, 'going to:', currentStep + 1);
+      if (currentStep < TOTAL_STEPS) {
         return {
           ...prev,
-          currentStep: prev.currentStep + 1,
+          currentStep: currentStep + 1,
         };
       }
       return prev;
@@ -176,11 +206,12 @@ export function SetupProvider({ children }) {
    */
   const previousStep = useCallback(() => {
     setSetupState(prev => {
-      Logger.log('SetupContext', 'previousStep called - current:', prev.currentStep, 'going to:', prev.currentStep - 1);
-      if (prev.currentStep > 1) {
+      const currentStep = prev?.currentStep ?? 1;
+      Logger.log('SetupContext', 'previousStep called - current:', currentStep, 'going to:', currentStep - 1);
+      if (currentStep > 1) {
         return {
           ...prev,
-          currentStep: prev.currentStep - 1,
+          currentStep: currentStep - 1,
         };
       }
       return prev;
@@ -299,11 +330,11 @@ export function SetupProvider({ children }) {
           speed: 1.0,
         },
         'openai-compatible': {
-          endpoint: 'http://localhost:8000',
-          apiKey: '',
-          model: 'tts',
-          voice: 'default',
-          speed: 1.0,
+          endpoint: setupState.setupData.tts?.['openai-compatible']?.endpoint || 'http://localhost:8000',
+          apiKey: setupState.setupData.tts?.['openai-compatible']?.apiKey || '',
+          model: setupState.setupData.tts?.['openai-compatible']?.model || 'tts',
+          voice: setupState.setupData.tts?.['openai-compatible']?.voice || 'default',
+          speed: setupState.setupData.tts?.['openai-compatible']?.speed || 1.0,
         },
         chunkSize: 500,
         minChunkSize: 100,

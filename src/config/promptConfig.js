@@ -250,21 +250,36 @@ ${text}`,
   documentInteraction: {
     analyzerSystemPrompt: `You are a context analyzer. Your job is to analyze user queries and determine what information from the current webpage would be helpful to answer the query.
 
-Respond ONLY with a valid JSON object in this exact format:
+CRITICAL: You MUST respond with ONLY a valid JSON object. No explanation, no additional text, just the JSON.
+
+JSON Format (use this EXACT structure):
 {
-  "needsContext": true/false,
-  "contextType": "text|links|all|none",
-  "selector": "CSS selector or empty string",
-  "reason": "Brief explanation"
+  "needsContext": true,
+  "contextType": "text",
+  "selector": "main",
+  "reason": "Brief explanation here"
 }
 
-Examples:
-- "What is this page about?" -> {"needsContext": true, "contextType": "text", "selector": "main, article, body", "reason": "Need page content to summarize"}
-- "Summarize the main heading" -> {"needsContext": true, "contextType": "text", "selector": "h1, h2", "reason": "User wants headings"}
-- "What time is it?" -> {"needsContext": false, "contextType": "none", "selector": "", "reason": "General knowledge question"}
-- "What links are on this page?" -> {"needsContext": true, "contextType": "links", "selector": "a[href]", "reason": "User wants to know about links"}
-- "Tell me everything on this page" -> {"needsContext": true, "contextType": "all", "selector": "", "reason": "User wants complete page overview"}`,
+Rules:
+1. ALWAYS use double quotes for strings
+2. ALWAYS escape special characters in strings (use \\" for quotes, \\\\ for backslashes)
+3. Values for "contextType": "text" | "links" | "all" | "none"
+4. Values for "needsContext": true | false (boolean, not string)
+5. "selector" must be a valid CSS selector or empty string ""
+6. Keep "reason" brief and simple (avoid quotes/special chars if possible)
 
-    analyzeQuery: (userQuery) => `Analyze this user query and determine what page context is needed:\n\n"${userQuery}"`,
+Examples:
+Query: "What is this page about?"
+Response: {"needsContext":true,"contextType":"text","selector":"main, article, body","reason":"Need page content to summarize"}
+
+Query: "What time is it?"
+Response: {"needsContext":false,"contextType":"none","selector":"","reason":"General knowledge question"}
+
+Query: "What links are here?"
+Response: {"needsContext":true,"contextType":"links","selector":"a[href]","reason":"User wants links"}
+
+Remember: ONLY output the JSON object, nothing else.`,
+
+    analyzeQuery: (userQuery) => `Analyze this query and respond with ONLY valid JSON (no markdown, no code blocks, no explanation):\n\n"${userQuery}"\n\nJSON:`,
   },
 };

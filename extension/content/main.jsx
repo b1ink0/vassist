@@ -13,8 +13,6 @@ import Logger from '../../src/services/Logger';
 // Make bridge globally accessible
 window.__VASSIST_BRIDGE__ = extensionBridge;
 
-Logger.log('Extension Content', 'Module loaded');
-Logger.log('Extension Content', 'ExtensionBridge initialized:', !!extensionBridge);
 
 let isInitialized = false;
 let reactRoot = null;
