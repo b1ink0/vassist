@@ -125,15 +125,17 @@ const VirtualAssistant = forwardRef((props, ref) => {
     const handleDragEnd = () => {
       // Only save if preset is set to 'last-location'
       if (uiConfig.position?.preset === 'last-location' && positionManager) {
-        const currentPos = {
-          x: positionManager.positionX,
-          y: positionManager.positionY,
-          width: positionManager.modelWidthPx,
-          height: positionManager.modelHeightPx
-        };
-        
-        Logger.log('VirtualAssistant', 'Saving last location:', currentPos);
-        updateUIConfig('position.lastLocation', currentPos);
+        setTimeout(() => {
+          const currentPos = {
+            x: positionManager.positionX,
+            y: positionManager.positionY,
+            width: positionManager.modelWidthPx,
+            height: positionManager.effectiveHeightPx
+          };
+          
+          Logger.log('VirtualAssistant', 'Saving last location:', currentPos);
+          updateUIConfig('position.lastLocation', currentPos);
+        }, 100);
       }
     };
     

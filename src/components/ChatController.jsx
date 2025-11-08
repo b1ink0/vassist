@@ -28,6 +28,7 @@ const ChatController = ({
   modelDisabled = false
 }) => {
   const chatInputRef = useRef(null);
+  const streamAbortControllerRef = useRef(null); // Track current stream to allow cancellation
   
   const {
     assistantRef,
@@ -171,6 +172,10 @@ const ChatController = ({
    * Streams AI response with TTS generation.
    */
   const streamAIResponse = async () => {
+    // Create abort controller for this stream
+    const abortController = new AbortController();
+    streamAbortControllerRef.current = abortController;
+    
     const autoTTSSessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     let savedConfig, ttsConfig;
@@ -189,6 +194,14 @@ const ChatController = ({
     // DOCUMENT INTERACTION: Extract page context based on user query
     const lastUserMessage = ChatService.getLastUserMessage();
     if (lastUserMessage && lastUserMessage.content) {
+      Logger.log('ChatController', 'Starting document interaction analysis...');
+      
+      // Check if aborted before starting
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', 'Document interaction cancelled before starting');
+        return { success: false, cancelled: true };
+      }
+      
       try {
         // Create AI send function for the analyzer (with utility session option)
         const aiSendMessage = async (messages, onStream, options) => {
@@ -197,8 +210,17 @@ const ChatController = ({
         
         const pageContext = await DocumentInteractionService.getContextForQuery(
           lastUserMessage.content, 
-          aiSendMessage
+          aiSendMessage,
+          abortController.signal
         );
+        
+        // Check if aborted after document interaction
+        if (abortController.signal.aborted) {
+          Logger.log('ChatController', 'Stream cancelled after document interaction');
+          return { success: false, cancelled: true };
+        }
+        
+        Logger.log('ChatController', 'Document interaction complete, message count:', ChatService.getMessages().length);
         
         if (pageContext) {
           Logger.log('ChatController', 'Injecting page context into AI prompt');
@@ -301,14 +323,22 @@ const ChatController = ({
     });
 
     const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', 'Streaming callback aborted, ignoring chunk');
+        return;
+      }
+      
       fullResponse += chunk;
       textBuffer += chunk;
 
       const currentMessages = ChatService.getMessages();
+      Logger.log('ChatController', 'Streaming chunk received, current message count:', currentMessages.length);
       if (currentMessages.length > 0 && 
           currentMessages[currentMessages.length - 1].role === 'assistant') {
+        Logger.log('ChatController', 'Updating existing assistant message');
         ChatService.updateLastMessage(fullResponse);
       } else {
+        Logger.log('ChatController', 'Adding new assistant message (no existing one found!)');
         ChatService.addMessage('assistant', fullResponse);
       }
       setChatMessages([...ChatService.getMessages()]);
@@ -342,6 +372,7 @@ const ChatController = ({
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
+      streamAbortControllerRef.current = null;
       setIsProcessing(false);
       return { success: false, cancelled: true };
     }
@@ -355,6 +386,7 @@ const ChatController = ({
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
+      streamAbortControllerRef.current = null;
       setIsProcessing(false);
       return { success: false, error: errorMessage };
     }
@@ -372,6 +404,9 @@ const ChatController = ({
     }
     
     TTSServiceProxy.setAudioFinishedCallback(null);
+    
+    // Clear abort controller on successful completion
+    streamAbortControllerRef.current = null;
 
     return { success: true, fullResponse };
   };
@@ -390,10 +425,18 @@ const ChatController = ({
     const attachmentStr = attachmentInfo.length > 0 ? ` with ${attachmentInfo.join(' and ')}` : '';
     Logger.log('ChatController', 'Message sent:', message, attachmentStr);
 
+    // Cancel any ongoing stream (including document interaction)
+    if (streamAbortControllerRef.current) {
+      Logger.log('ChatController', 'Aborting ongoing stream (including document interaction)');
+      streamAbortControllerRef.current.abort();
+      streamAbortControllerRef.current = null;
+    }
+    
+    // Also abort AI generation if it's running
     if (AIServiceProxy.isGenerating()) {
-      Logger.log('ChatController', 'Aborting ongoing AI generation before adding new message');
+      Logger.log('ChatController', 'Aborting ongoing AI generation');
       AIServiceProxy.abortRequest();
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     ChatService.addMessage('user', message, images, audios);
@@ -489,11 +532,16 @@ const ChatController = ({
    * Gets AI response and speaks it through VoiceConversationService.
    */
   const handleVoiceAIResponse = async () => {
+    // Create abort controller for this stream
+    const abortController = new AbortController();
+    streamAbortControllerRef.current = abortController;
+    
     setIsProcessing(true)
 
     if (!AIServiceProxy.isConfigured()) {
       ChatService.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.');
       setChatMessages([...ChatService.getMessages()]);
+      streamAbortControllerRef.current = null;
       setIsProcessing(false);
       VoiceConversationService.changeState(ConversationStates.LISTENING);
       return;
@@ -531,6 +579,13 @@ const ChatController = ({
     // DOCUMENT INTERACTION: Extract page context for voice queries too
     const lastUserMessage = ChatService.getLastUserMessage();
     if (lastUserMessage && lastUserMessage.content) {
+      // Check if aborted before starting
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');
+        streamAbortControllerRef.current = null;
+        return;
+      }
+      
       try {
         // Create AI send function for the analyzer (with utility session option)
         const aiSendMessage = async (messages, onStream, options) => {
@@ -539,8 +594,16 @@ const ChatController = ({
         
         const pageContext = await DocumentInteractionService.getContextForQuery(
           lastUserMessage.content,
-          aiSendMessage
+          aiSendMessage,
+          abortController.signal
         );
+        
+        // Check if aborted after document interaction
+        if (abortController.signal.aborted) {
+          Logger.log('ChatController', '[Voice] Stream cancelled after document interaction');
+          streamAbortControllerRef.current = null;
+          return;
+        }
         
         if (pageContext) {
           Logger.log('ChatController', '[Voice] Injecting page context into AI prompt');
@@ -625,6 +688,11 @@ const ChatController = ({
     })
 
     const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', '[Voice] Streaming callback aborted, ignoring chunk');
+        return;
+      }
+      
       fullResponse += chunk
       textBuffer += chunk
 
@@ -664,6 +732,7 @@ const ChatController = ({
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
       }
+      streamAbortControllerRef.current = null;
       setIsProcessing(false)
       return
     }
@@ -676,6 +745,7 @@ const ChatController = ({
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle()
       }
+      streamAbortControllerRef.current = null;
       setIsProcessing(false)
       return
     }
@@ -701,6 +771,8 @@ const ChatController = ({
       VoiceConversationService.changeState(ConversationStates.LISTENING)
     }
 
+    // Clear abort controller on successful completion
+    streamAbortControllerRef.current = null;
     setIsProcessing(false);
   }
 

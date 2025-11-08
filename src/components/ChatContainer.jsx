@@ -243,7 +243,8 @@ const ChatContainer = ({
     }
     
     return { x: 0, y: 0 };
-  }, [modelDisabled, positionManagerRef, chatInputRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelDisabled]);
 
   useEffect(() => {
     if (!modelDisabled || buttonInitializedRef.current) return;
@@ -275,8 +276,59 @@ const ChatContainer = ({
     if (!isVisible) return;
     
     const handleModelPosition = () => {
-      const newPos = calculateContainerPosition();
-      setContainerPos(newPos);
+      // Events are already RAF-throttled by PositionManager, just update directly
+      // Use .current to access latest refs without recreating handler
+      const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+      
+      if (modelDisabled) {
+        const buttonPos = buttonPosRef.current;
+        const containerWidth = 400;
+        const containerHeight = 400;
+        const offsetY = 5;
+        const buttonSize = 48;
+        
+        const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+        let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
+        containerY = Math.max(10, containerY);
+        const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
+        containerY = Math.min(containerY, maxY);
+        
+        setContainerPos({ x: containerX, y: containerY });
+      } else if (positionManagerRef?.current) {
+        try {
+          const modelPos = positionManagerRef.current.getPositionPixels();
+          const containerWidth = 400;
+          const containerHeight = 500;
+          const offsetX = 15;
+          const windowWidth = window.innerWidth;
+          const windowHeight = window.innerHeight;
+          
+          const rightX = modelPos.x + modelPos.width + offsetX;
+          const leftX = modelPos.x - containerWidth - offsetX;
+          const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
+          const wouldOverflowLeft = leftX < 10;
+          const modelRightEdge = modelPos.x + modelPos.width;
+          const wouldOverlapRight = modelRightEdge > rightX;
+          
+          let shouldBeOnLeft = false;
+          if (wouldOverflowRight) {
+            shouldBeOnLeft = true;
+          } else if (wouldOverlapRight && !wouldOverflowLeft) {
+            shouldBeOnLeft = true;
+          } else if (modelPos.x > windowWidth * 0.7) {
+            shouldBeOnLeft = true;
+          }
+          
+          let containerX = shouldBeOnLeft ? leftX : rightX;
+          containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+          let containerY = modelPos.y;
+          containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
+          
+          setContainerPos({ x: containerX, y: containerY });
+        } catch (error) {
+          Logger.error('ChatContainer', 'Failed to calculate model position:', error);
+        }
+      }
     };
 
     if (!modelDisabled) {
@@ -284,7 +336,8 @@ const ChatContainer = ({
       window.addEventListener('modelPositionChange', handleModelPosition);
       return () => window.removeEventListener('modelPositionChange', handleModelPosition);
     }
-  }, [isVisible, modelDisabled, calculateContainerPosition]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, modelDisabled]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -490,8 +543,31 @@ const ChatContainer = ({
    */
   useEffect(() => {
     if (!isVisible) return;
+
+    const isAdaptiveMode = uiConfig?.backgroundDetection?.mode === 'adaptive';
+    if (!isAdaptiveMode) {
+      const forcedMode = uiConfig?.backgroundDetection?.mode;
+      if (forcedMode === 'light') {
+        setIsLightBackground(true);
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.classList.add('light-bg');
+        }
+      } else if (forcedMode === 'dark') {
+        setIsLightBackground(false);
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.classList.remove('light-bg');
+        }
+      }
+      return;
+    }
+    
+    let detectionTimeout = null;
+    let scrollTimeout = null;
+    let intervalId = null;
     
     const detectBackgroundBrightness = () => {
+      if (isDraggingButton || isDraggingModel) return;
+      
       const canvas = document.getElementById('vassist-babylon-canvas');
       const container = containerRef.current;
       
@@ -532,27 +608,27 @@ const ChatContainer = ({
       });
     };
     
-    detectBackgroundBrightness();
+    // Initial detection with delay
+    detectionTimeout = setTimeout(detectBackgroundBrightness, 400);
     
-    const timeoutId = setTimeout(detectBackgroundBrightness, 400);
-    
-    let scrollTimeout;
+    // Debounced scroll handler
     const handleScroll = () => {
       clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(detectBackgroundBrightness, 200);
+      scrollTimeout = setTimeout(detectBackgroundBrightness, 500);
     };
     
     window.addEventListener('scroll', handleScroll, true);
     
-    const intervalId = setInterval(detectBackgroundBrightness, 4000);
+    // Periodic detection (less frequent)
+    intervalId = setInterval(detectBackgroundBrightness, 4000);
 
     return () => {
-      clearTimeout(timeoutId);
+      clearTimeout(detectionTimeout);
       clearTimeout(scrollTimeout);
       window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
-  }, [isVisible, containerPos]);
+  }, [isVisible, containerPos, isDraggingButton, isDraggingModel, uiConfig?.backgroundDetection?.mode]);
 
   /**
    * Sets up audio start callback for updating UI when audio starts playing.
@@ -665,9 +741,10 @@ const ChatContainer = ({
     const scrollTop = container.scrollTop;
     const clientHeight = container.clientHeight;
     
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < clientHeight;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const shouldScroll = distanceFromBottom < clientHeight * 3;
     
-    if (isNearBottom) {
+    if (shouldScroll) {
       container.scrollTo({
         top: scrollHeight,
         behavior: 'smooth'
@@ -676,29 +753,17 @@ const ChatContainer = ({
   }, []);
 
   useEffect(() => {
-    let lastScrollTime = 0;
-    const THROTTLE_MS = 200;
+    if (!isVisible || messages.length === 0) return;
     
-    const handleStreamingUpdate = () => {
-      const now = Date.now();
-      
-      if (now - lastScrollTime < THROTTLE_MS) {
-        return;
-      }
-      
-      lastScrollTime = now;
-      
+    const lastMessage = messages[messages.length - 1];
+    
+    // Auto-scroll when assistant message is being updated (streaming)
+    if (lastMessage?.role === 'assistant') {
       requestAnimationFrame(() => {
         scrollToBottom();
       });
-    };
-
-    window.addEventListener('streamingWordAdded', handleStreamingUpdate);
-    
-    return () => {
-      window.removeEventListener('streamingWordAdded', handleStreamingUpdate);
-    };
-  }, [scrollToBottom]);
+    }
+  }, [messages, isVisible, scrollToBottom]);
 
   /**
    * Scroll to bottom immediately when chat opens (from button or history)

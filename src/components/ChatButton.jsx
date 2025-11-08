@@ -52,144 +52,166 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   /**
    * Detect background color under the button
    */
-  const detectBackgroundColor = useCallback(() => {
-    if (!buttonRef.current) {
-      Logger.log('ChatButton', 'detectBackgroundColor: no button ref');
-      return;
-    }
+  useEffect(() => {
+    if (!shouldRender || isDragging) return;
     
-    const buttonRect = buttonRef.current.getBoundingClientRect();
-    const x = buttonRect.left + buttonRect.width / 2;
-    const y = buttonRect.top + buttonRect.height / 2;
+    let detectionTimeout = null;
+    let scrollTimeout = null;
     
-    Logger.log('ChatButton', 'Detecting background at:', { x, y });
-    
-    // Create a temporary invisible sampling element
-    const sampler = document.createElement('div');
-    sampler.style.position = 'fixed';
-    sampler.style.left = `${x}px`;
-    sampler.style.top = `${y}px`;
-    sampler.style.width = '1px';
-    sampler.style.height = '1px';
-    sampler.style.pointerEvents = 'none';
-    sampler.style.zIndex = '-1';
-    sampler.style.opacity = '0';
-    document.body.appendChild(sampler);
-    
-    // Use the button's position to find what's underneath
-    // We'll lower the button's z-index temporarily
-    const originalZIndex = buttonRef.current.style.zIndex;
-    buttonRef.current.style.zIndex = '-2';
-    
-    // Get element under the sampler position
-    const elementBelow = document.elementFromPoint(x, y);
-    
-    // Restore button z-index
-    buttonRef.current.style.zIndex = originalZIndex;
-    
-    // Remove sampler
-    document.body.removeChild(sampler);
-    
-    if (!elementBelow) {
-      Logger.log('ChatButton', 'No element found below button');
-      return;
-    }
-    
-    Logger.log('ChatButton', 'Element below:', elementBelow.tagName, elementBelow.className);
-    
-    // Get computed background color
-    const computedStyle = window.getComputedStyle(elementBelow);
-    let bgColor = computedStyle.backgroundColor;
-    
-    Logger.log('ChatButton', 'Initial bgColor:', bgColor);
-    
-    // If transparent, check parent elements
-    let currentElement = elementBelow;
-    let depth = 0;
-    while ((bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') && depth < 10) {
-      currentElement = currentElement.parentElement;
-      if (!currentElement) {
-        // Check HTML element and document
-        const htmlBg = window.getComputedStyle(document.documentElement).backgroundColor;
-        Logger.log('ChatButton', 'Checking HTML element:', htmlBg);
-        if (htmlBg && htmlBg !== 'rgba(0, 0, 0, 0)' && htmlBg !== 'transparent') {
-          bgColor = htmlBg;
+    const detectBackgroundColor = () => {
+      if (!buttonRef.current) {
+        Logger.log('ChatButton', 'detectBackgroundColor: no button ref');
+        return;
+      }
+      
+      const mode = uiConfig?.backgroundDetection?.mode || 'adaptive';
+      
+      if (mode !== 'adaptive') {
+        if (mode === 'light') {
+          setIsLightBackground(true);
+        } else if (mode === 'dark') {
+          setIsLightBackground(false);
+        }
+        return;
+      }
+      
+      const buttonRect = buttonRef.current.getBoundingClientRect();
+      const x = buttonRect.left + buttonRect.width / 2;
+      const y = buttonRect.top + buttonRect.height / 2;
+      
+      Logger.log('ChatButton', 'Detecting background at:', { x, y });
+      
+      // Create a temporary invisible sampling element
+      const sampler = document.createElement('div');
+      sampler.style.position = 'fixed';
+      sampler.style.left = `${x}px`;
+      sampler.style.top = `${y}px`;
+      sampler.style.width = '1px';
+      sampler.style.height = '1px';
+      sampler.style.pointerEvents = 'none';
+      sampler.style.zIndex = '-1';
+      sampler.style.opacity = '0';
+      document.body.appendChild(sampler);
+      
+      // Use the button's position to find what's underneath
+      // We'll lower the button's z-index temporarily
+      const originalZIndex = buttonRef.current.style.zIndex;
+      buttonRef.current.style.zIndex = '-2';
+      
+      // Get element under the sampler position
+      const elementBelow = document.elementFromPoint(x, y);
+      
+      // Restore button z-index
+      buttonRef.current.style.zIndex = originalZIndex;
+      
+      // Remove sampler
+      document.body.removeChild(sampler);
+      
+      if (!elementBelow) {
+        Logger.log('ChatButton', 'No element found below button');
+        return;
+      }
+      
+      Logger.log('ChatButton', 'Element below:', elementBelow.tagName, elementBelow.className);
+      
+      // Get computed background color
+      const computedStyle = window.getComputedStyle(elementBelow);
+      let bgColor = computedStyle.backgroundColor;
+      
+      Logger.log('ChatButton', 'Initial bgColor:', bgColor);
+      
+      // If transparent, check parent elements
+      let currentElement = elementBelow;
+      let depth = 0;
+      while ((bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') && depth < 10) {
+        currentElement = currentElement.parentElement;
+        if (!currentElement) {
+          // Check HTML element and document
+          const htmlBg = window.getComputedStyle(document.documentElement).backgroundColor;
+          Logger.log('ChatButton', 'Checking HTML element:', htmlBg);
+          if (htmlBg && htmlBg !== 'rgba(0, 0, 0, 0)' && htmlBg !== 'transparent') {
+            bgColor = htmlBg;
+            break;
+          }
+          // Default to white if everything is transparent
+          bgColor = 'rgb(255, 255, 255)';
+          Logger.log('ChatButton', 'Everything transparent, defaulting to white');
           break;
         }
-        // Default to white if everything is transparent
-        bgColor = 'rgb(255, 255, 255)';
-        Logger.log('ChatButton', 'Everything transparent, defaulting to white');
-        break;
+        bgColor = window.getComputedStyle(currentElement).backgroundColor;
+        Logger.log('ChatButton', 'Checking parent:', currentElement.tagName, bgColor);
+        depth++;
       }
-      bgColor = window.getComputedStyle(currentElement).backgroundColor;
-      Logger.log('ChatButton', 'Checking parent:', currentElement.tagName, bgColor);
-      depth++;
-    }
-    
-    // Special handling for canvas elements - sample pixel color
-    if (elementBelow.tagName === 'CANVAS') {
-      try {
-        const canvas = elementBelow;
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = x - rect.left;
-        const canvasY = y - rect.top;
-        
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (ctx) {
-          const imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
-          const [r, g, b, a] = imageData.data;
+      
+      // Special handling for canvas elements - sample pixel color
+      if (elementBelow.tagName === 'CANVAS') {
+        try {
+          const canvas = elementBelow;
+          const rect = canvas.getBoundingClientRect();
+          const canvasX = x - rect.left;
+          const canvasY = y - rect.top;
           
-          // Only use canvas pixel if it's not fully transparent
-          if (a > 0) {
-            bgColor = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-            Logger.log('ChatButton', 'Sampled canvas pixel:', bgColor);
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            const imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
+            const [r, g, b, a] = imageData.data;
+            
+            // Only use canvas pixel if it's not fully transparent
+            if (a > 0) {
+              bgColor = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+              Logger.log('ChatButton', 'Sampled canvas pixel:', bgColor);
+            }
           }
+        } catch (err) {
+          Logger.log('ChatButton', 'Canvas sampling failed (CORS or context):', err.message);
         }
-      } catch (err) {
-        Logger.log('ChatButton', 'Canvas sampling failed (CORS or context):', err.message);
       }
-    }
-    
-    // Parse RGB values
-    const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (rgbMatch) {
-      const r = parseInt(rgbMatch[1]);
-      const g = parseInt(rgbMatch[2]);
-      const b = parseInt(rgbMatch[3]);
       
-      // Calculate perceived brightness (0-255)
-      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-      
-      Logger.log('ChatButton', 'RGB:', { r, g, b, brightness });
-      
-      // If brightness > 128, it's a light background
-      const isLight = brightness > 128;
-      Logger.log('ChatButton', 'Background is:', isLight ? 'LIGHT' : 'DARK');
-      setIsLightBackground(isLight);
-    } else {
-      Logger.log('ChatButton', 'Failed to parse color:', bgColor);
-    }
-  }, []);
-
-  /**
-   * Run background detection when button position changes
-   */
-  useEffect(() => {
-    if (!shouldRender) return;
+      // Parse RGB values
+      const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (rgbMatch) {
+        const r = parseInt(rgbMatch[1]);
+        const g = parseInt(rgbMatch[2]);
+        const b = parseInt(rgbMatch[3]);
+        
+        // Calculate perceived brightness (0-255)
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        
+        Logger.log('ChatButton', 'RGB:', { r, g, b, brightness });
+        
+        // If brightness > 128, it's a light background
+        const isLight = brightness > 128;
+        Logger.log('ChatButton', 'Background is:', isLight ? 'LIGHT' : 'DARK');
+        setIsLightBackground(isLight);
+      } else {
+        Logger.log('ChatButton', 'Failed to parse color:', bgColor);
+      }
+    };
     
-    detectBackgroundColor();
+    // Debounced detection - waits until dragging stops
+    detectionTimeout = setTimeout(() => {
+      detectBackgroundColor();
+    }, 500);
     
-    // Re-detect on scroll or position change
-    const handleUpdate = () => detectBackgroundColor();
+    // Re-detect on scroll or position change (debounced)
+    const handleUpdate = () => {
+      if (isDragging) return;
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        detectBackgroundColor();
+      }, 500);
+    };
     
     window.addEventListener('scroll', handleUpdate, true);
     window.addEventListener('modelPositionChange', handleUpdate);
     
     return () => {
+      clearTimeout(detectionTimeout);
+      clearTimeout(scrollTimeout);
       window.removeEventListener('scroll', handleUpdate, true);
       window.removeEventListener('modelPositionChange', handleUpdate);
     };
-  }, [shouldRender, buttonPos, detectBackgroundColor]);
+  }, [shouldRender, buttonPos.x, buttonPos.y, isDragging, uiConfig?.backgroundDetection?.mode]);
 
   /**
    * Handle delayed unmount for fade animation
@@ -409,9 +431,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   const handleMouseMove = useCallback((e) => {
     if (!modelDisabled || !isDragging) return;
+    
     const deltaX = e.clientX - dragStartPos.current.x;
     const deltaY = e.clientY - dragStartPos.current.y;
     if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) setHasDragged(true);
+    
     const newX = dragStartButtonPos.current.x + deltaX;
     const newY = dragStartButtonPos.current.y + deltaY;
     const buttonSize = 48;
@@ -419,37 +443,61 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     const minDistanceFromBottom = chatInputHeight + 15;
     const boundedX = Math.max(10, Math.min(newX, window.innerWidth - buttonSize - 10));
     let boundedY = Math.max(10, Math.min(newY, window.innerHeight - buttonSize - 10));
-    if (isChatOpen && boundedY > window.innerHeight - minDistanceFromBottom) boundedY = window.innerHeight - minDistanceFromBottom;
+    if (isChatOpen && boundedY > window.innerHeight - minDistanceFromBottom) {
+      boundedY = window.innerHeight - minDistanceFromBottom;
+    }
     
     const newPos = { x: boundedX, y: boundedY };
-    setButtonPos(newPos);
+    buttonPosRef.current = newPos;
     
-    // Dispatch event so ChatContainer follows in real-time while dragging
-    const event = new CustomEvent('chatButtonMoved', { detail: newPos });
-    window.dispatchEvent(event);
-  }, [modelDisabled, isDragging, isChatOpen, setButtonPos]);
+    if (buttonRef.current) {
+      buttonRef.current.style.left = `${boundedX}px`;
+      buttonRef.current.style.top = `${boundedY}px`;
+    }
+
+    if (isChatOpen && !window.buttonDragEventTimeout) {
+      window.buttonDragEventTimeout = setTimeout(() => {
+        const event = new CustomEvent('chatButtonMoved', { detail: newPos });
+        window.dispatchEvent(event);
+        window.buttonDragEventTimeout = null;
+      }, 16); // ~60fps
+    }
+  }, [modelDisabled, isDragging, isChatOpen]);
 
   const handleMouseUp = useCallback(() => {
     if (!modelDisabled || !isDragging) return;
-    setIsDragging(false);
-    
-    // Save position if preset is 'last-location'
-    if (uiConfig.position?.preset === 'last-location') {
-      Logger.log('ChatButton', 'Saving last location:', buttonPos);
-      updateUIConfig('position.lastLocation', { 
-        x: buttonPos.x, 
-        y: buttonPos.y,
-        width: 48, // Button size
-        height: 48
-      });
+
+    if (window.buttonDragEventTimeout) {
+      clearTimeout(window.buttonDragEventTimeout);
+      window.buttonDragEventTimeout = null;
     }
     
-    // Emit chatButtonMoved event for ChatContainer to follow
-    const event = new CustomEvent('chatButtonMoved', { detail: buttonPos });
+    setIsDragging(false);
+    
+    const finalPos = buttonPosRef.current;
+    
+    // Update React state to match DOM
+    setButtonPos(finalPos);
+    
+    // Save position if preset is 'last-location
+    if (uiConfig.position?.preset === 'last-location') {
+      setTimeout(() => {
+        Logger.log('ChatButton', 'Saving last location:', finalPos);
+        updateUIConfig('position.lastLocation', { 
+          x: finalPos.x, 
+          y: finalPos.y,
+          width: 48,
+          height: 48
+        });
+      }, 100);
+    }
+    
+    // Final position update for ChatContainer
+    const event = new CustomEvent('chatButtonMoved', { detail: finalPos });
     window.dispatchEvent(event);
     
     endButtonDrag();
-  }, [modelDisabled, isDragging, buttonPos, endButtonDrag, uiConfig.position?.preset, updateUIConfig]);
+  }, [modelDisabled, isDragging, setButtonPos, endButtonDrag, uiConfig.position?.preset, updateUIConfig]);
 
   useEffect(() => {
     if (!modelDisabled) return;
@@ -550,6 +598,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         width: '48px',
         height: '48px',
         cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+        willChange: isDragging ? 'left, top' : 'auto',
+        transition: isDragging ? 'none' : undefined,
       }}
       className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} rounded-full flex items-center justify-center ${
         modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'

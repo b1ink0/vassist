@@ -53,7 +53,7 @@ export class AnimationManager {
    * @param {MmdModel} mmdModel - MMD model instance
    * @param {BvmdLoader} bvmdLoader - BVMD loader instance for loading animations
    */
-  constructor(scene, mmdRuntime, mmdModel, bvmdLoader) {
+  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     Logger.log('AnimationManager ${this.instanceId}', '🆕 Creating new instance');
@@ -63,6 +63,7 @@ export class AnimationManager {
     this.mmdRuntime = mmdRuntime;
     this.mmdModel = mmdModel;
     this.bvmdLoader = bvmdLoader;
+    this.vmdLoader = vmdLoader;
 
     // Animation loading cache
     this.loadedAnimations = new Map(); // filePath -> loaded animation
@@ -108,6 +109,15 @@ export class AnimationManager {
 
     // Initialization flag
     this.isInitialized = false;
+    
+    // ========================================
+    // BLINKING ANIMATION SYSTEM
+    // ========================================
+    this.blinkAnimation = null; // Loaded blink animation
+    this.blinkDuration = 0; // Duration of one blink cycle in frames
+    this.blinkDelayBetween = 0; // Configurable delay between blinks (frames), initially 0
+    this.blinkEnabled = true; // Enable/disable blinking system
+    this.blinkSpeedMultiplier = 1.5; // Speed multiplier for blink animation (higher = faster)
     
     // Visibility change handling
     this.visibilityChangeHandler = null;
@@ -312,6 +322,9 @@ export class AnimationManager {
     // Register visibility change handler to pause/resume on tab switch
     this.registerVisibilityHandler();
 
+    // Load blink animation first (used for merging into all animations)
+    await this._loadBlinkAnimation();
+
     if (playIntro) {
       // Play intro animation using INTRO state (loop: false, autoReturn: IDLE)
       Logger.log('AnimationManager', 'Playing intro animation...');
@@ -392,7 +405,14 @@ export class AnimationManager {
     const resolvedPath = await resourceLoader.getURLAsync(filePath);
     Logger.log('AnimationManager', `Resolved path: ${resolvedPath}`);
     
-    const loadPromise = this.bvmdLoader.loadAsync(id, resolvedPath);
+    let loadPromise;
+    if ( resolvedPath.endsWith('.vmd') ) {
+      // VMD file
+      loadPromise = this.vmdLoader.loadAsync(id, resolvedPath);
+    } else {
+      // BVMD file
+      loadPromise = this.bvmdLoader.loadAsync(id, resolvedPath);
+    }
 
     // Store promise to prevent duplicate loads
     this.loadingPromises.set(filePath, loadPromise);
@@ -569,6 +589,104 @@ export class AnimationManager {
   }
 
   /**
+   * Load the blink animation from file
+   * This is called once during initialization
+   * Uses the animation registry system to get blink animation
+   */
+  async _loadBlinkAnimation() {
+    try {
+      Logger.log('AnimationManager', 'Loading blink animation...');
+      
+      // Get blink animation from registry
+      const blinkAnimConfig = getRandomAnimation('blink');
+      
+      if (!blinkAnimConfig) {
+        Logger.warn('AnimationManager', 'No blink animations found in registry - blinking disabled');
+        this.blinkEnabled = false;
+        return;
+      }
+      
+      Logger.log('AnimationManager', `Selected blink animation: ${blinkAnimConfig.name}`);
+      
+      // Resolve URL for extension mode
+      const resolvedPath = await resourceLoader.getURLAsync(blinkAnimConfig.filePath);
+      
+      // Load the blink animation
+      if (resolvedPath.endsWith('.vmd')) {
+      this.blinkAnimation = await this.vmdLoader.loadAsync(blinkAnimConfig.id, resolvedPath);
+      } else {
+      this.blinkAnimation = await this.bvmdLoader.loadAsync(blinkAnimConfig.id, resolvedPath);
+      }
+      this.blinkDuration = this.blinkAnimation.endFrame;
+      
+      Logger.log('AnimationManager', `Blink animation loaded: ${this.blinkDuration} frames`);
+      
+      // Store all morph names from blink animation as compatible
+      if (this.blinkAnimation.morphTracks && this.blinkAnimation.morphTracks.length > 0) {
+        this.blinkCompatibleMorphs = this.blinkAnimation.morphTracks.map(track => track.name);
+        Logger.log('AnimationManager', `Blink animation has ${this.blinkCompatibleMorphs.length} morph(s):`, this.blinkCompatibleMorphs.join(', '));
+      } else {
+        Logger.warn('AnimationManager', 'WARNING: Blink animation has no morph tracks!');
+        this.blinkEnabled = false;
+        return;
+      }
+      
+      Logger.log('AnimationManager', `✓ Blink animation ready`);
+      
+    } catch (error) {
+      Logger.error('AnimationManager', 'Failed to load blink animation:', error);
+      this.blinkEnabled = false;
+    }
+  }
+
+
+
+  // ========================================
+  // BLINKING ANIMATION CONFIGURATION
+  // ========================================
+
+  /**
+   * Set delay between blink animations (in frames)
+   * @param {number} delayFrames - Delay in frames (0 = no delay, continuous blinking)
+   */
+  setBlinkDelay(delayFrames) {
+    this.blinkDelayBetween = Math.max(0, delayFrames);
+    Logger.log('AnimationManager', `Blink delay set to ${this.blinkDelayBetween} frames`);
+  }
+
+  /**
+   * Set blink speed multiplier
+   * @param {number} multiplier - Speed multiplier (1.0 = normal, 1.5 = 50% faster, 2.0 = 2x faster)
+   */
+  setBlinkSpeed(multiplier) {
+    this.blinkSpeedMultiplier = Math.max(0.1, multiplier);
+    Logger.log('AnimationManager', `Blink speed set to ${this.blinkSpeedMultiplier}x`);
+  }
+
+  /**
+   * Enable or disable the blinking system
+   * @param {boolean} enabled - True to enable, false to disable
+   */
+  setBlinkEnabled(enabled) {
+    this.blinkEnabled = enabled;
+    Logger.log('AnimationManager', `Blinking ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get blinking system status
+   * @returns {Object} Blink status information
+   */
+  getBlinkStatus() {
+    return {
+      enabled: this.blinkEnabled,
+      loaded: this.blinkAnimation !== null,
+      duration: this.blinkDuration,
+      delayBetween: this.blinkDelayBetween,
+      speedMultiplier: this.blinkSpeedMultiplier
+    };
+  }
+
+  /**
    * Get the current intro locomotion offset (for drag/interaction adjustments)
    * @returns {{x: number, z: number}} The locomotion offset or {x:0, z:0} if not set
    */
@@ -603,7 +721,14 @@ export class AnimationManager {
 
     // Load from blob URL
     Logger.log('AnimationManager', `Loading animation from blob: ${animationId}`);
-    const loadPromise = this.bvmdLoader.loadAsync(animationId, blobUrl);
+    let loadPromise;
+    if (blobUrl.endsWith('.vmd')) {
+      // VMD file
+      loadPromise = this.vmdLoader.loadAsync(animationId, blobUrl);
+    } else {
+      // BVMD file
+      loadPromise = this.bvmdLoader.loadAsync(animationId, blobUrl);
+    }
 
     this.loadingPromises.set(blobUrl, loadPromise);
 
@@ -1076,6 +1201,8 @@ export class AnimationManager {
       spans.push(span);
     }
 
+    // BLINK SYSTEM: No longer using spans - blinks applied in onAfterRender() instead
+
     this.spanMap.set(cycle, spans);
     this.lastAddedCycle = cycle;
     
@@ -1138,8 +1265,13 @@ export class AnimationManager {
     this.renderObserver = this.scene.onBeforeRenderObservable.add(() => {
       this.onBeforeRender();
     });
+    
+    // CRITICAL: Register AFTER render observer to apply blinks AFTER animations
+    this.afterRenderObserver = this.scene.onAfterRenderObservable.add(() => {
+      this.onAfterRender();
+    });
 
-    Logger.log('AnimationManager', 'Render observer registered');
+    Logger.log('AnimationManager', 'Render observers registered (before + after)');
   }
 
   /**
@@ -1150,6 +1282,9 @@ export class AnimationManager {
     if (this.disposed) {
       return;
     }
+    
+    // REMOVED: Don't zero out morphs here - let animations apply naturally
+    // We'll override them in onAfterRender instead
     
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
       return;
@@ -1332,6 +1467,77 @@ export class AnimationManager {
 
     // Handle idle animation auto-switching
     this.handleIdleAutoSwitch();
+  }
+
+  /**
+   * Called AFTER animations are applied - override eye morphs with blinks
+   * This runs AFTER babylon-mmd applies all animation morphs
+   * Simple approach: Calculate blink timing based on absolute time, apply directly
+   */
+  onAfterRender() {
+    if (this.disposed || !this.blinkEnabled || !this.blinkAnimation) {
+      return;
+    }
+    
+    // Get current animation time (relative to when current animation started)
+    const absoluteFrame = this.mmdRuntime.currentFrameTime;
+    const relativeFrame = absoluteFrame - this.animationStartFrame;
+    
+    // Apply speed multiplier to make blinks faster/slower
+    const adjustedBlinkDuration = this.blinkDuration / this.blinkSpeedMultiplier;
+    const blinkCycleDuration = adjustedBlinkDuration + this.blinkDelayBetween;
+    
+    // Where are we in the blink cycle?
+    const blinkCycleFrame = relativeFrame % blinkCycleDuration;
+    
+    // Are we in a blink (first adjustedBlinkDuration frames of the cycle)?
+    if (blinkCycleFrame < adjustedBlinkDuration) {
+      // We're blinking! Apply blink animation morphs directly
+      const morphController = this.mmdModel.morph;
+      
+      // Map adjusted frame back to original animation frame for sampling
+      const originalAnimFrame = (blinkCycleFrame / adjustedBlinkDuration) * this.blinkDuration;
+      
+      // Read morph weights from blink animation at mapped frame
+      for (const morphTrack of this.blinkAnimation.morphTracks) {
+        const weight = this._getMorphWeightAtFrame(morphTrack, originalAnimFrame);
+        // OVERRIDE morph weight (this runs AFTER animations, so we replace their values)
+        morphController.setMorphWeight(morphTrack.name, weight);
+      }
+    }
+    // If not blinking (in delay period), let base animation's morphs show through
+  }
+
+  /**
+   * Get morph weight at specific frame time (linear interpolation)
+   * @param {Object} morphTrack - Morph track from animation
+   * @param {number} frameTime - Frame time to sample
+   * @returns {number} Interpolated weight value
+   */
+  _getMorphWeightAtFrame(morphTrack, frameTime) {
+    const frameNumbers = morphTrack.frameNumbers;
+    const weights = morphTrack.weights;
+    
+    if (frameNumbers.length === 0) return 0;
+    if (frameTime <= frameNumbers[0]) return weights[0];
+    if (frameTime >= frameNumbers[frameNumbers.length - 1]) return weights[weights.length - 1];
+    
+    // Find the two keyframes to interpolate between
+    for (let i = 0; i < frameNumbers.length - 1; i++) {
+      const frameA = frameNumbers[i];
+      const frameB = frameNumbers[i + 1];
+      
+      if (frameTime >= frameA && frameTime <= frameB) {
+        const weightA = weights[i];
+        const weightB = weights[i + 1];
+        
+        // Linear interpolation
+        const t = (frameTime - frameA) / (frameB - frameA);
+        return weightA + (weightB - weightA) * t;
+      }
+    }
+    
+    return 0;
   }
 
   /**

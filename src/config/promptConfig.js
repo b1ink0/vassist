@@ -248,38 +248,84 @@ ${text}`,
   },
 
   documentInteraction: {
-    analyzerSystemPrompt: `You are a context analyzer. Your job is to analyze user queries and determine what information from the current webpage would be helpful to answer the query.
+    analyzerSystemPrompt: `You are an intelligent webpage context analyzer. Analyze user queries to determine what information from the current webpage is needed to answer them accurately.
 
-CRITICAL: You MUST respond with ONLY a valid JSON object. No explanation, no additional text, just the JSON.
+CRITICAL RULES:
+1. Respond with ONLY a valid JSON object - no markdown, no code blocks, no explanation
+2. Use double quotes for all strings
+3. Escape special characters properly
 
-JSON Format (use this EXACT structure):
+JSON Structure:
 {
-  "needsContext": true,
-  "contextType": "text",
-  "selector": "main",
-  "reason": "Brief explanation here"
+  "needsContext": boolean,
+  "contextType": "text" | "links" | "forms" | "images" | "tables" | "code" | "all" | "none",
+  "selector": "valid CSS selector or empty string",
+  "reason": "brief explanation"
 }
 
-Rules:
-1. ALWAYS use double quotes for strings
-2. ALWAYS escape special characters in strings (use \\" for quotes, \\\\ for backslashes)
-3. Values for "contextType": "text" | "links" | "all" | "none"
-4. Values for "needsContext": true | false (boolean, not string)
-5. "selector" must be a valid CSS selector or empty string ""
-6. Keep "reason" brief and simple (avoid quotes/special chars if possible)
+Context Types & When to Use:
+- "text": Page content (articles, descriptions, paragraphs) - use selectors like "main, article, .content, body"
+- "links": URLs and navigation - use "a[href]"
+- "forms": Input fields, forms, buttons - use "form, input, button, select, textarea"
+- "images": Image information - use "img[src], picture, figure"
+- "tables": Tabular/structured data displayed in tables - use selector "table" (finds ALL tables automatically)
+- "code": Code blocks and snippets - use "pre, code, .code-block"
+- "all": Multiple types needed - comprehensive extraction
+- "none": No page context needed (general knowledge, personal questions)
+
+KEY INSIGHT FOR TABLES:
+When the user asks about ANY structured/tabular data visible on the page, use contextType "tables" with selector "table". The system automatically finds all tables. Be smart about recognizing when data is likely in a table format.
 
 Examples:
-Query: "What is this page about?"
-Response: {"needsContext":true,"contextType":"text","selector":"main, article, body","reason":"Need page content to summarize"}
 
-Query: "What time is it?"
-Response: {"needsContext":false,"contextType":"none","selector":"","reason":"General knowledge question"}
+User: "What is this page about?"
+{"needsContext":true,"contextType":"text","selector":"main, article, [role=main], .content, body","reason":"Need page content"}
 
-Query: "What links are here?"
-Response: {"needsContext":true,"contextType":"links","selector":"a[href]","reason":"User wants links"}
+User: "Summarize this article"
+{"needsContext":true,"contextType":"text","selector":"article, main, .post, .article-content, body","reason":"Need article text"}
 
-Remember: ONLY output the JSON object, nothing else.`,
+User: "What links are on this page?"
+{"needsContext":true,"contextType":"links","selector":"a[href]","reason":"User wants links"}
 
-    analyzeQuery: (userQuery) => `Analyze this query and respond with ONLY valid JSON (no markdown, no code blocks, no explanation):\n\n"${userQuery}"\n\nJSON:`,
+User: "List the navigation items"
+{"needsContext":true,"contextType":"links","selector":"nav a, header a, .navigation a, .menu a","reason":"Navigation links needed"}
+
+User: "What images are shown?"
+{"needsContext":true,"contextType":"images","selector":"img[src], picture, figure","reason":"Image information needed"}
+
+User: "What can I fill out here?"
+{"needsContext":true,"contextType":"forms","selector":"form, input, textarea, select, button","reason":"Form elements needed"}
+
+User: "Show me the data table"
+{"needsContext":true,"contextType":"tables","selector":"table","reason":"Table data needed"}
+
+User: "Extract the weather forecast table data and summarize the weekly pattern"
+{"needsContext":true,"contextType":"tables","selector":"table","reason":"Need table data"}
+
+User: "Analyze the table"
+{"needsContext":true,"contextType":"tables","selector":"table","reason":"Table analysis needed"}
+
+User: "What's in the table?"
+{"needsContext":true,"contextType":"tables","selector":"table","reason":"Table content needed"}
+
+User: "What code is on this page?"
+{"needsContext":true,"contextType":"code","selector":"pre code, .code-block, .highlight, pre","reason":"Code snippets needed"}
+
+User: "What's the page title?"
+{"needsContext":true,"contextType":"text","selector":"h1, title, .page-title, .title, .heading","reason":"Page title needed"}
+
+User: "What time is it?"
+{"needsContext":false,"contextType":"none","selector":"","reason":"General question"}
+
+User: "Tell me about yourself"
+{"needsContext":false,"contextType":"none","selector":"","reason":"Personal question"}
+
+Remember: Output ONLY the JSON object.`,
+
+    analyzeQuery: (userQuery) => `Analyze this user query and determine what webpage context is needed. Respond with ONLY valid JSON (no markdown, no explanation):
+
+Query: "${userQuery}"
+
+JSON:`,
   },
 };

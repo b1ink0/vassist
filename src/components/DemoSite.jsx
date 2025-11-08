@@ -13,6 +13,7 @@ import LanguageDetectorServiceProxy from '../services/proxies/LanguageDetectorSe
 import RewriterServiceProxy from '../services/proxies/RewriterServiceProxy';
 import WriterServiceProxy from '../services/proxies/WriterServiceProxy';
 import { TranslationLanguages } from '../config/aiConfig';
+import DocumentInteractionDemo from './DemoSite/DocumentInteractionDemo.jsx';
 
 // Import demo images
 import berriesImg from '../assets/demo/berries.jpg';
@@ -236,7 +237,9 @@ const DemoSite = () => {
   const isDark = pageTheme === 'dark';
   const theme = {
     textPrimary: isDark ? 'text-white' : 'text-slate-900',
+    textSecondary: isDark ? 'text-white/70' : 'text-slate-700',
     textMuted: isDark ? 'text-white/70' : 'text-slate-700',
+    gradient: isDark ? 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' : 'bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent',
     card: isDark ? 'bg-white/5 backdrop-blur-sm border border-white/10' : 'bg-white border border-slate-200',
     cardHover: isDark ? 'hover:bg-white/10 hover:border-white/20' : 'hover:bg-slate-50 hover:border-slate-300',
     badge: isDark ? 'bg-white/10 text-white/90 border border-white/20' : 'bg-slate-100 text-slate-900 border border-slate-200',
@@ -1206,6 +1209,9 @@ const DemoSite = () => {
           </div>
         </div>
       </section>
+
+      {/* Document Interaction Demo Section */}
+      <DocumentInteractionDemo theme={theme} isDark={isDark} />
 
       <section id="theme-demo" className="relative py-24 px-6">
         <div className="max-w-7xl mx-auto">

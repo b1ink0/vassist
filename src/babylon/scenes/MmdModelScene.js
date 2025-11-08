@@ -34,6 +34,7 @@ import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
 import Logger from '../../services/Logger';
+import { VmdLoader } from "babylon-mmd";
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -190,6 +191,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const bvmdLoader = new BvmdLoader(scene);
   bvmdLoader.loggingEnabled = false;
 
+  const vmdLoader = new VmdLoader(scene);
+  vmdLoader.loggingEnabled = false;
+
   // Material builder with outline support
   const materialBuilder = new MmdStandardMaterialBuilder();
   // Let it load outline properties from the model
@@ -304,7 +308,8 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     scene,
     mmdRuntime,
     mmdModel,
-    bvmdLoader
+    bvmdLoader,
+    vmdLoader,
   );
   
   // Initialize scene metadata if null
@@ -463,20 +468,40 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const interactionManager = new CanvasInteractionManager(scene, canvas, modelMesh);
   interactionManager.initialize();
   
+  // Drag state for smooth dragging
+  let dragRAF = null;
+  let accumulatedDeltaX = 0;
+  let accumulatedDeltaY = 0;
+  let dragBasePosition = null;
+  
   // Setup drag callbacks to work with PositionManager
   interactionManager.setDragCallbacks(
     // onDragStart
     (startX, startY) => {
       Logger.log('MmdModelScene', 'Drag started at', startX, startY);
+      dragBasePosition = positionManager.getPositionPixels();
+      accumulatedDeltaX = 0;
+      accumulatedDeltaY = 0;
+      
+      // Cancel any pending RAF updates
+      if (dragRAF) {
+        cancelAnimationFrame(dragRAF);
+        dragRAF = null;
+      }
     },
-    // onDrag
+    // onDrag - update smoothly
     (deltaX, deltaY) => {
-      const currentPos = positionManager.getPositionPixels();
-      // Preserve two-height system during drag
+      if (!dragBasePosition) return;
+      
+      // Accumulate all deltas since drag start
+      accumulatedDeltaX += deltaX;
+      accumulatedDeltaY += deltaY;
+      
+      // Update position - events are already RAF-throttled in PositionManager
       positionManager.setPositionPixels(
-        currentPos.x + deltaX,
-        currentPos.y + deltaY,
-        currentPos.width,
+        dragBasePosition.x + accumulatedDeltaX,
+        dragBasePosition.y + accumulatedDeltaY,
+        dragBasePosition.width,
         positionManager.modelHeightPx,
         positionManager.effectiveHeightPx,
         positionManager.offset
@@ -485,6 +510,28 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // onDragEnd
     (endX, endY) => {
       Logger.log('MmdModelScene', 'Drag completed at', endX, endY);
+      
+      // Cancel RAF if pending
+      if (dragRAF) {
+        cancelAnimationFrame(dragRAF);
+        dragRAF = null;
+      }
+      
+      // Apply final accumulated position
+      if (dragBasePosition) {
+        positionManager.setPositionPixels(
+          dragBasePosition.x + accumulatedDeltaX,
+          dragBasePosition.y + accumulatedDeltaY,
+          dragBasePosition.width,
+          positionManager.modelHeightPx,
+          positionManager.effectiveHeightPx,
+          positionManager.offset
+        );
+        
+        dragBasePosition = null;
+        accumulatedDeltaX = 0;
+        accumulatedDeltaY = 0;
+      }
     }
   );
   

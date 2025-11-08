@@ -583,6 +583,12 @@ const ControlPanel = ({
             >
               💬 Speak
             </button>
+            <button
+              onClick={() => queueSimple('Blink', false)}
+              className="w-full px-3 py-2 bg-yellow-600 text-white border-none rounded cursor-pointer text-xs hover:bg-yellow-700 transition-colors"
+            >
+              👁️ Test Blink Animation
+            </button>
           </div>
         )}
 

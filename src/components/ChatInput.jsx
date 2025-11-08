@@ -9,6 +9,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
+import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/Logger';
 
@@ -35,11 +36,15 @@ const ChatInput = forwardRef(({
     pendingDropData,
     setPendingDropData,
   } = useApp();
+  
+  const { uiConfig } = useConfig();
+  
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
   const [recordingError, setRecordingError] = useState('');
   const textareaRef = useRef(null);
+  const submitButtonRef = useRef(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -95,7 +100,23 @@ const ChatInput = forwardRef(({
   useEffect(() => {
     if (!isVisible) return;
     
+    let detectionTimeout = null;
+    let scrollTimeout = null;
+    let intervalId = null;
+    
     const detectBackgroundBrightness = () => {
+      const mode = uiConfig?.backgroundDetection?.mode || 'adaptive';
+      
+      if (mode !== 'adaptive') {
+        // Set based on forced mode
+        if (mode === 'light') {
+          setIsLightBackground(true);
+        } else if (mode === 'dark') {
+          setIsLightBackground(false);
+        }
+        return;
+      }
+      
       const container = containerRef.current;
       const canvas = document.getElementById('vassist-babylon-canvas');
       const elementsToDisable = [container, canvas].filter(Boolean);
@@ -130,23 +151,25 @@ const ChatInput = forwardRef(({
       });
     };
     
-    detectBackgroundBrightness();
+    // Initial detection with delay
+    detectionTimeout = setTimeout(detectBackgroundBrightness, 300);
     
-    let scrollTimeout;
+    // Debounced scroll handler - longer delay to avoid performance issues
     const handleScroll = () => {
       clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(detectBackgroundBrightness, 200);
+      scrollTimeout = setTimeout(detectBackgroundBrightness, 500);
     };
     
     window.addEventListener('scroll', handleScroll, true);
-    const intervalId = setInterval(detectBackgroundBrightness, 4000);
+    intervalId = setInterval(detectBackgroundBrightness, 4000);
 
     return () => {
+      clearTimeout(detectionTimeout);
       clearTimeout(scrollTimeout);
       window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
-  }, [isVisible]);
+  }, [isVisible, uiConfig?.backgroundDetection?.mode]);
 
   useEffect(() => {
     if (isVisible && textareaRef.current && !isVoiceMode) {
@@ -325,10 +348,46 @@ const ChatInput = forwardRef(({
     }, 0);
   }, []);
 
+  /**
+   * Handles message submission.
+   * 
+   * @param {Event} e - Submit event
+   */
+  const handleSubmit = useCallback((e) => {
+    if (e) e.preventDefault();
+    
+    const trimmedMessage = message.trim();
+    
+    if (!trimmedMessage && attachedImages.length === 0 && attachedAudios.length === 0) {
+      return;
+    }
+    
+    Logger.log('ChatInput', 'Sending message:', trimmedMessage, 
+      `with ${attachedImages.length} image(s) and ${attachedAudios.length} audio(s)`);
+    
+    onSend(
+      trimmedMessage || 'Please analyze these attachments.',
+      attachedImages.map(img => img.dataUrl),
+      attachedAudios.map(audio => audio.dataUrl)
+    );
+    
+    setMessage('');
+    setAttachedImages([]);
+    setAttachedAudios([]);
+  }, [message, attachedImages, attachedAudios, onSend]);
+
   useEffect(() => {
     const handleChatDragDrop = (e) => {
       if (!isVisible || isVoiceMode) return;
       processDropData(e.detail);
+      
+      // Handle auto-send if requested
+      if (e.detail?.autoSend) {
+        // Dispatch a separate event to trigger auto-send after state updates
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('chatAutoSend'));
+        }, 100);
+      }
     };
 
     window.addEventListener('chatDragDrop', handleChatDragDrop);
@@ -360,6 +419,25 @@ const ChatInput = forwardRef(({
       window.removeEventListener('focusChatInput', handleFocusInput);
     };
   }, [isVisible, isVoiceMode]);
+
+  // Auto-send listener for demo actions
+  useEffect(() => {
+    const handleAutoSend = () => {
+      if (isVisible && !isVoiceMode && message.trim()) {
+        Logger.log('ChatInput', 'Auto-sending message from demo action');
+        setTimeout(() => {
+          // Click the submit button to trigger the form submission
+          submitButtonRef.current?.click();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('chatAutoSend', handleAutoSend);
+
+    return () => {
+      window.removeEventListener('chatAutoSend', handleAutoSend);
+    };
+  }, [isVisible, isVoiceMode, message]);
 
 
   /**
@@ -482,34 +560,6 @@ const ChatInput = forwardRef(({
    */
   const handleRemoveAudio = (index) => {
     setAttachedAudios(prev => prev.filter((_, i) => i !== index));
-  };
-
-  /**
-   * Handles message submission.
-   * 
-   * @param {Event} e - Submit event
-   */
-  const handleSubmit = (e) => {
-    if (e) e.preventDefault();
-    
-    const trimmedMessage = message.trim();
-    
-    if (!trimmedMessage && attachedImages.length === 0 && attachedAudios.length === 0) {
-      return;
-    }
-    
-    Logger.log('ChatInput', 'Sending message:', trimmedMessage, 
-      `with ${attachedImages.length} image(s) and ${attachedAudios.length} audio(s)`);
-    
-    onSend(
-      trimmedMessage || 'Please analyze these attachments.',
-      attachedImages.map(img => img.dataUrl),
-      attachedAudios.map(audio => audio.dataUrl)
-    );
-    
-    setMessage('');
-    setAttachedImages([]);
-    setAttachedAudios([]);
   };
 
   /**
@@ -1004,6 +1054,7 @@ const ChatInput = forwardRef(({
                   
                   <div className="flex items-center gap-1">
                     <button
+                      ref={submitButtonRef}
                       type="submit"
                       disabled={!message.trim() && !hasAttachments}
                       className={`p-1.5 rounded-lg transition-all ${

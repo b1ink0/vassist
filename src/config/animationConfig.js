@@ -343,6 +343,22 @@ export const AnimationRegistry = {
     },
   ],
   
+  blink: [
+    {
+      id: 'blink_1',
+      name: 'Blink',
+      filePath: 'res/assets/motion/blink3.bvmd',
+      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
+      loop: false,
+      loopTransition: true,
+      weight: 1.0,
+      metadata: {
+        description: 'Eye blink animation - contains only eye morph tracks for natural blinking',
+        tags: ['blink', 'eye', 'morph', 'facial'],
+      },
+    },
+  ],
+  
   happy: [
     {
       id: 'happy_placeholder',

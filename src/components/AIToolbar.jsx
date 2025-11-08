@@ -1140,6 +1140,19 @@ const AIToolbar = () => {
     if (!isVisible) return;
     
     const detectBackgrounds = () => {
+      const mode = uiConfig?.backgroundDetection?.mode || 'adaptive';
+      
+      if (mode !== 'adaptive') {
+        if (mode === 'light') {
+          setIsLightBackgroundToolbar(true);
+          setIsLightBackgroundPanel(true);
+        } else if (mode === 'dark') {
+          setIsLightBackgroundToolbar(false);
+          setIsLightBackgroundPanel(false);
+        }
+        return;
+      }
+      
       const canvas = document.getElementById('vassist-babylon-canvas');
       const toolbar = toolbarRef.current;
       const panel = resultPanelRef.current;
@@ -1190,7 +1203,7 @@ const AIToolbar = () => {
     const timeoutId = setTimeout(detectBackgrounds, 400);
     
     return () => clearTimeout(timeoutId);
-  }, [isVisible, position, shouldRenderResultPanel]);
+  }, [isVisible, position, shouldRenderResultPanel, uiConfig?.backgroundDetection?.mode]);
 
   /**
    * Handle Summarize action with streaming

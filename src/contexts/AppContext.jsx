@@ -302,19 +302,29 @@ export const AppProvider = ({ children }) => {
 
   /**
    * Add content to chat (using existing drag-drop flow)
+   * @param {Object} data - The data to add to chat
+   * @param {boolean} autoSend - Whether to automatically send the message (default: false)
    */
-  const handleAddToChat = useCallback((data) => {
-    Logger.log('AppContext', 'Add to chat:', data);
+  const handleAddToChat = useCallback((data, autoSend = false) => {
+    Logger.log('AppContext', 'Add to chat:', data, 'autoSend:', autoSend);
     
     // Open chat if closed
     if (!isChatContainerVisible || !isChatInputVisible) {
       setPendingDropData(data);
       setIsChatInputVisible(true);
       setIsChatContainerVisible(true);
+      
+      // If auto-send, trigger send after chat opens and content is added
+      if (autoSend) {
+        setTimeout(() => {
+          const sendEvent = new CustomEvent('chatAutoSend');
+          window.dispatchEvent(sendEvent);
+        }, 300);
+      }
     } else {
       // Dispatch event for ChatInput to handle
       const event = new CustomEvent('chatDragDrop', { 
-        detail: data,
+        detail: { ...data, autoSend },
         bubbles: true,
         composed: true,
       });

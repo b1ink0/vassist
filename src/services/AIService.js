@@ -442,12 +442,12 @@ class AIService {
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
   async _sendMessageChromeAI(state, messages, onStream, logPrefix, useUtilitySession = false) {
+    const sessionKey = useUtilitySession ? 'chromeAIUtilitySession' : 'chromeAISession';
+    
     try {
       const systemPrompts = messages.filter(m => m.role === 'system');
       const conversationMsgs = messages.filter(m => m.role !== 'system');
       
-      // Choose which session to use
-      const sessionKey = useUtilitySession ? 'chromeAIUtilitySession' : 'chromeAISession';
       let sessionToUse = state[sessionKey];
       
       if (!sessionToUse) {
@@ -532,13 +532,13 @@ class AIService {
     } catch (error) {
       Logger.error('other', `${logPrefix} - Chrome AI error:`, error);
       
-      if (state.chromeAISession) {
+      if (state[sessionKey]) {
         try {
-          state.chromeAISession.destroy();
+          state[sessionKey].destroy();
         } catch (destroyError) {
-          Logger.warn('other', 'Failed to destroy session:', destroyError);
+          Logger.warn('other', `Failed to destroy ${useUtilitySession ? 'utility' : 'main'} session:`, destroyError);
         }
-        state.chromeAISession = null;
+        state[sessionKey] = null;
       }
 
       let errorMessage = error.message;
@@ -561,15 +561,33 @@ class AIService {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
     
-    if (state && (state.provider === 'chrome-ai' || state.provider === AIProviders.CHROME_AI) && state.chromeAISession) {
-      Logger.log('other', `${logPrefix} - Destroying Chrome AI session`);
-      try {
-        state.chromeAISession.destroy();
-      } catch (destroyError) {
-        Logger.warn('other', 'Failed to destroy session:', destroyError);
+    let aborted = false;
+    
+    // Abort both main and utility Chrome AI sessions
+    if (state && (state.provider === 'chrome-ai' || state.provider === AIProviders.CHROME_AI)) {
+      if (state.chromeAISession) {
+        Logger.log('other', `${logPrefix} - Destroying Chrome AI main session`);
+        try {
+          state.chromeAISession.destroy();
+        } catch (destroyError) {
+          Logger.warn('other', 'Failed to destroy main session:', destroyError);
+        }
+        state.chromeAISession = null;
+        aborted = true;
       }
-      state.chromeAISession = null;
-      return true;
+      
+      if (state.chromeAIUtilitySession) {
+        Logger.log('other', `${logPrefix} - Destroying Chrome AI utility session`);
+        try {
+          state.chromeAIUtilitySession.destroy();
+        } catch (destroyError) {
+          Logger.warn('other', 'Failed to destroy utility session:', destroyError);
+        }
+        state.chromeAIUtilitySession = null;
+        aborted = true;
+      }
+      
+      if (aborted) return true;
     }
     
     if (state && state.abortController) {
