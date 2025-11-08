@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
         
         output: {
           entryFileNames: '[name].js',
-          chunkFileNames: '[name].js',
+          chunkFileNames: 'chunks/[name]-[hash].js',
           assetFileNames: (assetInfo) => {
             // Don't hash content-styles.css for easy loading
             if (assetInfo.name === 'content-styles.css') {
@@ -74,8 +74,27 @@ export default defineConfig(({ mode }) => {
           },
           format: 'es',
           
-          // Prevent code splitting - inline everything
-          manualChunks: undefined,
+          // Group all node_modules into a single vendor chunk
+          manualChunks(id) {
+            // Bundle all node_modules together to avoid file explosion
+            if (id.includes('node_modules')) {
+              // Group by major package
+              if (id.includes('@babylonjs')) {
+                return 'vendor-babylon';
+              }
+              if (id.includes('babylon-mmd')) {
+                return 'vendor-mmd';
+              }
+              if (id.includes('@huggingface')) {
+                return 'vendor-transformers';
+              }
+              if (id.includes('react')) {
+                return 'vendor-react';
+              }
+              // Everything else goes into vendor
+              return 'vendor';
+            }
+          },
         },
       },
       
