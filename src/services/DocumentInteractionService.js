@@ -6,7 +6,7 @@
  * Works with ANY AI provider (Chrome AI, OpenAI, Ollama, etc.)
  */
 
-import Logger from './Logger';
+import Logger from './LoggerService';
 import { PromptConfig } from '../config/promptConfig';
 
 class DocumentInteractionService {
@@ -41,8 +41,11 @@ class DocumentInteractionService {
         { role: 'user', content: PromptConfig.documentInteraction.analyzeQuery(userQuery) }
       ];
       
-      // Use utility session for analysis (separate from main chat)
-      const result = await aiServiceSendMessage(messages, null, { useUtilitySession: true });
+      // Use utility session for analysis (separate from main chat) - NON-STREAMING
+      const result = await aiServiceSendMessage(messages, null, { 
+        useUtilitySession: true,
+        streaming: false 
+      });
       
       if (abortSignal?.aborted) {
         Logger.log('other', `${logPrefix} Analysis aborted after AI call`);
@@ -300,7 +303,7 @@ class DocumentInteractionService {
       }
       
       if (context) {
-        return `[Page Context - ${analysis.reason}]\n${context}\n\n`;
+        return `[Page Context - ${analysis.reason}]\n${context}\n\n[IMPORTANT: Format your response using proper markdown syntax with **bold**, *italic*, code in backticks, headers (#), lists (- or 1.), links, code blocks, etc.]\n\n`;
       }
 
       return null;

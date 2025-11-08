@@ -6,7 +6,7 @@
 
 import { VMDFile } from '../../services/VMDHandler.js';
 import { AudioProcessingCore } from './AudioProcessingCore.js';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 export class VMDGenerationCore {
     static defaultConfig = {

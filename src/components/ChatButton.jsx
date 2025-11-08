@@ -7,7 +7,7 @@ import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Draggable chat button component with automatic positioning.

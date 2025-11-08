@@ -8,7 +8,7 @@
 import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
 import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class TTSService {
   constructor() {

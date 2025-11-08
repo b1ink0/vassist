@@ -11,7 +11,7 @@ import ModelLoadingOverlay from './ModelLoadingOverlay';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Main application content component shared between development and extension modes.

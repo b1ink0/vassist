@@ -13,7 +13,7 @@
  */
 
 import { STTServiceProxy } from './proxies';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class VoiceRecordingService {
   constructor() {

@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from './icons';
 import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Debug overlay component providing camera controls and visualization tools.

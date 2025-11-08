@@ -14,7 +14,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Main chat controller component.

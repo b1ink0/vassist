@@ -19,7 +19,7 @@ Logger.log('Offscreen', 'Configured transformers.js to use WASM files from:', ch
 
 // Now import KokoroTTSCore (it will use the configured paths)
 import KokoroTTSCore from '../../src/workers/shared/KokoroTTSCore.js';
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 
 class OffscreenWorker {
   constructor() {

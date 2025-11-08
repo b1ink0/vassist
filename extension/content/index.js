@@ -8,9 +8,7 @@
 
 import { ContentBridge } from './ContentBridge.js';
 import { MessageTypes } from '../shared/MessageTypes.js';
-import Logger from '../../src/services/Logger';
-
-Logger.log('Content Script', 'Loading...');
+import Logger from '../../src/services/LoggerService';
 
 class VirtualAssistantInjector {
   constructor() {
@@ -266,7 +264,6 @@ class VirtualAssistantInjector {
             }, '*');
           } else if (streaming) {
             // STREAMING REQUEST - Set up token forwarding
-            console.log('[Content Script Bridge] Setting up streaming for request (from main world):', requestId);
             
             try {
               // Send request to background and get the actual background requestId
@@ -504,5 +501,3 @@ window.addEventListener('beforeunload', () => {
 
 // Export for external control (if needed)
 window.__virtualAssistant = injector;
-
-Logger.log('Content Script', 'Message listener registered');

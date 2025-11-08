@@ -9,7 +9,7 @@ import AudioPlayer from './AudioPlayer';
 import StreamingText from './common/StreamingText';
 import MarkdownText from './common/MarkdownText';
 import StreamingContainer from './common/StreamingContainer';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Chat message component with editing, streaming, and multimedia features.

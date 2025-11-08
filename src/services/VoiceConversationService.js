@@ -10,7 +10,7 @@
 
 import { TTSServiceProxy, AIServiceProxy } from './proxies';
 import VoiceRecordingService from './VoiceRecordingService';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 
 
@@ -66,7 +66,6 @@ class VoiceConversationService {
           }
         },
         onError: (error) => {
-          console.error('[VoiceConversation] Recording error:', error);
           if (this.onError) {
             this.onError(error);
           }
@@ -104,7 +103,6 @@ class VoiceConversationService {
       Logger.log('VoiceConversation', 'Started successfully');
       
     } catch (error) {
-      console.error('[VoiceConversation] Failed to start:', error);
       if (this.onError) {
         this.onError(error);
       }
@@ -228,7 +226,6 @@ class VoiceConversationService {
       this.monitorTTSPlayback();
       
     } catch (error) {
-      console.error('[VoiceConversation] Speech failed:', error);
       if (this.onError) {
         this.onError(error);
       }

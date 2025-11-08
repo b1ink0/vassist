@@ -2,7 +2,7 @@
  * Service for extracting media elements (images, audios) from DOM/HTML
  * Used by both AIToolbar (selection) and DragDropService (HTML drops)
  */
-import Logger from './Logger';
+import Logger from './LoggerService';
 class MediaExtractionService {
   /**
    * MAIN METHOD: Process and extract media from any input source

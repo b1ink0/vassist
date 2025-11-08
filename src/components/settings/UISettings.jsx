@@ -11,7 +11,7 @@ import Toggle from '../common/Toggle';
 import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 const UISettings = ({ isLightBackground }) => {
   const {

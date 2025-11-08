@@ -4,7 +4,7 @@
  * Singleton utility service for common operations across the app.
  */
 
-import Logger from './Logger';
+import Logger from './LoggerService';
 class UtilService {
   constructor() {
     if (UtilService.instance) {

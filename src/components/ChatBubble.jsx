@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from './icons';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Chat bubble component for displaying messages near the virtual assistant.

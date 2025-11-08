@@ -22,13 +22,9 @@ import summarizerService from '../../src/services/SummarizerService.js';
 import ChromeAIValidator from '../../src/services/ChromeAIValidator.js';
 import rewriterService from '../../src/services/RewriterService.js';
 import writerService from '../../src/services/WriterService.js';
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 
 console.log('Background: Service worker starting...');
-
-// Logger auto-initializes and loads settings from storage
-// To enable all logging for debugging, uncomment:
-// Logger.init().then(() => Logger.enableAll());
 
 /**
  * Register message handlers
@@ -309,17 +305,22 @@ async function registerHandlers() {
     
     const { messages, options = {} } = message.data;
     
-    // Stream response back to content script (messages, onStream, tabId, options)
-    const result = await aiService.sendMessage(messages, (token) => {
+    // Check if streaming is requested (if message has streaming flag or isStreaming option)
+    const isStreamingRequest = message.streaming || options.streaming;
+    
+    // Only provide streaming callback if actually needed
+    const streamCallback = isStreamingRequest ? (token) => {
       // Send streaming token back to content script
       chrome.tabs.sendMessage(sender.tab.id, {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token }
       }).catch(err => Logger.error('Background', 'Failed to send stream token:', err));
-    }, tabId, options);
+    } : null;
     
-    // Return the result object (includes success, response, cancelled, error)
+    // Call AI service with or without streaming
+    const result = await aiService.sendMessage(messages, streamCallback, tabId, options);
+    
     return result.success ? { response: result.response } : result;
   });
 
@@ -1086,5 +1087,12 @@ chrome.tabs.onCreated.addListener(() => {
 
 // Initialize handlers
 registerHandlers();
+
+// Initialize Logger after all services are ready - pass storageManager to avoid import issues
+Logger.init(storageManager).then(() => {
+  console.log('Background: Logger initialized');
+}).catch((error) => {
+  console.warn('Background: Logger failed to initialize, using defaults:', error);
+});
 
 console.log('Background: Service worker initialized');

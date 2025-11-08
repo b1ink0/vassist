@@ -9,7 +9,7 @@ import OpenAICompatibleSTTConfig from '../../settings/stt/OpenAICompatibleSTTCon
 import ChromeAISTTConfig from '../../settings/stt/ChromeAISTTConfig';
 import { TTSProviders, STTProviders, DefaultTTSConfig } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
-import Logger from '../../../services/Logger';
+import Logger from '../../../services/LoggerService';
 import { Icon } from '../../icons';
 
 const TTSProviderStep = ({ isLightBackground = false }) => {

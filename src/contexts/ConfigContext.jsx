@@ -27,7 +27,7 @@ import {
   validateSTTConfig 
 } from '../config/aiConfig';
 import { DefaultUIConfig } from '../config/uiConfig';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 const ConfigContext = createContext(null);
 

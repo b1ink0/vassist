@@ -41,6 +41,9 @@ export default defineConfig(({ mode }) => {
       // Minify for production using esbuild
       minify: isProduction ? 'esbuild' : false,
       
+      // Disable module preload polyfill for extensions (causes issues with dynamic imports)
+      modulePreload: false,
+      
       rollupOptions: {
         input: {
           // Background service worker

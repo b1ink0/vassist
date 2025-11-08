@@ -9,7 +9,7 @@
 /* global chrome */
 
 import { MessageTypes, generateRequestId } from '../../extension/shared/MessageTypes.js';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 export class AudioWorkerClient {
   constructor() {

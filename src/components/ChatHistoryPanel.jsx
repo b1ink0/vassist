@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, memo } from 'react'
 import { Icon } from './icons';;
 import chatHistoryService from '../services/ChatHistoryService';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Chat history panel component with infinite scroll and search.

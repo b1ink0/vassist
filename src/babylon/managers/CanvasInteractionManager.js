@@ -1,5 +1,5 @@
 import { Vector3, Matrix } from '@babylonjs/core';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 /**
  * CanvasInteractionManager - Click-through canvas with selective model interaction

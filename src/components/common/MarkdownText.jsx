@@ -56,7 +56,8 @@ const parseMarkdown = (text) => {
   if (!text) return [];
   
   const elements = [];
-  const lines = text.split('\n');
+  const trimmedText = text.replace(/\n+$/, '');
+  const lines = trimmedText.split('\n');
   let inCodeBlock = false;
   let codeBlockContent = [];
   let codeBlockLang = '';
@@ -154,7 +155,7 @@ const parseMarkdown = (text) => {
 
     // Regular paragraph
     elements.push(
-      <p key={elementKey++} className="my-1.5 break-words overflow-wrap-anywhere">
+      <p key={elementKey++} className="my-1.5 break-words overflow-wrap-anywhere text-white">
         {parseInline(line)}
       </p>
     );

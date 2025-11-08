@@ -8,6 +8,12 @@
  * - Persistent storage of log preferences
  */
 
+// Conditional imports based on environment
+let StorageServiceProxy = null;
+
+// Check environment at module load time
+const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+
 class LoggerService {
   constructor() {
     if (LoggerService.instance) {
@@ -25,21 +31,18 @@ class LoggerService {
 
   /**
    * Initialize logger with saved preferences from storage
+   * @param {Object} storage - Optional storage instance (for service worker to avoid import issues)
    */
-  async init() {
+  async init(storage = null) {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
       try {
-        // Check if we're in service worker (background script)
-        const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-        
-        if (isServiceWorker) {
-          const { default: storageManager } = await import('../storage/StorageManager.js');
-          
-          this.enabled = await storageManager.config.load('loggerEnabled', false);
-          const savedCategories = await storageManager.config.load('loggerCategories', {});
+        if (isServiceWorker && storage) {
+          // Service worker - use provided storage instance
+          this.enabled = await storage.config.load('loggerEnabled', false);
+          const savedCategories = await storage.config.load('loggerCategories', {});
           
           Object.entries(savedCategories).forEach(([category, config]) => {
             if (this.categories.has(category)) {
@@ -50,10 +53,14 @@ class LoggerService {
               this.categories.set(category, config);
             }
           });
-        } else {
-          // Main world or dev mode - use StorageServiceProxy (dynamic import to avoid circular dependency)
+        } else if (!isServiceWorker) {
+          // Main world - use StorageServiceProxy
           try {
-            const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+            if (!StorageServiceProxy) {
+              const module = await import('./proxies/StorageServiceProxy.js');
+              StorageServiceProxy = module.default;
+            }
+            
             this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
             const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
             
@@ -66,7 +73,7 @@ class LoggerService {
                 this.categories.set(category, config);
               }
             });
-          } catch (error) {
+          } catch {
             // Bridge not ready yet, that's fine - use defaults
             console.log('Logger: Storage not ready yet, using defaults');
           }
@@ -228,12 +235,15 @@ class LoggerService {
 
   /**
    * Check if logging is enabled for a category
-   * Triggers lazy initialization if needed
+   * Triggers lazy initialization if needed (NOT in service workers - must call init() manually)
    */
   shouldLog(category) {
-    // Lazy init in extension mode
-    if (!this.initialized) {
-      this.init().catch(() => {}); // Fire and forget
+    // In service workers, init() must be called manually AFTER imports
+    // Don't auto-init here to avoid preload issues
+    const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+    
+    if (!this.initialized && !isServiceWorker) {
+      this.init().catch(() => {}); // Fire and forget in main world only
     }
     
     if (!this.enabled) return false;
@@ -348,11 +358,16 @@ if (Logger && typeof Logger.registerCategory === 'function') {
   });
 }
 
-// Auto-initialize Logger asynchronously in all modes
+// Auto-initialize Logger asynchronously (skip in service workers)
 if (Logger && typeof Logger.init === 'function') {
-  Logger.init().catch(error => {
-    console.warn('Logger initialization failed, using defaults:', error);
-  });
+  const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+  
+  if (!isServiceWorker) {
+    Logger.init().catch(error => {
+      console.warn('Logger initialization failed, using defaults:', error);
+    });
+  }
+  // Service workers will initialize manually when needed
 }
 
 // Export both default and named for better bundler compatibility

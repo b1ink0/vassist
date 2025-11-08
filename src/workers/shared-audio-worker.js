@@ -9,7 +9,7 @@ import { MessageTypes } from '../../extension/shared/MessageTypes.js';
 import { VMDGenerationCore } from './shared/VMDGenerationCore.js';
 import { BVMDConversionCore } from './shared/BVMDConversionCore.js';
 import KokoroTTSCore from './shared/KokoroTTSCore.js';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 class SharedAudioWorker {
     constructor() {

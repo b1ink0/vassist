@@ -6,7 +6,6 @@
  */
 
 import Dexie from 'dexie';
-import Logger from '../services/Logger';
 
 class VassistDatabase extends Dexie {
   constructor() {
@@ -50,14 +49,12 @@ class VassistDatabase extends Dexie {
       data: 'key, category, updatedAt',
     });
 
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
    * Clear all tables (for development/testing only)
    */
   async clearAll() {
-    Logger.log('VassistDatabase', 'Clearing all data...');
     await this.tables.forEach(table => table.clear());
   }
 

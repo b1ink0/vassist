@@ -7,7 +7,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import StorageServiceProxy from '../services/proxies/StorageServiceProxy';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 const SetupContext = createContext(null);
 

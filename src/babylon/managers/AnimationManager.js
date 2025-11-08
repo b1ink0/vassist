@@ -30,7 +30,7 @@ import {
 } from "../../config/animationConfig";
 import TTSService from "../../services/TTSService";
 import { resourceLoader } from "../../utils/ResourceLoader";
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 /**
  * Helper function to get timestamp for logging

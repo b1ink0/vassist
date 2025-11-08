@@ -4,7 +4,7 @@
  * Uses chrome-extension:// URLs in extension mode, relative paths in dev mode
  */
 
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 class ResourceLoader {
   constructor() {
     // Check multiple ways to detect extension mode

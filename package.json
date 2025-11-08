@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:extension": "vite build --config vite.config.extension.js --watch",
-    "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --watch\"",
+    "dev:extension": "vite build --config vite.config.extension.js --mode development --watch",
+    "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --mode development --watch\"",
     "build": "vite build --mode production",
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",

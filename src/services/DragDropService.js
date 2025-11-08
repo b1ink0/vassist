@@ -7,7 +7,7 @@
  */
 
 import MediaExtractionService from './MediaExtractionService';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class DragDropService {
   constructor(options = {}) {

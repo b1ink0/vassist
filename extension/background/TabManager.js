@@ -3,7 +3,7 @@
  * Manages per-tab state and lifecycle
  */
 
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 export class TabManager {
   constructor() {
     this.tabs = new Map(); // tabId -> tabState

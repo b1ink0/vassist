@@ -13,7 +13,7 @@
  */
 
 import { PositionPresets } from '../../config/uiConfig.js';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 export class PositionManager {
   /**

@@ -15,7 +15,6 @@
  */
 
 import { storageAdapter } from './StorageAdapter.js';
-import Logger from '../services/Logger';
 
 export class StorageManager {
   constructor() {

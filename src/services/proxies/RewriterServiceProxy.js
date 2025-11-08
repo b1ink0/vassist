@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import RewriterService from '../RewriterService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class RewriterServiceProxy extends ServiceProxy {
   constructor() {

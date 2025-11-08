@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client';
 // Import ExtensionBridge first to ensure it's initialized before any services
 import { extensionBridge } from '../../src/utils/ExtensionBridge.js';
 import App from '../../src/App.jsx';
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 
 // Make bridge globally accessible
 window.__VASSIST_BRIDGE__ = extensionBridge;
@@ -84,7 +84,12 @@ const observer = new MutationObserver((mutations) => {
         
         if (reactRoot) {
           Logger.log('Extension Content', 'Unmounting React app...');
-          reactRoot.unmount();
+          try {
+            reactRoot.unmount();
+          } catch (error) {
+            // Ignore portal-related unmount errors (canvas is in document.body via portal)
+            Logger.log('Extension Content', 'React unmount error (expected for portals):', error.message);
+          }
         }
         
         isInitialized = false;

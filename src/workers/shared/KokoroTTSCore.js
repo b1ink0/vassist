@@ -9,7 +9,7 @@
  * Kokoro TTS Core Class
  * Singleton instance manages model lifecycle
  */
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 export class KokoroTTSCore {
   constructor() {
     this.tts = null; // KokoroTTS instance

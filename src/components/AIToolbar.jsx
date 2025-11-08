@@ -16,7 +16,7 @@ import ToolbarButton from './toolbar/ToolbarButton';
 import ToolbarSection from './toolbar/ToolbarSection';
 import ToolbarResultPanel from './toolbar/ToolbarResultPanel';
 import { Icon } from './icons';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 const AIToolbar = () => {
   const { uiConfig, aiConfig, handleAddToChat } = useApp();

@@ -8,7 +8,7 @@ import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
 import { StorageServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Developer control panel component with debug tools and performance metrics.

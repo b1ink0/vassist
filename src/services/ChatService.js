@@ -2,7 +2,7 @@
  * ChatService - chat conversation management
  */
 
-import Logger from './Logger';
+import Logger from './LoggerService';
 class ChatService {
   constructor() {
     // Tree structure

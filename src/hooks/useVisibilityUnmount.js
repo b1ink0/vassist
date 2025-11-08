@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 const UNMOUNT_DELAY_MS = 15000; // 15 seconds
 

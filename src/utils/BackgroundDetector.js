@@ -1,6 +1,6 @@
 import { StorageServiceProxy } from '../services/proxies';
 import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Singleton utility for detecting background brightness

@@ -5,7 +5,7 @@
  */
 
 import { ChromeAIFlags, ChromeAIAvailability } from '../config/aiConfig';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class ChromeAIValidator {
   constructor() {

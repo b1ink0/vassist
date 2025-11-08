@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import STTService from '../STTService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {

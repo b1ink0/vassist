@@ -18,7 +18,7 @@ import ChatMessage from './ChatMessage';
 import chatHistoryService from '../services/ChatHistoryService';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Chat container component.

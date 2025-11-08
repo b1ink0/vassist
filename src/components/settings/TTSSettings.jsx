@@ -11,7 +11,7 @@ import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDev
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
 import Toggle from '../common/Toggle';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 const TTSSettings = ({ isLightBackground }) => {
   const [clearingCache, setClearingCache] = useState(false);

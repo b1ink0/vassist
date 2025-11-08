@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import SummarizerService from '../SummarizerService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class SummarizerServiceProxy extends ServiceProxy {
   constructor() {

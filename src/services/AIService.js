@@ -7,7 +7,7 @@
 import OpenAI from 'openai';
 import { AIProviders } from '../config/aiConfig';
 import ChromeAIValidator from './ChromeAIValidator';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class AIService {
   constructor() {

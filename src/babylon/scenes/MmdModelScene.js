@@ -33,7 +33,7 @@ import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
 import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 import { VmdLoader } from "babylon-mmd";
 
 /**

@@ -16,7 +16,7 @@
 import storageServiceProxy from './proxies/StorageServiceProxy.js';
 import AIServiceProxy from './proxies/AIServiceProxy.js';
 import ChatService from './ChatService.js';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class ChatHistoryService {
   constructor() {

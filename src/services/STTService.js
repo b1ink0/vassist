@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 import { STTProviders, DefaultSTTConfig } from '../config/aiConfig';
 import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class STTService {
   constructor() {

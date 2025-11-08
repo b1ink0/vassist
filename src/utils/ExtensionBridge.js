@@ -4,7 +4,7 @@
  * Uses window.postMessage for cross-world communication
  */
 
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 class ExtensionBridge {
   constructor() {
     this.requestId = 0;

@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import WriterService from '../WriterService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class WriterServiceProxy extends ServiceProxy {
   constructor() {

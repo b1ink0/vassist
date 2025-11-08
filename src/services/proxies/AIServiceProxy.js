@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import AIService from '../AIService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class AIServiceProxy extends ServiceProxy {
   constructor() {
@@ -94,7 +94,7 @@ class AIServiceProxy extends ServiceProxy {
         
         await bridge.sendStreamingMessage(
           MessageTypes.AI_SEND_MESSAGE,
-          { messages, options },
+          { messages, options: { ...options, streaming: true } }, // Mark as streaming request
           (chunk) => {
             fullResponse += chunk;
             onStream(chunk);
@@ -105,10 +105,10 @@ class AIServiceProxy extends ServiceProxy {
         // Return in same format as AIService.sendMessage()
         return { success: true, response: fullResponse, cancelled: false, error: null };
       } else {
-        // Non-streaming mode
+        // Non-streaming mode - explicitly mark as non-streaming
         const response = await bridge.sendMessage(
           MessageTypes.AI_SEND_MESSAGE,
-          { messages, options },
+          { messages, options: { ...options, streaming: false } }, // Mark as non-streaming request
           { timeout: 60000 } // 1 minute timeout
         );
         

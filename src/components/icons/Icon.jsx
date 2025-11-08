@@ -2,7 +2,7 @@ import React from 'react';
 import { iconMap } from './iconMap.jsx';
 import { getIconColor } from './iconColors.js';
 import { useApp } from '../../contexts/AppContext';
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 
 /**
  * Universal Icon Component (Heroicons)

@@ -15,7 +15,7 @@
  * Animation categories define the type/purpose of animations
  * Now we don't need this since categories are just the keys in AnimationRegistry
  */
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 export const AnimationCategory = {
   IDLE: 'idle',
   THINKING: 'thinking',

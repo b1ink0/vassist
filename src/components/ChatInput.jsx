@@ -11,7 +11,7 @@ import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.

@@ -8,7 +8,7 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import TTSService from '../TTSService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import Logger from '../Logger';
+import Logger from '../LoggerService';
 
 class TTSServiceProxy extends ServiceProxy {
   constructor() {

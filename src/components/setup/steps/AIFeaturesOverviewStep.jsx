@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
-import Logger from '../../../services/Logger';
+import Logger from '../../../services/LoggerService';
 
 const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();

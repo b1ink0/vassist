@@ -11,7 +11,7 @@ import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
 import AIFeaturesSettings from './settings/AIFeaturesSettings';
 import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Settings panel with configuration options for UI, LLM, TTS, STT, and AI features.

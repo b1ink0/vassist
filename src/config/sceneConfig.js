@@ -8,7 +8,7 @@
  */
 
 import { resourceLoader } from '../utils/ResourceLoader.js';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Default scene configuration

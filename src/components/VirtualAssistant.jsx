@@ -10,7 +10,7 @@ import { AssistantState, getAnimationForEmotion } from '../config/animationConfi
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.

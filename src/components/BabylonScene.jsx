@@ -7,7 +7,7 @@ import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 /**
  * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.

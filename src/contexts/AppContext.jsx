@@ -17,7 +17,7 @@ import {
 } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
-import Logger from '../services/Logger';
+import Logger from '../services/LoggerService';
 
 const AppContext = createContext(null);
 

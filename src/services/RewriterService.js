@@ -6,7 +6,7 @@
  */
 
 import OpenAI from 'openai';
-import Logger from './Logger';
+import Logger from './LoggerService';
 
 class RewriterService {
   constructor() {

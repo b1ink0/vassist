@@ -4,7 +4,7 @@ import { AIServiceProxy } from '../../../services/proxies';
 import ProviderSelection from '../shared/ProviderSelection';
 import Icon from '../../icons/Icon';
 import StatusMessage from '../../common/StatusMessage';
-import Logger from '../../../services/Logger';
+import Logger from '../../../services/LoggerService';
 
 // Copy button component for Chrome flags
 const FlagCopyButton = ({ flagUrl, flagValue }) => {

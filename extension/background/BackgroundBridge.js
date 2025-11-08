@@ -7,7 +7,7 @@
 /* global chrome */
 
 import { MessageTypes } from '../shared/MessageTypes.js';
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 
 export class BackgroundBridge {
   constructor() {

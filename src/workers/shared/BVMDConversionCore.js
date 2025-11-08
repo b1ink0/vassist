@@ -5,7 +5,7 @@
  * Used by both offscreen worker and SharedWorker
  */
 
-import Logger from '../../services/Logger';
+import Logger from '../../services/LoggerService';
 export class BVMDConversionCore {
     /**
      * Convert VMD ArrayBuffer to BVMD ArrayBuffer

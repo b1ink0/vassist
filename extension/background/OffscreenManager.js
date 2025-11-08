@@ -6,7 +6,7 @@
 
 /* global chrome */
 
-import Logger from '../../src/services/Logger';
+import Logger from '../../src/services/LoggerService';
 export class OffscreenManager {
   constructor() {
     this.isOffscreenOpen = false;
