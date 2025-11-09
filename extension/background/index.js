@@ -936,21 +936,21 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { sharedContext, options } = message.data;
-    Logger.log('Background', `WRITER_WRITE (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
-    const writtenText = await writerService.write(sharedContext, options, tabId);
+    const { prompt, options } = message.data;
+    Logger.log('Background', `WRITER_WRITE (${options?.tone || 'neutral'}):`, prompt?.substring(0, 50) || 'no prompt');
+    const writtenText = await writerService.write(prompt, options, tabId);
     return { writtenText };
   });
 
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { sharedContext, options } = message.data;
-    Logger.log('Background', `WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, sharedContext?.substring(0, 50) || 'no context');
+    const { prompt, options } = message.data;
+    Logger.log('Background', `WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, prompt?.substring(0, 50) || 'no prompt');
     
     let fullWritten = '';
     
     // Stream write chunks back to content script
-    for await (const chunk of writerService.writeStreaming(sharedContext, options, tabId)) {
+    for await (const chunk of writerService.writeStreaming(prompt, options, tabId)) {
       // Send streaming token back to content script
       chrome.tabs.sendMessage(sender.tab.id, {
         type: MessageTypes.AI_STREAM_TOKEN,
