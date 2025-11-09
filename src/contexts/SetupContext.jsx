@@ -113,7 +113,10 @@ const DEFAULT_SETUP_STATE = {
 
 export function SetupProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
-  const [setupState, setSetupState] = useState(DEFAULT_SETUP_STATE);
+  const [setupState, setSetupState] = useState({
+    ...DEFAULT_SETUP_STATE,
+    setupCompleted: true, // Default to true - will be overridden by actual loaded state
+  });
   const initialLoadRef = useRef(false);
 
   useEffect(() => {
@@ -127,6 +130,18 @@ export function SetupProvider({ children }) {
         while (retries < maxRetries) {
           try {
             savedState = await StorageServiceProxy.configLoad('setupState', DEFAULT_SETUP_STATE);
+            
+            // Validate loaded state - if it looks corrupted, reject it
+            if (savedState && typeof savedState === 'object') {
+              const hasSetupFields = 'setupCompleted' in savedState && 'currentStep' in savedState;
+              const hasUIConfigFields = 'theme' in savedState || 'position' in savedState || 'enableModelLoading' in savedState;
+              
+              if (hasUIConfigFields && !hasSetupFields) {
+                Logger.error('SetupContext', 'CORRUPTED DATA DETECTED: setupState contains uiConfig fields!', savedState);
+                savedState = { ...DEFAULT_SETUP_STATE, setupCompleted: true };
+              }
+            }
+            
             Logger.log('SetupContext', 'Loaded setup state from storage:', savedState);
             break; // Success - exit retry loop
           } catch (error) {
@@ -137,8 +152,8 @@ export function SetupProvider({ children }) {
               await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retries - 1)));
             } else {
               Logger.error('SetupContext', 'Failed to load setup state after all retries:', error);
-              // Use default state on final failure
-              savedState = DEFAULT_SETUP_STATE;
+              // If loading fails, assume setup is complete (safer than forcing re-setup)
+              savedState = { ...DEFAULT_SETUP_STATE, setupCompleted: true };
             }
           }
         }
@@ -146,7 +161,8 @@ export function SetupProvider({ children }) {
         setSetupState(savedState);
       } catch (error) {
         Logger.error('SetupContext', 'Unexpected error in loadSetupState:', error);
-        setSetupState(DEFAULT_SETUP_STATE);
+        // If loading fails, assume setup is complete (safer than forcing re-setup)
+        setSetupState({ ...DEFAULT_SETUP_STATE, setupCompleted: true });
       } finally {
         setIsLoading(false);
         initialLoadRef.current = true;
@@ -387,18 +403,21 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Saving uiConfig:', uiConfig);
       await StorageServiceProxy.configSave('uiConfig', uiConfig);
       
+      // Create proper setup state structure (not corrupted with uiConfig!)
       const completedState = {
-        ...setupState,
         setupCompleted: true,
+        currentStep: TOTAL_STEPS,
+        completedSteps: Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1),
+        setupData: setupState.setupData, // Keep the actual setup data
       };
       setSetupState(completedState);
-      await StorageServiceProxy.configSave('setupState', completedState);
       
-      Logger.log('SetupContext', 'Setup completed successfully - all configs saved');
+      Logger.log('SetupContext', 'Setup completed successfully - waiting for auto-save before reload...');
       
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // Wait for auto-save to complete (auto-save has 500ms debounce + save time)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      window.location.reload();
       
     } catch (error) {
       Logger.error('SetupContext', 'Failed to complete setup:', error);

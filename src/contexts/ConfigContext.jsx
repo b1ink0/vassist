@@ -99,10 +99,11 @@ export const ConfigProvider = ({ children }) => {
   useEffect(() => {
     const loadConfigs = async () => {
       try {
-        // Load UI config
-        const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
-        setUiConfig(savedUiConfig);
-        Logger.log('ConfigContext', 'UI config loaded:', savedUiConfig);
+        // Load UI config and merge with defaults to ensure all fields exist
+        const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', {});
+        const mergedUiConfig = { ...DefaultUIConfig, ...savedUiConfig };
+        setUiConfig(mergedUiConfig);
+        Logger.log('ConfigContext', 'UI config loaded:', mergedUiConfig);
 
         // Load AI config
         const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);

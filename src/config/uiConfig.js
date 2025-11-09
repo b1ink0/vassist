@@ -170,7 +170,7 @@ export const DefaultUIConfig = {
   enableColoredIcons: false,
   enableColoredIconsToolbarOnly: false,
   
-  enableDebugPanel: true,
+  enableDebugPanel: false,
   
   position: {
     preset: 'bottom-right',

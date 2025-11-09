@@ -16,6 +16,63 @@
 
 import { storageAdapter } from './StorageAdapter.js';
 
+/**
+ * Config Schema Validators
+ * Validates data structure before saving to prevent corruption
+ */
+const CONFIG_VALIDATORS = {
+  setupState: (data) => {
+    // setupState MUST have: setupCompleted, currentStep, completedSteps, setupData
+    if (typeof data !== 'object' || data === null) return false;
+    
+    const hasSetupFields = 'setupCompleted' in data && 'currentStep' in data && 'completedSteps' in data;
+    const hasUIConfigFields = 'enableModelLoading' in data || 'enablePortraitMode' in data || 'theme' in data || 'position' in data || 'fpsLimit' in data;
+    
+    return hasSetupFields && !hasUIConfigFields;
+  },
+  
+  uiConfig: (data) => {
+    // uiConfig MUST have: theme, position
+    if (typeof data !== 'object' || data === null) return false;
+    
+    const hasUIFields = 'theme' in data || 'position' in data || 'enableModelLoading' in data;
+    const hasSetupFields = 'setupCompleted' in data || 'currentStep' in data || 'completedSteps' in data;
+    
+    return hasUIFields && !hasSetupFields;
+  },
+  
+  aiConfig: (data) => {
+    // aiConfig MUST have: provider
+    if (typeof data !== 'object' || data === null) return false;
+    
+    const hasAIFields = 'provider' in data || 'chromeAi' in data || 'openai' in data || 'ollama' in data;
+    const hasSetupFields = 'setupCompleted' in data || 'currentStep' in data;
+    const hasUIFields = 'theme' in data || 'position' in data;
+    
+    return hasAIFields && !hasSetupFields && !hasUIFields;
+  },
+  
+  ttsConfig: (data) => {
+    // ttsConfig MUST have: enabled, provider
+    if (typeof data !== 'object' || data === null) return false;
+    
+    const hasTTSFields = 'enabled' in data && 'provider' in data;
+    const hasSetupFields = 'setupCompleted' in data || 'currentStep' in data;
+    
+    return hasTTSFields && !hasSetupFields;
+  },
+  
+  sttConfig: (data) => {
+    // sttConfig MUST have provider-specific fields
+    if (typeof data !== 'object' || data === null) return false;
+    
+    const hasSTTFields = 'chromeAi' in data || 'openai' in data || 'recordingFormat' in data;
+    const hasSetupFields = 'setupCompleted' in data || 'currentStep' in data;
+    
+    return hasSTTFields && !hasSetupFields;
+  }
+};
+
 export class StorageManager {
   constructor() {
     this.adapter = storageAdapter;
@@ -96,8 +153,17 @@ export class StorageManager {
     return await this.adapter.getStats();
   }
 
-  // CONFIG NAMESPACE METHODS
   async _configSave(key, value) {
+    // Validate data before saving to prevent corruption
+    if (CONFIG_VALIDATORS[key]) {
+      const isValid = CONFIG_VALIDATORS[key](value);
+      
+      if (!isValid) {
+        const error = new Error(`[StorageManager] VALIDATION FAILED: Attempted to save invalid data to '${key}'. Data structure does not match expected schema. This prevents data corruption.`);        
+        throw error;
+      }
+    }
+    
     return await this.adapter.set('config', key, value);
   }
 

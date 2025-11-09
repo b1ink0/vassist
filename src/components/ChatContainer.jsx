@@ -66,10 +66,9 @@ const ChatContainer = ({
     regenerateAIMessage,
     previousBranch,
     nextBranch,
-    uiConfig,
   } = useApp();
 
-  const { updateUIConfig } = useConfig();
+  const { updateUIConfig, uiConfig } = useConfig();
 
   const buttonPosRef = useRef(buttonPosition);
   const buttonInitializedRef = useRef(false);
@@ -544,7 +543,8 @@ const ChatContainer = ({
   useEffect(() => {
     if (!isVisible) return;
 
-    const isAdaptiveMode = uiConfig?.backgroundDetection?.mode === 'adaptive';
+    const isAdaptiveMode = (uiConfig?.backgroundDetection?.mode || 'adaptive') === 'adaptive';
+    
     if (!isAdaptiveMode) {
       const forcedMode = uiConfig?.backgroundDetection?.mode;
       if (forcedMode === 'light') {
@@ -566,8 +566,6 @@ const ChatContainer = ({
     let intervalId = null;
     
     const detectBackgroundBrightness = () => {
-      if (isDraggingButton || isDraggingModel) return;
-      
       const canvas = document.getElementById('vassist-babylon-canvas');
       const container = containerRef.current;
       
