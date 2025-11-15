@@ -14,7 +14,33 @@ class TTSServiceProxy extends ServiceProxy {
   constructor() {
     super('TTSService');
     this.directService = TTSService;
-    this.lastConfigured = null; // Store last configured settings for initialization
+    this.lastConfigured = null;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
+      const ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+      
+      if (ttsConfig && ttsConfig.enabled) {
+        Logger.log('TTSServiceProxy', 'Auto-configuring from storage...');
+        await this.configure(ttsConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -40,11 +66,18 @@ class TTSServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured and enabled
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      return true; // Trust background state
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.TTS_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -144,6 +177,8 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {Promise<{audio: Blob|ArrayBuffer, bvmdUrl: string|null}>} Audio and BVMD URL
    */
   async generateSpeech(text, generateLipSync = true) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // Extension mode flow:
       // 1. Background generates TTS audio (returns ArrayBuffer)

@@ -14,6 +14,31 @@ class SummarizerServiceProxy extends ServiceProxy {
   constructor() {
     super('SummarizerService');
     this.directService = SummarizerService;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
+      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      
+      if (aiConfig && aiConfig.aiFeatures?.summarizer?.enabled !== false) {
+        await this.configure(aiConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -37,11 +62,18 @@ class SummarizerServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      return true; // Trust background state
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.SUMMARIZER_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -72,6 +104,8 @@ class SummarizerServiceProxy extends ServiceProxy {
    * @returns {Promise<string>} Summary
    */
   async summarize(text, options = {}) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
@@ -93,6 +127,8 @@ class SummarizerServiceProxy extends ServiceProxy {
    * @returns {AsyncIterable<string>} Streaming summary chunks
    */
   async *summarizeStreaming(text, options = {}) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // Extension mode: Use streaming message bridge with queue-based async iteration
       const bridge = await this.waitForBridge();

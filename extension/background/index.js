@@ -271,6 +271,62 @@ async function registerHandlers() {
       translatorService.initTab(tabId);
       languageDetectorService.initTab(tabId);
       summarizerService.initTab(tabId);
+      rewriterService.initTab(tabId);
+      writerService.initTab(tabId);
+      
+      Logger.log('Background', `TAB_INIT: Auto-configuring services for tab ${tabId}...`);
+      try {
+        const { DefaultAIConfig } = await import('../../src/config/aiConfig.js');
+        const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
+        const { DefaultSTTConfig } = await import('../../src/config/aiConfig.js');
+        
+        const aiConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
+        const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+        const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+        
+        if (aiConfig.provider) {
+          await aiService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: AI service configured for tab ${tabId}`);
+        }
+        
+        if (aiConfig.provider && aiConfig.aiFeatures?.translator?.enabled !== false) {
+          await translatorService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: Translator configured for tab ${tabId}`);
+        }
+        
+        if (aiConfig.provider && aiConfig.aiFeatures?.languageDetector?.enabled !== false) {
+          await languageDetectorService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: LanguageDetector configured for tab ${tabId}`);
+        }
+        
+        if (aiConfig.provider && aiConfig.aiFeatures?.summarizer?.enabled !== false) {
+          await summarizerService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: Summarizer configured for tab ${tabId}`);
+        }
+        
+        if (aiConfig.aiFeatures?.rewriter?.enabled !== false) {
+          await rewriterService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: Rewriter configured for tab ${tabId}`);
+        }
+        
+        if (aiConfig.aiFeatures?.writer?.enabled !== false) {
+          await writerService.configure(aiConfig, tabId);
+          Logger.log('Background', `TAB_INIT: Writer configured for tab ${tabId}`);
+        }
+        
+        if (ttsConfig.enabled) {
+          await ttsService.configure(ttsConfig, tabId);
+          Logger.log('Background', `TAB_INIT: TTS configured for tab ${tabId}`);
+        }
+        
+        if (sttConfig.enabled) {
+          await sttService.configure(sttConfig, tabId);
+          Logger.log('Background', `TAB_INIT: STT configured for tab ${tabId}`);
+        }
+      } catch (error) {
+        Logger.warn('Background', `TAB_INIT: Auto-configure failed for tab ${tabId}:`, error);
+      }
+      
       return { initialized: true };
     }
     return null;
@@ -298,6 +354,12 @@ async function registerHandlers() {
     await aiService.configure(config, tabId);
     Logger.log('Background', 'AI_CONFIGURE complete for tab:', tabId);
     return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.AI_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = aiService.isConfigured(tabId);
+    return { configured };
   });
 
   backgroundBridge.registerHandler(MessageTypes.AI_SEND_MESSAGE, async (message, sender, tabId) => {
@@ -370,18 +432,16 @@ async function registerHandlers() {
     return { configured: true };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.TTS_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = ttsService.isConfigured(tabId);
+    return { configured };
+  });
+
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { text } = message.data;
     Logger.log('Background', 'TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text?.substring(0, 50));
-    
-    // Check if TTS is configured for this tab
-    if (!ttsService.isConfigured(tabId)) {
-      Logger.error('Background', 'TTS not configured for tab:', tabId);
-      const state = ttsService.tabStates?.get(tabId);
-      Logger.error('Background', 'Tab state:', state);
-      throw new Error(`TTS service not configured for tab ${tabId}`);
-    }
     
     // Get the configured provider for this tab
     const tabState = ttsService.tabStates.get(tabId);
@@ -707,6 +767,12 @@ async function registerHandlers() {
     return { configured: true };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.STT_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = sttService.isConfigured(tabId);
+    return { configured };
+  });
+
   backgroundBridge.registerHandler(MessageTypes.STT_TRANSCRIBE_AUDIO, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const { audioBuffer, mimeType } = message.data;
@@ -729,6 +795,12 @@ async function registerHandlers() {
     const { config } = message.data;
     await translatorService.configure(config, tabId);
     return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = translatorService.isConfigured(tabId);
+    return { configured };
   });
 
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_CHECK_AVAILABILITY, async (message, _sender, tabId) => {
@@ -788,6 +860,12 @@ async function registerHandlers() {
     return { configured: true };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = languageDetectorService.isConfigured(tabId);
+    return { configured };
+  });
+
   backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const availability = await languageDetectorService.checkAvailability(tabId);
@@ -814,6 +892,12 @@ async function registerHandlers() {
     const { config } = message.data;
     await summarizerService.configure(config, tabId);
     return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = summarizerService.isConfigured(tabId);
+    return { configured };
   });
 
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
@@ -872,6 +956,12 @@ async function registerHandlers() {
     return { configured: true };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.REWRITER_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = rewriterService.isConfigured(tabId);
+    return { configured };
+  });
+
   backgroundBridge.registerHandler(MessageTypes.REWRITER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     const availability = await rewriterService.checkAvailability(tabId);
@@ -926,6 +1016,12 @@ async function registerHandlers() {
     const { config } = message.data;
     await writerService.configure(config, tabId);
     return { configured: true };
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.WRITER_IS_CONFIGURED, async (_message, _sender, tabId) => {
+    if (!tabId) throw new Error('Tab ID required');
+    const configured = writerService.isConfigured(tabId);
+    return { configured };
   });
 
   backgroundBridge.registerHandler(MessageTypes.WRITER_CHECK_AVAILABILITY, async (_message, _sender, tabId) => {

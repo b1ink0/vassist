@@ -14,6 +14,32 @@ class TranslatorServiceProxy extends ServiceProxy {
   constructor() {
     super('TranslatorService');
     this.directService = TranslatorService;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
+      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      
+      if (aiConfig && aiConfig.aiFeatures?.translator?.enabled !== false) {
+        Logger.log('TranslatorServiceProxy', 'Auto-configuring from storage...');
+        await this.configure(aiConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -37,11 +63,18 @@ class TranslatorServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      return true; // Trust background state
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.TRANSLATOR_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -75,6 +108,8 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @returns {Promise<string>} Translated text
    */
   async translate(text, sourceLanguage, targetLanguage) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
@@ -97,6 +132,8 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @returns {AsyncIterable<string>} Streaming translation chunks
    */
   async *translateStreaming(text, sourceLanguage, targetLanguage) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // Extension mode: Use streaming message bridge with queue-based async iteration
       const bridge = await this.waitForBridge();

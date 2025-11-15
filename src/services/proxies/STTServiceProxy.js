@@ -14,6 +14,32 @@ class STTServiceProxy extends ServiceProxy {
   constructor() {
     super('STTService');
     this.directService = STTService;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultSTTConfig } = await import('../../config/aiConfig.js');
+      const sttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
+      
+      if (sttConfig && sttConfig.enabled) {
+        Logger.log('STTServiceProxy', 'Auto-configuring from storage...');
+        await this.configure(sttConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -36,11 +62,18 @@ class STTServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured and ready
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      return true; // Trust background state
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.STT_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -64,6 +97,8 @@ class STTServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} Success status
    */
   async startRecording() {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // In extension mode, recording happens in content script
       // We use MediaRecorder directly here
@@ -189,6 +224,8 @@ class STTServiceProxy extends ServiceProxy {
    * @returns {Promise<string>} Transcribed text
    */
   async transcribeAudio(audioBlob) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // Convert blob to ArrayBuffer, then to plain Array (like TTS does)
       const arrayBuffer = await audioBlob.arrayBuffer();

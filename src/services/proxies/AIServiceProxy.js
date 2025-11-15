@@ -13,7 +13,33 @@ import Logger from '../LoggerService';
 class AIServiceProxy extends ServiceProxy {
   constructor() {
     super('AIService');
-    this.directService = AIService; // Use existing service in dev mode
+    this.directService = AIService;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
+      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      
+      if (aiConfig && aiConfig.provider) {
+        Logger.log('AIServiceProxy', 'Auto-configuring from storage...');
+        await this.configure(aiConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -32,13 +58,18 @@ class AIServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured and ready
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      // In extension mode, we trust the background state
-      // Could add a message to check, but for performance we skip it
-      return true;
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.AI_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -65,6 +96,8 @@ class AIServiceProxy extends ServiceProxy {
    * @returns {Promise<string>} Full response text
    */
   async sendMessage(messages, onStream = null, options = {}) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       // Extension mode: streaming via message bridge
       return await this.sendMessageViabridge(messages, onStream, options);
@@ -131,6 +164,8 @@ class AIServiceProxy extends ServiceProxy {
    * @returns {Promise<string>} Full response text
    */
   async sendMessageSync(messages) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
@@ -183,6 +218,8 @@ class AIServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} True if connection successful
    */
   async testConnection() {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');

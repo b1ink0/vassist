@@ -13,6 +13,31 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
   constructor() {
     super('LanguageDetectorService');
     this.directService = LanguageDetectorService;
+    this._configuring = false;
+  }
+
+  /**
+   * Ensure service is configured (auto-loads from storage if needed)
+   * @returns {Promise<void>}
+   */
+  async ensureConfigured() {
+    if (this._configuring) return;
+    
+    const configured = await this.isConfigured();
+    if (configured) return;
+    
+    this._configuring = true;
+    try {
+      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
+      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
+      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      
+      if (aiConfig && aiConfig.aiFeatures?.languageDetector?.enabled !== false) {
+        await this.configure(aiConfig);
+      }
+    } finally {
+      this._configuring = false;
+    }
   }
 
   /**
@@ -36,11 +61,18 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
 
   /**
    * Check if service is configured
-   * @returns {boolean} True if ready
+   * @returns {Promise<boolean>} True if ready
    */
-  isConfigured() {
+  async isConfigured() {
     if (this.isExtension) {
-      return true; // Trust background state
+      const bridge = await this.waitForBridge();
+      if (!bridge) return false;
+      try {
+        const response = await bridge.sendMessage(MessageTypes.LANGUAGE_DETECTOR_IS_CONFIGURED, {});
+        return response.configured;
+      } catch {
+        return false;
+      }
     } else {
       return this.directService.isConfigured();
     }
@@ -70,6 +102,8 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
    * @returns {Promise<Array>} Array of {detectedLanguage: string, confidence: number}
    */
   async detect(text) {
+    await this.ensureConfigured();
+    
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('LanguageDetectorServiceProxy: Bridge not available');

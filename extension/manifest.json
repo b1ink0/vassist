@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VAssist",
-  "version": "1.0.0",
+  "version": "0.2.1",
   "description": "AI-powered Chrome extension with 3D character, chat, voice, and animation capabilities",
   
   "permissions": [
