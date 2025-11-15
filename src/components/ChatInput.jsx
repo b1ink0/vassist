@@ -365,8 +365,19 @@ const ChatInput = forwardRef(({
     Logger.log('ChatInput', 'Sending message:', trimmedMessage, 
       `with ${attachedImages.length} image(s) and ${attachedAudios.length} audio(s)`);
     
+    let defaultPrompt = 'Please analyze these attachments.';
+    if (!trimmedMessage) {
+      if (attachedAudios.length > 0 && attachedImages.length === 0) {
+        defaultPrompt = 'What is being said in this audio?';
+      } else if (attachedImages.length > 0 && attachedAudios.length === 0) {
+        defaultPrompt = 'What is in this image?';
+      } else if (attachedImages.length > 0 && attachedAudios.length > 0) {
+        defaultPrompt = 'What is in the image and what is being said in the audio?';
+      }
+    }
+    
     onSend(
-      trimmedMessage || 'Please analyze these attachments.',
+      trimmedMessage || defaultPrompt,
       attachedImages.map(img => img.dataUrl),
       attachedAudios.map(audio => audio.dataUrl)
     );

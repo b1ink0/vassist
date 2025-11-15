@@ -227,6 +227,22 @@ class AIService {
   }
 
   /**
+   * Convert data URL to ArrayBuffer
+   * @param {string} dataUrl - Data URL (e.g., data:audio/wav;base64,...)
+   * @returns {ArrayBuffer} Audio array buffer
+   */
+  _dataUrlToArrayBuffer(dataUrl) {
+    const arr = dataUrl.split(',');
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return u8arr.buffer;
+  }
+
+  /**
    * Format messages for multi-modal support
    * Converts ChatManager format to provider-specific format
    * @param {Array} messages - Messages from ChatManager
@@ -266,7 +282,7 @@ class AIService {
           for (const audioDataUrl of msg.audios) {
             content.push({
               type: 'audio',
-              value: this._dataUrlToBlob(audioDataUrl)
+              value: this._dataUrlToArrayBuffer(audioDataUrl)
             });
           }
         }
@@ -342,18 +358,21 @@ class AIService {
 
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
     
-    // Check if any message contains images
+    // Check if any message contains images or audios
     const hasImages = messages.some(m => m.images && m.images.length > 0);
+    const hasAudios = messages.some(m => m.audios && m.audios.length > 0);
+    const hasAttachments = hasImages || hasAudios;
     
     Logger.log('other', `${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
       model: state.config.model || 'chrome-ai',
       hasImages,
+      hasAudios,
       useUtilitySession: options.useUtilitySession || false,
     });
 
     // Format messages for multi-modal if needed
-    const formattedMessages = hasImages 
+    const formattedMessages = hasAttachments 
       ? this._formatMultiModalMessages(messages, state.provider)
       : messages;
 
@@ -511,11 +530,9 @@ class AIService {
             return { success: false, response: fullResponse, cancelled: true, error: null };
           }
           
-          fullResponse = chunk;
-          const previousLength = fullResponse.length - chunk.length;
-          const newContent = chunk.slice(previousLength > 0 ? previousLength : 0);
-          if (newContent) {
-            onStream(newContent);
+          fullResponse += chunk;
+          if (chunk && onStream) {
+            onStream(chunk);
           }
         }
       } else {

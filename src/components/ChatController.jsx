@@ -192,8 +192,14 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt);
     
     // DOCUMENT INTERACTION: Extract page context based on user query
+    // SKIP if user has attachments (images/audios)
     const lastUserMessage = ChatService.getLastUserMessage();
-    if (lastUserMessage && lastUserMessage.content) {
+    const hasAttachments = lastUserMessage && (
+      (lastUserMessage.images && lastUserMessage.images.length > 0) ||
+      (lastUserMessage.audios && lastUserMessage.audios.length > 0)
+    );
+    
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
       Logger.log('ChatController', 'Starting document interaction analysis...');
       
       // Check if aborted before starting
@@ -234,6 +240,8 @@ const ChatController = ({
         Logger.warn('ChatController', 'Failed to extract page context:', error);
         // Continue without context - non-critical error
       }
+    } else if (hasAttachments) {
+      Logger.log('ChatController', 'Skipping document interaction - user has attachments (images/audios)');
     }
     
     const ttsEnabled = ttsConfig.enabled && TTSServiceProxy.isConfigured();
@@ -577,8 +585,14 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt)
 
     // DOCUMENT INTERACTION: Extract page context for voice queries too
+    // SKIP if user has attachments (images/audios)
     const lastUserMessage = ChatService.getLastUserMessage();
-    if (lastUserMessage && lastUserMessage.content) {
+    const hasAttachments = lastUserMessage && (
+      (lastUserMessage.images && lastUserMessage.images.length > 0) ||
+      (lastUserMessage.audios && lastUserMessage.audios.length > 0)
+    );
+    
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
       // Check if aborted before starting
       if (abortController.signal.aborted) {
         Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');
@@ -615,6 +629,8 @@ const ChatController = ({
       } catch (error) {
         Logger.warn('ChatController', '[Voice] Failed to extract page context:', error);
       }
+    } else if (hasAttachments) {
+      Logger.log('ChatController', '[Voice] Skipping document interaction - user has attachments (images/audios)');
     }
 
     if (ttsEnabled) {

@@ -716,10 +716,41 @@ const AIToolbar = () => {
       return;
     }
     
+    // For image hover mode
     if (showingFromImageHoverRef.current) {
-      setIsVisible(false);
-      setHoveredImageElement(null);
-      showingFromImageHoverRef.current = false;
+      // If showing results/loading, update position to follow the image
+      if (resultPanelActive || isLoading || result || error) {
+        if (hoveredImageElement) {
+          const rect = hoveredImageElement.getBoundingClientRect();
+          const toolbarWidth = 400;
+          const toolbarHeight = 50;
+          const viewportWidth = window.innerWidth;
+          
+          let x, y;
+          
+          if (rect.right + toolbarWidth - 120 > viewportWidth) {
+            x = rect.left;
+          } else {
+            x = rect.right - 120;
+          }
+          
+          const topY = rect.top - toolbarHeight - 10;
+          const bottomY = rect.bottom + 10;
+          
+          if (topY < 0) {
+            y = bottomY;
+          } else {
+            y = topY;
+          }
+          
+          setPosition({ x, y });
+        }
+      } else {
+        // No results showing, hide toolbar on scroll
+        setIsVisible(false);
+        setHoveredImageElement(null);
+        showingFromImageHoverRef.current = false;
+      }
       return;
     }
     
@@ -732,7 +763,7 @@ const AIToolbar = () => {
         setIsVisible(false);
       }
     }
-  }, [calculatePosition]);
+  }, [calculatePosition, resultPanelActive, isLoading, result, error, hoveredImageElement]);
 
   /**
    * Hides toolbar when clicking outside using shadow DOM-compatible event path checking
@@ -907,11 +938,18 @@ const AIToolbar = () => {
       Logger.log('AIToolbar', 'Image hovered, showing toolbar (will extract on button click)');
       
       if (hoveredImageElement && hoveredImageElement !== target) {
-        Logger.log('AIToolbar', 'Different image hovered, clearing previous results');
+        Logger.log('AIToolbar', 'Different image hovered, aborting previous request and clearing results');
+        
+        // Abort any ongoing request
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+
         setResult('');
         setError('');
         setAction(null);
-        setResultPanelActive(false);
+        setIsLoading(false);
       }
       
       showingFromInputFocusRef.current = false;
@@ -1435,6 +1473,9 @@ const AIToolbar = () => {
     if (!skipClearResult) {
       setResult('');
     }
+    
+    setResultPanelActive(true);
+    setIsResultPanelClosing(false);
     
     Logger.log('AIToolbar', `Image Analysis clicked (${analysisType}, streaming)`);
     
