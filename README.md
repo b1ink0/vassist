@@ -34,9 +34,43 @@ Works on Chrome 138+ with built-in AI enabled. All processing happens on device.
   <img src="./assets/toolbars.png" alt="AI Toolbar" />
 </div>
 
-Select any text on any website and a sleek toolbar pops up with powerful AI tools at your fingertips:
+Select any text on any website and a sleek toolbar pops up with powerful AI tools at your fingertips.
 
 ---
+
+### Chat Interface
+
+<div align="center">
+  <img src="./assets/chat.png" alt="AI Toolbar" />
+</div>
+
+Open the chat window anytime to have natural conversations with Gemini Nano running right in your browser.
+
+- Page Context - Ask questions about the current page you're viewing
+- File Attachments - Drag and drop images or audio files for context
+- Voice Mode - Hands-free conversation with TTS and STT
+- Chat History - Auto-saved conversations with search and branching
+- Message Actions - Edit messages, regenerate responses, TTS playback
+- Smooth Animations - Words fade in smoothly one at a time as AI responds
+- Temporary Chats - Start sessions that don't save to history
+
+---
+
+### Virtual Companion
+
+<div align="center">
+  <img src="./assets/companion.png" alt="Virtual Companion" />
+</div>
+
+A fully animated character appears on your screen, making the experience more interactive and fun. The character responds with expressions and gestures, bringing some personality to your browsing.
+
+- Display Modes - Full body or portrait mode
+- Animations - Idle movements, thinking states, lip-synced speech
+- Positioning - Drag anywhere on screen, position saved per preset
+
+---
+
+### Toolbar Features
 
 **📝 Summarize**  
 
@@ -55,6 +89,10 @@ Turn walls of text into digestible chunks. Uses Chrome's Summarizer API to give 
 
 <div align="center">
   <img src="./assets/translate.png" alt="AI Toolbar" />
+</div>
+
+<div align="center">
+  <img src="./assets/language_detector.png" alt="AI Toolbar" />
 </div>
 
 Speak the language, any language. Powered by Chrome's Translator API and Language Detector API:
@@ -125,38 +163,6 @@ Work smarter with web content:
 - Smart Summaries - Get instant summaries of articles and documents
 - Content Analysis - Understand complex content with AI assistance
 - Works seamlessly with Chrome's built-in AI
-
----
-
-### Chat Interface
-
-<div align="center">
-  <img src="./assets/chat.png" alt="AI Toolbar" />
-</div>
-
-Open the chat window anytime to have natural conversations with Gemini Nano running right in your browser.
-
-- Page Context - Ask questions about the current page you're viewing
-- File Attachments - Drag and drop images or audio files for context
-- Voice Mode - Hands-free conversation with TTS and STT
-- Chat History - Auto-saved conversations with search and branching
-- Message Actions - Edit messages, regenerate responses, TTS playback
-- Smooth Animations - Words fade in smoothly one at a time as AI responds
-- Temporary Chats - Start sessions that don't save to history
-
----
-
-### Virtual Companion
-
-<div align="center">
-  <img src="./assets/companion.png" alt="Virtual Companion" />
-</div>
-
-A fully animated character appears on your screen, making the experience more interactive and fun. The character responds with expressions and gestures, bringing some personality to your browsing.
-
-- Display Modes - Full body or portrait mode
-- Animations - Idle movements, thinking states, lip-synced speech
-- Positioning - Drag anywhere on screen, position saved per preset
 
 ## Installation
 
