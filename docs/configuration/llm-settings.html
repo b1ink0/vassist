@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-configuration/llm-settings" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">LLM Settings | VAssist</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://b1ink0.github.io/vassist/img/vassist-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://b1ink0.github.io/vassist/img/vassist-social-card.jpg"><meta data-rh="true" property="og:url" content="https://b1ink0.github.io/vassist/docs/configuration/llm-settings"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="LLM Settings | VAssist"><meta data-rh="true" name="description" content="Configure the Language Model provider powering VAssist&#x27;s AI chat and toolbar features. Choose between Chrome&#x27;s built-in AI, OpenAI&#x27;s API, or a local Ollama server."><meta data-rh="true" property="og:description" content="Configure the Language Model provider powering VAssist&#x27;s AI chat and toolbar features. Choose between Chrome&#x27;s built-in AI, OpenAI&#x27;s API, or a local Ollama server."><link data-rh="true" rel="icon" href="/vassist/img/VA.svg"><link data-rh="true" rel="canonical" href="https://b1ink0.github.io/vassist/docs/configuration/llm-settings"><link data-rh="true" rel="alternate" href="https://b1ink0.github.io/vassist/docs/configuration/llm-settings" hreflang="en"><link data-rh="true" rel="alternate" href="https://b1ink0.github.io/vassist/docs/configuration/llm-settings" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"LLM Settings","item":"https://b1ink0.github.io/vassist/docs/configuration/llm-settings"}]}</script><link rel="stylesheet" href="/vassist/assets/css/styles.5df7e32b.css">
+<script src="/vassist/assets/js/runtime~main.ade62d19.js" defer="defer"></script>
+<script src="/vassist/assets/js/main.f7eadd22.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><link rel="preload" as="image" href="/vassist/img/VA.svg"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/vassist/"><div class="navbar__logo"><img src="/vassist/img/VA.svg" alt="VAssist Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/vassist/img/VA.svg" alt="VAssist Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate">VAssist</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/vassist/docs/intro">Docs</a><a href="https://vassist-demo.vercel.app" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Demo<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/b1ink0/vassist" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/vassist/docs/intro"><span title="Getting Started" class="linkLabel_WmDU">Getting Started</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/vassist/docs/installation"><span title="Installation" class="linkLabel_WmDU">Installation</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/vassist/docs/features/toolbar"><span title="Features" class="categoryLinkLabel_W154">Features</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/vassist/docs/configuration/settings"><span title="Configuration" class="categoryLinkLabel_W154">Configuration</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/settings"><span title="Settings Overview" class="linkLabel_WmDU">Settings Overview</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/ui-settings"><span title="UI Settings" class="linkLabel_WmDU">UI Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/vassist/docs/configuration/llm-settings"><span title="LLM Settings" class="linkLabel_WmDU">LLM Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/tts-settings"><span title="TTS Settings" class="linkLabel_WmDU">TTS Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/stt-settings"><span title="STT Settings" class="linkLabel_WmDU">STT Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/ai-features"><span title="AI+" class="linkLabel_WmDU">AI+</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/shortcuts"><span title="Keyboard Shortcuts" class="linkLabel_WmDU">Keyboard Shortcuts</span></a></li></ul></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/vassist/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Configuration</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">LLM Settings</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>LLM Settings</h1></header>
+<p>Configure the Language Model provider powering VAssist&#x27;s AI chat and toolbar features. Choose between Chrome&#x27;s built-in AI, OpenAI&#x27;s API, or a local Ollama server.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="provider-selection">Provider Selection<a href="#provider-selection" class="hash-link" aria-label="Direct link to Provider Selection" title="Direct link to Provider Selection" translate="no">​</a></h2>
+<p>VAssist supports three LLM providers:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="chrome-ai">Chrome AI<a href="#chrome-ai" class="hash-link" aria-label="Direct link to Chrome AI" title="Direct link to Chrome AI" translate="no">​</a></h3>
+<p><strong>On-device AI running locally in Chrome</strong></p>
+<ul>
+<li class="">✅ <strong>Free</strong> - No API costs</li>
+<li class="">✅ <strong>Private</strong> - All processing happens locally</li>
+<li class="">✅ <strong>Fast</strong> - No network latency</li>
+<li class="">✅ <strong>Offline</strong> - Works without internet (after download)</li>
+<li class="">⚠️ <strong>Requires</strong> Chrome 138+ with specific flags enabled</li>
+</ul>
+<p><strong>Best for</strong>: Privacy-conscious users, offline use, zero cost</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="openai">OpenAI<a href="#openai" class="hash-link" aria-label="Direct link to OpenAI" title="Direct link to OpenAI" translate="no">​</a></h3>
+<p><strong>Cloud-based API using OpenAI models</strong></p>
+<ul>
+<li class="">✅ <strong>Powerful</strong> - Access to latest GPT models</li>
+<li class="">✅ <strong>Flexible</strong> - Wide range of models (GPT-4, GPT-3.5, etc.)</li>
+<li class="">✅ <strong>Reliable</strong> - Production-ready service</li>
+<li class="">⚠️ <strong>Paid</strong> - Requires API key and usage billing</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="ollama">Ollama<a href="#ollama" class="hash-link" aria-label="Direct link to Ollama" title="Direct link to Ollama" translate="no">​</a></h3>
+<p><strong>Local open-source models on your machine</strong></p>
+<ul>
+<li class="">✅ <strong>Free</strong> - No API costs</li>
+<li class="">✅ <strong>Private</strong> - Complete data control</li>
+<li class="">✅ <strong>Customizable</strong> - Run any Ollama-compatible model</li>
+<li class="">✅ <strong>Offline</strong> - Works without internet</li>
+<li class="">⚠️ <strong>Requires</strong> Local Ollama server installation</li>
+</ul>
+<p><strong>Best for</strong>: Privacy, customization, local development</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="chrome-ai-configuration">Chrome AI Configuration<a href="#chrome-ai-configuration" class="hash-link" aria-label="Direct link to Chrome AI Configuration" title="Direct link to Chrome AI Configuration" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="status--availability">Status &amp; Availability<a href="#status--availability" class="hash-link" aria-label="Direct link to Status &amp; Availability" title="Direct link to Status &amp; Availability" translate="no">​</a></h3>
+<p>Check if Chrome AI is available on your device:</p>
+<ul>
+<li class=""><strong>Readily Available</strong> - Ready to use immediately</li>
+<li class=""><strong>Downloadable</strong> - Click &quot;Start Model Download&quot; button</li>
+<li class=""><strong>Downloading</strong> - Model downloading in progress</li>
+<li class=""><strong>Unavailable</strong> - Not supported on this device</li>
+</ul>
+<p>For download progress, visit <code>chrome://on-device-internals/</code></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="model-parameters">Model Parameters<a href="#model-parameters" class="hash-link" aria-label="Direct link to Model Parameters" title="Direct link to Model Parameters" translate="no">​</a></h3>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="temperature">Temperature<a href="#temperature" class="hash-link" aria-label="Direct link to Temperature" title="Direct link to Temperature" translate="no">​</a></h4>
+<p><strong>Range</strong>: 0.0 - 2.0<br>
+<strong>Default</strong>: 1.0</p>
+<p>Controls randomness in responses:</p>
+<ul>
+<li class=""><strong>0.0</strong> - Deterministic, always same answer</li>
+<li class=""><strong>1.0</strong> - Balanced creativity and consistency</li>
+<li class=""><strong>2.0</strong> - Very creative, varied responses</li>
+</ul>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li class="">Low (0.0-0.5): Factual questions, code generation, translations</li>
+<li class="">Medium (0.5-1.5): General chat, creative writing</li>
+<li class="">High (1.5-2.0): Brainstorming, storytelling, artistic tasks</li>
+</ul>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="top-k">Top-K<a href="#top-k" class="hash-link" aria-label="Direct link to Top-K" title="Direct link to Top-K" translate="no">​</a></h4>
+<p><strong>Range</strong>: 1 - 10<br>
+<strong>Default</strong>: 3</p>
+<p>Limits token choices for more focused responses:</p>
+<ul>
+<li class=""><strong>1</strong> - Most focused, least variety</li>
+<li class=""><strong>3</strong> - Balanced (recommended)</li>
+<li class=""><strong>10</strong> - Most variety, less focused</li>
+</ul>
+<p>Lower values make responses more predictable and coherent.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="output-language">Output Language<a href="#output-language" class="hash-link" aria-label="Direct link to Output Language" title="Direct link to Output Language" translate="no">​</a></h4>
+<p><strong>Options</strong>: English (en), Spanish (es), Japanese (ja)<br>
+<strong>Default</strong>: en</p>
+<p>Specifies the output language for optimal quality and safety. Choose your preferred language for AI responses.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="multi-modal-support">Multi-modal Support<a href="#multi-modal-support" class="hash-link" aria-label="Direct link to Multi-modal Support" title="Direct link to Multi-modal Support" translate="no">​</a></h3>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="image-support">Image Support<a href="#image-support" class="hash-link" aria-label="Direct link to Image Support" title="Direct link to Image Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<p>Allows sending images with text prompts for visual analysis:</p>
+<ul>
+<li class="">Describe images</li>
+<li class="">Extract text from screenshots</li>
+<li class="">Identify objects in photos</li>
+<li class="">Analyze diagrams and charts</li>
+</ul>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="audio-support">Audio Support<a href="#audio-support" class="hash-link" aria-label="Direct link to Audio Support" title="Direct link to Audio Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<p>Allows sending audio files with text prompts:</p>
+<ul>
+<li class="">Transcribe voice recordings</li>
+<li class="">Summarize audio content</li>
+<li class="">Translate spoken language</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="required-chrome-flags">Required Chrome Flags<a href="#required-chrome-flags" class="hash-link" aria-label="Direct link to Required Chrome Flags" title="Direct link to Required Chrome Flags" translate="no">​</a></h3>
+<p>Chrome AI requires these flags to be enabled:</p>
+<ol>
+<li class="">
+<p><strong>optimization-guide-on-device-model</strong></p>
+<ul>
+<li class="">Set to: <code>Enabled BypassPerfRequirement</code></li>
+</ul>
+</li>
+<li class="">
+<p><strong>prompt-api-for-gemini-nano</strong></p>
+<ul>
+<li class="">Set to: <code>Enabled</code></li>
+</ul>
+</li>
+</ol>
+<p>After enabling flags:</p>
+<ol>
+<li class="">Restart Chrome</li>
+<li class="">Visit <code>chrome://components</code></li>
+<li class="">Find &quot;Optimization Guide On Device Model&quot;</li>
+<li class="">Click &quot;Check for update&quot; to download the AI model</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="openai-configuration">OpenAI Configuration<a href="#openai-configuration" class="hash-link" aria-label="Direct link to OpenAI Configuration" title="Direct link to OpenAI Configuration" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="api-key">API Key<a href="#api-key" class="hash-link" aria-label="Direct link to API Key" title="Direct link to API Key" translate="no">​</a></h3>
+<p>Your OpenAI API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" class="">platform.openai.com</a></p>
+<p>Format: <code>sk-...</code></p>
+<div class="theme-admonition theme-admonition-tip admonition_xJq3 alert alert--success"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 12 16"><path fill-rule="evenodd" d="M6.5 0C3.48 0 1 2.19 1 5c0 .92.55 2.25 1 3 1.34 2.25 1.78 2.78 2 4v1h5v-1c.22-1.22.66-1.75 2-4 .45-.75 1-2.08 1-3 0-2.81-2.48-5-5.5-5zm3.64 7.48c-.25.44-.47.8-.67 1.11-.86 1.41-1.25 2.06-1.45 3.23-.02.05-.02.11-.02.17H5c0-.06 0-.13-.02-.17-.2-1.17-.59-1.83-1.45-3.23-.2-.31-.42-.67-.67-1.11C2.44 6.78 2 5.65 2 5c0-2.2 2.02-4 4.5-4 1.22 0 2.36.42 3.22 1.19C10.55 2.94 11 3.94 11 5c0 .66-.44 1.78-.86 2.48zM4 14h5c-.23 1.14-1.3 2-2.5 2s-2.27-.86-2.5-2z"></path></svg></span>tip</div><div class="admonitionContent_BuS1"><p>Keep your API key secure. VAssist stores it locally in browser storage.</p></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="model">Model<a href="#model" class="hash-link" aria-label="Direct link to Model" title="Direct link to Model" translate="no">​</a></h3>
+<p>The OpenAI model to use for chat completions.</p>
+<p><strong>Examples</strong>:</p>
+<ul>
+<li class=""><code>gpt-4o</code> - Latest GPT-4 with vision</li>
+<li class=""><code>gpt-4-turbo-preview</code> - GPT-4 Turbo</li>
+<li class=""><code>gpt-3.5-turbo</code> - Faster, more economical</li>
+</ul>
+<p>See <a href="https://platform.openai.com/docs/models" target="_blank" rel="noopener noreferrer" class="">OpenAI Models</a> for available options.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="multi-modal-support-1">Multi-modal Support<a href="#multi-modal-support-1" class="hash-link" aria-label="Direct link to Multi-modal Support" title="Direct link to Multi-modal Support" translate="no">​</a></h3>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="image-support-1">Image Support<a href="#image-support-1" class="hash-link" aria-label="Direct link to Image Support" title="Direct link to Image Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<p>Enables sending images with chat messages (requires vision-capable model like <code>gpt-4o</code>).</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="audio-support-1">Audio Support<a href="#audio-support-1" class="hash-link" aria-label="Direct link to Audio Support" title="Direct link to Audio Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<p>Enables sending audio files with chat messages.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="ollama-configuration">Ollama Configuration<a href="#ollama-configuration" class="hash-link" aria-label="Direct link to Ollama Configuration" title="Direct link to Ollama Configuration" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="endpoint-url">Endpoint URL<a href="#endpoint-url" class="hash-link" aria-label="Direct link to Endpoint URL" title="Direct link to Endpoint URL" translate="no">​</a></h3>
+<p><strong>Default</strong>: <code>http://localhost:11434</code></p>
+<p>URL of your local Ollama server. Change if running on different port or remote server.</p>
+<div class="theme-admonition theme-admonition-info admonition_xJq3 alert alert--info"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 14 16"><path fill-rule="evenodd" d="M7 2.3c3.14 0 5.7 2.56 5.7 5.7s-2.56 5.7-5.7 5.7A5.71 5.71 0 0 1 1.3 8c0-3.14 2.56-5.7 5.7-5.7zM7 1C3.14 1 0 4.14 0 8s3.14 7 7 7 7-3.14 7-7-3.14-7-7-7zm1 3H6v5h2V4zm0 6H6v2h2v-2z"></path></svg></span>info</div><div class="admonitionContent_BuS1"><p>Make sure Ollama is running before testing connection. Install from <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" class="">ollama.ai</a></p></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="model-1">Model<a href="#model-1" class="hash-link" aria-label="Direct link to Model" title="Direct link to Model" translate="no">​</a></h3>
+<p>The Ollama model to use.</p>
+<p><strong>Examples</strong>:</p>
+<ul>
+<li class=""><code>llama2</code> - Meta&#x27;s Llama 2</li>
+<li class=""><code>mistral</code> - Mistral AI</li>
+<li class=""><code>codellama</code> - Code-focused Llama</li>
+<li class=""><code>llava</code> - Vision-capable model</li>
+</ul>
+<p>List available models: <code>ollama list</code><br>
+<!-- -->Pull new models: <code>ollama pull &lt;model-name&gt;</code></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="multi-modal-support-2">Multi-modal Support<a href="#multi-modal-support-2" class="hash-link" aria-label="Direct link to Multi-modal Support" title="Direct link to Multi-modal Support" translate="no">​</a></h3>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="image-support-2">Image Support<a href="#image-support-2" class="hash-link" aria-label="Direct link to Image Support" title="Direct link to Image Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>warning</div><div class="admonitionContent_BuS1"><p>Requires multi-modal capable model like <code>llava</code> or <code>bakllava</code>.</p></div></div>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="audio-support-2">Audio Support<a href="#audio-support-2" class="hash-link" aria-label="Direct link to Audio Support" title="Direct link to Audio Support" translate="no">​</a></h4>
+<p><strong>Default</strong>: Enabled</p>
+<div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>warning</div><div class="admonitionContent_BuS1"><p>Requires multi-modal capable model with audio support.</p></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="system-prompt-configuration">System Prompt Configuration<a href="#system-prompt-configuration" class="hash-link" aria-label="Direct link to System Prompt Configuration" title="Direct link to System Prompt Configuration" translate="no">​</a></h2>
+<p>The system prompt defines the AI&#x27;s personality and behavior. Available for all providers.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="personality-presets">Personality Presets<a href="#personality-presets" class="hash-link" aria-label="Direct link to Personality Presets" title="Direct link to Personality Presets" translate="no">​</a></h3>
+<p>Choose a pre-defined personality:</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="default">Default<a href="#default" class="hash-link" aria-label="Direct link to Default" title="Direct link to Default" translate="no">​</a></h4>
+<p><em>&quot;You are a helpful virtual assistant. Be concise and friendly.&quot;</em></p>
+<p>General-purpose assistant suitable for most use cases.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="professional">Professional<a href="#professional" class="hash-link" aria-label="Direct link to Professional" title="Direct link to Professional" translate="no">​</a></h4>
+<p><em>&quot;You are a professional virtual assistant...&quot;</em></p>
+<p>Accurate, well-structured responses with formal tone. For business and professional contexts.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="friendly">Friendly<a href="#friendly" class="hash-link" aria-label="Direct link to Friendly" title="Direct link to Friendly" translate="no">​</a></h4>
+<p><em>&quot;You are a friendly and casual virtual assistant...&quot;</em></p>
+<p>Warm, approachable, conversational. Uses simple language with positive attitude.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="technical-expert">Technical Expert<a href="#technical-expert" class="hash-link" aria-label="Direct link to Technical Expert" title="Direct link to Technical Expert" translate="no">​</a></h4>
+<p><em>&quot;You are a technical expert assistant...&quot;</em></p>
+<p>Detailed technical information with precise terminology. Includes code examples and best practices.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="creative">Creative<a href="#creative" class="hash-link" aria-label="Direct link to Creative" title="Direct link to Creative" translate="no">​</a></h4>
+<p><em>&quot;You are a creative assistant...&quot;</em></p>
+<p>Helps with brainstorming, creative writing, and artistic endeavors. Imaginative and expressive.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="concise">Concise<a href="#concise" class="hash-link" aria-label="Direct link to Concise" title="Direct link to Concise" translate="no">​</a></h4>
+<p><em>&quot;You are a concise virtual assistant...&quot;</em></p>
+<p>Brief, to-the-point responses. Eliminates unnecessary information.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="teacher">Teacher<a href="#teacher" class="hash-link" aria-label="Direct link to Teacher" title="Direct link to Teacher" translate="no">​</a></h4>
+<p><em>&quot;You are an educational assistant...&quot;</em></p>
+<p>Explains concepts clearly with examples and analogies. Breaks down complex topics.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="custom">Custom<a href="#custom" class="hash-link" aria-label="Direct link to Custom" title="Direct link to Custom" translate="no">​</a></h4>
+<p>Write your own system prompt for complete control over AI behavior.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="custom-system-prompt">Custom System Prompt<a href="#custom-system-prompt" class="hash-link" aria-label="Direct link to Custom System Prompt" title="Direct link to Custom System Prompt" translate="no">​</a></h3>
+<p>When you select &quot;Custom&quot; personality, you can write your own system prompt.</p>
+<p>Define how the AI should:</p>
+<ul>
+<li class="">Respond to questions</li>
+<li class="">Format answers</li>
+<li class="">Handle specific topics</li>
+<li class="">Use tone and language style</li>
+</ul>
+<div class="theme-admonition theme-admonition-tip admonition_xJq3 alert alert--success"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 12 16"><path fill-rule="evenodd" d="M6.5 0C3.48 0 1 2.19 1 5c0 .92.55 2.25 1 3 1.34 2.25 1.78 2.78 2 4v1h5v-1c.22-1.22.66-1.75 2-4 .45-.75 1-2.08 1-3 0-2.81-2.48-5-5.5-5zm3.64 7.48c-.25.44-.47.8-.67 1.11-.86 1.41-1.25 2.06-1.45 3.23-.02.05-.02.11-.02.17H5c0-.06 0-.13-.02-.17-.2-1.17-.59-1.83-1.45-3.23-.2-.31-.42-.67-.67-1.11C2.44 6.78 2 5.65 2 5c0-2.2 2.02-4 4.5-4 1.22 0 2.36.42 3.22 1.19C10.55 2.94 11 3.94 11 5c0 .66-.44 1.78-.86 2.48zM4 14h5c-.23 1.14-1.3 2-2.5 2s-2.27-.86-2.5-2z"></path></svg></span>tip</div><div class="admonitionContent_BuS1"><p>Editing any preset prompt automatically switches to &quot;Custom&quot; mode. You can use a preset as a starting point and modify it.</p></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-connection">Testing Connection<a href="#testing-connection" class="hash-link" aria-label="Direct link to Testing Connection" title="Direct link to Testing Connection" translate="no">​</a></h2>
+<p>Click <strong>Test Connection</strong> to verify your LLM configuration:</p>
+<ul>
+<li class="">✅ <strong>Success</strong> - Provider is configured correctly</li>
+<li class="">❌ <strong>Error</strong> - Check your settings and try again</li>
+</ul>
+<p>Common errors:</p>
+<ul>
+<li class=""><strong>Chrome AI</strong>: Flags not enabled, model not downloaded</li>
+<li class=""><strong>OpenAI</strong>: Invalid API key, incorrect model name</li>
+<li class=""><strong>Ollama</strong>: Server not running, model not pulled</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="tips">Tips<a href="#tips" class="hash-link" aria-label="Direct link to Tips" title="Direct link to Tips" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="for-privacy">For Privacy<a href="#for-privacy" class="hash-link" aria-label="Direct link to For Privacy" title="Direct link to For Privacy" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Chrome AI</strong>: All processing on-device, no data sent to servers</li>
+<li class=""><strong>Ollama</strong>: Complete control over data, runs locally</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="troubleshooting">Troubleshooting<a href="#troubleshooting" class="hash-link" aria-label="Direct link to Troubleshooting" title="Direct link to Troubleshooting" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="chrome-ai-not-available">Chrome AI Not Available<a href="#chrome-ai-not-available" class="hash-link" aria-label="Direct link to Chrome AI Not Available" title="Direct link to Chrome AI Not Available" translate="no">​</a></h3>
+<ul>
+<li class="">Update Chrome to version 138 or later</li>
+<li class="">Enable required flags (see above)</li>
+<li class="">Check device compatibility at <code>chrome://on-device-internals/</code></li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="openai-connection-failed">OpenAI Connection Failed<a href="#openai-connection-failed" class="hash-link" aria-label="Direct link to OpenAI Connection Failed" title="Direct link to OpenAI Connection Failed" translate="no">​</a></h3>
+<ul>
+<li class="">Verify API key is correct (starts with <code>sk-</code>)</li>
+<li class="">Check you have credits in your OpenAI account</li>
+<li class="">Ensure model name is spelled correctly</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="ollama-connection-failed">Ollama Connection Failed<a href="#ollama-connection-failed" class="hash-link" aria-label="Direct link to Ollama Connection Failed" title="Direct link to Ollama Connection Failed" translate="no">​</a></h3>
+<ul>
+<li class="">Verify Ollama is running: <code>ollama serve</code></li>
+<li class="">Check endpoint URL is correct</li>
+<li class="">Ensure model is pulled: <code>ollama pull &lt;model-name&gt;</code></li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="next-steps">Next Steps<a href="#next-steps" class="hash-link" aria-label="Direct link to Next Steps" title="Direct link to Next Steps" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/vassist/docs/configuration/tts-settings">TTS Settings</a> - Configure voice output</li>
+<li class=""><a class="" href="/vassist/docs/configuration/stt-settings">STT Settings</a> - Configure voice input</li>
+<li class=""><a class="" href="/vassist/docs/configuration/ai-features">AI Features</a> - Toggle individual AI capabilities</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/b1ink0/vassist/tree/docs/docs/configuration/llm-settings.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/vassist/docs/configuration/ui-settings"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">UI Settings</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/vassist/docs/configuration/tts-settings"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">TTS Settings</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#provider-selection" class="table-of-contents__link toc-highlight">Provider Selection</a><ul><li><a href="#chrome-ai" class="table-of-contents__link toc-highlight">Chrome AI</a></li><li><a href="#openai" class="table-of-contents__link toc-highlight">OpenAI</a></li><li><a href="#ollama" class="table-of-contents__link toc-highlight">Ollama</a></li></ul></li><li><a href="#chrome-ai-configuration" class="table-of-contents__link toc-highlight">Chrome AI Configuration</a><ul><li><a href="#status--availability" class="table-of-contents__link toc-highlight">Status &amp; Availability</a></li><li><a href="#model-parameters" class="table-of-contents__link toc-highlight">Model Parameters</a></li><li><a href="#multi-modal-support" class="table-of-contents__link toc-highlight">Multi-modal Support</a></li><li><a href="#required-chrome-flags" class="table-of-contents__link toc-highlight">Required Chrome Flags</a></li></ul></li><li><a href="#openai-configuration" class="table-of-contents__link toc-highlight">OpenAI Configuration</a><ul><li><a href="#api-key" class="table-of-contents__link toc-highlight">API Key</a></li><li><a href="#model" class="table-of-contents__link toc-highlight">Model</a></li><li><a href="#multi-modal-support-1" class="table-of-contents__link toc-highlight">Multi-modal Support</a></li></ul></li><li><a href="#ollama-configuration" class="table-of-contents__link toc-highlight">Ollama Configuration</a><ul><li><a href="#endpoint-url" class="table-of-contents__link toc-highlight">Endpoint URL</a></li><li><a href="#model-1" class="table-of-contents__link toc-highlight">Model</a></li><li><a href="#multi-modal-support-2" class="table-of-contents__link toc-highlight">Multi-modal Support</a></li></ul></li><li><a href="#system-prompt-configuration" class="table-of-contents__link toc-highlight">System Prompt Configuration</a><ul><li><a href="#personality-presets" class="table-of-contents__link toc-highlight">Personality Presets</a></li><li><a href="#custom-system-prompt" class="table-of-contents__link toc-highlight">Custom System Prompt</a></li></ul></li><li><a href="#testing-connection" class="table-of-contents__link toc-highlight">Testing Connection</a></li><li><a href="#tips" class="table-of-contents__link toc-highlight">Tips</a><ul><li><a href="#for-privacy" class="table-of-contents__link toc-highlight">For Privacy</a></li></ul></li><li><a href="#troubleshooting" class="table-of-contents__link toc-highlight">Troubleshooting</a><ul><li><a href="#chrome-ai-not-available" class="table-of-contents__link toc-highlight">Chrome AI Not Available</a></li><li><a href="#openai-connection-failed" class="table-of-contents__link toc-highlight">OpenAI Connection Failed</a></li><li><a href="#ollama-connection-failed" class="table-of-contents__link toc-highlight">Ollama Connection Failed</a></li></ul></li><li><a href="#next-steps" class="table-of-contents__link toc-highlight">Next Steps</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/vassist/docs/intro">Getting Started</a></li><li class="footer__item"><a class="footer__link-item" href="/vassist/docs/installation">Installation</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/b1ink0/vassist/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/b1ink0/vassist/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">More</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://vassist-demo.vercel.app" target="_blank" rel="noopener noreferrer" class="footer__link-item">Demo<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/b1ink0/vassist" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">VAssist - An open-source AI-powered virtual companion</div></div></div></footer></div>
+</body>
+</html>

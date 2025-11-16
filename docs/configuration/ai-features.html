@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-configuration/ai-features" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">AI+ | VAssist</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://b1ink0.github.io/vassist/img/vassist-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://b1ink0.github.io/vassist/img/vassist-social-card.jpg"><meta data-rh="true" property="og:url" content="https://b1ink0.github.io/vassist/docs/configuration/ai-features"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="AI+ | VAssist"><meta data-rh="true" name="description" content="Toggle individual AI capabilities that enhance the toolbar and chat experience. These features work with all LLM providers (Chrome AI, OpenAI, Ollama)."><meta data-rh="true" property="og:description" content="Toggle individual AI capabilities that enhance the toolbar and chat experience. These features work with all LLM providers (Chrome AI, OpenAI, Ollama)."><link data-rh="true" rel="icon" href="/vassist/img/VA.svg"><link data-rh="true" rel="canonical" href="https://b1ink0.github.io/vassist/docs/configuration/ai-features"><link data-rh="true" rel="alternate" href="https://b1ink0.github.io/vassist/docs/configuration/ai-features" hreflang="en"><link data-rh="true" rel="alternate" href="https://b1ink0.github.io/vassist/docs/configuration/ai-features" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"AI+","item":"https://b1ink0.github.io/vassist/docs/configuration/ai-features"}]}</script><link rel="stylesheet" href="/vassist/assets/css/styles.5df7e32b.css">
+<script src="/vassist/assets/js/runtime~main.ade62d19.js" defer="defer"></script>
+<script src="/vassist/assets/js/main.f7eadd22.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><link rel="preload" as="image" href="/vassist/img/VA.svg"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/vassist/"><div class="navbar__logo"><img src="/vassist/img/VA.svg" alt="VAssist Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/vassist/img/VA.svg" alt="VAssist Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate">VAssist</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/vassist/docs/intro">Docs</a><a href="https://vassist-demo.vercel.app" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Demo<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/b1ink0/vassist" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/vassist/docs/intro"><span title="Getting Started" class="linkLabel_WmDU">Getting Started</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/vassist/docs/installation"><span title="Installation" class="linkLabel_WmDU">Installation</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/vassist/docs/features/toolbar"><span title="Features" class="categoryLinkLabel_W154">Features</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/vassist/docs/configuration/settings"><span title="Configuration" class="categoryLinkLabel_W154">Configuration</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/settings"><span title="Settings Overview" class="linkLabel_WmDU">Settings Overview</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/ui-settings"><span title="UI Settings" class="linkLabel_WmDU">UI Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/llm-settings"><span title="LLM Settings" class="linkLabel_WmDU">LLM Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/tts-settings"><span title="TTS Settings" class="linkLabel_WmDU">TTS Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/stt-settings"><span title="STT Settings" class="linkLabel_WmDU">STT Settings</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/vassist/docs/configuration/ai-features"><span title="AI+" class="linkLabel_WmDU">AI+</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/vassist/docs/configuration/shortcuts"><span title="Keyboard Shortcuts" class="linkLabel_WmDU">Keyboard Shortcuts</span></a></li></ul></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/vassist/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Configuration</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">AI+</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>AI+</h1></header>
+<p>Toggle individual AI capabilities that enhance the toolbar and chat experience. These features work with <strong>all LLM providers</strong> (Chrome AI, OpenAI, Ollama).</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="overview">Overview<a href="#overview" class="hash-link" aria-label="Direct link to Overview" title="Direct link to Overview" translate="no">​</a></h2>
+<p>AI Features are advanced capabilities powered by your configured LLM provider:</p>
+<ul>
+<li class=""><strong>Translator</strong> - Translate text between 25+ languages</li>
+<li class=""><strong>Language Detector</strong> - Detect language with confidence scores</li>
+<li class=""><strong>Summarizer</strong> - Generate different types of summaries</li>
+<li class=""><strong>Text Rewriter</strong> - Rewrite text in different tones/styles</li>
+<li class=""><strong>Content Writer</strong> - Generate new content from prompts</li>
+</ul>
+<p>All features can be individually enabled or disabled based on your needs.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="translator">Translator<a href="#translator" class="hash-link" aria-label="Direct link to Translator" title="Direct link to Translator" translate="no">​</a></h2>
+<p><strong>Default</strong>: Enabled</p>
+<p>Translate text between multiple languages in the AI Toolbar and Chat.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="features">Features<a href="#features" class="hash-link" aria-label="Direct link to Features" title="Direct link to Features" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Auto-Detection</strong> - Automatically detects source language</li>
+<li class=""><strong>Bidirectional</strong> - Translate from any language to any language</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="default-translation-language">Default Translation Language<a href="#default-translation-language" class="hash-link" aria-label="Direct link to Default Translation Language" title="Direct link to Default Translation Language" translate="no">​</a></h3>
+<p>Set your preferred target language for translations. This is used when:</p>
+<ul>
+<li class="">Using &quot;Translate&quot; in AI Toolbar on selected text</li>
+<li class="">Testing the translator in settings</li>
+</ul>
+<p><strong>Default</strong>: English (en)</p>
+<p>Can be changed to any of the supported languages.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-its-used">Where It&#x27;s Used<a href="#where-its-used" class="hash-link" aria-label="Direct link to Where It&#x27;s Used" title="Direct link to Where It&#x27;s Used" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>AI Toolbar</strong> - &quot;Translate&quot; action on text selection</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing">Testing<a href="#testing" class="hash-link" aria-label="Direct link to Testing" title="Direct link to Testing" translate="no">​</a></h3>
+<p>Click <strong>Test</strong> to translate &quot;Hello, how are you?&quot; to your selected target language.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="language-detector">Language Detector<a href="#language-detector" class="hash-link" aria-label="Direct link to Language Detector" title="Direct link to Language Detector" translate="no">​</a></h2>
+<p><strong>Default</strong>: Enabled</p>
+<p>Automatically detect the language of text with confidence scores.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="features-1">Features<a href="#features-1" class="hash-link" aria-label="Direct link to Features" title="Direct link to Features" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Auto-Detection</strong> - Identifies language from text samples</li>
+<li class=""><strong>Confidence Scores</strong> - Shows probability for each detected language</li>
+<li class=""><strong>Multi-Language</strong> - Supports all major world languages</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-its-used-1">Where It&#x27;s Used<a href="#where-its-used-1" class="hash-link" aria-label="Direct link to Where It&#x27;s Used" title="Direct link to Where It&#x27;s Used" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>AI Toolbar</strong> - Automatically detects language before translation</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-1">Testing<a href="#testing-1" class="hash-link" aria-label="Direct link to Testing" title="Direct link to Testing" translate="no">​</a></h3>
+<p>Enter any text in the test input field and click <strong>Test</strong> to detect its language.</p>
+<p>Results show: Language name and confidence percentage.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="summarizer">Summarizer<a href="#summarizer" class="hash-link" aria-label="Direct link to Summarizer" title="Direct link to Summarizer" translate="no">​</a></h2>
+<p><strong>Default</strong>: Enabled</p>
+<p>Generate different types of summaries from long text.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="summary-types">Summary Types<a href="#summary-types" class="hash-link" aria-label="Direct link to Summary Types" title="Direct link to Summary Types" translate="no">​</a></h3>
+<p>When using the summarizer from AI Toolbar, you can choose:</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="tldr-too-long-didnt-read">TL;DR (Too Long; Didn&#x27;t Read)<a href="#tldr-too-long-didnt-read" class="hash-link" aria-label="Direct link to TL;DR (Too Long; Didn&#x27;t Read)" title="Direct link to TL;DR (Too Long; Didn&#x27;t Read)" translate="no">​</a></h4>
+<ul>
+<li class="">Short, concise summary</li>
+<li class="">Captures main points only</li>
+<li class="">Best for quick overview</li>
+</ul>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="key-points">Key Points<a href="#key-points" class="hash-link" aria-label="Direct link to Key Points" title="Direct link to Key Points" translate="no">​</a></h4>
+<ul>
+<li class="">Bullet-point summary</li>
+<li class="">Highlights main ideas</li>
+<li class="">Easy to scan format</li>
+</ul>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="teaser">Teaser<a href="#teaser" class="hash-link" aria-label="Direct link to Teaser" title="Direct link to Teaser" translate="no">​</a></h4>
+<ul>
+<li class="">Engaging preview summary</li>
+<li class="">Sparks curiosity</li>
+<li class="">Good for content preview</li>
+</ul>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="headline">Headline<a href="#headline" class="hash-link" aria-label="Direct link to Headline" title="Direct link to Headline" translate="no">​</a></h4>
+<ul>
+<li class="">Single-sentence summary</li>
+<li class="">Captures essence in few words</li>
+<li class="">News-style format</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="summary-formats">Summary Formats<a href="#summary-formats" class="hash-link" aria-label="Direct link to Summary Formats" title="Direct link to Summary Formats" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Plain Text</strong> - Simple text format</li>
+<li class=""><strong>Markdown</strong> - Formatted with markdown</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="summary-lengths">Summary Lengths<a href="#summary-lengths" class="hash-link" aria-label="Direct link to Summary Lengths" title="Direct link to Summary Lengths" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Short</strong> - Brief, essential points only</li>
+<li class=""><strong>Medium</strong> - Balanced detail (default)</li>
+<li class=""><strong>Long</strong> - Comprehensive summary</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-its-used-2">Where It&#x27;s Used<a href="#where-its-used-2" class="hash-link" aria-label="Direct link to Where It&#x27;s Used" title="Direct link to Where It&#x27;s Used" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>AI Toolbar</strong> - &quot;Summarize&quot; action on text selection</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-2">Testing<a href="#testing-2" class="hash-link" aria-label="Direct link to Testing" title="Direct link to Testing" translate="no">​</a></h3>
+<p>Click <strong>Test</strong> to summarize a sample paragraph about AI.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="text-rewriter">Text Rewriter<a href="#text-rewriter" class="hash-link" aria-label="Direct link to Text Rewriter" title="Direct link to Text Rewriter" translate="no">​</a></h2>
+<p><strong>Default</strong>: Enabled</p>
+<p>Rewrite text in different tones and styles while preserving meaning.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="rewrite-actions">Rewrite Actions<a href="#rewrite-actions" class="hash-link" aria-label="Direct link to Rewrite Actions" title="Direct link to Rewrite Actions" translate="no">​</a></h3>
+<p>The rewriter supports using AI Toolbar:</p>
+<ul>
+<li class=""><strong>Fix Grammar</strong> - Correct grammatical errors</li>
+<li class=""><strong>Fix Spelling</strong> - Correct spelling mistakes</li>
+<li class=""><strong>Improve Clarity</strong> - Make text clearer</li>
+<li class=""><strong>Simplify</strong> - Use simpler words</li>
+<li class=""><strong>Make Concise</strong> - Remove unnecessary words</li>
+<li class="">And more...</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-its-used-3">Where It&#x27;s Used<a href="#where-its-used-3" class="hash-link" aria-label="Direct link to Where It&#x27;s Used" title="Direct link to Where It&#x27;s Used" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>AI Toolbar</strong> - &quot;Rewrite&quot; action on text selection</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-3">Testing<a href="#testing-3" class="hash-link" aria-label="Direct link to Testing" title="Direct link to Testing" translate="no">​</a></h3>
+<p>Click <strong>Test</strong> to rewrite &quot;The weather is nice today.&quot; in a more formal tone.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="content-writer">Content Writer<a href="#content-writer" class="hash-link" aria-label="Direct link to Content Writer" title="Direct link to Content Writer" translate="no">​</a></h2>
+<p><strong>Default</strong>: Enabled</p>
+<p>Generate new content from prompts with different tones and lengths.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-its-used-4">Where It&#x27;s Used<a href="#where-its-used-4" class="hash-link" aria-label="Direct link to Where It&#x27;s Used" title="Direct link to Where It&#x27;s Used" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>AI Toolbar</strong> - &quot;Writer&quot; action in input fields</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-4">Testing<a href="#testing-4" class="hash-link" aria-label="Direct link to Testing" title="Direct link to Testing" translate="no">​</a></h3>
+<p>Click <strong>Test</strong> to write a short paragraph about AI benefits in neutral tone.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="chrome-ai-additional-flags">Chrome AI Additional Flags<a href="#chrome-ai-additional-flags" class="hash-link" aria-label="Direct link to Chrome AI Additional Flags" title="Direct link to Chrome AI Additional Flags" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="required-flags">Required Flags<a href="#required-flags" class="hash-link" aria-label="Direct link to Required Flags" title="Direct link to Required Flags" translate="no">​</a></h3>
+<p>Enable these flags at <code>chrome://flags</code>:</p>
+<ol>
+<li class="">
+<p><strong>translation-api</strong></p>
+<ul>
+<li class="">Enables translation feature</li>
+</ul>
+</li>
+<li class="">
+<p><strong>language-detection-api</strong></p>
+<ul>
+<li class="">Enables language detection</li>
+</ul>
+</li>
+<li class="">
+<p><strong>summarization-api-for-gemini-nano</strong></p>
+<ul>
+<li class="">Enables summarization</li>
+</ul>
+</li>
+<li class="">
+<p><strong>rewriter-api-for-gemini-nano</strong></p>
+<ul>
+<li class="">Enables text rewriting</li>
+</ul>
+</li>
+<li class="">
+<p><strong>writer-api-for-gemini-nano</strong></p>
+<ul>
+<li class="">Enables content generation</li>
+</ul>
+</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="setup-instructions">Setup Instructions<a href="#setup-instructions" class="hash-link" aria-label="Direct link to Setup Instructions" title="Direct link to Setup Instructions" translate="no">​</a></h3>
+<ol>
+<li class="">Click &quot;Copy Flag URL&quot; for each flag</li>
+<li class="">Paste each URL in Chrome address bar</li>
+<li class="">Set each flag to <strong>&quot;Enabled&quot;</strong></li>
+<li class="">Click <strong>&quot;Relaunch&quot;</strong> at bottom of flags page</li>
+<li class="">After restart, AI Features will be available</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="troubleshooting">Troubleshooting<a href="#troubleshooting" class="hash-link" aria-label="Direct link to Troubleshooting" title="Direct link to Troubleshooting" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="feature-not-appearing-in-toolbar">Feature Not Appearing in Toolbar<a href="#feature-not-appearing-in-toolbar" class="hash-link" aria-label="Direct link to Feature Not Appearing in Toolbar" title="Direct link to Feature Not Appearing in Toolbar" translate="no">​</a></h3>
+<ul>
+<li class="">Check feature is <strong>enabled</strong> in settings</li>
+<li class="">Verify LLM provider is configured correctly</li>
+<li class="">For Chrome AI: Check flags are enabled</li>
+<li class="">Refresh the page after enabling</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="next-steps">Next Steps<a href="#next-steps" class="hash-link" aria-label="Direct link to Next Steps" title="Direct link to Next Steps" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/vassist/docs/configuration/shortcuts">Shortcuts</a> - Configure keyboard shortcuts</li>
+<li class=""><a class="" href="/vassist/docs/configuration/llm-settings">LLM Settings</a> - Configure AI provider</li>
+<li class=""><a class="" href="/vassist/docs/configuration/ui-settings">UI Settings</a> - Customize interface</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/b1ink0/vassist/tree/docs/docs/configuration/ai-features.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/vassist/docs/configuration/stt-settings"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">STT Settings</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/vassist/docs/configuration/shortcuts"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Keyboard Shortcuts</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#overview" class="table-of-contents__link toc-highlight">Overview</a></li><li><a href="#translator" class="table-of-contents__link toc-highlight">Translator</a><ul><li><a href="#features" class="table-of-contents__link toc-highlight">Features</a></li><li><a href="#default-translation-language" class="table-of-contents__link toc-highlight">Default Translation Language</a></li><li><a href="#where-its-used" class="table-of-contents__link toc-highlight">Where It&#39;s Used</a></li><li><a href="#testing" class="table-of-contents__link toc-highlight">Testing</a></li></ul></li><li><a href="#language-detector" class="table-of-contents__link toc-highlight">Language Detector</a><ul><li><a href="#features-1" class="table-of-contents__link toc-highlight">Features</a></li><li><a href="#where-its-used-1" class="table-of-contents__link toc-highlight">Where It&#39;s Used</a></li><li><a href="#testing-1" class="table-of-contents__link toc-highlight">Testing</a></li></ul></li><li><a href="#summarizer" class="table-of-contents__link toc-highlight">Summarizer</a><ul><li><a href="#summary-types" class="table-of-contents__link toc-highlight">Summary Types</a></li><li><a href="#summary-formats" class="table-of-contents__link toc-highlight">Summary Formats</a></li><li><a href="#summary-lengths" class="table-of-contents__link toc-highlight">Summary Lengths</a></li><li><a href="#where-its-used-2" class="table-of-contents__link toc-highlight">Where It&#39;s Used</a></li><li><a href="#testing-2" class="table-of-contents__link toc-highlight">Testing</a></li></ul></li><li><a href="#text-rewriter" class="table-of-contents__link toc-highlight">Text Rewriter</a><ul><li><a href="#rewrite-actions" class="table-of-contents__link toc-highlight">Rewrite Actions</a></li><li><a href="#where-its-used-3" class="table-of-contents__link toc-highlight">Where It&#39;s Used</a></li><li><a href="#testing-3" class="table-of-contents__link toc-highlight">Testing</a></li></ul></li><li><a href="#content-writer" class="table-of-contents__link toc-highlight">Content Writer</a><ul><li><a href="#where-its-used-4" class="table-of-contents__link toc-highlight">Where It&#39;s Used</a></li><li><a href="#testing-4" class="table-of-contents__link toc-highlight">Testing</a></li></ul></li><li><a href="#chrome-ai-additional-flags" class="table-of-contents__link toc-highlight">Chrome AI Additional Flags</a><ul><li><a href="#required-flags" class="table-of-contents__link toc-highlight">Required Flags</a></li><li><a href="#setup-instructions" class="table-of-contents__link toc-highlight">Setup Instructions</a></li></ul></li><li><a href="#troubleshooting" class="table-of-contents__link toc-highlight">Troubleshooting</a><ul><li><a href="#feature-not-appearing-in-toolbar" class="table-of-contents__link toc-highlight">Feature Not Appearing in Toolbar</a></li></ul></li><li><a href="#next-steps" class="table-of-contents__link toc-highlight">Next Steps</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/vassist/docs/intro">Getting Started</a></li><li class="footer__item"><a class="footer__link-item" href="/vassist/docs/installation">Installation</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/b1ink0/vassist/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/b1ink0/vassist/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">More</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://vassist-demo.vercel.app" target="_blank" rel="noopener noreferrer" class="footer__link-item">Demo<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/b1ink0/vassist" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">VAssist - An open-source AI-powered virtual companion</div></div></div></footer></div>
+</body>
+</html>
