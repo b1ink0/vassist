@@ -23,6 +23,7 @@ import ChromeAIValidator from '../../src/services/ChromeAIValidator.js';
 import rewriterService from '../../src/services/RewriterService.js';
 import writerService from '../../src/services/WriterService.js';
 import Logger from '../../src/services/LoggerService';
+import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig } from '../../src/config/aiConfig.js';
 
 console.log('Background: Service worker starting...');
 
@@ -276,10 +277,6 @@ async function registerHandlers() {
       
       Logger.log('Background', `TAB_INIT: Auto-configuring services for tab ${tabId}...`);
       try {
-        const { DefaultAIConfig } = await import('../../src/config/aiConfig.js');
-        const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
-        const { DefaultSTTConfig } = await import('../../src/config/aiConfig.js');
-        
         const aiConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
         const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
         const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);

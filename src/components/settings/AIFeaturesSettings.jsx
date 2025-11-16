@@ -1,7 +1,7 @@
 /**
  * AIFeaturesSettings Component
  * AI Features configuration tab for SettingsPanel
- * Handles Translator, Language Detector, Summarizer, and Rewriter settings
+ * Handles Translator, Language Detector, Summarizer, Rewriter, and Writer settings
  * Works with all LLM providers (Chrome AI, OpenAI, Ollama)
  */
 
@@ -19,6 +19,7 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
     testLanguageDetector,
     testSummarizer,
     testRewriter,
+    testWriter,
   } = useConfig();
 
   const chromeVersion = ChromeAIValidator.getChromeVersion();
@@ -51,6 +52,7 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
         testLanguageDetector={testLanguageDetector}
         testSummarizer={testSummarizer}
         testRewriter={testRewriter}
+        testWriter={testWriter}
         isChromeAI={aiConfig.provider === 'chrome-ai'}
         needsFlags={needsFlags}
         showTesting={true}

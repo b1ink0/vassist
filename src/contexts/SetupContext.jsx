@@ -100,6 +100,7 @@ const DEFAULT_SETUP_STATE = {
       languageDetector: { enabled: true },
       summarizer: { enabled: true },
       rewriter: { enabled: true },
+      writer: { enabled: true },
     },
     
     ui: {
@@ -324,6 +325,8 @@ export function SetupProvider({ children }) {
           translator: { enabled: true, defaultTargetLanguage: 'en' },
           languageDetector: { enabled: true },
           summarizer: { enabled: true, defaultType: 'tldr', defaultFormat: 'plain-text', defaultLength: 'medium' },
+          rewriter: { enabled: true, defaultTone: 'as-is', defaultFormat: 'as-is', defaultLength: 'as-is' },
+          writer: { enabled: true, defaultTone: 'neutral', defaultFormat: 'plain-text', defaultLength: 'medium' },
         },
       };
       Logger.log('SetupContext', 'Saving aiConfig:', aiConfig);

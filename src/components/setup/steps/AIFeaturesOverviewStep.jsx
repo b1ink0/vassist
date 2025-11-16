@@ -17,6 +17,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
     languageDetector: { enabled: true },
     summarizer: { enabled: true },
     rewriter: { enabled: true },
+    writer: { enabled: true },
   });
 
   // Load existing setup data on mount
@@ -72,6 +73,12 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
       icon: 'edit',
       name: 'Rewriter',
       description: 'Rephrase and improve text with different tones and styles'
+    },
+    {
+      key: 'writer',
+      icon: 'write',
+      name: 'Writer',
+      description: 'Generate new content based on prompts and context'
     },
   ];
 

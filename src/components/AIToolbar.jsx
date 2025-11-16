@@ -1560,7 +1560,7 @@ const AIToolbar = () => {
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullResponse);
         }
-      });
+      }, null, { useUtilitySession: true });
       
       if (!abortControllerRef.current?.signal.aborted) {
         if (response.response) {
@@ -1628,7 +1628,7 @@ const AIToolbar = () => {
         if (!abortControllerRef.current?.signal.aborted) {
           setResultThrottled(fullResponse);
         }
-      });
+      }, null, { useUtilitySession: true });
       
       Logger.log('AIToolbar', '${actionName} response object:', response);
       Logger.log('AIToolbar', '${actionName} fullResponse:', fullResponse);

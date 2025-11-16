@@ -1,7 +1,7 @@
 /**
  * @fileoverview Shared AI Features configuration component.
  * Reusable component used in both Settings and Setup Wizard.
- * Handles Translator, Language Detector, Summarizer, and Rewriter.
+ * Handles Translator, Language Detector, Summarizer, Rewriter, and Writer.
  */
 
 import React, { useState } from 'react';
@@ -54,6 +54,7 @@ const TestResult = ({ status, message }) => {
  * @param {Function} [props.testLanguageDetector] - Optional language detector test function
  * @param {Function} [props.testSummarizer] - Optional summarizer test function
  * @param {Function} [props.testRewriter] - Optional rewriter test function
+ * @param {Function} [props.testWriter] - Optional writer test function
  * @param {boolean} [props.isChromeAI=false] - Whether Chrome AI is being used
  * @param {Object} [props.needsFlags] - Object indicating which features need Chrome flags enabled
  * @param {boolean} [props.showTesting=true] - Whether to show testing sections
@@ -69,6 +70,7 @@ const AIFeaturesConfig = ({
   testLanguageDetector,
   testSummarizer,
   testRewriter,
+  testWriter,
   isChromeAI = false,
   needsFlags = false,
   showTesting = true,
@@ -80,6 +82,7 @@ const AIFeaturesConfig = ({
   const [languageDetectorInput, setLanguageDetectorInput] = useState('Bonjour, comment allez-vous?');
   const [summarizerTest, setSummarizerTest] = useState({ status: 'idle', message: '' });
   const [rewriterTest, setRewriterTest] = useState({ status: 'idle', message: '' });
+  const [writerTest, setWriterTest] = useState({ status: 'idle', message: '' });
 
   const handleTargetLanguageChange = (langCode) => {
     setTargetLanguage(langCode);
@@ -158,6 +161,24 @@ const AIFeaturesConfig = ({
       setRewriterTest({ status: 'success', message: `Rewritten: "${msg}"` });
     } catch (err) {
       setRewriterTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    }
+  };
+
+  /**
+   * Tests writer functionality.
+   */
+  const runWriterTest = async () => {
+    if (!testWriter) return;
+    try {
+      setWriterTest({ status: 'loading', message: 'Writing...' });
+      const res = await testWriter(
+        'Write a short paragraph about AI benefits',
+        { tone: 'neutral', length: 'short' }
+      );
+      const msg = typeof res === 'string' ? res : JSON.stringify(res);
+      setWriterTest({ status: 'success', message: `Written: "${msg.substring(0, 150)}${msg.length > 150 ? '...' : ''}"`  });
+    } catch (err) {
+      setWriterTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
     }
   };
 
@@ -424,6 +445,48 @@ const AIFeaturesConfig = ({
                 </div>
 
                 <TestResult status={rewriterTest.status} message={rewriterTest.message} />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Writer */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+          <label htmlFor="writer-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
+            Content Writer
+          </label>
+          <Toggle
+            id="writer-enabled"
+            checked={features.writer?.enabled !== false}
+            onChange={(checked) => onFeatureChange?.('writer', checked)}
+          />
+        </div>
+        {features.writer?.enabled !== false && (
+          <div className="ml-7 space-y-3">
+            <p className="text-xs text-white/50">
+              Generate new content from prompts with different tones and lengths
+            </p>
+
+            {showTesting && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={runWriterTest}
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
+                  >
+                    {writerTest.status === 'loading' ? 'Testing...' : 'Test'}
+                  </button>
+                  <button
+                    onClick={() => setWriterTest({ status: 'idle', message: '' })}
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                <TestResult status={writerTest.status} message={writerTest.message} />
               </>
             )}
           </div>

@@ -111,9 +111,20 @@ class AIService {
           try {
             state.chromeAISession.destroy();
           } catch (error) {
-            Logger.warn('other', `${logPrefix} - Error destroying session:`, error);
+            Logger.warn('other', `${logPrefix} - Error destroying main session:`, error);
           }
           state.chromeAISession = null;
+        }
+        
+        // Also destroy utility session if multi-modal support changed
+        if ((imageSupportChanged || audioSupportChanged) && state.chromeAIUtilitySession) {
+          Logger.log('other', `${logPrefix} - Multi-modal support changed, destroying utility session`);
+          try {
+            state.chromeAIUtilitySession.destroy();
+          } catch (error) {
+            Logger.warn('other', `${logPrefix} - Error destroying utility session:`, error);
+          }
+          state.chromeAIUtilitySession = null;
         }
         
         state.config = {
