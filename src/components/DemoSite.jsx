@@ -51,7 +51,7 @@ const DemoSite = () => {
   const [isPromptLoading, setIsPromptLoading] = useState(false);
   
   const [summarizeText, setSummarizeText] = useState('Artificial intelligence (AI) is transforming the way we live and work. From virtual assistants to self-driving cars, AI is becoming increasingly integrated into our daily lives. Machine learning algorithms can now recognize patterns, make predictions, and even create art. However, with great power comes great responsibility, and we must ensure AI is developed ethically and transparently.');
-  const [summarizeType, setSummarizeType] = useState('tl;dr');
+  const [summarizeType, setSummarizeType] = useState('teaser');
   const [summarizeResponse, setSummarizeResponse] = useState('');
   const [isSummarizeLoading, setIsSummarizeLoading] = useState(false);
   
@@ -146,13 +146,27 @@ const DemoSite = () => {
           sourceLanguage = detectionResults[0].detectedLanguage;
         }
       } catch (detectError) {
-        setTranslateResponse('Error: ' + (detectError.message || 'Failed to detect source language'));
+        console.error('Language detection error:', detectError);
+        // Continue with fallback sourceLanguage
+      }
+      
+      // Check if translation is available for this language pair
+      try {
+        const availability = await TranslatorServiceProxy.checkAvailability(sourceLanguage, targetLanguage);
+        if (availability === 'no') {
+          setTranslateResponse(`Translation from ${sourceLanguage} to ${targetLanguage} is not available. Try a different language pair.`);
+          return;
+        }
+      } catch (availError) {
+        console.error('Availability check error:', availError);
+        // Continue anyway, let translate() handle the error
       }
       
       const result = await TranslatorServiceProxy.translate(translateText, sourceLanguage, targetLanguage);
       setTranslateResponse(result);
     } catch (error) {
-      setTranslateResponse('Error: ' + (error.message || 'Failed to translate'));
+      console.error('Translation error:', error);
+      setTranslateResponse('Error: ' + (error.message || 'Failed to translate. This language pair may not be supported.'));
     } finally {
       setIsTranslateLoading(false);
     }
@@ -819,14 +833,14 @@ const DemoSite = () => {
               
               <div className="flex justify-between gap-2 mb-3">
                 <button
-                  onClick={() => setSummarizeType('tl;dr')}
+                  onClick={() => setSummarizeType('teaser')}
                   className={`px-2 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap flex-1 ${
-                    summarizeType === 'tl;dr'
+                    summarizeType === 'teaser'
                       ? `${theme.purpleTag} ring-2 ${isDark ? 'ring-purple-400' : 'ring-purple-500'}`
                       : `${isDark ? 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`
                   }`}
                 >
-                  TL;DR
+                  Teaser
                 </button>
                 <button
                   onClick={() => setSummarizeType('key-points')}
