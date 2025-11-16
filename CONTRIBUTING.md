@@ -78,10 +78,6 @@ VAssist uses a multi-layer architecture:
 3. Background Service Worker
 4. External APIs
 
-### Multi-Tab Support
-
-Each browser tab gets independent state with automatic cleanup when tabs close to prevent memory leaks.
-
 ### Shadow DOM Isolation
 
 VAssist uses Shadow DOM for zero CSS conflicts with host pages:
@@ -98,7 +94,7 @@ The project is organized into shared source code and extension-specific files:
 **Main Source (`src/`):**
 - `components/` - React components, settings panels, setup wizard
 - `babylon/` - 3D rendering (MMDModelScene, AnimationManager)
-- `services/` - Demo mode services with smart routing proxies
+- `services/` - Services with smart routing proxies
 - `managers/` - State management (ChatManager, StorageManager)
 - `config/` - Configuration files (AI, animations, UI)
 - `workers/` - Web workers (AudioWorkerClient)
@@ -110,20 +106,12 @@ The project is organized into shared source code and extension-specific files:
 - `offscreen/` - Audio processing
 
 **Static Assets (`public/`):**
-- `res/assets/model/` - 3D models (.pmx format)
+- `res/assets/model/` - 3D models (.bpmx format)
 - `res/assets/motion/` - Animations (.bvmd format)
 
 ---
 
 ## How to Add Features
-
-### Adding a New Animation
-
-1. Get or create a VMD file (use MikuMikuDance software or download from animation sites)
-2. Convert to BVMD if needed (babylon-mmd can do this automatically)
-3. Add the file to `public/res/assets/motion/`
-4. Register it in `src/config/animationConfig.js` with id, name, file path, and options
-5. Use it by calling the animation manager with your animation id
 
 ### Adding a New AI Provider
 
@@ -209,6 +197,5 @@ Enable debug panel in Settings → UI to see FPS, memory, and animation state.
 
 - Open a [Discussion](https://github.com/b1ink0/vassist/discussions) for questions
 - Open an [Issue](https://github.com/b1ink0/vassist/issues) for bugs
-- Check [existing docs](docs/) for detailed guides
 
 Thanks for contributing! 🎉

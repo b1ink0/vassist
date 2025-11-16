@@ -1,110 +1,179 @@
-# VAssist - Your AI-Powered Virtual Assistant
+<div align="center">
+  <img src="public/VA.svg" alt="VAssist Logo" width="64" />
+  <h1>VAssist</h1>
+  <p>Chrome extension with AI toolbar, chat interface, and animated virtual companion. Runs locally using Chrome's built-in AI.</p>
+</div>
 
-VAssist brings an interactive 3D character to your browser, powered by Chrome's built-in AI. Think of it as having a personal assistant that lives right in your browser, ready to help with writing, translations, summaries, and more.
+<div align="center">
 
-## Quick Links
+[🎮 Try Demo](https://vassist-demo.vercel.app) • [📖 Documentation](https://b1ink0.github.io/vassist/docs/intro) • [🚀 Installation](#installation) • [💻 Contributing](CONTRIBUTING.md)
 
-[🎮 Try Demo](https://vassist-demo.vercel.app) • [⚡ AI Toolbar Features](#ai-toolbar---the-star-feature) • [🚀 Installation](#getting-started) • [⚙️ Customization](#customization) • [💻 Contributing](CONTRIBUTING.md)
+</div>
+
+## Overview
+
+<div align="center">
+  <img src="./assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
+</div>
+
+VAssist has three main components:
+
+- **AI Toolbar** - Appears when selecting text or focusing inputs. Provides summarize, translate, rewrite, grammar fix, tone change, image analysis, dictation
+- **Chat Interface** - Chat with AI about current page or anything else. Supports image/audio attachments, voice mode, conversation history with branching
+- **Virtual Companion** - Animated character that appears on pages. Shows different states (idle, thinking, speaking) with lip-synced speech
+
+Works on Chrome 138+ with built-in AI enabled. All processing happens on device. No external API calls unless you configure third-party providers.
+
+[View full documentation →](https://b1ink0.github.io/vassist/docs/intro)
+
+## Features
+
+### AI Toolbar
+
+<div align="center">
+  <img src="./assets/toolbars.png" alt="AI Toolbar" />
+</div>
+
+Select any text on any website and a sleek toolbar pops up with powerful AI tools at your fingertips:
 
 ---
 
-## Try Before Installing
+**📝 Summarize**  
 
-Want to see what VAssist can do before installing? Check out [demo site](https://vassist-demo.vercel.app) and play around with all the features. No installation needed, just open it in Chrome and start chatting.
+<div align="center">
+  <img src="./assets/summarize.png" alt="AI Toolbar" />
+</div>
+
+Turn walls of text into digestible chunks. Uses Chrome's Summarizer API to give you:
+- Headline - One punchy line
+- Key Points - Bullet list of main ideas  
+- Teaser - Short preview that hooks you in
 
 ---
 
-## What VAssist Does
+**🌍 Translate**  
 
-### AI Toolbar - The Star Feature
+<div align="center">
+  <img src="./assets/translate.png" alt="AI Toolbar" />
+</div>
 
-Select any text on any website and watch the magic happen. A sleek toolbar pops up with powerful AI tools at your fingertips:
-
-#### 📝 Summarize
-Turn walls of text into digestible chunks. Uses **Chrome's Summarizer API** to give you:
-- **Headline** - One punchy line
-- **Key Points** - Bullet list of main ideas  
-- **Teaser** - Short preview that hooks you in
-
-#### 🌍 Translate
-Speak the language, any language. Powered by **Chrome's Translator API**:
+Speak the language, any language. Powered by Chrome's Translator API and Language Detector API:
 - Translate to 100+ languages instantly
-- **Auto-detect** what language you're reading
+- Auto-detect what language you're reading
 - Works completely offline
 
-#### ✍️ Rewrite  
-Make your words shine. **Chrome's Rewriter API** helps you:
-- **Fix Spelling & Grammar** - Clean up mistakes
-- **Change Tone** - Go formal, casual, or professional
-- **Adjust Length** - Make it shorter, expand it, or keep it concise
-- **Improve Clarity** - Simplify complex sentences
-- **Custom Rewrites** - Tell it exactly what you want
+---
 
-#### 📚 Dictionary
-Your personal word expert. Uses **Chrome's Prompt API** (Gemini Nano):
+**✍️ Rewrite**  
+
+<div align="center">
+  <img src="./assets/rewrite.png" alt="AI Toolbar" />
+</div>
+
+Make your words shine. Chrome's Rewriter API helps you:
+- Fix Spelling & Grammar - Clean up mistakes
+- Change Tone - Go formal, casual, or professional
+- Adjust Length - Make it shorter, expand it, or keep it concise
+- Improve Clarity - Simplify complex sentences
+- Custom Rewrites - Tell it exactly what you want
+
+---
+
+**📚 Dictionary**  
+Your personal word expert. Uses Chrome's Prompt API (Gemini Nano):
 - Get definitions on the spot
 - Find synonyms and antonyms
 - Learn pronunciation
 - See real usage examples
 
-#### 🎨 Writer
-Generate fresh content from scratch. Powered by **Chrome's Writer API**:
+---
+
+**🎨 Writer**  
+
+<div align="center">
+  <img src="./assets/writer.png" alt="AI Toolbar" />
+</div>
+
+Generate fresh content from scratch. Powered by Chrome's Writer API:
 - Create content based on your ideas
 - Works with your selected text as context
 - Perfect for brainstorming and drafting
 
-#### 🖼️ Image Tools
+---
+
+**🖼️ Image Tools**  
 Just hover over any image to:
-- **Describe** - AI tells you what's in the image (**Multimodal Prompt API**)
-- **Extract Text** - Pull out text from screenshots (OCR)
-- **Identify Objects** - Spot and label things in photos
+- Describe - AI tells you what's in the image (Multimodal Prompt API)
+- Extract Text - Pull out text from screenshots (OCR)
+- Identify Objects - Spot and label things in photos
 
-#### 🎤 Voice Dictation
-Talk instead of type. **Multimodal Input API** lets you dictate directly into text fields.
+---
 
-#### 📄 Document Interaction
+**🎤 Voice Dictation**  
+
+<div align="center">
+  <img src="./assets/dictation.png" alt="AI Toolbar" />
+</div>
+
+Talk instead of type. Multimodal Input API lets you dictate directly into text fields.
+
+---
+
+**📄 Document Interaction**  
 Work smarter with web content:
-- **Page Context** - Ask questions about the current page you're viewing
-- **Smart Summaries** - Get instant summaries of articles and documents
-- **Content Analysis** - Understand complex content with AI assistance
+- Page Context - Ask questions about the current page you're viewing
+- Smart Summaries - Get instant summaries of articles and documents
+- Content Analysis - Understand complex content with AI assistance
 - Works seamlessly with Chrome's built-in AI
 
 ---
 
-### Chat With Your Assistant
+### Chat Interface
+
+<div align="center">
+  <img src="./assets/chat.png" alt="AI Toolbar" />
+</div>
 
 Open the chat window anytime to have natural conversations with Gemini Nano running right in your browser.
 
-### Your 3D Companion
-
-A fully animated 3D character appears on your screen, making the experience more interactive and fun. The character responds with expressions and gestures, bringing some personality to your browsing.
+- Page Context - Ask questions about the current page you're viewing
+- File Attachments - Drag and drop images or audio files for context
+- Voice Mode - Hands-free conversation with TTS and STT
+- Chat History - Auto-saved conversations with search and branching
+- Message Actions - Edit messages, regenerate responses, TTS playback
+- Smooth Animations - Words fade in smoothly one at a time as AI responds
+- Temporary Chats - Start sessions that don't save to history
 
 ---
 
-## Getting Started
+### Virtual Companion
 
-### What You'll Need
+<div align="center">
+  <img src="./assets/companion.png" alt="Virtual Companion" />
+</div>
 
-VAssist is built specifically for **Google Chrome** with built-in AI capabilities. Here's what you need:
+A fully animated character appears on your screen, making the experience more interactive and fun. The character responds with expressions and gestures, bringing some personality to your browsing.
 
-- **Chrome Browser** version 138 or newer
-- **Chrome AI Features** enabled (we'll walk you through this)
-- That's it! No API keys, no subscriptions, no external services needed
+- Display Modes - Full body or portrait mode
+- Animations - Idle movements, thinking states, lip-synced speech
+- Positioning - Drag anywhere on screen, position saved per preset
 
-> **Note:** While other providers like OpenAI can be used as fallbacks, VAssist is designed for Chrome's built-in AI to give you the best experience.
+## Installation
 
-### Enable Chrome AI Features
+### Requirements
 
-Chrome's AI features need to be turned on first. Don't worry, it's straightforward:
+- Chrome Browser version 138 or newer
+- Chrome AI flags enabled (see below)
 
-**Step 1: Check Your Chrome Version**
-1. Open Chrome and type `chrome://version` in the address bar
-2. Make sure you see version 138 or higher
-3. If not, update Chrome from `chrome://settings/help`
+### Quick Start
 
-**Step 2: Enable Required Flags**
+**Step 1: Check Chrome Version**
 
-Copy and paste these URLs into Chrome, then change each to the specified setting:
+Open `chrome://version` and verify you have version 138+. Update at `chrome://settings/help` if needed.
+
+**Step 2: Enable Chrome AI Flags**
+
+Visit each URL and set to the specified value:
 
 | Chrome Flag URL | Setting |
 |-----------------|---------|
@@ -113,89 +182,57 @@ Copy and paste these URLs into Chrome, then change each to the specified setting
 | `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` | **Enabled** |
 | `chrome://flags/#writer-api-for-gemini-nano` | **Enabled** |
 | `chrome://flags/#rewriter-api-for-gemini-nano` | **Enabled** |
+| `chrome://flags/#summarization-api-for-gemini-nano` | **Enabled** |
+| `chrome://flags/#translation-api` | **Enabled** |
+| `chrome://flags/#language-detection-api` | **Enabled** |
 
-Once you've enabled all five flags, hit the **Relaunch** button at the bottom of the page to restart Chrome.
+Click **Relaunch** after enabling all flags.
 
-### Install VAssist Extension
+**Step 3: Install Extension**
 
-**From Release (Recommended)**
-1. Head to the [GitHub releases page](https://github.com/b1ink0/vassist/releases)
-2. Download the latest `vassist-extension.zip` file
-3. Extract the zip file somewhere on your computer
-4. Open Chrome and go to `chrome://extensions`
-5. Turn on **Developer mode** (toggle in top-right corner)
-6. Click **Load unpacked**
-7. Select the extracted `vassist-extension` folder
-8. VAssist is now installed!
+1. Download `vassist-extension.zip` from [releases](https://github.com/b1ink0/vassist/releases)
+2. Extract the zip file
+3. Open `chrome://extensions`
+4. Enable **Developer mode** (top-right toggle)
+5. Click **Load unpacked**
+6. Select the extracted folder
 
-### First Time Setup
+**Step 4: First Launch**
 
-When you first click the VAssist icon, the application will walk you through a quick setup to get everything configured just the way you like.
+Click the extension icon to run the setup wizard.
 
----
-
-## Privacy & Offline Use
-
-VAssist runs locally using Chrome's built-in AI. Your conversations and data stay on your device. No information is sent to external servers unless you explicitly choose to use alternative AI providers in settings.
-
-The AI model downloads once and works offline after that (though you still need internet for browsing websites).
-
----
-
-## Customization
-
-### Settings Panel
-
-Access settings from the chat interface to customize:
-
-**Appearance**
-- Position (corners, center, custom)
-- Size and scale
-- Transparency and blur effects
-- Theme options
-
-**Behavior**
-- Animation speed and style
-- Auto-hide when inactive
-- Chat history length
-- Voice settings
-
-**AI Provider**
-- Use Chrome AI (recommended)
-- Fallback options for unsupported features
-
----
-
-## Built With
-
-VAssist is built using modern web technologies:
-
-- **React** - UI framework
-- **Vite** - Build tool and dev server
-- **Babylon.js** - 3D rendering engine
-- **Tailwind CSS** - Styling
-- **Chrome AI APIs** - Built-in AI capabilities (Gemini Nano)
-
----
+[Detailed installation guide →](https://b1ink0.github.io/vassist/docs/installation)
 
 ## Contributing
 
-Want to contribute? Check out the [Contributing Guide](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
----
+```bash
+git clone https://github.com/b1ink0/vassist.git
+cd vassist
+bun install
+
+bun run dev                    # Start demo site
+bun run build:extension        # Build extension
+bun run build:extension:zip    # Create distributable
+```
+
+## Built With
+
+- **React** - UI framework
+- **Vite** - Build tool
+- **Babylon.js** - Character rendering and animation
+- **Tailwind CSS** - Styling
+- **Dexie.js** - IndexedDB wrapper
+- **Kokoro.js** - On-device TTS
+- **Chrome AI APIs** - Gemini Nano
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Links
+
+[🐛 Issues](https://github.com/b1ink0/vassist/issues) • [💬 Discussions](https://github.com/b1ink0/vassist/discussions) • [📖 Docs](https://b1ink0.github.io/vassist/docs/intro)
 
 ---
-
-## Support & Community
-
-- **Issues**: Found a bug? [Report it here](https://github.com/b1ink0/vassist/issues)
-- **Discussions**: Questions or ideas? [Start a discussion](https://github.com/b1ink0/vassist/discussions)
-- **Updates**: Follow the project to get notified about new features
-
----
-
-Made with curiosity and a bit of magic ✨
