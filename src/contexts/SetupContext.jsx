@@ -108,6 +108,11 @@ const DEFAULT_SETUP_STATE = {
       enablePortraitMode: false,
       position: 'bottom-right',
       enableAIToolbar: true,
+      shortcuts: {
+        enabled: false,
+        openChat: '',
+        toggleMode: '',
+      },
     },
   },
 };
@@ -402,6 +407,11 @@ export function SetupProvider({ children }) {
         enableChatHistory: true,
         enableVoiceInput: false,
         theme: 'dark',
+        shortcuts: setupState.setupData.ui?.shortcuts || {
+          enabled: false,
+          openChat: '',
+          toggleMode: '',
+        },
       };
       Logger.log('SetupContext', 'Saving uiConfig:', uiConfig);
       await StorageServiceProxy.configSave('uiConfig', uiConfig);

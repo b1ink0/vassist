@@ -717,6 +717,87 @@ export const AppProvider = ({ children }) => {
   }, [chatMessages, currentChatId, isTempChat, isProcessing]);
 
   // ========================================
+  // KEYBOARD SHORTCUTS
+  // ========================================
+
+  /**
+   * Parse keyboard event into key combination string
+   */
+  const parseKeyEvent = useCallback((event) => {
+    const modifiers = [];
+    let mainKey = event.key;
+    
+    // Ignore modifier-only presses
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(mainKey)) {
+      return null;
+    }
+    
+    // Collect modifiers
+    if (event.ctrlKey) modifiers.push('Ctrl');
+    if (event.altKey) modifiers.push('Alt');
+    if (event.shiftKey) modifiers.push('Shift');
+    if (event.metaKey) modifiers.push('Meta');
+    
+    // Normalize key name
+    if (mainKey.length === 1) {
+      mainKey = mainKey.toUpperCase();
+    }
+    
+    return [...modifiers, mainKey].join('+');
+  }, []);
+
+  /**
+   * Global keyboard shortcut listener
+   */
+  useEffect(() => {
+    if (!uiConfig?.shortcuts?.enabled) return;
+    
+    const handleKeyDown = (event) => {
+      const combo = parseKeyEvent(event);
+      if (!combo) return;
+      
+      const shortcuts = uiConfig.shortcuts;
+      
+      // Check for Open Chat shortcut
+      if (shortcuts.openChat && combo === shortcuts.openChat) {
+        event.preventDefault();
+        event.stopPropagation();
+        Logger.log('AppContext', 'Toggle Chat shortcut triggered:', combo);
+        toggleChat();
+        return;
+      }
+      
+      // Check for Toggle Avatar shortcut
+      if (shortcuts.toggleMode && combo === shortcuts.toggleMode) {
+        event.preventDefault();
+        event.stopPropagation();
+        Logger.log('AppContext', 'Toggle Avatar shortcut triggered:', combo);
+        
+        const newValue = !uiConfig.enableModelLoading;
+        
+        setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
+        setEnableModelLoading(newValue);
+        
+        // Create updated config and notify listeners
+        const updatedConfig = { ...uiConfig, enableModelLoading: newValue };
+        window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: updatedConfig }));
+        
+        StorageServiceProxy.configSave('uiConfig', updatedConfig)
+          .then(() => {
+            Logger.log('AppContext', 'Avatar visibility toggled via shortcut:', newValue);
+          })
+          .catch(err => {
+            Logger.error('AppContext', 'Failed to toggle avatar via shortcut:', err);
+          });
+        return;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [uiConfig, parseKeyEvent, toggleChat]);
+
+  // ========================================
   // CONTEXT VALUE
   // ========================================
 

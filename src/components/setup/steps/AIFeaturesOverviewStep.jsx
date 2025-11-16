@@ -3,13 +3,14 @@
  * Simple enable/disable toggles for all AI features
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
+import ShortcutsConfig from '../../common/ShortcutsConfig';
 import Logger from '../../../services/LoggerService';
 
-const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
+const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const [features, setFeatures] = useState({
@@ -19,12 +20,22 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
     rewriter: { enabled: true },
     writer: { enabled: true },
   });
+  const [shortcuts, setShortcuts] = useState({
+    enabled: false,
+    openChat: '',
+    toggleMode: '',
+  });
 
   // Load existing setup data on mount
   useEffect(() => {
     const aiFeatures = setupData?.aiFeatures;
     if (aiFeatures) {
       setFeatures(aiFeatures);
+    }
+    
+    const uiShortcuts = setupData?.ui?.shortcuts;
+    if (uiShortcuts) {
+      setShortcuts(uiShortcuts);
     }
     
     // Mark initial load complete
@@ -41,6 +52,15 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
     Logger.log('AIFeaturesOverviewStep', 'Saving AI features config');
     updateSetupData({ aiFeatures: features });
   }, [features, updateSetupData]);
+  
+  const handleShortcutsChange = useCallback((newShortcuts) => {
+    setShortcuts(newShortcuts);
+    
+    if (!initialLoadRef.current) {
+      Logger.log('AIFeaturesOverviewStep', 'Saving shortcuts config');
+      updateSetupData('ui.shortcuts', newShortcuts);
+    }
+  }, [updateSetupData]);
 
   const handleToggle = (featureKey) => {
     setFeatures(prev => ({
@@ -141,6 +161,26 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => { // eslint-di
               {Object.values(features).filter(f => f?.enabled !== false).length} of {featureList.length} features enabled
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Keyboard Shortcuts Section */}
+      <div className="mt-8 pt-6 border-t border-white/10">
+        <div className="mb-4">
+          <h3 className="text-lg font-bold mb-1 text-white">
+            Keyboard Shortcuts
+          </h3>
+          <p className="text-xs text-white/70">
+            Optional: Set up quick access shortcuts (can be configured later)
+          </p>
+        </div>
+
+        <div className="rounded-lg p-4 border border-white/10 bg-white/5">
+          <ShortcutsConfig
+            shortcuts={shortcuts}
+            onShortcutsChange={handleShortcutsChange}
+            isLightBackground={isLightBackground}
+          />
         </div>
       </div>
     </div>

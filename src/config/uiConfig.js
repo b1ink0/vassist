@@ -184,4 +184,10 @@ export const DefaultUIConfig = {
   },
   
   smoothStreamingAnimation: false,
+  
+  shortcuts: {
+    enabled: false,
+    openChat: '',
+    toggleMode: '',
+  },
 };

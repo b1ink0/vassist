@@ -8,6 +8,7 @@ import { useConfig } from '../../contexts/ConfigContext';
 import { BackgroundThemeModes, PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
+import ShortcutsConfig from '../common/ShortcutsConfig';
 import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
@@ -120,15 +121,15 @@ const UISettings = ({ isLightBackground }) => {
       <div className="space-y-4 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Virtual Companion</h4>
         
-        {/* Enable 3D Model Loading Toggle */}
+        {/* Enable Avatar Toggle */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex-1">
-              <label className="text-sm text-white font-medium">Enable 3D Model Loading</label>
+              <label className="text-sm text-white font-medium">Enable Avatar</label>
               <p className="text-xs text-white/50 mt-0.5">
                 {uiConfig.enableModelLoading 
-                  ? 'Virtual assistant with 3D avatar' 
-                  : 'Chat-only mode (no 3D model)'}
+                  ? 'Virtual assistant with animated avatar' 
+                  : 'Chat-only mode (no avatar)'}
               </p>
             </div>
             <Toggle
@@ -138,7 +139,7 @@ const UISettings = ({ isLightBackground }) => {
           </div>
         </div>
 
-        {/* Character Display Settings - Only show when 3D model is enabled */}
+        {/* Character Display Settings - Only show when avatar is enabled */}
         {uiConfig.enableModelLoading && (
           <>
           {/* Portrait Mode Toggle */}
@@ -256,24 +257,6 @@ const UISettings = ({ isLightBackground }) => {
         </div>
       )}
 
-      {/* Enable Developer Tools Toggle */}
-      <div className="space-y-2 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
-        
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <label className="text-sm text-white font-medium">Enable Developer Tools</label>
-            <p className="text-xs text-white/50 mt-0.5">
-              Show draggable debug panel for testing animations and positions
-            </p>
-          </div>
-          <Toggle
-            checked={uiConfig.enableDebugPanel || false}
-            onChange={(checked) => updateUIConfig('enableDebugPanel', checked)}
-          />
-        </div>
-      </div>
-
       {/* Chat & UI Settings */}
       <div className="space-y-4 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Chat & Interface</h4>
@@ -390,6 +373,35 @@ const UISettings = ({ isLightBackground }) => {
             </div>
           </>
         )}
+      </div>
+
+      {/* Keyboard Shortcuts */}
+      <div className="space-y-4 border-t border-white/10 pt-4">
+        <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
+        
+        <ShortcutsConfig
+          shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
+          onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
+          isLightBackground={isLightBackground}
+        />
+      </div>
+
+      {/* Developer Options - Moved to bottom */}
+      <div className="space-y-2 border-t border-white/10 pt-4">
+        <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
+        
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <label className="text-sm text-white font-medium">Enable Developer Tools</label>
+            <p className="text-xs text-white/50 mt-0.5">
+              Show draggable debug panel for testing animations and positions
+            </p>
+          </div>
+          <Toggle
+            checked={uiConfig.enableDebugPanel || false}
+            onChange={(checked) => updateUIConfig('enableDebugPanel', checked)}
+          />
+        </div>
       </div>
     </div>
   );

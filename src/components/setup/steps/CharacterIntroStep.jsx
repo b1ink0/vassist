@@ -89,10 +89,10 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
               <h4 className="text-base font-semibold text-white mb-1">
-                Enable Virtual Companion
+                Enable Avatar
               </h4>
               <p className="text-xs text-white/60">
-                Display an animated companion alongside your chat
+                Display an animated avatar alongside your chat
               </p>
             </div>
             
