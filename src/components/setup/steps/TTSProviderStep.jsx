@@ -102,8 +102,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     Logger.log('TTSProviderStep', 'Saving TTS/STT config');
     
     const ttsData = {
-      enabled: true,
-      provider: selectedProvider,
+      enabled: selectedProvider !== 'disabled',
+      provider: selectedProvider === 'disabled' ? 'kokoro' : selectedProvider,
       kokoro: kokoroConfig,
       openai: {
         apiKey: openAIKey,
@@ -119,8 +119,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     };
     
     const sttData = {
-      enabled: true,
-      provider: selectedSTTProvider,
+      enabled: selectedSTTProvider !== 'disabled',
+      provider: selectedSTTProvider === 'disabled' ? STTProviders.CHROME_AI_MULTIMODAL : selectedSTTProvider,
     };
     
     updateSetupData({ 
@@ -137,6 +137,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   ]);
 
   const providers = [
+    {
+      id: 'disabled',
+      name: 'Disabled',
+      description: 'Turn off text-to-speech',
+      iconName: 'x',
+      recommended: false,
+      pros: [
+        'No resource usage',
+        'Faster performance',
+        'Text-only mode'
+      ],
+      cons: [
+        'No voice output',
+        'Silent virtual companion'
+      ],
+      requirements: 'None'
+    },
     {
       id: 'kokoro',
       name: 'Kokoro TTS',
@@ -260,6 +277,15 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const hasMultimodal = setupData?.multimodal?.audioSupport;
   
   const sttProviders = [
+    {
+      id: 'disabled',
+      name: 'Disabled',
+      iconName: 'x',
+      description: 'Turn off speech recognition',
+      recommended: false,
+      available: true,
+      requirements: 'None - text input only'
+    },
     {
       id: STTProviders.CHROME_AI_MULTIMODAL,
       name: 'Chrome AI',
@@ -420,6 +446,21 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         />
 
       {/* Provider-specific Configuration */}
+      {selectedProvider === 'disabled' && (
+        <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
+          <div className="flex items-start gap-3">
+            <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-2 text-sm text-white/90">
+              <p className="font-semibold">Text-to-Speech Disabled</p>
+              <p className="text-white/70">
+                The virtual companion will be silent. You can still use all other features, 
+                but AI responses won't be spoken aloud. You can enable TTS later in Settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedProvider === 'kokoro' && (
         <KokoroTTSConfig
           config={kokoroConfig}
@@ -623,6 +664,21 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         </div>
 
         {/* STT Provider-specific Configuration */}
+        {selectedSTTProvider === 'disabled' && (
+          <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
+            <div className="flex items-start gap-3">
+              <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-2 text-sm text-white/90">
+                <p className="font-semibold">Speech-to-Text Disabled</p>
+                <p className="text-white/70">
+                  Voice input will be unavailable. You'll need to type your messages instead. 
+                  You can enable STT later in Settings if you want to use voice input.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {selectedSTTProvider === STTProviders.CHROME_AI_MULTIMODAL && (
           <ChromeAISTTConfig
             config={sttConfig.chromeAi}

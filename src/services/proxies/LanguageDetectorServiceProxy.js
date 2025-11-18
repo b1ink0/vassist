@@ -8,6 +8,8 @@
 import { ServiceProxy } from './ServiceProxy.js';
 import LanguageDetectorService from '../LanguageDetectorService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import StorageServiceProxy from './StorageServiceProxy.js';
+import { DefaultAIConfig } from '../../config/aiConfig.js';
 
 class LanguageDetectorServiceProxy extends ServiceProxy {
   constructor() {
@@ -28,8 +30,6 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
-      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
       const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.languageDetector?.enabled !== false) {

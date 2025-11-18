@@ -101,10 +101,39 @@ const KokoroTTSConfig = ({
               <ol className="list-decimal list-inside space-y-2 text-blue-200/90 ml-2">
                 <li><strong>Choose a Voice:</strong> Select from the dropdown below. Try different voices to find your favorite!</li>
                 <li><strong>Adjust Speed:</strong> Use the slider to make speech faster or slower (1.0x is normal speed).</li>
-                <li><strong>Pick Device Backend (Optional):</strong> Auto is recommended. WebGPU uses ~350MB (faster), WASM uses ~86MB (slower).</li>
+                <li><strong>Pick Device Backend:</strong> Auto is recommended. WebGPU uses ~350MB (faster), WASM uses ~86MB (slower but more compatible).</li>
                 <li><strong>Download the Model:</strong> Click "Initialize Model" to download. Size depends on backend selected.</li>
                 <li><strong>Test Your Voice:</strong> After initialization, click "Test Voice" to hear a sample.</li>
               </ol>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Consolidated Performance & Compatibility Warnings - Only show in setup mode */}
+      {isSetupMode && (
+        <div className="space-y-3">
+          {/* Main Performance Warning */}
+          <div className="rounded-lg p-3 border border-yellow-500/30 bg-yellow-500/10">
+            <div className="flex items-start gap-3">
+              <Icon name="warning" size={20} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-2 text-sm text-yellow-100">
+                <p className="font-semibold">Important Performance & Compatibility Notes</p>
+                <ol className="list-decimal list-inside space-y-2 text-yellow-200/90 ml-2">
+                  <li className="pl-2">
+                    <strong>Page Lag:</strong> If you experience lag or poor performance with WebGPU or Auto backend, 
+                    switch to <strong>WASM backend</strong> (in Advanced Settings below) or choose a different TTS provider.
+                  </li>
+                  <li className="pl-2">
+                    <strong>Gibberish Audio:</strong> If the generated audio sounds like gibberish or is unintelligible while using WebGPU or Auto, 
+                    your system doesn't support WebGPU properly. Switch to <strong>WASM backend</strong> to fix this issue.
+                  </li>
+                  <li className="pl-2">
+                    <strong>Backend Comparison:</strong> WebGPU is 2-10x faster but requires GPU support and uses more memory (~350MB). 
+                    WASM is slower but more stable, compatible with all systems, and uses less memory (~86MB).
+                  </li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
@@ -163,61 +192,63 @@ const KokoroTTSConfig = ({
         </div>
       </div>
 
-      {/* Advanced Settings Collapsible - Open by default in setup mode */}
-      <details className="space-y-2" open={isSetupMode}>
+      {/* Device Backend Selection - Moved outside Advanced Settings for visibility */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">
+          Device Backend {isSetupMode && <span className="text-xs text-white/60">(Step 3 - Optional)</span>}
+        </label>
+        {isSetupMode && (
+          <p className="text-xs text-white/60 mb-2">
+            Choose how the model runs: <strong>Auto</strong> (recommended) automatically picks the best option. 
+            <strong>WebGPU</strong> is faster (~350MB download) but needs a good graphics card. 
+            <strong>WASM</strong> is slower but smaller (~86MB) and works on any device.
+          </p>
+        )}
+        <select
+          value={config.device || KokoroDevice.AUTO}
+          onChange={(e) => handleChange('device', e.target.value)}
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+        >
+          {deviceOptions.map((option) => (
+            <option key={option.value} value={option.value} className="bg-gray-900">
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {isSetupMode && (
+          <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
+            <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
+              <Icon name="idea" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
+              <span><strong>Tip:</strong> Select "Auto" to let the system choose the best option for your device. 
+              If you have a gaming PC or laptop with a dedicated graphics card, it will use WebGPU (faster). 
+              Otherwise, it will use WASM (smaller download, works everywhere).</span>
+            </p>
+          </div>
+        )}
+        {!isSetupMode && (
+          <>
+            <p className="text-xs text-white/50">
+              Quantization is automatic: WebGPU uses fp32 (~350MB), WASM uses q8 (~86MB)
+            </p>
+            <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
+              <Icon name="warning" size={16} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-yellow-200/90 leading-relaxed">
+                <strong>Performance Note:</strong> If the model or page lags, try switching to WASM backend for better stability. 
+                However, WASM is significantly slower than WebGPU. For optimal performance, consider using different TTS providers 
+                (OpenAI, OpenAI-Compatible) or hosting a TTS service directly on your device.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Advanced Settings Collapsible - Collapsed by default now */}
+      <details className="space-y-2">
         <summary className="text-sm font-medium text-white/70 cursor-pointer hover:text-white/90">
-          Advanced Settings {isSetupMode && <span className="text-xs text-white/60">(Optional - Auto is recommended)</span>}
+          Advanced Settings {isSetupMode && <span className="text-xs text-white/60">(Optional)</span>}
         </summary>
         
         <div className="space-y-4 pt-2">
-          {/* Device Selection - First in setup mode */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Device Backend</label>
-            {isSetupMode && (
-              <p className="text-xs text-white/60 mb-2">
-                Choose how the model runs: <strong>Auto</strong> (recommended) automatically picks the best option. 
-                <strong>WebGPU</strong> is faster (~350MB download) but needs a good graphics card. 
-                <strong>WASM</strong> is slower but smaller (~86MB) and works on any device.
-              </p>
-            )}
-            <select
-              value={config.device || KokoroDevice.AUTO}
-              onChange={(e) => handleChange('device', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              {deviceOptions.map((option) => (
-                <option key={option.value} value={option.value} className="bg-gray-900">
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {isSetupMode && (
-              <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-                <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
-                  <Icon name="idea" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
-                  <span><strong>Tip:</strong> Select "Auto" to let the system choose the best option for your device. 
-                  If you have a gaming PC or laptop with a dedicated graphics card, it will use WebGPU (faster). 
-                  Otherwise, it will use WASM (smaller download, works everywhere).</span>
-                </p>
-              </div>
-            )}
-            {!isSetupMode && (
-              <>
-                <p className="text-xs text-white/50">
-                  Quantization is automatic: WebGPU uses fp32 (~350MB), WASM uses q8 (~86MB)
-                </p>
-                <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
-                  <Icon name="alert-triangle" size={16} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-yellow-200/90 leading-relaxed">
-                    <strong>Performance Note:</strong> If the model or page lags, try switching to WASM backend for better stability. 
-                    However, WASM is significantly slower than WebGPU. For optimal performance, consider using different TTS providers 
-                    (OpenAI, OpenAI-Compatible) or hosting a TTS service directly on your device.
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
           {/* Model ID - Hidden in setup mode for simplicity */}
           {!isSetupMode && (
             <div className="space-y-2">

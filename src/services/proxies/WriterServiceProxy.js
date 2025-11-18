@@ -9,6 +9,8 @@ import { ServiceProxy } from './ServiceProxy.js';
 import WriterService from '../WriterService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
 import Logger from '../LoggerService';
+import StorageServiceProxy from './StorageServiceProxy.js';
+import { DefaultAIConfig } from '../../config/aiConfig.js';
 
 class WriterServiceProxy extends ServiceProxy {
   constructor() {
@@ -29,8 +31,6 @@ class WriterServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
-      const { DefaultAIConfig } = await import('../../config/aiConfig.js');
       const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.writer?.enabled !== false) {

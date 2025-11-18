@@ -9,6 +9,8 @@ import { ServiceProxy } from './ServiceProxy.js';
 import TTSService from '../TTSService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
 import Logger from '../LoggerService';
+import StorageServiceProxy from './StorageServiceProxy.js';
+import { DefaultTTSConfig } from '../../config/aiConfig.js';
 
 class TTSServiceProxy extends ServiceProxy {
   constructor() {
@@ -30,8 +32,6 @@ class TTSServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
-      const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
       const ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
       
       if (ttsConfig && ttsConfig.enabled) {

@@ -9,6 +9,8 @@ import { ServiceProxy } from './ServiceProxy.js';
 import STTService from '../STTService.js';
 import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
 import Logger from '../LoggerService';
+import StorageServiceProxy from './StorageServiceProxy.js';
+import { DefaultSTTConfig } from '../../config/aiConfig.js';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {
@@ -29,8 +31,6 @@ class STTServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const { StorageServiceProxy } = await import('./StorageServiceProxy.js');
-      const { DefaultSTTConfig } = await import('../../config/aiConfig.js');
       const sttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
       
       if (sttConfig && sttConfig.enabled) {

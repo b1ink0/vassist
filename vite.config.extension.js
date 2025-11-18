@@ -62,7 +62,11 @@ export default defineConfig(({ mode }) => {
           'offscreen': resolve(__dirname, 'extension/offscreen/offscreen.html'),
         },
         
+        // This prevents preloading issues in service worker context
+        preserveEntrySignatures: 'strict',
+        
         output: {
+          inlineDynamicImports: true,
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js',
           assetFileNames: (assetInfo) => {
@@ -73,10 +77,21 @@ export default defineConfig(({ mode }) => {
             return 'assets/[name][extname]';
           },
           format: 'es',
-          
-          // Group all node_modules into a single vendor chunk
-          manualChunks(id) {
-            // Bundle all node_modules together to avoid file explosion
+          // Service workers don't have access to 'window' so we can't use dynamic imports with preloading
+          manualChunks(id, { getModuleInfo }) {
+            const moduleInfo = getModuleInfo(id);
+            
+            // Check if this module is imported by background script
+            const isBackgroundDependency = moduleInfo?.importers?.some(importer => 
+              importer.includes('background/index.js')
+            );
+            
+            // If it's a background dependency, don't chunk it - inline everything
+            if (isBackgroundDependency) {
+              return undefined; // undefined = inline into entry file
+            }
+            
+            // For content script and offscreen, we can safely chunk
             if (id.includes('node_modules')) {
               // Group by major package
               if (id.includes('@babylonjs')) {
