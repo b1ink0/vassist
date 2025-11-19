@@ -48,8 +48,21 @@ export async function resolveResourceURLs(config) {
   Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
   if (!resourceLoader.isExtensionMode()) {
-    Logger.log('sceneConfig', 'Dev mode - returning config as-is');
-    return config;
+    Logger.log('sceneConfig', 'Dev/Desktop mode - making paths absolute');
+    const resolvedConfig = { ...config };
+    
+    // In dev/desktop mode, make paths absolute by prepending /
+    if (config.modelUrl && !config.modelUrl.startsWith('/') && !config.modelUrl.startsWith('http')) {
+      resolvedConfig.modelUrl = '/' + config.modelUrl;
+      Logger.log('sceneConfig', 'Made modelUrl absolute:', resolvedConfig.modelUrl);
+    }
+    
+    if (config.cameraAnimationUrl && !config.cameraAnimationUrl.startsWith('/') && !config.cameraAnimationUrl.startsWith('http')) {
+      resolvedConfig.cameraAnimationUrl = '/' + config.cameraAnimationUrl;
+      Logger.log('sceneConfig', 'Made cameraAnimationUrl absolute:', resolvedConfig.cameraAnimationUrl);
+    }
+    
+    return resolvedConfig;
   }
 
   Logger.log('sceneConfig', 'Extension mode - resolving URLs...');

@@ -5,9 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'dist-extension', 'dist-desktop']),
   {
     files: ['**/*.{js,jsx}'],
+    ignores: ['electron/**/*.js'],
     extends: [
       js.configs.recommended,
       reactHooks.configs['recommended-latest'],
@@ -19,11 +20,29 @@ export default defineConfig([
         ...globals.browser,
         // Build-time constants injected by Vite
         __EXTENSION_MODE__: 'readonly',
+        __DESKTOP_MODE__: 'readonly',
         __DEV_MODE__: 'readonly',
       },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+  // Electron main and preload scripts
+  {
+    files: ['electron/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
         sourceType: 'module',
       },
     },

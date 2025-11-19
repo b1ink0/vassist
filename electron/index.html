@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <base href="/" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* https:; worker-src 'self' blob:; child-src 'self' blob:;" />
+    <link rel="icon" type="image/svg+xml" href="/VA.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="VAssist Desktop - AI Assistant with transparent overlay interface" />
+    <title>VAssist Desktop</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/electron/main.jsx"></script>
+  </body>
+</html>

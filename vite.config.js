@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
     define: {
       // Build-time constants for mode detection
       __EXTENSION_MODE__: JSON.stringify(false),
+      __DESKTOP_MODE__: JSON.stringify(false),
       __DEV_MODE__: JSON.stringify(!isProduction),
     },
     build: {

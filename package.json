@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist-desktop/main.js",
   "scripts": {
     "dev": "vite",
     "dev:extension": "vite build --config vite.config.extension.js --mode development --watch",
+    "dev:desktop": "vite --config vite.config.desktop.js",
     "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --mode development --watch\"",
     "build": "vite build --mode production",
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
+    "build:desktop": "vite build --config vite.config.desktop.js --mode production",
+    "build:desktop:win": "vite build --config vite.config.desktop.js --mode production && electron-builder --win",
+    "build:desktop:mac": "vite build --config vite.config.desktop.js --mode production && electron-builder --mac",
+    "build:desktop:linux": "vite build --config vite.config.desktop.js --mode production && electron-builder --linux",
     "build:all": "concurrently \"vite build --mode production\" \"vite build --config vite.config.extension.js --mode production\"",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -36,14 +42,53 @@
     "@vitejs/plugin-react": "^5.0.4",
     "archiver": "^7.0.1",
     "babel-plugin-react-compiler": "^19.1.0-rc.3",
+    "electron": "^39.2.2",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.25.12",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
-    "vite": "npm:rolldown-vite@7.1.14"
+    "vite": "npm:rolldown-vite@7.1.14",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.1.14"
+  },
+  "build": {
+    "appId": "com.vassist.app",
+    "productName": "VAssist",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist-desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    }
   }
 }

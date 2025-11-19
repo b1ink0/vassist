@@ -797,6 +797,57 @@ export const AppProvider = ({ children }) => {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [uiConfig, parseKeyEvent, toggleChat]);
 
+  /**
+   * Register global shortcuts in Electron and listen for shortcut events
+   */
+  useEffect(() => {
+    // Only in desktop mode
+    if (!__DESKTOP_MODE__ || !window.electron?.shortcuts) return;
+    
+    // Register shortcuts when config changes
+    if (uiConfig?.shortcuts) {
+      window.electron.shortcuts.register(uiConfig.shortcuts)
+        .then(() => {
+          Logger.log('AppContext', 'Global shortcuts registered in Electron');
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to register shortcuts:', err);
+        });
+    }
+    
+    // Listen for shortcut events from main process
+    const cleanupOpenChat = window.electron.shortcuts.onOpenChat(() => {
+      Logger.log('AppContext', 'Open Chat shortcut triggered from Electron');
+      toggleChat();
+    });
+    
+    const cleanupToggleModel = window.electron.shortcuts.onToggleModel(() => {
+      Logger.log('AppContext', 'Toggle Model shortcut triggered from Electron');
+      
+      const newValue = !uiConfig.enableModelLoading;
+      
+      setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
+      setEnableModelLoading(newValue);
+      
+      // Create updated config and notify listeners
+      const updatedConfig = { ...uiConfig, enableModelLoading: newValue };
+      window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: updatedConfig }));
+      
+      StorageServiceProxy.configSave('uiConfig', updatedConfig)
+        .then(() => {
+          Logger.log('AppContext', 'Avatar visibility toggled via Electron shortcut:', newValue);
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to toggle avatar via Electron shortcut:', err);
+        });
+    });
+    
+    return () => {
+      cleanupOpenChat?.();
+      cleanupToggleModel?.();
+    };
+  }, [uiConfig, toggleChat]);
+
   // ========================================
   // CONTEXT VALUE
   // ========================================
