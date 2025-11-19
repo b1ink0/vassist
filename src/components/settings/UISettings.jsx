@@ -29,6 +29,28 @@ const UISettings = ({ isLightBackground }) => {
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-white mb-4">UI Configuration</h3>
       
+      {/* Documentation Link */}
+      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-400/20">
+        <div className="flex items-start gap-3">
+          <Icon name="book" size={20} className="text-blue-300 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-white mb-1">Documentation</h4>
+            <p className="text-xs text-white/70 mb-2">
+              Need help? Check out the full documentation for setup guides, troubleshooting, and feature explanations.
+            </p>
+            <a
+              href="https://b1ink0.github.io/vassist/docs/intro"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
+            >
+              View Documentation
+              <Icon name="arrow-top-right" size={14} />
+            </a>
+          </div>
+        </div>
+      </div>
+      
       {/* Start Setup Again Button */}
       <div className="space-y-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
         <button

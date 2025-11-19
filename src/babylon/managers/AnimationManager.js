@@ -1802,13 +1802,6 @@ export class AnimationManager {
    * @param {string} mouthAnimationBlobUrl - Blob URL to BVMD file with lip-sync animation
    * @param {string} emotionCategory - Animation category for body motion ('talking', 'idle', 'thinking', etc.)
    * @param {Object} options - Optional settings { primaryWeight: 0.0, fillWeight: 1.0 }
-   * 
-   * Future use cases for the text parameter:
-   * - TTS generation (if not pre-generated)
-   * - Speech timing synchronization
-   * - Logging/analytics
-   * - Subtitle display
-   * - Context tracking for conversation flow
    */
   async speak(text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) {
     if (this.disposed) return;
@@ -1967,14 +1960,25 @@ export class AnimationManager {
     morphOnly.name = `morphonly_${morphAnimation.name}`;
     morphOnly.endFrame = morphAnimation.endFrame;
     
-    // CRITICAL: Remove ALL bone tracks to prevent conflicts with body animations
+    // Remove ALL bone tracks to prevent conflicts with body animations
     morphOnly.boneTracks = [];
-    morphOnly.movableBoneTracks = [];
+    
+    // Keep ONLY the center bone track from base animation to preserve locomotion offset
+    const centerTrack = baseAnimation.movableBoneTracks?.find(
+      track => track.name === 'センター' || track.name === 'center'
+    );
+    
+    if (centerTrack) {
+      morphOnly.movableBoneTracks = [centerTrack];
+      Logger.log('AnimationManager', `Preserved center bone track for locomotion offset in morph-only animation`);
+    } else {
+      morphOnly.movableBoneTracks = [];
+    }
     
     // Inject morph tracks from mouth animation
     if (morphAnimation.morphTracks && morphAnimation.morphTracks.length > 0) {
       morphOnly.morphTracks = morphAnimation.morphTracks;
-      Logger.log('AnimationManager', `Created morph-only animation: 0 bone tracks + ${morphAnimation.morphTracks.length} morph tracks`);
+      Logger.log('AnimationManager', `Created morph-only animation: ${morphOnly.movableBoneTracks.length} bone track (center) + ${morphAnimation.morphTracks.length} morph tracks`);
     }
     
     return morphOnly;
