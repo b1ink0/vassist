@@ -3,9 +3,38 @@
  * Quick Start introduction
  */
 
+import { useState } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import logo from '../../../assets/VA.svg';
+
+// Copy button component for Chrome flags
+const FlagCopyButton = ({ flagUrl, flagValue }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(flagUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center gap-2 p-2 bg-white/5 rounded border border-white/10">
+      <Icon name="flag" size={14} className="text-blue-400 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <code className="text-[11px] text-blue-300 break-all block">{flagUrl}</code>
+        <p className="text-[10px] text-white/60 mt-1">Set to: <span className="text-yellow-300">{flagValue}</span></p>
+      </div>
+      <button
+        onClick={handleCopy}
+        className="flex-shrink-0 px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
+        title="Copy flag URL"
+      >
+        <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green-400" : "text-white/80"} />
+      </button>
+    </div>
+  );
+};
 
 const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { nextStep } = useSetup();
@@ -68,51 +97,36 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
             </p>
             
             <div className="space-y-2 text-xs">
-              <div className="flex items-start gap-2">
-                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <code className="text-blue-300 text-[11px]">chrome://flags/#optimization-guide-on-device-model</code>
-                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled BypassPerfRequirement</p>
-                </div>
-              </div>
+              <FlagCopyButton
+                flagUrl="chrome://flags/#optimization-guide-on-device-model"
+                flagValue="Enabled BypassPerfRequirement"
+              />
               
-              <div className="flex items-start gap-2">
-                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <code className="text-blue-300 text-[11px]">chrome://flags/#prompt-api-for-gemini-nano</code>
-                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled</p>
-                </div>
-              </div>
+              <FlagCopyButton
+                flagUrl="chrome://flags/#prompt-api-for-gemini-nano"
+                flagValue="Enabled"
+              />
               
-              <div className="flex items-start gap-2">
-                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <code className="text-blue-300 text-[11px]">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code>
-                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (for voice input)</p>
-                </div>
-              </div>
+              <FlagCopyButton
+                flagUrl="chrome://flags/#prompt-api-for-gemini-nano-multimodal-input"
+                flagValue="Enabled (for voice input)"
+              />
               
-              <div className="flex items-start gap-2">
-                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <code className="text-blue-300 text-[11px]">chrome://flags/#writer-api-for-gemini-nano</code>
-                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (optional - for content generation)</p>
-                </div>
-              </div>
+              <FlagCopyButton
+                flagUrl="chrome://flags/#writer-api-for-gemini-nano"
+                flagValue="Enabled (optional - for content generation)"
+              />
               
-              <div className="flex items-start gap-2">
-                <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <code className="text-blue-300 text-[11px]">chrome://flags/#rewriter-api-for-gemini-nano</code>
-                  <p className="text-white/60 text-[10px] mt-0.5">Set to: Enabled (optional - for text rewriting)</p>
-                </div>
-              </div>
+              <FlagCopyButton
+                flagUrl="chrome://flags/#rewriter-api-for-gemini-nano"
+                flagValue="Enabled (optional - for text rewriting)"
+              />
             </div>
 
             <div className="pt-3 border-t border-white/10">
-              <p className="text-[11px] text-white/70">
-                <Icon name="alert-circle" size={12} className="inline mr-1" />
-                After enabling flags, <strong>restart Chrome completely</strong> before continuing with setup.
+              <p className="text-[11px] text-white/70 flex items-start gap-1.5">
+                <Icon name="warning" size={12} className="flex-shrink-0 mt-0.5" />
+                <span>After enabling flags, <strong>restart Chrome completely</strong> before continuing with setup.</span>
               </p>
             </div>
           </div>

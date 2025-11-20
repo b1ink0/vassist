@@ -314,6 +314,12 @@ export const AppProvider = ({ children }) => {
       setIsChatInputVisible(true);
       setIsChatContainerVisible(true);
       
+      // Focus input after chat opens
+      setTimeout(() => {
+        const event = new CustomEvent('focusChatInput');
+        window.dispatchEvent(event);
+      }, 100);
+      
       // If auto-send, trigger send after chat opens and content is added
       if (autoSend) {
         setTimeout(() => {
@@ -349,6 +355,12 @@ export const AppProvider = ({ children }) => {
     } else {
       setIsChatInputVisible(true);
       setIsChatContainerVisible(true);
+      
+      // Focus input after chat opens
+      setTimeout(() => {
+        const event = new CustomEvent('focusChatInput');
+        window.dispatchEvent(event);
+      }, 100);
     }
   }, [isChatContainerVisible, isChatInputVisible]);
 
@@ -359,6 +371,12 @@ export const AppProvider = ({ children }) => {
     Logger.log('AppContext', 'Open chat');
     setIsChatInputVisible(true);
     setIsChatContainerVisible(true);
+    
+    // Focus input after chat opens
+    setTimeout(() => {
+      const event = new CustomEvent('focusChatInput');
+      window.dispatchEvent(event);
+    }, 100);
   }, []);
 
   /**
@@ -368,7 +386,13 @@ export const AppProvider = ({ children }) => {
     Logger.log('AppContext', 'Close chat');
     setIsChatInputVisible(false);
     setIsChatContainerVisible(false);
+    
+    // Stop playback and abort TTS generation
     TTSServiceProxy.stopPlayback();
+    
+    // Dispatch event to abort TTS generation stream in ChatController
+    const event = new CustomEvent('abortTTSGeneration');
+    window.dispatchEvent(event);
   }, []);
 
   /**
@@ -393,6 +417,10 @@ export const AppProvider = ({ children }) => {
     // Stop TTS
     TTSServiceProxy.stopPlayback();
     
+    // Dispatch event to abort TTS generation stream in ChatController
+    const event = new CustomEvent('abortTTSGeneration');
+    window.dispatchEvent(event);
+    
     // Return assistant to idle
     if (assistantRef.current?.isReady()) {
       assistantRef.current.idle();
@@ -416,6 +444,10 @@ export const AppProvider = ({ children }) => {
     
     AIServiceProxy.abortRequest();
     TTSServiceProxy.stopPlayback();
+    
+    // Dispatch event to abort TTS generation stream in ChatController
+    const event = new CustomEvent('abortTTSGeneration');
+    window.dispatchEvent(event);
     
     if (isVoiceMode) {
       VoiceConversationService.interrupt();
@@ -466,6 +498,12 @@ export const AppProvider = ({ children }) => {
       if (!isChatContainerVisible) {
         setIsChatContainerVisible(true);
         setIsChatInputVisible(true);
+        
+        // Focus input after chat opens
+        setTimeout(() => {
+          const event = new CustomEvent('focusChatInput');
+          window.dispatchEvent(event);
+        }, 100);
       }
       
       // Reset processing state

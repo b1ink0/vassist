@@ -680,8 +680,14 @@ const ChatContainer = ({
       Logger.log('ChatContainer', 'Audio finished playing for session:', sessionId);
       
       if (currentSessionRef.current === sessionId) {
-        setPlayingMessageIndex(null);
-        currentSessionRef.current = null;
+        // Only clear playing state if no more audio in queue and nothing currently playing
+        // This prevents icon from flickering to "speaker" while waiting for next chunk (especially with WASM delays)
+        if (!TTSServiceProxy.isAudioActive()) {
+          setPlayingMessageIndex(null);
+          currentSessionRef.current = null;
+        } else {
+          Logger.log('ChatContainer', 'Audio still active in queue, keeping playing state');
+        }
       }
     });
 

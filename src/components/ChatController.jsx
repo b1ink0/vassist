@@ -93,6 +93,40 @@ const ChatController = ({
   }, [isTempChat, currentChatId])
 
   /**
+   * Abort streaming when chat is closed to stop TTS generation
+   */
+  useEffect(() => {
+    if (!isChatContainerVisible && streamAbortControllerRef.current) {
+      Logger.log('ChatController', 'Chat closed, aborting TTS generation stream');
+      streamAbortControllerRef.current.abort();
+      streamAbortControllerRef.current = null;
+      TTSServiceProxy.stopPlayback();
+      TTSServiceProxy.setAudioFinishedCallback(null);
+    }
+  }, [isChatContainerVisible])
+
+  /**
+   * Listen for stop generation event (from stop button, shortcuts, etc.)
+   */
+  useEffect(() => {
+    const handleAbortGeneration = () => {
+      if (streamAbortControllerRef.current) {
+        Logger.log('ChatController', 'Stop generation event received, aborting TTS stream');
+        streamAbortControllerRef.current.abort();
+        streamAbortControllerRef.current = null;
+        TTSServiceProxy.stopPlayback();
+        TTSServiceProxy.setAudioFinishedCallback(null);
+      }
+    };
+
+    window.addEventListener('abortTTSGeneration', handleAbortGeneration);
+
+    return () => {
+      window.removeEventListener('abortTTSGeneration', handleAbortGeneration);
+    };
+  }, [])
+
+  /**
    * Handles chat button click to toggle chat visibility.
    */
   const handleChatButtonClick = useCallback(() => {
@@ -107,6 +141,12 @@ const ChatController = ({
       Logger.log('ChatController', 'Opening chat')
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
+      
+      // Focus input after chat opens
+      setTimeout(() => {
+        const event = new CustomEvent('focusChatInput');
+        window.dispatchEvent(event);
+      }, 100);
     }
   }, [isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
@@ -118,6 +158,12 @@ const ChatController = ({
       Logger.log('ChatController', 'Opening chat from drag-drop')
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
+      
+      // Focus input after chat opens
+      setTimeout(() => {
+        const event = new CustomEvent('focusChatInput');
+        window.dispatchEvent(event);
+      }, 100);
     }
   }, [isChatInputVisible, isChatContainerVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
@@ -267,6 +313,12 @@ const ChatController = ({
      * @param {number} chunkIndex - Index of chunk to generate
      */
     const generateTTSChunk = async (chunkIndex) => {
+      // Check if aborted (stop button pressed, chat closed, etc.)
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', 'TTS generation aborted, stopping chunk generation');
+        return;
+      }
+      
       if (chunkIndex >= allChunks.length) return;
       
       const chunkText = allChunks[chunkIndex];
@@ -285,14 +337,19 @@ const ChatController = ({
       try {
         const result = await TTSServiceProxy.generateSpeech(chunkText, true);
         
-        if (!result || !result.audio) {
-          Logger.warn('ChatController', `TTS generation returned null for chunk ${chunkIndex}`);
+        // Check again after async operation
+        if (abortController.signal.aborted || !result || !result.audio) {
+          if (abortController.signal.aborted) {
+            Logger.log('ChatController', 'TTS generation aborted after speech generation');
+          } else {
+            Logger.warn('ChatController', `TTS generation returned null for chunk ${chunkIndex}`);
+          }
           return;
         }
         
         const { audio, bvmdUrl } = result;
         
-        if (TTSServiceProxy.isStopped) {
+        if (TTSServiceProxy.isStopped || abortController.signal.aborted) {
           return;
         }
 
@@ -309,6 +366,12 @@ const ChatController = ({
      * Generates next chunk if queue has space.
      */
     const tryGenerateNextChunk = async () => {
+      // Check if aborted before generating
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', 'TTS chunk generation stopped (aborted)');
+        return;
+      }
+      
       if (isGeneratingChunk) {
         return;
       }
@@ -320,14 +383,20 @@ const ChatController = ({
         await generateTTSChunk(nextChunkToGenerate++);
         isGeneratingChunk = false;
         
-        if (nextChunkToGenerate < allChunks.length) {
+        // Check if aborted before scheduling next
+        if (!abortController.signal.aborted && nextChunkToGenerate < allChunks.length) {
           setTimeout(() => tryGenerateNextChunk(), 0);
         }
       }
     };
 
     TTSServiceProxy.setAudioFinishedCallback(() => {
-      tryGenerateNextChunk();
+      // Only continue generating if not aborted
+      if (!abortController.signal.aborted) {
+        tryGenerateNextChunk();
+      } else {
+        Logger.log('ChatController', 'Audio finished but generation aborted, not generating next chunk');
+      }
     });
 
     const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
@@ -377,6 +446,7 @@ const ChatController = ({
     if (result.cancelled) {
       Logger.log('ChatController', 'Generation cancelled by user');
       TTSServiceProxy.stopPlayback();
+      TTSServiceProxy.setAudioFinishedCallback(null); // Clear callback to stop TTS generation loop
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
@@ -391,6 +461,7 @@ const ChatController = ({
       ChatService.addMessage('assistant', `Error: ${errorMessage}`);
       setChatMessages([...ChatService.getMessages()]);
       TTSServiceProxy.stopPlayback();
+      TTSServiceProxy.setAudioFinishedCallback(null); // Clear callback to stop TTS generation loop
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
@@ -406,8 +477,13 @@ const ChatController = ({
     }
 
     if (ttsEnabled && allChunks.length > 0) {
-      while (nextChunkToGenerate < allChunks.length) {
+      // Wait for all chunks to be generated, but abort if cancelled
+      while (nextChunkToGenerate < allChunks.length && !abortController.signal.aborted) {
         await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', 'TTS chunk generation aborted while waiting for completion');
       }
     }
     

@@ -412,6 +412,16 @@ const KokoroTTSConfig = ({
               )}
             </div>
           </button>
+
+          {/* Info message for gibberish audio */}
+          <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
+            <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
+              <Icon name="info" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
+              <span>
+                If you hear gibberish, switch to <strong>WASM backend</strong> or turn <strong>OFF</strong> hardware acceleration in Chrome settings.
+              </span>
+            </p>
+          </div>
         </>
       )}
     </div>

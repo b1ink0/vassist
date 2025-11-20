@@ -35,10 +35,16 @@ export class KokoroTTSCore {
    * - wasm -> q8 (recommended for WASM backend, best balance)
    */
   async initialize(config, progressCallback = null) {
-    // If already initialized with same config, return success
-    if (this.isInitialized && this.modelId === config.modelId) {
-      Logger.log('KokoroTTSCore', 'Already initialized with model:', this.modelId);
+    // If already initialized with same config AND same device, return success
+    if (this.isInitialized && this.modelId === config.modelId && this.config?.device === config.device) {
+      Logger.log('KokoroTTSCore', 'Already initialized with model:', this.modelId, 'device:', this.config?.device);
       return true;
+    }
+
+    // If device changed, we need to re-initialize with new backend
+    if (this.isInitialized && this.config?.device !== config.device) {
+      Logger.log('KokoroTTSCore', 'Device changed from', this.config?.device, 'to', config.device, '- destroying old model');
+      await this.destroy();
     }
 
     // If currently initializing, wait for it

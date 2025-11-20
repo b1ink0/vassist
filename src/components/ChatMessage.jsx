@@ -398,6 +398,10 @@ const ChatMessage = ({
                       setLoadingMessageIndex(null);
                       setPlayingMessageIndex(null);
                       currentSessionRef.current = null;
+                      
+                      // Dispatch event to abort TTS generation stream
+                      const event = new CustomEvent('abortTTSGeneration');
+                      window.dispatchEvent(event);
                     } else {
                       // Play or stop TTS
                       onPlayTTS(messageIndex, message.content);

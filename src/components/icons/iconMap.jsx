@@ -8,6 +8,7 @@ import * as HeroIconsOutline from '@heroicons/react/24/outline';
 
 export const iconMap = {
   'close': HeroIconsSolid.XMarkIcon,
+  'x': HeroIconsSolid.XMarkIcon,
   'stop': HeroIconsSolid.StopIcon,
   'pause': HeroIconsSolid.PauseIcon,
   'play': HeroIconsSolid.PlayIcon,

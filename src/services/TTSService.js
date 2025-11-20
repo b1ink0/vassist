@@ -22,6 +22,7 @@ class TTSService {
     this.isStopped = false;
     this.currentAudio = null;
     this.currentPlaybackSession = null;
+    this.stoppedSessionIds = new Set(); // Track stopped sessions to reject late-arriving chunks
     this.blobUrls = new Set();
 
     if (this.isExtensionMode) {
@@ -504,14 +505,20 @@ class TTSService {
       this.stopPlayback();
     }
     
-    // Don't queue if stopped AND it's not a new session starting
-    if (this.isStopped && !sessionId) {
-      Logger.log('TTSService', 'Audio not queued - playback stopped');
+    // Don't queue if globally stopped (covers case where session was cleared)
+    if (this.isStopped) {
+      Logger.log('TTSService', `Audio not queued - playback stopped globally (session: ${effectiveSessionId})`);
       return;
     }
     
-    // If starting a new session, clear the stopped flag
+    // If starting a new session, check if it was previously stopped
     if (sessionId) {
+      // Reject late-arriving chunks from stopped sessions (important for extension mode with WASM delays)
+      if (this.stoppedSessionIds.has(sessionId)) {
+        Logger.log('TTSService', `Rejecting audio from stopped session ${sessionId} (late-arriving chunk)`);
+        return;
+      }
+      
       this.isStopped = false;
       this.currentPlaybackSession = sessionId;
     }
@@ -690,6 +697,12 @@ class TTSService {
     // Save current session ID before clearing
     const stoppedSessionId = this.currentPlaybackSession;
     
+    // Track this session as stopped to reject late-arriving chunks
+    if (stoppedSessionId) {
+      this.stoppedSessionIds.add(stoppedSessionId);
+      Logger.log('TTSService', `Added session ${stoppedSessionId} to stopped sessions list`);
+    }
+    
     // Set stopped flag to prevent new audio from starting
     this.isStopped = true;
     
@@ -727,8 +740,9 @@ class TTSService {
    * Call this before starting new TTS generation
    */
   resumePlayback() {
-    Logger.log('TTSService', 'Resuming playback (clearing stopped flag)');
+    Logger.log('TTSService', 'Resuming playback (clearing stopped flag and stopped sessions)');
     this.isStopped = false;
+    this.stoppedSessionIds.clear();
   }
 
   // Extension-only controls (stop/resume generation)

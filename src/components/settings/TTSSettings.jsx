@@ -66,7 +66,12 @@ const TTSSettings = ({ isLightBackground }) => {
             <>
               <KokoroTTSConfig
                 config={ttsConfig.kokoro || {}}
-                onChange={(field, value) => updateTTSConfig(`kokoro.${field}`, value)}
+                onChange={(field, value) => {
+                  updateTTSConfig(`kokoro.${field}`, value);
+                  if (field === 'device') {
+                    setTimeout(() => checkKokoroStatus(value), 100);
+                  }
+                }}
                 kokoroStatus={kokoroStatus}
                 onInitialize={async () => {
                   try {

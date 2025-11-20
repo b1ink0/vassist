@@ -159,13 +159,13 @@ class ChromeAIValidator {
       const session = await self.LanguageModel.create({
         language: 'en',
         monitor(m) {
-          Logger.log('ChromeAIValidator', 'Monitor callback called');
+          Logger.log('ChromeAIValidator', 'Monitor callback called', m);
           
           m.ondownloadprogress = (e) => {
             const progress = e.loaded * 100;
             const details = `Downloading model: ${progress.toFixed(1)}%`;
             
-            Logger.log('ChromeAIValidator', `Download progress: ${progress.toFixed(1)}%`);
+            Logger.log('ChromeAIValidator', `Download progress event: ${progress.toFixed(1)}%`, e);
             
             validator.downloadProgress = progress;
             
@@ -176,8 +176,15 @@ class ChromeAIValidator {
         }
       });
 
-      Logger.log('ChromeAIValidator', 'Session created, download complete or in progress');
+      Logger.log('ChromeAIValidator', 'Session created successfully, destroying...', session);
       session.destroy();
+      Logger.log('ChromeAIValidator', 'Session destroyed');
+      
+      // Return success response matching background handler format
+      return {
+        success: true,
+        message: 'Download initiated successfully. The model is now downloading in the background. Please check chrome://on-device-internals/ to monitor progress, then refresh the status in settings.'
+      };
       
     } catch (error) {
       Logger.error('ChromeAIValidator', 'Download monitor error:', error);

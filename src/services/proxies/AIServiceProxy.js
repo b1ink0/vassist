@@ -285,14 +285,34 @@ class AIServiceProxy extends ServiceProxy {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
       
-      // For extension mode, we can't stream progress easily
-      // So we'll poll for progress instead
-      const response = await bridge.sendMessage(
-        MessageTypes.CHROME_AI_START_DOWNLOAD,
-        {},
-        { timeout: 300000 } // 5 minutes for download
-      );
-      return response;
+      // Set up message listener for progress updates via bridge
+      let progressListener = null;
+      if (onProgress) {
+        progressListener = (message) => {
+          if (message.type === MessageTypes.CHROME_AI_DOWNLOAD_PROGRESS && message.data) {
+            onProgress(message.data);
+          }
+        };
+        bridge.addMessageListener(progressListener);
+      }
+      
+      try {
+        // Trigger download in background
+        const response = await bridge.sendMessage(
+          MessageTypes.CHROME_AI_START_DOWNLOAD,
+          {},
+          { timeout: 300000 } // 5 minutes for download
+        );
+
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to start download');
+        }
+        return response;
+      } finally {
+        if (progressListener) {
+          bridge.removeMessageListener(progressListener);
+        }
+      }
     } else {
       const ChromeAIValidator = (await import('../ChromeAIValidator.js')).default;
       return await ChromeAIValidator.monitorDownload(onProgress);

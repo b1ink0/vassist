@@ -170,7 +170,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     
     try {
       // Trigger model download with progress callback
-      await AIServiceProxy.downloadChromeAIModel((progress) => {
+      const result = await AIServiceProxy.downloadChromeAIModel((progress) => {
         setChromeAIStatus(prev => ({
           ...prev,
           downloadProgress: progress.progress || 0,
@@ -180,15 +180,26 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       
       clearTimeout(timeoutId);
       
+      Logger.log('LLMProviderStep', 'Download result:', result);
+
+      if (result.success) {
+        setChromeAIStatus(prev => ({
+          ...prev,
+          downloadDetails: result.message || 'Download initiated. Please check chrome://on-device-internals for progress.',
+        }));
+      }
+      
       // Recheck status after download
       await checkChromeAIStatus();
     } catch (error) {
       clearTimeout(timeoutId);
+      Logger.error('LLMProviderStep', 'Download error:', error);
       setChromeAIStatus(prev => ({ 
         ...prev, 
         downloading: false,
         downloadTimedOut: false,
-        message: error.message || 'Failed to download model'
+        message: error.message || 'Failed to download model',
+        downloadDetails: 'Please try manually at chrome://components or check chrome://flags'
       }));
     }
   };

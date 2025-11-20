@@ -412,13 +412,48 @@ async function registerHandlers() {
     return { supported };
   });
 
-  backgroundBridge.registerHandler(MessageTypes.CHROME_AI_START_DOWNLOAD, async () => {
-    // For extension mode, we can't directly start download
-    // This is handled manually by opening chrome://components
-    return { 
-      success: false, 
-      message: 'Manual download required via chrome://components' 
-    };
+  backgroundBridge.registerHandler(MessageTypes.CHROME_AI_START_DOWNLOAD, async (message, sender) => {
+    Logger.log('Background', 'CHROME_AI_START_DOWNLOAD handler called');
+    
+    try {
+      // Check if Chrome AI is supported first
+      if (!ChromeAIValidator.isSupported()) {
+        Logger.error('Background', 'Chrome AI not supported');
+        return { 
+          success: false, 
+          message: 'Chrome AI is not supported. Please check Chrome version and flags.' 
+        };
+      }
+      
+      Logger.log('Background', 'Triggering download by creating session...');
+      
+      // Set up progress listener to relay progress to content script
+      const progressCallback = (progress) => {
+        Logger.log('Background', 'Chrome AI Download progress:', progress);
+        
+        // Send progress update to content script
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: MessageTypes.CHROME_AI_DOWNLOAD_PROGRESS,
+          requestId: message.requestId,
+          data: progress
+        }).catch(err => Logger.error('Background', 'Failed to send Chrome AI progress:', err));
+      };
+      
+      // Trigger download by creating a session (which will start the download if model not present)
+      await ChromeAIValidator.monitorDownload(progressCallback);
+      
+      Logger.log('Background', 'Download completed or session created successfully');
+      return { 
+        success: true, 
+        message: 'Download initiated successfully. The model is now downloading in the background. Please check chrome://on-device-internals/ to monitor progress, then refresh the status in settings.' 
+      };
+    } catch (error) {
+      Logger.error('Background', 'Failed to start download:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to start download. Please manually check chrome://components and click "Check for update" on "Optimization Guide On Device Model".' 
+      };
+    }
   });
 
   // TTS Service handlers
@@ -661,11 +696,16 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_CHECK_STATUS, async (message) => {
-    Logger.log('Background', 'KOKORO_CHECK_STATUS');
+    Logger.log('Background', 'KOKORO_CHECK_STATUS - Forwarding to offscreen');
     
     // Forward to offscreen for status check
     const result = await offscreenManager.sendToOffscreen(message);
-    return result?.data || { initialized: false, initializing: false };
+    Logger.log('Background', 'KOKORO_CHECK_STATUS - Received from offscreen:', JSON.stringify(result));
+    
+    const returnData = result?.data || { initialized: false, initializing: false };
+    Logger.log('Background', 'KOKORO_CHECK_STATUS - Returning:', JSON.stringify(returnData));
+    
+    return returnData;
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_LIST_VOICES, async (message) => {

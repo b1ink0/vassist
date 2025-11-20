@@ -110,7 +110,7 @@ class OffscreenWorker {
   async handleMessage(message, sender) {
     const { type, requestId } = message;
     
-    Logger.log('OffscreenWorker', 'Received ${type}, request ${requestId}');
+    Logger.log('OffscreenWorker', `Received ${type}, request ${requestId}`);
     
     // Only handle messages intended for offscreen
     // Ignore messages for background/content scripts
@@ -120,16 +120,18 @@ class OffscreenWorker {
       Logger.log('OffscreenWorker', `Ignoring message type: ${type} (not for offscreen)`);
       return; // Return undefined (no response needed)
     }
-    
+
     const data = await handler(message, sender);
     
-    Logger.log('OffscreenWorker', 'Handler completed, returning response for ${requestId}');
+    Logger.log('OffscreenWorker', `Handler completed for ${requestId}, data:`, JSON.stringify(data));
     
-    return {
+    const response = {
       type: MessageTypes.SUCCESS,
       requestId,
       data
     };
+    
+    return response;
   }
 
   /**
@@ -272,6 +274,7 @@ class OffscreenWorker {
   async handleKokoroCheckStatus() {
     try {
       const status = KokoroTTSCore.getStatus();
+      Logger.log('OffscreenWorker', 'Kokoro status:', JSON.stringify(status));
       return status;
     } catch (error) {
       Logger.error('OffscreenWorker', 'Kokoro status check failed:', error);
@@ -299,7 +302,7 @@ class OffscreenWorker {
   async handleKokoroPing(message) {
     try {
       // Check if initialized first
-      const status = await KokoroTTSCore.checkStatus();
+      const status = KokoroTTSCore.getStatus();
       if (!status.initialized) {
         return { alive: false };
       }

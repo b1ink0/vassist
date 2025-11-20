@@ -17,7 +17,6 @@ import {
   RewriterServiceProxy,
   WriterServiceProxy
 } from '../services/proxies';
-import ChromeAIValidator from '../services/ChromeAIValidator';
 import { 
   DefaultAIConfig, 
   DefaultTTSConfig, 
@@ -470,17 +469,21 @@ export const ConfigProvider = ({ children }) => {
   }, [ttsConfig]);
 
   // Kokoro TTS Status handlers - Define BEFORE testTTSConnection since it depends on this
-  const checkKokoroStatus = useCallback(async () => {
+  const checkKokoroStatus = useCallback(async (desiredDeviceOverride = null) => {
     setKokoroStatus(prev => ({ ...prev, checking: true }));
     
     try {
       const status = await TTSServiceProxy.checkKokoroStatus();
+
+      const desiredDevice = desiredDeviceOverride || ttsConfig.kokoro?.device || 'auto';
+      const actualDevice = status.config?.device || null;
+      const isInitializedWithCorrectDevice = status.initialized && actualDevice === desiredDevice;
       
       setKokoroStatus({
         checking: false,
-        initialized: status.initialized,
-        state: status.initialized ? 'ready' : 'notInitialized',
-        message: status.message || (status.initialized ? 'Kokoro TTS is ready' : 'Not initialized'),
+        initialized: isInitializedWithCorrectDevice,
+        state: isInitializedWithCorrectDevice ? 'ready' : 'notInitialized',
+        message: status.message || (isInitializedWithCorrectDevice ? 'Kokoro TTS is ready' : 'Not initialized'),
         details: status.details || '',
         progress: 0,
         downloading: false,
@@ -488,7 +491,7 @@ export const ConfigProvider = ({ children }) => {
       
       Logger.log('ConfigContext', 'Kokoro status:', status);
       
-      return status;
+      return { ...status, initialized: isInitializedWithCorrectDevice };
     } catch (error) {
       Logger.log('ConfigContext', 'Kokoro status check failed:', error);
       setKokoroStatus({
@@ -502,7 +505,7 @@ export const ConfigProvider = ({ children }) => {
       });
       throw error;
     }
-  }, []);
+  }, [ttsConfig.kokoro?.device]);
 
   const initializeKokoro = useCallback(async () => {
     try {
@@ -683,7 +686,7 @@ export const ConfigProvider = ({ children }) => {
     setChromeAiStatus(prev => ({ ...prev, checking: true }));
     
     try {
-      const status = await ChromeAIValidator.checkAvailability();
+      const status = await AIServiceProxy.checkChromeAIAvailability();
       
       setChromeAiStatus({
         checking: false,
@@ -722,16 +725,62 @@ export const ConfigProvider = ({ children }) => {
       
       if (status.state !== 'downloadable' && status.state !== 'after-download') {
         Logger.log('ConfigContext', 'Model not in downloadable state:', status.state);
+        setChromeAiStatus(prev => ({ 
+          ...prev, 
+          message: 'Model is not in a downloadable state',
+          details: `Current state: ${status.state}`,
+        }));
         return;
       }
       
       // Now start monitoring the download
-      setChromeAiStatus(prev => ({ ...prev, downloading: true, progress: 0 }));
+      setChromeAiStatus(prev => ({ 
+        ...prev, 
+        downloading: true, 
+        progress: 0,
+        message: 'Starting download...',
+        details: 'Please wait while the model is being downloaded',
+      }));
       
-      await ChromeAIValidator.monitorDownload((progress) => {
-        Logger.log('ConfigContext', `Chrome AI download progress: ${progress.toFixed(1)}%`);
-        setChromeAiStatus(prev => ({ ...prev, progress }));
+      const result = await AIServiceProxy.downloadChromeAIModel((progress) => {
+        Logger.log('ConfigContext', `Chrome AI download progress: ${progress.progress?.toFixed(1)}%`);
+        setChromeAiStatus(prev => ({ 
+          ...prev, 
+          progress: progress.progress,
+          details: progress.details || `${(progress.progress || 0).toFixed(1)}%`
+        }));
       });
+      
+      Logger.log('ConfigContext', 'Download result:', result);
+      
+      // Update status with the result message
+      // Safety check: ensure result exists and has success property
+      if (result && result.success) {
+        setChromeAiStatus(prev => ({ 
+          ...prev, 
+          downloading: false,
+          message: result.message || 'Download initiated successfully',
+          details: 'Please check chrome://on-device-internals for progress, then refresh status',
+        }));
+      } else if (result && !result.success) {
+        // Download initiated but with a non-success status
+        setChromeAiStatus(prev => ({ 
+          ...prev, 
+          downloading: false,
+          message: result.message || 'Download completed with warnings',
+          details: result.details || 'Please check chrome://on-device-internals for status',
+        }));
+      } else {
+        // Fallback if result is undefined or malformed
+        setChromeAiStatus(prev => ({ 
+          ...prev, 
+          downloading: false,
+          message: 'Download process completed',
+          details: 'Please check chrome://on-device-internals for status, then refresh',
+        }));
+      }
+      
+      Logger.log('ConfigContext', 'Download monitor completed, rechecking availability...');
       
       // Recheck availability after download completes
       await checkChromeAIAvailability();
@@ -741,8 +790,8 @@ export const ConfigProvider = ({ children }) => {
       setChromeAiStatus(prev => ({ 
         ...prev, 
         downloading: false,
-        message: 'Download monitoring failed',
-        details: error.message,
+        message: 'Download failed',
+        details: error.message || 'Failed to start download. Please try manually at chrome://components',
       }));
       throw error;
     }

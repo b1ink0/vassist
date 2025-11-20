@@ -218,6 +218,9 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   // Handler for Kokoro config changes
   const handleKokoroConfigChange = (field, value) => {
     setKokoroConfig(prev => ({ ...prev, [field]: value }));
+    if (field === 'device') {
+      setTimeout(() => handleCheckKokoroStatus(value), 100);
+    }
   };
 
   // Initialize Kokoro (simplified - user can fully configure in settings later)
@@ -244,10 +247,15 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   };
 
   // Check Kokoro status
-  const handleCheckKokoroStatus = async () => {
+  const handleCheckKokoroStatus = async (desiredDeviceOverride = null) => {
     try {
       const status = await TTSServiceProxy.checkKokoroStatus();
-      setKokoroStatus(prev => ({ ...prev, initialized: status.initialized || false }));
+
+      const desiredDevice = desiredDeviceOverride || kokoroConfig.device || 'auto';
+      const actualDevice = status.config?.device || null;
+      const isInitializedWithCorrectDevice = status.initialized && actualDevice === desiredDevice;
+      
+      setKokoroStatus(prev => ({ ...prev, initialized: isInitializedWithCorrectDevice || false }));
     } catch (error) {
       Logger.error('other', 'Check status failed:', error);
     }
