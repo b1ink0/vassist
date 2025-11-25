@@ -418,11 +418,19 @@ export function getAllAnimations() {
 
 /**
  * Get all animations by category (animation type)
+ * Returns default animations only - use AnimationContext.getEnabledAnimations() for merged list
  * @param {string} category - Animation type ('idle', 'thinking', 'walking', 'celebrating', 'talking', etc.)
- * @returns {Array} Array of animation configs
+ * @returns {Array} Array of default animation configs
  */
 export function getAnimationsByCategory(category) {
   return AnimationRegistry[category] || [];
+}
+
+/**
+ * Alias for getAnimationsByCategory (for clarity)
+ */
+export function getDefaultAnimationsByCategory(category) {
+  return getAnimationsByCategory(category);
 }
 
 /**
@@ -435,7 +443,8 @@ export function getAnimationById(id) {
 }
 
 /**
- * Get random animation from a specific category
+ * Get random animation from a specific category (default animations only)
+ * Use AnimationContext.getRandomAnimation() for merged list with custom animations
  * @param {string} category - Category name ('idle', 'thinking', 'walking', etc.)
  * @returns {Object|null} Random animation config or null if category empty
  */

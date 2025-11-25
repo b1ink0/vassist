@@ -18,8 +18,12 @@ export const iconMap = {
   'attachment': HeroIconsSolid.PaperClipIcon,
   'clipboard': HeroIconsSolid.ClipboardIcon,
   'edit': HeroIconsSolid.PencilIcon,
+  'edit-2': HeroIconsSolid.PencilSquareIcon,
   'write': HeroIconsSolid.PencilSquareIcon,
   'delete': HeroIconsSolid.TrashIcon,
+  'trash': HeroIconsSolid.TrashIcon,
+  'trash-2': HeroIconsSolid.TrashIcon,
+  'upload': HeroIconsSolid.ArrowUpTrayIcon,
   'refresh': HeroIconsSolid.ArrowPathIcon,
   'regenerate': HeroIconsSolid.ArrowPathIcon,
   'add': HeroIconsSolid.PlusIcon,
@@ -123,6 +127,10 @@ export const iconMap = {
   'casual': HeroIconsSolid.ChatBubbleLeftRightIcon,
   'compress': HeroIconsSolid.ArrowsPointingInIcon,
   'clarity': HeroIconsSolid.EyeIcon,
+  'chevron-down': HeroIconsSolid.ChevronDownIcon,
+  'chevron-right': HeroIconsSolid.ChevronRightIcon,
+  'adjustments-horizontal': HeroIconsSolid.AdjustmentsHorizontalIcon,
+  'alert-triangle': HeroIconsSolid.ExclamationTriangleIcon,
 };
 
 export default iconMap;

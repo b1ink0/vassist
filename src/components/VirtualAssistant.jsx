@@ -10,6 +10,7 @@ import { AssistantState, getAnimationForEmotion } from '../config/animationConfi
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
+import { useAnimation } from '../contexts/AnimationContext';
 import Logger from '../services/LoggerService';
 
 /**
@@ -39,6 +40,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
   const { savedModelPosition, setSavedModelPosition } = useApp();
+  const { getRandomAnimation, getEnabledAnimations } = useAnimation();
   
   const [animationManager, setAnimationManager] = useState(null);
   const [positionManager, setPositionManager] = useState(null);
@@ -431,7 +433,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
           sceneConfig={{ 
             uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
             enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
-            savedModelPosition: isPreview ? null : savedModelPosition
+            savedModelPosition: isPreview ? null : savedModelPosition,
+            getRandomAnimation,
+            getEnabledAnimations
           }}
         />
       )}

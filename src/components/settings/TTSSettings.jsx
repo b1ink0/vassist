@@ -108,9 +108,6 @@ const TTSSettings = ({ isLightBackground }) => {
                     </button>
                     <button 
                       onClick={async () => {
-                        if (!confirm('Clear Kokoro model cache? You will need to re-download the model (~86MB).')) {
-                          return;
-                        }
                         try {
                           setClearingCache(true);
                           await TTSServiceProxy.clearKokoroCache();
@@ -118,7 +115,6 @@ const TTSSettings = ({ isLightBackground }) => {
                           await checkKokoroStatus();
                         } catch (error) {
                           Logger.error('other', 'Failed to clear cache:', error);
-                          alert('Failed to clear cache: ' + error.message);
                         } finally {
                           setClearingCache(false);
                         }

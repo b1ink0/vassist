@@ -9,6 +9,7 @@ import LoadingIndicator from './components/LoadingIndicator'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
+import { AnimationProvider } from './contexts/AnimationContext'
 
 /**
  * Application wrapper component that handles setup flow.
@@ -42,16 +43,18 @@ function App({ mode = 'development' }) {
   return (
     <SetupProvider>
       <ConfigProvider>
-        <AppProvider>
-          {mode === 'development' ? (
-            <div className="relative w-full h-screen overflow-hidden">
-              <DemoSite />
-              <AppWithSetup mode="development" />
-            </div>
-          ) : (
+        <AnimationProvider>
+          <AppProvider>
+            {mode === 'development' ? (
+              <div className="relative w-full h-screen overflow-hidden">
+                <DemoSite />
+                <AppWithSetup mode="development" />
+              </div>
+            ) : (
             <AppWithSetup mode="extension" />
           )}
-        </AppProvider>
+          </AppProvider>
+        </AnimationProvider>
       </ConfigProvider>
     </SetupProvider>
   )

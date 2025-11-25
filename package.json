@@ -23,6 +23,7 @@
     "babylon-mmd": "^0.68.0",
     "concurrently": "^9.2.1",
     "dexie": "^4.2.1",
+    "jszip": "^3.10.1",
     "kokoro-js": "^1.2.1",
     "openai": "^6.3.0",
     "react": "^19.1.1",

@@ -336,10 +336,26 @@ class StorageServiceProxy extends ServiceProxy {
       let messageData = data;
       if (data && typeof data === 'object') {
         messageData = { ...data };
+        
+        // Handle data.data (general file storage)
         if (messageData.data instanceof Blob) {
           const buffer = await messageData.data.arrayBuffer();
           messageData.data = Array.from(new Uint8Array(buffer));
           messageData._blobType = data.data.type || 'application/octet-stream';
+        }
+        
+        // Handle motionData (MotionStorageService)
+        if (messageData.motionData instanceof Blob) {
+          const buffer = await messageData.motionData.arrayBuffer();
+          messageData.motionData = Array.from(new Uint8Array(buffer));
+          messageData._motionBlobType = data.motionData.type || 'application/octet-stream';
+        }
+        
+        // Handle modelData (ModelStorageService)
+        if (messageData.modelData instanceof Blob) {
+          const buffer = await messageData.modelData.arrayBuffer();
+          messageData.modelData = Array.from(new Uint8Array(buffer));
+          messageData._modelBlobType = data.modelData.type || 'application/octet-stream';
         }
       }
       
@@ -356,12 +372,33 @@ class StorageServiceProxy extends ServiceProxy {
       const result = await bridge.sendMessage(MessageTypes.STORAGE_FILE_LOAD, { fileId });
       
       // Convert Arrays back to Blobs if needed
-      if (result && typeof result === 'object' && Array.isArray(result.data)) {
-        const blobType = result._blobType || 'application/octet-stream';
-        const uint8Array = new Uint8Array(result.data);
-        const blob = new Blob([uint8Array], { type: blobType });
-        result.data = blob;
-        delete result._blobType;
+      if (result && typeof result === 'object') {
+        // Handle data.data (general file storage)
+        if (Array.isArray(result.data)) {
+          const blobType = result._blobType || 'application/octet-stream';
+          const uint8Array = new Uint8Array(result.data);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.data = blob;
+          delete result._blobType;
+        }
+        
+        // Handle motionData (MotionStorageService)
+        if (Array.isArray(result.motionData)) {
+          const blobType = result._motionBlobType || 'application/octet-stream';
+          const uint8Array = new Uint8Array(result.motionData);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.motionData = blob;
+          delete result._motionBlobType;
+        }
+        
+        // Handle modelData (ModelStorageService)
+        if (Array.isArray(result.modelData)) {
+          const blobType = result._modelBlobType || 'application/octet-stream';
+          const uint8Array = new Uint8Array(result.modelData);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.modelData = blob;
+          delete result._modelBlobType;
+        }
       }
       
       return result;
@@ -404,9 +441,52 @@ class StorageServiceProxy extends ServiceProxy {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
-      return await bridge.sendMessage(MessageTypes.STORAGE_FILES_GET_BY_CATEGORY, { category });
+      const files = await bridge.sendMessage(MessageTypes.STORAGE_FILES_GET_BY_CATEGORY, { category });
+      
+      // Convert Arrays back to Blobs for all files
+      if (files && typeof files === 'object') {
+        for (const fileData of Object.values(files)) {
+          if (fileData && typeof fileData === 'object') {
+            // Handle data.data (general file storage)
+            if (Array.isArray(fileData.data)) {
+              const blobType = fileData._blobType || 'application/octet-stream';
+              const uint8Array = new Uint8Array(fileData.data);
+              fileData.data = new Blob([uint8Array], { type: blobType });
+              delete fileData._blobType;
+            }
+            
+            // Handle motionData (MotionStorageService)
+            if (Array.isArray(fileData.motionData)) {
+              const blobType = fileData._motionBlobType || 'application/octet-stream';
+              const uint8Array = new Uint8Array(fileData.motionData);
+              fileData.motionData = new Blob([uint8Array], { type: blobType });
+              delete fileData._motionBlobType;
+            }
+            
+            // Handle modelData (ModelStorageService)
+            if (Array.isArray(fileData.modelData)) {
+              const blobType = fileData._modelBlobType || 'application/octet-stream';
+              const uint8Array = new Uint8Array(fileData.modelData);
+              fileData.modelData = new Blob([uint8Array], { type: blobType });
+              delete fileData._modelBlobType;
+            }
+          }
+        }
+      }
+      
+      return files;
     } else {
       return await (await this._getDevStorageManager()).files.getByCategory(category);
+    }
+  }
+
+  async filesGetMetadataByCategory(category) {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
+      return await bridge.sendMessage(MessageTypes.STORAGE_FILES_GET_METADATA_BY_CATEGORY, { category });
+    } else {
+      return await (await this._getDevStorageManager()).files.getMetadataByCategory(category);
     }
   }
 
