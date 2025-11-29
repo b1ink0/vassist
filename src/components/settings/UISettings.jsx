@@ -201,6 +201,8 @@ const UISettings = ({ isLightBackground }) => {
               }}
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
             >
+              <option value={FPSLimitOptions.FPS_15} className="bg-gray-900">15 FPS (Ultra Battery Saver)</option>
+              <option value={FPSLimitOptions.FPS_24} className="bg-gray-900">24 FPS (Cinematic)</option>
               <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
               <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
               <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>

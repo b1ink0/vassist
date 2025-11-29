@@ -1,10 +1,12 @@
 package com.vassist.app
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.MimeTypeMap
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -14,6 +16,8 @@ import android.webkit.WebViewClient
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -34,6 +38,36 @@ class FullAppActivity : ComponentActivity() {
     
     private lateinit var webView: WebView
     private var lastKeyboardHeight = 0
+    
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    
+    private val photoPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        fileChooserCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: arrayOf())
+        fileChooserCallback = null
+    }
+    
+    private val multiplePhotoPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris: List<Uri> ->
+        fileChooserCallback?.onReceiveValue(uris.toTypedArray())
+        fileChooserCallback = null
+    }
+    
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri>? ->
+        fileChooserCallback?.onReceiveValue(uris?.toTypedArray() ?: arrayOf())
+        fileChooserCallback = null
+    }
+    
+    private val singleFilePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        fileChooserCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: arrayOf())
+        fileChooserCallback = null
+    }
     
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,6 +144,93 @@ class FullAppActivity : ComponentActivity() {
                 }
                 return true
             }
+            
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = filePathCallback
+                
+                try {
+                    val acceptTypes = fileChooserParams?.acceptTypes ?: arrayOf("*/*")
+                    val mimeTypes = if (acceptTypes.isEmpty() || (acceptTypes.size == 1 && acceptTypes[0].isNullOrEmpty())) {
+                        arrayOf("*/*")
+                    } else {
+                        acceptTypes.mapNotNull { type ->
+                            when {
+                                type.isNullOrEmpty() -> null
+                                type.startsWith(".") -> getMimeTypeFromExtension(type.substring(1))
+                                type.contains("/") -> type
+                                else -> "*/*"
+                            }
+                        }.toTypedArray().ifEmpty { arrayOf("*/*") }
+                    }
+                    
+                    Log.d(TAG, "File chooser opened with MIME types: ${mimeTypes.joinToString()}")
+                    
+                    val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                    
+                    val isImageOnly = mimeTypes.all { it.startsWith("image/") }
+                    val isVideoOnly = mimeTypes.all { it.startsWith("video/") }
+                    val isImageOrVideo = mimeTypes.all { it.startsWith("image/") || it.startsWith("video/") }
+                    
+                    when {
+                        isImageOnly -> {
+                            Log.d(TAG, "Using Photo Picker for images")
+                            if (allowMultiple) {
+                                multiplePhotoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            } else {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            }
+                        }
+                        isVideoOnly -> {
+                            Log.d(TAG, "Using Photo Picker for videos")
+                            if (allowMultiple) {
+                                multiplePhotoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                )
+                            } else {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                )
+                            }
+                        }
+                        isImageOrVideo -> {
+                            Log.d(TAG, "Using Photo Picker for images and videos")
+                            if (allowMultiple) {
+                                multiplePhotoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                )
+                            } else {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                )
+                            }
+                        }
+                        else -> {
+                            Log.d(TAG, "Using Document Picker for files")
+                            if (allowMultiple) {
+                                filePickerLauncher.launch(mimeTypes)
+                            } else {
+                                singleFilePickerLauncher.launch(mimeTypes)
+                            }
+                        }
+                    }
+                    
+                    return true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error opening file chooser: ${e.message}")
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                    return false
+                }
+            }
         }
         
         // Configure WebView settings
@@ -180,7 +301,14 @@ class FullAppActivity : ComponentActivity() {
     
     private fun guessMimeType(path: String): String {
         val extension = MimeTypeMap.getFileExtensionFromUrl(path)
-        return when (extension?.lowercase()) {
+        return getMimeTypeFromExtension(extension ?: "") ?: "application/octet-stream"
+    }
+    
+    /**
+     * Get MIME type from file extension
+     */
+    private fun getMimeTypeFromExtension(extension: String): String? {
+        return when (extension.lowercase()) {
             "html" -> "text/html"
             "js" -> "application/javascript"
             "mjs" -> "application/javascript"
@@ -190,6 +318,7 @@ class FullAppActivity : ComponentActivity() {
             "jpg", "jpeg" -> "image/jpeg"
             "gif" -> "image/gif"
             "svg" -> "image/svg+xml"
+            "webp" -> "image/webp"
             "wasm" -> "application/wasm"
             "woff" -> "font/woff"
             "woff2" -> "font/woff2"
@@ -204,11 +333,17 @@ class FullAppActivity : ComponentActivity() {
             "pmx" -> "application/octet-stream"
             "vmd" -> "application/octet-stream"
             "bpmx" -> "application/octet-stream"
-            else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+            "zip" -> "application/zip"
+            "pdf" -> "application/pdf"
+            else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
         }
     }
     
     override fun onDestroy() {
+        // Cancel any pending file chooser callback
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
+        
         ViewCompat.setOnApplyWindowInsetsListener(webView, null)
         webView.destroy()
         super.onDestroy()

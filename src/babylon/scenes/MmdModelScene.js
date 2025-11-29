@@ -566,8 +566,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Priority: savedModelPosition from context > lastLocation from config > preset
   // savedModelPosition persists across unmount/remount (tab visibility changes)
-  // Use savedModelPosition REGARDLESS of preset if it exists
-  if (finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation)) {
+  const shouldUseSavedPosition = !isAndroid && (finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation));
+  
+  if (shouldUseSavedPosition) {
     const savedPos = finalConfig.savedModelPosition || positionConfig.lastLocation;
     const { x, y, width, height, preset: savedPreset } = savedPos;
     Logger.log('MmdModelScene', 'Loading saved position:', savedPos);
@@ -580,10 +581,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     positionManager.isPortraitMode = isPortraitMode;
     
     // Get preset data for dimensions and offset
-    // Use the saved preset if available, otherwise fall back to current preset
     const { PositionPresets } = await import('../../config/uiConfig.js');
     const presetToUse = savedPreset || actualPreset;
     const presetData = PositionPresets[presetToUse];
+    
     const modelSize = isPortraitMode ? presetData.portraitModelSize : presetData.modelSize;
     const finalWidth = width || modelSize.width;
     const finalHeight = height || modelSize.height;
@@ -601,11 +602,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       effectiveHeight = finalHeight;    // 500px for positioning
     }
     
-    Logger.log('MmdModelScene', `Restoring position (${x}, ${y}) with size ${finalWidth}x${finalHeight}, preset: ${presetToUse}, offset:`, offset);
+    Logger.log('MmdModelScene', `Restoring position (${x}, ${y}) with size ${finalWidth}x${finalHeight}, offset:`, offset);
     positionManager.setPositionPixels(x, y, finalWidth, cameraHeight, effectiveHeight, offset);
   } else {
-    // Use preset
-    Logger.log('MmdModelScene', 'Using preset:', actualPreset);
+    Logger.log('MmdModelScene', 'Using preset:', actualPreset, isAndroid ? '(Android mode)' : '');
     positionManager.initialize(actualPreset);
   }
 

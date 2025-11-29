@@ -844,7 +844,8 @@ export const AppProvider = ({ children }) => {
   // SCENE RELOAD
   // ========================================
   const reloadScene = useCallback(() => {
-    Logger.log('AppContext', 'Reloading 3D scene');
+    Logger.log('AppContext', 'Reloading 3D scene - clearing saved position');
+    setSavedModelPosition(null);
     setSceneKey(prev => prev + 1);
   }, []);
 

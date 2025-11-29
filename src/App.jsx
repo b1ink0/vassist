@@ -67,11 +67,13 @@ function App({ mode = 'development' }) {
     if (isWallpaperMode()) {
       return (
         <ConfigProvider>
-          <AppProvider>
-            <div className="relative w-full h-screen overflow-hidden bg-transparent">
-              <AndroidWrapper />
-            </div>
-          </AppProvider>
+          <AnimationProvider>
+            <AppProvider>
+              <div className="relative w-full h-screen overflow-hidden bg-transparent">
+                <AndroidWrapper />
+              </div>
+            </AppProvider>
+          </AnimationProvider>
         </ConfigProvider>
       );
     }
@@ -79,11 +81,13 @@ function App({ mode = 'development' }) {
     return (
       <SetupProvider>
         <ConfigProvider>
-          <AppProvider>
-            <div className="relative w-full h-screen overflow-hidden">
-              <AppWithSetup mode="android" />
-            </div>
-          </AppProvider>
+          <AnimationProvider>
+            <AppProvider>
+              <div className="relative w-full h-screen overflow-hidden">
+                <AppWithSetup mode="android" />
+              </div>
+            </AppProvider>
+          </AnimationProvider>
         </ConfigProvider>
       </SetupProvider>
     );
