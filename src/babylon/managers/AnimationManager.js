@@ -2221,6 +2221,37 @@ export class AnimationManager {
   }
 
   /**
+   * Pause animation playback (for Android wallpaper when not visible)
+   */
+  pause() {
+    if (this._isPaused) return;
+    this._isPaused = true;
+    
+    Logger.log('AnimationManager', 'Pausing animation playback');
+    
+    // Pause the MMD runtime
+    if (this.mmdRuntime) {
+      this._pausedTimeScale = this.mmdRuntime.timeScale;
+      this.mmdRuntime.timeScale = 0;
+    }
+  }
+
+  /**
+   * Resume animation playback (for Android wallpaper when visible again)
+   */
+  resume() {
+    if (!this._isPaused) return;
+    this._isPaused = false;
+    
+    Logger.log('AnimationManager', 'Resuming animation playback');
+    
+    // Resume the MMD runtime
+    if (this.mmdRuntime) {
+      this.mmdRuntime.timeScale = this._pausedTimeScale ?? 1;
+    }
+  }
+
+  /**
    * Dispose and cleanup
    */
   dispose() {

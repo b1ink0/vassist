@@ -97,6 +97,8 @@ class VAssistWallpaperService : WallpaperService() {
             Log.d(TAG, "Visibility changed: $visible")
             
             if (visible) {
+                rendererWebView?.resumeWallpaper()
+                
                 rendererWebView?.let { webView ->
                     val currentUrl = webView.url
                     Log.d(TAG, "Current URL: $currentUrl")
@@ -106,6 +108,8 @@ class VAssistWallpaperService : WallpaperService() {
                         webView.loadUrl(url)
                     }
                 }
+            } else {
+                rendererWebView?.pauseWallpaper()
             }
         }
 

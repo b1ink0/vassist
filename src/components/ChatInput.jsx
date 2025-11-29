@@ -49,6 +49,8 @@ const ChatInput = forwardRef(({
   const containerRef = useRef(null);
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(isVisible);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   
   useEffect(() => {
     if (ref) {
@@ -59,6 +61,22 @@ const ChatInput = forwardRef(({
       }
     }
   }, [ref]);
+  
+  useEffect(() => {
+    if (!isAndroid) return;
+    
+    const handleKeyboardHeight = (event) => {
+      const { height } = event.detail;
+      Logger.log('ChatInput', `Native keyboard height: ${height}px`);
+      setKeyboardOffset(height);
+    };
+    
+    window.addEventListener('keyboardHeightChange', handleKeyboardHeight);
+    
+    return () => {
+      window.removeEventListener('keyboardHeightChange', handleKeyboardHeight);
+    };
+  }, [isAndroid]);
 
   useEffect(() => {
     if (isVisible) {
@@ -830,7 +848,11 @@ const ChatInput = forwardRef(({
 
   return (
     <div 
-      className="fixed bottom-0 left-0 right-0 z-[1001] flex justify-center pointer-events-none"
+      className="fixed bottom-0 left-0 right-0 z-[10001] flex justify-center pointer-events-none"
+      style={isAndroid && keyboardOffset > 0 ? {
+        transform: `translateY(-${keyboardOffset}px)`,
+        transition: 'transform 0.1s ease-out'
+      } : undefined}
     >
       <div 
         ref={containerRef}

@@ -2,6 +2,7 @@
  * Audio Worker Client
  * Provides unified interface for audio processing in both dev and extension modes
  * - Dev mode: Uses SharedWorker, decodes audio on main thread
+ * - Android mode: Uses regular Worker (SharedWorker not supported in WebView)
  * - Extension mode: Uses offscreen document (handled by extension infrastructure)
  * Handles AudioContext operations on main thread, delegates heavy work to worker
  */
@@ -26,15 +27,29 @@ export class AudioWorkerClient {
 
   /**
    * Detect runtime mode
-   * @returns {'dev'|'extension'}
+   * @returns {'dev'|'android'|'extension'}
    */
   detectMode() {
     // Check if running in Chrome extension context
-    return (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) ? 'extension' : 'dev';
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+      return 'extension';
+    }
+    
+    // Check if running in Android WebView (SharedWorker not supported)
+    if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
+      return 'android';
+    }
+    
+    // Check if SharedWorker is available (not available in Android WebView)
+    if (typeof SharedWorker === 'undefined') {
+      return 'android'; // Fallback to regular Worker
+    }
+    
+    return 'dev';
   }
 
   /**
-   * Initialize worker connection (SharedWorker for dev mode)
+   * Initialize worker connection (SharedWorker for dev mode, Worker for Android)
    * Extension mode doesn't need initialization here (uses offscreen)
    * @returns {Promise<void>}
    */
@@ -53,33 +68,56 @@ export class AudioWorkerClient {
     
     return new Promise((resolve, reject) => {
       try {
-        // Create SharedWorker for dev mode
-        this.worker = new SharedWorker(
-          new URL('./shared-audio-worker.js', import.meta.url),
-          { type: 'module', name: 'sharedAudioWorker' }
-        );
+        if (this.mode === 'android') {
+          // Android mode: Use regular Worker instead of SharedWorker
+          Logger.log('AudioWorkerClient', 'Android mode: Using regular Worker (SharedWorker not supported)');
+          
+          this.worker = new Worker(
+            new URL('./shared-audio-worker.js', import.meta.url),
+            { type: 'module', name: 'audioWorker' }
+          );
+          
+          // Regular Worker uses direct onmessage
+          this.worker.onmessage = (event) => {
+            this.handleMessage(event.data);
+          };
+          
+          this.worker.onerror = (error) => {
+            Logger.error('AudioWorkerClient', 'Worker error:', error);
+          };
+          
+          // No port needed for regular Worker
+          this.port = null;
+          
+        } else {
+          // Dev mode: Use SharedWorker
+          this.worker = new SharedWorker(
+            new URL('./shared-audio-worker.js', import.meta.url),
+            { type: 'module', name: 'sharedAudioWorker' }
+          );
+          
+          this.port = this.worker.port;
+          
+          // Set up message handler
+          this.port.onmessage = (event) => {
+            this.handleMessage(event.data);
+          };
+          
+          this.port.onmessageerror = (error) => {
+            Logger.error('AudioWorkerClient', 'Message error:', error);
+          };
+          
+          // Start port (required for SharedWorker)
+          this.port.start();
+        }
         
-        this.port = this.worker.port;
-        
-        // Set up message handler
-        this.port.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-        
-        this.port.onmessageerror = (error) => {
-          Logger.error('AudioWorkerClient', 'Message error:', error);
-        };
-        
-        // Start port (required for SharedWorker)
-        this.port.start();
-        
-        // Create AudioContext for main thread operations (dev mode only)
+        // Create AudioContext for main thread operations
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        Logger.log('AudioWorkerClient', 'AudioContext created for dev mode');
+        Logger.log('AudioWorkerClient', 'AudioContext created');
         
         // Mark as ready
         this.isReady = true;
-        Logger.log('AudioWorkerClient', 'SharedWorker initialized');
+        Logger.log('AudioWorkerClient', `${this.mode === 'android' ? 'Worker' : 'SharedWorker'} initialized`);
         resolve();
         
       } catch (error) {
@@ -87,6 +125,20 @@ export class AudioWorkerClient {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Post message to worker (handles both Worker and SharedWorker)
+   * @param {Object} message - Message to post
+   */
+  postToWorker(message) {
+    if (this.mode === 'android') {
+      // Regular Worker: post directly
+      this.worker.postMessage(message);
+    } else {
+      // SharedWorker: post via port
+      this.port.postMessage(message);
+    }
   }
 
   /**
@@ -182,7 +234,7 @@ export class AudioWorkerClient {
       });
     }
     
-    // Dev mode: Use SharedWorker port
+    // Dev/Android mode: Use Worker or SharedWorker
     return new Promise((resolve, reject) => {
       // Store pending request
       const timeoutId = setTimeout(() => {
@@ -196,8 +248,8 @@ export class AudioWorkerClient {
         timeoutId
       });
       
-      // Send message
-      this.port.postMessage({
+      // Send message using appropriate method
+      this.postToWorker({
         type,
         requestId,
         data,

@@ -60,6 +60,13 @@ const BabylonScene = ({
   
   const isFirstMountRef = useRef(true);
   
+  const initialHeightRef = useRef(null);
+  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+  
+  if (initialHeightRef.current === null && typeof window !== 'undefined') {
+    initialHeightRef.current = window.innerHeight;
+  }
+  
   const onSceneReadyRef = useRef(onSceneReady);
   const onLoadProgressRef = useRef(onLoadProgress);
   const sceneConfigRef = useRef(sceneConfig);
@@ -256,6 +263,31 @@ const BabylonScene = ({
         engine.resize();
       };
       window.addEventListener('resize', handleResize);
+      
+      // Android wallpaper visibility handler - pause/resume rendering
+      const handleWallpaperVisibility = (event) => {
+        const { visible } = event.detail;
+        Logger.log('BabylonScene', `Wallpaper visibility changed: ${visible}`);
+        
+        if (visible) {
+          engine.runRenderLoop(() => {
+            scene.render();
+          });
+          if (scene?.metadata?.animationManager) {
+            scene.metadata.animationManager.resume?.();
+          }
+        } else {
+          engine.stopRenderLoop();
+          if (scene?.metadata?.animationManager) {
+            scene.metadata.animationManager.pause?.();
+          }
+        }
+      };
+      
+      // Only add wallpaper visibility listener on Android
+      if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
+        window.addEventListener('wallpaperVisibility', handleWallpaperVisibility);
+      }
 
       const cleanupBabylon = () => {
         Logger.log('BabylonScene', 'Cleaning up Babylon resources...');
@@ -266,6 +298,11 @@ const BabylonScene = ({
         }
         
         window.removeEventListener('resize', handleResize);
+        
+        // Remove wallpaper visibility listener
+        if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
+          window.removeEventListener('wallpaperVisibility', handleWallpaperVisibility);
+        }
         
         if (engine) {
           engine.stopRenderLoop();
@@ -409,7 +446,9 @@ const BabylonScene = ({
     };
   }, [isReady, openChat, setPendingDropData, isPreview]);
 
-  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+  const canvasHeight = isAndroid && initialHeightRef.current 
+    ? `${initialHeightRef.current}px` 
+    : '100vh';
 
   const canvasContent = (
     <>
@@ -427,7 +466,7 @@ const BabylonScene = ({
           transition: 'opacity 700ms ease-in-out'
         } : {
           width: '100%',
-          height: '100vh',
+          height: canvasHeight,
           display: 'block',
           outline: 'none',
           backgroundColor: 'transparent',

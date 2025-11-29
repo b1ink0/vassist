@@ -34,6 +34,31 @@ class RendererWebView(
     }
 
     private var firstLoad = true
+    private var isPaused = false
+    
+    /**
+     * Pause the wallpaper rendering (called when wallpaper is not visible)
+     */
+    fun pauseWallpaper() {
+        if (!isPaused) {
+            isPaused = true
+            Log.d(TAG, "Pausing wallpaper")
+            evaluateJavascript("window.dispatchEvent(new CustomEvent('wallpaperVisibility', { detail: { visible: false } }));", null)
+            onPause()
+        }
+    }
+    
+    /**
+     * Resume the wallpaper rendering (called when wallpaper becomes visible)
+     */
+    fun resumeWallpaper() {
+        if (isPaused) {
+            isPaused = false
+            Log.d(TAG, "Resuming wallpaper")
+            onResume()
+            evaluateJavascript("window.dispatchEvent(new CustomEvent('wallpaperVisibility', { detail: { visible: true } }));", null)
+        }
+    }
     
     /**
      * Custom PathHandler that serves assets from the public/ subfolder

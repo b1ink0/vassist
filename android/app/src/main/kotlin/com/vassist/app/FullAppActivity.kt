@@ -14,6 +14,9 @@ import android.webkit.WebViewClient
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import com.vassist.app.webview.RendererWebView
 import java.io.InputStream
@@ -30,10 +33,14 @@ class FullAppActivity : ComponentActivity() {
     }
     
     private lateinit var webView: WebView
+    private var lastKeyboardHeight = 0
     
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Enable edge-to-edge and handle insets ourselves
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         
         // Enable WebView debugging
         WebView.setWebContentsDebuggingEnabled(true)
@@ -135,8 +142,40 @@ class FullAppActivity : ComponentActivity() {
         
         setContentView(webView)
         
+        // Setup keyboard height detection using WindowInsets
+        setupKeyboardListener()
+        
         // Load the app in full app mode (with UI controls)
         webView.loadUrl(APP_URL)
+    }
+    
+    /**
+     * Setup listener to detect keyboard height changes using WindowInsetsCompat
+     */
+    private fun setupKeyboardListener() {
+        val density = resources.displayMetrics.density
+        
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val keyboardHeightPx = imeInsets.bottom
+            
+            if (keyboardHeightPx != lastKeyboardHeight) {
+                lastKeyboardHeight = keyboardHeightPx
+                
+                val keyboardHeightCss = (keyboardHeightPx / density).toInt()
+                
+                Log.d(TAG, "Keyboard height changed: ${keyboardHeightPx}px physical -> ${keyboardHeightCss}px CSS (density: $density)")
+                
+                webView.post {
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('keyboardHeightChange', { detail: { height: $keyboardHeightCss } }));",
+                        null
+                    )
+                }
+            }
+            
+            insets
+        }
     }
     
     private fun guessMimeType(path: String): String {
@@ -170,6 +209,7 @@ class FullAppActivity : ComponentActivity() {
     }
     
     override fun onDestroy() {
+        ViewCompat.setOnApplyWindowInsetsListener(webView, null)
         webView.destroy()
         super.onDestroy()
     }
