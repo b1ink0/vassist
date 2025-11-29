@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
-import { PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
+import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions } from '../../config/uiConfig';
 import { AnimationCategory, getDefaultAnimationsByCategory } from '../../config/animationConfig';
 import Toggle from '../common/Toggle';
 import Dialog from '../common/Dialog';
@@ -838,6 +838,26 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 onChange={(checked) => updateUIConfig('enablePhysics', checked)}
               />
             </div>
+            
+            {/* Physics Engine Selector - Only show in non-extension mode when physics is enabled */}
+            {uiConfig.enablePhysics !== false && (typeof __EXTENSION_MODE__ === 'undefined' || !__EXTENSION_MODE__) && (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <label className="block text-xs text-white/70 font-medium mb-2">Physics Engine</label>
+                <select
+                  value={uiConfig.physicsEngine || PhysicsEngineOptions.BULLET}
+                  onChange={(e) => updateUIConfig('physicsEngine', e.target.value)}
+                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+                >
+                  <option value={PhysicsEngineOptions.BULLET} className="bg-gray-900">Bullet Physics (Recommended)</option>
+                  <option value={PhysicsEngineOptions.HAVOK} className="bg-gray-900">Havok Physics</option>
+                </select>
+                <p className="text-xs text-white/40 mt-1.5">
+                  {uiConfig.physicsEngine === PhysicsEngineOptions.BULLET
+                    ? 'WASM-based physics with better MMD compatibility'
+                    : 'Alternative physics engine'}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* FPS Limit */}

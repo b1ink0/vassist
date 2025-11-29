@@ -118,16 +118,33 @@ class RendererWebView(
         .addPathHandler("/", PublicAssetsPathHandler(context))
         .build()
 
+    /**
+     * Helper to add Cross-Origin headers required for SharedArrayBuffer
+     */
+    private fun addCrossOriginHeaders(response: WebResourceResponse?): WebResourceResponse? {
+        if (response == null) return null
+        
+        val headers = response.responseHeaders?.toMutableMap() ?: mutableMapOf()
+        headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        response.responseHeaders = headers
+        
+        return response
+    }
+    
     private val webViewClient = object : WebViewClient() {
         
         // Intercept requests to serve local assets via WebViewAssetLoader
+        // Add Cross-Origin headers to ALL responses for SharedArrayBuffer support
         override fun shouldInterceptRequest(
             view: WebView?,
             request: WebResourceRequest?
         ): WebResourceResponse? {
             request?.url?.let { url ->
                 Log.d(TAG, "Intercepting request: $url")
-                return assetLoader.shouldInterceptRequest(url)
+                val response = assetLoader.shouldInterceptRequest(url)
+                return addCrossOriginHeaders(response)
             }
             return super.shouldInterceptRequest(view, request)
         }

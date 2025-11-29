@@ -318,9 +318,8 @@ export class AnimationManager {
     // Create composite animation
     this.compositeAnimation = new MmdCompositeAnimation('assistantComposite');
     
-    // Add composite animation to model
-    this.mmdModel.addAnimation(this.compositeAnimation);
-    this.mmdModel.setAnimation('assistantComposite');
+    this.runtimeAnimationHandle = this.mmdModel.createRuntimeAnimation(this.compositeAnimation);
+    this.mmdModel.setRuntimeAnimation(this.runtimeAnimationHandle);
 
     // Register onBeforeRender observer for dynamic span management
     this.registerRenderObserver();

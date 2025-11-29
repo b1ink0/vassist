@@ -30,6 +30,16 @@ import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
+import { MmdWasmInstanceTypeMPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/multiPhysicsRelease";
+import { MmdWasmInstanceTypeSPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/singlePhysicsRelease";
+import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmInstance";
+import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
+import { PhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/physicsRuntime";
+import { MmdBulletPhysics } from "babylon-mmd/esm/Runtime/Optimized/Physics/mmdBulletPhysics";
+import { MotionType } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/motionType";
+import { PhysicsStaticPlaneShape } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/physicsShape";
+import { RigidBody } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBody";
+import { RigidBodyConstructionInfo } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBodyConstructionInfo";
 import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
@@ -181,11 +191,67 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // MMD RUNTIME INITIALIZATION
   // ========================================
   
-  // Initialize MMD Runtime
-  const mmdRuntime = new MmdRuntime(
-    scene, 
-    finalConfig.enablePhysics ? new MmdPhysics(scene) : undefined
-  );
+  const isExtension = import.meta.url.startsWith('chrome-extension://');
+  
+  const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && self.crossOriginIsolated;
+  
+  const physicsEngine = finalConfig.uiConfig?.physicsEngine || 'bullet';
+  
+  let physicsRuntime = null;
+  let mmdPhysics = null;
+  let isMultiThreadedPhysics = false;
+  
+  if (finalConfig.enablePhysics) {
+    const useBullet = !isExtension && physicsEngine === 'bullet';
+    
+    if (useBullet) {
+      if (hasSharedArrayBuffer) {
+        // Multi-threaded Bullet physics (faster, requires SharedArrayBuffer)
+        Logger.log('MmdModelScene', 'Initializing Multi-threaded Bullet Physics...');
+        try {
+          const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeMPR());
+          physicsRuntime = new MultiPhysicsRuntime(wasmInstance);
+          physicsRuntime.setGravity(new Vector3(0, -98, 0)); // MMD uses 10x gravity
+          physicsRuntime.register(scene);
+          mmdPhysics = new MmdBulletPhysics(physicsRuntime);
+          isMultiThreadedPhysics = true;
+          Logger.log('MmdModelScene', '✓ Multi-threaded Bullet Physics initialized');
+        } catch (error) {
+          Logger.error('MmdModelScene', 'Failed to initialize Multi-threaded Bullet Physics:', error);
+          Logger.warn('MmdModelScene', 'Falling back to single-threaded mode...');
+        }
+      }
+      
+      // Fall back to single-threaded if multi-threaded failed or SharedArrayBuffer not available
+      if (!mmdPhysics) {
+        Logger.log('MmdModelScene', 'Initializing Single-threaded Bullet Physics (Android/WebView mode)...');
+        try {
+          const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeSPR());
+          physicsRuntime = new PhysicsRuntime(wasmInstance);
+          physicsRuntime.setGravity(new Vector3(0, -98, 0)); // MMD uses 10x gravity
+          physicsRuntime.register(scene);
+          mmdPhysics = new MmdBulletPhysics(physicsRuntime);
+          isMultiThreadedPhysics = false;
+          Logger.log('MmdModelScene', '✓ Single-threaded Bullet Physics initialized');
+        } catch (error) {
+          Logger.error('MmdModelScene', 'Failed to initialize Single-threaded Bullet Physics:', error);
+          Logger.warn('MmdModelScene', 'Continuing without physics');
+        }
+      }
+    } else if (isExtension) {
+      Logger.log('MmdModelScene', 'Initializing Havok Physics...');
+      try {
+        mmdPhysics = new MmdPhysics(scene);
+        Logger.log('MmdModelScene', '✓ Havok Physics initialized');
+      } catch (error) {
+        Logger.error('MmdModelScene', 'Failed to initialize Havok Physics:', error);
+        Logger.warn('MmdModelScene', 'Continuing without physics');
+      }
+    }
+  }
+  
+  // Initialize MMD Runtime with physics
+  const mmdRuntime = new MmdRuntime(scene, mmdPhysics);
   mmdRuntime.loggingEnabled = true;
   mmdRuntime.register(scene);
 
@@ -299,15 +365,32 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   }
 
   // ========================================
-  // PHYSICS INITIALIZATION
+  // SCENE PHYSICS INITIALIZATION (for ground collider)
   // ========================================
   
   if (finalConfig.enablePhysics) {
-    Logger.log('MmdModelScene', 'Initializing physics...');
-    const havokInstance = await havokPhysics();
-    const havokPlugin = new HavokPlugin(true, havokInstance);
-    scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
-    Logger.log('MmdModelScene', 'Physics initialized');
+    const useBullet = !isExtension && physicsEngine === 'bullet';
+    
+    if (!useBullet) {
+      Logger.log('MmdModelScene', 'Initializing Havok scene physics...');
+      const havokInstance = await havokPhysics();
+      const havokPlugin = new HavokPlugin(true, havokInstance);
+      scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
+      Logger.log('MmdModelScene', 'Havok scene physics initialized');
+    } else if (physicsRuntime) {
+      Logger.log('MmdModelScene', 'Adding Bullet ground collider...');
+      const info = new RigidBodyConstructionInfo(physicsRuntime.wasmInstance);
+      info.motionType = MotionType.Static;
+      info.shape = new PhysicsStaticPlaneShape(physicsRuntime, new Vector3(0, 1, 0), 0);
+      const groundBody = new RigidBody(physicsRuntime, info);
+      
+      if (isMultiThreadedPhysics) {
+        physicsRuntime.addRigidBodyToGlobal(groundBody);
+      } else {
+        physicsRuntime.addRigidBody(groundBody);
+      }
+      Logger.log('MmdModelScene', 'Bullet ground collider added');
+    }
   }
 
   // ========================================
@@ -326,7 +409,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
 
   // Create MMD model
   mmdModel = mmdRuntime.createMmdModel(modelMesh, {
-    buildPhysics: finalConfig.enablePhysics,
+    buildPhysics: mmdPhysics !== null && mmdPhysics !== undefined,
   });
   
   // Enable and configure outline rendering on all materials
