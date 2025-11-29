@@ -239,6 +239,11 @@ class RendererWebView(
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
+            
+            // Improve WebGL rendering quality
+            // Enable WebGL 2.0 if available (Android 9+)
+            // Force high quality rendering
+            setRenderPriority(WebSettings.RenderPriority.HIGH)
         }
         
         // Make interactive

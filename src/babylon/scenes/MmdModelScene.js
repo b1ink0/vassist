@@ -702,12 +702,34 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   // ========================================
   
   const defaultPipeline = new DefaultRenderingPipeline("default", true, scene);
-  defaultPipeline.samples = 4;
-  defaultPipeline.bloomEnabled = true;
-  defaultPipeline.chromaticAberrationEnabled = true;
-  defaultPipeline.chromaticAberration.aberrationAmount = 1;
+  
+  // Get render quality from config (default to 'medium')
+  const renderQuality = finalConfig.renderQuality || 'medium';
+  const isAndroidDevice = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+  
+  // Get quality presets from sceneConfig
+  const { getRenderQualityPresets } = await import('../../config/sceneConfig.js');
+  const qualityPresets = getRenderQualityPresets(isAndroidDevice);
+  
+  // Get the quality preset (fallback to medium if invalid)
+  const quality = qualityPresets[renderQuality] || qualityPresets.medium;
+  
+  // Apply quality settings
+  defaultPipeline.samples = quality.samples;
+  defaultPipeline.bloomEnabled = quality.bloomEnabled;
+  if (quality.bloomEnabled) {
+    defaultPipeline.bloomKernel = quality.bloomKernel;
+    defaultPipeline.bloomScale = quality.bloomScale;
+    defaultPipeline.bloomWeight = quality.bloomWeight;
+  }
+  defaultPipeline.chromaticAberrationEnabled = quality.chromaticAberrationEnabled;
+  if (quality.chromaticAberrationEnabled) {
+    defaultPipeline.chromaticAberration.aberrationAmount = 1;
+  }
   defaultPipeline.depthOfFieldEnabled = false;
-  defaultPipeline.fxaaEnabled = true;
+  defaultPipeline.fxaaEnabled = quality.fxaaEnabled;
+  
+  // Image processing - always enabled for tone mapping
   defaultPipeline.imageProcessingEnabled = true;
   defaultPipeline.imageProcessing.toneMappingEnabled = true;
   defaultPipeline.imageProcessing.toneMappingType =
@@ -716,6 +738,8 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   defaultPipeline.imageProcessing.vignetteStretch = 0.5;
   defaultPipeline.imageProcessing.vignetteColor = new Color4(0, 0, 0, 0);
   defaultPipeline.imageProcessing.vignetteEnabled = true;
+  
+  Logger.log('MmdModelScene', `Post-processing configured: quality=${renderQuality}, samples=${quality.samples}, bloom=${quality.bloomEnabled}, chromatic=${quality.chromaticAberrationEnabled}, isAndroid=${isAndroidDevice}`);
 
   // ========================================
   // CANVAS INTERACTION MANAGER

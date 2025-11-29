@@ -161,11 +161,25 @@ const BabylonScene = ({
       canvas.dataset.babylonInitialized = 'true';
       delete canvas.dataset.babylonInitializing;
       
+      // Get device pixel ratio - limit to 2x on Android to balance quality vs performance
+      const isAndroidDevice = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+      const rawDPR = window.devicePixelRatio || 1;
+      const maxDPR = isAndroidDevice ? 2 : 3; // Cap at 2x on Android, 3x on other platforms
+      const effectiveDPR = Math.min(rawDPR, maxDPR);
+      
+      Logger.log('BabylonScene', `Device pixel ratio: ${rawDPR}, effective: ${effectiveDPR}, isAndroid: ${isAndroidDevice}`);
+      
       const engine = new Engine(canvas, true, {
         preserveDrawingBuffer: true,
         stencil: true,
         alpha: true,
+        adaptToDeviceRatio: true, // Enable high-DPI rendering
+        powerPreference: isAndroidDevice ? 'high-performance' : 'default',
       });
+      
+      // Set hardware scaling level to control resolution (lower = higher quality)
+      // 1 / effectiveDPR ensures we render at the device's native resolution (capped)
+      engine.setHardwareScalingLevel(1 / effectiveDPR);
       
       if (fpsLimit !== FPSLimitOptions.NATIVE && fpsLimit !== 'native') {
         const targetFPS = typeof fpsLimit === 'number' ? fpsLimit : 60;

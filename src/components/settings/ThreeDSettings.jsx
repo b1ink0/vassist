@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
-import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions } from '../../config/uiConfig';
+import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions, RenderQualityOptions } from '../../config/uiConfig';
 import { AnimationCategory, getDefaultAnimationsByCategory } from '../../config/animationConfig';
 import Toggle from '../common/Toggle';
 import Dialog from '../common/Dialog';
@@ -890,6 +890,27 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 Limits rendering to {uiConfig.fpsLimit || 60} frames per second
               </p>
             )}
+          </div>
+
+          {/* Render Quality */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Render Quality</label>
+            <select
+              value={uiConfig.renderQuality || RenderQualityOptions.MEDIUM}
+              onChange={(e) => updateUIConfig('renderQuality', e.target.value)}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            >
+              <option value={RenderQualityOptions.LOW} className="bg-gray-900">Low (Best Performance)</option>
+              <option value={RenderQualityOptions.MEDIUM} className="bg-gray-900">Medium (Balanced)</option>
+              <option value={RenderQualityOptions.HIGH} className="bg-gray-900">High (Better Quality)</option>
+              <option value={RenderQualityOptions.ULTRA} className="bg-gray-900">Ultra (Maximum Quality)</option>
+            </select>
+            <p className="text-xs text-white/50">
+              {uiConfig.renderQuality === RenderQualityOptions.LOW && 'Minimal effects for low-end devices and better battery life'}
+              {(uiConfig.renderQuality === RenderQualityOptions.MEDIUM || !uiConfig.renderQuality) && 'Balanced quality with bloom, FXAA, and tone mapping'}
+              {uiConfig.renderQuality === RenderQualityOptions.HIGH && 'Full post-processing with high-quality anti-aliasing'}
+              {uiConfig.renderQuality === RenderQualityOptions.ULTRA && 'Maximum quality with 8x MSAA and all effects enabled'}
+            </p>
           </div>
 
           {/* Position Preset */}

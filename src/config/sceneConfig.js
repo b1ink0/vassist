@@ -11,6 +11,53 @@ import { resourceLoader } from '../utils/ResourceLoader.js';
 import Logger from '../services/LoggerService';
 
 /**
+ * Render Quality Presets
+ * Controls post-processing effects and rendering quality
+ * @param {boolean} isAndroid - Whether the device is Android
+ * @returns {Object} Quality presets configuration
+ */
+export function getRenderQualityPresets(isAndroid = false) {
+  return {
+    low: {
+      samples: 1,                    // No MSAA
+      bloomEnabled: false,           // Disable bloom
+      chromaticAberrationEnabled: false,
+      fxaaEnabled: true,             // Keep FXAA (lightweight)
+      bloomKernel: 32,
+      bloomScale: 0.3,
+      bloomWeight: 0.1,
+    },
+    medium: {
+      samples: 2,                    // 2x MSAA
+      bloomEnabled: true,
+      chromaticAberrationEnabled: false, // Disable on medium for performance
+      fxaaEnabled: true,
+      bloomKernel: isAndroid ? 32 : 48,
+      bloomScale: 0.5,
+      bloomWeight: 0.15,
+    },
+    high: {
+      samples: isAndroid ? 2 : 4,    // 4x MSAA on desktop, 2x on Android
+      bloomEnabled: true,
+      chromaticAberrationEnabled: !isAndroid, // Only on desktop
+      fxaaEnabled: true,
+      bloomKernel: 64,
+      bloomScale: 0.6,
+      bloomWeight: 0.2,
+    },
+    ultra: {
+      samples: isAndroid ? 4 : 8,    // 8x MSAA on desktop, 4x on Android
+      bloomEnabled: true,
+      chromaticAberrationEnabled: true,
+      fxaaEnabled: true,
+      bloomKernel: 64,
+      bloomScale: 0.7,
+      bloomWeight: 0.25,
+    },
+  };
+}
+
+/**
  * Default scene configuration
  */
 const SceneConfig = {
@@ -243,4 +290,5 @@ export default {
   isFeatureEnabled,
   createSceneConfig,
   validateSceneConfig,
+  getRenderQualityPresets,
 };

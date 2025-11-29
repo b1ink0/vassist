@@ -175,6 +175,21 @@ export const PhysicsEngineOptions = {
 };
 
 /**
+ * Render Quality Options
+ * Controls post-processing effects and rendering quality
+ * - LOW: Minimal effects, best performance (mobile/low-end)
+ * - MEDIUM: Balanced quality and performance (default)
+ * - HIGH: Full effects, good quality (desktop)
+ * - ULTRA: Maximum quality, highest GPU usage (high-end desktop)
+ */
+export const RenderQualityOptions = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  ULTRA: 'ultra',
+};
+
+/**
  * Default UI Configuration
  */
 export const DefaultUIConfig = {
@@ -185,6 +200,8 @@ export const DefaultUIConfig = {
   enablePhysics: true,
   
   physicsEngine: PhysicsEngineOptions.BULLET,
+  
+  renderQuality: RenderQualityOptions.MEDIUM,
   
   fpsLimit: FPSLimitOptions.FPS_60,
   
