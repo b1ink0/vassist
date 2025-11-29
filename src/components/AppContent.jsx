@@ -31,6 +31,7 @@ function AppContent({ mode = 'development' }) {
     sceneRef,
     positionManagerRef,
     handleAssistantReady: contextHandleAssistantReady,
+    sceneKey,
   } = useApp();
 
   const { kokoroStatus, ttsConfig } = useConfig();
@@ -76,12 +77,13 @@ function AppContent({ mode = 'development' }) {
     }
     return (
       <VirtualAssistant 
+        key={sceneKey}
         ref={assistantRef}
         onReady={handleAssistantReady}
         mode={mode}
       />
     );
-  }, [enableModelLoading, shouldMountModel, shouldWaitForKokoro, handleAssistantReady, mode, assistantRef]);
+  }, [enableModelLoading, shouldMountModel, shouldWaitForKokoro, handleAssistantReady, mode, assistantRef, sceneKey]);
   
   return (
     <div className="relative">

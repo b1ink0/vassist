@@ -18,6 +18,7 @@ import Logger from '../services/LoggerService';
  * @param {string} props.animationClass - CSS animation class
  * @param {Function} props.onRequestEditDialog - Callback to show edit dialog
  * @param {Function} props.onRequestDeleteDialog - Callback to show delete dialog
+ * @param {number} props.refreshTrigger - Trigger to reload chats when changed
  * @returns {JSX.Element} Chat history panel component
  */
 const ChatHistoryPanel = ({
@@ -27,6 +28,7 @@ const ChatHistoryPanel = ({
   animationClass = '',
   onRequestEditDialog = null,
   onRequestDeleteDialog = null,
+  refreshTrigger = 0,
 }) => {
   const [displayedChats, setDisplayedChats] = useState([]);
   const [filteredChats, setFilteredChats] = useState([]);
@@ -50,6 +52,13 @@ const ChatHistoryPanel = ({
   useEffect(() => {
     loadInitialChats();
   }, []);
+
+  // Reload chats when refreshTrigger changes (after edit/delete operations)
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      loadInitialChats();
+    }
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (scrollRef.current && displayedChats.length > 0) {

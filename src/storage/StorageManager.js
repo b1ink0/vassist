@@ -126,6 +126,7 @@ export class StorageManager {
       remove: (fileId) => this._fileRemove(fileId),
       getAll: () => this._filesGetAll(),
       getByCategory: (category) => this._filesGetByCategory(category),
+      getMetadataByCategory: (category) => this._filesGetMetadataByCategory(category),
       clear: () => this._filesClear(),
     };
 
@@ -346,6 +347,33 @@ export class StorageManager {
     const result = {};
     records.forEach(record => {
       result[record.fileId] = record.value;
+    });
+    return result;
+  }
+
+  async _filesGetMetadataByCategory(category) {
+    const records = await this.adapter.query('files', { category });
+    const result = {};
+    records.forEach(record => {
+      const { value } = record;
+      const metadata = {
+        fileId: record.fileId,
+        fileName: record.fileName,
+        category: record.category,
+        createdAt: record.createdAt,
+      };
+      
+      if (value && typeof value === 'object') {
+        const cleanValue = {};
+        for (const [key, val] of Object.entries(value)) {
+          if (!(val instanceof Blob) && key !== 'modelData' && key !== 'motionData') {
+            cleanValue[key] = val;
+          }
+        }
+        metadata.value = cleanValue;
+      }
+      
+      result[record.fileId] = metadata;
     });
     return result;
   }

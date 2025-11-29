@@ -99,6 +99,11 @@ export const AppProvider = ({ children }) => {
   const [savedModelPosition, setSavedModelPosition] = useState(null);
 
   // ========================================
+  // SCENE RELOAD STATE
+  // ========================================
+  const [sceneKey, setSceneKey] = useState(0);
+
+  // ========================================
   // ASSISTANT INITIALIZATION
   // ========================================
   
@@ -836,6 +841,14 @@ export const AppProvider = ({ children }) => {
   }, [uiConfig, parseKeyEvent, toggleChat]);
 
   // ========================================
+  // SCENE RELOAD
+  // ========================================
+  const reloadScene = useCallback(() => {
+    Logger.log('AppContext', 'Reloading 3D scene');
+    setSceneKey(prev => prev + 1);
+  }, []);
+
+  // ========================================
   // CONTEXT VALUE
   // ========================================
 
@@ -944,6 +957,10 @@ export const AppProvider = ({ children }) => {
     handleSummarize,
     handleTranslate,
     handleAddToChat,
+
+    // Scene actions
+    sceneKey,
+    reloadScene,
 
     // Config state
     uiConfig,

@@ -23,7 +23,6 @@ import {
   AssistantState,
   StateBehavior,
   TransitionSettings,
-  getRandomAnimation,
   getAnimationsByCategory,
   getAnimationsByName,
   isValidTransition,
@@ -52,8 +51,11 @@ export class AnimationManager {
    * @param {MmdRuntime} mmdRuntime - MMD runtime instance
    * @param {MmdModel} mmdModel - MMD model instance
    * @param {BvmdLoader} bvmdLoader - BVMD loader instance for loading animations
+   * @param {VmdLoader} vmdLoader - VMD loader instance
+   * @param {Function} getRandomAnimation - Function to get random animation from category (from AnimationContext)
+   * @param {Function} getEnabledAnimations - Function to get enabled animations for category (from AnimationContext)
    */
-  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader) {
+  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader, getRandomAnimation, getEnabledAnimations) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     Logger.log('AnimationManager ${this.instanceId}', '🆕 Creating new instance');
@@ -64,6 +66,10 @@ export class AnimationManager {
     this.mmdModel = mmdModel;
     this.bvmdLoader = bvmdLoader;
     this.vmdLoader = vmdLoader;
+    
+    // Animation context functions
+    this.getRandomAnimation = getRandomAnimation;
+    this.getEnabledAnimations = getEnabledAnimations;
 
     // Animation loading cache
     this.loadedAnimations = new Map(); // filePath -> loaded animation
@@ -328,7 +334,7 @@ export class AnimationManager {
     if (playIntro) {
       // Play intro animation using INTRO state (loop: false, autoReturn: IDLE)
       Logger.log('AnimationManager', 'Playing intro animation...');
-      const introAnim = getRandomAnimation('intro');
+      const introAnim = this.getRandomAnimation('intro');
       
       if (introAnim) {
         // Load intro animation FIRST to read its locomotion
@@ -378,13 +384,91 @@ export class AnimationManager {
   /**
    * Load animation on-demand with deduplication
    * Multiple calls to same filePath return same cached animation
-   * @param {Object} animationConfig - Animation config from AnimationRegistry
+   * Supports both file-based animations (filePath) and custom animations (customMotionId)
+   * @param {Object} animationConfig - Animation config from AnimationRegistry or AnimationContext
    * @returns {Promise<Animation>} Loaded animation
    */
   async loadAnimation(animationConfig) {
     if (this.disposed) return null;
     
-    const { filePath, id, name } = animationConfig;
+    const { filePath, id, name, isCustom, customMotionId } = animationConfig;
+    
+    // Handle custom animations (from MotionStorageService)
+    if (isCustom && customMotionId) {
+      const cacheKey = `custom_${customMotionId}`;
+      
+      // 1. Already loaded? Return cached
+      if (this.loadedAnimations.has(cacheKey)) {
+        Logger.log('AnimationManager', `Using cached custom animation: ${name} (${customMotionId})`);
+        return this.loadedAnimations.get(cacheKey);
+      }
+
+      // 2. Currently loading? Wait for existing promise
+      if (this.loadingPromises.has(cacheKey)) {
+        Logger.log('AnimationManager', `Waiting for in-flight custom load: ${name} (${customMotionId})`);
+        return await this.loadingPromises.get(cacheKey);
+      }
+
+      // 3. Load custom animation from storage
+      Logger.log('AnimationManager', `Loading custom animation: ${name} (${customMotionId})`);
+      
+      const loadPromise = (async () => {
+        try {
+          // Import MotionStorageService dynamically to avoid circular dependencies
+          const { motionStorageService } = await import('../../services/MotionStorageService');
+          
+          // Get motion data from storage
+          const motion = await motionStorageService.getMotion(customMotionId);
+          if (!motion || !motion.motionData) {
+            throw new Error(`Custom motion ${customMotionId} not found or has no data`);
+          }
+          
+          // Convert Blob to ArrayBuffer
+          const arrayBuffer = await motion.motionData.arrayBuffer();
+          
+          // Create blob URL for the BVMD loader
+          const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: 'application/octet-stream' }));
+          
+          // Load using BVMD loader (custom animations are always BVMD)
+          const animation = await this.bvmdLoader.loadAsync(customMotionId, blobUrl);
+          
+          // Clean up blob URL
+          URL.revokeObjectURL(blobUrl);
+          
+          // Apply transformations
+          if (this._shouldFlipAnimations) {
+            this._flipAnimationXAxis(animation);
+          }
+          this._applyLocomotionOffset(animation);
+          if (this.scene.metadata?.isPortraitMode) {
+            this._fixRootBoneForPortraitMode(animation);
+          }
+          
+          Logger.log('AnimationManager', `Loaded custom animation: ${name}, duration: ${animation.endFrame} frames`);
+          return animation;
+        } catch (error) {
+          Logger.error('AnimationManager', `Failed to load custom animation: ${name}`, error);
+          throw error;
+        }
+      })();
+      
+      // Store promise to prevent duplicate loads
+      this.loadingPromises.set(cacheKey, loadPromise);
+      
+      try {
+        const animation = await loadPromise;
+        this.loadedAnimations.set(cacheKey, animation);
+        return animation;
+      } finally {
+        this.loadingPromises.delete(cacheKey);
+      }
+    }
+
+    // Handle file-based animations (default animations)
+    if (!filePath) {
+      Logger.error('AnimationManager', `Animation ${name} has no filePath and is not a custom animation`);
+      return null;
+    }
 
     // 1. Already loaded? Return cached
     if (this.loadedAnimations.has(filePath)) {
@@ -598,7 +682,7 @@ export class AnimationManager {
       Logger.log('AnimationManager', 'Loading blink animation...');
       
       // Get blink animation from registry
-      const blinkAnimConfig = getRandomAnimation('blink');
+      const blinkAnimConfig = this.getRandomAnimation('blink');
       
       if (!blinkAnimConfig) {
         Logger.warn('AnimationManager', 'No blink animations found in registry - blinking disabled');
@@ -828,7 +912,7 @@ export class AnimationManager {
         // Randomly pick from allowed animations
         const allowedCategories = behavior.allowedAnimations;
         const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
-        animationConfig = getRandomAnimation(randomCategory);
+        animationConfig = this.getRandomAnimation(randomCategory);
         Logger.log('AnimationManager', `[TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
       } else {
         // Use first animation from first allowed category
@@ -1586,7 +1670,7 @@ export class AnimationManager {
         const maxAttempts = 10;
         
         while (attempts < maxAttempts) {
-          newAnimation = getRandomAnimation('idle');
+          newAnimation = this.getRandomAnimation('idle');
           // Make sure it's different from current
           if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
             break;

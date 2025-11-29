@@ -35,6 +35,8 @@ import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
 import Logger from '../../services/LoggerService';
 import { VmdLoader } from "babylon-mmd";
+import { pmxConverterService } from '../../services/PMXConverterService';
+import { modelStorageService } from '../../services/ModelStorageService';
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -210,10 +212,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   try {
     // Load model with progress tracking (no built-in loading UI)
+    // For blob URLs from custom models, LoadAssetContainerAsync can load directly
     const result = await LoadAssetContainerAsync(
       finalConfig.modelUrl,
       scene,
       {
+        // Specify plugin explicitly for blob URLs
+        ...(finalConfig.modelFileName ? { pluginExtension: '.bpmx' } : {}),
         pluginOptions: {
           mmdmodel: {
             materialBuilder: materialBuilder,
@@ -243,6 +248,45 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     modelMesh = result.meshes[0];
     
     Logger.log('MmdModelScene', 'Model added to scene successfully');
+    
+    // ========================================
+    // EXTRACT AND SAVE TEXTURE/MESH METADATA
+    // ========================================
+    // Check if we need to populate texture/mesh metadata for this model
+    if (finalConfig.modelId) {
+      try {
+        Logger.log('MmdModelScene', 'Checking if model metadata needs population...');
+        
+        // Get current model data from storage
+        const currentModel = await modelStorageService.getModel(finalConfig.modelId);
+        
+        // Check if textures and meshParts metadata already exists
+        const needsMetadata = !currentModel?.metadata?.textures || !currentModel?.metadata?.meshParts;
+        
+        if (needsMetadata) {
+          Logger.log('MmdModelScene', 'Extracting texture and mesh metadata from loaded model...');
+          
+          // Extract metadata using the same function from PMXConverterService
+          const modelMetadata = pmxConverterService.extractModelMetadata(modelMesh);
+          
+          Logger.log('MmdModelScene', `Extracted ${modelMetadata.textures.length} textures and ${modelMetadata.meshParts.length} mesh parts`);
+          
+          // Update model metadata in storage
+          await modelStorageService.updateModelMetadata(finalConfig.modelId, {
+            textures: modelMetadata.textures,
+            meshParts: modelMetadata.meshParts
+          });
+          
+          Logger.log('MmdModelScene', '✓ Model metadata saved to storage');
+        } else {
+          Logger.log('MmdModelScene', 'Model already has texture/mesh metadata, skipping extraction');
+        }
+      } catch (error) {
+        Logger.warn('MmdModelScene', 'Failed to extract/save model metadata:', error);
+        // Don't throw - this is not critical for scene loading
+      }
+    }
+    // ========================================
     
     // Call user's model loaded callback
     if (finalConfig.onModelLoaded) {
@@ -299,6 +343,128 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   Logger.log('MmdModelScene', 'MMD model created with outlines enabled');
 
   // ========================================
+  // APPLY SAVED TEXTURE/MESH STATES
+  // ========================================
+  // Apply saved texture and mesh visibility states from metadata
+  // This runs AFTER model is fully loaded and materials are set up
+  if (finalConfig.modelId) {
+    try {
+      Logger.log('MmdModelScene', 'Applying saved texture and mesh states...');
+      
+      const currentModel = await modelStorageService.getModel(finalConfig.modelId);
+      
+      if (currentModel?.metadata?.textures || currentModel?.metadata?.meshParts) {
+        // Collect all materials using the same logic as extraction
+        const materials = [];
+        
+        if (modelMesh.metadata && modelMesh.metadata.materials) {
+          materials.push(...modelMesh.metadata.materials);
+        }
+        
+        if (modelMesh.material && !materials.includes(modelMesh.material)) {
+          materials.push(modelMesh.material);
+        }
+        
+        if (modelMesh.subMeshes) {
+          modelMesh.subMeshes.forEach((subMesh) => {
+            if (subMesh.getMaterial && subMesh.getMaterial()) {
+              const subMaterial = subMesh.getMaterial();
+              if (subMaterial && !materials.includes(subMaterial)) {
+                materials.push(subMaterial);
+              }
+            }
+          });
+        }
+        
+        Logger.log('MmdModelScene', `Found ${materials.length} materials for texture application`);
+        
+        // Apply texture states - store original textures and toggle disabled ones to null
+        if (currentModel.metadata.textures) {
+          let appliedCount = 0;
+          for (const textureData of currentModel.metadata.textures) {
+            if (textureData.materialIndex >= materials.length) {
+              Logger.warn('MmdModelScene', `Texture material index ${textureData.materialIndex} out of bounds`);
+              continue;
+            }
+            
+            const material = materials[textureData.materialIndex];
+            if (!material) continue;
+            
+            // Store original texture reference if not already stored
+            // This is critical for toggling later
+            const textureKey = `_original_${textureData.type}_texture`;
+            
+            if (textureData.type === 'diffuse' && material.diffuseTexture) {
+              if (!material[textureKey]) {
+                material[textureKey] = material.diffuseTexture;
+              }
+              if (!textureData.isActive) {
+                material.diffuseTexture = null;
+                appliedCount++;
+              }
+            } else if (textureData.type === 'sphere' && material.sphereTexture) {
+              if (!material[textureKey]) {
+                material[textureKey] = material.sphereTexture;
+              }
+              if (!textureData.isActive) {
+                material.sphereTexture = null;
+                appliedCount++;
+              }
+            } else if (textureData.type === 'toon' && material.toonTexture) {
+              if (!material[textureKey]) {
+                material[textureKey] = material.toonTexture;
+              }
+              if (!textureData.isActive) {
+                material.toonTexture = null;
+                appliedCount++;
+              }
+            }
+          }
+          Logger.log('MmdModelScene', `Applied ${appliedCount} disabled texture states`);
+        }
+        
+        // Apply mesh visibility states
+        if (currentModel.metadata.meshParts && modelMesh.metadata.meshes) {
+          let appliedCount = 0;
+          for (const meshPart of currentModel.metadata.meshParts) {
+            if (!meshPart.isVisible) {
+              const mesh = modelMesh.metadata.meshes[meshPart.meshIndex];
+              if (mesh) {
+                if (meshPart.type === 'submesh' && meshPart.subMeshIndex !== undefined) {
+                  // For submeshes, toggle via material alpha
+                  if (mesh.subMeshes && mesh.subMeshes[meshPart.subMeshIndex]) {
+                    const subMesh = mesh.subMeshes[meshPart.subMeshIndex];
+                    const material = subMesh.getMaterial ? subMesh.getMaterial() : mesh.material;
+                    if (material) {
+                      if (!material._originalAlpha) {
+                        material._originalAlpha = material.alpha !== undefined ? material.alpha : 1;
+                      }
+                      material.alpha = 0;
+                      material._isHidden = true;
+                      appliedCount++;
+                    }
+                  }
+                } else {
+                  // For main meshes, use setEnabled
+                  mesh.setEnabled(false);
+                  appliedCount++;
+                }
+              }
+            }
+          }
+          Logger.log('MmdModelScene', `Applied ${appliedCount} hidden mesh states`);
+        }
+        
+        Logger.log('MmdModelScene', '✓ Saved states applied successfully');
+      }
+    } catch (error) {
+      Logger.warn('MmdModelScene', 'Failed to apply saved states:', error);
+      // Don't throw - this is not critical
+    }
+  }
+  // ========================================
+
+  // ========================================
   // ANIMATION MANAGER INTEGRATION
   // ========================================
   
@@ -310,6 +476,8 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     mmdModel,
     bvmdLoader,
     vmdLoader,
+    finalConfig.getRandomAnimation,
+    finalConfig.getEnabledAnimations
   );
   
   // Initialize scene metadata if null
@@ -328,12 +496,17 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const actualPreset = preset;
   
   // Portrait Mode - Use clipping plane to hide lower body
-  // Get clipping plane Y value from preset (allows per-model adjustment)
+  // Get clipping plane Y value from config (model-specific) or preset
   if (isPortraitMode) {
-    // Import PositionPresets to get the portraitClipPlaneY value
-    const { PositionPresets } = await import('../../config/uiConfig.js');
-    const presetData = PositionPresets[actualPreset];
-    const clipPlaneY = presetData?.portraitClipPlaneY ?? 6.5; // Default to 6.5 if not specified
+    // Use portrait clipping from model metadata (via config) or fall back to preset
+    let clipPlaneY = finalConfig.portraitClipping ?? 12;
+    
+    // If no custom value, try preset
+    if (clipPlaneY === 12) {
+      const { PositionPresets } = await import('../../config/uiConfig.js');
+      const presetData = PositionPresets[actualPreset];
+      clipPlaneY = presetData?.portraitClipPlaneY ?? 12;
+    }
     
     Logger.log('MmdModelScene', `Portrait Mode enabled - setting up clipping plane at Y = ${clipPlaneY}`);
     

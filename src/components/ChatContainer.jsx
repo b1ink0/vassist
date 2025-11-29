@@ -12,10 +12,11 @@ import DragDropService from '../services/DragDropService';
 import UtilService from '../services/UtilService';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
-import ChatEditDialog from './ChatEditDialog';
-import ChatDeleteDialog from './ChatDeleteDialog';
+import Dialog from './common/Dialog';
 import ChatMessage from './ChatMessage';
 import chatHistoryService from '../services/ChatHistoryService';
+import { modelStorageService } from '../services/ModelStorageService';
+import { motionStorageService } from '../services/MotionStorageService';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
@@ -96,6 +97,13 @@ const ChatContainer = ({
   const [deletingChatId, setDeletingChatId] = useState(null);
   const [isEditDialogClosing, setIsEditDialogClosing] = useState(false);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
+  
+  const [deletingModelId, setDeletingModelId] = useState(null);
+  const [deletingMotionId, setDeletingMotionId] = useState(null);
+  const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] = useState(false);
+  const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] = useState(false);
+  const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   
   const streamedMessageIdsRef = useRef(new Set());
   
@@ -445,6 +453,9 @@ const ChatContainer = ({
       await chatHistoryService.updateChatTitle(chatId, newTitle);
       Logger.log('ChatContainer', 'Updated chat title:', chatId, newTitle);
       
+      // Trigger chat history panel refresh
+      setHistoryRefreshTrigger(prev => prev + 1);
+      
       setIsEditDialogClosing(true);
       setTimeout(() => {
         setEditingChatId(null);
@@ -474,6 +485,9 @@ const ChatContainer = ({
       await chatHistoryService.deleteChat(chatId);
       Logger.log('ChatContainer', 'Deleted chat:', chatId);
       
+      // Trigger chat history panel refresh
+      setHistoryRefreshTrigger(prev => prev + 1);
+      
       setIsDeleteDialogClosing(true);
       setTimeout(() => {
         setDeletingChatId(null);
@@ -489,6 +503,62 @@ const ChatContainer = ({
     setTimeout(() => {
       setDeletingChatId(null);
       setIsDeleteDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteModelDialog = useCallback((modelId) => {
+    setDeletingModelId(modelId);
+  }, []);
+
+  const handleDeleteModelConfirm = useCallback(async (modelId) => {
+    try {
+      await modelStorageService.deleteModel(modelId);
+      Logger.log('ChatContainer', 'Deleted model:', modelId);
+      
+      setIsDeleteModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingModelId(null);
+        setIsDeleteModelDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete model:', error);
+    }
+  }, []);
+
+  const handleDeleteModelCancel = useCallback(() => {
+    setIsDeleteModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingModelId(null);
+      setIsDeleteModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteMotionDialog = useCallback((motionId) => {
+    setDeletingMotionId(motionId);
+  }, []);
+
+  const handleDeleteMotionConfirm = useCallback(async (motionId) => {
+    try {
+      await motionStorageService.deleteMotion(motionId);
+      Logger.log('ChatContainer', 'Deleted motion:', motionId);
+      
+      setIsDeleteMotionDialogClosing(true);
+      setTimeout(() => {
+        setDeletingMotionId(null);
+        setIsDeleteMotionDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete motion:', error);
+    }
+  }, []);
+
+  const handleDeleteMotionCancel = useCallback(() => {
+    setIsDeleteMotionDialogClosing(true);
+    setTimeout(() => {
+      setDeletingMotionId(null);
+      setIsDeleteMotionDialogClosing(false);
     }, 200);
   }, []);
 
@@ -1199,6 +1269,9 @@ const ChatContainer = ({
             onClose={handleSettingsPanelClose} 
             isLightBackground={isLightBackground}
             animationClass={isSettingsPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
+            onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+            refreshTrigger={settingsRefreshTrigger}
           />
         </div>
       )}
@@ -1212,6 +1285,7 @@ const ChatContainer = ({
             onSelectChat={handleSelectChat}
             onRequestEditDialog={handleRequestEditDialog}
             onRequestDeleteDialog={handleRequestDeleteDialog}
+            refreshTrigger={historyRefreshTrigger}
             animationClass={isHistoryPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
           />
         </div>
@@ -1220,12 +1294,17 @@ const ChatContainer = ({
       {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {editingChatId && (
         <div className="absolute inset-0 z-20">
-          <ChatEditDialog
-            chatId={editingChatId}
-            initialTitle={editingChatTitle}
+          <Dialog
+            type="edit"
+            title="Edit Chat Title"
+            itemId={editingChatId}
+            initialValue={editingChatTitle}
+            inputPlaceholder="Enter new title..."
+            inputMaxLength={100}
             isLightBackground={isLightBackground}
             animationClass={isEditDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
-            onSave={handleEditDialogSave}
+            confirmLabel="Save"
+            onConfirm={handleEditDialogSave}
             onCancel={handleEditDialogCancel}
           />
         </div>
@@ -1234,12 +1313,53 @@ const ChatContainer = ({
       {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {deletingChatId && (
         <div className="absolute inset-0 z-20">
-          <ChatDeleteDialog
-            chatId={deletingChatId}
+          <Dialog
+            type="delete"
+            title="Delete Chat?"
+            message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
+            itemId={deletingChatId}
             isLightBackground={isLightBackground}
             animationClass={isDeleteDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
             onConfirm={handleDeleteDialogConfirm}
             onCancel={handleDeleteDialogCancel}
+          />
+        </div>
+      )}
+
+      {/* Model Delete Dialog - renders outside SettingsPanel */}
+      {deletingModelId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Model?"
+            message="This will permanently delete this custom model. This cannot be undone."
+            itemId={deletingModelId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteModelDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteModelConfirm}
+            onCancel={handleDeleteModelCancel}
+          />
+        </div>
+      )}
+
+      {/* Motion Delete Dialog - renders outside SettingsPanel */}
+      {deletingMotionId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Animation?"
+            message="This will permanently delete this custom animation. This cannot be undone."
+            itemId={deletingMotionId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteMotionDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteMotionConfirm}
+            onCancel={handleDeleteMotionCancel}
           />
         </div>
       )}

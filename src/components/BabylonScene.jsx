@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
+import { getSceneConfigAsync } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
@@ -187,7 +187,14 @@ const BabylonScene = ({
       let scene;
 
       if (sceneBuilder) {
-        let finalConfig = createSceneConfig({
+        Logger.log('BabylonScene', 'About to call getSceneConfigAsync()...');
+        // Get scene config with custom model check
+        let finalConfig = await getSceneConfigAsync();
+        Logger.log('BabylonScene', 'getSceneConfigAsync() returned, finalConfig.modelUrl:', finalConfig.modelUrl);
+        
+        // Merge with user-provided config
+        finalConfig = {
+          ...finalConfig,
           ...sceneConfigRef.current,
           onLoadProgress: (progress) => {
             setLoadingProgress(progress);
@@ -195,8 +202,10 @@ const BabylonScene = ({
               onLoadProgressRef.current(progress);
             }
           },
-        });
-        finalConfig = await resolveResourceURLs(finalConfig);
+        };
+        
+        Logger.log('BabylonScene', 'After merge, finalConfig.modelUrl:', finalConfig.modelUrl);
+        
         scene = await sceneBuilder(canvas, engine, finalConfig);
         
         if (cancelled) {

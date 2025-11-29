@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from './icons';;
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import UISettings from './settings/UISettings';
+import ThreeDSettings from './settings/ThreeDSettings';
 import LLMSettings from './settings/LLMSettings';
 import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
@@ -21,14 +22,25 @@ import Logger from '../services/LoggerService';
  * @param {Function} props.onClose - Callback when panel is closed
  * @param {boolean} props.isLightBackground - Whether chat has light background
  * @param {string} props.animationClass - CSS animation class
+ * @param {Function} props.onRequestDeleteModelDialog - Callback to show delete model dialog
+ * @param {Function} props.onRequestDeleteMotionDialog - Callback to show delete motion dialog
+ * @param {number} props.refreshTrigger - Trigger to refresh lists after delete
  * @returns {JSX.Element} Settings panel component
  */
-const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
+const SettingsPanel = ({ 
+  onClose, 
+  isLightBackground, 
+  animationClass = '',
+  onRequestDeleteModelDialog,
+  onRequestDeleteMotionDialog,
+  refreshTrigger
+}) => {
   const [activeTab, setActiveTab] = useState('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
   const tabsRef = useState({
     ui: null,
+    '3d': null,
     llm: null,
     tts: null,
     stt: null,
@@ -193,6 +205,17 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
           UI
         </button>
         <button
+          ref={(el) => (tabsRef['3d'] = el)}
+          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+            activeTab === '3d' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveTab('3d')}
+        >
+          3D
+        </button>
+        <button
           ref={(el) => (tabsRef.llm = el)}
           className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'llm' 
@@ -242,11 +265,20 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         <div 
           className="absolute inset-0 flex transition-transform duration-300 ease-out"
           style={{
-            transform: `translateX(-${['ui', 'llm', 'tts', 'stt', 'ai-plus'].indexOf(activeTab) * 100}%)`
+            transform: `translateX(-${['ui', '3d', 'llm', 'tts', 'stt', 'ai-plus'].indexOf(activeTab) * 100}%)`
           }}
         >
           <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
             <UISettings isLightBackground={isLightBackground} />
+          </div>
+
+          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <ThreeDSettings 
+              isLightBackground={isLightBackground} 
+              onRequestDeleteModelDialog={onRequestDeleteModelDialog}
+              onRequestDeleteMotionDialog={onRequestDeleteMotionDialog}
+              refreshTrigger={refreshTrigger}
+            />
           </div>
 
           <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>

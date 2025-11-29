@@ -57,14 +57,24 @@ export async function resolveResourceURLs(config) {
   
   if (config.modelUrl) {
     Logger.log('sceneConfig', 'Resolving modelUrl:', config.modelUrl);
-    resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
-    Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
+    if (config.modelUrl.startsWith('blob:')) {
+      Logger.log('sceneConfig', 'modelUrl is a Blob URL, using as-is');
+      resolvedConfig.modelUrl = config.modelUrl;
+    } else {
+      resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
+      Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
+    }
   }
   
   if (config.cameraAnimationUrl) {
     Logger.log('sceneConfig', 'Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
-    resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
-    Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
+    if (config.cameraAnimationUrl.startsWith('blob:')) {
+      Logger.log('sceneConfig', 'cameraAnimationUrl is a Blob URL, using as-is');
+      resolvedConfig.cameraAnimationUrl = config.cameraAnimationUrl;
+    } else {
+      resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
+      Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
+    }
   }
   
   Logger.log('sceneConfig', 'Final resolved config:', resolvedConfig);
@@ -85,10 +95,38 @@ export function getSceneConfig() {
  * Get scene configuration with resolved URLs (async)
  * Use this in extension mode to ensure URLs are properly resolved
  * 
+ * Checks for custom default model from IndexedDB first
+ * 
  * @returns {Promise<Object>} Scene configuration with resolved URLs
  */
 export async function getSceneConfigAsync() {
   const config = getSceneConfig();
+  
+  try {
+    const { modelStorageService } = await import('../services/ModelStorageService.js');
+    const customDefaultModel = await modelStorageService.getDefaultModel();
+    
+    
+    if (customDefaultModel && customDefaultModel.modelData) {
+      const customModelUrl = URL.createObjectURL(customDefaultModel.modelData);
+      
+      config.modelUrl = customModelUrl;
+      config.modelId = customDefaultModel.id;
+      config.modelFileName = customDefaultModel.name || 'model.bpmx';
+      config.portraitClipping = customDefaultModel.metadata?.portraitClipping ?? 12;
+      config._customModelBlobUrl = customModelUrl;
+    } else {
+      config.modelId = 'builtin_default_model';
+      config.modelFileName = 'vassist_default.bpmx';
+      config.portraitClipping = 12;
+    }
+  } catch (error) {
+    Logger.error('sceneConfig', 'Failed to load custom default model:', error);
+    config.modelId = 'builtin_default_model';
+    config.modelFileName = 'vassist_default.bpmx';
+  }
+  
+  Logger.log('sceneConfig', 'Calling resolveResourceURLs with config.modelUrl:', config.modelUrl);
   return resolveResourceURLs(config);
 }
 

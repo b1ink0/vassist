@@ -139,25 +139,15 @@ const UISettings = ({ isLightBackground }) => {
         )}
       </div>
 
-      {/* Virtual Companion Settings */}
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">Virtual Companion</h4>
-        
-        {/* Enable Avatar Toggle */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex-1">
-              <label className="text-sm text-white font-medium">Enable Avatar</label>
-              <p className="text-xs text-white/50 mt-0.5">
-                {uiConfig.enableModelLoading 
-                  ? 'Virtual assistant with animated avatar' 
-                  : 'Chat-only mode (no avatar)'}
-              </p>
-            </div>
-            <Toggle
-              checked={uiConfig.enableModelLoading}
-              onChange={(checked) => updateUIConfig('enableModelLoading', checked)}
-            />
+      {/* 3D Settings Moved to 3D Tab */}
+      <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-400/20">
+        <div className="flex items-start gap-3">
+          <Icon name="idea" size={20} className="text-blue-300 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-white mb-1">3D Settings Moved</h4>
+            <p className="text-xs text-white/70">
+              Avatar, physics, framerate, and position settings have been moved to the <strong>3D tab</strong> for better organization.
+            </p>
           </div>
         </div>
 
@@ -211,8 +201,6 @@ const UISettings = ({ isLightBackground }) => {
               }}
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
             >
-              <option value={FPSLimitOptions.FPS_15} className="bg-gray-900">15 FPS (Ultra Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_24} className="bg-gray-900">24 FPS (Cinematic)</option>
               <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
               <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
               <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
@@ -257,10 +245,11 @@ const UISettings = ({ isLightBackground }) => {
         )}
       </div>
 
-      {/* Chat Position for chat-only mode */}
+      {/* Chat Position - visible when avatar is disabled */}
       {!uiConfig.enableModelLoading && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">Chat Position</label>
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold text-white mb-3">Chat Position</h4>
+          <label className="block text-sm font-medium text-white/90">Chat Window Position</label>
           <select
             value={uiConfig.position?.preset || 'bottom-right'}
             onChange={(e) => updateUIConfig('position.preset', e.target.value)}
