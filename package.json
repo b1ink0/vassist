@@ -6,17 +6,23 @@
   "scripts": {
     "dev": "vite",
     "dev:extension": "vite build --config vite.config.extension.js --mode development --watch",
+    "dev:android": "vite build --config vite.config.android.js --mode development && bunx cap sync android",
     "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --mode development --watch\"",
     "build": "vite build --mode production",
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
+    "build:android": "vite build --config vite.config.android.js --mode production && bunx cap sync android",
     "build:all": "concurrently \"vite build --mode production\" \"vite build --config vite.config.extension.js --mode production\"",
+    "cap:open:android": "bunx cap open android",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@babylonjs/core": "^8.30.0",
     "@babylonjs/havok": "^1.3.10",
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
     "@heroicons/react": "^2.2.0",
     "@huggingface/transformers": "^3.7.6",
     "@tailwindcss/vite": "^4.1.14",

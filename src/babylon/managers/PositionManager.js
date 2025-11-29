@@ -12,8 +12,10 @@
  * - No hardcoded magic numbers - everything calculated from actual dimensions
  */
 
-import { PositionPresets } from '../../config/uiConfig.js';
+import { PositionPresets, AndroidPresetOverride } from '../../config/uiConfig.js';
 import Logger from '../../services/LoggerService';
+
+const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
 
 export class PositionManager {
   /**
@@ -187,7 +189,12 @@ export class PositionManager {
       preset = 'center';
     }
     
-    const config = PositionPresets[preset];
+    const baseConfig = PositionPresets[preset];
+    const config = isAndroid ? { ...baseConfig, ...AndroidPresetOverride } : baseConfig;
+    
+    if (isAndroid) {
+      Logger.log('PositionManager', 'Using Android preset override', AndroidPresetOverride);
+    }
     
     // Use Portrait Mode model size if enabled, otherwise use standard size
     const isPortraitMode = this.scene.metadata?.isPortraitMode || false;

@@ -409,6 +409,8 @@ const BabylonScene = ({
     };
   }, [isReady, openChat, setPendingDropData, isPreview]);
 
+  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+
   const canvasContent = (
     <>
       <canvas
@@ -433,7 +435,7 @@ const BabylonScene = ({
           top: 0,
           left: 0,
           pointerEvents: 'none',
-          zIndex: 9999,
+          zIndex: isAndroid ? 100 : 9999,
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         }}
@@ -448,7 +450,7 @@ const BabylonScene = ({
             top: `${modelOverlayPos.y}px`,
             width: `${modelOverlayPos.width}px`,
             height: `${modelOverlayPos.height}px`,
-            zIndex: 10000,
+            zIndex: isAndroid ? 101 : 10000,
             pointerEvents: isDragging ? 'auto' : 'none',
             borderRadius: '24px'
           }}

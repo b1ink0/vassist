@@ -352,10 +352,12 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   }
   
   // Determine if we should skip intro
-  // Skip for: center positions, last-location, Portrait Mode, OR if we have savedModelPosition (model already loaded before)
+  // Skip for: center positions, last-location, Portrait Mode, Android, OR if we have savedModelPosition (model already loaded before)
+  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   const shouldSkipIntro = preset.includes('center') 
     || preset === 'last-location' 
     || isPortraitMode 
+    || isAndroid
     || finalConfig.savedModelPosition !== null; // Skip intro if model already loaded in this session
   
   Logger.log('MmdModelScene', `Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}${finalConfig.savedModelPosition ? ' (has saved position)' : ''}`);

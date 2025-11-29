@@ -139,9 +139,25 @@ export const PositionPresets = {
 };
 
 /**
+ * Android-specific preset configuration
+ */
+export const AndroidPresetOverride = {
+  modelSize: { width: 600, height: 1000 },
+  portraitModelSize: { width: 600, height: 1000 },
+  padding: 0,
+  offset: { x: 2.5, y: 7 },
+  portraitOffset: { x: 0, y: 6.2 },
+  customBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitCustomBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitClipPlaneY: 12,
+};
+
+/**
  * FPS Limit Options for rendering
  */
 export const FPSLimitOptions = {
+  FPS_15: 15,
+  FPS_24: 24,
   FPS_30: 30,
   FPS_60: 60,
   FPS_90: 90,

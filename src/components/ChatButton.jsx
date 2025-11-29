@@ -9,6 +9,8 @@ import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
 
+const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+
 /**
  * Draggable chat button component with automatic positioning.
  * 
@@ -585,6 +587,15 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   if (!shouldRender) return null;
 
+  const androidPosition = isAndroid ? {
+    left: '20px',
+    bottom: '20px',
+    top: 'auto',
+  } : {
+    left: `${buttonPos.x}px`,
+    top: `${buttonPos.y}px`,
+  };
+
   return (
     <button
       ref={buttonRef}
@@ -592,9 +603,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       onMouseDown={handleMouseDown}
       style={{
         position: 'fixed',
-        left: `${buttonPos.x}px`,
-        top: `${buttonPos.y}px`,
-        zIndex: 10000, // Higher than canvas (9999) to ensure clickability
+        ...androidPosition,
+        zIndex: isAndroid ? 200 : 10000, // Android: above canvas (100), below chat (9999). Desktop: above canvas (9999)
         width: '48px',
         height: '48px',
         cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
