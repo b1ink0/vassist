@@ -149,12 +149,26 @@ export const FPSLimitOptions = {
 };
 
 /**
+ * Physics Engine Options
+ * - BULLET: Bullet Physics (WASM) - Better performance, requires SharedArrayBuffer
+ * - HAVOK: Havok Physics - Used in extension mode
+ */
+export const PhysicsEngineOptions = {
+  BULLET: 'bullet',
+  HAVOK: 'havok',
+};
+
+/**
  * Default UI Configuration
  */
 export const DefaultUIConfig = {
   enableModelLoading: true,
   
   enablePortraitMode: false,
+  
+  enablePhysics: true,
+  
+  physicsEngine: PhysicsEngineOptions.BULLET,
   
   fpsLimit: FPSLimitOptions.FPS_60,
   

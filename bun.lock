@@ -9,7 +9,7 @@
         "@heroicons/react": "^2.2.0",
         "@huggingface/transformers": "^3.7.6",
         "@tailwindcss/vite": "^4.1.14",
-        "babylon-mmd": "^0.68.0",
+        "babylon-mmd": "1.0.0",
         "concurrently": "^9.2.1",
         "dexie": "^4.2.1",
         "jszip": "^3.10.1",
@@ -369,7 +369,7 @@
 
     "babel-plugin-react-compiler": ["babel-plugin-react-compiler@19.1.0-rc.3", "", { "dependencies": { "@babel/types": "^7.26.0" } }, "sha512-mjRn69WuTz4adL0bXGx8Rsyk1086zFJeKmes6aK0xPuK3aaXmDJdLHqwKKMrpm6KAI1MCoUK72d2VeqQbu8YIA=="],
 
-    "babylon-mmd": ["babylon-mmd@0.68.0", "", { "peerDependencies": { "@babylonjs/core": "^8.16.2" } }, "sha512-zHUDuoo+xP3QQfVDg3VDBdvQiZ4R36NRoqIRdl8G7osxJi/WWOTvrzRZvjV1Pv48uBRHb0SM1c+ZSIJhK+g6bQ=="],
+    "babylon-mmd": ["babylon-mmd@1.0.0", "", { "peerDependencies": { "@babylonjs/core": "^8.30.2" } }, "sha512-N10pDMKZz4+B6t+tRHNY71zS93LzELBcUvJw9FcPj+MEH2cfGFvjQhwwP0lfzVj0lNGtRHirqX1ZLlIdI+B/sg=="],
 
     "balanced-match": ["balanced-match@1.0.2", "", {}, "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw=="],
 

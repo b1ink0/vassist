@@ -21,6 +21,20 @@ export default defineConfig(({ mode }) => {
       __EXTENSION_MODE__: JSON.stringify(false),
       __DEV_MODE__: JSON.stringify(!isProduction),
     },
+    server: {
+      headers: {
+        // Required for SharedArrayBuffer support in babylon-mmd bullet physics
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
+    },
+    preview: {
+      headers: {
+        // Required for SharedArrayBuffer support in babylon-mmd bullet physics
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
+    },
     build: {
       sourcemap: !isProduction,
       minify: isProduction ? 'esbuild' : false,
