@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Color
 import android.webkit.ConsoleMessage
 import android.webkit.MimeTypeMap
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -205,6 +206,20 @@ class RendererWebView(
                 Log.d(TAG, "Console: ${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
             }
             return true
+        }
+        
+        // Handle permission requests from WebView
+        override fun onPermissionRequest(request: PermissionRequest?) {
+            request?.let { permRequest ->
+                val resources = permRequest.resources
+                Log.d(TAG, "WebView permission request in wallpaper mode: ${resources.joinToString()}")
+                if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    Log.d(TAG, "Denying audio capture in wallpaper mode (use full app for voice)")
+                    permRequest.deny()
+                } else {
+                    permRequest.grant(resources)
+                }
+            }
         }
     }
 

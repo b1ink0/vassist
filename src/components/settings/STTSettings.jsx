@@ -4,8 +4,10 @@
  * Handles Speech-to-Text provider selection and configuration
  */
 
+import { useMemo } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { STTProviders } from '../../config/aiConfig';
+import { isAndroid } from '../../utils/PlatformUtils';
 import OpenAISTTConfig from './stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from './stt/OpenAICompatibleSTTConfig';
 import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
@@ -22,6 +24,15 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
+
+  // Filter providers based on platform
+  const availableProviders = useMemo(() => {
+    if (isAndroid) {
+      return STTProviders;
+    }
+    const { ANDROID_LOCAL, ...otherProviders } = STTProviders;
+    return otherProviders;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -48,10 +59,15 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
           disabled={!sttConfig.enabled}
         >
-          {Object.entries(STTProviders).map(([key, value]) => (
+          {Object.entries(availableProviders).map(([key, value]) => (
             <option key={value} value={value} className="bg-gray-900">{key}</option>
           ))}
         </select>
+        {isAndroid && (
+          <p className="text-xs text-white/50">
+            Using native Android STT via local Whisper model
+          </p>
+        )}
       </div>
 
       {sttConfig.provider === 'chrome-ai-multimodal' && !hasChromeAI && (
@@ -65,6 +81,31 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
       {/* Configuration sections - only show when enabled */}
       {sttConfig.enabled && (
         <>
+          {/* Android Local STT Configuration */}
+          {sttConfig.provider === STTProviders.ANDROID_LOCAL && (
+            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+              <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/90">Language</label>
+                <select
+                  value={sttConfig['android-local']?.language || 'en'}
+                  onChange={(e) => updateSTTConfig('android-local.language', e.target.value)}
+                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                >
+                  <option value="en" className="bg-gray-900">English</option>
+                  <option value="es" className="bg-gray-900">Spanish</option>
+                  <option value="ja" className="bg-gray-900">Japanese</option>
+                  <option value="zh" className="bg-gray-900">Chinese</option>
+                  <option value="de" className="bg-gray-900">German</option>
+                  <option value="fr" className="bg-gray-900">French</option>
+                </select>
+              </div>
+              <p className="text-xs text-white/50">
+                Powered by Whisper running locally on your device
+              </p>
+            </div>
+          )}
+
           {/* OpenAI Whisper Configuration */}
           {sttConfig.provider === STTProviders.OPENAI && (
             <OpenAISTTConfig

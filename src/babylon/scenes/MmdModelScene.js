@@ -48,6 +48,7 @@ import Logger from '../../services/LoggerService';
 import { VmdLoader } from "babylon-mmd";
 import { pmxConverterService } from '../../services/PMXConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
+import { isAndroid } from '../../utils/PlatformUtils';
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -610,7 +611,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Determine if we should skip intro
   // Skip for: center positions, last-location, Portrait Mode, Android, OR if we have savedModelPosition (model already loaded before)
-  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   const shouldSkipIntro = preset.includes('center') 
     || preset === 'last-location' 
     || isPortraitMode 
@@ -706,7 +706,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Get render quality from config (default to 'medium')
   const renderQuality = finalConfig.renderQuality || 'medium';
-  const isAndroidDevice = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   
   
   // Get quality settings - either custom or from presets
@@ -716,7 +715,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     Logger.log('MmdModelScene', 'Using custom render quality settings:', JSON.stringify(quality));
   } else {
     const { getRenderQualityPresets } = await import('../../config/sceneConfig.js');
-    const qualityPresets = getRenderQualityPresets(isAndroidDevice);
+    const qualityPresets = getRenderQualityPresets(isAndroid);
     quality = qualityPresets[renderQuality] || qualityPresets.medium;
     Logger.log('MmdModelScene', `Using preset quality: ${renderQuality}`, JSON.stringify(quality));
   }
@@ -753,7 +752,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   colorCurves.globalSaturation = quality.saturation || 15;
   defaultPipeline.imageProcessing.colorCurves = colorCurves;
   
-  Logger.log('MmdModelScene', `Post-processing configured: quality=${renderQuality}, samples=${quality.samples}, bloom=${quality.bloomEnabled}, chromatic=${quality.chromaticAberrationEnabled}, isAndroid=${isAndroidDevice}`);
+  Logger.log('MmdModelScene', `Post-processing configured: quality=${renderQuality}, samples=${quality.samples}, bloom=${quality.bloomEnabled}, chromatic=${quality.chromaticAberrationEnabled}, isAndroid=${isAndroid}`);
 
   // ========================================
   // CANVAS INTERACTION MANAGER

@@ -12,6 +12,7 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
+import { isAndroid } from '../utils/PlatformUtils';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -50,7 +51,6 @@ const ChatInput = forwardRef(({
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(isVisible);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
-  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   
   useEffect(() => {
     if (ref) {

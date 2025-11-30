@@ -159,6 +159,30 @@ class TTSService {
         state.provider = provider;
 
         Logger.log('other', `${logPrefix} - Generic TTS configured:`, { baseURL: endpoint });
+      } else if (provider === TTSProviders.ANDROID_LOCAL) {
+        const androidConfig = config['android-local'] || {};
+        let endpoint = androidConfig.endpoint || 'http://127.0.0.1:8765';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'android-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+
+        const speakerId = androidConfig.speakerId ?? 0;
+        
+        state.config = {
+          model: androidConfig.model || 'vits-vctk',
+          voice: `speaker_${speakerId}`,
+          speed: androidConfig.speed || 1.0,
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - Android local TTS configured:`, { baseURL: endpoint, speakerId });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }
@@ -271,7 +295,7 @@ class TTSService {
       return await this.generateKokoroSpeech(text, generateLipSync, tabId);
     }
 
-    // Handle OpenAI and compatible TTS generation
+    // Handle OpenAI, OpenAI-compatible, and Android Local TTS generation
     if (this.isExtensionMode) {
       state.isGenerating = true;
 
@@ -328,8 +352,8 @@ class TTSService {
         try {
           if (state.isStopped) return null;
           
-          // Use SharedWorker for audio processing in dev mode
-          Logger.log('other', `${logPrefix} - Processing audio with lip sync via SharedWorker...`);
+          // Use Worker for audio processing (SharedWorker in dev, regular Worker in Android)
+          Logger.log('other', `${logPrefix} - Processing audio with lip sync via Worker...`);
           
           // Initialize worker client if needed
           if (!audioWorkerClient.isReady) {

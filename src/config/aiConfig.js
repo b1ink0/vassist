@@ -5,10 +5,20 @@
  * All settings are editable via the Control Panel Config tab.
  */
 
+const isAndroidMode = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+
+/**
+ * Android Local AI Server Configuration
+ */
+const ANDROID_LOCAL_SERVER = {
+  baseUrl: 'http://127.0.0.1:8765',
+};
+
 /**
  * Available AI Providers
  */
 export const AIProviders = {
+  ANDROID_LOCAL: 'android-local',
   CHROME_AI: 'chrome-ai',
   OPENAI: 'openai',
   OLLAMA: 'ollama',
@@ -18,6 +28,7 @@ export const AIProviders = {
  * Available TTS Providers
  */
 export const TTSProviders = {
+  ANDROID_LOCAL: 'android-local',
   KOKORO: 'kokoro', // Kokoro-JS local TTS
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible', // Generic OpenAI-compatible TTS API
@@ -27,6 +38,7 @@ export const TTSProviders = {
  * Available STT (Speech-to-Text) Providers
  */
 export const STTProviders = {
+  ANDROID_LOCAL: 'android-local',
   CHROME_AI_MULTIMODAL: 'chrome-ai-multimodal',
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible',
@@ -185,7 +197,7 @@ export const TranslationLanguages = [
  * Default AI Configuration
  */
 export const DefaultAIConfig = {
-  provider: AIProviders.CHROME_AI,
+  provider: isAndroidMode ? AIProviders.ANDROID_LOCAL : AIProviders.CHROME_AI,
   
   chromeAi: {
     temperature: 1.0,
@@ -217,6 +229,15 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+  },
+  
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'qwen3-local',
+    temperature: 0.7,
+    maxTokens: 2048,
+    systemPromptType: 'default',
+    systemPrompt: '',
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
@@ -259,7 +280,7 @@ export const DefaultAIConfig = {
 export const DefaultTTSConfig = {
   enabled: false,
   
-  provider: TTSProviders.KOKORO,
+  provider: isAndroidMode ? TTSProviders.ANDROID_LOCAL : TTSProviders.KOKORO,
   
   kokoro: {
     modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
@@ -284,6 +305,13 @@ export const DefaultTTSConfig = {
     speed: 1.0,
   },
   
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'vits-local',
+    voice: 'default',
+    speed: 1.0,
+  },
+  
   chunkSize: 500,
   minChunkSize: 100,
 };
@@ -293,7 +321,7 @@ export const DefaultTTSConfig = {
  */
 export const DefaultSTTConfig = {
   enabled: false,
-  provider: STTProviders.CHROME_AI_MULTIMODAL,
+  provider: isAndroidMode ? STTProviders.ANDROID_LOCAL : STTProviders.CHROME_AI_MULTIMODAL,
   
   'chrome-ai-multimodal': {
     temperature: 0.1,
@@ -314,6 +342,12 @@ export const DefaultSTTConfig = {
     model: 'whisper',
     language: 'en',
     temperature: 0,
+  },
+  
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'whisper-local',
+    language: 'en',
   },
   
   recordingFormat: 'webm',
@@ -366,6 +400,12 @@ export function validateAIConfig(config) {
     }
     if (!config.ollama?.model || config.ollama.model.trim() === '') {
       errors.push('Ollama Model is required');
+    }
+  }
+  
+  if (config.provider === AIProviders.ANDROID_LOCAL) {
+    if (config['android-local']?.endpoint && config['android-local'].endpoint.trim() === '') {
+      errors.push('Android Local Endpoint cannot be empty');
     }
   }
   
@@ -517,6 +557,8 @@ export function validateSTTConfig(config) {
  */
 export function getProviderDisplayName(provider) {
   switch (provider) {
+    case AIProviders.ANDROID_LOCAL:
+      return 'Android Local LLM';
     case AIProviders.OPENAI:
       return 'OpenAI';
     case AIProviders.OLLAMA:

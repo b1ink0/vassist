@@ -1,11 +1,14 @@
 package com.vassist.app
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.MimeTypeMap
+import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -18,11 +21,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
+import com.vassist.app.ai.LocalAIBridge
+import com.vassist.app.ai.LocalAIServer
 import com.vassist.app.webview.RendererWebView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.InputStream
 
 /**
@@ -39,7 +50,30 @@ class FullAppActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private var lastKeyboardHeight = 0
     
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    
+    private var aiServer: LocalAIServer? = null
+    private var aiBridge: LocalAIBridge? = null
+    private var aiInitialized = false
+    
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingPermissionRequest: PermissionRequest? = null
+    private val microphonePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        pendingPermissionRequest?.let { request ->
+            runOnUiThread {
+                if (isGranted) {
+                    Log.d(TAG, "Microphone permission granted, allowing WebView access")
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                } else {
+                    Log.d(TAG, "Microphone permission denied")
+                    request.deny()
+                }
+            }
+            pendingPermissionRequest = null
+        }
+    }
     
     private val photoPickerLauncher = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -125,6 +159,9 @@ class FullAppActivity : ComponentActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 Log.d(TAG, "Page finished loading: $url")
+                
+                // Initialize AI server AFTER WebView has finished loading
+                initializeLocalAI()
             }
             
             override fun onReceivedError(
@@ -143,6 +180,33 @@ class FullAppActivity : ComponentActivity() {
                     Log.d(TAG, "Console: ${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
                 }
                 return true
+            }
+            
+            // Handle permission requests from WebView (microphone, camera, etc.)
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                runOnUiThread {
+                    request?.let { permRequest ->
+                        val resources = permRequest.resources
+                        Log.d(TAG, "WebView permission request: ${resources.joinToString()} from ${permRequest.origin}")
+                        
+                        if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            if (ContextCompat.checkSelfPermission(
+                                    this@FullAppActivity, 
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                Log.d(TAG, "Microphone permission already granted, allowing WebView")
+                                permRequest.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                            } else {
+                                Log.d(TAG, "Requesting microphone permission from user")
+                                pendingPermissionRequest = permRequest
+                                microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        } else {
+                            permRequest.grant(resources)
+                        }
+                    }
+                }
             }
             
             override fun onShowFileChooser(
@@ -248,6 +312,16 @@ class FullAppActivity : ComponentActivity() {
             setSupportZoom(true)
             builtInZoomControls = true
             displayZoomControls = false
+            
+            @Suppress("DEPRECATION")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW)
+            }
+        }
+        
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
+            != PackageManager.PERMISSION_GRANTED) {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
         
         // Handle back button
@@ -339,10 +413,71 @@ class FullAppActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Initialize the local AI server and add JavaScript bridge to WebView
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun initializeLocalAI() {
+        // Prevent multiple initializations
+        if (aiInitialized) return
+        aiInitialized = true
+        
+        try {
+            val server = LocalAIServer.getInstance(this)
+            aiServer = server
+            val bridge = LocalAIBridge(server)
+            aiBridge = bridge
+            
+            webView.addJavascriptInterface(bridge, LocalAIBridge.JS_INTERFACE_NAME)
+            Log.i(TAG, "Added JavaScript interface: ${LocalAIBridge.JS_INTERFACE_NAME}")
+            
+            scope.launch(Dispatchers.IO) {
+                try {
+                    if (!server.isAlive) {
+                        server.start()
+                        Log.i(TAG, "Local AI server started on ${LocalAIServer.getBaseUrl()}")
+                    }
+                    
+                    scope.launch(Dispatchers.Main) {
+                        webView.evaluateJavascript(
+                            """
+                            window.dispatchEvent(new CustomEvent('localAIReady', { 
+                                detail: { 
+                                    baseUrl: '${LocalAIServer.getBaseUrl()}',
+                                    endpoints: {
+                                        transcriptions: '${LocalAIServer.getBaseUrl()}/v1/audio/transcriptions',
+                                        speech: '${LocalAIServer.getBaseUrl()}/v1/audio/speech',
+                                        chatCompletions: '${LocalAIServer.getBaseUrl()}/v1/chat/completions'
+                                    }
+                                } 
+                            }));
+                            """.trimIndent(),
+                            null
+                        )
+                        Log.i(TAG, "Local AI server ready, notified WebView")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start local AI server", e)
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to setup local AI", e)
+        }
+    }
+    
     override fun onDestroy() {
         // Cancel any pending file chooser callback
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
+        
+        scope.cancel()
+        aiServer?.let { server ->
+            server.shutdown()
+            Log.i(TAG, "Local AI server shutdown")
+        }
+        aiServer = null
+        aiBridge = null
         
         ViewCompat.setOnApplyWindowInsetsListener(webView, null)
         webView.destroy()

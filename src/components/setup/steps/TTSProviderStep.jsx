@@ -11,13 +11,15 @@ import { TTSProviders, STTProviders, DefaultTTSConfig } from '../../../config/ai
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
 import { Icon } from '../../icons';
+import { isAndroid } from '../../../utils/PlatformUtils';
 
 const TTSProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   
   // TTS state
-  const [selectedProvider, setSelectedProvider] = useState('kokoro');
+  const [selectedProvider, setSelectedProvider] = useState(isAndroid ? 'android-local' : 'kokoro');
+  const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState('http://127.0.0.1:8765');
   
   // Kokoro config state
   const [kokoroConfig, setKokoroConfig] = useState(DefaultTTSConfig.kokoro || {});
@@ -45,7 +47,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [testResult, setTestResult] = useState(null);
 
   // STT state  
-  const [selectedSTTProvider, setSelectedSTTProvider] = useState(STTProviders.CHROME_AI_MULTIMODAL);
+  const [selectedSTTProvider, setSelectedSTTProvider] = useState(isAndroid ? STTProviders.ANDROID_LOCAL : STTProviders.CHROME_AI_MULTIMODAL);
+  const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState('http://127.0.0.1:8765');
   const [chromeAiSTTStatus, setChromeAiSTTStatus] = useState(null);
   const [sttConfig, setSTTConfig] = useState({
     openai: {
@@ -64,7 +67,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
   // Check Kokoro status on mount
   useEffect(() => {
-    if (selectedProvider === 'kokoro') {
+    if (selectedProvider === 'kokoro' && !isAndroid) {
       handleCheckKokoroStatus();
     }
     
@@ -83,10 +86,14 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       if (ttsData['openai-compatible']?.apiKey) setCustomApiKey(ttsData['openai-compatible'].apiKey);
       if (ttsData['openai-compatible']?.model) setCustomModel(ttsData['openai-compatible'].model);
       if (ttsData['openai-compatible']?.voice) setCustomVoice(ttsData['openai-compatible'].voice);
+      if (ttsData['android-local']?.endpoint) setAndroidTTSEndpoint(ttsData['android-local'].endpoint);
     }
     
     if (sttData?.provider) setSelectedSTTProvider(sttData.provider);
-    if (sttConfigData) setSTTConfig(sttConfigData);
+    if (sttConfigData) {
+      setSTTConfig(sttConfigData);
+      if (sttConfigData['android-local']?.endpoint) setAndroidSTTEndpoint(sttConfigData['android-local'].endpoint);
+    }
     
     // Mark initial load complete
     if (initialLoadRef.current) {
@@ -116,6 +123,10 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         model: customModel,
         voice: customVoice,
       },
+      'android-local': {
+        endpoint: androidTTSEndpoint,
+        voice: 'vits-local',
+      },
     };
     
     const sttData = {
@@ -123,20 +134,49 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       provider: selectedSTTProvider === 'disabled' ? STTProviders.CHROME_AI_MULTIMODAL : selectedSTTProvider,
     };
     
+    // Add android-local to sttConfig
+    const updatedSTTConfig = {
+      ...sttConfig,
+      'android-local': {
+        endpoint: androidSTTEndpoint,
+        model: 'whisper-local',
+      },
+    };
+    
     updateSetupData({ 
       tts: ttsData,
       stt: sttData,
-      sttConfig: sttConfig,
+      sttConfig: updatedSTTConfig,
     });
   }, [
     selectedProvider, kokoroConfig, 
     openAIKey, openAIModel, openAIVoice,
     customEndpoint, customApiKey, customModel, customVoice,
-    selectedSTTProvider, sttConfig,
+    androidTTSEndpoint,
+    selectedSTTProvider, sttConfig, androidSTTEndpoint,
     updateSetupData
   ]);
 
   const providers = [
+    // Android Local TTS - only on Android, first and recommended
+    ...(isAndroid ? [{
+      id: 'android-local',
+      name: 'Android Local',
+      description: 'On-device TTS using VITS',
+      iconName: 'speaker',
+      recommended: true,
+      pros: [
+        '100% Free',
+        'Privacy-focused (local)',
+        'No internet needed',
+        'Natural voice quality'
+      ],
+      cons: [
+        'Single voice option',
+        'Fixed voice style'
+      ],
+      requirements: 'Ready to use! Pre-installed on device'
+    }] : []),
     {
       id: 'disabled',
       name: 'Disabled',
@@ -154,12 +194,13 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       ],
       requirements: 'None'
     },
-    {
+    // Kokoro - only on non-Android
+    ...(!isAndroid ? [{
       id: 'kokoro',
       name: 'Kokoro TTS',
       description: 'High-quality local text-to-speech',
       iconName: 'speaker',
-      recommended: true,
+      recommended: !isAndroid,
       pros: [
         '100% Free',
         'Privacy-focused (runs locally)',
@@ -173,7 +214,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         'First load may be slow'
       ],
       requirements: 'Modern browser with WebGPU or WebAssembly'
-    },
+    }] : []),
     {
       id: 'openai',
       name: 'OpenAI TTS',
@@ -285,6 +326,15 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const hasMultimodal = setupData?.multimodal?.audioSupport;
   
   const sttProviders = [
+    ...(isAndroid ? [{
+      id: STTProviders.ANDROID_LOCAL,
+      name: 'Android Local',
+      iconName: 'microphone',
+      description: 'On-device STT using Whisper',
+      recommended: true,
+      available: true,
+      requirements: 'Ready to use! Pre-installed on device'
+    }] : []),
     {
       id: 'disabled',
       name: 'Disabled',
@@ -294,15 +344,15 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       available: true,
       requirements: 'None - text input only'
     },
-    {
+    ...(!isAndroid ? [{
       id: STTProviders.CHROME_AI_MULTIMODAL,
       name: 'Chrome AI',
       iconName: 'microphone',
       description: 'On-device speech recognition',
-      recommended: true,
+      recommended: !isAndroid,
       available: hasMultimodal,
       requirements: hasMultimodal ? 'Ready to use!' : 'Requires multimodal audio support'
-    },
+    }] : []),
     {
       id: STTProviders.OPENAI,
       name: 'OpenAI Whisper',
@@ -466,6 +516,56 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedProvider === 'android-local' && (
+        <div className="space-y-3">
+          {/* Info Banner */}
+          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="flex items-start gap-2">
+              <Icon name="speaker" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-green-300">
+                <span className="font-semibold">Android Local TTS</span> - On-device text-to-speech using VITS VCTK neural network with 109 different voices!
+              </p>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <span className="text-sm font-semibold text-white/90">Ready to use!</span>
+            </div>
+            <p className="text-xs text-white/60">
+              Model: VITS VCTK • 109 multi-speaker voices
+            </p>
+          </div>
+
+          {/* Advanced Config */}
+          <details className="group">
+            <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
+              <span>Advanced Settings</span>
+              <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+            </summary>
+            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Endpoint URL
+                </label>
+                <input
+                  type="text"
+                  value={androidTTSEndpoint}
+                  onChange={(e) => setAndroidTTSEndpoint(e.target.value)}
+                  placeholder="http://127.0.0.1:8765"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                />
+                <p className="text-[10px] text-white/50 mt-1">
+                  Local HTTP server for TTS on your Android device
+                </p>
+              </div>
+            </div>
+          </details>
         </div>
       )}
 
@@ -684,6 +784,56 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {selectedSTTProvider === STTProviders.ANDROID_LOCAL && (
+          <div className="space-y-3">
+            {/* Info Banner */}
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="flex items-start gap-2">
+                <Icon name="microphone" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-green-300">
+                  <span className="font-semibold">Android Local STT</span> - On-device speech recognition using Whisper. Runs entirely on your device!
+                </p>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-sm font-semibold text-white/90">Ready to use!</span>
+              </div>
+              <p className="text-xs text-white/60">
+                Model: Whisper Tiny • Accurate speech recognition
+              </p>
+            </div>
+
+            {/* Advanced Config */}
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
+                <span>Advanced Settings</span>
+                <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+              </summary>
+              <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-white/90 mb-1">
+                    Endpoint URL
+                  </label>
+                  <input
+                    type="text"
+                    value={androidSTTEndpoint}
+                    onChange={(e) => setAndroidSTTEndpoint(e.target.value)}
+                    placeholder="http://127.0.0.1:8765"
+                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                  />
+                  <p className="text-[10px] text-white/50 mt-1">
+                    Local HTTP server for STT on your Android device
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
         )}
 

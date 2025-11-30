@@ -14,8 +14,7 @@
 
 import { PositionPresets, AndroidPresetOverride } from '../../config/uiConfig.js';
 import Logger from '../../services/LoggerService';
-
-const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+import { isAndroid } from '../../utils/PlatformUtils';
 
 export class PositionManager {
   /**

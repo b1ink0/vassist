@@ -32,7 +32,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     WallpaperSetupScreen(
                         onSetWallpaperClick = { openWallpaperPicker() },
-                        onOpenAppClick = { openFullApp() }
+                        onOpenAppClick = { openFullApp() },
+                        onTestAIClick = { openAITest() }
                     )
                 }
             }
@@ -52,12 +53,18 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, FullAppActivity::class.java)
         startActivity(intent)
     }
+    
+    private fun openAITest() {
+        val intent = Intent(this, AITestActivity::class.java)
+        startActivity(intent)
+    }
 }
 
 @Composable
 fun WallpaperSetupScreen(
     onSetWallpaperClick: () -> Unit,
-    onOpenAppClick: () -> Unit
+    onOpenAppClick: () -> Unit,
+    onTestAIClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -105,6 +112,23 @@ fun WallpaperSetupScreen(
         ) {
             Text(
                 text = "Open VAssist App",
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedButton(
+            onClick = onTestAIClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiary
+            )
+        ) {
+            Text(
+                text = "Test Native AI",
                 style = MaterialTheme.typography.titleMedium
             )
         }

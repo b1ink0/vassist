@@ -4,10 +4,11 @@
  * Handles Text-to-Speech provider selection and configuration
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
 import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice } from '../../config/aiConfig';
+import { isAndroid } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
 import Toggle from '../common/Toggle';
@@ -26,6 +27,15 @@ const TTSSettings = ({ isLightBackground }) => {
     checkKokoroStatus,
     initializeKokoro,
   } = useConfig();
+
+  // Filter providers based on platform
+  const availableProviders = useMemo(() => {
+    if (isAndroid) {
+      return TTSProviders;
+    }
+    const { ANDROID_LOCAL, ...otherProviders } = TTSProviders;
+    return otherProviders;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -52,15 +62,58 @@ const TTSSettings = ({ isLightBackground }) => {
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
           disabled={!ttsConfig.enabled}
         >
-          {Object.entries(TTSProviders).map(([key, value]) => (
+          {Object.entries(availableProviders).map(([key, value]) => (
             <option key={value} value={value} className="bg-gray-900">{key}</option>
           ))}
         </select>
+        {isAndroid && (
+          <p className="text-xs text-white/50">
+            Using native Android TTS via local VITS model
+          </p>
+        )}
       </div>
 
       {/* Configuration sections - only show when enabled */}
       {ttsConfig.enabled && (
         <>
+          {/* Android Local TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.ANDROID_LOCAL && (
+            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+              <h4 className="text-sm font-semibold text-white/90">Android Local TTS</h4>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/90">Voice</label>
+                <p className="text-sm text-white/70">VCTK (Multi-speaker, 109 voices, English)</p>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-white/60">Speaker ID (0-108):</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="108"
+                    value={ttsConfig['android-local']?.speakerId || 0}
+                    onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
+                    className="w-20 px-2 py-1 rounded bg-white/10 text-white text-sm border border-white/20"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/90">Speed</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={ttsConfig['android-local']?.speed || 1.0}
+                  onChange={(e) => updateTTSConfig('android-local.speed', parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-white/60">{ttsConfig['android-local']?.speed || 1.0}x</span>
+              </div>
+              <p className="text-xs text-white/50">
+                Powered by VITS VCTK running locally on your device
+              </p>
+            </div>
+          )}
+
           {/* Kokoro TTS Configuration */}
           {ttsConfig.provider === TTSProviders.KOKORO && (
             <>

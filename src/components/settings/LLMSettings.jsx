@@ -213,6 +213,86 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
         </>
       )}
 
+      {/* Android Local LLM Configuration */}
+      {aiConfig.provider === AIProviders.ANDROID_LOCAL && (
+        <>
+          {/* Info Banner */}
+          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <p className="text-xs text-green-300">
+              <span className="font-semibold">Android Local LLM (Qwen3)</span> - On-device AI using llama.cpp with Qwen3-0.6B model
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
+            <input
+              type="text"
+              value={aiConfig['android-local']?.endpoint ?? 'http://127.0.0.1:8765'}
+              onChange={(e) => updateAIConfig('android-local.endpoint', e.target.value)}
+              placeholder="http://127.0.0.1:8765"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            />
+            <p className="text-xs text-white/50">
+              Local HTTP server on Android device
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Model</label>
+            <input
+              type="text"
+              value={aiConfig['android-local']?.model ?? 'qwen3-local'}
+              onChange={(e) => updateAIConfig('android-local.model', e.target.value)}
+              placeholder="qwen3-local"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            />
+            <p className="text-xs text-white/50">
+              Model identifier (Qwen3-0.6B-Q4 by default)
+            </p>
+          </div>
+
+          {/* Temperature Slider */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">
+              Temperature: {aiConfig['android-local']?.temperature || 0.7}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={aiConfig['android-local']?.temperature || 0.7}
+              onChange={(e) => updateAIConfig('android-local.temperature', parseFloat(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-white/50">
+              Controls randomness (0 = deterministic, 2 = very creative)
+            </p>
+          </div>
+
+          {/* Max Tokens */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">
+              Max Tokens: {aiConfig['android-local']?.maxTokens || 2048}
+            </label>
+            <input
+              type="range"
+              min="64"
+              max="2048"
+              step="64"
+              value={aiConfig['android-local']?.maxTokens || 2048}
+              onChange={(e) => updateAIConfig('android-local.maxTokens', parseInt(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-white/50">
+              Maximum response length (higher = slower)
+            </p>
+          </div>
+
+          <SystemPromptSection providerKey="android-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+        </>
+      )}
+
       {/* Chrome AI Configuration */}
       {aiConfig.provider === AIProviders.CHROME_AI && (
         <>

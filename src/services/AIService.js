@@ -177,6 +177,33 @@ class AIService {
           endpoint: ollamaConfig.endpoint,
           model: state.config.model,
         });
+      }
+      else if (provider === AIProviders.ANDROID_LOCAL || provider === 'android-local') {
+        const androidConfig = config['android-local'] || {};
+        let endpoint = androidConfig.endpoint || 'http://127.0.0.1:8765';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'android-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+        
+        state.config = {
+          model: androidConfig.model || 'qwen3-local',
+          temperature: androidConfig.temperature || 0.7,
+          maxTokens: androidConfig.maxTokens || 2048,
+          enableImageSupport: false,
+          enableAudioSupport: false,
+        };
+        
+        Logger.log('other', `${logPrefix} - Android local LLM configured:`, {
+          endpoint: endpoint,
+          model: state.config.model,
+        });
       } else {
         throw new Error(`Unknown provider: ${provider}`);
       }

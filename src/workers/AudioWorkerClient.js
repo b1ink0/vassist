@@ -11,10 +11,11 @@
 
 import { MessageTypes, generateRequestId } from '../../extension/shared/MessageTypes.js';
 import Logger from '../services/LoggerService';
+import { isAndroid } from '../utils/PlatformUtils';
 
 export class AudioWorkerClient {
   constructor() {
-    this.mode = this.detectMode();
+    this.mode = null;
     this.worker = null;
     this.port = null;
     this.connectionId = null;
@@ -26,26 +27,34 @@ export class AudioWorkerClient {
   }
 
   /**
-   * Detect runtime mode
+   * Detect runtime mode (lazy initialization)
    * @returns {'dev'|'android'|'extension'}
    */
   detectMode() {
+    if (this.mode !== null) {
+      return this.mode;
+    }
+    
     // Check if running in Chrome extension context
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-      return 'extension';
+      this.mode = 'extension';
+      return this.mode;
     }
     
     // Check if running in Android WebView (SharedWorker not supported)
-    if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
-      return 'android';
+    if (isAndroid) {
+      this.mode = 'android';
+      return this.mode;
     }
     
     // Check if SharedWorker is available (not available in Android WebView)
     if (typeof SharedWorker === 'undefined') {
-      return 'android'; // Fallback to regular Worker
+      this.mode = 'android'; // Fallback to regular Worker
+      return this.mode;
     }
     
-    return 'dev';
+    this.mode = 'dev';
+    return this.mode;
   }
 
   /**
@@ -59,6 +68,9 @@ export class AudioWorkerClient {
       return;
     }
     
+    this.detectMode();
+    Logger.log('AudioWorkerClient', `Initializing in ${this.mode} mode`);
+    
     if (this.mode === 'extension') {
       // Extension mode uses offscreen document, no init needed here
       Logger.log('AudioWorkerClient', 'Extension mode detected, skipping SharedWorker init');
@@ -68,9 +80,10 @@ export class AudioWorkerClient {
     
     return new Promise((resolve, reject) => {
       try {
-        if (this.mode === 'android') {
-          // Android mode: Use regular Worker instead of SharedWorker
-          Logger.log('AudioWorkerClient', 'Android mode: Using regular Worker (SharedWorker not supported)');
+        const useRegularWorker = this.mode === 'android' || typeof SharedWorker === 'undefined';
+        
+        if (useRegularWorker) {
+          Logger.log('AudioWorkerClient', 'Using regular Worker (SharedWorker not available)');
           
           this.worker = new Worker(
             new URL('./shared-audio-worker.js', import.meta.url),
@@ -269,15 +282,30 @@ export class AudioWorkerClient {
     try {
       Logger.log('AudioWorkerClient', `Processing audio with lip sync (${this.mode} mode)...`);
       
-      if (this.mode === 'dev') {
-        // Dev mode: Decode on main thread, send PCM to SharedWorker
-        
+      if (this.mode === 'dev' || this.mode === 'android') {
         if (!this.isReady) {
           await this.init();
         }
         
+        const bufferView = new Uint8Array(audioBuffer);
+        const header = String.fromCharCode(...bufferView.slice(0, 4));
+        Logger.log('AudioWorkerClient', `Audio buffer: ${audioBuffer.byteLength} bytes, header: "${header}"`);
+        
         // Step 1: Decode audio on main thread (AudioContext required)
-        const audioContextBuffer = await this.audioContext.decodeAudioData(audioBuffer.slice(0));
+        let audioContextBuffer;
+        try {
+          audioContextBuffer = await this.audioContext.decodeAudioData(audioBuffer.slice(0));
+        } catch (decodeError) {
+          Logger.error('AudioWorkerClient', 'decodeAudioData failed:', decodeError);
+          
+          // On Android WebView, try manual WAV decoding as fallback
+          if (this.mode === 'android' && header === 'RIFF') {
+            Logger.log('AudioWorkerClient', 'Trying manual WAV decode as fallback...');
+            audioContextBuffer = this.decodeWavManually(audioBuffer);
+          } else {
+            throw decodeError;
+          }
+        }
         
         Logger.log('AudioWorkerClient', `Audio decoded: ${audioContextBuffer.duration.toFixed(2)}s`);
         
@@ -285,7 +313,7 @@ export class AudioWorkerClient {
         const audioData = audioContextBuffer.getChannelData(0); // First channel
         const sampleRate = audioContextBuffer.sampleRate;
         
-        // Step 3: Send to SharedWorker for heavy processing
+        // Step 3: Send to Worker for heavy processing
         // Worker will: compute spectrogram → analyze vowels → generate VMD → convert to BVMD
         const response = await this.sendMessage(
           MessageTypes.TTS_PROCESS_AUDIO_WITH_LIPSYNC,
@@ -301,10 +329,12 @@ export class AudioWorkerClient {
         
         return response;
         
-      } else {
+      } else if (this.mode === 'extension') {
         // Extension mode: This shouldn't be called directly in extension mode
         // Extension uses offscreen document which is managed by background script
         throw new Error('processAudioWithLipSync should not be called in extension mode. Use offscreen document.');
+      } else {
+        throw new Error(`Unknown mode: ${this.mode}`);
       }
       
     } catch (error) {
@@ -322,8 +352,8 @@ export class AudioWorkerClient {
    * @returns {Promise<{vmdData: Array}>} VMD data as Array
    */
   async generateVMD(audioBuffer, modelName = 'Model') {
-    if (this.mode !== 'dev') {
-      throw new Error('generateVMD is only available in dev mode');
+    if (this.mode !== 'dev' && this.mode !== 'android') {
+      throw new Error('generateVMD is only available in dev/android mode');
     }
     
     try {
@@ -584,8 +614,8 @@ export class AudioWorkerClient {
    * @returns {Promise<Object>} Analysis results
    */
   async analyzeAudio(audioBuffer) {
-    if (this.mode !== 'dev') {
-      throw new Error('analyzeAudio is only available in dev mode');
+    if (this.mode !== 'dev' && this.mode !== 'android') {
+      throw new Error('analyzeAudio is only available in dev/android mode');
     }
     
     try {
@@ -616,6 +646,106 @@ export class AudioWorkerClient {
       Logger.error('AudioWorkerClient', 'Audio analysis failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Manually decode WAV audio when decodeAudioData fails
+   * This is a fallback for Android WebView which may not support all WAV formats
+   * 
+   * @param {ArrayBuffer} audioBuffer - WAV audio data
+   * @returns {AudioBuffer} Decoded audio buffer
+   */
+  decodeWavManually(audioBuffer) {
+    const view = new DataView(audioBuffer);
+    
+    // Parse WAV header
+    // RIFF chunk
+    const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+    if (riff !== 'RIFF') {
+      throw new Error('Not a valid WAV file: missing RIFF header');
+    }
+    
+    // WAVE format
+    const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
+    if (wave !== 'WAVE') {
+      throw new Error('Not a valid WAV file: missing WAVE format');
+    }
+    
+    // Find fmt chunk (starts at byte 12)
+    let offset = 12;
+    let sampleRate = 0;
+    let numChannels = 0;
+    let bitsPerSample = 0;
+    let dataOffset = 0;
+    let dataSize = 0;
+    
+    while (offset < audioBuffer.byteLength - 8) {
+      const chunkId = String.fromCharCode(
+        view.getUint8(offset),
+        view.getUint8(offset + 1),
+        view.getUint8(offset + 2),
+        view.getUint8(offset + 3)
+      );
+      const chunkSize = view.getUint32(offset + 4, true);
+      
+      if (chunkId === 'fmt ') {
+        // Audio format (should be 1 for PCM)
+        const audioFormat = view.getUint16(offset + 8, true);
+        if (audioFormat !== 1) {
+          throw new Error(`Unsupported audio format: ${audioFormat} (only PCM supported)`);
+        }
+        
+        numChannels = view.getUint16(offset + 10, true);
+        sampleRate = view.getUint32(offset + 12, true);
+        bitsPerSample = view.getUint16(offset + 22, true);
+        
+        Logger.log('AudioWorkerClient', `WAV format: ${sampleRate}Hz, ${numChannels}ch, ${bitsPerSample}bit`);
+      } else if (chunkId === 'data') {
+        dataOffset = offset + 8;
+        dataSize = chunkSize;
+        break;
+      }
+      
+      offset += 8 + chunkSize;
+      // Pad to even boundary
+      if (chunkSize % 2 !== 0) offset++;
+    }
+    
+    if (dataOffset === 0 || dataSize === 0) {
+      throw new Error('WAV file missing data chunk');
+    }
+    
+    // Calculate number of samples
+    const bytesPerSample = bitsPerSample / 8;
+    const numSamples = dataSize / (numChannels * bytesPerSample);
+    
+    // Create AudioBuffer
+    const audioContextBuffer = this.audioContext.createBuffer(numChannels, numSamples, sampleRate);
+    
+    // Decode samples
+    for (let channel = 0; channel < numChannels; channel++) {
+      const channelData = audioContextBuffer.getChannelData(channel);
+      
+      for (let i = 0; i < numSamples; i++) {
+        const sampleOffset = dataOffset + (i * numChannels + channel) * bytesPerSample;
+        
+        let sample;
+        if (bitsPerSample === 16) {
+          sample = view.getInt16(sampleOffset, true) / 32768.0;
+        } else if (bitsPerSample === 8) {
+          sample = (view.getUint8(sampleOffset) - 128) / 128.0;
+        } else if (bitsPerSample === 32) {
+          sample = view.getFloat32(sampleOffset, true);
+        } else {
+          throw new Error(`Unsupported bits per sample: ${bitsPerSample}`);
+        }
+        
+        channelData[i] = sample;
+      }
+    }
+    
+    Logger.log('AudioWorkerClient', `Manual WAV decode: ${numSamples} samples, ${(numSamples / sampleRate).toFixed(2)}s`);
+    return audioContextBuffer;
   }
 
   /**

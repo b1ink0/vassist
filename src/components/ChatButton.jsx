@@ -8,8 +8,7 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
-
-const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+import { isAndroid } from '../utils/PlatformUtils';
 
 /**
  * Draggable chat button component with automatic positioning.

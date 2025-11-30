@@ -15,6 +15,7 @@ import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
 import Logger from '../services/LoggerService';
+import { isAndroid } from '../utils/PlatformUtils';
 
 /**
  * Main chat controller component.
@@ -143,7 +144,6 @@ const ChatController = ({
       setIsChatContainerVisible(true)
       
       // Focus input after chat opens (skip on Android to avoid keyboard popup)
-      const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
       if (!isAndroid) {
         setTimeout(() => {
           const event = new CustomEvent('focusChatInput');
@@ -163,7 +163,6 @@ const ChatController = ({
       setIsChatContainerVisible(true)
       
       // Focus input after chat opens (skip on Android to avoid keyboard popup)
-      const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
       if (!isAndroid) {
         setTimeout(() => {
           const event = new CustomEvent('focusChatInput');
@@ -244,14 +243,16 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt);
     
     // DOCUMENT INTERACTION: Extract page context based on user query
-    // SKIP if user has attachments (images/audios)
+    // SKIP if user has attachments (images/audios) or using android-local provider
+    // (android-local runs on-device with limited context, document interaction adds latency)
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
+    const isAndroidLocal = savedConfig.provider === 'android-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroidLocal) {
       Logger.log('ChatController', 'Starting document interaction analysis...');
       
       // Check if aborted before starting
@@ -667,14 +668,15 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt)
 
     // DOCUMENT INTERACTION: Extract page context for voice queries too
-    // SKIP if user has attachments (images/audios)
+    // SKIP if user has attachments (images/audios) or using android-local provider
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
+    const isAndroidLocalVoice = voiceAIConfig.provider === 'android-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroidLocalVoice) {
       // Check if aborted before starting
       if (abortController.signal.aborted) {
         Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');

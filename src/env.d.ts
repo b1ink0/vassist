@@ -15,6 +15,12 @@ declare global {
    * @constant
    */
   const __DEV_MODE__: boolean;
+
+  /**
+   * True when building for Android WebView, false for other platforms
+   * @constant
+   */
+  const __ANDROID_MODE__: boolean;
 }
 
 export {};

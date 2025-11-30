@@ -8,6 +8,7 @@ import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
+import { isAndroid } from '../utils/PlatformUtils';
 
 /**
  * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
@@ -61,7 +62,6 @@ const BabylonScene = ({
   const isFirstMountRef = useRef(true);
   
   const initialHeightRef = useRef(null);
-  const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   
   if (initialHeightRef.current === null && typeof window !== 'undefined') {
     initialHeightRef.current = window.innerHeight;
@@ -162,19 +162,18 @@ const BabylonScene = ({
       delete canvas.dataset.babylonInitializing;
       
       // Get device pixel ratio - limit to 2x on Android to balance quality vs performance
-      const isAndroidDevice = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
       const rawDPR = window.devicePixelRatio || 1;
-      const maxDPR = isAndroidDevice ? 2 : 3; // Cap at 2x on Android, 3x on other platforms
+      const maxDPR = isAndroid ? 2 : 3; // Cap at 2x on Android, 3x on other platforms
       const effectiveDPR = Math.min(rawDPR, maxDPR);
       
-      Logger.log('BabylonScene', `Device pixel ratio: ${rawDPR}, effective: ${effectiveDPR}, isAndroid: ${isAndroidDevice}`);
+      Logger.log('BabylonScene', `Device pixel ratio: ${rawDPR}, effective: ${effectiveDPR}, isAndroid: ${isAndroid}`);
       
       const engine = new Engine(canvas, true, {
         preserveDrawingBuffer: true,
         stencil: true,
         alpha: true,
         adaptToDeviceRatio: true, // Enable high-DPI rendering
-        powerPreference: isAndroidDevice ? 'high-performance' : 'default',
+        powerPreference: isAndroid ? 'high-performance' : 'default',
       });
       
       // Set hardware scaling level to control resolution (lower = higher quality)
@@ -308,7 +307,7 @@ const BabylonScene = ({
       };
       
       // Only add wallpaper visibility listener on Android
-      if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
+      if (isAndroid) {
         window.addEventListener('wallpaperVisibility', handleWallpaperVisibility);
       }
 
@@ -323,7 +322,7 @@ const BabylonScene = ({
         window.removeEventListener('resize', handleResize);
         
         // Remove wallpaper visibility listener
-        if (typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__) {
+        if (isAndroid) {
           window.removeEventListener('wallpaperVisibility', handleWallpaperVisibility);
         }
         

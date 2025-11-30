@@ -11,6 +11,7 @@ import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
 import { AnimationProvider } from './contexts/AnimationContext'
+import { isAndroid } from './utils/PlatformUtils'
 
 /**
  * Application wrapper component that handles setup flow.
@@ -61,7 +62,7 @@ function isWallpaperMode() {
  */
 function App({ mode = 'development' }) {
   // Determine actual mode based on build-time constants and props
-  const actualMode = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__ ? 'android' : mode;
+  const actualMode = isAndroid ? 'android' : mode;
   
   if (actualMode === 'android') {
     if (isWallpaperMode()) {

@@ -31,7 +31,6 @@
 
         </activity>
 
-        <!-- Full App Activity with WebView -->
         <activity
             android:name=".FullAppActivity"
             android:label="@string/app_name"
@@ -40,7 +39,12 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:exported="false" />
 
-        <!-- Live Wallpaper Service -->
+        <activity
+            android:name=".AITestActivity"
+            android:label="AI Test"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:exported="false" />
+
         <service
             android:name=".service.VAssistWallpaperService"
             android:enabled="true"
@@ -72,6 +76,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <!-- For microphone/voice input -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>

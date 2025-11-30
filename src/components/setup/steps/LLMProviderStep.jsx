@@ -5,6 +5,7 @@ import ProviderSelection from '../shared/ProviderSelection';
 import Icon from '../../icons/Icon';
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
+import { isAndroid } from '../../../utils/PlatformUtils';
 
 // Copy button component for Chrome flags
 const FlagCopyButton = ({ flagUrl, flagValue }) => {
@@ -36,10 +37,11 @@ const FlagCopyButton = ({ flagUrl, flagValue }) => {
 const LLMProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
-  const [selectedProvider, setSelectedProvider] = useState('chrome-ai');
+  const [selectedProvider, setSelectedProvider] = useState(isAndroid ? 'android-local' : 'chrome-ai');
   const [apiKey, setApiKey] = useState('');
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState('llama2');
+  const [androidEndpoint, setAndroidEndpoint] = useState('http://127.0.0.1:8765');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [chromeAIStatus, setChromeAIStatus] = useState({
@@ -60,7 +62,9 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
 
   useEffect(() => {
     // Check Chrome AI status when component mounts
-    checkChromeAIStatus();
+    if (!isAndroid) {
+      checkChromeAIStatus();
+    }
     
     // Load existing setup data if any (only on first mount)
     const llmData = setupData?.llm;
@@ -71,6 +75,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       if (llmData.openai?.apiKey) setApiKey(llmData.openai.apiKey);
       if (llmData.ollama?.endpoint) setOllamaEndpoint(llmData.ollama.endpoint);
       if (llmData.ollama?.model) setOllamaModel(llmData.ollama.model);
+      if (llmData['android-local']?.endpoint) setAndroidEndpoint(llmData['android-local'].endpoint);
     }
     
     // Mark initial load complete after first load
@@ -100,10 +105,16 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
         endpoint: ollamaEndpoint,
         model: ollamaModel,
       },
+      'android-local': {
+        endpoint: androidEndpoint,
+        model: 'qwen3-local',
+        temperature: 0.7,
+        maxTokens: 2048,
+      },
     };
     
     updateSetupData({ llm: llmConfig });
-  }, [selectedProvider, apiKey, ollamaEndpoint, ollamaModel, updateSetupData]);
+  }, [selectedProvider, apiKey, ollamaEndpoint, ollamaModel, androidEndpoint, updateSetupData]);
 
   const checkChromeAIStatus = async () => {
     setChromeAIStatus(prev => ({ ...prev, checking: true }));
@@ -204,25 +215,39 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     }
   };
 
+  // Build providers list - Android Local first if on Android
   const providers = [
-    {
+    // Android Local - only shown on Android, always first and recommended
+    ...(isAndroid ? [{
+      id: 'android-local',
+      name: 'Android Local',
+      description: 'On-device AI using Qwen3-0.6B',
+      iconName: 'cpu',
+      available: true,
+      recommended: true,
+      requirements: 'Ready to use! Pre-installed on device',
+      pros: ['100% Free', 'Privacy-focused (local)', 'No internet needed', 'Fast on-device inference'],
+      cons: ['Limited model size', 'No image/audio support yet']
+    }] : []),
+    // Chrome AI - only on non-Android
+    ...(!isAndroid ? [{
       id: 'chrome-ai',
       name: 'Chrome AI',
       description: 'Free, local AI powered by Google',
       iconName: 'globe',
-      available: true, // Always allow selection
-      recommended: chromeAIStatus.ready, // Only recommend if ready
+      available: true,
+      recommended: chromeAIStatus.ready,
       requirements: chromeAIStatus.ready ? 'Ready to use!' : chromeAIStatus.available ? 'Setup required' : 'Chrome 138+ required',
       pros: ['100% Free', 'Privacy-focused (local)', 'No API keys needed', 'Fast response'],
       cons: chromeAIStatus.ready ? ['Limited to Chrome browser'] : ['Requires Chrome 138+', 'Needs browser flags', 'Model download required']
-    },
+    }] : []),
     {
       id: 'openai',
       name: 'OpenAI',
       description: 'Cloud-based AI with GPT models',
       iconName: 'ai',
       available: true,
-      recommended: false, // Recommend if Chrome AI not available
+      recommended: false,
       requirements: 'API key required (paid service)',
       pros: ['Most capable models', 'Works on any browser', 'Regular updates', 'Reliable'],
       cons: ['Requires API key', 'Costs money per request', 'Needs internet', 'Data sent to OpenAI']
@@ -255,7 +280,14 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
         provider: selectedProvider
       };
 
-      if (selectedProvider === 'chrome-ai') {
+      if (selectedProvider === 'android-local') {
+        testConfig['android-local'] = {
+          endpoint: androidEndpoint,
+          model: 'qwen3-local',
+          temperature: 0.7,
+          maxTokens: 2048
+        };
+      } else if (selectedProvider === 'chrome-ai') {
         testConfig.chromeAi = {
           enableImageSupport: true,
           enableAudioSupport: true
@@ -314,6 +346,56 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       />
 
       {/* Provider-specific Configuration */}
+      {selectedProvider === 'android-local' && (
+        <div className="space-y-3">
+          {/* Info Banner */}
+          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="flex items-start gap-2">
+              <Icon name="cpu" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-green-300">
+                <span className="font-semibold">Android Local AI</span> - On-device language model using Qwen3-0.6B. Runs entirely on your device, no internet needed!
+              </p>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <span className="text-sm font-semibold text-white/90">Ready to use!</span>
+            </div>
+            <p className="text-xs text-white/60">
+              Model: Qwen3-0.6B-Q4 (400MB) • Optimized for mobile devices
+            </p>
+          </div>
+
+          {/* Advanced Config (collapsed by default) */}
+          <details className="group">
+            <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
+              <span>Advanced Settings</span>
+              <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+            </summary>
+            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Endpoint URL
+                </label>
+                <input
+                  type="text"
+                  value={androidEndpoint}
+                  onChange={(e) => setAndroidEndpoint(e.target.value)}
+                  placeholder="http://127.0.0.1:8765"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                />
+                <p className="text-[10px] text-white/50 mt-1">
+                  Local HTTP server running on your Android device
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
+
       {selectedProvider === 'openai' && (
         <div className="rounded-lg p-2 sm:p-3 border border-white/10">
           <h3 className="text-sm font-semibold text-white mb-2">OpenAI Config</h3>
@@ -534,7 +616,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       )}
 
       {/* Test Connection */}
-      {selectedProvider !== 'chrome-ai' && (selectedProvider === 'openai' ? apiKey.length > 0 : (ollamaEndpoint && ollamaModel)) && (
+      {(selectedProvider === 'android-local' || 
+        (selectedProvider !== 'chrome-ai' && (selectedProvider === 'openai' ? apiKey.length > 0 : (ollamaEndpoint && ollamaModel)))) && (
         <div>
           <button
             onClick={testConnection}
@@ -549,7 +632,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
             ) : (
               <>
                 <Icon name="wrench" size={14} />
-                <span>Test</span>
+                <span>Test Connection</span>
               </>
             )}
           </button>
