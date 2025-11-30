@@ -8,9 +8,11 @@ import AndroidBackground from './components/AndroidBackground'
 import DemoSite from './components/DemoSite'
 import SetupWizard from './components/setup/SetupWizard'
 import LoadingIndicator from './components/LoadingIndicator'
+import DesktopWindowControls from './components/DesktopWindowControls'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
+import { useDesktopClickThrough } from './hooks/useDesktopClickThrough'
 import { AnimationProvider } from './contexts/AnimationContext'
 import { isAndroid } from './utils/PlatformUtils'
 
@@ -58,12 +60,15 @@ function isWallpaperMode() {
  * Root application component.
  * 
  * @param {Object} props
- * @param {string} props.mode - Application mode ('development'|'extension'|'android')
+ * @param {string} props.mode - Application mode ('development'|'extension'|'desktop'|'android')
  * @returns {JSX.Element}
  */
 function App({ mode = 'development' }) {
   // Determine actual mode based on build-time constants and props
-  const actualMode = isAndroid ? 'android' : mode;
+  const actualMode = __DESKTOP_MODE__ ? 'desktop' : isAndroid ? 'android' : mode;
+  
+  // Enable click-through for transparent areas in desktop mode
+  useDesktopClickThrough();
   
   if (actualMode === 'android') {
     if (isWallpaperMode()) {
@@ -102,14 +107,19 @@ function App({ mode = 'development' }) {
       <ConfigProvider>
         <AnimationProvider>
           <AppProvider>
+            {actualMode === 'desktop' && <DesktopWindowControls />}
             {actualMode === 'development' ? (
               <div className="relative w-full h-screen overflow-hidden">
                 <DemoSite />
                 <AppWithSetup mode="development" />
               </div>
+            ) : actualMode === 'desktop' ? (
+              <div className="relative w-full h-screen overflow-hidden">
+                <AppWithSetup mode="desktop" />
+              </div>
             ) : (
-            <AppWithSetup mode="extension" />
-          )}
+              <AppWithSetup mode="extension" />
+            )}
           </AppProvider>
         </AnimationProvider>
       </ConfigProvider>
