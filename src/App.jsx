@@ -4,6 +4,7 @@
 
 import AppContent from './components/AppContent'
 import AndroidContent from '../android-src/AndroidContent'
+import AndroidBackground from './components/AndroidBackground'
 import DemoSite from './components/DemoSite'
 import SetupWizard from './components/setup/SetupWizard'
 import LoadingIndicator from './components/LoadingIndicator'
@@ -71,6 +72,7 @@ function App({ mode = 'development' }) {
           <AnimationProvider>
             <AppProvider>
               <div className="relative w-full h-screen overflow-hidden bg-transparent">
+                <AndroidBackground />
                 <AndroidWrapper />
               </div>
             </AppProvider>
@@ -85,6 +87,7 @@ function App({ mode = 'development' }) {
           <AnimationProvider>
             <AppProvider>
               <div className="relative w-full h-screen overflow-hidden">
+                <AndroidBackground />
                 <AppWithSetup mode="android" />
               </div>
             </AppProvider>

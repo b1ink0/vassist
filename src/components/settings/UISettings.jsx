@@ -5,7 +5,7 @@
  */
 
 import { useConfig } from '../../contexts/ConfigContext';
-import { BackgroundThemeModes, PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
+import { BackgroundThemeModes, PositionPresets } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
 import ShortcutsConfig from '../common/ShortcutsConfig';
@@ -13,6 +13,8 @@ import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
 import Logger from '../../services/LoggerService';
+import { isAndroid } from '../../utils/PlatformUtils';
+import BackgroundSettings from './BackgroundSettings';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -139,114 +141,6 @@ const UISettings = ({ isLightBackground }) => {
         )}
       </div>
 
-      {/* 3D Settings Moved to 3D Tab */}
-      <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-400/20">
-        <div className="flex items-start gap-3">
-          <Icon name="idea" size={20} className="text-blue-300 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold text-white mb-1">3D Settings Moved</h4>
-            <p className="text-xs text-white/70">
-              Avatar, physics, framerate, and position settings have been moved to the <strong>3D tab</strong> for better organization.
-            </p>
-          </div>
-        </div>
-
-        {/* Character Display Settings - Only show when avatar is enabled */}
-        {uiConfig.enableModelLoading && (
-          <>
-          {/* Portrait Mode Toggle */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Portrait Mode</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  {uiConfig.enablePortraitMode 
-                    ? 'Upper body framing with closer camera view' 
-                    : 'Full body view with standard camera'}
-                </p>
-              </div>
-              <Toggle
-                checked={uiConfig.enablePortraitMode || false}
-                onChange={(checked) => updateUIConfig('enablePortraitMode', checked)}
-              />
-            </div>
-          </div>
-
-          {/* Physics Toggle */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Physics Simulation</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  {uiConfig.enablePhysics !== false
-                    ? 'Realistic hair and cloth movement' 
-                    : 'Disable physics for better performance'}
-                </p>
-              </div>
-              <Toggle
-                checked={uiConfig.enablePhysics !== false}
-                onChange={(checked) => updateUIConfig('enablePhysics', checked)}
-              />
-            </div>
-          </div>
-
-          {/* FPS Limit */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Frame Rate Limit</label>
-            <select
-              value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
-              onChange={(e) => {
-                const value = e.target.value === 'native' ? 'native' : parseInt(e.target.value);
-                updateUIConfig('fpsLimit', value);
-              }}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value={FPSLimitOptions.FPS_15} className="bg-gray-900">15 FPS (Ultra Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_24} className="bg-gray-900">24 FPS (Cinematic)</option>
-              <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
-              <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
-              <option value={FPSLimitOptions.NATIVE} className="bg-gray-900">Native (Monitor Rate)</option>
-            </select>
-            {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native' ? (
-              <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
-                <Icon name="alert-triangle" size={14} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-yellow-200/90">
-                  Native refresh rate may impact performance on high-refresh monitors (144Hz+)
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-white/50">
-                Limits rendering to {uiConfig.fpsLimit || 60} frames per second
-              </p>
-            )}
-          </div>
-
-          {/* Position Preset */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Character Position</label>
-            <select
-              value={uiConfig.position?.preset || 'bottom-right'}
-              onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-              {Object.entries(PositionPresets).map(([key, preset]) => (
-                <option key={key} value={key} className="bg-gray-900">
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-white/50">
-              {uiConfig.position?.preset === 'last-location'
-                ? 'Will load at the last dragged position. Drag to save new position.'
-                : 'Changes will apply on next page load or reload'}
-            </p>
-          </div>
-          </>
-        )}
-      </div>
-
       {/* Chat Position - visible when avatar is disabled */}
       {!uiConfig.enableModelLoading && (
         <div className="space-y-2 border-t border-white/10 pt-4">
@@ -338,6 +232,11 @@ const UISettings = ({ isLightBackground }) => {
           </>
         )}
       </div>
+
+      {/* Custom Background Images - Android Only */}
+      {isAndroid && (
+        <BackgroundSettings isLightBackground={isLightBackground} />
+      )}
 
       {/* AI Toolbar Settings */}
       <div className="space-y-2 border-t border-white/10 pt-4">
