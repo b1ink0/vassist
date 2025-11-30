@@ -142,11 +142,14 @@ const ChatController = ({
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
       
-      // Focus input after chat opens
-      setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
-        window.dispatchEvent(event);
-      }, 100);
+      // Focus input after chat opens (skip on Android to avoid keyboard popup)
+      const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+      if (!isAndroid) {
+        setTimeout(() => {
+          const event = new CustomEvent('focusChatInput');
+          window.dispatchEvent(event);
+        }, 100);
+      }
     }
   }, [isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
@@ -159,11 +162,14 @@ const ChatController = ({
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
       
-      // Focus input after chat opens
-      setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
-        window.dispatchEvent(event);
-      }, 100);
+      // Focus input after chat opens (skip on Android to avoid keyboard popup)
+      const isAndroid = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+      if (!isAndroid) {
+        setTimeout(() => {
+          const event = new CustomEvent('focusChatInput');
+          window.dispatchEvent(event);
+        }, 100);
+      }
     }
   }, [isChatInputVisible, isChatContainerVisible, setIsChatInputVisible, setIsChatContainerVisible])
 

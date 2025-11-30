@@ -181,12 +181,30 @@ export const PhysicsEngineOptions = {
  * - MEDIUM: Balanced quality and performance (default)
  * - HIGH: Full effects, good quality (desktop)
  * - ULTRA: Maximum quality, highest GPU usage (high-end desktop)
+ * - CUSTOM: User-defined settings
  */
 export const RenderQualityOptions = {
   LOW: 'low',
   MEDIUM: 'medium',
   HIGH: 'high',
   ULTRA: 'ultra',
+  CUSTOM: 'custom',
+};
+
+/**
+ * Default Custom Render Quality Settings
+ */
+export const DefaultCustomQualitySettings = {
+  samples: 2,                    // MSAA samples: 1, 2, 4, 8
+  bloomEnabled: true,
+  bloomKernel: 32,               // 16, 32, 48, 64
+  bloomScale: 0.5,               // 0.1 - 1.0
+  bloomWeight: 0.2,              // 0.05 - 0.5
+  bloomThreshold: 0.9,           // 0.5 - 1.0
+  fxaaEnabled: true,
+  contrast: 1.2,                 // 0.5 - 2.0
+  exposure: 1.05,                // 0.5 - 2.0
+  saturation: 15,                // -50 - 50
 };
 
 /**
@@ -202,6 +220,8 @@ export const DefaultUIConfig = {
   physicsEngine: PhysicsEngineOptions.BULLET,
   
   renderQuality: RenderQualityOptions.MEDIUM,
+  
+  customQuality: { ...DefaultCustomQualitySettings },
   
   fpsLimit: FPSLimitOptions.FPS_60,
   

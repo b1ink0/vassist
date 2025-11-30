@@ -9,6 +9,7 @@ import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
+import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
@@ -707,12 +708,18 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const renderQuality = finalConfig.renderQuality || 'medium';
   const isAndroidDevice = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
   
-  // Get quality presets from sceneConfig
-  const { getRenderQualityPresets } = await import('../../config/sceneConfig.js');
-  const qualityPresets = getRenderQualityPresets(isAndroidDevice);
   
-  // Get the quality preset (fallback to medium if invalid)
-  const quality = qualityPresets[renderQuality] || qualityPresets.medium;
+  // Get quality settings - either custom or from presets
+  let quality;
+  if (renderQuality === 'custom' && finalConfig.customQuality) {
+    quality = finalConfig.customQuality;
+    Logger.log('MmdModelScene', 'Using custom render quality settings:', JSON.stringify(quality));
+  } else {
+    const { getRenderQualityPresets } = await import('../../config/sceneConfig.js');
+    const qualityPresets = getRenderQualityPresets(isAndroidDevice);
+    quality = qualityPresets[renderQuality] || qualityPresets.medium;
+    Logger.log('MmdModelScene', `Using preset quality: ${renderQuality}`, JSON.stringify(quality));
+  }
   
   // Apply quality settings
   defaultPipeline.samples = quality.samples;
@@ -721,23 +728,30 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     defaultPipeline.bloomKernel = quality.bloomKernel;
     defaultPipeline.bloomScale = quality.bloomScale;
     defaultPipeline.bloomWeight = quality.bloomWeight;
+    defaultPipeline.bloomThreshold = quality.bloomThreshold || 0.9;
   }
-  defaultPipeline.chromaticAberrationEnabled = quality.chromaticAberrationEnabled;
-  if (quality.chromaticAberrationEnabled) {
-    defaultPipeline.chromaticAberration.aberrationAmount = 1;
-  }
+  
+  defaultPipeline.chromaticAberrationEnabled = false;
+  
   defaultPipeline.depthOfFieldEnabled = false;
+  
   defaultPipeline.fxaaEnabled = quality.fxaaEnabled;
   
-  // Image processing - always enabled for tone mapping
   defaultPipeline.imageProcessingEnabled = true;
+  
   defaultPipeline.imageProcessing.toneMappingEnabled = true;
   defaultPipeline.imageProcessing.toneMappingType =
-    ImageProcessingConfiguration.TONEMAPPING_ACES;
-  defaultPipeline.imageProcessing.vignetteWeight = 0.5;
-  defaultPipeline.imageProcessing.vignetteStretch = 0.5;
-  defaultPipeline.imageProcessing.vignetteColor = new Color4(0, 0, 0, 0);
-  defaultPipeline.imageProcessing.vignetteEnabled = true;
+    ImageProcessingConfiguration.TONEMAPPING_STANDARD;
+  
+  defaultPipeline.imageProcessing.vignetteEnabled = false;
+  
+  defaultPipeline.imageProcessing.contrast = quality.contrast || 1.2;
+  defaultPipeline.imageProcessing.exposure = quality.exposure || 1.05;
+  
+  defaultPipeline.imageProcessing.colorCurvesEnabled = true;
+  const colorCurves = new ColorCurves();
+  colorCurves.globalSaturation = quality.saturation || 15;
+  defaultPipeline.imageProcessing.colorCurves = colorCurves;
   
   Logger.log('MmdModelScene', `Post-processing configured: quality=${renderQuality}, samples=${quality.samples}, bloom=${quality.bloomEnabled}, chromatic=${quality.chromaticAberrationEnabled}, isAndroid=${isAndroidDevice}`);
 
@@ -837,6 +851,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   scene.metadata.mmdModel = mmdModel;
   scene.metadata.mmdRuntime = mmdRuntime;
   scene.metadata.mmdCamera = mmdCamera;
+  scene.metadata.renderPipeline = defaultPipeline;
 
   // ========================================
   // CLEANUP

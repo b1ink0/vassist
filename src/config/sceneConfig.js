@@ -10,51 +10,70 @@
 import { resourceLoader } from '../utils/ResourceLoader.js';
 import Logger from '../services/LoggerService';
 
-/**
- * Render Quality Presets
- * Controls post-processing effects and rendering quality
- * @param {boolean} isAndroid - Whether the device is Android
- * @returns {Object} Quality presets configuration
- */
+const RenderQualityPresets = {
+  low: {
+    samples: 1,
+    bloomEnabled: false,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 32,
+    bloomScale: 0.5,
+    bloomWeight: 0.15,
+    bloomThreshold: 0.95,
+    contrast: 1.15,
+    exposure: 1.0,
+    saturation: 10,
+  },
+  medium: {
+    samples: 2,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 32,
+    bloomScale: 0.5,
+    bloomWeight: 0.2,
+    bloomThreshold: 0.9,
+    contrast: 1.2,
+    exposure: 1.05,
+    saturation: 15,
+  },
+  high: {
+    samples: 4,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 48,
+    bloomScale: 0.5,
+    bloomWeight: 0.25,
+    bloomThreshold: 0.85,
+    contrast: 1.2,
+    exposure: 1.1,
+    saturation: 15,
+  },
+  ultra: {
+    samples: 8,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 48,
+    bloomScale: 0.5,
+    bloomWeight: 0.25,
+    bloomThreshold: 0.8,
+    contrast: 1.2,
+    exposure: 1.1,
+    saturation: 18,
+  },
+};
+
+const RenderQualityPresetsAndroid = {
+  low: RenderQualityPresets.low,
+  medium: RenderQualityPresets.medium,
+  high: { ...RenderQualityPresets.high, samples: 2, bloomKernel: 32 },
+  ultra: { ...RenderQualityPresets.ultra, samples: 4 },
+};
+
 export function getRenderQualityPresets(isAndroid = false) {
-  return {
-    low: {
-      samples: 1,                    // No MSAA
-      bloomEnabled: false,           // Disable bloom
-      chromaticAberrationEnabled: false,
-      fxaaEnabled: true,             // Keep FXAA (lightweight)
-      bloomKernel: 32,
-      bloomScale: 0.3,
-      bloomWeight: 0.1,
-    },
-    medium: {
-      samples: 2,                    // 2x MSAA
-      bloomEnabled: true,
-      chromaticAberrationEnabled: false, // Disable on medium for performance
-      fxaaEnabled: true,
-      bloomKernel: isAndroid ? 32 : 48,
-      bloomScale: 0.5,
-      bloomWeight: 0.15,
-    },
-    high: {
-      samples: isAndroid ? 2 : 4,    // 4x MSAA on desktop, 2x on Android
-      bloomEnabled: true,
-      chromaticAberrationEnabled: !isAndroid, // Only on desktop
-      fxaaEnabled: true,
-      bloomKernel: 64,
-      bloomScale: 0.6,
-      bloomWeight: 0.2,
-    },
-    ultra: {
-      samples: isAndroid ? 4 : 8,    // 8x MSAA on desktop, 4x on Android
-      bloomEnabled: true,
-      chromaticAberrationEnabled: true,
-      fxaaEnabled: true,
-      bloomKernel: 64,
-      bloomScale: 0.7,
-      bloomWeight: 0.25,
-    },
-  };
+  return isAndroid ? RenderQualityPresetsAndroid : RenderQualityPresets;
 }
 
 /**

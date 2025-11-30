@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
-import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions, RenderQualityOptions } from '../../config/uiConfig';
+import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions, RenderQualityOptions, DefaultCustomQualitySettings } from '../../config/uiConfig';
 import { AnimationCategory, getDefaultAnimationsByCategory } from '../../config/animationConfig';
 import Toggle from '../common/Toggle';
 import Dialog from '../common/Dialog';
@@ -709,6 +709,60 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
+  const handleCustomQualityChange = async (key, value) => {
+    updateUIConfig(`customQuality.${key}`, value);
+    
+    const scene = sceneRef?.current;
+    if (!scene || !scene.metadata?.renderPipeline) return;
+    
+    const pipeline = scene.metadata.renderPipeline;
+    
+    switch (key) {
+      case 'samples':
+        pipeline.samples = value;
+        break;
+      case 'fxaaEnabled':
+        pipeline.fxaaEnabled = value;
+        break;
+      case 'bloomEnabled':
+        pipeline.bloomEnabled = value;
+        break;
+      case 'bloomThreshold':
+        pipeline.bloomThreshold = value;
+        break;
+      case 'bloomWeight':
+        pipeline.bloomWeight = value;
+        break;
+      case 'bloomScale':
+        pipeline.bloomScale = value;
+        break;
+      case 'bloomKernel':
+        pipeline.bloomKernel = value;
+        break;
+      case 'contrast':
+        if (pipeline.imageProcessing) {
+          pipeline.imageProcessing.contrast = value;
+        }
+        break;
+      case 'exposure':
+        if (pipeline.imageProcessing) {
+          pipeline.imageProcessing.exposure = value;
+        }
+        break;
+      case 'saturation':
+        if (pipeline.imageProcessing?.colorCurves) {
+          pipeline.imageProcessing.colorCurves.globalSaturation = value;
+        } else if (pipeline.imageProcessing) {
+          const { ColorCurves } = await import('@babylonjs/core');
+          const colorCurves = new ColorCurves();
+          colorCurves.globalSaturation = value;
+          pipeline.imageProcessing.colorCurvesEnabled = true;
+          pipeline.imageProcessing.colorCurves = colorCurves;
+        }
+        break;
+    }
+  };
+
   const handlePortraitClippingChange = async (value) => {
     setPortraitClipping(value);
     
@@ -904,13 +958,212 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               <option value={RenderQualityOptions.MEDIUM} className="bg-gray-900">Medium (Balanced)</option>
               <option value={RenderQualityOptions.HIGH} className="bg-gray-900">High (Better Quality)</option>
               <option value={RenderQualityOptions.ULTRA} className="bg-gray-900">Ultra (Maximum Quality)</option>
+              <option value={RenderQualityOptions.CUSTOM} className="bg-gray-900">Custom (Advanced)</option>
             </select>
             <p className="text-xs text-white/50">
-              {uiConfig.renderQuality === RenderQualityOptions.LOW && 'Minimal effects for low-end devices and better battery life'}
-              {(uiConfig.renderQuality === RenderQualityOptions.MEDIUM || !uiConfig.renderQuality) && 'Balanced quality with bloom, FXAA, and tone mapping'}
-              {uiConfig.renderQuality === RenderQualityOptions.HIGH && 'Full post-processing with high-quality anti-aliasing'}
-              {uiConfig.renderQuality === RenderQualityOptions.ULTRA && 'Maximum quality with 8x MSAA and all effects enabled'}
+              {uiConfig.renderQuality === RenderQualityOptions.LOW && 'Minimal effects, sharp image for low-end devices'}
+              {(uiConfig.renderQuality === RenderQualityOptions.MEDIUM || !uiConfig.renderQuality) && 'Subtle bloom highlights'}
+              {uiConfig.renderQuality === RenderQualityOptions.HIGH && 'Smooth edges and soft glow'}
+              {uiConfig.renderQuality === RenderQualityOptions.ULTRA && 'Maximum clarity with 8x anti-aliasing'}
+              {uiConfig.renderQuality === RenderQualityOptions.CUSTOM && 'Fine-tune all rendering parameters'}
             </p>
+            
+            {/* Custom Quality Settings */}
+            {uiConfig.renderQuality === RenderQualityOptions.CUSTOM && (
+              <div className="mt-3 pt-3 border-t border-white/10 space-y-4">
+                <p className="text-xs font-medium text-white/70">Custom Quality Settings</p>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/70">Anti-Aliasing (MSAA)</label>
+                    <span className="text-xs text-white/50">{uiConfig.customQuality?.samples || DefaultCustomQualitySettings.samples}x</span>
+                  </div>
+                  <select
+                    value={uiConfig.customQuality?.samples || DefaultCustomQualitySettings.samples}
+                    onChange={(e) => handleCustomQualityChange('samples', parseInt(e.target.value))}
+                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+                  >
+                    <option value={1} className="bg-gray-900">1x (Off)</option>
+                    <option value={2} className="bg-gray-900">2x</option>
+                    <option value={4} className="bg-gray-900">4x</option>
+                    <option value={8} className="bg-gray-900">8x (High GPU)</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs text-white/70">FXAA (Fast Anti-Aliasing)</label>
+                    <p className="text-[10px] text-white/40">Smooth edges without blur</p>
+                  </div>
+                  <Toggle
+                    checked={uiConfig.customQuality?.fxaaEnabled ?? DefaultCustomQualitySettings.fxaaEnabled}
+                    onChange={(checked) => handleCustomQualityChange('fxaaEnabled', checked)}
+                    size="sm"
+                    isLightBackground={isLightBackground}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs text-white/70">Bloom Effect</label>
+                    <p className="text-[10px] text-white/40">Glow on bright areas</p>
+                  </div>
+                  <Toggle
+                    checked={uiConfig.customQuality?.bloomEnabled ?? DefaultCustomQualitySettings.bloomEnabled}
+                    onChange={(checked) => handleCustomQualityChange('bloomEnabled', checked)}
+                    size="sm"
+                    isLightBackground={isLightBackground}
+                  />
+                </div>
+                
+                {(uiConfig.customQuality?.bloomEnabled ?? DefaultCustomQualitySettings.bloomEnabled) && (
+                  <div className="pl-3 border-l border-white/10 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-white/60">Bloom Threshold</label>
+                        <span className="text-xs text-white/40">{(uiConfig.customQuality?.bloomThreshold || DefaultCustomQualitySettings.bloomThreshold).toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="1.0"
+                        step="0.05"
+                        value={uiConfig.customQuality?.bloomThreshold || DefaultCustomQualitySettings.bloomThreshold}
+                        onChange={(e) => handleCustomQualityChange('bloomThreshold', parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <p className="text-[10px] text-white/30">Higher = only brightest areas glow</p>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-white/60">Bloom Intensity</label>
+                        <span className="text-xs text-white/40">{(uiConfig.customQuality?.bloomWeight || DefaultCustomQualitySettings.bloomWeight).toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.05"
+                        max="0.5"
+                        step="0.05"
+                        value={uiConfig.customQuality?.bloomWeight || DefaultCustomQualitySettings.bloomWeight}
+                        onChange={(e) => handleCustomQualityChange('bloomWeight', parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-white/60">Bloom Scale</label>
+                        <span className="text-xs text-white/40">{(uiConfig.customQuality?.bloomScale || DefaultCustomQualitySettings.bloomScale).toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1.0"
+                        step="0.1"
+                        value={uiConfig.customQuality?.bloomScale || DefaultCustomQualitySettings.bloomScale}
+                        onChange={(e) => handleCustomQualityChange('bloomScale', parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-white/60">Bloom Kernel Size</label>
+                        <span className="text-xs text-white/40">{uiConfig.customQuality?.bloomKernel || DefaultCustomQualitySettings.bloomKernel}</span>
+                      </div>
+                      <select
+                        value={uiConfig.customQuality?.bloomKernel || DefaultCustomQualitySettings.bloomKernel}
+                        onChange={(e) => handleCustomQualityChange('bloomKernel', parseInt(e.target.value))}
+                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                      >
+                        <option value={16} className="bg-gray-900">16 (Tight)</option>
+                        <option value={32} className="bg-gray-900">32 (Normal)</option>
+                        <option value={48} className="bg-gray-900">48 (Wide)</option>
+                        <option value={64} className="bg-gray-900">64 (Very Wide)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/70">Contrast</label>
+                    <span className="text-xs text-white/50">{(uiConfig.customQuality?.contrast || DefaultCustomQualitySettings.contrast).toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.05"
+                    value={uiConfig.customQuality?.contrast || DefaultCustomQualitySettings.contrast}
+                    onChange={(e) => handleCustomQualityChange('contrast', parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/70">Exposure</label>
+                    <span className="text-xs text-white/50">{(uiConfig.customQuality?.exposure || DefaultCustomQualitySettings.exposure).toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.05"
+                    value={uiConfig.customQuality?.exposure || DefaultCustomQualitySettings.exposure}
+                    onChange={(e) => handleCustomQualityChange('exposure', parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/70">Saturation</label>
+                    <span className="text-xs text-white/50">{uiConfig.customQuality?.saturation ?? DefaultCustomQualitySettings.saturation}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-50"
+                    max="50"
+                    step="5"
+                    value={uiConfig.customQuality?.saturation ?? DefaultCustomQualitySettings.saturation}
+                    onChange={(e) => handleCustomQualityChange('saturation', parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <p className="text-[10px] text-white/30">0 = neutral, positive = more vibrant</p>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    updateUIConfig('customQuality', { ...DefaultCustomQualitySettings });
+                    const scene = sceneRef?.current;
+                    if (scene?.metadata?.renderPipeline) {
+                      const pipeline = scene.metadata.renderPipeline;
+                      const d = DefaultCustomQualitySettings;
+                      pipeline.samples = d.samples;
+                      pipeline.fxaaEnabled = d.fxaaEnabled;
+                      pipeline.bloomEnabled = d.bloomEnabled;
+                      pipeline.bloomThreshold = d.bloomThreshold;
+                      pipeline.bloomWeight = d.bloomWeight;
+                      pipeline.bloomScale = d.bloomScale;
+                      pipeline.bloomKernel = d.bloomKernel;
+                      if (pipeline.imageProcessing) {
+                        pipeline.imageProcessing.contrast = d.contrast;
+                        pipeline.imageProcessing.exposure = d.exposure;
+                        if (pipeline.imageProcessing.colorCurves) {
+                          pipeline.imageProcessing.colorCurves.globalSaturation = d.saturation;
+                        }
+                      }
+                    }
+                  }}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-3 py-1.5 rounded text-xs font-medium`}
+                >
+                  Reset to Defaults
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Position Preset */}

@@ -434,6 +434,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
             uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
             enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
             renderQuality: isPreview ? 'low' : (uiConfig?.renderQuality || 'medium'),
+            customQuality: uiConfig?.customQuality,
             savedModelPosition: isPreview ? null : savedModelPosition,
             getRandomAnimation,
             getEnabledAnimations
