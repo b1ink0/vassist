@@ -17,9 +17,11 @@ import ChatMessage from './ChatMessage';
 import chatHistoryService from '../services/ChatHistoryService';
 import { modelStorageService } from '../services/ModelStorageService';
 import { motionStorageService } from '../services/MotionStorageService';
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
+import { isDesktop } from '../utils/PlatformUtils';
 
 /**
  * Chat container component.
@@ -114,6 +116,8 @@ const ChatContainer = ({
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
   }, [buttonPosition]);
+
+  useDesktopWindowResize();
 
   /**
    * Detects when to force-complete streaming animation.
@@ -1158,16 +1162,22 @@ const ChatContainer = ({
       <div 
         ref={messagesContainerRef}
         className="flex-1 relative overflow-hidden"
+        style={isDesktop ? {
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
+        } : undefined}
       >
-        {/* Top glass bar - matches message style */}
-        <div 
-          className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
-        />
+        {!isDesktop && (
+          <div 
+            className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+          />
+        )}
         
-        {/* Bottom glass bar - matches message style */}
-        <div 
-          className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
-        />
+        {!isDesktop && (
+          <div 
+            className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+          />
+        )}
         
         {/* Scrollable messages */}
         <div 

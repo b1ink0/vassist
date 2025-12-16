@@ -3,32 +3,21 @@ import Logger from '../../services/LoggerService';
 
 /**
  * CanvasInteractionManager - Click-through canvas with selective model interaction
- * 
- * PROBLEM:
- * - Canvas blocks background HTML interaction (text selection, clicks)
- * - But we need to drag the 3D model
- * 
- * SOLUTION (pointer-events:none + dynamic enable):
- * - Canvas has pointer-events:none by default (click-through enabled)
- * - On document mousemove: temporarily enable pointer-events to check if over model
- * - If over model: keep pointer-events:auto and handle drag
- * - If NOT over model: restore pointer-events:none (background interactable)
- * 
- * This approach:
- * ✅ Allows text selection and clicks on background HTML
- * ✅ Enables model dragging when cursor is over model
- * ✅ No interference with rapid clicking or selection
  */
 export class CanvasInteractionManager {
   /**
    * @param {Scene} scene - Babylon.js scene
    * @param {HTMLCanvasElement} canvas - Canvas element
    * @param {Mesh} modelMesh - The model mesh (parent)
+   * @param {boolean} isDesktop - Whether running in Electron desktop mode
+   * @param {Object} desktopAPI - Electron API from DesktopContext (desktop mode only)
    */
-  constructor(scene, canvas, modelMesh) {
+  constructor(scene, canvas, modelMesh, isDesktop = false, desktopAPI = null) {
     this.scene = scene;
     this.canvas = canvas;
     this.modelMesh = modelMesh;
+    this.isDesktop = isDesktop;
+    this.desktopAPI = desktopAPI;
     
     // Drag state
     this.isDragging = false;
@@ -36,6 +25,10 @@ export class CanvasInteractionManager {
     this.dragStartY = 0;
     this.lastX = 0;
     this.lastY = 0;
+    
+    // Desktop mode
+    this.windowX = 0;
+    this.windowY = 0;
     
     // Model detection
     this.isOverModel = false;
@@ -51,7 +44,7 @@ export class CanvasInteractionManager {
     this.handleCanvasPointerMove = this.handleCanvasPointerMove.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
     
-    Logger.log('CanvasInteractionManager', 'Initialized with pointer-events switching');
+    Logger.log('CanvasInteractionManager', `Initialized (${isDesktop ? 'Desktop' : 'Web'} mode)`);
   }
   
   /**
@@ -65,17 +58,17 @@ export class CanvasInteractionManager {
     // This works even when canvas has pointer-events:none
     document.addEventListener('mousemove', this.handleDocumentMouseMove);
     
-    // Canvas event listeners (only active when pointer-events:auto)
+    // Canvas event listeners
     this.canvas.addEventListener('pointerdown', this.handleCanvasPointerDown);
     this.canvas.addEventListener('pointermove', this.handleCanvasPointerMove);
     this.canvas.addEventListener('pointerup', this.handleCanvasPointerUp);
     this.canvas.addEventListener('pointercancel', this.handleCanvasPointerUp);
     
-    Logger.log('CanvasInteractionManager', 'Initialized - canvas starts as click-through');
+    Logger.log('CanvasInteractionManager', 'Initialized');
   }
   
   /**
-   * Handle document mouse move - detect if over model (works even with pointer-events:none)
+   * Handle document mouse move - detect if over model
    */
   handleDocumentMouseMove(event) {
     // Skip if currently dragging (canvas already has pointer-events:auto)
@@ -117,9 +110,9 @@ export class CanvasInteractionManager {
   }
   
   /**
-   * Handle canvas pointer down - start drag (only called when pointer-events:auto)
+   * Handle canvas pointer down - start drag
    */
-  handleCanvasPointerDown(event) {
+  async handleCanvasPointerDown(event) {
     // Only left button
     if (event.button !== 0) return;
     
@@ -127,46 +120,72 @@ export class CanvasInteractionManager {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    // Double-check we're clicking on model
+    // Check if clicking on model
     const pickResult = this.scene.pick(x, y);
     const clickedOnModel = pickResult.hit && this.isModelMesh(pickResult.pickedMesh);
     
     if (clickedOnModel) {
+      // Get initial window position for desktop mode
+      if (this.isDesktop && this.desktopAPI?.window?.getPosition) {
+        try {
+          const pos = await this.desktopAPI.window.getPosition();
+          this.windowX = pos.x;
+          this.windowY = pos.y;
+        } catch (error) {
+          Logger.error('CanvasInteractionManager', 'Failed to get window position:', error);
+        }
+      }
+      
       // Start drag
       this.isDragging = true;
-      this.dragStartX = event.clientX;
-      this.dragStartY = event.clientY;
-      this.lastX = event.clientX;
-      this.lastY = event.clientY;
+      // For desktop mode, use screen coordinates (absolute) instead of client (window-relative)
+      this.dragStartX = this.isDesktop ? event.screenX : event.clientX;
+      this.dragStartY = this.isDesktop ? event.screenY : event.clientY;
+      this.lastX = this.isDesktop ? event.screenX : event.clientX;
+      this.lastY = this.isDesktop ? event.screenY : event.clientY;
       
       // Update cursor
       this.canvas.style.cursor = 'grabbing';
       
-      // Emit drag start event for UI components to show drag visual
+      // Emit drag start event
       window.dispatchEvent(new CustomEvent('modelDragStart'));
       
       if (this.onDragStartCallback) {
         this.onDragStartCallback(event.clientX, event.clientY);
       }
       
-      Logger.log('CanvasInteractionManager', 'Drag started');
+      Logger.log('CanvasInteractionManager', `Drag started (${this.isDesktop ? 'window' : 'model'} drag)`);
     }
   }
   
   /**
-   * Handle canvas pointer move - handle drag movement (only called when pointer-events:auto)
+   * Handle canvas pointer move - handle drag movement
    */
   handleCanvasPointerMove(event) {
     if (!this.isDragging) return;
     
-    const deltaX = event.clientX - this.lastX;
-    const deltaY = event.clientY - this.lastY;
+    const currentX = this.isDesktop ? event.screenX : event.clientX;
+    const currentY = this.isDesktop ? event.screenY : event.clientY;
     
-    this.lastX = event.clientX;
-    this.lastY = event.clientY;
+    const deltaX = currentX - this.lastX;
+    const deltaY = currentY - this.lastY;
     
-    if (this.onDragCallback) {
-      this.onDragCallback(deltaX, deltaY);
+    this.lastX = currentX;
+    this.lastY = currentY;
+    
+    if (this.isDesktop) {
+      this.windowX += deltaX;
+      this.windowY += deltaY;
+      
+      if (this.desktopAPI?.window?.setPosition) {
+        this.desktopAPI.window.setPosition(Math.floor(this.windowX), Math.floor(this.windowY)).catch(error => {
+          Logger.error('CanvasInteractionManager', 'Failed to move window:', error);
+        });
+      }
+    } else {
+      if (this.onDragCallback) {
+        this.onDragCallback(deltaX, deltaY);
+      }
     }
   }
   
@@ -236,6 +255,11 @@ export class CanvasInteractionManager {
    * Enable/disable interaction
    */
   setEnabled(enabled) {
+    if (this.isDesktop) {
+      // Desktop mode: canvas always has pointer-events:auto
+      return;
+    }
+    
     if (enabled) {
       document.addEventListener('mousemove', this.handleDocumentMouseMove);
     } else {

@@ -4,24 +4,16 @@
  */
 
 import { MinusIcon, XMarkIcon, Square2StackIcon } from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useDesktop } from '../contexts/DesktopContext';
 
 /**
  * Window controls for Electron desktop app
  * Only rendered when __DESKTOP_MODE__ is true
  */
 export default function DesktopWindowControls() {
-  const [electronAvailable, setElectronAvailable] = useState(false);
-
-  useEffect(() => {
-    // Check if electron API is available
-    if (window.electron) {
-      console.log('Electron API is available:', window.electron);
-      setElectronAvailable(true);
-    } else {
-      console.warn('Electron API not available');
-    }
-  }, []);
+  const { api } = useDesktop();
+  const [electronAvailable] = useState(!!api);
 
   // Only render in desktop mode
   if (!__DESKTOP_MODE__) {
@@ -29,30 +21,24 @@ export default function DesktopWindowControls() {
   }
 
   const handleMinimize = () => {
-    console.log('Minimize clicked, electron available:', !!window.electron);
-    if (window.electron?.window?.minimize) {
-      console.log('Calling minimize...');
-      window.electron.window.minimize();
+    if (api?.window?.minimize) {
+      api.window.minimize();
     } else {
       console.error('Minimize function not available');
     }
   };
 
   const handleMaximize = () => {
-    console.log('Maximize clicked, electron available:', !!window.electron);
-    if (window.electron?.window?.maximize) {
-      console.log('Calling maximize...');
-      window.electron.window.maximize();
+    if (api?.window?.maximize) {
+      api.window.maximize();
     } else {
       console.error('Maximize function not available');
     }
   };
 
   const handleClose = () => {
-    console.log('Close clicked, electron available:', !!window.electron);
-    if (window.electron?.window?.close) {
-      console.log('Calling close...');
-      window.electron.window.close();
+    if (api?.window?.close) {
+      api.window.close();
     } else {
       console.error('Close function not available');
     }
@@ -60,7 +46,7 @@ export default function DesktopWindowControls() {
 
   return (
     <div 
-      className="fixed top-2 left-1/2 -translate-x-1/2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
+      className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
     >
       {!electronAvailable && (
         <span className="text-xs text-red-500 mr-2">Electron API not loaded</span>

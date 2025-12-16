@@ -1,6 +1,5 @@
 /**
- * Build-time environment constants
- * These are injected by Vite at build time via the `define` option
+ * @fileoverview Global environment variable type declarations
  */
 
 declare global {
@@ -27,12 +26,6 @@ declare global {
    * @constant
    */
   const __ANDROID_MODE__: boolean;
-
-  /**
-   * True when building in production mode, false for development
-   * @constant
-   */
-  const __PROD_MODE__: boolean;
 }
 
 export {};

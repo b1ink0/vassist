@@ -10,6 +10,7 @@ import { AssistantState, getAnimationForEmotion } from '../config/animationConfi
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
+import { useDesktop } from '../contexts/DesktopContext';
 import { useAnimation } from '../contexts/AnimationContext';
 import Logger from '../services/LoggerService';
 
@@ -40,6 +41,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
   const { savedModelPosition, setSavedModelPosition } = useApp();
+  const { api: desktopAPI } = useDesktop();
   const { getRandomAnimation, getEnabledAnimations } = useAnimation();
   
   const [animationManager, setAnimationManager] = useState(null);
@@ -437,7 +439,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
             customQuality: uiConfig?.customQuality,
             savedModelPosition: isPreview ? null : savedModelPosition,
             getRandomAnimation,
-            getEnabledAnimations
+            getEnabledAnimations,
+            desktopAPI,
           }}
         />
       )}

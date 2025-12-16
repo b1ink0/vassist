@@ -7,6 +7,7 @@ import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
 import AIToolbar from './AIToolbar'
+import { InputWindowManager } from './InputWindowManager'
 import ChatService from '../services/ChatService'
 import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
 import DocumentInteractionService from '../services/DocumentInteractionService'
@@ -14,8 +15,10 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
 import Logger from '../services/LoggerService';
-import { isAndroid } from '../utils/PlatformUtils';
+import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
+import { useDesktop } from '../contexts/DesktopContext';
 
 /**
  * Main chat controller component.
@@ -28,6 +31,7 @@ import { isAndroid } from '../utils/PlatformUtils';
 const ChatController = ({ 
   modelDisabled = false
 }) => {
+  const { api } = useDesktop();
   const chatInputRef = useRef(null);
   const streamAbortControllerRef = useRef(null); // Track current stream to allow cancellation
   
@@ -40,6 +44,7 @@ const ChatController = ({
     isVoiceMode,
     currentChatId,
     isTempChat,
+    pendingDropData,
     setIsChatInputVisible,
     setIsChatContainerVisible,
     setChatMessages,
@@ -50,7 +55,10 @@ const ChatController = ({
     setPendingDropData,
     regenerateWithStreamingRef,
     editWithStreamingRef,
+    closeChat,
   } = useApp();
+
+  useDesktopWindowResize();
 
   /**
    * Track voice conversation state to update isSpeaking
@@ -887,6 +895,63 @@ const ChatController = ({
   }, [setIsVoiceMode])
 
   /**
+   * IPC bridge for desktop mode - listen for events from input window
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    if (!api?.ipc) return;
+
+    const unsubscribeSend = api.ipc.on('chatInput:send', ({ message, images, audios }) => {
+      Logger.log('ChatController', 'Received send from input window via IPC', { message, images, audios });
+      handleMessageSend(message, images, audios);
+    });
+
+    const unsubscribePendingDrop = api.ipc.on('chatInput:setPendingDropData', (data) => {
+      Logger.log('ChatController', 'Received setPendingDropData from input window via IPC', data);
+      setPendingDropData(data);
+    });
+
+    const unsubscribeClose = api.ipc.on('chatInput:close', () => {
+      Logger.log('ChatController', 'Received close from input window via IPC');
+      closeChat();
+    });
+
+    return () => {
+      unsubscribeSend?.();
+      unsubscribePendingDrop?.();
+      unsubscribeClose?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setPendingDropData, api]);
+
+  /**
+   * IPC state broadcast for desktop mode - send state changes to input window
+   * This runs only in the main window to broadcast state to input window
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    if (!api?.ipc) return;
+
+    api.ipc.send('state:isChatInputVisible', isChatInputVisible);
+  }, [isChatInputVisible, api]);
+
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    if (!api?.ipc) return;
+
+    api.ipc.send('state:pendingDropData', pendingDropData);
+  }, [pendingDropData, api]);
+
+  /**
    * Handles drag-drop onto ChatContainer.
    * Forwards dropped content to ChatInput.
    * 
@@ -940,6 +1005,9 @@ const ChatController = ({
 
   return (
     <>
+      {/* Desktop input window manager */}
+      {isDesktop && <InputWindowManager />}
+      
       {/* AI Toolbar - appears on text/image selection */}
       <AIToolbar />
       
@@ -955,13 +1023,15 @@ const ChatController = ({
       />
 
       {/* Chat Input - bottom screen */}
-      <ChatInput
-        ref={chatInputRef}
-        onSend={handleMessageSend}
-        onClose={handleChatInputClose}
-        onVoiceTranscription={handleVoiceTranscription}
-        onVoiceMode={handleVoiceModeChange}
-      />
+      {!isDesktop && (
+        <ChatInput
+          ref={chatInputRef}
+          onSend={handleMessageSend}
+          onClose={handleChatInputClose}
+          onVoiceTranscription={handleVoiceTranscription}
+          onVoiceMode={handleVoiceModeChange}
+        />
+      )}
 
       {/* Chat Container - message bubbles */}
       <ChatContainer

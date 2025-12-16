@@ -5,6 +5,8 @@
  */
 
 import Logger from '../services/LoggerService';
+import { isDesktop, isProduction } from './PlatformUtils';
+
 class ResourceLoader {
   constructor() {
     // Check multiple ways to detect extension mode
@@ -70,9 +72,17 @@ class ResourceLoader {
    */
   async getURLAsync(path) {
     if (!this.isExtension) {
-      // In dev mode, use relative path from public folder
-      // Ensure path starts with / but don't double it
-      return path.startsWith('/') ? path : `/${path}`;
+      if (path.startsWith('blob:') || path.includes('://')) {
+        return path;
+      }
+      if (isDesktop && isProduction) {
+        if (path.startsWith('res/')) {
+          return `../${path}`;
+        }
+        return path.startsWith('/') ? path.substring(1) : path;
+      } else {
+        return path.startsWith('/') ? path : `/${path}`;
+      }
     }
 
     // Extension mode - request URL from content script via ExtensionBridge

@@ -8,7 +8,7 @@ import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
-import { isAndroid } from '../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../utils/PlatformUtils';
 
 /**
  * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
@@ -487,8 +487,8 @@ const BabylonScene = ({
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         } : {
-          width: '100%',
-          height: canvasHeight,
+          width: isDesktop ? '500px' : '100%',
+          height: isDesktop ? '500px' : canvasHeight,
           display: 'block',
           outline: 'none',
           backgroundColor: 'transparent',

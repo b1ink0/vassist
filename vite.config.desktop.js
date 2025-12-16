@@ -83,6 +83,7 @@ export default defineConfig(({ mode }) => {
       __EXTENSION_MODE__: JSON.stringify(false),
       __DESKTOP_MODE__: JSON.stringify(true),
       __DEV_MODE__: JSON.stringify(!isProduction),
+      __PROD_MODE__: JSON.stringify(isProduction),
     },
     
     build: {

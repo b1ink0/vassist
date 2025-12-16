@@ -18,6 +18,7 @@ import {
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
+import { useDesktop } from './DesktopContext';
 
 const AppContext = createContext(null);
 
@@ -30,6 +31,8 @@ export const useApp = () => {
 };
 
 export const AppProvider = ({ children }) => {
+  const { api } = useDesktop();
+  
   // ========================================
   // ASSISTANT STATE
   // ========================================
@@ -845,11 +848,11 @@ export const AppProvider = ({ children }) => {
    */
   useEffect(() => {
     // Only in desktop mode
-    if (!__DESKTOP_MODE__ || !window.electron?.shortcuts) return;
+    if (!__DESKTOP_MODE__ || !api?.shortcuts) return;
     
     // Register shortcuts when config changes
     if (uiConfig?.shortcuts) {
-      window.electron.shortcuts.register(uiConfig.shortcuts)
+      api.shortcuts.register(uiConfig.shortcuts)
         .then(() => {
           Logger.log('AppContext', 'Global shortcuts registered in Electron');
         })
@@ -859,12 +862,12 @@ export const AppProvider = ({ children }) => {
     }
     
     // Listen for shortcut events from main process
-    const cleanupOpenChat = window.electron.shortcuts.onOpenChat(() => {
+    const cleanupOpenChat = api.shortcuts.onOpenChat(() => {
       Logger.log('AppContext', 'Open Chat shortcut triggered from Electron');
       toggleChat();
     });
     
-    const cleanupToggleModel = window.electron.shortcuts.onToggleModel(() => {
+    const cleanupToggleModel = api.shortcuts.onToggleModel(() => {
       Logger.log('AppContext', 'Toggle Model shortcut triggered from Electron');
       
       const newValue = !uiConfig.enableModelLoading;
@@ -889,7 +892,7 @@ export const AppProvider = ({ children }) => {
       cleanupOpenChat?.();
       cleanupToggleModel?.();
     };
-  }, [uiConfig, toggleChat]);
+  }, [uiConfig, toggleChat, api]);
 
   // ========================================
   // SCENE RELOAD

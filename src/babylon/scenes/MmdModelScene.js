@@ -48,7 +48,7 @@ import Logger from '../../services/LoggerService';
 import { VmdLoader } from "babylon-mmd";
 import { pmxConverterService } from '../../services/PMXConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
-import { isAndroid } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -760,7 +760,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   Logger.log('MmdModelScene', 'Initializing CanvasInteractionManager...');
   
-  const interactionManager = new CanvasInteractionManager(scene, canvas, modelMesh);
+  const interactionManager = new CanvasInteractionManager(
+    scene, 
+    canvas, 
+    modelMesh, 
+    isDesktop,
+    finalConfig.desktopAPI
+  );
   interactionManager.initialize();
   
   // Drag state for smooth dragging
@@ -769,51 +775,30 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   let accumulatedDeltaY = 0;
   let dragBasePosition = null;
   
-  // Setup drag callbacks to work with PositionManager
-  interactionManager.setDragCallbacks(
-    // onDragStart
-    (startX, startY) => {
-      Logger.log('MmdModelScene', 'Drag started at', startX, startY);
-      dragBasePosition = positionManager.getPositionPixels();
-      accumulatedDeltaX = 0;
-      accumulatedDeltaY = 0;
-      
-      // Cancel any pending RAF updates
-      if (dragRAF) {
-        cancelAnimationFrame(dragRAF);
-        dragRAF = null;
-      }
-    },
-    // onDrag - update smoothly
-    (deltaX, deltaY) => {
-      if (!dragBasePosition) return;
-      
-      // Accumulate all deltas since drag start
-      accumulatedDeltaX += deltaX;
-      accumulatedDeltaY += deltaY;
-      
-      // Update position - events are already RAF-throttled in PositionManager
-      positionManager.setPositionPixels(
-        dragBasePosition.x + accumulatedDeltaX,
-        dragBasePosition.y + accumulatedDeltaY,
-        dragBasePosition.width,
-        positionManager.modelHeightPx,
-        positionManager.effectiveHeightPx,
-        positionManager.offset
-      );
-    },
-    // onDragEnd
-    (endX, endY) => {
-      Logger.log('MmdModelScene', 'Drag completed at', endX, endY);
-      
-      // Cancel RAF if pending
-      if (dragRAF) {
-        cancelAnimationFrame(dragRAF);
-        dragRAF = null;
-      }
-      
-      // Apply final accumulated position
-      if (dragBasePosition) {
+  // Setup drag callbacks to work with PositionManager (only for web/extension mode)
+  // In desktop mode, window dragging is handled in CanvasInteractionManager
+  if (!isDesktop) {
+    interactionManager.setDragCallbacks(
+      // onDragStart
+      (startX, startY) => {
+        Logger.log('MmdModelScene', 'Drag started at', startX, startY);
+        dragBasePosition = positionManager.getPositionPixels();
+        accumulatedDeltaX = 0;
+        accumulatedDeltaY = 0;
+
+        if (dragRAF) {
+          cancelAnimationFrame(dragRAF);
+          dragRAF = null;
+        }
+      },
+      // onDrag - update smoothly
+      (deltaX, deltaY) => {
+        if (!dragBasePosition) return;
+        
+        // Accumulate all deltas since drag start
+        accumulatedDeltaX += deltaX;
+        accumulatedDeltaY += deltaY;
+
         positionManager.setPositionPixels(
           dragBasePosition.x + accumulatedDeltaX,
           dragBasePosition.y + accumulatedDeltaY,
@@ -822,15 +807,36 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
           positionManager.effectiveHeightPx,
           positionManager.offset
         );
+      },
+      // onDragEnd
+      (endX, endY) => {
+        Logger.log('MmdModelScene', 'Drag completed at', endX, endY);
+
+        if (dragRAF) {
+          cancelAnimationFrame(dragRAF);
+          dragRAF = null;
+        }
         
-        dragBasePosition = null;
-        accumulatedDeltaX = 0;
-        accumulatedDeltaY = 0;
+        // Apply final accumulated position
+        if (dragBasePosition) {
+          positionManager.setPositionPixels(
+            dragBasePosition.x + accumulatedDeltaX,
+            dragBasePosition.y + accumulatedDeltaY,
+            dragBasePosition.width,
+            positionManager.modelHeightPx,
+            positionManager.effectiveHeightPx,
+            positionManager.offset
+          );
+          
+          dragBasePosition = null;
+          accumulatedDeltaX = 0;
+          accumulatedDeltaY = 0;
+        }
       }
-    }
-  );
+    );
+  }
   
-  Logger.log('MmdModelScene', 'CanvasInteractionManager initialized');
+  Logger.log('MmdModelScene', `CanvasInteractionManager initialized (${isDesktop ? 'desktop' : 'web'} mode)`);
 
   // ========================================
   // START ANIMATION

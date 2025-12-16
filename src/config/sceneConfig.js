@@ -9,6 +9,7 @@
 
 import { resourceLoader } from '../utils/ResourceLoader.js';
 import Logger from '../services/LoggerService';
+import { isDesktop, isProduction } from '../utils/PlatformUtils';
 
 const RenderQualityPresets = {
   low: {
@@ -113,50 +114,26 @@ const SceneConfig = {
 export async function resolveResourceURLs(config) {
   Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
-  if (!resourceLoader.isExtensionMode()) {
-    Logger.log('sceneConfig', 'Dev/Desktop mode - making paths absolute');
-    const resolvedConfig = { ...config };
-    
-    // In dev/desktop mode, make paths absolute by prepending /
-    if (config.modelUrl && !config.modelUrl.startsWith('/') && !config.modelUrl.startsWith('http')) {
-      resolvedConfig.modelUrl = '/' + config.modelUrl;
-      Logger.log('sceneConfig', 'Made modelUrl absolute:', resolvedConfig.modelUrl);
-    }
-    
-    if (config.cameraAnimationUrl && !config.cameraAnimationUrl.startsWith('/') && !config.cameraAnimationUrl.startsWith('http')) {
-      resolvedConfig.cameraAnimationUrl = '/' + config.cameraAnimationUrl;
-      Logger.log('sceneConfig', 'Made cameraAnimationUrl absolute:', resolvedConfig.cameraAnimationUrl);
-    }
-    
-    return resolvedConfig;
+  const needsResolution = resourceLoader.isExtensionMode() || (isDesktop && isProduction);
+  
+  if (!needsResolution) {
+    Logger.log('sceneConfig', 'Dev/Web mode - using paths as-is');
+    return config;
   }
-
-  Logger.log('sceneConfig', 'Extension mode - resolving URLs...');
+  
+  Logger.log('sceneConfig', `${isDesktop && isProduction ? 'Desktop Production' : 'Extension'} mode - resolving URLs...`);
   const resolvedConfig = { ...config };
   
-  if (config.modelUrl) {
-    Logger.log('sceneConfig', 'Resolving modelUrl:', config.modelUrl);
-    if (config.modelUrl.startsWith('blob:')) {
-      Logger.log('sceneConfig', 'modelUrl is a Blob URL, using as-is');
-      resolvedConfig.modelUrl = config.modelUrl;
-    } else {
-      resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
-      Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
-    }
+  if (config.modelUrl && !config.modelUrl.startsWith('blob:')) {
+    resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
+    Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
   }
   
-  if (config.cameraAnimationUrl) {
-    Logger.log('sceneConfig', 'Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
-    if (config.cameraAnimationUrl.startsWith('blob:')) {
-      Logger.log('sceneConfig', 'cameraAnimationUrl is a Blob URL, using as-is');
-      resolvedConfig.cameraAnimationUrl = config.cameraAnimationUrl;
-    } else {
-      resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
-      Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
-    }
+  if (config.cameraAnimationUrl && !config.cameraAnimationUrl.startsWith('blob:')) {
+    resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
+    Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
   }
   
-  Logger.log('sceneConfig', 'Final resolved config:', resolvedConfig);
   return resolvedConfig;
 }
 

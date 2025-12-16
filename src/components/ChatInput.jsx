@@ -8,11 +8,13 @@ import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
-import { isAndroid } from '../utils/PlatformUtils';
+import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
+import { useDesktop } from '../contexts/DesktopContext';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -39,6 +41,11 @@ const ChatInput = forwardRef(({
   } = useApp();
   
   const { uiConfig } = useConfig();
+  const { api } = useDesktop();
+  
+  // Local state for input window (synced from main window)
+  const [localPendingDropData, setLocalPendingDropData] = useState(null);
+  const [localIsVisible, setLocalIsVisible] = useState(true); // Input window is always visible when open
   
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -49,7 +56,7 @@ const ChatInput = forwardRef(({
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
   const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(isVisible);
+  const [shouldRender, setShouldRender] = useState(isInputWindow ? true : isVisible);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   
   useEffect(() => {
@@ -76,21 +83,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('keyboardHeightChange', handleKeyboardHeight);
     };
-  }, [isAndroid]);
-
-  useEffect(() => {
-    if (isVisible) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timeout = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200);
-      return () => clearTimeout(timeout);
-    }
-  }, [isVisible, shouldRender]);
+  }, []);
   
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
@@ -102,6 +95,61 @@ const ChatInput = forwardRef(({
   
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDropServiceRef = useRef(null);
+
+  // IPC wrapper functions for input window
+  const wrappedOnSend = useCallback((message, images, audios) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:send', { message, images, audios });
+    } else {
+      onSend(message, images, audios);
+    }
+  }, [onSend, api]);
+
+  const wrappedSetPendingDropData = useCallback((data) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:setPendingDropData', data);
+    } else {
+      setPendingDropData(data);
+    }
+  }, [setPendingDropData, api]);
+
+  const wrappedOnClose = useCallback(() => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:close');
+    } else {
+      onClose();
+    }
+  }, [onClose, api]);
+
+  const effectiveIsVisible = isInputWindow ? localIsVisible : isVisible;
+  const effectivePendingDropData = isInputWindow ? localPendingDropData : pendingDropData;
+
+  useEffect(() => {
+    if (isInputWindow) return;
+    if (effectiveIsVisible) {
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      setIsClosing(true);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 200);
+      return () => clearTimeout(timeout);
+    }
+  }, [effectiveIsVisible, shouldRender]);
+
+  useEffect(() => {
+    if (!isInputWindow || !api?.ipc) return;
+
+    const unsubscribePendingDrop = api.ipc.on('state:pendingDropData', (data) => {
+      setLocalPendingDropData(data);
+    });
+
+    return () => {
+      unsubscribePendingDrop?.();
+    };
+  }, [api]);
 
   /**
    * Auto-resizes textarea based on content.
@@ -116,7 +164,7 @@ const ChatInput = forwardRef(({
   };
 
   useEffect(() => {
-    if (!isVisible) return;
+    if (!effectiveIsVisible) return;
     
     let detectionTimeout = null;
     let scrollTimeout = null;
@@ -187,19 +235,27 @@ const ChatInput = forwardRef(({
       window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
-  }, [isVisible, uiConfig?.backgroundDetection?.mode]);
+  }, [effectiveIsVisible, uiConfig?.backgroundDetection?.mode]);
+
+  useDesktopWindowResize(isInputWindow ? containerRef : null, {
+    minWidth: 400,
+    minHeight: 100,
+    maxWidth: 800,
+    maxHeight: 400,
+    padding: 10
+  });
 
   useEffect(() => {
-    if (isVisible && textareaRef.current && !isVoiceMode) {
+    if (effectiveIsVisible && textareaRef.current && !isVoiceMode) {
       textareaRef.current.focus();
       adjustTextareaHeight();
       Logger.log('ChatInput', 'Focused textarea');
-    } else if (!isVisible) {
+    } else if (!effectiveIsVisible) {
       setAttachedImages([]);
       setAttachedAudios([]);
       setMessage('');
     }
-  }, [isVisible, isVoiceMode]);
+  }, [effectiveIsVisible, isVoiceMode]);
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -271,7 +327,7 @@ const ChatInput = forwardRef(({
 
   useEffect(() => {
     const handleStartVoiceMode = async () => {
-      if (!isVoiceMode && isVisible) {
+      if (!isVoiceMode && effectiveIsVisible) {
         Logger.log('ChatInput', 'External voice mode start requested');
         try {
           if (!STTServiceProxy.isConfigured()) {
@@ -304,7 +360,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('startVoiceMode', handleStartVoiceMode);
     };
-  }, [isVoiceMode, isVisible, onVoiceMode]);
+  }, [isVoiceMode, effectiveIsVisible, onVoiceMode]);
 
   /**
    * Processes drag-and-drop data (text, images, audios).
@@ -394,7 +450,7 @@ const ChatInput = forwardRef(({
       }
     }
     
-    onSend(
+    wrappedOnSend(
       trimmedMessage || defaultPrompt,
       attachedImages.map(img => img.dataUrl),
       attachedAudios.map(audio => audio.dataUrl)
@@ -403,11 +459,11 @@ const ChatInput = forwardRef(({
     setMessage('');
     setAttachedImages([]);
     setAttachedAudios([]);
-  }, [message, attachedImages, attachedAudios, onSend]);
+  }, [message, attachedImages, attachedAudios, wrappedOnSend]);
 
   useEffect(() => {
     const handleChatDragDrop = (e) => {
-      if (!isVisible || isVoiceMode) return;
+      if (!effectiveIsVisible || isVoiceMode) return;
       processDropData(e.detail);
       
       // Handle auto-send if requested
@@ -424,20 +480,20 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('chatDragDrop', handleChatDragDrop);
     };
-  }, [isVisible, isVoiceMode, processDropData]);
+  }, [effectiveIsVisible, isVoiceMode, processDropData]);
 
   useEffect(() => {
-    if (!pendingDropData || !isVisible || isVoiceMode) return;
+    if (!effectivePendingDropData || !effectiveIsVisible || isVoiceMode) return;
 
     Logger.log('ChatInput', 'Processing pending drop data');
-    processDropData(pendingDropData);
+    processDropData(effectivePendingDropData);
 
-    setPendingDropData(null);
-  }, [pendingDropData, isVisible, isVoiceMode, processDropData, setPendingDropData]);
+    wrappedSetPendingDropData(null);
+  }, [effectivePendingDropData, effectiveIsVisible, isVoiceMode, processDropData, wrappedSetPendingDropData]);
 
   useEffect(() => {
     const handleFocusInput = () => {
-      if (textareaRef.current && isVisible && !isVoiceMode) {
+      if (textareaRef.current && effectiveIsVisible && !isVoiceMode) {
         textareaRef.current.focus();
       }
     };
@@ -447,12 +503,12 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('focusChatInput', handleFocusInput);
     };
-  }, [isVisible, isVoiceMode]);
+  }, [effectiveIsVisible, isVoiceMode]);
 
   // Auto-send listener for demo actions
   useEffect(() => {
     const handleAutoSend = () => {
-      if (isVisible && !isVoiceMode && message.trim()) {
+      if (effectiveIsVisible && !isVoiceMode && message.trim()) {
         Logger.log('ChatInput', 'Auto-sending message from demo action');
         setTimeout(() => {
           // Click the submit button to trigger the form submission
@@ -466,7 +522,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('chatAutoSend', handleAutoSend);
     };
-  }, [isVisible, isVoiceMode, message]);
+  }, [effectiveIsVisible, isVoiceMode, message]);
 
 
   /**
@@ -599,7 +655,7 @@ const ChatInput = forwardRef(({
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       Logger.log('ChatInput', 'Escape pressed - closing');
-      onClose();
+      wrappedOnClose();
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -658,11 +714,11 @@ const ChatInput = forwardRef(({
    */
   useEffect(() => {
     Logger.log('ChatInput', 'Drag-drop setup effect running', { 
-      isVisible, 
+      isVisible: effectiveIsVisible, 
       hasContainer: !!containerRef.current 
     });
     
-    if (!isVisible) {
+    if (!effectiveIsVisible) {
       Logger.log('ChatInput', 'Skipping drag-drop setup - not visible');
       return;
     }
@@ -725,7 +781,7 @@ const ChatInput = forwardRef(({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible]);
+  }, [effectiveIsVisible]);
 
   /**
    * Toggles voice conversation mode.
@@ -856,9 +912,10 @@ const ChatInput = forwardRef(({
     >
       <div 
         ref={containerRef}
-        className="relative p-4 w-full max-w-3xl pointer-events-auto"
+        className={`relative p-4 w-full max-w-3xl pointer-events-auto ${isInputWindow ? 'flex flex-col justify-end' : ''}`}
         style={{
-          touchAction: 'none'
+          touchAction: 'none',
+          ...(isInputWindow ? { minHeight: '400px' } : {})
         }}
       >
         {!isVoiceMode && isDragOver && (
@@ -884,7 +941,7 @@ const ChatInput = forwardRef(({
           </div>
         )}
         {hasAttachments && !isVoiceMode && (
-          <div className="max-w-3xl mx-auto mb-2">
+          <div className={`w-full max-w-3xl mb-2 ${isInputWindow ? '' : 'mx-auto'}`}>
             <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg ${
               isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
             }`}>
@@ -948,7 +1005,7 @@ const ChatInput = forwardRef(({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2 items-end">
+        <form onSubmit={handleSubmit} className={`max-w-3xl flex gap-2 items-end ${isInputWindow ? '' : 'mx-auto'}`}>
           {isVoiceMode ? (
             <>
               <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between ${
@@ -982,7 +1039,7 @@ const ChatInput = forwardRef(({
                   
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={wrappedOnClose}
                     className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg hover:bg-white/10`}
                     title="Close (Esc)"
                   >
@@ -1102,7 +1159,7 @@ const ChatInput = forwardRef(({
                     
                     <button
                       type="button"
-                      onClick={onClose}
+                      onClick={wrappedOnClose}
                       className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
                       title="Close (Esc)"
                     >

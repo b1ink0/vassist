@@ -3,6 +3,7 @@
  */
 
 import AppContent from './components/AppContent'
+import ChatInput from './components/ChatInput'
 import AndroidContent from '../android-src/AndroidContent'
 import AndroidBackground from './components/AndroidBackground'
 import DemoSite from './components/DemoSite'
@@ -12,9 +13,9 @@ import DesktopWindowControls from './components/DesktopWindowControls'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
-import { useDesktopClickThrough } from './hooks/useDesktopClickThrough'
 import { AnimationProvider } from './contexts/AnimationContext'
-import { isAndroid } from './utils/PlatformUtils'
+import { DesktopProvider } from './contexts/DesktopContext'
+import { isAndroid, isInputWindow } from './utils/PlatformUtils'
 
 /**
  * Application wrapper component that handles setup flow.
@@ -67,9 +68,6 @@ function App({ mode = 'development' }) {
   // Determine actual mode based on build-time constants and props
   const actualMode = __DESKTOP_MODE__ ? 'desktop' : isAndroid ? 'android' : mode;
   
-  // Enable click-through for transparent areas in desktop mode
-  useDesktopClickThrough();
-  
   if (actualMode === 'android') {
     if (isWallpaperMode()) {
       return (
@@ -102,20 +100,52 @@ function App({ mode = 'development' }) {
     );
   }
   
+  if (actualMode === 'desktop') {
+    if (isInputWindow) {
+      return (
+        <DesktopProvider>
+          <ConfigProvider>
+            <AppProvider>
+              <ChatInput 
+                onSend={() => {}} 
+                onClose={() => {}} 
+                onVoiceTranscription={() => {}} 
+                onVoiceMode={() => {}} 
+              />
+            </AppProvider>
+          </ConfigProvider>
+        </DesktopProvider>
+      );
+    }
+    
+    return (
+      <DesktopProvider>
+        <SetupProvider>
+          <ConfigProvider>
+            <AnimationProvider>
+              <AppProvider>
+                <DesktopWindowControls />
+                <div className="relative w-full h-screen overflow-hidden">
+                  <AppWithSetup mode="desktop" />
+                </div>
+              </AppProvider>
+            </AnimationProvider>
+          </ConfigProvider>
+        </SetupProvider>
+      </DesktopProvider>
+    );
+  }
+  
+  // Development and Extension modes
   return (
     <SetupProvider>
       <ConfigProvider>
         <AnimationProvider>
           <AppProvider>
-            {actualMode === 'desktop' && <DesktopWindowControls />}
             {actualMode === 'development' ? (
               <div className="relative w-full h-screen overflow-hidden">
                 <DemoSite />
                 <AppWithSetup mode="development" />
-              </div>
-            ) : actualMode === 'desktop' ? (
-              <div className="relative w-full h-screen overflow-hidden">
-                <AppWithSetup mode="desktop" />
               </div>
             ) : (
               <AppWithSetup mode="extension" />

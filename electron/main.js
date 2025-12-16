@@ -3,14 +3,16 @@
  * Creates a transparent window for the desktop app
  */
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol } from 'electron';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+let inputWindow;
 let tray = null;
 
 /**
@@ -22,23 +24,73 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('disable-gpu-driver-bug-workarounds');
 
 /**
+ * Create the input window
+ */
+function createInputWindow() {
+  if (inputWindow) return;
+
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const inputWidth = 600;
+  const inputHeight = 400;
+
+  inputWindow = new BrowserWindow({
+    width: inputWidth,
+    height: inputHeight,
+    x: Math.floor((screenWidth - inputWidth) / 2),
+    y: screenHeight - inputHeight - 50,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    parent: mainWindow,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    inputWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/electron/index.html?window=input');
+    inputWindow.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    inputWindow.loadURL('app://./electron/index.html?window=input');
+  }
+
+  inputWindow.once('ready-to-show', () => {
+    inputWindow.show();
+    inputWindow.setOpacity(0);
+    inputWindow.setIgnoreMouseEvents(true);
+  });
+
+  inputWindow.on('closed', () => {
+    inputWindow = null;
+  });
+}
+
+/**
  * Create the main application window with transparency
  */
 function createWindow() {
   // Get primary display dimensions
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+
+  const initialWidth = 400;
+  const initialHeight = 500;
   
   mainWindow = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
+    width: initialWidth,
+    height: initialHeight,
+    x: Math.floor((screenWidth - initialWidth) / 2),
+    y: Math.floor((screenHeight - initialHeight) / 2),
     transparent: true,
     frame: false,
-    resizable: true,
+    resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: true, // Hide from taskbar
-    show: false, // Don't show until ready
+    skipTaskbar: true,
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -53,17 +105,15 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/electron/index.html');
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    // Production mode
-    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+    mainWindow.loadURL('app://./electron/index.html');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
-  // Enable click-through by default (before React loads)
-  // This allows clicking through transparent areas to desktop
-  mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    createInputWindow();
   });
 
   // Handle window close - hide instead of closing
@@ -200,9 +250,59 @@ function createTray() {
 }
 
 /**
+ * Register custom protocol with CORS headers to enable SharedArrayBuffer
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+]);
+
+/**
  * App lifecycle handlers
  */
 app.whenReady().then(() => {
+  // Register protocol handler that serves files with proper CORS headers
+  protocol.handle('app', (request) => {
+    const url = request.url.substring('app://'.length);
+    const filePath = path.normalize(path.join(__dirname, url.split('?')[0]));
+    
+    const fileBuffer = fs.readFileSync(filePath);
+    
+    // Determine content type
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.html': 'text/html',
+      '.js': 'application/javascript',
+      '.mjs': 'application/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.wasm': 'application/wasm',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon'
+    };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    
+    // Return with CORS headers
+    return new Response(fileBuffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Resource-Policy': 'same-origin'
+      }
+    });
+  });
+
   createTray();
   createWindow();
 
@@ -276,4 +376,91 @@ ipcMain.handle('app:platform', () => {
 // Register global shortcuts
 ipcMain.handle('shortcuts:register', (event, shortcuts) => {
   registerGlobalShortcuts(shortcuts);
+});
+
+// Window positioning and sizing for model dragging
+ipcMain.handle('window:set-position', (event, x, y) => {
+  if (mainWindow) {
+    mainWindow.setPosition(Math.floor(x), Math.floor(y));
+  }
+});
+
+ipcMain.handle('window:get-position', () => {
+  if (mainWindow) {
+    const [x, y] = mainWindow.getPosition();
+    return { x, y };
+  }
+  return { x: 0, y: 0 };
+});
+
+ipcMain.handle('window:set-size', (event, width, height) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow) {
+    const currentBounds = senderWindow.getBounds();
+
+    const newY = currentBounds.y - (height - currentBounds.height);
+    senderWindow.setBounds({
+      x: currentBounds.x,
+      y: newY,
+      width: Math.floor(width),
+      height: Math.floor(height)
+    });
+  }
+});
+
+ipcMain.handle('window:get-size', () => {
+  if (mainWindow) {
+    const [width, height] = mainWindow.getSize();
+    return { width, height };
+  }
+  return { width: 0, height: 0 };
+});
+
+ipcMain.handle('input-window:open', async () => {
+  if (inputWindow) {
+    inputWindow.setOpacity(1);
+    inputWindow.setIgnoreMouseEvents(false);
+    inputWindow.focus();
+  }
+});
+
+ipcMain.handle('input-window:close', () => {
+  if (inputWindow) {
+    inputWindow.setOpacity(0);
+    inputWindow.setIgnoreMouseEvents(true);
+  }
+});
+
+ipcMain.handle('input-window:is-open', () => {
+  return inputWindow && inputWindow.getOpacity() > 0;
+});
+
+ipcMain.on('chatInput:send', (event, data) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:send', data);
+  }
+});
+
+ipcMain.on('chatInput:setPendingDropData', (event, data) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:setPendingDropData', data);
+  }
+});
+
+ipcMain.on('chatInput:close', () => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:close');
+  }
+});
+
+ipcMain.on('state:isChatInputVisible', (event, visible) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:isChatInputVisible', visible);
+  }
+});
+
+ipcMain.on('state:pendingDropData', (event, data) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:pendingDropData', data);
+  }
 });
