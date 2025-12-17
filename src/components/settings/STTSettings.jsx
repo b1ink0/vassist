@@ -7,10 +7,11 @@
 import { useMemo } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { STTProviders } from '../../config/aiConfig';
-import { isAndroid } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import OpenAISTTConfig from './stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from './stt/OpenAICompatibleSTTConfig';
 import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
+import DesktopSTTConfig from './stt/DesktopSTTConfig';
 import Toggle from '../common/Toggle';
 
 const STTSettings = ({ isLightBackground, hasChromeAI }) => {
@@ -103,6 +104,22 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
               <p className="text-xs text-white/50">
                 Powered by Whisper running locally on your device
               </p>
+            </div>
+          )}
+
+          {/* Desktop Local STT Configuration */}
+          {sttConfig.provider === STTProviders.DESKTOP_LOCAL && isDesktop && (
+            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+              <h4 className="text-sm font-semibold text-white/90">Desktop Local STT (Whisper)</h4>
+              <DesktopSTTConfig
+                config={sttConfig['desktop-local'] || {}}
+                onChange={(updates) => {
+                  Object.entries(updates).forEach(([key, value]) => {
+                    updateSTTConfig(`desktop-local.${key}`, value);
+                  });
+                }}
+                isSetupMode={false}
+              />
             </div>
           )}
 

@@ -153,6 +153,27 @@ class STTService {
         state.provider = provider;
 
         Logger.log('other', `${logPrefix} - Android local STT configured:`, { baseURL: endpoint });
+      } else if (provider === STTProviders.DESKTOP_LOCAL) {
+        const desktopConfig = config['desktop-local'] || {};
+        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+
+        state.config = {
+          model: desktopConfig.model || 'whisper-base',
+          language: desktopConfig.language || 'en',
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - Desktop local STT configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown STT provider: ${provider}`);
       }
@@ -350,8 +371,9 @@ class STTService {
       let fileBlob = audioBlob;
       let fileName = 'recording.webm';
       
-      if (state.provider === STTProviders.ANDROID_LOCAL || state.provider === 'android-local') {
-        Logger.log('other', `${logPrefix} - Converting audio to WAV for android-local...`);
+      if (state.provider === STTProviders.ANDROID_LOCAL || state.provider === 'android-local' ||
+          state.provider === STTProviders.DESKTOP_LOCAL || state.provider === 'desktop-local') {
+        Logger.log('other', `${logPrefix} - Converting audio to WAV for local STT...`);
         fileBlob = await this.convertToWav(audioBlob);
         fileName = 'recording.wav';
         Logger.log('other', `${logPrefix} - Converted to WAV: ${fileBlob.size} bytes`);

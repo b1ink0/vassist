@@ -4,22 +4,38 @@ import TTSServiceProxy from '../../../services/proxies/TTSServiceProxy';
 import { AIServiceProxy } from '../../../services/proxies';
 import ProviderSelection from '../shared/ProviderSelection';
 import KokoroTTSConfig from '../../settings/tts/KokoroTTSConfig';
+import GPTSoVITSConfig from '../../settings/tts/GPTSoVITSConfig';
+import DesktopSTTConfig from '../../settings/stt/DesktopSTTConfig';
 import OpenAISTTConfig from '../../settings/stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from '../../settings/stt/OpenAICompatibleSTTConfig';
 import ChromeAISTTConfig from '../../settings/stt/ChromeAISTTConfig';
-import { TTSProviders, STTProviders, DefaultTTSConfig } from '../../../config/aiConfig';
+import { TTSProviders, STTProviders, DefaultTTSConfig, GPTSoVITSLanguages } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
 import { Icon } from '../../icons';
-import { isAndroid } from '../../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
 const TTSProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   
   // TTS state
-  const [selectedProvider, setSelectedProvider] = useState(isAndroid ? 'android-local' : 'kokoro');
+  const defaultTTSProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'kokoro');
+  const [selectedProvider, setSelectedProvider] = useState(defaultTTSProvider);
   const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState('http://127.0.0.1:8765');
+  
+  // Desktop TTS state
+  const [desktopTTSEndpoint, setDesktopTTSEndpoint] = useState('http://127.0.0.1:11438');
+  const [desktopReferenceAudio, setDesktopReferenceAudio] = useState(null);
+  const [desktopReferenceText, setDesktopReferenceText] = useState('');
+  const [desktopReferenceLanguage, setDesktopReferenceLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
+  const [desktopSpeed, setDesktopSpeed] = useState(1.0);
+  const [desktopTopK, setDesktopTopK] = useState(15);
+  const [desktopTopP, setDesktopTopP] = useState(0.7);
+  const [desktopTemperature, setDesktopTemperature] = useState(0.7);
+  const [desktopTrained, setDesktopTrained] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState(null);
+  const [desktopReferenceAudioPath, setDesktopReferenceAudioPath] = useState(null);
   
   // Kokoro config state
   const [kokoroConfig, setKokoroConfig] = useState(DefaultTTSConfig.kokoro || {});
@@ -46,9 +62,12 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
-  // STT state  
-  const [selectedSTTProvider, setSelectedSTTProvider] = useState(isAndroid ? STTProviders.ANDROID_LOCAL : STTProviders.CHROME_AI_MULTIMODAL);
+  // STT state
+  const defaultSTTProvider = isAndroid ? STTProviders.ANDROID_LOCAL : (isDesktop ? STTProviders.DESKTOP_LOCAL : STTProviders.CHROME_AI_MULTIMODAL);
+  const [selectedSTTProvider, setSelectedSTTProvider] = useState(defaultSTTProvider);
   const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState('http://127.0.0.1:8765');
+  const [desktopSTTEndpoint, setDesktopSTTEndpoint] = useState('http://127.0.0.1:11438');
+  const [desktopSTTModel, setDesktopSTTModel] = useState('ggml-small.en.bin');
   const [chromeAiSTTStatus, setChromeAiSTTStatus] = useState(null);
   const [sttConfig, setSTTConfig] = useState({
     openai: {
@@ -87,12 +106,22 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       if (ttsData['openai-compatible']?.model) setCustomModel(ttsData['openai-compatible'].model);
       if (ttsData['openai-compatible']?.voice) setCustomVoice(ttsData['openai-compatible'].voice);
       if (ttsData['android-local']?.endpoint) setAndroidTTSEndpoint(ttsData['android-local'].endpoint);
+      if (ttsData['desktop-local']?.endpoint) setDesktopTTSEndpoint(ttsData['desktop-local'].endpoint);
+      if (ttsData['desktop-local']?.referenceText) setDesktopReferenceText(ttsData['desktop-local'].referenceText);
+      if (ttsData['desktop-local']?.referenceLanguage) setDesktopReferenceLanguage(ttsData['desktop-local'].referenceLanguage);
+      if (ttsData['desktop-local']?.speed) setDesktopSpeed(ttsData['desktop-local'].speed);
+      if (ttsData['desktop-local']?.topK) setDesktopTopK(ttsData['desktop-local'].topK);
+      if (ttsData['desktop-local']?.topP) setDesktopTopP(ttsData['desktop-local'].topP);
+      if (ttsData['desktop-local']?.temperature) setDesktopTemperature(ttsData['desktop-local'].temperature);
+      if (ttsData['desktop-local']?.trained) setDesktopTrained(ttsData['desktop-local'].trained);
     }
     
     if (sttData?.provider) setSelectedSTTProvider(sttData.provider);
     if (sttConfigData) {
       setSTTConfig(sttConfigData);
       if (sttConfigData['android-local']?.endpoint) setAndroidSTTEndpoint(sttConfigData['android-local'].endpoint);
+      if (sttConfigData['desktop-local']?.endpoint) setDesktopSTTEndpoint(sttConfigData['desktop-local'].endpoint);
+      if (sttConfigData['desktop-local']?.model) setDesktopSTTModel(sttConfigData['desktop-local'].model);
     }
     
     // Mark initial load complete
@@ -127,6 +156,18 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         endpoint: androidTTSEndpoint,
         voice: 'vits-local',
       },
+      'desktop-local': {
+        endpoint: desktopTTSEndpoint,
+        model: 'gpt-sovits',
+        referenceAudio: desktopReferenceAudio,
+        referenceText: desktopReferenceText,
+        referenceLanguage: desktopReferenceLanguage,
+        speed: desktopSpeed,
+        topK: desktopTopK,
+        topP: desktopTopP,
+        temperature: desktopTemperature,
+        trained: desktopTrained,
+      },
     };
     
     const sttData = {
@@ -141,6 +182,12 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         endpoint: androidSTTEndpoint,
         model: 'whisper-local',
       },
+      'desktop-local': {
+        endpoint: desktopSTTEndpoint,
+        model: desktopSTTModel,
+        language: 'en',
+        threads: 4,
+      },
     };
     
     updateSetupData({ 
@@ -153,7 +200,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     openAIKey, openAIModel, openAIVoice,
     customEndpoint, customApiKey, customModel, customVoice,
     androidTTSEndpoint,
-    selectedSTTProvider, sttConfig, androidSTTEndpoint,
+    selectedSTTProvider, sttConfig, androidSTTEndpoint, desktopSTTEndpoint, desktopSTTModel,
+    desktopTTSEndpoint, desktopReferenceAudio, desktopReferenceText, desktopReferenceLanguage, desktopSpeed, desktopTopK, desktopTopP, desktopTemperature, desktopTrained,
     updateSetupData
   ]);
 
@@ -176,6 +224,26 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         'Fixed voice style'
       ],
       requirements: 'Ready to use! Pre-installed on device'
+    }] : []),
+    // Desktop Local TTS - only on Desktop, first and recommended
+    ...(isDesktop ? [{
+      id: 'desktop-local',
+      name: 'Desktop Local',
+      description: 'On-device TTS using GPT-SoVITS',
+      iconName: 'speaker',
+      recommended: true,
+      pros: [
+        '100% Free',
+        'Privacy-focused (local)',
+        'No internet needed',
+        'Voice cloning support',
+        'Natural voice quality'
+      ],
+      cons: [
+        'Requires voice training',
+        'GPU recommended'
+      ],
+      requirements: 'Ready to use! Pre-installed on desktop'
     }] : []),
     {
       id: 'disabled',
@@ -334,6 +402,26 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       recommended: true,
       available: true,
       requirements: 'Ready to use! Pre-installed on device'
+    }] : []),
+    // Desktop Local STT - only on Desktop
+    ...(isDesktop ? [{
+      id: STTProviders.DESKTOP_LOCAL,
+      name: 'Desktop Local',
+      iconName: 'microphone',
+      description: 'On-device STT using Whisper',
+      recommended: true,
+      available: true,
+      requirements: 'Ready to use! Pre-installed on device'
+    }] : []),
+    // Desktop Local STT - only on Desktop
+    ...(isDesktop ? [{
+      id: STTProviders.DESKTOP_LOCAL,
+      name: 'Desktop Local',
+      iconName: 'microphone',
+      description: 'On-device STT using Whisper',
+      recommended: true,
+      available: true,
+      requirements: 'Ready to use! Pre-installed on desktop'
     }] : []),
     {
       id: 'disabled',
@@ -567,6 +655,37 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             </div>
           </details>
         </div>
+      )}
+
+      {selectedProvider === 'desktop-local' && (
+        <GPTSoVITSConfig
+          config={{
+            endpoint: desktopTTSEndpoint,
+            model: 'GPT-SoVITS',
+            referenceAudio: desktopReferenceAudio,
+            referenceText: desktopReferenceText,
+            referenceLanguage: desktopReferenceLanguage,
+            speed: desktopSpeed,
+            topK: desktopTopK,
+            topP: desktopTopP,
+            temperature: desktopTemperature,
+            trained: desktopTrained,
+            checkpointPath: ''
+          }}
+          onChange={(updates) => {
+            if (updates.endpoint !== undefined) setDesktopTTSEndpoint(updates.endpoint);
+            if (updates.referenceAudio !== undefined) setDesktopReferenceAudio(updates.referenceAudio);
+            if (updates.referenceText !== undefined) setDesktopReferenceText(updates.referenceText);
+            if (updates.referenceLanguage !== undefined) setDesktopReferenceLanguage(updates.referenceLanguage);
+            if (updates.speed !== undefined) setDesktopSpeed(updates.speed);
+            if (updates.topK !== undefined) setDesktopTopK(updates.topK);
+            if (updates.topP !== undefined) setDesktopTopP(updates.topP);
+            if (updates.temperature !== undefined) setDesktopTemperature(updates.temperature);
+            if (updates.trained !== undefined) setDesktopTrained(updates.trained);
+          }}
+          isSetupMode={true}
+          showTitle={false}
+        />
       )}
 
       {selectedProvider === 'kokoro' && (
@@ -835,6 +954,21 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               </div>
             </details>
           </div>
+        )}
+
+        {selectedSTTProvider === STTProviders.DESKTOP_LOCAL && (
+          <DesktopSTTConfig
+            config={{
+              endpoint: desktopSTTEndpoint,
+              model: desktopSTTModel
+            }}
+            onChange={(updates) => {
+              if (updates.endpoint !== undefined) setDesktopSTTEndpoint(updates.endpoint);
+              if (updates.model !== undefined) setDesktopSTTModel(updates.model);
+            }}
+            isSetupMode={true}
+            showTitle={false}
+          />
         )}
 
         {selectedSTTProvider === STTProviders.CHROME_AI_MULTIMODAL && (

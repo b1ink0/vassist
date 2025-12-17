@@ -7,6 +7,8 @@
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
+import { isDesktop } from '../../utils/PlatformUtils';
+import DesktopLLMConfig from './llm/DesktopLLMConfig';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
 
@@ -290,6 +292,22 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
           </div>
 
           <SystemPromptSection providerKey="android-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+        </>
+      )}
+
+      {/* Desktop Local LLM Configuration */}
+      {aiConfig.provider === AIProviders.DESKTOP_LOCAL && isDesktop && (
+        <>
+          <DesktopLLMConfig
+            config={aiConfig['desktop-local'] || {}}
+            onChange={(updates) => {
+              Object.entries(updates).forEach(([key, value]) => {
+                updateAIConfig(`desktop-local.${key}`, value);
+              });
+            }}
+            isSetupMode={false}
+          />
+          <SystemPromptSection providerKey="desktop-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
         </>
       )}
 

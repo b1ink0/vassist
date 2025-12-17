@@ -204,6 +204,33 @@ class AIService {
           endpoint: endpoint,
           model: state.config.model,
         });
+      }
+      else if (provider === AIProviders.DESKTOP_LOCAL || provider === 'desktop-local') {
+        const desktopConfig = config['desktop-local'] || {};
+        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+        
+        state.config = {
+          model: desktopConfig.model || 'qwen3:0.6b',
+          temperature: desktopConfig.temperature || 0.7,
+          maxTokens: desktopConfig.maxTokens || 2048,
+          enableImageSupport: false,
+          enableAudioSupport: false,
+        };
+        
+        Logger.log('other', `${logPrefix} - Desktop local LLM configured:`, {
+          endpoint: endpoint,
+          model: state.config.model,
+        });
       } else {
         throw new Error(`Unknown provider: ${provider}`);
       }

@@ -183,6 +183,28 @@ class TTSService {
         state.provider = provider;
 
         Logger.log('other', `${logPrefix} - Android local TTS configured:`, { baseURL: endpoint, speakerId });
+      } else if (provider === TTSProviders.DESKTOP_LOCAL) {
+        const desktopConfig = config['desktop-local'] || {};
+        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+
+        state.config = {
+          model: desktopConfig.model || 'gpt-sovits',
+          voice: desktopConfig.voice || 'default',
+          speed: desktopConfig.speed || 1.0,
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - Desktop local TTS configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }

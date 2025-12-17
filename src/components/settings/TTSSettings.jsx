@@ -8,9 +8,10 @@ import { useState, useMemo } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
 import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice } from '../../config/aiConfig';
-import { isAndroid } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
+import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 
@@ -111,6 +112,23 @@ const TTSSettings = ({ isLightBackground }) => {
               <p className="text-xs text-white/50">
                 Powered by VITS VCTK running locally on your device
               </p>
+            </div>
+          )}
+
+          {/* Desktop Local TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && isDesktop && (
+            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+              <h4 className="text-sm font-semibold text-white/90">Desktop Local TTS (GPT-SoVITS)</h4>
+              <GPTSoVITSConfig
+                config={ttsConfig['desktop-local'] || {}}
+                onChange={(updates) => {
+                  Object.entries(updates).forEach(([key, value]) => {
+                    updateTTSConfig(`desktop-local.${key}`, value);
+                  });
+                }}
+                showTitle={false}
+                isSetupMode={false}
+              />
             </div>
           )}
 

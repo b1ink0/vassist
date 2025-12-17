@@ -13,10 +13,13 @@
     "build": "vite build --mode production",
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
+    "build:server": "cd electron/server && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release",
+    "setup:desktop:tts": "cd electron/server/gpt-sovits && python setup.py",
+    "prebuild:desktop": "cd electron/server && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release",
     "build:desktop": "vite build --config vite.config.desktop.js --mode production",
-    "build:desktop:win": "vite build --config vite.config.desktop.js --mode production && electron-builder --win",
-    "build:desktop:mac": "vite build --config vite.config.desktop.js --mode production && electron-builder --mac",
-    "build:desktop:linux": "vite build --config vite.config.desktop.js --mode production && electron-builder --linux",
+    "build:desktop:win": "electron-builder --win",
+    "build:desktop:mac": "electron-builder --mac",
+    "build:desktop:linux": "electron-builder --linux",
     "build:android": "vite build --config vite.config.android.js --mode production && bunx cap sync android",
     "build:all": "concurrently \"vite build --mode production\" \"vite build --config vite.config.extension.js --mode production\"",
     "cap:open:android": "bunx cap open android",
@@ -57,6 +60,8 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "node-addon-api": "^8.2.1",
+    "node-gyp": "^11.0.0",
     "vite": "npm:rolldown-vite@7.1.14",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
@@ -73,6 +78,7 @@
     },
     "files": [
       "dist-desktop/**/*",
+      "electron/server/build/Release/server.node",
       "package.json"
     ],
     "win": {

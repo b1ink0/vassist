@@ -1,0 +1,46 @@
+# GPT-SoVITS TTS Dependencies
+# For Windows x64 with CUDA 12.x
+
+# PyTorch with CUDA 12.8 (install first)
+--index-url https://download.pytorch.org/whl/cu128
+torch>=2.5.0
+torchaudio>=2.5.0
+
+# Core dependencies
+--index-url https://pypi.org/simple
+numpy>=1.26.0
+scipy>=1.11.0
+librosa>=0.10.2
+soundfile>=0.12.1
+tqdm>=4.65.0
+psutil>=5.9.0
+numba>=0.57.0
+resampy>=0.4.2
+ffmpeg-python>=0.2.0
+
+# FastAPI server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+python-multipart>=0.0.6
+
+# Audio processing
+praat-parselmouth>=0.4.3
+pyworld>=0.3.4
+
+# Text processing
+jieba>=0.42.1
+cn2an>=0.5.22
+pypinyin>=0.50.0
+g2p-en>=2.1.0
+inflect>=7.0.0
+eng-to-ipa>=0.0.2
+
+# Neural network utilities
+einops>=0.7.0
+transformers>=4.45.0
+sentencepiece>=0.1.99
+protobuf>=4.25.0
+
+# Model download
+huggingface-hub>=0.26.0

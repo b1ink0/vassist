@@ -66,6 +66,26 @@ contextBridge.exposeInMainWorld('electron', {
     isDesktop: true,
     isDev: process.env.NODE_ENV === 'development',
   },
+  
+  // Server API
+  server: {
+    start: (options) => ipcRenderer.invoke('server:start', options),
+    stop: () => ipcRenderer.invoke('server:stop'),
+    getStatus: () => ipcRenderer.invoke('server:status'),
+  },
+  
+  // LLM Model Management
+  llm: {
+    listModels: () => ipcRenderer.invoke('llm:list-models'),
+    downloadModel: (url) => ipcRenderer.invoke('llm:download-model', url),
+    pullModel: (modelName) => ipcRenderer.invoke('llm:pull-model', modelName),
+    deleteModel: (filename) => ipcRenderer.invoke('llm:delete-model', filename),
+    onDownloadProgress: (callback) => {
+      const subscription = (event, progress) => callback(progress);
+      ipcRenderer.on('llm:download-progress', subscription);
+      return () => ipcRenderer.removeListener('llm:download-progress', subscription);
+    },
+  },
 });
 
 console.log('Preload script completed, window.electron exposed!');

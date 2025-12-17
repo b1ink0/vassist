@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { AIServiceProxy } from '../../../services/proxies';
 import ProviderSelection from '../shared/ProviderSelection';
+import DesktopLLMConfig from '../../settings/llm/DesktopLLMConfig';
 import Icon from '../../icons/Icon';
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
-import { isAndroid } from '../../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
 // Copy button component for Chrome flags
 const FlagCopyButton = ({ flagUrl, flagValue }) => {
@@ -37,11 +38,14 @@ const FlagCopyButton = ({ flagUrl, flagValue }) => {
 const LLMProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
-  const [selectedProvider, setSelectedProvider] = useState(isAndroid ? 'android-local' : 'chrome-ai');
+  const defaultProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
+  const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
   const [apiKey, setApiKey] = useState('');
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState('llama2');
   const [androidEndpoint, setAndroidEndpoint] = useState('http://127.0.0.1:8765');
+  const [desktopEndpoint, setDesktopEndpoint] = useState('http://127.0.0.1:11438');
+  const [desktopModel, setDesktopModel] = useState('qwen3:0.6b');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [chromeAIStatus, setChromeAIStatus] = useState({
@@ -76,6 +80,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       if (llmData.ollama?.endpoint) setOllamaEndpoint(llmData.ollama.endpoint);
       if (llmData.ollama?.model) setOllamaModel(llmData.ollama.model);
       if (llmData['android-local']?.endpoint) setAndroidEndpoint(llmData['android-local'].endpoint);
+      if (llmData['desktop-local']?.endpoint) setDesktopEndpoint(llmData['desktop-local'].endpoint);
+      if (llmData['desktop-local']?.model) setDesktopModel(llmData['desktop-local'].model);
     }
     
     // Mark initial load complete after first load
@@ -111,10 +117,19 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
         temperature: 0.7,
         maxTokens: 2048,
       },
+      'desktop-local': {
+        endpoint: desktopEndpoint,
+        model: desktopModel,
+        temperature: 0.7,
+        maxTokens: 2048,
+        contextSize: 4096,
+        gpuLayers: 99,
+        threads: 4,
+      },
     };
     
     updateSetupData({ llm: llmConfig });
-  }, [selectedProvider, apiKey, ollamaEndpoint, ollamaModel, androidEndpoint, updateSetupData]);
+  }, [selectedProvider, apiKey, ollamaEndpoint, ollamaModel, androidEndpoint, desktopEndpoint, desktopModel, updateSetupData]);
 
   const checkChromeAIStatus = async () => {
     setChromeAIStatus(prev => ({ ...prev, checking: true }));
@@ -215,7 +230,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     }
   };
 
-  // Build providers list - Android Local first if on Android
+  // Build providers list - Android Local/Desktop Local first if on their respective platforms
   const providers = [
     // Android Local - only shown on Android, always first and recommended
     ...(isAndroid ? [{
@@ -229,8 +244,20 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       pros: ['100% Free', 'Privacy-focused (local)', 'No internet needed', 'Fast on-device inference'],
       cons: ['Limited model size', 'No image/audio support yet']
     }] : []),
-    // Chrome AI - only on non-Android
-    ...(!isAndroid ? [{
+    // Desktop Local - only shown on Desktop, always first and recommended
+    ...(isDesktop ? [{
+      id: 'desktop-local',
+      name: 'Desktop Local',
+      description: 'On-device AI using llama.cpp',
+      iconName: 'cpu',
+      available: true,
+      recommended: true,
+      requirements: 'Ready to use! llama-server via Electron',
+      pros: ['100% Free', 'Privacy-focused (local)', 'No internet needed', 'GPU accelerated', 'Supports large models'],
+      cons: ['Requires model download', 'GPU recommended']
+    }] : []),
+    // Chrome AI - only on non-Android/non-Desktop (web mode)
+    ...(!isAndroid && !isDesktop ? [{
       id: 'chrome-ai',
       name: 'Chrome AI',
       description: 'Free, local AI powered by Google',
@@ -286,6 +313,16 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
           model: 'qwen3-local',
           temperature: 0.7,
           maxTokens: 2048
+        };
+      } else if (selectedProvider === 'desktop-local') {
+        testConfig['desktop-local'] = {
+          endpoint: desktopEndpoint,
+          model: desktopModel,
+          temperature: 0.7,
+          maxTokens: 2048,
+          contextSize: 4096,
+          gpuLayers: 99,
+          threads: 4
         };
       } else if (selectedProvider === 'chrome-ai') {
         testConfig.chromeAi = {
@@ -394,6 +431,21 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
             </div>
           </details>
         </div>
+      )}
+
+      {selectedProvider === 'desktop-local' && (
+        <DesktopLLMConfig
+          config={{
+            endpoint: desktopEndpoint,
+            model: desktopModel
+          }}
+          onChange={(updates) => {
+            if (updates.endpoint !== undefined) setDesktopEndpoint(updates.endpoint);
+            if (updates.model !== undefined) setDesktopModel(updates.model);
+          }}
+          isSetupMode={true}
+          showTitle={false}
+        />
       )}
 
       {selectedProvider === 'openai' && (

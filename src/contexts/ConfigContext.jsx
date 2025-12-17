@@ -28,6 +28,8 @@ import {
 } from '../config/aiConfig';
 import { DefaultUIConfig } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
+import { useDesktop } from './DesktopContext';
+import { isDesktop } from '../utils/PlatformUtils';
 
 const ConfigContext = createContext(null);
 
@@ -40,6 +42,7 @@ export const useConfig = () => {
 };
 
 export const ConfigProvider = ({ children }) => {
+  const { api } = useDesktop();
   const initialLoadRef = useRef(true);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
 
@@ -98,6 +101,7 @@ export const ConfigProvider = ({ children }) => {
   // Load all configs on mount
   useEffect(() => {
     const loadConfigs = async () => {
+      let savedAiConfig;
       try {
         // Load UI config and merge with defaults to ensure all fields exist
         const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', {});
@@ -106,7 +110,7 @@ export const ConfigProvider = ({ children }) => {
         Logger.log('ConfigContext', 'UI config loaded:', mergedUiConfig);
 
         // Load AI config
-        const savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+        savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
         setAiConfig(savedAiConfig);
         try {
           if (savedAiConfig.provider) {
@@ -170,6 +174,24 @@ export const ConfigProvider = ({ children }) => {
         setTimeout(() => {
           initialLoadRef.current = false;
         }, 100);
+        
+        // Start desktop server if in Electron and desktop-local provider is configured
+        if (isDesktop && savedAiConfig?.provider === 'desktop-local') {
+          const config = savedAiConfig['desktop-local'];
+          if (config && api?.server) {
+            api.server.start(config)
+              .then(result => {
+                if (result.success) {
+                  Logger.log('ConfigContext', 'Desktop server started:', result);
+                } else {
+                  Logger.error('ConfigContext', 'Failed to start desktop server:', result.error);
+                }
+              })
+              .catch(error => {
+                Logger.error('ConfigContext', 'Error starting desktop server:', error);
+              });
+          }
+        }
       }
     };
 

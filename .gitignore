@@ -28,6 +28,25 @@ release
 
 docs
 *.patch
+
+# Desktop AI Server - TTS (bundled with Electron, not in git)
+electron/server/gpt-sovits/python/
+electron/server/gpt-sovits/models/
+electron/server/gpt-sovits/GPT-SoVITS/
+electron/server/gpt-sovits/temp/
 *.diff
 private_test
 *.zip
+
+# Python / GPT-SoVITS
+electron/server/gpt-sovits/python/
+electron/server/gpt-sovits/temp/
+electron/server/gpt-sovits/__pycache__/
+electron/server/gpt-sovits/*.pyc
+electron/server/gpt-sovits/.venv/
+electron/server/gpt-sovits/env/
+electron/server/gpt-sovits/models
+
+# C++ build artifacts
+electron/server/build/
+electron/server/*.node
