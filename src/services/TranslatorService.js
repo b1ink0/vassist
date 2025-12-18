@@ -142,6 +142,22 @@ class TranslatorService {
         state.provider = 'ollama';
         Logger.log('other', `${logPrefix} Ollama configured for translation`);
       }
+      else if (provider === 'desktop-local') {
+        const desktopConfig = config['desktop-local'];
+        state.llmClient = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: desktopConfig.endpoint + '/v1',
+          dangerouslyAllowBrowser: !this.isExtensionMode,
+        });
+        
+        state.config = {
+          provider: 'desktop-local',
+          model: desktopConfig.model || 'local',
+          temperature: desktopConfig.temperature || 0.3,
+        };
+        state.provider = 'desktop-local';
+        Logger.log('other', `${logPrefix} Desktop Local configured for translation`);
+      }
       else {
         throw new Error(`Unknown provider: ${provider}`);
       }
@@ -285,7 +301,7 @@ class TranslatorService {
       Logger.log('other', `${logPrefix} Translation complete:`, translated.substring(0, 50));
       return translated;
     } 
-    else if (state.provider === 'openai' || state.provider === 'ollama') {
+    else if (state.provider === 'openai' || state.provider === 'ollama' || state.provider === 'desktop-local') {
       return await this._translateWithOpenAICompatible(text, sourceLanguage, targetLanguage, tabId);
     }
     
@@ -318,7 +334,7 @@ class TranslatorService {
         yield chunk;
       }
     }
-    else if (state.provider === 'openai' || state.provider === 'ollama') {
+    else if (state.provider === 'openai' || state.provider === 'ollama' || state.provider === 'desktop-local') {
       yield* this._translateStreamingWithOpenAICompatible(text, sourceLanguage, targetLanguage, tabId);
     }
     else {

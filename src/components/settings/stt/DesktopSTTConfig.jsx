@@ -13,7 +13,8 @@ import { Icon } from '../../icons';
 const DesktopSTTConfig = ({ 
   config = {}, 
   onChange, 
-  isSetupMode = false
+  isSetupMode = false,
+  isLightBackground = false
 }) => {
   const handleChange = (key, value) => {
     onChange({ [key]: value });
@@ -48,7 +49,7 @@ const DesktopSTTConfig = ({
           <span>Advanced Settings</span>
           <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
         </summary>
-        <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+        <div className="mt-2 space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/90 mb-1">
               Endpoint URL
@@ -58,7 +59,7 @@ const DesktopSTTConfig = ({
               value={config.endpoint || 'http://127.0.0.1:11438'}
               onChange={(e) => handleChange('endpoint', e.target.value)}
               placeholder="http://127.0.0.1:11438"
-              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
             />
             <p className="text-[10px] text-white/50 mt-1">
               Unified local AI server endpoint (same as LLM/TTS)
@@ -74,7 +75,7 @@ const DesktopSTTConfig = ({
               value={config.model || 'ggml-small.en.bin'}
               onChange={(e) => handleChange('model', e.target.value)}
               placeholder="ggml-small.en.bin"
-              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
             />
             <p className="text-[10px] text-white/50 mt-1">
               Whisper model filename (place in models/ directory)
@@ -90,7 +91,7 @@ const DesktopSTTConfig = ({
               <select
                 value={config.language || 'en'}
                 onChange={(e) => handleChange('language', e.target.value)}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               >
                 <option value="en" className="bg-gray-900">English</option>
                 <option value="es" className="bg-gray-900">Spanish</option>
@@ -115,7 +116,7 @@ const DesktopSTTConfig = ({
                 max="16"
                 value={config.threads || 4}
                 onChange={(e) => handleChange('threads', parseInt(e.target.value))}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               />
               <p className="text-[10px] text-white/50 mt-1">
                 CPU threads for processing

@@ -73,9 +73,13 @@ class ChatHistoryService {
         finalMessages = messages;
       }
 
-      // Generate title if not provided or is default
+      // Generate title if not provided AND not already in cache
       let finalTitle = title;
-      if (!finalTitle || finalTitle === 'Untitled Chat') {
+      const cachedChat = this.cache.chats.get(chatId);
+      
+      if (cachedChat && cachedChat.title && cachedChat.title !== 'Untitled Chat') {
+        finalTitle = cachedChat.title;
+      } else if (!finalTitle || finalTitle === 'Untitled Chat') {
         Logger.log('ChatHistoryService', 'Generating title for chat:', chatId);
         finalTitle = await this._generateTitleFromMessages(finalMessages);
       }

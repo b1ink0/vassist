@@ -3,12 +3,13 @@
  * Creates a transparent window for the desktop app
  */
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session } from 'electron';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import { LocalAIServer } from './server/http-server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,7 @@ let mainWindow;
 let inputWindow;
 let tray = null;
 let gptsovitsProcess = null;
+let whisperProcess = null;
 
 /**
  * Force dedicated GPU usage for better 3D rendering performance
@@ -26,6 +28,12 @@ app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('disable-gpu-driver-bug-workarounds');
+
+/**
+ * Network optimizations for faster dev server loading
+ */
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
+app.commandLine.appendSwitch('ignore-connections-limit', 'localhost,127.0.0.1');
 
 /**
  * Create the input window
@@ -273,6 +281,14 @@ protocol.registerSchemesAsPrivileged([
  * App lifecycle handlers
  */
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+  
   // Register protocol handler that serves files with proper CORS headers
   protocol.handle('app', (request) => {
     const url = request.url.substring('app://'.length);
@@ -310,11 +326,44 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
   
-  // Start GPT-SoVITS TTS server
+  // Start Python servers
   startGPTSoVITSServer();
+  startWhisperServer();
   
-  // Server will be started by frontend via 'server:start' IPC after config is loaded
-  console.log('[Server] Waiting for frontend to initialize...');
+  // Auto-start HTTP proxy server
+  setTimeout(async () => {
+    try {
+      if (!server) {
+        server = new LocalAIServer();
+      }
+      
+      // Prepare server configuration
+      const serverConfig = {
+        llm: {
+          modelPath: null,
+          temperature: 0.7,
+          maxTokens: 2048,
+          contextSize: 4096,
+          gpuLayers: 'auto'
+        },
+        stt: {
+          proxyUrl: 'http://127.0.0.1:9881'
+        },
+        tts: {
+          proxyUrl: 'http://127.0.0.1:9880'
+        }
+      };
+      
+      console.log('[Server] Initializing with config:', JSON.stringify(serverConfig, null, 2));
+      
+      await server.initialize(serverConfig);
+      
+      await server.start();
+      console.log('[Server] HTTP proxy server started on port 11438');
+    } catch (error) {
+      console.error('[Server] Failed to auto-start:', error.message);
+    }
+  }, 2000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -342,6 +391,7 @@ app.on('before-quit', () => {
   }
   
   stopGPTSoVITSServer();
+  stopWhisperServer();
 });
 
 /**
@@ -492,8 +542,6 @@ ipcMain.on('state:pendingDropData', (event, data) => {
 // ============================================
 // Desktop AI Server Management
 // ============================================
-// Server - Native addon integration
-// ============================================
 
 let server = null;
 
@@ -501,70 +549,88 @@ let server = null;
 ipcMain.handle('server:start', async (event, config = {}) => {
   console.log('[Server] Starting with config:', config);
   
+  // Create server instance if it doesn't exist
   if (!server) {
     try {
-      const serverPath = process.env.VITE_DEV_SERVER_URL
-        ? path.join(process.cwd(), 'electron', 'server', 'build', 'Release', 'server.node')
-        : path.join(app.getAppPath(), 'server', 'build', 'Release', 'server.node');
-      
-      if (!fs.existsSync(serverPath)) {
-        const buildMsg = 'Native server not found. Run: bun run build:server';
-        console.error('[Server]', buildMsg);
-        return { success: false, error: buildMsg };
-      }
-      
-      console.log('[Server] Loading addon from:', serverPath);
-      const addon = require(serverPath);
-      server = new addon.Server();
-      console.log('[Server] Addon loaded successfully');
+      server = new LocalAIServer();
     } catch (error) {
-      console.error('[Server] Failed to load addon:', error);
-      
-      // Provide helpful error message for missing CUDA DLLs
-      if (error.code === 'ERR_DLOPEN_FAILED') {
-        const helpMsg = 'Missing CUDA runtime libraries. Install CUDA Toolkit 12.x or rebuild without CUDA (CPU-only).';
-        console.error('[Server]', helpMsg);
-        return { success: false, error: helpMsg };
-      }
-      
+      console.error('[Server] Failed to create server:', error);
       return { success: false, error: error.message };
     }
   }
 
-  try {
-    // Build server options from config
-    const options = {
-      port: 11438
-    };
-    
-    // Add LLM model path if specified
-    if (config.model) {
-      const llmPath = path.join(getModelsDir(), config.model);
-      if (fs.existsSync(llmPath)) {
-        options.llmModel = llmPath;
-        console.log('[Server] LLM model:', config.model);
-      } else {
-        console.warn('[Server] Model not found:', config.model);
-      }
+  // Build server configuration
+  const serverConfig = {
+    llm: {
+      modelPath: null,
+      defaultModelsDir: getModelsDir(),
+      temperature: config.temperature || 0.7,
+      maxTokens: config.maxTokens || 2048,
+      contextSize: config.contextSize || 4096,
+      gpuLayers: config.gpuLayers === 99 ? 'auto' : config.gpuLayers || 'auto'
+    },
+    stt: {
+      modelPath: null,
+      language: 'en'
+    },
+    tts: {
+      proxyUrl: 'http://127.0.0.1:9880'
     }
+  };
+  
+  // Add LLM model path if specified
+  if (config.model) {
+    const llmPath = path.join(getModelsDir(config.customModelsPath), config.model);
+    if (fs.existsSync(llmPath)) {
+      serverConfig.llm.modelPath = llmPath;
+      console.log('[Server] LLM model:', config.model);
+    } else {
+      console.warn('[Server] Model not found:', config.model);
+    }
+  }
+
+  // Check if already running - update config and return
+  if (server.getStatus().running) {
+    console.log('[Server] Already running, updating config');
+    console.log('[Server] Old LLM model path:', server.config.llm.modelPath);
+    console.log('[Server] New LLM model path:', serverConfig.llm.modelPath);
+    
+    // Update server config
+    Object.assign(server.config.llm, serverConfig.llm);
+    Object.assign(server.config.stt, serverConfig.stt);
+    Object.assign(server.config.tts, serverConfig.tts);
+    
+    console.log('[Server] Updated LLM model path:', server.config.llm.modelPath);
+    console.log('[Server] Config updated successfully');
+    return { success: true, ...server.getStatus() };
+  }
+
+  try {
     
     // Add STT model if exists
-    const devSttPath = path.join(__dirname, 'server', 'models', 'whisper-base.bin');
-    const prodSttPath = path.join(app.getPath('userData'), 'models', 'whisper-base.bin');
-    const sttPath = fs.existsSync(devSttPath) ? devSttPath : prodSttPath;
+    const whisperModelName = 'ggml-base.en.bin';
+    const devSttPath = path.join(__dirname, 'server', 'models', 'whisper', whisperModelName);
+    const prodSttPath = path.join(__dirname, 'server', 'models', 'whisper', whisperModelName);
+    const sttPath = process.env.VITE_DEV_SERVER_URL ? devSttPath : prodSttPath;
     
+    console.log('[Server] Checking STT model at:', sttPath);
     if (fs.existsSync(sttPath)) {
-      options.sttModel = sttPath;
-      console.log('[Server] STT model found');
+      serverConfig.stt.modelPath = sttPath;
+      console.log('[Server] STT model found:', whisperModelName);
+    } else {
+      console.warn('[Server] STT model not found at:', sttPath);
     }
     
-    const success = server.start(options);
-    if (success) {
-      const status = server.getStatus();
-      console.log('[Server] Started:', status);
-      return { success: true, ...status };
-    }
-    return { success: false, error: 'Failed to start' };
+    console.log('[Server] Final serverConfig:', JSON.stringify(serverConfig, null, 2));
+    
+    await server.initialize(serverConfig);
+    
+    await server.start();
+    
+    const status = server.getStatus();
+    console.log('[Server] Started:', status);
+    return { success: true, ...status };
+    
   } catch (error) {
     console.error('[Server] Start error:', error);
     return { success: false, error: error.message };
@@ -579,9 +645,9 @@ ipcMain.handle('server:stop', async () => {
   }
 
   try {
-    const success = server.stop();
+    await server.stop();
     console.log('[Server] Stopped');
-    return { success };
+    return { success: true };
   } catch (error) {
     console.error('[Server] Stop error:', error);
     return { success: false, error: error.message };
@@ -605,21 +671,22 @@ ipcMain.handle('server:status', async () => {
 // LLM Model Management
 // ============================================
 
-// Get models directory (works in both dev and production)
-function getModelsDir() {
+function getModelsDir(customPath = null) {
+  if (customPath && fs.existsSync(customPath)) {
+    return customPath;
+  }
+
   if (process.env.VITE_DEV_SERVER_URL) {
-    // Development: use electron/server/models
-    return path.join(__dirname, 'server', 'models');
+    return path.join(__dirname, '..', 'electron', 'server', 'models');
   } else {
-    // Production: use app data directory
-    return path.join(app.getPath('userData'), 'models');
+    return path.join(__dirname, 'server', 'models');
   }
 }
 
 // List models in models directory
-ipcMain.handle('llm:list-models', async () => {
+ipcMain.handle('llm:list-models', async (event, customPath = null) => {
   try {
-    const modelsDir = getModelsDir();
+    const modelsDir = getModelsDir(customPath);
     
     if (!fs.existsSync(modelsDir)) {
       fs.mkdirSync(modelsDir, { recursive: true });
@@ -647,21 +714,22 @@ ipcMain.handle('llm:list-models', async () => {
 });
 
 // Pull model using Ollama (free, open source)
-ipcMain.handle('llm:pull-model', async (event, modelName) => {
+ipcMain.handle('llm:pull-model', async (event, modelName, customPath = null) => {
+  const https = require('https');
+  const http = require('http');
+  
   try {
     console.log('[LLM] Pulling model from Ollama registry:', modelName);
-    const modelsDir = getModelsDir();
+    const modelsDir = getModelsDir(customPath);
     if (!fs.existsSync(modelsDir)) {
       fs.mkdirSync(modelsDir, { recursive: true });
     }
 
-    // Parse model name (e.g., "llama3.2:3b" -> "library/llama3.2", "3b")
     const [model, tag = 'latest'] = modelName.split(':');
     const namespace = model.includes('/') ? model : `library/${model}`;
 
     event.sender.send('llm:download-progress', { status: 'Pulling manifest...', percent: 0 });
 
-    // 1. Fetch manifest from registry.ollama.ai
     const manifestUrl = `https://registry.ollama.ai/v2/${namespace}/manifests/${tag}`;
     const manifestRes = await fetch(manifestUrl, {
       headers: { 'Accept': 'application/vnd.docker.distribution.manifest.v2+json' }
@@ -675,46 +743,134 @@ ipcMain.handle('llm:pull-model', async (event, modelName) => {
     const layers = manifest.layers || [];
 
     event.sender.send('llm:download-progress', { 
-      status: `Found ${layers.length} layers`, 
-      percent: 5 
+      status: `Found ${layers.length} layers to download`, 
+      percent: 2 
     });
 
-    // 2. Download each layer (model files are in layers)
+    const downloadFile = (url, destPath, layerSize, layerIndex, totalLayers) => {
+      return new Promise((resolve, reject) => {
+        const protocol = url.startsWith('https') ? https : http;
+        const file = fs.createWriteStream(destPath);
+        let downloadedBytes = 0;
+        
+        const request = protocol.get(url, (response) => {
+          if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
+            file.close();
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+            
+            const redirectUrl = response.headers.location;
+            if (!redirectUrl) {
+              reject(new Error(`Redirect without location header`));
+              return;
+            }
+            
+            console.log(`[LLM] Following redirect to: ${redirectUrl}`);
+            // Follow redirect
+            downloadFile(redirectUrl, destPath, layerSize, layerIndex, totalLayers)
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
+          
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+            return;
+          }
+
+          const totalBytes = parseInt(response.headers['content-length'], 10) || layerSize;
+          
+          response.on('data', (chunk) => {
+            downloadedBytes += chunk.length;
+            file.write(chunk);
+            
+            const layerProgress = Math.round((downloadedBytes / totalBytes) * 1000) / 10;
+            
+            if (Math.floor(layerProgress * 2) % 1 === 0) {
+              const sizeMB = (downloadedBytes / 1024 / 1024).toFixed(1);
+              const totalMB = (totalBytes / 1024 / 1024).toFixed(1);
+              event.sender.send('llm:download-progress', {
+                status: `Layer ${layerIndex + 1}/${totalLayers}: ${sizeMB}MB / ${totalMB}MB`,
+                percent: Math.min(100, layerProgress)
+              });
+            }
+          });
+
+          response.on('end', () => {
+            file.end();
+            resolve({ path: destPath, size: downloadedBytes });
+          });
+
+          response.on('error', (err) => {
+            file.close();
+            fs.unlinkSync(destPath);
+            reject(err);
+          });
+        });
+
+        request.on('error', (err) => {
+          file.close();
+          if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+          reject(err);
+        });
+
+        file.on('error', (err) => {
+          file.close();
+          if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+          reject(err);
+        });
+      });
+    };
+
+    const downloadedFiles = [];
     for (let i = 0; i < layers.length; i++) {
       const layer = layers[i];
       const digest = layer.digest;
       const size = layer.size;
 
-      event.sender.send('llm:download-progress', {
-        status: `Downloading layer ${i + 1}/${layers.length}`,
-        percent: 5 + (i / layers.length) * 85
-      });
-
       const blobUrl = `https://registry.ollama.ai/v2/${namespace}/blobs/${digest}`;
-      const blobRes = await fetch(blobUrl);
-
-      if (!blobRes.ok) {
-        throw new Error(`Failed to download layer: ${digest}`);
-      }
-
-      // Save to models directory with digest as filename
-      const fileName = `${model.replace('/', '_')}-${tag}-${digest.replace('sha256:', '').substring(0, 12)}.gguf`;
-      const filePath = path.join(modelsDir, fileName);
-      
-      const buffer = await blobRes.arrayBuffer();
-      fs.writeFileSync(filePath, Buffer.from(buffer));
+      const tempFileName = `${model.replace('/', '_')}-${tag}-${digest.replace('sha256:', '').substring(0, 12)}.tmp`;
+      const tempFilePath = path.join(modelsDir, tempFileName);
 
       event.sender.send('llm:download-progress', {
-        status: `Downloaded ${fileName}`,
-        percent: 5 + ((i + 1) / layers.length) * 85
+        status: `Starting layer ${i + 1}/${layers.length}...`,
+        percent: 2 + (i / layers.length) * 93
       });
+
+      const result = await downloadFile(blobUrl, tempFilePath, size, i, layers.length);
+      downloadedFiles.push(result);
     }
 
-    event.sender.send('llm:download-progress', { status: 'Model downloaded successfully', percent: 100 });
+    event.sender.send('llm:download-progress', { status: 'Processing files...', percent: 95 });
+
+    let largestFile = downloadedFiles[0];
+    for (const file of downloadedFiles) {
+      if (file.size > largestFile.size) {
+        largestFile = file;
+      }
+    }
+
+    const finalFileName = `${model.replace('/', '_')}-${tag}.gguf`;
+    const finalFilePath = path.join(modelsDir, finalFileName);
+    fs.renameSync(largestFile.path, finalFilePath);
+
+    event.sender.send('llm:download-progress', { status: 'Cleaning up...', percent: 97 });
+
+    for (const file of downloadedFiles) {
+      if (file.path !== largestFile.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    }
+
+    event.sender.send('llm:download-progress', { 
+      status: `Model ready: ${finalFileName}`, 
+      percent: 100 
+    });
+
+    console.log('[LLM] Model downloaded:', finalFileName, `(${(largestFile.size / 1024 / 1024).toFixed(1)}MB)`);
 
     return { 
       success: true,
-      note: `Downloaded ${layers.length} files from Ollama registry`
+      note: `Model saved as ${finalFileName}`
     };
   } catch (error) {
     console.error('[LLM] Pull error:', error);
@@ -736,13 +892,14 @@ ipcMain.handle('llm:download-model', async (event, url) => {
     const urlParts = url.split('/');
     let filename = urlParts[urlParts.length - 1];
     
-    // Handle Hugging Face URLs
+    // Handle Hugging Face URLs and remove query parameters
     if (url.includes('huggingface.co') && url.includes('/resolve/')) {
       filename = urlParts[urlParts.length - 1];
     }
+    filename = filename.split('?')[0];
 
     if (!filename.endsWith('.gguf')) {
-      throw new Error('Invalid file: must be a .gguf model');
+      return { success: false, error: 'Invalid file: must be a .gguf model file' };
     }
 
     const filePath = path.join(modelsDir, filename);
@@ -771,6 +928,7 @@ ipcMain.handle('llm:download-model', async (event, url) => {
 function downloadFile(response, filePath, event, resolve, reject) {
   const totalSize = parseInt(response.headers['content-length'], 10);
   let downloadedSize = 0;
+  let lastReportedPercent = 0;
 
   const fileStream = fs.createWriteStream(filePath);
   
@@ -778,15 +936,25 @@ function downloadFile(response, filePath, event, resolve, reject) {
 
   response.on('data', (chunk) => {
     downloadedSize += chunk.length;
-    const percent = Math.round((downloadedSize / totalSize) * 100);
-    event.sender.send('llm:download-progress', {
-      percent,
-      status: `Downloading... ${Math.round(downloadedSize / 1024 / 1024)}MB / ${Math.round(totalSize / 1024 / 1024)}MB`
-    });
+    const percent = Math.round((downloadedSize / totalSize) * 1000) / 10;
+    
+    if (Math.floor(percent * 2) !== Math.floor(lastReportedPercent * 2)) {
+      const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(1);
+      const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+      event.sender.send('llm:download-progress', {
+        percent: Math.min(100, percent),
+        status: `Downloading: ${downloadedMB}MB / ${totalMB}MB`
+      });
+      lastReportedPercent = percent;
+    }
   });
 
   fileStream.on('finish', () => {
     fileStream.close();
+    event.sender.send('llm:download-progress', {
+      percent: 100,
+      status: `Download complete: ${path.basename(filePath)}`
+    });
     resolve({ success: true, filename: path.basename(filePath) });
   });
 
@@ -797,9 +965,9 @@ function downloadFile(response, filePath, event, resolve, reject) {
 }
 
 // Delete model
-ipcMain.handle('llm:delete-model', async (event, filename) => {
+ipcMain.handle('llm:delete-model', async (event, filename, customPath = null) => {
   try {
-    const modelsDir = getModelsDir();
+    const modelsDir = getModelsDir(customPath);
     const filePath = path.join(modelsDir, filename);
 
     // Security: ensure file is within models directory
@@ -817,6 +985,80 @@ ipcMain.handle('llm:delete-model', async (event, filename) => {
     return { success: true };
   } catch (error) {
     console.error('[LLM] Delete error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('llm:import-model', async (event, sourcePath, customPath = null) => {
+  try {
+    console.log('[LLM] Importing model from:', sourcePath);
+    const modelsDir = getModelsDir(customPath);
+    
+    if (!fs.existsSync(modelsDir)) {
+      fs.mkdirSync(modelsDir, { recursive: true });
+    }
+
+    if (!sourcePath.endsWith('.gguf')) {
+      throw new Error('Only .gguf files are supported');
+    }
+
+    const filename = path.basename(sourcePath);
+    const destPath = path.join(modelsDir, filename);
+
+    if (fs.existsSync(destPath)) {
+      throw new Error(`Model "${filename}" already exists`);
+    }
+
+    fs.copyFileSync(sourcePath, destPath);
+
+    console.log('[LLM] Model imported successfully:', filename);
+    return { success: true, filename };
+  } catch (error) {
+    console.error('[LLM] Import model error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('llm:choose-models-folder', async () => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select Models Folder',
+      buttonLabel: 'Select Folder'
+    });
+
+    if (result.canceled || !result.filePaths.length) {
+      return { success: false, canceled: true };
+    }
+
+    return { success: true, path: result.filePaths[0] };
+  } catch (error) {
+    console.error('[LLM] Choose folder error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('llm:choose-model-file', async () => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Select GGUF Model File',
+      buttonLabel: 'Import',
+      filters: [
+        { name: 'GGUF Models', extensions: ['gguf'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePaths.length) {
+      return { success: false, canceled: true };
+    }
+
+    return { success: true, path: result.filePaths[0] };
+  } catch (error) {
+    console.error('[LLM] Choose file error:', error);
     return { success: false, error: error.message };
   }
 });
@@ -886,5 +1128,78 @@ function stopGPTSoVITSServer() {
     console.log('[GPT-SoVITS] Stopping server...');
     gptsovitsProcess.kill('SIGTERM');
     gptsovitsProcess = null;
+  }
+}
+
+/**
+ * Faster Whisper STT Server Management
+ */
+function startWhisperServer() {
+  if (whisperProcess) {
+    console.log('[Whisper] Server already running');
+    return;
+  }
+
+  try {
+    const gptsovitsDir = process.env.VITE_DEV_SERVER_URL
+      ? path.join(process.cwd(), 'electron', 'server', 'gpt-sovits')
+      : path.join(app.getAppPath(), 'server', 'gpt-sovits');
+    const whisperDir = process.env.VITE_DEV_SERVER_URL
+      ? path.join(process.cwd(), 'electron', 'server', 'whisper-stt')
+      : path.join(app.getAppPath(), 'server', 'whisper-stt');
+    const pythonExe = path.join(gptsovitsDir, 'python', 'python.exe'); 
+    const serverScript = path.join(whisperDir, 'server.py');
+
+    if (!fs.existsSync(pythonExe)) {
+      console.error('[Whisper] Embedded Python not found. Run setup.py first.');
+      return;
+    }
+
+    if (!fs.existsSync(serverScript)) {
+      console.error('[Whisper] Server script not found:', serverScript);
+      return;
+    }
+
+    console.log('[Whisper] Starting STT server...');
+    console.log('[Whisper] Python:', pythonExe);
+    console.log('[Whisper] Script:', serverScript);
+
+    whisperProcess = spawn(pythonExe, [serverScript], {
+      cwd: whisperDir,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: '1'
+      }
+    });
+
+    whisperProcess.stdout.on('data', (data) => {
+      console.log(`[Whisper] ${data.toString().trim()}`);
+    });
+
+    whisperProcess.stderr.on('data', (data) => {
+      console.error(`[Whisper] ${data.toString().trim()}`);
+    });
+
+    whisperProcess.on('error', (error) => {
+      console.error('[Whisper] Failed to start:', error);
+      whisperProcess = null;
+    });
+
+    whisperProcess.on('exit', (code, signal) => {
+      console.log(`[Whisper] Process exited with code ${code}, signal ${signal}`);
+      whisperProcess = null;
+    });
+
+    console.log('[Whisper] Server started on http://127.0.0.1:9881');
+  } catch (error) {
+    console.error('[Whisper] Start error:', error);
+  }
+}
+
+function stopWhisperServer() {
+  if (whisperProcess) {
+    console.log('[Whisper] Stopping server...');
+    whisperProcess.kill('SIGTERM');
+    whisperProcess = null;
   }
 }

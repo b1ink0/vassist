@@ -131,6 +131,9 @@ export const iconMap = {
   'chevron-right': HeroIconsSolid.ChevronRightIcon,
   'adjustments-horizontal': HeroIconsSolid.AdjustmentsHorizontalIcon,
   'alert-triangle': HeroIconsSolid.ExclamationTriangleIcon,
+  'folder': HeroIconsSolid.FolderIcon,
+  'help': HeroIconsSolid.QuestionMarkCircleIcon,
+  'file': HeroIconsSolid.DocumentIcon,
 };
 
 export default iconMap;

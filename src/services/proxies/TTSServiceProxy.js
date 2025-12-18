@@ -177,7 +177,8 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {Promise<{audio: Blob|ArrayBuffer, bvmdUrl: string|null}>} Audio and BVMD URL
    */
   async generateSpeech(text, generateLipSync = true) {
-    await this.ensureConfigured();
+    try {
+      await this.ensureConfigured();
     
     if (this.isExtension) {
       // Extension mode flow:
@@ -272,7 +273,13 @@ class TTSServiceProxy extends ServiceProxy {
       
     } else {
       // Dev mode: Direct service handles everything
-      return await this.directService.generateSpeech(text, generateLipSync);
+      const result = await this.directService.generateSpeech(text, generateLipSync);
+      Logger.log('TTSServiceProxy', 'directService.generateSpeech returned:', result ? 'success' : 'null');
+      return result;
+    }
+    } catch (error) {
+      Logger.error('TTSServiceProxy', 'generateSpeech failed:', error);
+      throw error;
     }
   }
 

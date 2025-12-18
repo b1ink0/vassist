@@ -94,9 +94,10 @@ class STTServiceProxy extends ServiceProxy {
 
   /**
    * Start recording audio from microphone
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording() {
+  async startRecording(deviceId = null) {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -108,14 +109,20 @@ class STTServiceProxy extends ServiceProxy {
       }
 
       try {
-        // Request microphone access
-        this.audioStream = await navigator.mediaDevices.getUserMedia({
+        // Request microphone access with optional deviceId
+        const constraints = {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
           }
-        });
+        };
+        
+        if (deviceId) {
+          constraints.audio.deviceId = { exact: deviceId };
+        }
+        
+        this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 
         // Create MediaRecorder
         const mimeType = this.getSupportedMimeType();
@@ -197,7 +204,7 @@ class STTServiceProxy extends ServiceProxy {
         throw error;
       }
     } else {
-      return await this.directService.startRecording();
+      return await this.directService.startRecording(deviceId);
     }
   }
 
@@ -251,9 +258,10 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Test STT with a sample recording
    * @param {number} duration - Recording duration in seconds
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3) {
+  async testRecording(duration = 3, deviceId = null) {
     if (this.isExtension) {
       return new Promise((resolve, reject) => {
         const originalTranscription = this.onTranscription;
@@ -271,14 +279,14 @@ class STTServiceProxy extends ServiceProxy {
           reject(error);
         };
         
-        this.startRecording().then(() => {
+        this.startRecording(deviceId).then(() => {
           setTimeout(() => {
             this.stopRecording();
           }, duration * 1000);
         }).catch(reject);
       });
     } else {
-      return await this.directService.testRecording(duration);
+      return await this.directService.testRecording(duration, deviceId);
     }
   }
 

@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
 import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
 import Logger from './LoggerService';
+import voiceStorageService from './VoiceStorageService';
 
 class TTSService {
   constructor() {
@@ -191,20 +192,19 @@ class TTSService {
           endpoint = endpoint.replace(/\/$/, '') + '/v1';
         }
         
-        state.client = new OpenAI({
-          apiKey: 'desktop-local',
-          baseURL: endpoint,
-          dangerouslyAllowBrowser: true,
-        });
+        state.client = endpoint;
 
         state.config = {
           model: desktopConfig.model || 'gpt-sovits',
           voice: desktopConfig.voice || 'default',
           speed: desktopConfig.speed || 1.0,
+          referenceVoiceId: desktopConfig.referenceVoiceId || null,
+          referenceText: desktopConfig.referenceText || '',
+          referenceLanguage: desktopConfig.referenceLanguage || 'en',
         };
         state.provider = provider;
 
-        Logger.log('other', `${logPrefix} - Desktop local TTS configured:`, { baseURL: endpoint });
+        Logger.log('other', `${logPrefix} - Desktop local TTS configured:`, { baseURL: endpoint, hasVoiceId: !!state.config.referenceVoiceId });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }
@@ -323,6 +323,75 @@ class TTSService {
 
       try {
         Logger.log('other', `${logPrefix} - Generating speech (${text.length} chars)`);
+        
+        if (state.provider === TTSProviders.DESKTOP_LOCAL) {
+          let referenceAudioBase64 = null;
+          let refText = state.config.referenceText;
+          let refLang = state.config.referenceLanguage;
+          
+          if (state.config.referenceVoiceId) {
+            try {
+              Logger.log('other', `${logPrefix} - Loading voice ${state.config.referenceVoiceId} from IndexedDB...`);
+              const voiceData = await voiceStorageService.getVoice(state.config.referenceVoiceId);
+              if (!voiceData) {
+                throw new Error(`Voice ${state.config.referenceVoiceId} not found in IndexedDB`);
+              }
+              if (!voiceData.audioData) {
+                throw new Error('Voice data missing audioData blob');
+              }
+              Logger.log('other', `${logPrefix} - Converting blob to base64 (${voiceData.audioData.size} bytes)...`);
+              const audioArrayBuffer = await voiceData.audioData.arrayBuffer();
+              const audioBytes = new Uint8Array(audioArrayBuffer);
+              const binaryString = Array.from(audioBytes).map(b => String.fromCharCode(b)).join('');
+              referenceAudioBase64 = btoa(binaryString);
+              refText = voiceData.referenceText;
+              refLang = voiceData.language;
+              Logger.log('other', `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`);
+            } catch (error) {
+              Logger.error('other', `${logPrefix} - Failed to load reference audio from IndexedDB:`, error);
+              throw new Error(`Failed to load reference voice: ${error.message}`);
+            }
+          }
+          
+          if (!referenceAudioBase64 || !refText) {
+            throw new Error('GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.');
+          }
+          
+          Logger.log('other', `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang})`);
+          
+          const response = await fetch(`${state.client}/audio/speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              input: text,
+              reference_audio: referenceAudioBase64,
+              reference_text: refText,
+              reference_language: refLang,
+            }),
+          });
+          
+          Logger.log('other', `${logPrefix} - TTS response received: ${response.status} ${response.statusText}`);
+          
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unable to read error');
+            Logger.error('other', `${logPrefix} - TTS request failed:`, errorText);
+            throw new Error(`TTS request failed: ${response.status} ${response.statusText}`);
+          }
+          
+          if (state.isStopped) {
+            state.isGenerating = false;
+            return null;
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          const contentType = response.headers.get('content-type') || 'audio/mpeg';
+          
+          state.isGenerating = false;
+          Logger.log('other', `${logPrefix} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`);
+          return { audioBuffer: arrayBuffer, mimeType: contentType };
+        }
+        
+        // For other providers, use OpenAI client
         const response = await state.client.audio.speech.create({
           model: state.config.model,
           voice: state.config.voice,
@@ -357,17 +426,78 @@ class TTSService {
     try {
       Logger.log('other', `${logPrefix} - Generating speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? ' with lip sync' : ''}`);
 
-      const response = await state.client.audio.speech.create({
-        model: state.config.model,
-        voice: state.config.voice,
-        input: text,
-        speed: state.config.speed,
-      });
+      let arrayBuffer;
+      let contentType = 'audio/mpeg';
+      
+      if (state.provider === TTSProviders.DESKTOP_LOCAL) {
+        let referenceAudioBase64 = null;
+        let refText = state.config.referenceText;
+        let refLang = state.config.referenceLanguage;
+        
+        if (state.config.referenceVoiceId) {
+          try {
+            Logger.log('other', `${logPrefix} - Loading voice ${state.config.referenceVoiceId} from IndexedDB...`);
+            const voiceData = await voiceStorageService.getVoice(state.config.referenceVoiceId);
+            if (!voiceData) {
+              throw new Error(`Voice ${state.config.referenceVoiceId} not found in IndexedDB`);
+            }
+            if (!voiceData.audioData) {
+              throw new Error('Voice data missing audioData blob');
+            }
+            Logger.log('other', `${logPrefix} - Converting blob to base64 (${voiceData.audioData.size} bytes)...`);
+            const audioArrayBuffer = await voiceData.audioData.arrayBuffer();
+            const audioBytes = new Uint8Array(audioArrayBuffer);
+            const binaryString = Array.from(audioBytes).map(b => String.fromCharCode(b)).join('');
+            referenceAudioBase64 = btoa(binaryString);
+            refText = voiceData.referenceText;
+            refLang = voiceData.language;
+            Logger.log('other', `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`);
+          } catch (error) {
+            Logger.error('other', `${logPrefix} - Failed to load reference audio from IndexedDB:`, error);
+            throw new Error(`Failed to load reference voice: ${error.message}`);
+          }
+        }
+        
+        if (!referenceAudioBase64 || !refText) {
+          throw new Error('GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.');
+        }
+        
+        Logger.log('other', `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang})`);
+        
+        const response = await fetch(`${state.client}/audio/speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: text,
+            reference_audio: referenceAudioBase64,
+            reference_text: refText,
+            reference_language: refLang,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`TTS request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        if (state.isStopped) return null;
+        
+        arrayBuffer = await response.arrayBuffer();
+        contentType = response.headers.get('content-type') || 'audio/mpeg';
+      } else {
+        // For other providers, use OpenAI client
+        const response = await state.client.audio.speech.create({
+          model: state.config.model,
+          voice: state.config.voice,
+          input: text,
+          speed: state.config.speed,
+        });
 
-      if (state.isStopped) return null;
+        if (state.isStopped) return null;
+        
+        arrayBuffer = await response.arrayBuffer();
+      }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+      const blob = new Blob([arrayBuffer], { type: contentType });
 
       let bvmdUrl = null;
       if (generateLipSync && state.lipSyncEnabled) {

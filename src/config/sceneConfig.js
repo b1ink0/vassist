@@ -83,8 +83,8 @@ export function getRenderQualityPresets(isAndroid = false) {
 const SceneConfig = {
   enableModelLoading: true,
   
-  modelUrl: "res/assets/model/vassist_default.bpmx",
-  cameraAnimationUrl: "res/private_test/motion/2.bvmd",
+  modelUrl: isDesktop ? "/res/assets/model/vassist_default.bpmx" : "res/assets/model/vassist_default.bpmx",
+  cameraAnimationUrl: isDesktop ? "/res/private_test/motion/2.bvmd" : "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   
   orthoHeight: 12,

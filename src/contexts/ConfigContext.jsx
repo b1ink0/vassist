@@ -147,7 +147,8 @@ export const ConfigProvider = ({ children }) => {
 
         // Load TTS config
         const savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
-        Logger.log('ConfigContext', 'TTS config loaded from storage:', JSON.stringify(savedTtsConfig.kokoro, null, 2));
+        
+        Logger.log('ConfigContext', 'TTS config loaded from storage');
         setTtsConfig(savedTtsConfig);
         try {
           TTSServiceProxy.configure(savedTtsConfig);
@@ -258,7 +259,6 @@ export const ConfigProvider = ({ children }) => {
       if (!validation.valid) return;
       
       try {
-        Logger.log('ConfigContext', 'Auto-saving TTS config, device:', ttsConfig.kokoro?.device);
         await StorageServiceProxy.configSave('ttsConfig', ttsConfig);
         setTtsConfigSaved(true);
         TTSServiceProxy.configure(ttsConfig);
@@ -455,7 +455,12 @@ export const ConfigProvider = ({ children }) => {
       let current = updated;
       
       for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
+        const existing = current[parts[i]];
+        if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+          current[parts[i]] = { ...existing };
+        } else {
+          current[parts[i]] = {};
+        }
         current = current[parts[i]];
       }
       
@@ -584,9 +589,11 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [checkKokoroStatus, ttsConfig]);
 
-  const testTTSConnection = useCallback(async () => {
+  const testTTSConnection = useCallback(async (customText = null) => {
     setTtsConfigError('');
     setTtsTesting(true);
+    
+    const testText = customText || "Hello, this is a test of the text to speech system.";
     
     try {
       TTSServiceProxy.configure(ttsConfig);
@@ -623,7 +630,7 @@ export const ConfigProvider = ({ children }) => {
       setTtsConfigError('hourglass:Testing TTS...');
       const startTime = Date.now();
       
-      await TTSServiceProxy.testConnection("Hello, this is a test of the text to speech system.");
+      await TTSServiceProxy.testConnection(testText);
       
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       
@@ -687,7 +694,7 @@ export const ConfigProvider = ({ children }) => {
     }
   }, [sttConfig]);
 
-  const testSTTRecording = useCallback(async () => {
+  const testSTTRecording = useCallback(async (deviceId = null) => {
     setSttConfigError('');
     setSttTesting(true);
     
@@ -695,12 +702,12 @@ export const ConfigProvider = ({ children }) => {
       STTServiceProxy.configure(sttConfig);
       setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
       
-      const transcription = await STTServiceProxy.testRecording(3);
+      const transcription = await STTServiceProxy.testRecording(3, deviceId);
       
       setSttConfigError(`✅ Transcription: "${transcription}"`);
       setTimeout(() => setSttConfigError(''), 5000);
     } catch (error) {
-      setSttConfigError('error-status:STT test failed:' + error.message);
+      setSttConfigError('error-status:STT test failed: ' + error.message);
     } finally {
       setSttTesting(false);
     }
@@ -931,6 +938,7 @@ export const ConfigProvider = ({ children }) => {
     updateTTSConfig,
     saveTTSConfig,
     testTTSConnection,
+    setTtsConfigError,
     clearTTSConfigError: () => setTtsConfigError(''),
     
     // STT Config

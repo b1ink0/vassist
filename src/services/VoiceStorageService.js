@@ -108,46 +108,49 @@ class VoiceStorageService {
   /**
    * Get a voice by ID
    * @param {string} voiceId - Voice ID
-   * @returns {Promise<Object>} - Voice data with audio blob
+   * @returns {Promise<Object|null>} - Voice data or null
    */
   async getVoice(voiceId) {
     try {
-      const voiceData = await storageServiceProxy.fileGet(voiceId, this.CATEGORY);
-      
-      if (!voiceData) {
-        throw new Error(`Voice not found: ${voiceId}`);
-      }
-
-      return voiceData;
+      const voiceData = await storageServiceProxy.fileLoad(voiceId);
+      return voiceData || null;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to get voice:', error);
-      throw error;
+      Logger.error('VoiceStorage', `Failed to get voice ${voiceId}:`, error);
+      return null;
     }
   }
 
   /**
-   * Get all voices
-   * @returns {Promise<Array>} - Array of {id, data} objects
+   * Get all voices (including full blob data)
+   * @returns {Promise<Array>} - Array of voice objects with IDs
    */
   async getAllVoices() {
     try {
-      const voices = await storageServiceProxy.fileGetAll(this.CATEGORY);
-      return voices;
+      const allVoices = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      
+      const voicesArray = Object.entries(allVoices).map(([id, data]) => ({
+        id,
+        ...data
+      }));
+
+      Logger.log('VoiceStorage', `Retrieved ${voicesArray.length} voices`);
+      return voicesArray;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to get voices:', error);
-      throw error;
+      Logger.error('VoiceStorage', 'Failed to get all voices:', error);
+      return [];
     }
   }
 
   /**
    * Delete a voice
    * @param {string} voiceId - Voice ID
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} - Success status
    */
   async deleteVoice(voiceId) {
     try {
-      await storageServiceProxy.fileDelete(voiceId, this.CATEGORY);
+      await storageServiceProxy.fileRemove(voiceId);
       Logger.log('VoiceStorage', `Voice deleted: ${voiceId}`);
+      return true;
     } catch (error) {
       Logger.error('VoiceStorage', 'Failed to delete voice:', error);
       throw error;
@@ -188,8 +191,8 @@ class VoiceStorageService {
       let totalSize = 0;
       
       for (const voice of voices) {
-        if (voice.data?.audioData?.size) {
-          totalSize += voice.data.audioData.size;
+        if (voice.audioData?.size) {
+          totalSize += voice.audioData.size;
         }
       }
       

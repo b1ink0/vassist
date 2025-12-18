@@ -251,16 +251,15 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt);
     
     // DOCUMENT INTERACTION: Extract page context based on user query
-    // SKIP if user has attachments (images/audios) or using android-local provider
-    // (android-local runs on-device with limited context, document interaction adds latency)
+    // SKIP if user has attachments (images/audios) or using android-local/desktop-local provider
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
-    const isAndroidLocal = savedConfig.provider === 'android-local';
+    const isLocalProvider = savedConfig.provider === 'android-local' || savedConfig.provider === 'desktop-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroidLocal) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isLocalProvider) {
       Logger.log('ChatController', 'Starting document interaction analysis...');
       
       // Check if aborted before starting
@@ -676,15 +675,15 @@ const ChatController = ({
     const messages = ChatService.getFormattedMessages(systemPrompt)
 
     // DOCUMENT INTERACTION: Extract page context for voice queries too
-    // SKIP if user has attachments (images/audios) or using android-local provider
+    // SKIP if user has attachments (images/audios) or using android-local/desktop-local provider
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
-    const isAndroidLocalVoice = voiceAIConfig.provider === 'android-local';
+    const isLocalProviderVoice = voiceAIConfig.provider === 'android-local' || voiceAIConfig.provider === 'desktop-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroidLocalVoice) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isLocalProviderVoice) {
       // Check if aborted before starting
       if (abortController.signal.aborted) {
         Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');

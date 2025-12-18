@@ -12,6 +12,7 @@ import electron from 'vite-plugin-electron/simple';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +30,24 @@ export default defineConfig(({ mode }) => {
         },
       }),
       tailwindcss(),
+      isProduction && {
+        name: 'copy-server-files-production',
+        closeBundle() {
+          const serverSrc = resolve(__dirname, 'electron/server');
+          const serverDest = resolve(__dirname, 'dist-desktop/server');
+          
+          if (fs.existsSync(serverSrc)) {
+            fs.cpSync(serverSrc, serverDest, { 
+              recursive: true,
+              filter: (src) => {
+                const basename = path.basename(src);
+                return !basename.match(/^(\.git|node_modules|__pycache__|\.pytest_cache)$/);
+              }
+            });
+            console.log('✓ Copied server files to dist-desktop/server');
+          }
+        },
+      },
       electron({
         main: {
           // Main process entry point
@@ -46,7 +65,16 @@ export default defineConfig(({ mode }) => {
               minify: isProduction ? 'esbuild' : false,
               sourcemap: !isProduction,
               rollupOptions: {
-                external: ['electron'],
+                external: [
+                  'electron',
+                  'node-llama-cpp',
+                  'express',
+                  'axios',
+                  'form-data',
+                  'multer',
+                  'util',
+                  'stream'
+                ],
               },
             },
           },
@@ -60,7 +88,16 @@ export default defineConfig(({ mode }) => {
               minify: isProduction ? 'esbuild' : false,
               sourcemap: !isProduction,
               rollupOptions: {
-                external: ['electron'],
+                external: [
+                  'electron',
+                  'node-llama-cpp',
+                  'express',
+                  'axios',
+                  'form-data',
+                  'multer',
+                  'util',
+                  'stream'
+                ],
               },
             },
           },
@@ -76,7 +113,7 @@ export default defineConfig(({ mode }) => {
           },
         },
       }),
-    ],
+    ].filter(Boolean),
     
     define: {
       // Build-time constants for mode detection
@@ -100,6 +137,9 @@ export default defineConfig(({ mode }) => {
         },
       },
       chunkSizeWarningLimit: 50000,
+      modulePreload: {
+        polyfill: false,
+      },
     },
     
     worker: {
@@ -116,6 +156,15 @@ export default defineConfig(({ mode }) => {
         'kokoro-js',
         'onnxruntime-web',
       ],
+      include: [
+        'react',
+        'react-dom',
+      ],
+      force: false,
+      esbuildOptions: {
+        target: 'esnext',
+      },
+      holdUntilCrawlEnd: true,
     },
     
     resolve: {
@@ -129,10 +178,28 @@ export default defineConfig(({ mode }) => {
     
     server: {
       port: 3001,
+      strictPort: true,
       fs: {
         // Allow serving files from the public directory
         allow: ['..'],
       },
+      hmr: {
+        overlay: true,
+        host: 'localhost',
+        protocol: 'ws',
+        port: 3001,
+      },
+      warmup: {
+        clientFiles: [
+          './src/App.jsx',
+          './src/main.jsx',
+          './src/components/**/*.jsx',
+        ],
+      },
+      middlewareMode: false,
+      preTransformRequests: false,
     },
+    
+    cacheDir: 'node_modules/.vite',
   };
 });

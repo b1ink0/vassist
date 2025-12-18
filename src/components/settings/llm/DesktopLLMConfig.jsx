@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import { useDesktop } from '../../../contexts/DesktopContext';
 import { isDesktop } from '../../../utils/PlatformUtils';
+import Toggle from '../../common/Toggle';
 
 /**
  * Reusable Desktop LLM Configuration Component
@@ -17,7 +18,9 @@ const DesktopLLMConfig = ({
   config = {}, 
   onChange,
   isLightBackground = false,
-  isSetupMode = false
+  isSetupMode = false,
+  onRequestDeleteModel,
+  refreshTrigger
 }) => {
   const { api } = useDesktop();
   const [models, setModels] = useState([]);
@@ -26,18 +29,26 @@ const DesktopLLMConfig = ({
   const [ollamaModel, setOllamaModel] = useState('');
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [error, setError] = useState('');
-  const [downloadMethod, setDownloadMethod] = useState('huggingface'); // 'huggingface' or 'ollama'
+  const [successMessage, setSuccessMessage] = useState('');
+  const [downloadMethod, setDownloadMethod] = useState('ollama'); // 'huggingface' or 'ollama'
 
   const handleChange = (key, value) => {
     onChange({ [key]: value });
   };
+
+  const handleSetDefault = (modelName) => {
+    handleChange('model', modelName);
+  };
+
+  // Get custom models path from config
+  const customModelsPath = config.customModelsPath || null;
 
   // Load model list
   const loadModels = async () => {
     if (!isDesktop || !api?.llm) return;
     
     try {
-      const result = await api.llm.listModels();
+      const result = await api.llm.listModels(customModelsPath);
       if (result?.success) {
         setModels(result.models || []);
       }
@@ -48,7 +59,7 @@ const DesktopLLMConfig = ({
 
   useEffect(() => {
     loadModels();
-  }, [isDesktop, api]);
+  }, [isDesktop, api, refreshTrigger, customModelsPath]);
 
   // Download model from Hugging Face or Ollama
   const handleDownload = async () => {
@@ -78,8 +89,8 @@ const DesktopLLMConfig = ({
       });
 
       const result = downloadMethod === 'ollama'
-        ? await api.llm.pullModel(ollamaModel)
-        : await api.llm.downloadModel(downloadUrl);
+        ? await api.llm.pullModel(ollamaModel, customModelsPath)
+        : await api.llm.downloadModel(downloadUrl, customModelsPath);
       
       unsubscribe();
 
@@ -88,8 +99,10 @@ const DesktopLLMConfig = ({
         setOllamaModel('');
         setDownloadProgress(null);
         await loadModels();
+        setError('');
         if (result.note) {
-          setError(result.note); // Show info message
+          setSuccessMessage(result.note);
+          setTimeout(() => setSuccessMessage(''), 5000);
         }
       } else {
         setError(result?.error || 'Download failed');
@@ -107,20 +120,90 @@ const DesktopLLMConfig = ({
   const handleDelete = async (filename) => {
     if (!isDesktop || !api?.llm) return;
 
-    if (!confirm(`Delete model "${filename}"?\n\nThis will permanently remove the file.`)) {
-      return;
+    if (onRequestDeleteModel) {
+      onRequestDeleteModel(filename);
+    } else {
+      if (!confirm(`Delete model "${filename}"?\n\nThis will permanently remove the file.`)) {
+        return;
+      }
+
+      try {
+        const result = await api.llm.deleteModel(filename, customModelsPath);
+        if (result?.success) {
+          await loadModels();
+        } else {
+          setError(result?.error || 'Delete failed');
+        }
+      } catch (err) {
+        setError(err.message);
+      }
     }
+  };
+
+  // Import model (use Electron dialog for proper file path)
+  const handleImportClick = async () => {
+    if (!isDesktop || !api?.llm) return;
 
     try {
-      const result = await api.llm.deleteModel(filename);
+      setLoading(true);
+      setError('');
+      
+      const fileResult = await api.llm.chooseModelFile();
+      
+      if (fileResult?.canceled || !fileResult?.path) {
+        setLoading(false);
+        return;
+      }
+
+      const filePath = fileResult.path;
+      
+      if (!filePath.endsWith('.gguf')) {
+        setError('Only .gguf files are supported');
+        setLoading(false);
+        return;
+      }
+      
+      const result = await api.llm.importModel(filePath, customModelsPath);
+      
       if (result?.success) {
+        setSuccessMessage(`Model "${result.filename}" imported successfully!`);
+        setTimeout(() => setSuccessMessage(''), 5000);
         await loadModels();
       } else {
-        setError(result?.error || 'Delete failed');
+        setError(result?.error || 'Import failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle folder picker
+  const handleChooseFolder = async () => {
+    if (!isDesktop || !api?.llm) return;
+
+    try {
+      const result = await api.llm.chooseModelsFolder();
+      
+      if (result?.success && result.path) {
+        handleChange('customModelsPath', result.path);
+        setSuccessMessage('Custom models folder set!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+        await loadModels();
+      } else if (!result?.canceled) {
+        setError(result?.error || 'Failed to select folder');
       }
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleClearCustomFolder = async () => {
+    handleChange('customModelsPath', null);
+    setSuccessMessage('Using default models folder');
+    setTimeout(() => setSuccessMessage(''), 3000);
+    await loadModels();
   };
 
   const formatBytes = (bytes) => {
@@ -165,7 +248,7 @@ const DesktopLLMConfig = ({
           <span>Advanced Settings</span>
           <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
         </summary>
-        <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+        <div className="mt-2 space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/90 mb-1">
               Endpoint URL
@@ -175,43 +258,10 @@ const DesktopLLMConfig = ({
               value={config.endpoint || 'http://127.0.0.1:11438'}
               onChange={(e) => handleChange('endpoint', e.target.value)}
               placeholder="http://127.0.0.1:11438"
-              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
             />
             <p className="text-[10px] text-white/50 mt-1">
               Unified local AI server endpoint (Electron manages routing internally)
-            </p>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Model File
-            </label>
-            {isDesktop && models.length > 0 ? (
-              <select
-                value={config.model || ''}
-                onChange={(e) => handleChange('model', e.target.value)}
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
-              >
-                <option value="">Select a model...</option>
-                {models.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.name} ({formatBytes(model.size)})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={config.model || ''}
-                onChange={(e) => handleChange('model', e.target.value)}
-                placeholder="qwen3:0.6b"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
-              />
-            )}
-            <p className="text-[10px] text-white/50 mt-1">
-              {isDesktop && models.length > 0 
-                ? 'Select from downloaded models or download new ones below'
-                : 'GGUF model filename (download models below)'}
             </p>
           </div>
 
@@ -243,7 +293,7 @@ const DesktopLLMConfig = ({
                 step="256"
                 value={config.maxTokens || 2048}
                 onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               />
             </div>
             
@@ -258,7 +308,7 @@ const DesktopLLMConfig = ({
                 step="512"
                 value={config.contextSize || 4096}
                 onChange={(e) => handleChange('contextSize', parseInt(e.target.value))}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               />
             </div>
             
@@ -272,7 +322,7 @@ const DesktopLLMConfig = ({
                 max="100"
                 value={config.gpuLayers !== undefined ? config.gpuLayers : 33}
                 onChange={(e) => handleChange('gpuLayers', parseInt(e.target.value))}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               />
               <p className="text-[10px] text-white/50 mt-1">
                 Offload layers to GPU (0 = CPU only)
@@ -289,39 +339,100 @@ const DesktopLLMConfig = ({
                 max="32"
                 value={config.threads || 4}
                 onChange={(e) => handleChange('threads', parseInt(e.target.value))}
-                className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
               />
             </div>
           </div>
+        </div>
+      </details>
 
-          {/* Model Management Section - Only show in settings, not setup */}
-          {!isSetupMode && isDesktop && (
-            <>
-              {/* Download Section */}
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
-                  <Icon name="download" size={16} />
-                  Download Model
-                </h3>
+      {/* Model Management Section */}
+      {!isSetupMode && isDesktop && (
+        <>
+          {/* Custom Models Folder */}
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+              <Icon name="folder" size={16} />
+              Models Folder
+            </h3>
+            
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={customModelsPath || 'Default'}
+                readOnly
+                placeholder="Default models folder"
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleChooseFolder}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${customModelsPath ? 'flex-1' : 'w-full'}`}
+                >
+                  <Icon name="folder" size={14} />
+                  <span>Choose</span>
+                </button>
+                {customModelsPath && (
+                  <button
+                    onClick={handleClearCustomFolder}
+                    className="w-10 h-10 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors flex items-center justify-center"
+                    title="Reset to default"
+                  >
+                    <Icon name="x" size={16} />
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-white/50">
+                Store models on a different drive or custom location
+              </p>
+            </div>
+          </div>
+
+          {/* Import Model */}
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+              <Icon name="upload" size={16} />
+              Import Model
+            </h3>
+            
+            <button
+              onClick={handleImportClick}
+              disabled={loading}
+              className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
+              <p className="text-sm text-white/90 mb-1">
+                {loading ? 'Importing...' : 'Import GGUF Model'}
+              </p>
+              <p className="text-xs text-white/50">Click to browse for .gguf file</p>
+            </button>
+          </div>
+
+          {/* Download Section */}
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+              <Icon name="download" size={16} />
+              Download Model
+            </h3>
                 
                 {/* Download method selector */}
                 <div className="flex gap-2 mb-3">
                   <button
                     onClick={() => setDownloadMethod('ollama')}
-                    className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       downloadMethod === 'ollama'
-                        ? 'bg-purple-500 text-white'
-                        : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        ? `glass-button ${isLightBackground ? 'glass-button-dark' : ''}`
+                        : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
                     }`}
                   >
-                    Ollama (Recommended)
+                    Ollama
                   </button>
                   <button
                     onClick={() => setDownloadMethod('huggingface')}
-                    className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       downloadMethod === 'huggingface'
-                        ? 'bg-purple-500 text-white'
-                        : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        ? `glass-button ${isLightBackground ? 'glass-button-dark' : ''}`
+                        : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
                     }`}
                   >
                     Hugging Face
@@ -368,7 +479,7 @@ const DesktopLLMConfig = ({
                       </div>
                       <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+                          className="h-full bg-gradient-to-r from-white/40 to-white/60 transition-all duration-300"
                           style={{ width: `${downloadProgress.percent}%` }}
                         />
                       </div>
@@ -378,26 +489,50 @@ const DesktopLLMConfig = ({
                   <button
                     onClick={handleDownload}
                     disabled={loading || (downloadMethod === 'huggingface' ? !downloadUrl.trim() : !ollamaModel.trim())}
-                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {loading ? (
-                      <><Icon name="loader" size={16} className="animate-spin" /> Downloading...</>
+                      <>
+                        <svg 
+                          className="animate-spin" 
+                          width="16" 
+                          height="16" 
+                          viewBox="0 0 32 32" 
+                          fill="none" 
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle 
+                            cx="16" 
+                            cy="16" 
+                            r="14" 
+                            stroke="currentColor" 
+                            strokeWidth="3" 
+                            strokeLinecap="round"
+                            strokeDasharray="70 20"
+                            className="text-white opacity-90"
+                          />
+                        </svg>
+                        <span>Downloading...</span>
+                      </>
                     ) : (
-                      <><Icon name="download" size={16} /> {downloadMethod === 'ollama' ? 'Pull Model' : 'Download Model'}</>
+                      <>
+                        <Icon name="download" size={16} />
+                        <span>{downloadMethod === 'ollama' ? 'Pull Model' : 'Download Model'}</span>
+                      </>
                     )}
                   </button>
                 </div>
 
                 {/* Quick links */}
                 <details className="mt-3 group">
-                  <summary className="cursor-pointer text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                  <summary className="cursor-pointer text-xs text-white/70 hover:text-white/90 flex items-center gap-1 transition-colors">
                     <Icon name="help" size={12} />
                     <span>{downloadMethod === 'ollama' ? 'Popular Ollama models' : 'Where to find models?'}</span>
                   </summary>
                   <div className="mt-2 p-2 rounded bg-black/20 text-[10px] text-white/60 space-y-1">
                     {downloadMethod === 'ollama' ? (
                       <>
-                        <p><strong>Recommended Ollama models (free):</strong></p>
+                        <p><strong>Ollama models (free):</strong></p>
                         <ul className="list-disc list-inside space-y-0.5 ml-2">
                           <li>llama3.2:3b - Meta's Llama 3.2 3B</li>
                           <li>qwen2.5:3b - Alibaba's Qwen 2.5 3B</li>
@@ -424,6 +559,16 @@ const DesktopLLMConfig = ({
                 </details>
               </div>
 
+              {/* Success Message */}
+              {successMessage && (
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-300 text-xs">
+                  <div className="flex items-start gap-2">
+                    <Icon name="check" size={14} className="flex-shrink-0 mt-0.5" />
+                    <span>{successMessage}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Error Message */}
               {error && (
                 <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
@@ -443,7 +588,7 @@ const DesktopLLMConfig = ({
                   </h3>
                   <button
                     onClick={loadModels}
-                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                    className="text-xs text-white/70 hover:text-white/90 flex items-center gap-1 transition-colors"
                   >
                     <Icon name="refresh" size={12} />
                     Refresh
@@ -465,7 +610,7 @@ const DesktopLLMConfig = ({
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <Icon name="file" size={14} className="text-purple-400 flex-shrink-0" />
+                            <Icon name="document" size={14} className="text-white/70 flex-shrink-0" />
                             <span className="text-sm font-medium text-white/90 truncate">
                               {model.name}
                             </span>
@@ -477,13 +622,24 @@ const DesktopLLMConfig = ({
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDelete(model.name)}
-                          className="ml-3 p-2 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete model"
-                        >
-                          <Icon name="trash" size={16} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(model.name)}
+                            className="p-2 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
+                            title="Delete model"
+                          >
+                            <Icon name="trash" size={16} />
+                          </button>
+                          <Toggle
+                            checked={config.model === model.name}
+                            onChange={(checked) => {
+                              if (checked) {
+                                handleSetDefault(model.name);
+                              }
+                            }}
+                            title="Set as default model"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -491,8 +647,6 @@ const DesktopLLMConfig = ({
               </div>
             </>
           )}
-        </div>
-      </details>
     </div>
   );
 };

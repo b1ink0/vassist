@@ -4,10 +4,11 @@
  * Handles provider selection and configuration for OpenAI, Ollama, and Chrome AI
  */
 
+import { useMemo } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
-import { isDesktop } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import DesktopLLMConfig from './llm/DesktopLLMConfig';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
@@ -111,7 +112,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
   );
 };
 
-const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
+const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, refreshTrigger }) => {
   const {
     aiConfig,
     aiTesting,
@@ -122,6 +123,15 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
+
+  // Filter providers based on platform
+  const availableProviders = useMemo(() => {
+    if (isAndroid) {
+      return AIProviders;
+    }
+    const { ANDROID_LOCAL, CHROME_AI, ...otherProviders } = AIProviders;
+    return otherProviders;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -135,7 +145,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
           onChange={(e) => updateAIConfig('provider', e.target.value)}
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         >
-          {Object.entries(AIProviders).map(([key, value]) => (
+          {Object.entries(availableProviders).map(([key, value]) => (
             <option key={value} value={value} className="bg-gray-900">{key}</option>
           ))}
         </select>
@@ -216,7 +226,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
       )}
 
       {/* Android Local LLM Configuration */}
-      {aiConfig.provider === AIProviders.ANDROID_LOCAL && (
+      {aiConfig.provider === AIProviders.ANDROID_LOCAL && isAndroid && (
         <>
           {/* Info Banner */}
           <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
@@ -306,6 +316,9 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
               });
             }}
             isSetupMode={false}
+            isLightBackground={isLightBackground}
+            onRequestDeleteModel={onRequestDeleteLLMModel}
+            refreshTrigger={refreshTrigger}
           />
           <SystemPromptSection providerKey="desktop-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
         </>

@@ -76,10 +76,13 @@ contextBridge.exposeInMainWorld('electron', {
   
   // LLM Model Management
   llm: {
-    listModels: () => ipcRenderer.invoke('llm:list-models'),
-    downloadModel: (url) => ipcRenderer.invoke('llm:download-model', url),
-    pullModel: (modelName) => ipcRenderer.invoke('llm:pull-model', modelName),
-    deleteModel: (filename) => ipcRenderer.invoke('llm:delete-model', filename),
+    listModels: (customPath) => ipcRenderer.invoke('llm:list-models', customPath),
+    downloadModel: (url, customPath) => ipcRenderer.invoke('llm:download-model', url, customPath),
+    pullModel: (modelName, customPath) => ipcRenderer.invoke('llm:pull-model', modelName, customPath),
+    deleteModel: (filename, customPath) => ipcRenderer.invoke('llm:delete-model', filename, customPath),
+    importModel: (sourcePath, customPath) => ipcRenderer.invoke('llm:import-model', sourcePath, customPath),
+    chooseModelsFolder: () => ipcRenderer.invoke('llm:choose-models-folder'),
+    chooseModelFile: () => ipcRenderer.invoke('llm:choose-model-file'),
     onDownloadProgress: (callback) => {
       const subscription = (event, progress) => callback(progress);
       ipcRenderer.on('llm:download-progress', subscription);

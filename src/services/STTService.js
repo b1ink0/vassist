@@ -209,9 +209,10 @@ class STTService {
 
   /**
    * Start recording audio from microphone
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording() {
+  async startRecording(deviceId = null) {
     if (!this.isConfigured()) {
       throw new Error('STTService not configured. Enable STT and configure settings first.');
     }
@@ -224,14 +225,20 @@ class STTService {
     try {
       Logger.log('STTService', 'Requesting microphone access...');
       
-      // Request microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia({ 
+      // Request microphone access with optional deviceId
+      const constraints = { 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         } 
-      });
+      };
+      
+      if (deviceId) {
+        constraints.audio.deviceId = { exact: deviceId };
+      }
+      
+      this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       // Create MediaRecorder
       const mimeType = this.getSupportedMimeType();
@@ -487,9 +494,10 @@ class STTService {
   /**
    * Test STT with a sample recording
    * @param {number} duration - Recording duration in seconds (default: 3)
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3) {
+  async testRecording(duration = 3, deviceId = null) {
     return new Promise((resolve, reject) => {
       // Setup temporary callbacks
       const originalTranscription = this.onTranscription;
@@ -507,8 +515,8 @@ class STTService {
         reject(error);
       };
       
-      // Start recording
-      this.startRecording().then(() => {
+      // Start recording with deviceId
+      this.startRecording(deviceId).then(() => {
         // Auto-stop after duration
         setTimeout(() => {
           this.stopRecording();

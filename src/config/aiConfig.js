@@ -351,7 +351,8 @@ export const DefaultTTSConfig = {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'gpt-sovits',
     // Voice cloning reference
-    referenceAudio: null, // Path to reference audio file
+    referenceVoiceId: null, // Voice ID from IndexedDB
+    referenceAudio: null, // Path to reference audio file 
     referenceText: '', // Text spoken in reference audio
     referenceLanguage: GPTSoVITSLanguages.ENGLISH,
     // TTS parameters
@@ -471,9 +472,6 @@ export function validateAIConfig(config) {
   if (config.provider === AIProviders.DESKTOP_LOCAL) {
     if (config['desktop-local']?.endpoint && config['desktop-local'].endpoint.trim() === '') {
       errors.push('Desktop Local Endpoint cannot be empty');
-    }
-    if (!config['desktop-local']?.model || config['desktop-local'].model.trim() === '') {
-      errors.push('Desktop Local Model path is required');
     }
   }
   

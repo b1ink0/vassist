@@ -24,6 +24,8 @@ import Logger from '../services/LoggerService';
  * @param {string} props.animationClass - CSS animation class
  * @param {Function} props.onRequestDeleteModelDialog - Callback to show delete model dialog
  * @param {Function} props.onRequestDeleteMotionDialog - Callback to show delete motion dialog
+ * @param {Function} props.onRequestDeleteVoiceDialog - Callback to show delete voice dialog
+ * @param {Function} props.onRequestDeleteLLMModel - Callback to show delete LLM model dialog
  * @param {number} props.refreshTrigger - Trigger to refresh lists after delete
  * @returns {JSX.Element} Settings panel component
  */
@@ -33,6 +35,8 @@ const SettingsPanel = ({
   animationClass = '',
   onRequestDeleteModelDialog,
   onRequestDeleteMotionDialog,
+  onRequestDeleteVoiceDialog,
+  onRequestDeleteLLMModel,
   refreshTrigger
 }) => {
   const [activeTab, setActiveTab] = useState('ui');
@@ -282,11 +286,20 @@ const SettingsPanel = ({
           </div>
 
           <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
-            <LLMSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />
+            <LLMSettings 
+              isLightBackground={isLightBackground} 
+              hasChromeAI={hasChromeAI} 
+              onRequestDeleteLLMModel={onRequestDeleteLLMModel}
+              refreshTrigger={refreshTrigger}
+            />
           </div>
 
           <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
-            <TTSSettings isLightBackground={isLightBackground} />
+            <TTSSettings
+              isLightBackground={isLightBackground}
+              onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+              refreshTrigger={refreshTrigger}
+            />
           </div>
 
           <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>

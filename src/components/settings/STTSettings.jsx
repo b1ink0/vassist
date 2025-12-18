@@ -4,7 +4,7 @@
  * Handles Speech-to-Text provider selection and configuration
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { STTProviders } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
@@ -15,6 +15,9 @@ import DesktopSTTConfig from './stt/DesktopSTTConfig';
 import Toggle from '../common/Toggle';
 
 const STTSettings = ({ isLightBackground, hasChromeAI }) => {
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  
   const {
     sttConfig,
     sttTesting,
@@ -25,7 +28,26 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
-
+  // Load available microphones (desktop mode only)
+  useEffect(() => {
+    if (!isDesktop || sttConfig.provider !== STTProviders.DESKTOP_LOCAL) return;
+    
+    const loadDevices = async () => {
+      try {
+        const deviceList = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = deviceList.filter(device => device.kind === 'audioinput');
+        setDevices(audioInputs);
+        
+        if (!selectedDeviceId && audioInputs.length > 0) {
+          setSelectedDeviceId(audioInputs[0].deviceId);
+        }
+      } catch (error) {
+        console.error('Failed to enumerate devices:', error);
+      }
+    };
+    
+    loadDevices();
+  }, [sttConfig.provider, isDesktop]);
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
@@ -84,7 +106,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
         <>
           {/* Android Local STT Configuration */}
           {sttConfig.provider === STTProviders.ANDROID_LOCAL && (
-            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+            <>
               <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Language</label>
@@ -104,12 +126,12 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
               <p className="text-xs text-white/50">
                 Powered by Whisper running locally on your device
               </p>
-            </div>
+            </>
           )}
 
           {/* Desktop Local STT Configuration */}
           {sttConfig.provider === STTProviders.DESKTOP_LOCAL && isDesktop && (
-            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+            <>
               <h4 className="text-sm font-semibold text-white/90">Desktop Local STT (Whisper)</h4>
               <DesktopSTTConfig
                 config={sttConfig['desktop-local'] || {}}
@@ -119,8 +141,9 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
                   });
                 }}
                 isSetupMode={false}
+                isLightBackground={isLightBackground}
               />
-            </div>
+            </>
           )}
 
           {/* OpenAI Whisper Configuration */}
@@ -157,9 +180,27 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-4">
+      <div className="space-y-3 pt-4">
+        {/* Microphone Selector (Desktop mode only) */}
+        {isDesktop && sttConfig.provider === STTProviders.DESKTOP_LOCAL && devices.length > 0 && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Microphone</label>
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+            >
+              {devices.map(device => (
+                <option key={device.deviceId} value={device.deviceId} className="bg-gray-900">
+                  {device.label || `Microphone ${device.deviceId.substring(0, 8)}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        
         <button 
-          onClick={testSTTRecording}
+          onClick={() => testSTTRecording(selectedDeviceId)}
           disabled={!sttConfig.enabled || sttTesting}
           className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >

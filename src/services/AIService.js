@@ -223,6 +223,7 @@ class AIService {
           model: desktopConfig.model || 'qwen3:0.6b',
           temperature: desktopConfig.temperature || 0.7,
           maxTokens: desktopConfig.maxTokens || 2048,
+          customModelsPath: desktopConfig.customModelsPath || null,
           enableImageSupport: false,
           enableAudioSupport: false,
         };
@@ -396,13 +397,19 @@ class AIService {
    * @returns {Object} Request body for API call
    */
   _prepareRequestBody(state, formattedMessages) {
-    return {
+    const body = {
       model: state.config.model,
       messages: formattedMessages,
       temperature: state.config.temperature,
       max_tokens: state.config.maxTokens,
       stream: true,
     };
+    
+    if ((state.provider === AIProviders.DESKTOP_LOCAL || state.provider === 'desktop-local') && state.config.customModelsPath) {
+      body.customModelsPath = state.config.customModelsPath;
+    }
+    
+    return body;
   }
 
   /**

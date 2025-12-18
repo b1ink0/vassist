@@ -8,17 +8,25 @@ import os
 import sys
 import io
 
+# Force jieba to use pure Python mode (embedded Python doesn't have C extensions)
+class _DummyJiebaModule:
+    """Dummy module to prevent jieba C extension import errors"""
+    pass
+sys.modules['_jieba_fast_functions_py3'] = _DummyJiebaModule()
+
 # Set UTF-8 encoding for Windows console
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import soundfile as sf
 import io
 import base64
@@ -38,7 +46,13 @@ TEMP_DIR.mkdir(exist_ok=True)
 # Add GPT-SoVITS source to Python path
 GPTSOVITS_DIR = BASE_DIR / "GPT-SoVITS"
 if GPTSOVITS_DIR.exists():
+    # Change working directory to GPT-SoVITS for relative imports to work
+    original_cwd = os.getcwd()
+    os.chdir(str(GPTSOVITS_DIR))
+    # Add both the repo root (for GPT_SoVITS imports) and the GPT_SoVITS subfolder (for direct imports)
     sys.path.insert(0, str(GPTSOVITS_DIR))
+    sys.path.insert(0, str(GPTSOVITS_DIR / "GPT_SoVITS"))
+    logger.info(f"Changed working directory to: {GPTSOVITS_DIR}")
     logger.info(f"Added GPT-SoVITS source to path: {GPTSOVITS_DIR}")
 
 # Reference audio cache (in-memory)
@@ -67,97 +81,239 @@ MODELS_DIR.mkdir(exist_ok=True)
 CHECKPOINTS_DIR.mkdir(exist_ok=True)
 TEMP_DIR.mkdir(exist_ok=True)
 
-# Global model instance (loaded ONCE and kept in memory)
-gpt_sovits_model = None
-is_loading = False  # Prevent concurrent loading attempts
+# Language mapping for GPT-SoVITS webui module
+# i18n("英文") returns "English", i18n("中文") returns "Chinese", etc.
+dict_language = {
+    "中文": "all_zh",
+    "英文": "en",
+    "日文": "all_ja",
+    "中英混合": "zh",
+    "日英混合": "ja",
+    "多语种混合": "auto",
+    "all_zh": "all_zh",
+    "en": "en",
+    "all_ja": "all_ja",
+    "zh": "zh",
+    "ja": "ja",
+    "auto": "auto",
+    "Chinese": "all_zh",
+    "English": "en",
+    "Japanese": "all_ja",
+    "Cantonese": "all_yue",
+    "Korean": "all_ko",
+}
+
+# Global model variables
+vq_model = None
+hps = None
+t2s_model = None
+config = None
+hz = 50
+max_sec = None
+is_half = False
+device = "cpu"
+bert_model = None
+ssl_model = None
+tokenizer = None
+webui_module = None 
+
+models_loaded = False
 
 def load_models():
-    """Load pre-trained GPT-SoVITS models - ONLY CALLED ONCE AT STARTUP"""
-    global gpt_sovits_model, is_loading
+    """Load GPT-SoVITS models using the same approach as reference api.py"""
+    global models_loaded, vq_model, hps, t2s_model, config, hz, max_sec
+    global bert_model, ssl_model, tokenizer, is_half, device
     
-    if gpt_sovits_model is not None:
-        logger.info("Models already loaded in memory, skipping reload")
+    if models_loaded:
+        logger.info("Models already loaded")
         return
-    
-    if is_loading:
-        logger.info("Models currently loading, please wait...")
-        return
-    
-    is_loading = True
     
     try:
-        # Check for downloaded v2Pro+ models
-        s2G_model = MODELS_DIR / "v2Pro" / "s2Gv2ProPlus.pth"
-        s2D_model = MODELS_DIR / "v2Pro" / "s2Dv2ProPlus.pth"
+        # Model paths - s1 = GPT (text-to-semantic), s2G = SoVITS (vocoder),
+        s1_model = MODELS_DIR / "s1v3.ckpt"  # GPT model for text-to-semantic
+        s2G_model = MODELS_DIR / "v2Pro" / "s2Gv2ProPlus.pth"  # SoVITS vocoder
+        bert_path = MODELS_DIR / "chinese-roberta-wwm-ext-large"
+        hubert_path = MODELS_DIR / "chinese-hubert-base"
         
-        if not s2G_model.exists() or not s2D_model.exists():
-            logger.error(f"Models not found at {MODELS_DIR}/v2Pro/")
-            logger.error("Please run setup.py to download models")
-            return
         
-        # Import GPT-SoVITS inference from cloned repo
-        logger.info(f"Loading GPT-SoVITS v2Pro+ models from {MODELS_DIR}")
-        logger.info(f"  Generator: {s2G_model}")
-        logger.info(f"  Discriminator: {s2D_model}")
+        # Set up paths for GPT-SoVITS
+        os.environ["bert_path"] = str(bert_path)
+        os.environ["cnhubert_base_path"] = str(hubert_path)
+        os.environ["gpt_path"] = str(s1_model)  # GPT uses s1 model
+        os.environ["sovits_path"] = str(s2G_model)  # SoVITS uses s2G model
+        os.environ["_GPTSOVITS_INFER"] = "1"  # Skip auto-load
+        os.environ["is_share"] = "False"  # Disable speaker verification
+        sv_path = MODELS_DIR / "sv" / "pretrained_eres2netv2w24s4ep4.ckpt"
+        os.environ["sv_path"] = str(sv_path)
         
-        try:
-            # Import from GPT-SoVITS source
-            from GPT_SoVITS.inference_cli import get_tts_wav
-            import torch
-            
-            # Load models with PyTorch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"Using device: {device}")
-            
-            # Create inference wrapper
-            class GPTSoVITSInference:
-                def __init__(self, s2g_path, s2d_path, device="cuda"):
-                    self.device = device
-                    self.s2g_path = str(s2g_path)
-                    self.s2d_path = str(s2d_path)
-                    # Models loaded lazily by get_tts_wav
-                    
-                def infer(self, text, ref_wav_path, prompt_text="", 
-                         prompt_language="en", text_language="en", **kwargs):
-                    """Generate speech using reference audio"""
-                    # Use GPT-SoVITS inference function
-                    audio = get_tts_wav(
-                        ref_wav_path=ref_wav_path,
-                        prompt_text=prompt_text,
-                        prompt_language=prompt_language,
-                        text=text,
-                        text_language=text_language,
-                        how_to_cut="不切",
-                        top_k=kwargs.get("top_k", 15),
-                        top_p=kwargs.get("top_p", 0.8),
-                        temperature=kwargs.get("temperature", 0.8),
-                        speed=kwargs.get("speed", 1.0)
-                    )
-                    return audio
-            
-            gpt_sovits_model = GPTSoVITSInference(s2G_model, s2D_model, device)
-            
-        except ImportError as e:
-            logger.error(f"Failed to import GPT-SoVITS: {e}")
-            logger.error("Make sure GPT-SoVITS source is cloned in electron/server/gpt-sovits/GPT-SoVITS")
-            raise
+        # Change to GPT-SoVITS directory for imports
+        original_dir = os.getcwd()
+        gpt_sovits_dir = GPTSOVITS_DIR
+        os.chdir(gpt_sovits_dir)
+        sys.path.insert(0, str(gpt_sovits_dir))
+        sys.path.insert(0, str(gpt_sovits_dir / "GPT_SoVITS"))
         
-        logger.info("✓ GPT-SoVITS models loaded into memory (will persist)")
+        logger.info("Importing GPT-SoVITS modules...")
+        
+        import torch
+        import numpy as np
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+        from feature_extractor import cnhubert
+        from module.models import SynthesizerTrn
+        from AR.models.t2s_lightning_module import Text2SemanticLightningModule
+        from text import cleaned_text_to_sequence
+        from text.cleaner import clean_text
+        from module.mel_processing import spectrogram_torch
+        from tools.my_utils import load_audio
+        
+        # Import the get_tts_wav function and helper functions
+        import GPT_SoVITS.inference_webui as webui_mod
+        globals()['webui_module'] = webui_mod  # Store globally for get_tts_wav
+        
+        # Set global device - properly update global variables
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        is_half = torch.cuda.is_available()  # Use half precision on CUDA, full on CPU
+        globals()['device'] = device
+        globals()['is_half'] = is_half
+        logger.info(f"Using device: {device}, half precision: {is_half}")
+        
+        # Initialize BERT and HuBERT models
+        cnhubert.cnhubert_base_path = str(hubert_path)
+        tokenizer = AutoTokenizer.from_pretrained(str(bert_path))
+        bert_model = AutoModelForMaskedLM.from_pretrained(str(bert_path))
+        ssl_model = cnhubert.get_model()
+        
+        if is_half:
+            bert_model = bert_model.half().to(device)
+            ssl_model = ssl_model.half().to(device)
+        else:
+            bert_model = bert_model.to(device)
+            ssl_model = ssl_model.to(device)
+        
+        # Load SoVITS first
+        webui_mod.change_sovits_weights(str(s2G_model))
+        
+        # Load GPT model - use default config from GPT-SoVITS
+        dict_s1 = torch.load(str(s1_model), map_location="cpu", weights_only=False)
+        gpt_config = dict_s1.get("config", {})
+        
+        # Default config from GPT-SoVITS - ALL required keys from t2s_model.py
+        default_model_config = {
+            "hidden_dim": 512,
+            "embedding_dim": 512,
+            "head": 8,
+            "n_layer": 12,
+            "dropout": 0.0,
+            "vocab_size": 1024 + 1,
+            "phoneme_vocab_size": 512,
+            "EOS": 1024,
+        }
+        
+        default_data_config = {
+            "max_sec": 54,
+            "sampling_rate": 32000,
+        }
+        
+        # Merge defaults with checkpoint config
+        if "model" not in gpt_config:
+            gpt_config["model"] = {}
+        if "data" not in gpt_config:
+            gpt_config["data"] = {}
+            
+        for key, value in default_model_config.items():
+            if key not in gpt_config["model"]:
+                gpt_config["model"][key] = value
+                
+        for key, value in default_data_config.items():
+            if key not in gpt_config["data"]:
+                gpt_config["data"][key] = value
+        
+        # Load model with merged config
+        from AR.models.t2s_lightning_module import Text2SemanticLightningModule
+        
+        # Set module variables including device settings
+        webui_mod.device = device
+        webui_mod.is_half = is_half
+        webui_mod.hz = 50
+        webui_mod.max_sec = gpt_config["data"]["max_sec"]
+        webui_mod.config = gpt_config
+        
+        # Create and load model
+        webui_mod.t2s_model = Text2SemanticLightningModule(gpt_config, "****", is_train=False)
+        webui_mod.t2s_model.load_state_dict(dict_s1["weight"])
+        webui_mod.t2s_model.eval()
+        
+        if is_half:
+            webui_mod.t2s_model = webui_mod.t2s_model.half()
+        webui_mod.t2s_model = webui_mod.t2s_model.to(device)
+        
+        del dict_s1
+        logger.info("✓ GPT model loaded successfully")
+        
+        # Get the model references from the module
+        vq_model = webui_mod.vq_model
+        hps = webui_mod.hps
+        t2s_model = webui_mod.t2s_model
+        config = webui_mod.config
+        hz = webui_mod.hz
+        max_sec = webui_mod.max_sec
+        
+        # Change back to original directory
+        os.chdir(original_dir)
+        
+        # Mark models as loaded (update global variable)
+        globals()['models_loaded'] = True
+        logger.info("✓ Models loaded successfully and ready for inference")
         
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
-        gpt_sovits_model = None
-    finally:
-        is_loading = False
+        import traceback
+        traceback.print_exc()
+
+def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language):
+    """
+    Generate TTS audio using GPT-SoVITS (generator function)
+    Calls the actual GPT-SoVITS inference_webui.get_tts_wav
+    """
+    if webui_module is None:
+        raise RuntimeError("Models not loaded. Call load_models() first.")
+    
+    # Map language codes to what webui expects
+    # "en" → needs to become "English" (what i18n("英文") returns)
+    lang_to_i18n = {
+        "en": "English",
+        "zh": "Chinese",  
+        "ja": "Japanese",
+        "all_zh": "Chinese",
+        "all_ja": "Japanese",
+        "auto": "Mixed (Multilingual)",
+    }
+    
+    # Convert to i18n format that webui's dict_language expects
+    prompt_lang = lang_to_i18n.get(prompt_language, prompt_language)
+    text_lang = lang_to_i18n.get(text_language, text_language)
+    
+    # Call the webui module's get_tts_wav function
+    for sample_rate, audio_data in webui_module.get_tts_wav(
+        ref_wav_path, prompt_text, prompt_lang, text, text_lang
+    ):
+        # Convert numpy array to WAV bytes
+        wav_buffer = io.BytesIO()
+        sf.write(wav_buffer, audio_data, sample_rate, format='WAV')
+        wav_buffer.seek(0)
+        yield wav_buffer.read()
+
+# In-memory reference cache
+reference_cache = {}
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize models on server startup - MODELS LOADED ONCE HERE"""
+    """Initialize models on server startup"""
     logger.info("=" * 60)
     logger.info("Starting GPT-SoVITS TTS Server...")
     logger.info("=" * 60)
-    load_models()  # Load models into memory ONCE
-    logger.info("Server ready. Models will stay in memory for all requests.")
+    load_models()
+    logger.info("Server ready for TTS requests")
     logger.info("=" * 60)
 
 @app.get("/")
@@ -167,7 +323,7 @@ async def root():
         "status": "running",
         "service": "GPT-SoVITS TTS",
         "version": "1.0.0",
-        "models_loaded": gpt_sovits_model is not None
+        "models_loaded": models_loaded
     }
 
 @app.get("/health")
@@ -177,8 +333,8 @@ async def health_check():
         "status": "healthy",
         "gpu_available": check_gpu(),
         "models": {
-            "gpt": (MODELS_DIR / "gpt_model.ckpt").exists(),
-            "sovits": (MODELS_DIR / "sovits_model.pth").exists()
+            "gpt": (MODELS_DIR / "v2Pro" / "s2Gv2ProPlus.pth").exists(),
+            "sovits": (MODELS_DIR / "v2Pro" / "s2Dv2ProPlus.pth").exists()
         }
     }
 
@@ -245,7 +401,7 @@ async def openai_compatible_tts(request: dict):
                 "path": str(ref_audio_path),
                 "text": ref_text,
                 "language": ref_lang,
-                "timestamp": os.time()
+                "timestamp": time.time()
             }
             
             logger.info(f"Cached new reference: {reference_id}")
@@ -282,65 +438,40 @@ async def openai_compatible_tts(request: dict):
                 detail="Reference audio required. Provide reference_audio or reference_id."
             )
         
-        # Check if models are loaded (should already be in memory from startup)
-        if gpt_sovits_model is None:
-            logger.warning("Models not in memory, attempting to load...")
+        # Check if models are loaded
+        if not models_loaded:
+            logger.warning("Models not loaded, attempting to load...")
             load_models()
-            if gpt_sovits_model is None:
+            if not models_loaded:
                 raise HTTPException(
                     status_code=503,
                     detail="Models not loaded. Check server logs and model files."
                 )
         
-        logger.info("Using models from memory (no reload needed)")
+        logger.info("Models loaded, generating TTS...")
         
-        # Use GPT-SoVITS for actual inference with reference audio
+        # Map language codes through dict_language
+        prompt_language = dict_language.get(language, language)
+        text_language = dict_language.get(language, language)
+        
+        # Primary reference
+        ref_wav_path = ref_paths[0]
+        prompt_text = ref_texts[0] if ref_texts else ""
+        
+        logger.info(f"Running TTS: text='{text[:50]}...', ref={ref_wav_path}, lang={text_language}")
+        
+        # Return streaming audio response using generator
         try:
-            # Primary reference
-            ref_wav_path = ref_paths[0]
-            prompt_text = ref_texts[0] if ref_texts else ""
-            
-            # TODO: Call actual GPT-SoVITS inference (models already in memory)
-            # audio_data = gpt_sovits_model.infer(
-            #     text=text,
-            #     ref_wav_path=ref_wav_path,
-            #     prompt_text=prompt_text,
-            #     ...
-            # )
-            
-            # PLACEHOLDER: Generate test audio until GPT-SoVITS integration complete
-            import numpy as np
-            sample_rate = 48000
-            duration = len(text.split()) * 0.3
-            audio_data = np.random.randn(int(sample_rate * duration)).astype(np.float32) * 0.1
-            
-            logger.warning("Using placeholder audio - GPT-SoVITS inference not yet integrated")
-            
+            return StreamingResponse(
+                get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language),
+                media_type="audio/wav"
+            )
         except Exception as e:
-            logger.error(f"Inference failed: {e}")
+            logger.error(f"TTS generation failed: {e}")
             raise HTTPException(
                 status_code=500,
-                detail=f"TTS inference failed: {str(e)}. Check models and reference audio."
+                detail=f"TTS failed: {str(e)}"
             )
-        
-        # Convert to WAV bytes
-        audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, audio_data, sample_rate, format='WAV')
-        audio_buffer.seek(0)
-        
-        logger.info(f"✓ TTS generated successfully ({len(audio_data)/sample_rate:.2f}s)")
-        
-        # Return JSON response with audio
-        audio_base64 = base64.b64encode(audio_buffer.read()).decode('utf-8')
-        
-        return {
-            "audio": audio_base64,
-            "format": "wav",
-            "sample_rate": sample_rate,
-            "channels": 1,
-            "reference_id": reference_id,
-            "voice": voice
-        }
         
     except HTTPException:
         raise
@@ -348,83 +479,85 @@ async def openai_compatible_tts(request: dict):
         logger.error(f"TTS generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class TTSRequestJSON(BaseModel):
+    """JSON format (from request.json)"""
+    input: str
+    reference_audio: str
+    reference_text: str
+    reference_language: str = "en"
+    voice: Optional[str] = None
+
+
 @app.post("/tts")
-async def text_to_speech(
-    text: str = Form(...),
-    ref_audio_path: Optional[str] = Form(None),
-    ref_audio: Optional[UploadFile] = File(None),
-    ref_text: Optional[str] = Form(None),
-    language: str = Form("en"),
-    speed: float = Form(1.0),
-    top_k: int = Form(15),
-    top_p: float = Form(0.8),
-    temperature: float = Form(0.8)
-):
+async def text_to_speech(request: Request):
     """
     Generate speech from text using reference audio
     
-    Parameters:
-    - text: Text to synthesize
-    - ref_audio_path: Path to reference audio (or upload ref_audio)
-    - ref_audio: Reference audio file (multipart upload)
-    - ref_text: Transcript of reference audio (optional for zero-shot)
-    - language: Language code (en, zh, ja, ko)
-    - speed: Speech speed (0.5-2.0)
-    - top_k: Sampling top-k
-    - top_p: Sampling top-p
-    - temperature: Sampling temperature
+    Accepts BOTH:
+    1. Form Data (multipart/form-data): text, ref_audio_base64, ref_text, language
+    2. JSON Body (application/json): input, reference_audio, reference_text, reference_language
     """
     
-    if gpt_sovits_model is None:
+    if not models_loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
     
     try:
-        # Handle reference audio
-        ref_audio_bytes = None
-        if ref_audio:
-            ref_audio_bytes = await ref_audio.read()
-            ref_audio_path = TEMP_DIR / f"ref_{ref_audio.filename}"
-            with open(ref_audio_path, "wb") as f:
-                f.write(ref_audio_bytes)
-        elif ref_audio_path:
-            ref_audio_path = Path(ref_audio_path)
-            if not ref_audio_path.exists():
-                raise HTTPException(status_code=404, detail="Reference audio not found")
+        content_type = request.headers.get("content-type", "")
+        
+        if "application/json" in content_type:
+            # JSON format
+            data = await request.json()
+            text_val = data.get("input")
+            ref_audio_b64 = data.get("reference_audio")
+            ref_text_val = data.get("reference_text")
+            language_val = data.get("reference_language", "en")
         else:
-            raise HTTPException(status_code=400, detail="Reference audio required")
+            # Form data format
+            form = await request.form()
+            text_val = form.get("text")
+            ref_audio_b64 = form.get("ref_audio_base64")
+            ref_text_val = form.get("ref_text")
+            language_val = form.get("language", "en")
         
-        # Perform TTS inference
-        logger.info(f"Generating speech: '{text[:50]}...'")
+        if not text_val:
+            raise HTTPException(status_code=400, detail="text/input field is required")
         
-        audio_data = gpt_sovits_model.infer(
-            text=text,
-            ref_wav_path=str(ref_audio_path),
-            prompt_text=ref_text or "",
-            prompt_language=language,
-            text_language=language,
-            how_to_cut="凑四句一切" if language == "zh" else "不切",
-            top_k=top_k,
-            top_p=top_p,
-            temperature=temperature,
-            speed=speed
-        )
+        if not ref_audio_b64:
+            raise HTTPException(status_code=400, detail="ref_audio_base64/reference_audio field is required")
         
-        # Convert to WAV bytes
-        audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, audio_data, 32000, format='WAV')
-        audio_buffer.seek(0)
+        if not ref_text_val:
+            raise HTTPException(status_code=400, detail="ref_text/reference_text field is required")
         
-        logger.info("✓ Speech generated successfully")
+        # Decode base64 reference audio
+        try:
+            audio_data = base64.b64decode(ref_audio_b64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 audio data: {e}")
         
-        return StreamingResponse(
-            audio_buffer,
+        # Save to temporary file
+        temp_audio_path = TEMP_DIR / f"ref_{int(time.time() * 1000)}.wav"
+        temp_audio_path.write_bytes(audio_data)
+        
+        # Pass language codes directly
+        prompt_language = language_val.lower()
+        text_language = language_val.lower()
+        
+        logger.info(f"Generating speech: '{text_val[:50]}...' (lang={language_val})")
+        
+        # Return streaming response
+        response = StreamingResponse(
+            get_tts_wav(str(temp_audio_path), ref_text_val, prompt_language, text_val, text_language),
             media_type="audio/wav",
             headers={"Content-Disposition": "attachment; filename=output.wav"}
         )
         
+        return response
+        
     except Exception as e:
         logger.error(f"TTS generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/models/list")
 async def list_models():

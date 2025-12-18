@@ -18,6 +18,7 @@ import chatHistoryService from '../services/ChatHistoryService';
 import { modelStorageService } from '../services/ModelStorageService';
 import { motionStorageService } from '../services/MotionStorageService';
 import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
+import { useDesktop } from '../contexts/DesktopContext';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
@@ -71,7 +72,8 @@ const ChatContainer = ({
     nextBranch,
   } = useApp();
 
-  const { updateUIConfig, uiConfig } = useConfig();
+  const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext } = useConfig();
+  const { api } = useDesktop();
 
   const buttonPosRef = useRef(buttonPosition);
   const buttonInitializedRef = useRef(false);
@@ -102,8 +104,12 @@ const ChatContainer = ({
   
   const [deletingModelId, setDeletingModelId] = useState(null);
   const [deletingMotionId, setDeletingMotionId] = useState(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState(null);
+  const [deletingLLMModel, setDeletingLLMModel] = useState(null);
   const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] = useState(false);
   const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] = useState(false);
+  const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] = useState(false);
+  const [isDeleteLLMModelDialogClosing, setIsDeleteLLMModelDialogClosing] = useState(false);
   const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   
@@ -563,6 +569,83 @@ const ChatContainer = ({
     setTimeout(() => {
       setDeletingMotionId(null);
       setIsDeleteMotionDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteVoiceDialog = useCallback((voiceId) => {
+    setDeletingVoiceId(voiceId);
+  }, []);
+
+  const handleDeleteVoiceConfirm = useCallback(async (voiceId) => {
+    try {
+      const { default: voiceStorageService } = await import('../services/VoiceStorageService');
+      await voiceStorageService.deleteVoice(voiceId);
+      Logger.log('ChatContainer', 'Deleted voice:', voiceId);
+      
+      if (ttsConfig?.gptsovits?.referenceVoiceId === voiceId) {
+        updateTTSConfig('gptsovits.referenceVoiceId', null);
+        updateTTSConfig('gptsovits.referenceText', '');
+      }
+      
+      setSettingsRefreshTrigger(prev => {
+        const newValue = prev + 1;
+        return newValue;
+      });
+      
+      setIsDeleteVoiceDialogClosing(true);
+      setTimeout(() => {
+        setDeletingVoiceId(null);
+        setIsDeleteVoiceDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete voice:', error);
+    }
+  }, [ttsConfig, updateTTSConfig]);
+
+  const handleDeleteVoiceCancel = useCallback(() => {
+    setIsDeleteVoiceDialogClosing(true);
+    setTimeout(() => {
+      setDeletingVoiceId(null);
+      setIsDeleteVoiceDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteLLMModel = useCallback((filename) => {
+    setDeletingLLMModel(filename);
+  }, []);
+
+  const handleDeleteLLMModelConfirm = useCallback(async (filename) => {
+    if (!isDesktop || !api?.llm) return;
+
+    try {
+      const result = await api.llm.deleteModel(filename);
+      if (result?.success) {
+        Logger.log('ChatContainer', 'Deleted LLM model:', filename);
+        
+        // Trigger refresh
+        setSettingsRefreshTrigger(prev => prev + 1);
+      }
+      
+      setIsDeleteLLMModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingLLMModel(null);
+        setIsDeleteLLMModelDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete LLM model:', error);
+      setIsDeleteLLMModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingLLMModel(null);
+        setIsDeleteLLMModelDialogClosing(false);
+      }, 200);
+    }
+  }, [isDesktop, api]);
+
+  const handleDeleteLLMModelCancel = useCallback(() => {
+    setIsDeleteLLMModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingLLMModel(null);
+      setIsDeleteLLMModelDialogClosing(false);
     }, 200);
   }, []);
 
@@ -1281,6 +1364,8 @@ const ChatContainer = ({
             animationClass={isSettingsPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
             onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
             onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+            onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
+            onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
             refreshTrigger={settingsRefreshTrigger}
           />
         </div>
@@ -1370,6 +1455,42 @@ const ChatContainer = ({
             confirmStyle="error"
             onConfirm={handleDeleteMotionConfirm}
             onCancel={handleDeleteMotionCancel}
+          />
+        </div>
+      )}
+
+      {/* Voice Delete Dialog - renders outside SettingsPanel */}
+      {deletingVoiceId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Voice?"
+            message="This will permanently delete this reference voice. This cannot be undone."
+            itemId={deletingVoiceId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteVoiceDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteVoiceConfirm}
+            onCancel={handleDeleteVoiceCancel}
+          />
+        </div>
+      )}
+
+      {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
+      {deletingLLMModel && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Model?"
+            message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}
+            itemId={deletingLLMModel}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteLLMModelDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteLLMModelConfirm}
+            onCancel={handleDeleteLLMModelCancel}
           />
         </div>
       )}

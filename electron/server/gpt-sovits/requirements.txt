@@ -1,46 +1,47 @@
-# GPT-SoVITS TTS Dependencies
-# For Windows x64 with CUDA 12.x
-
-# PyTorch with CUDA 12.8 (install first)
---index-url https://download.pytorch.org/whl/cu128
-torch>=2.5.0
-torchaudio>=2.5.0
 
 # Core dependencies
 --index-url https://pypi.org/simple
-numpy>=1.26.0
-scipy>=1.11.0
-librosa>=0.10.2
-soundfile>=0.12.1
-tqdm>=4.65.0
-psutil>=5.9.0
-numba>=0.57.0
-resampy>=0.4.2
-ffmpeg-python>=0.2.0
 
-# FastAPI server
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
-python-multipart>=0.0.6
+--no-binary=opencc
+numpy<2.0
+scipy
+tensorboard
+librosa==0.10.2
+numba
+pytorch-lightning>=2.4
+gradio<5
+ffmpeg-python
+onnxruntime-gpu
+tqdm
+cn2an
+pypinyin
+pyopenjtalk-prebuilt
+g2p_en
+modelscope
+sentencepiece
+transformers==4.46.0
+peft==0.12.0
+chardet
+PyYAML
+psutil
+jieba_fast
+jieba
+split-lang
+fast_langdetect>=0.3.1
+wordsegment
+rotary_embedding_torch
+ToJyutping
+g2pk2
+ko_pron
+opencc
+pyopenjtalk-prebuilt
+fastapi[standard]>=0.115.2
+x_transformers
+torchmetrics<=1.5
+pydantic<=2.10.6
+ctranslate2>=4.0,<5
+av>=11
+soundfile
 
-# Audio processing
-praat-parselmouth>=0.4.3
-pyworld>=0.3.4
-
-# Text processing
-jieba>=0.42.1
-cn2an>=0.5.22
-pypinyin>=0.50.0
-g2p-en>=2.1.0
-inflect>=7.0.0
-eng-to-ipa>=0.0.2
-
-# Neural network utilities
-einops>=0.7.0
-transformers>=4.45.0
-sentencepiece>=0.1.99
-protobuf>=4.25.0
-
-# Model download
-huggingface-hub>=0.26.0
+# Faster Whisper STT (GPU-accelerated)
+faster-whisper>=1.0.0

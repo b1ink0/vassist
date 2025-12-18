@@ -7,7 +7,7 @@
 import { useState, useMemo } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
-import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice } from '../../config/aiConfig';
+import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice, GPTSoVITSLanguages } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
@@ -15,13 +15,17 @@ import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 
-const TTSSettings = ({ isLightBackground }) => {
+const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTrigger }) => {
   const [clearingCache, setClearingCache] = useState(false);
   const [cacheSize, setCacheSize] = useState(null);
+  const [testText, setTestText] = useState('Hello, this is a test of the text to speech system.');
+  const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
   
   const {
     ttsConfig,
     ttsTesting,
+    ttsConfigError,
+    setTtsConfigError,
     updateTTSConfig,
     testTTSConnection,
     kokoroStatus,
@@ -92,7 +96,7 @@ const TTSSettings = ({ isLightBackground }) => {
                     max="108"
                     value={ttsConfig['android-local']?.speakerId || 0}
                     onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
-                    className="w-20 px-2 py-1 rounded bg-white/10 text-white text-sm border border-white/20"
+                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-20 text-sm`}
                   />
                 </div>
               </div>
@@ -117,19 +121,22 @@ const TTSSettings = ({ isLightBackground }) => {
 
           {/* Desktop Local TTS Configuration */}
           {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && isDesktop && (
-            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
-              <h4 className="text-sm font-semibold text-white/90">Desktop Local TTS (GPT-SoVITS)</h4>
+            <>
+              <h4 className="text-sm font-semibold text-white/90 mb-3">Desktop Local TTS (GPT-SoVITS)</h4>
               <GPTSoVITSConfig
                 config={ttsConfig['desktop-local'] || {}}
-                onChange={(updates) => {
-                  Object.entries(updates).forEach(([key, value]) => {
-                    updateTTSConfig(`desktop-local.${key}`, value);
-                  });
+                onChange={(field, value) => {
+                  updateTTSConfig(`desktop-local.${field}`, value);
                 }}
                 showTitle={false}
                 isSetupMode={false}
+                onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+                refreshTrigger={refreshTrigger}
+                isLightBackground={isLightBackground}
+                errorMessage={ttsConfigError}
+                setErrorMessage={setTtsConfigError}
               />
-            </div>
+            </>
           )}
 
           {/* Kokoro TTS Configuration */}
@@ -332,9 +339,37 @@ const TTSSettings = ({ isLightBackground }) => {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-4">
+      <div className="space-y-3 pt-4">
+        {/* Test Text Input */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Test Text</label>
+          <input
+            type="text"
+            value={testText}
+            onChange={(e) => setTestText(e.target.value)}
+            placeholder="Enter text to test TTS..."
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          />
+        </div>
+        
+        {/* Test Language (only for GPT-SoVITS) */}
+        {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Test Language</label>
+            <select
+              value={testLanguage}
+              onChange={(e) => setTestLanguage(e.target.value)}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            >
+              <option value={GPTSoVITSLanguages.ENGLISH}>English</option>
+              <option value={GPTSoVITSLanguages.JAPANESE}>Japanese (日本語)</option>
+              <option value={GPTSoVITSLanguages.CHINESE}>Chinese (中文)</option>
+            </select>
+          </div>
+        )}
+        
         <button 
-          onClick={testTTSConnection}
+          onClick={() => testTTSConnection(testText)}
           disabled={!ttsConfig.enabled || ttsTesting}
           className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
