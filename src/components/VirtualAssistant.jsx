@@ -13,6 +13,7 @@ import { useApp } from '../contexts/AppContext';
 import { useDesktop } from '../contexts/DesktopContext';
 import { useAnimation } from '../contexts/AnimationContext';
 import Logger from '../services/LoggerService';
+import emotePlayerService from '../services/EmotePlayerService';
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.
@@ -110,6 +111,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
       }
     });
     Logger.log('VirtualAssistant', 'TTS Service integrated with lip sync');
+    
+    emotePlayerService.setAnimationManager(manager);
+    Logger.log('VirtualAssistant', 'EmotePlayerService connected to AnimationManager');
     
     // Call onReady callback if provided
     if (onReady) {

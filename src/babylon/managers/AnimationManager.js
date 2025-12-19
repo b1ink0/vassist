@@ -390,7 +390,7 @@ export class AnimationManager {
   async loadAnimation(animationConfig) {
     if (this.disposed) return null;
     
-    const { filePath, id, name, isCustom, customMotionId } = animationConfig;
+    const { filePath, id, name, isCustom, customMotionId, preserveRootBone } = animationConfig;
     
     // Handle custom animations (from MotionStorageService)
     if (isCustom && customMotionId) {
@@ -438,8 +438,10 @@ export class AnimationManager {
           if (this._shouldFlipAnimations) {
             this._flipAnimationXAxis(animation);
           }
-          this._applyLocomotionOffset(animation);
-          if (this.scene.metadata?.isPortraitMode) {
+          if (!preserveRootBone) {
+            this._applyLocomotionOffset(animation);
+          }
+          if (this.scene.metadata?.isPortraitMode && !preserveRootBone) {
             this._fixRootBoneForPortraitMode(animation);
           }
           
@@ -509,10 +511,13 @@ export class AnimationManager {
       }
 
       // Apply intro locomotion offset to this animation if we have one
-      this._applyLocomotionOffset(animation);
+      if (!preserveRootBone) {
+        this._applyLocomotionOffset(animation);
+      }
 
       // Fix root bone position for Portrait Mode to prevent drifting
-      if (this.scene.metadata?.isPortraitMode) {
+      if (this.scene.metadata?.isPortraitMode && !preserveRootBone) {
+        Logger.log('AnimationManager', `Portrait Mode: Fixing root bone for "${name}"`);
         this._fixRootBoneForPortraitMode(animation);
       }
 
@@ -958,25 +963,42 @@ export class AnimationManager {
     // Keep old spans active during transition for smooth blending
     const allOldSpans = Array.from(this.spanMap.values()).flat();
     
-    // Filter out spans that already have ease-out (they're from a previous transition)
-    // We should remove those immediately, not keep them for another transition!
-    const oldSpans = allOldSpans.filter(span => {
-      if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
-        Logger.log('AnimationManager', `Removing span at offset ${span.offset} - already easing out from previous transition`);
-        this.compositeAnimation.removeSpan(span);
-        return false; // Don't include in transition
-      }
-      return true; // Include in new transition
-    });
-    
-    if (oldSpans.length > 0) {
-      Logger.log('AnimationManager', `Keeping ${oldSpans.length} old spans for transition blending`);
+    if (animationConfig.preserveRootBone) {
+      Logger.log('AnimationManager', `Emote: Completely resetting composite animation (was ${allOldSpans.length} spans)`);
       
-      // Apply ease-out to old spans
-      // CRITICAL: We need to truncate the old span's endFrame to the current position + transition duration
-      // This makes the ease-out start IMMEDIATELY from the current playback position
-      const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
-      const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
+      // Remove ALL existing spans
+      for (const span of allOldSpans) {
+        this.compositeAnimation.removeSpan(span);
+      }
+      
+      // Clear all tracking state
+      this.spanMap.clear();
+      this.oldSpansToRemove = null;
+      this.currentCycle = 0;
+      this.lastAddedCycle = -1;
+      this.firstActiveCycle = 0;
+      
+      this.compositeAnimation = new MmdCompositeAnimation('assistantComposite_emote');
+      
+      this.mmdModel.setRuntimeAnimation(null);
+      this.runtimeAnimationHandle = this.mmdModel.createRuntimeAnimation(this.compositeAnimation);
+      this.mmdModel.setRuntimeAnimation(this.runtimeAnimationHandle);
+      
+      Logger.log('AnimationManager', 'Emote: Fresh composite animation created');
+    } else {
+      const oldSpans = allOldSpans.filter(span => {
+        if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
+          Logger.log('AnimationManager', `Removing span at offset ${span.offset} - already easing out from previous transition`);
+          this.compositeAnimation.removeSpan(span);
+          return false; // Don't include in transition
+        }
+        return true; // Include in new transition
+      });
+    
+      if (oldSpans.length > 0) {
+        Logger.log('AnimationManager', `Keeping ${oldSpans.length} old spans for transition blending`);
+        const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+        const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
       
       // Track the latest end time across ALL old spans
       let latestSpanEndTime = currentTimelineFrame;
@@ -1018,7 +1040,7 @@ export class AnimationManager {
       this.oldSpansRemovalFrame = latestSpanEndTime + 2;
       
       Logger.log('AnimationManager', `Scheduled old span removal at frame ${this.oldSpansRemovalFrame.toFixed(2)} (last span ends at ${latestSpanEndTime.toFixed(2)})`);
-    
+      }
     }
     
     // Reset cycle tracking for new animation
@@ -1558,7 +1580,7 @@ export class AnimationManager {
    * Simple approach: Calculate blink timing based on absolute time, apply directly
    */
   onAfterRender() {
-    if (this.disposed || !this.blinkEnabled || !this.blinkAnimation) {
+    if (this.disposed || !this.blinkEnabled || !this.blinkAnimation || this.currentAnimationConfig?.disableBlinking) {
       return;
     }
     

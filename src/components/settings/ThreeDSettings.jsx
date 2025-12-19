@@ -17,6 +17,7 @@ import { pmxConverterService } from '../../services/PMXConverterService';
 import { vmdConverterService } from '../../services/VMDConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
+import emoteStorageService from '../../services/EmoteStorageService';
 
 const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }) => {
   const {
@@ -59,6 +60,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [editingMotionName, setEditingMotionName] = useState('');
   const [expandedMotionSettings, setExpandedMotionSettings] = useState(null); // ID of motion showing expanded settings
   const motionFileInputRef = useRef(null);
+
+  const [emotes, setEmotes] = useState([]);
+  const [emoteUploadState, setEmoteUploadState] = useState({
+    uploading: false,
+    progress: '',
+    error: null
+  });
+  const [editingEmoteId, setEditingEmoteId] = useState(null);
+  const [editingEmoteName, setEditingEmoteName] = useState('');
+  const [emoteName, setEmoteName] = useState('');
+  const emoteAudioFileInputRef = useRef(null);
+  const emoteMotionFileInputRef = useRef(null);
   
   const [expandedModelSettings, setExpandedModelSettings] = useState(null); // ID of model showing expanded settings
   
@@ -75,6 +88,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   useEffect(() => {
     loadModels();
     loadMotions();
+    loadEmotes();
     loadBuiltinModelMetadata();
   }, [refreshTrigger]);
 
@@ -631,6 +645,112 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const handleCancelEditMotion = () => {
     setEditingMotionId(null);
     setEditingMotionName('');
+  };
+
+  // Emote management functions
+  const loadEmotes = async () => {
+    try {
+      const emotesList = await emoteStorageService.getEmotesList();
+      setEmotes(emotesList);
+    } catch (error) {
+      console.error('Failed to load emotes:', error);
+    }
+  };
+
+  const handleEmoteAudioFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      emoteAudioFileInputRef.current.selectedFile = file;
+    }
+  };
+
+  const handleEmoteMotionFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      emoteMotionFileInputRef.current.selectedFile = file;
+    }
+  };
+
+  const handleEmoteUpload = async () => {
+    try {
+      if (!emoteName.trim()) {
+        setEmoteUploadState({ uploading: false, progress: '', error: 'Please enter an emote name' });
+        return;
+      }
+
+      const audioFile = emoteAudioFileInputRef.current?.selectedFile;
+      const motionFile = emoteMotionFileInputRef.current?.selectedFile;
+
+      if (!audioFile || !motionFile) {
+        setEmoteUploadState({ uploading: false, progress: '', error: 'Please select both audio and motion files' });
+        return;
+      }
+
+      setEmoteUploadState({ uploading: true, progress: 'Converting motion...', error: null });
+
+      const bvmdData = await vmdConverterService.convertVMDToBVMD(motionFile);
+
+      setEmoteUploadState({ uploading: true, progress: 'Uploading emote...', error: null });
+
+      await emoteStorageService.saveEmote(
+        null,
+        emoteName,
+        audioFile,
+        bvmdData,
+        {
+          originalAudioFileName: audioFile.name,
+          originalMotionFileName: motionFile.name,
+          audioMimeType: audioFile.type
+        }
+      );
+
+      setEmoteUploadState({ uploading: false, progress: '', error: null });
+      setEmoteName('');
+      emoteAudioFileInputRef.current.selectedFile = null;
+      emoteMotionFileInputRef.current.selectedFile = null;
+      emoteAudioFileInputRef.current.value = '';
+      emoteMotionFileInputRef.current.value = '';
+      await loadEmotes();
+    } catch (error) {
+      console.error('Failed to upload emote:', error);
+      setEmoteUploadState({ uploading: false, progress: '', error: error.message || 'Upload failed' });
+    }
+  };
+
+  const handleDeleteEmote = async (emoteId) => {
+    if (window.confirm('Are you sure you want to delete this emote?')) {
+      try {
+        await emoteStorageService.deleteEmote(emoteId);
+        await loadEmotes();
+      } catch (error) {
+        console.error('Failed to delete emote:', error);
+        setErrorDialogMessage(error.message || 'Failed to delete emote');
+        setShowErrorDialog(true);
+      }
+    }
+  };
+
+  const handleEditEmote = (emoteId, currentName) => {
+    setEditingEmoteId(emoteId);
+    setEditingEmoteName(currentName);
+  };
+
+  const handleSaveEmoteName = async (emoteId) => {
+    try {
+      await emoteStorageService.updateEmoteName(emoteId, editingEmoteName);
+      setEditingEmoteId(null);
+      setEditingEmoteName('');
+      await loadEmotes();
+    } catch (error) {
+      console.error('Failed to update emote name:', error);
+      setErrorDialogMessage(error.message || 'Failed to update emote name');
+      setShowErrorDialog(true);
+    }
+  };
+
+  const handleCancelEditEmote = () => {
+    setEditingEmoteId(null);
+    setEditingEmoteName('');
   };
 
   // Handle toggling category for a motion
@@ -1697,6 +1817,167 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                           })}
                         </div>
                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Emote Management Section */}
+          <div className="space-y-4 border-t border-white/10 pt-4">
+            <h4 className="text-sm font-semibold text-white mb-3">Emotes</h4>
+            
+            {/* Emote Upload */}
+            <div className="space-y-3">
+              {/* Emote Name Input */}
+              <div className="space-y-1">
+                <label className="text-xs text-white/70">Emote Name</label>
+                <input
+                  type="text"
+                  value={emoteName}
+                  onChange={(e) => setEmoteName(e.target.value)}
+                  placeholder="Enter emote name"
+                  disabled={emoteUploadState.uploading}
+                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+                />
+              </div>
+
+              {/* Hidden File Inputs */}
+              <input
+                ref={emoteAudioFileInputRef}
+                type="file"
+                accept=".mp3,.wav,.ogg,.m4a"
+                onChange={handleEmoteAudioFileChange}
+                className="hidden"
+              />
+              <input
+                ref={emoteMotionFileInputRef}
+                type="file"
+                accept=".vmd"
+                onChange={handleEmoteMotionFileChange}
+                className="hidden"
+              />
+              
+              {/* Audio File Upload Button */}
+              <button
+                onClick={() => emoteAudioFileInputRef.current?.click()}
+                disabled={emoteUploadState.uploading}
+                className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
+                <p className="text-sm text-white/90">
+                  {emoteAudioFileInputRef.current?.selectedFile?.name || 'Upload Audio'}
+                </p>
+                <p className="text-xs text-white/50">MP3, WAV, OGG, M4A</p>
+              </button>
+
+              {/* Motion File Upload Button */}
+              <button
+                onClick={() => emoteMotionFileInputRef.current?.click()}
+                disabled={emoteUploadState.uploading}
+                className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
+                <p className="text-sm text-white/90">
+                  {emoteMotionFileInputRef.current?.selectedFile?.name || 'Upload Motion'}
+                </p>
+                <p className="text-xs text-white/50">VMD file</p>
+              </button>
+
+              {/* Upload Button */}
+              <button
+                onClick={handleEmoteUpload}
+                disabled={emoteUploadState.uploading || !emoteName.trim()}
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
+              </button>
+
+              {emoteUploadState.error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
+                  <p className="text-xs text-red-200">{emoteUploadState.error}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Emote List */}
+            {emotes.length > 0 && (
+              <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar">
+                {emotes.map((emote) => {
+                  const isEditing = editingEmoteId === emote.id;
+                  return (
+                    <div key={emote.id} className="rounded-lg overflow-hidden">
+                      <div className="bg-white/5 backdrop-blur-sm p-3 hover:bg-white/10 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editingEmoteName}
+                                onChange={(e) => setEditingEmoteName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveEmoteName(emote.id);
+                                  if (e.key === 'Escape') handleCancelEditEmote();
+                                }}
+                                className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                                autoFocus
+                              />
+                            ) : (
+                              <p className="text-sm font-medium text-white/90 truncate">
+                                {emote.name}
+                              </p>
+                            )}
+                            {isEditing && (
+                              <>
+                                <p className="text-xs text-white/50 truncate">
+                                  {emote.metadata?.originalAudioFileName || 'Unknown'}
+                                </p>
+                                <p className="text-xs text-white/50 truncate">
+                                  {emote.metadata?.originalMotionFileName || 'Unknown'}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => handleSaveEmoteName(emote.id)}
+                                  className="p-1 rounded hover:bg-green-500/20 text-white/50 hover:text-green-300 transition-colors"
+                                  title="Save"
+                                >
+                                  <Icon name="check" size={16} />
+                                </button>
+                                <button
+                                  onClick={handleCancelEditEmote}
+                                  className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                  title="Cancel"
+                                >
+                                  <Icon name="x" size={16} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleEditEmote(emote.id, emote.name)}
+                                  className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                  title="Edit name"
+                                >
+                                  <Icon name="edit-2" size={16} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteEmote(emote.id)}
+                                  className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Icon name="trash-2" size={16} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}

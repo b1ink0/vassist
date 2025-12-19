@@ -8,6 +8,8 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
+import emoteStorageService from '../services/EmoteStorageService';
+import emotePlayerService from '../services/EmotePlayerService';
 import { isAndroid } from '../utils/PlatformUtils';
 
 /**
@@ -40,6 +42,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const buttonPosRef = useRef({ x: -100, y: -100 });
   const lastSetPosition = useRef({ x: -100, y: -100 });
   const [isDragOverButton, setIsDragOverButton] = useState(false);
+  const [isEmotePanelOpen, setIsEmotePanelOpen] = useState(false);
+  const [emotes, setEmotes] = useState([]);
   const dragDropServiceRef = useRef(null);
   const buttonRef = useRef(null);
   
@@ -49,6 +53,14 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   
   // Background detection state
   const [isLightBackground, setIsLightBackground] = useState(false);
+
+  useEffect(() => {
+    if (isEmotePanelOpen) {
+      emoteStorageService.getEmotesList().then(setEmotes).catch(err => {
+        Logger.error('ChatButton', 'Failed to load emotes:', err);
+      });
+    }
+  }, [isEmotePanelOpen]);
 
   /**
    * Detect background color under the button
@@ -586,43 +598,112 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   if (!shouldRender) return null;
 
+  const EMOTE_BUTTON_OFFSET = 56;
+
   const androidPosition = isAndroid ? {
     left: '20px',
     bottom: '20px',
     top: 'auto',
   } : {
     left: `${buttonPos.x}px`,
-    top: `${buttonPos.y}px`,
+    top: `${buttonPos.y - EMOTE_BUTTON_OFFSET}px`,
   };
 
   return (
-    <button
-      ref={buttonRef}
-      onClick={handleClick}
-      onMouseDown={handleMouseDown}
+    <>
+    {/* Emote List */}
+    {isEmotePanelOpen && (
+      <div
+        style={{
+          left: `${buttonPos.x - 77}px`,
+          top: `${buttonPos.y - EMOTE_BUTTON_OFFSET - Math.min(emotes.length * 43, 300) - 8}px`,
+          zIndex: isAndroid ? 201 : 10001,
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+        className="fixed w-[125px] max-h-[300px] snap-y snap-mandatory overflow-y-auto"
+      >
+        <style>{`
+          div::-webkit-scrollbar { display: none; }
+        `}</style>
+        {emotes.length === 0 ? (
+          <div className="snap-center flex items-center justify-center h-[35px] text-[10px] text-white/50 text-center p-1">
+            No emotes
+          </div>
+        ) : (
+          emotes.map((emote, index) => (
+            <button
+              key={emote.id}
+              onClick={async () => {
+                try {
+                  await emotePlayerService.playEmote(emote.id);
+                  setIsEmotePanelOpen(false);
+                } catch (err) {
+                  Logger.error('ChatButton', 'Failed to play emote:', err);
+                }
+              }}
+              className={`snap-center glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+                isLightBackground 
+                  ? 'glass-button-dark' 
+                  : ''
+              } backdrop-blur-[10px]`}
+              title={emote.name}
+            >
+              <span className="truncate">{emote.name}</span>
+            </button>
+          ))
+        )}
+      </div>
+    )}
+
+    <div
       style={{
-        position: 'fixed',
         ...androidPosition,
-        zIndex: isAndroid ? 200 : 10000, // Android: above canvas (100), below chat (9999). Desktop: above canvas (9999)
-        width: '48px',
-        height: '48px',
-        cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
-        willChange: isDragging ? 'left, top' : 'auto',
-        transition: isDragging ? 'none' : undefined,
+        zIndex: isAndroid ? 200 : 10000,
       }}
-      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} rounded-full flex items-center justify-center ${
-        modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
-      } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''} ${
-        isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-      } ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'}`}
-      title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
+      className="fixed flex flex-col gap-2 items-center"
     >
-      <Icon 
-        name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
-        size={24} 
-        className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
-      />
-    </button>
+
+      {/* Emote Button */}
+      <button
+        onClick={() => setIsEmotePanelOpen(!isEmotePanelOpen)}
+        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
+          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
+        }`}
+        title="Emotes"
+      >
+        <Icon 
+          name="music" 
+          size={24} 
+          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+        />
+      </button>
+
+      {/* Chat Button */}
+      <button
+        ref={buttonRef}
+        onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        style={{
+          cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+          willChange: isDragging ? 'left, top' : 'auto',
+          transition: isDragging ? 'none' : undefined,
+        }}
+        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center ${
+          modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
+        } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''} ${
+          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
+        } ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'}`}
+        title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
+      >
+        <Icon 
+          name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
+          size={24} 
+          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+        />
+      </button>
+    </div>
+    </>
   );
 };
 

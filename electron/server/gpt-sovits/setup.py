@@ -1,23 +1,43 @@
 """
 Setup script for GPT-SoVITS TTS server
 Downloads models and sets up Python environment
+Supports: Windows (x64), macOS (Apple Silicon/M-series)
 """
 
 import os
 import sys
 import subprocess
 import shutil
+import platform
 from pathlib import Path
 import urllib.request
 import zipfile
+import tarfile
 from tqdm import tqdm
 
 BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"
 PYTHON_DIR = BASE_DIR / "python"
 
+# Platform detection
+IS_WINDOWS = platform.system() == 'Windows'
+IS_MACOS = platform.system() == 'Darwin'
+IS_ARM_MAC = IS_MACOS and platform.machine() == 'arm64'
+
+def get_python_exe():
+    """Get the Python executable path for current platform"""
+    if IS_WINDOWS:
+        return PYTHON_DIR / "python.exe"
+    else:
+        return PYTHON_DIR / "bin" / "python3"
+
 def check_cuda_available():
-    """Check if CUDA is available on the system"""
+    """Check if CUDA is available on the system (Windows/Linux only)"""
+    if IS_MACOS:
+        # macOS uses Metal Performance Shaders (MPS), not CUDA
+        print("ℹ macOS detected - will use Metal Performance Shaders (MPS) for GPU acceleration")
+        return False
+    
     try:
         # Try nvidia-smi first
         result = subprocess.run(
@@ -84,15 +104,19 @@ def download_file(url, dest):
         raise
 
 def setup_python_runtime():
-    """Download embedded Python runtime for Windows"""
-    if not PYTHON_DIR.exists():
-        PYTHON_DIR.mkdir(parents=True)
+    """Download and setup Python runtime for current platform"""
+    if PYTHON_DIR.exists():
+        print(f"✓ Python runtime already exists at {PYTHON_DIR}")
+        return
         
-        # Download Python embeddable package
+    PYTHON_DIR.mkdir(parents=True)
+    
+    if IS_WINDOWS:
+        # Windows: Download embedded Python package
         python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
         python_zip = PYTHON_DIR / "python.zip"
         
-        print("Setting up Python runtime...")
+        print("Setting up Python runtime for Windows...")
         download_file(python_url, python_zip)
         
         with zipfile.ZipFile(python_zip, 'r') as zip_ref:
@@ -115,62 +139,138 @@ def setup_python_runtime():
         get_pip = PYTHON_DIR / "get-pip.py"
         download_file("https://bootstrap.pypa.io/get-pip.py", get_pip)
         
-        python_exe = PYTHON_DIR / "python.exe"
+        python_exe = get_python_exe()
         subprocess.run([str(python_exe), str(get_pip)], check=True)
         
         print("✓ pip installed")
+        
+    elif IS_ARM_MAC:
+        # macOS ARM: Download standalone Python build for Apple Silicon
+        python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
+        
+        print("Setting up Python runtime for macOS (Apple Silicon)...")
+        print("Note: Using system Python with virtual environment approach")
+        
+        # Create virtual environment using system Python
+        system_python = shutil.which('python3')
+        if not system_python:
+            print("✗ System Python3 not found. Please install Python 3.10+ from python.org")
+            print("  Download: https://www.python.org/downloads/macos/")
+            sys.exit(1)
+        
+        # Check Python version
+        result = subprocess.run([system_python, '--version'], capture_output=True, text=True)
+        print(f"✓ Found system Python: {result.stdout.strip()}")
+        
+        # Create virtual environment
+        subprocess.run([system_python, '-m', 'venv', str(PYTHON_DIR)], check=True)
+        print("✓ Virtual environment created")
+        
+        # Upgrade pip
+        python_exe = get_python_exe()
+        subprocess.run([str(python_exe), '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
+        print("✓ pip installed")
+    
+    else:
+        print(f"✗ Unsupported platform: {platform.system()} {platform.machine()}")
+        print("  Supported: Windows x64, macOS Apple Silicon (M1/M2/M3)")
+        sys.exit(1)
 
 def install_pytorch():
-    """Install PyTorch with CUDA support if available"""
-    embedded_python_exe = PYTHON_DIR / "python.exe"
+    """Install PyTorch with platform-specific acceleration"""
+    python_exe = get_python_exe()
     
     print("\n" + "="*60)
     print("Installing PyTorch...")
     print("="*60)
     
-    # Check for CUDA
-    has_cuda = check_cuda_available()
-    
-    if has_cuda:
-        print("Installing PyTorch with CUDA 12.1 support (2.4GB download)...")
-        print("This may take 10-30 minutes depending on your internet speed.")
+    if IS_ARM_MAC:
+        # macOS Apple Silicon: Install PyTorch with MPS (Metal Performance Shaders) support
+        print("Installing PyTorch for Apple Silicon (MPS acceleration)...")
+        print("This will enable GPU acceleration via Metal")
         try:
             subprocess.run([
-                str(embedded_python_exe), "-m", "pip", "install",
+                str(python_exe), "-m", "pip", "install",
                 "torch", "torchaudio",
-                "--index-url", "https://download.pytorch.org/whl/cu121",
                 "--no-warn-script-location"
             ], check=True)
-            print("✓ PyTorch with CUDA installed")
+            print("✓ PyTorch with MPS support installed")
             
-            # Verify CUDA is available
+            # Verify MPS is available
             result = subprocess.run([
-                str(embedded_python_exe), "-c",
-                "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+                str(python_exe), "-c",
+                "import torch; print(f'MPS available: {torch.backends.mps.is_available()}, Built: {torch.backends.mps.is_built()}')"
             ], capture_output=True, text=True, check=False)
             print(result.stdout.strip())
             
         except subprocess.CalledProcessError as e:
-            print(f"⚠ CUDA PyTorch installation failed: {e}")
-            print("Falling back to CPU version...")
-            has_cuda = False
+            print(f"⚠ PyTorch installation failed: {e}")
+            sys.exit(1)
     
-    if not has_cuda:
-        print("Installing PyTorch CPU version...")
-        subprocess.run([
-            str(embedded_python_exe), "-m", "pip", "install",
-            "torch", "torchaudio",
-            "--index-url", "https://download.pytorch.org/whl/cpu",
-            "--no-warn-script-location"
-        ], check=True)
-        print("✓ PyTorch CPU installed")
+    elif IS_WINDOWS:
+        # Windows: Check for CUDA
+        has_cuda = check_cuda_available()
+        
+        if has_cuda:
+            print("Installing PyTorch with CUDA 12.1 support (2.4GB download)...")
+            print("This may take 10-30 minutes depending on your internet speed.")
+            try:
+                subprocess.run([
+                    str(python_exe), "-m", "pip", "install",
+                    "torch", "torchaudio",
+                    "--index-url", "https://download.pytorch.org/whl/cu121",
+                    "--no-warn-script-location"
+                ], check=True)
+                print("✓ PyTorch with CUDA installed")
+                
+                # Verify CUDA is available
+                result = subprocess.run([
+                    str(python_exe), "-c",
+                    "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+                ], capture_output=True, text=True, check=False)
+                print(result.stdout.strip())
+                
+            except subprocess.CalledProcessError as e:
+                print(f"⚠ CUDA PyTorch installation failed: {e}")
+                print("Falling back to CPU version...")
+                has_cuda = False
+        
+        if not has_cuda:
+            print("Installing PyTorch CPU version...")
+            subprocess.run([
+                str(python_exe), "-m", "pip", "install",
+                "torch", "torchaudio",
+                "--index-url", "https://download.pytorch.org/whl/cpu",
+                "--no-warn-script-location"
+            ], check=True)
+            print("✓ PyTorch CPU installed")
 
 def install_dependencies():
     """Install Python dependencies"""
-    embedded_python_exe = PYTHON_DIR / "python.exe"
+    python_exe = get_python_exe()
     
     requirements = BASE_DIR / "requirements.txt"
     requirements_no_pyopenjtalk = BASE_DIR / "requirements_temp.txt"
+    
+    if IS_ARM_MAC:
+        # macOS: Simpler approach - install all dependencies directly
+        # No need to separate compilation packages on macOS
+        print("Installing dependencies...")
+        
+        # Install PyTorch first
+        install_pytorch()
+        
+        # Install all dependencies
+        subprocess.run([
+            str(python_exe), "-m", "pip", "install", "-r", str(requirements),
+            "--no-warn-script-location"
+        ], check=True)
+        
+        print("✓ All dependencies installed")
+        return
+    
+    # Windows: Original complex approach with system Python for compilation
+    embedded_python_exe = PYTHON_DIR / "python.exe"
     
     # Try to find system Python (has dev headers for compilation)
     system_python = shutil.which('python') or shutil.which('python3')
@@ -257,7 +357,7 @@ def install_dependencies():
     print("="*60)
     try:
         subprocess.run([
-            str(embedded_python_exe), "-m", "pip", "uninstall", "-y", "decoders"
+            str(python_exe), "-m", "pip", "uninstall", "-y", "decoders"
         ], check=False)
         print("✓ Removed decoders package")
     except Exception as e:
@@ -434,22 +534,22 @@ os.environ["HF_ENDPOINT"]'''
         content = sv_file.read_text(encoding='utf-8')
         
         # Check if already patched
-        if 'models/sv/pretrained_eres2netv2w24s4ep4.ckpt' in content:
+        if '../../models/sv/pretrained_eres2netv2w24s4ep4.ckpt' in content:
             print("✓ sv.py already patched")
         else:
-            # Find the first few lines and add fallback path
+            # Find line with sv_path = os.environ.get
             lines = content.split('\n')
             
-            # Find line with sv_path = os.environ.get
             for i, line in enumerate(lines):
                 if 'sv_path = os.environ.get("sv_path"' in line:
                     # Insert fallback logic after this line
                     next_line_idx = i + 1
                     
-                    # Insert fallback code
+                    # Insert fallback code - point to our models/sv/ directory
                     fallback_code = [
                         'if not os.path.exists(sv_path):',
-                        '    alt_path = "models/sv/pretrained_eres2netv2w24s4ep4.ckpt"',
+                        '    # Try relative path to electron/server/gpt-sovits/models/sv/',
+                        '    alt_path = os.path.join(os.path.dirname(__file__), "../../models/sv/pretrained_eres2netv2w24s4ep4.ckpt")',
                         '    if os.path.exists(alt_path):',
                         '        sv_path = alt_path',
                     ]
@@ -459,7 +559,7 @@ os.environ["HF_ENDPOINT"]'''
                     # Write back
                     content = '\n'.join(lines)
                     sv_file.write_text(content, encoding='utf-8')
-                    print("✓ Patched sv.py to find SV model in models/sv/ directory")
+                    print("✓ Patched sv.py to find SV model in ../../models/sv/ directory")
                     break
             else:
                 print("✗ Could not find sv_path in sv.py (GPT-SoVITS may have been updated)")
@@ -489,7 +589,7 @@ os.environ["HF_ENDPOINT"]'''
 
 def download_nltk_data():
     """Download required NLTK data for English text processing"""
-    embedded_python_exe = PYTHON_DIR / "python.exe"
+    python_exe = get_python_exe()
     
     print("\n" + "="*60)
     print("Downloading NLTK data for English TTS...")
@@ -498,7 +598,7 @@ def download_nltk_data():
     try:
         # Download English POS tagger (averaged_perceptron_tagger_eng)
         subprocess.run([
-            str(embedded_python_exe), "-c",
+            str(python_exe), "-c",
             "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('universal_tagset'); print('✓ NLTK data downloaded')"
         ], check=True)
         print("✓ NLTK data downloaded successfully")
@@ -561,55 +661,48 @@ def main():
     print("GPT-SoVITS TTS Server Setup")
     print("="*60)
     
-    # Step 1: Setup Python runtime
-    setup_python_runtime()
-    
-    # Step 2: Install dependencies
-    install_dependencies()
-    
-    # Step 3: Clone GPT-SoVITS source
-    clone_gptsovits_repo()
-    
-    # Step 4: Patch GPT-SoVITS for API usage
-    patch_gptsovits_for_api()
-    
-    # Step 5: Download TTS models
-    download_models()
-    
-    # Step 6: Download BERT model
-    download_bert_model()
-    
-    # Step 7: Download HuBERT model
-    download_hubert_model()
-    
-    # Step 8: Download NLTK data for English
-    download_nltk_data()
-    
-    # Step 9: Download fast-langdetect model
-    download_fast_langdetect_model()
-    
-    # Step 10: Download Whisper STT models
-    download_whisper_models()
-    
-    print("\n" + "="*60)
-    print("✓ Setup complete!")
-    print("="*60)
-    """Main setup function"""
-    print("=" * 60)
-    print("GPT-SoVITS TTS Server Setup")
-    print("=" * 60)
-    
     try:
+        # Step 1: Setup Python runtime
         setup_python_runtime()
+        
+        # Step 2: Install dependencies
         install_dependencies()
+        
+        # Step 3: Clone GPT-SoVITS source
         clone_gptsovits_repo()
+        
+        # Step 4: Patch GPT-SoVITS for API usage
+        patch_gptsovits_for_api()
+        
+        # Step 5: Download TTS models
         download_models()
         
-        print("\n" + "=" * 60)
+        # Step 6: Download BERT model
+        download_bert_model()
+        
+        # Step 7: Download HuBERT model
+        download_hubert_model()
+        
+        # Step 8: Download NLTK data for English
+        download_nltk_data()
+        
+        # Step 9: Download fast-langdetect model
+        download_fast_langdetect_model()
+        
+        # Step 10: Download Whisper STT models
+        download_whisper_models()
+        
+        print("\n" + "="*60)
         print("✓ Setup complete!")
-        print("=" * 60)
-        print(f"\nTo start server:")
-        print(f"  {PYTHON_DIR / 'python.exe'} {BASE_DIR / 'api.py'}")
+        print("="*60)
+        
+        # Print platform-specific start command
+        if IS_WINDOWS:
+            print(f"\nTo start server:")
+            print(f"  {PYTHON_DIR / 'python.exe'} {BASE_DIR / 'api.py'}")
+        elif IS_ARM_MAC:
+            print(f"\nTo start server:")
+            print(f"  {PYTHON_DIR / 'bin' / 'python3'} {BASE_DIR / 'api.py'}")
         
     except Exception as e:
         print(f"\n✗ Setup failed: {e}")
