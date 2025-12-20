@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('electron', {
     getPosition: () => ipcRenderer.invoke('window:get-position'),
     setSize: (width, height) => ipcRenderer.invoke('window:set-size', width, height),
     getSize: () => ipcRenderer.invoke('window:get-size'),
+    updateWindowSizeForZoom: (modelWidth, modelHeight) => ipcRenderer.invoke('window:update-size-for-zoom', modelWidth, modelHeight),
+    setScaleFactor: (scaleFactor) => ipcRenderer.invoke('window:set-scale-factor', scaleFactor),
+    getScaleFactor: () => ipcRenderer.invoke('window:get-scale-factor'),
   },
   
   // Input window controls

@@ -244,6 +244,8 @@ export const DefaultUIConfig = {
     lastLocation: null,
   },
   
+  modelSizePx: null,
+  
   backgroundDetection: {
     mode: BackgroundThemeModes.ADAPTIVE,
     sampleGridSize: 5,

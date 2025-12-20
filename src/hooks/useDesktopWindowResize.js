@@ -8,7 +8,7 @@ import { useDesktop } from '../contexts/DesktopContext';
 import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
 
 export function useDesktopWindowResize(containerRef = null, options = {}) {
-  const { isChatContainerVisible } = useApp();
+  const { isChatContainerVisible, positionManagerRef } = useApp();
   const { api } = useDesktop();
   const observerRef = useRef(null);
   
@@ -25,11 +25,15 @@ export function useDesktopWindowResize(containerRef = null, options = {}) {
     if (!isDesktop || !api) return;
     
     if (!isInputWindow) {
-      if (isChatContainerVisible) {
-        api.window.setSize(920 + windowPadding, 500 + windowPadding);
-      } else {
-        api.window.setSize(500 + windowPadding, 500 + windowPadding);
-      }
+      const canvasWidth = positionManagerRef?.current?.canvasWidth || 500;
+      const canvasHeight = positionManagerRef?.current?.canvasHeight || 500;
+      
+      const chatContainerWidth = isChatContainerVisible ? 400 : 0;
+      
+      const width = canvasWidth + chatContainerWidth + windowPadding;
+      const height = canvasHeight + windowPadding;
+      
+      api.window.setSize(width, height);
       return;
     }
     

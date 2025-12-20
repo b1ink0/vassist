@@ -124,6 +124,7 @@ export class AnimationManager {
     this.blinkDelayBetween = 0; // Configurable delay between blinks (frames), initially 0
     this.blinkEnabled = true; // Enable/disable blinking system
     this.blinkSpeedMultiplier = 1.5; // Speed multiplier for blink animation (higher = faster)
+    this._blinkMorphsApplied = false; // Track if blink morphs are currently applied (for cleanup)
     
     // Visibility change handling
     this.visibilityChangeHandler = null;
@@ -1580,7 +1581,16 @@ export class AnimationManager {
    * Simple approach: Calculate blink timing based on absolute time, apply directly
    */
   onAfterRender() {
-    if (this.disposed || !this.blinkEnabled || !this.blinkAnimation || this.currentAnimationConfig?.disableBlinking) {
+    const shouldDisableBlink = this.disposed || !this.blinkEnabled || !this.blinkAnimation || this.currentAnimationConfig?.disableBlinking;
+    
+    if (shouldDisableBlink) {
+      if (this._blinkMorphsApplied) {
+        const morphController = this.mmdModel.morph;
+        for (const morphTrack of this.blinkAnimation.morphTracks) {
+          morphController.setMorphWeight(morphTrack.name, 0);
+        }
+        this._blinkMorphsApplied = false;
+      }
       return;
     }
     
@@ -1609,8 +1619,8 @@ export class AnimationManager {
         // OVERRIDE morph weight (this runs AFTER animations, so we replace their values)
         morphController.setMorphWeight(morphTrack.name, weight);
       }
+      this._blinkMorphsApplied = true;
     }
-    // If not blinking (in delay period), let base animation's morphs show through
   }
 
   /**

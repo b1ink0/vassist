@@ -691,6 +691,64 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   } else {
     Logger.log('MmdModelScene', 'Using preset:', actualPreset, isAndroid ? '(Android mode)' : '');
     positionManager.initialize(actualPreset);
+    
+    const modelSizePx = finalConfig.uiConfig?.modelSizePx;
+    if (modelSizePx && modelSizePx.width && modelSizePx.height) {
+      Logger.log('MmdModelScene', 'Applying saved zoom:', modelSizePx);
+      
+      const { PositionPresets } = await import('../../config/uiConfig.js');
+      const presetConfig = PositionPresets[actualPreset];
+      const padding = presetConfig.padding || 0;
+      
+      let pixelX, pixelY;
+      const modelWidth = modelSizePx.width;
+      const modelHeight = modelSizePx.height;
+      const canvasWidth = positionManager.canvasWidth;
+      const canvasHeight = positionManager.canvasHeight;
+      
+      switch(actualPreset) {
+        case 'bottom-right':
+          pixelX = canvasWidth - modelWidth - padding;
+          pixelY = canvasHeight - modelHeight - padding;
+          break;
+        case 'bottom-left':
+          pixelX = padding;
+          pixelY = canvasHeight - modelHeight - padding;
+          break;
+        case 'bottom-center':
+          pixelX = (canvasWidth - modelWidth) / 2;
+          pixelY = canvasHeight - modelHeight - padding;
+          break;
+        case 'top-center':
+          pixelX = (canvasWidth - modelWidth) / 2;
+          pixelY = padding;
+          break;
+        case 'center':
+          pixelX = (canvasWidth - modelWidth) / 2;
+          pixelY = (canvasHeight - modelHeight) / 2;
+          break;
+        case 'top-left':
+          pixelX = padding;
+          pixelY = padding;
+          break;
+        case 'top-right':
+          pixelX = canvasWidth - modelWidth - padding;
+          pixelY = padding;
+          break;
+        default:
+          pixelX = (canvasWidth - modelWidth) / 2;
+          pixelY = (canvasHeight - modelHeight) / 2;
+      }
+      
+      positionManager.positionX = pixelX;
+      positionManager.positionY = pixelY;
+      positionManager.modelWidthPx = modelWidth;
+      positionManager.modelHeightPx = modelHeight;
+      positionManager.effectiveHeightPx = modelHeight;
+      positionManager.updateCameraFrustum();
+      
+      Logger.log('MmdModelScene', `Position recalculated for zoom: (${pixelX}, ${pixelY})`);
+    }
   }
 
   Logger.log('MmdModelScene', 'PositionManager initialized');

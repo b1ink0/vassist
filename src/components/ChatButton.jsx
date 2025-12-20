@@ -6,11 +6,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
+import { useDesktop } from '../contexts/DesktopContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
 import emoteStorageService from '../services/EmoteStorageService';
 import emotePlayerService from '../services/EmotePlayerService';
-import { isAndroid } from '../utils/PlatformUtils';
+import ZoomControl from './ZoomControl';
+import { isAndroid, isDesktop } from '../utils/PlatformUtils';
+import { PositionPresets } from '../config/uiConfig';
 
 /**
  * Draggable chat button component with automatic positioning.
@@ -33,7 +36,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     setPendingDropData,
   } = useApp();
   
-  const { uiConfig, updateUIConfig } = useConfig(); // Get position config
+  const { uiConfig, updateUIConfig } = useConfig();
+  const { api: desktopAPI } = useDesktop();
+
+  const isLeftSide = buttonPos.x < window.innerWidth / 2;
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
@@ -381,7 +387,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   // When model is enabled, follow the model position (throttled events come from PositionManager)
   useEffect(() => {
     if (modelDisabled) return;
-    const updateFromModel = (ev) => {
+    const updateFromModel = async (ev) => {
       let modelPos = null;
       if (ev && ev.detail) modelPos = ev.detail;
       else if (positionManagerRef?.current) {
@@ -396,16 +402,54 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       try {
         const buttonSize = 48;
         const offsetX = 15;
+        const padding = 10;
         
         // Chat icon positioning - at bottom of effectiveHeight (visible area)
-        const buttonY = modelPos.y + modelPos.height - buttonSize;
+        let buttonY = modelPos.y + modelPos.height - buttonSize;
         
-        const rightX = modelPos.x + modelPos.width + offsetX;
-        const leftX = modelPos.x - buttonSize - offsetX;
-        const windowWidth = window.innerWidth;
-        const wouldOverflowRight = rightX + buttonSize > windowWidth - 10;
-        const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
-        const buttonX = shouldBeOnLeft ? leftX : rightX;
+        // Desktop mode: Position on right side, but use Electron window bounds
+        // Browser mode: Dynamic positioning based on available space
+        let buttonX;
+        if (isDesktop) {
+          buttonX = modelPos.x + modelPos.width + offsetX;
+          
+          if (desktopAPI && desktopAPI.window) {
+            try {
+              const electronWindow = await desktopAPI.window.getSize();
+              const electronWindowWidth = electronWindow.width;
+              const electronWindowHeight = electronWindow.height;
+              
+              // If button's right edge exceeds Electron window width, reposition
+              if (buttonX + buttonSize > electronWindowWidth - padding) {
+                buttonX = electronWindowWidth - buttonSize - padding;
+                Logger.log('ChatButton', `Button X clipped, repositioned to: ${buttonX} (window width: ${electronWindowWidth})`);
+              }
+              
+              // If button's bottom edge exceeds Electron window height, reposition
+              if (buttonY + buttonSize > electronWindowHeight - padding) {
+                buttonY = electronWindowHeight - buttonSize - padding;
+                Logger.log('ChatButton', `Button Y clipped, repositioned to: ${buttonY} (window height: ${electronWindowHeight})`);
+              }
+              
+              // If button's top edge is above window, reposition
+              if (buttonY < padding) {
+                buttonY = padding;
+                Logger.log('ChatButton', `Button Y above window, repositioned to: ${buttonY}`);
+              }
+            } catch (err) {
+              Logger.error('ChatButton', 'Failed to get Electron window size:', err);
+            }
+          }
+        } else {
+          // Browser: Check for overflow and position dynamically
+          const rightX = modelPos.x + modelPos.width + offsetX;
+          const leftX = modelPos.x - buttonSize - offsetX;
+          const windowWidth = window.innerWidth;
+          const wouldOverflowRight = rightX + buttonSize > windowWidth - 10;
+          const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
+          buttonX = shouldBeOnLeft ? leftX : rightX;
+        }
+        
         const newX = Math.round(buttonX);
         const newY = Math.round(buttonY);
         
@@ -424,7 +468,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       window.removeEventListener('modelPositionChange', updateFromModel);
       window.removeEventListener('resize', updateFromModel);
     };
-  }, [modelDisabled, positionManagerRef, setButtonPos]);
+  }, [modelDisabled, positionManagerRef, setButtonPos, desktopAPI]);
 
   const handleMouseDown = useCallback((e) => {
     if (!modelDisabled) return;
@@ -596,9 +640,161 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldRender]); // Trigger when button actually renders
 
+  /**
+   * Unified zoom handler
+   * @param {'in' | 'out' | 'reset'} zoomType - Type of zoom operation
+   */
+  const handleZoom = useCallback((zoomType) => {
+    const positionManager = positionManagerRef.current;
+    if (!positionManager) return;
+    
+    const currentSize = positionManager.modelHeightPx || 600;
+    const zoomAmount = 50;
+    
+    // Get preset default size from PositionPresets
+    const currentPreset = uiConfig.position?.preset || 'bottom-right';
+    const presetConfig = PositionPresets[currentPreset];
+    const defaultHeight = presetConfig?.modelSize?.height || 500;
+    const defaultWidth = presetConfig?.modelSize?.width || 300;
+    
+    let newSize, newWidth;
+    
+    switch (zoomType) {
+      case 'in':
+        newSize = currentSize + zoomAmount;
+        newWidth = newSize * 0.6;
+        Logger.log('ChatButton', `Zooming in: ${currentSize}px → ${newSize}px`);
+        break;
+      case 'out':
+        if (currentSize <= defaultHeight) {
+          Logger.log('ChatButton', 'Already at default size, cannot zoom out');
+          return;
+        }
+        newSize = Math.max(defaultHeight, currentSize - zoomAmount);
+        newWidth = Math.max(defaultWidth, newSize * 0.6);
+        Logger.log('ChatButton', `Zooming out: ${currentSize}px → ${newSize}px`);
+        break;
+      case 'reset':
+        newSize = defaultHeight;
+        newWidth = defaultWidth;
+        Logger.log('ChatButton', 'Resetting zoom to default');
+        break;
+      default:
+        Logger.warn('ChatButton', `Unknown zoom type: ${zoomType}`);
+        return;
+    }
+    
+    updateUIConfig('modelSizePx', zoomType === 'reset' ? null : {
+      width: newWidth,
+      height: newSize
+    });
+    
+    if (isDesktop && desktopAPI && desktopAPI.window) {
+      Logger.log('ChatButton', `Requesting Electron window resize for model size: ${newWidth}x${newSize}`);
+      desktopAPI.window.updateWindowSizeForZoom(newWidth, newSize).then(() => {
+        return desktopAPI.window.getSize();
+      }).then(windowSize => {
+        Logger.log('ChatButton', `Window resized to: ${windowSize.width}x${windowSize.height}`);
+        
+        const event = new CustomEvent('updateCanvasSize', {
+          detail: { 
+            width: windowSize.width, 
+            height: windowSize.height,
+            modelWidth: newWidth,
+            modelHeight: newSize
+          }
+        });
+        window.dispatchEvent(event);
+        
+        setTimeout(() => {
+          if (!positionManager) return;
+          
+          const oldCanvasWidth = positionManager.canvasWidth;
+          const oldCanvasHeight = positionManager.canvasHeight;
+          const oldPosX = positionManager.positionX;
+          const oldPosY = positionManager.positionY;
+          const oldModelHeight = positionManager.effectiveHeightPx;
+          
+          positionManager.updateCanvasDimensions();
+          
+          if (zoomType === 'reset') {
+            Logger.log('ChatButton', 'Resetting to preset position');
+            positionManager.applyPreset(currentPreset, {
+              modelSizePx: { width: newWidth, height: newSize }
+            });
+          } else {
+            const canvasWidthDelta = positionManager.canvasWidth - oldCanvasWidth;
+            const canvasHeightDelta = positionManager.canvasHeight - oldCanvasHeight;
+            
+            const modelHeightDelta = newSize - oldModelHeight;
+            
+            const scaleFactorHeight = 0.75;
+            const compensationMultiplier = (1 - scaleFactorHeight) * 100;
+            
+            const newPosX = oldPosX + canvasWidthDelta;
+            const newPosY = oldPosY + canvasHeightDelta - (modelHeightDelta * compensationMultiplier);
+            
+            positionManager.positionX = newPosX;
+            positionManager.positionY = newPosY;
+            positionManager.modelHeightPx = newSize;
+            positionManager.modelWidthPx = newWidth;
+            positionManager.effectiveHeightPx = newSize;
+            
+            positionManager.updateCameraFrustum();
+          }
+        }, 300); 
+      }).catch(err => {
+        Logger.warn('ChatButton', 'Failed to update window/canvas size:', err);
+      });
+    } else {
+      if (zoomType === 'reset') {
+        positionManager.applyPreset(currentPreset, {
+          modelSizePx: { width: newWidth, height: newSize }
+        });
+      } else {
+        const oldPosX = positionManager.positionX;
+        const oldPosY = positionManager.positionY;
+        const oldModelWidth = positionManager.modelWidthPx;
+        const oldModelHeight = positionManager.modelHeightPx;
+        
+        const widthDelta = newWidth - oldModelWidth;
+        const heightDelta = newSize - oldModelHeight;
+        
+        const newPosX = oldPosX - (widthDelta / 2);
+        const newPosY = oldPosY - (heightDelta / 2);
+        
+        positionManager.positionX = newPosX;
+        positionManager.positionY = newPosY;
+        positionManager.modelHeightPx = newSize;
+        positionManager.modelWidthPx = newWidth;
+        positionManager.effectiveHeightPx = newSize;
+      }
+      
+      positionManager.updateCameraFrustum();
+    }
+  }, [positionManagerRef, updateUIConfig, desktopAPI, uiConfig.position]);
+
+  const isAtDefaultSize = useCallback(() => {
+    const positionManager = positionManagerRef.current;
+    if (!positionManager) return true;
+    
+    if (!uiConfig.modelSizePx) return true;
+    
+    const currentPreset = uiConfig.position?.preset || 'bottom-right';
+    const presetConfig = PositionPresets[currentPreset];
+    const defaultHeight = presetConfig?.modelSize?.height || 500;
+    
+    const currentSize = positionManager.modelHeightPx || defaultHeight;
+    return currentSize <= defaultHeight;
+  }, [positionManagerRef, uiConfig.modelSizePx, uiConfig.position]);
+
+  const handleZoomIn = useCallback(() => handleZoom('in'), [handleZoom]);
+  const handleZoomOut = useCallback(() => handleZoom('out'), [handleZoom]);
+  const handleZoomReset = useCallback(() => handleZoom('reset'), [handleZoom]);
+
   if (!shouldRender) return null;
 
-  const EMOTE_BUTTON_OFFSET = 56;
+  const TOTAL_BUTTON_OFFSET = 168;
 
   const androidPosition = isAndroid ? {
     left: '20px',
@@ -606,7 +802,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     top: 'auto',
   } : {
     left: `${buttonPos.x}px`,
-    top: `${buttonPos.y - EMOTE_BUTTON_OFFSET}px`,
+    top: `${buttonPos.y - TOTAL_BUTTON_OFFSET}px`,
   };
 
   return (
@@ -616,18 +812,23 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       <div
         style={{
           left: `${buttonPos.x - 77}px`,
-          top: `${buttonPos.y - EMOTE_BUTTON_OFFSET - Math.min(emotes.length * 43, 300) - 8}px`,
+          top: `${buttonPos.y - 108 - Math.min(emotes.length * 43, 300) - 8}px`,
           zIndex: isAndroid ? 201 : 10001,
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          scrollSnapType: 'y mandatory',
+          ...(isDesktop && emotes.length > 7 ? {
+            maskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
+          } : {})
         }}
-        className="fixed w-[125px] max-h-[300px] snap-y snap-mandatory overflow-y-auto"
+        className="fixed w-[125px] max-h-[300px] overflow-y-auto py-1"
       >
         <style>{`
           div::-webkit-scrollbar { display: none; }
         `}</style>
         {emotes.length === 0 ? (
-          <div className="snap-center flex items-center justify-center h-[35px] text-[10px] text-white/50 text-center p-1">
+          <div style={{ scrollSnapAlign: 'center' }} className="flex items-center justify-center h-[35px] text-[10px] text-white/50 text-center p-1">
             No emotes
           </div>
         ) : (
@@ -642,7 +843,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                   Logger.error('ChatButton', 'Failed to play emote:', err);
                 }
               }}
-              className={`snap-center glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+              style={{ scrollSnapAlign: 'center' }}
+              className={`glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
                 isLightBackground 
                   ? 'glass-button-dark' 
                   : ''
@@ -664,6 +866,21 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       className="fixed flex flex-col gap-2 items-center"
     >
 
+      {/* Reload Button */}
+      <button
+        onClick={() => window.location.reload()}
+        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
+          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
+        }`}
+        title="Reload Page"
+      >
+        <Icon 
+          name="refresh" 
+          size={24} 
+          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+        />
+      </button>
+
       {/* Emote Button */}
       <button
         onClick={() => setIsEmotePanelOpen(!isEmotePanelOpen)}
@@ -678,6 +895,17 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
         />
       </button>
+
+      {/* Zoom Control */}
+      <ZoomControl
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onReset={handleZoomReset}
+        isZoomOutDisabled={isAtDefaultSize()}
+        isLeftSide={isLeftSide}
+        isLightBackground={isLightBackground}
+        isVisible={isVisible}
+      />
 
       {/* Chat Button */}
       <button

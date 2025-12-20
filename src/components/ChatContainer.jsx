@@ -238,13 +238,16 @@ const ChatContainer = ({
         const modelRightEdge = modelPos.x + modelPos.width;
         const wouldOverlapRight = modelRightEdge > rightX;
         
+        // Always place on right side in desktop mode
         let shouldBeOnLeft = false;
-        if (wouldOverflowRight) {
-          shouldBeOnLeft = true;
-        } else if (wouldOverlapRight && !wouldOverflowLeft) {
-          shouldBeOnLeft = true;
-        } else if (modelPos.x > windowWidth * 0.7) {
-          shouldBeOnLeft = true;
+        if (!isDesktop) {
+          if (wouldOverflowRight) {
+            shouldBeOnLeft = true;
+          } else if (wouldOverlapRight && !wouldOverflowLeft) {
+            shouldBeOnLeft = true;
+          } else if (modelPos.x > windowWidth * 0.7) {
+            shouldBeOnLeft = true;
+          }
         }
         
         let containerX = shouldBeOnLeft ? leftX : rightX;

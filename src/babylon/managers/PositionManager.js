@@ -203,8 +203,17 @@ export class PositionManager {
       ? config.portraitModelSize 
       : config.modelSize;
     
+    // Apply saved zoom from uiConfig if available
     let modelWidth = options.modelSizePx?.width || modelSize.width;
     let modelHeight = options.modelSizePx?.height || modelSize.height;
+    
+    if (options.modelSizePx) {
+      modelWidth = options.modelSizePx.width || modelWidth;
+      modelHeight = options.modelSizePx.height || modelHeight;
+      Logger.log('PositionManager', `Applied saved zoom from config: ${modelWidth}x${modelHeight}`);
+    } else {
+      Logger.log('PositionManager', `Using default model size: ${modelWidth}x${modelHeight}`);
+    }
     
     let cameraHeight = modelHeight; // Height used for camera frustum (zoom)
     let effectiveHeight = modelHeight; // Height used for positioning/boundaries

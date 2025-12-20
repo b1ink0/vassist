@@ -6,6 +6,7 @@ import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
+import { useDesktop } from '../contexts/DesktopContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop } from '../utils/PlatformUtils';
@@ -50,12 +51,109 @@ const BabylonScene = ({
   const cleanupFnRef = useRef(null);
   
   const { uiConfig } = useConfig();
+  const { api: desktopAPI } = useDesktop();
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
+  
+  const [canvasSize, setCanvasSize] = useState(() => {
+    if (isDesktop && typeof window !== 'undefined') {
+      if (uiConfig?.modelSizePx?.width && uiConfig?.modelSizePx?.height) {
+        const baseModelWidth = 400;
+        const baseModelHeight = 600;
+        const scaleFactorWidth = 0.85;
+        const scaleFactorHeight = 0.75;
+        const baseWidth = 400;
+        const baseHeight = 600;
+        
+        const modelWidthDelta = uiConfig.modelSizePx.width - baseModelWidth;
+        const modelHeightDelta = uiConfig.modelSizePx.height - baseModelHeight;
+        
+        const width = Math.max(baseWidth + (modelWidthDelta * scaleFactorWidth), 400);
+        const height = Math.max(baseHeight + (modelHeightDelta * scaleFactorHeight), 500);
+        Logger.log('BabylonScene', `Initializing canvas with saved size: ${width}x${height}`);
+        return { width, height };
+      }
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+    }
+    return { width: 500, height: 500 };
+  });
+
+  useEffect(() => {
+    const handleCanvasSizeUpdate = (event) => {
+      const { width, height } = event.detail;
+      setCanvasSize({ width, height });
+      Logger.log('BabylonScene', `Canvas size updated to ${width}x${height}`);
+    };
+
+    window.addEventListener('updateCanvasSize', handleCanvasSizeUpdate);
+
+    return () => {
+      window.removeEventListener('updateCanvasSize', handleCanvasSizeUpdate);
+    };
+  }, []);
+  
+  // On mount, if desktop and saved config exists, resize Electron window to match
+  useEffect(() => {
+    if (!isDesktop || !desktopAPI?.window || isPreview) return;
+    
+    if (uiConfig?.modelSizePx?.width && uiConfig?.modelSizePx?.height) {
+      const { width: modelWidth, height: modelHeight } = uiConfig.modelSizePx;
+      Logger.log('BabylonScene', `Applying saved zoom to Electron window on mount: ${modelWidth}x${modelHeight}`);
+      
+      desktopAPI.window.updateWindowSizeForZoom(modelWidth, modelHeight).then(() => {
+        return desktopAPI.window.getSize();
+      }).then(windowSize => {
+        Logger.log('BabylonScene', `Electron window resized to: ${windowSize.width}x${windowSize.height}`);
+        setCanvasSize({ width: windowSize.width, height: windowSize.height });
+        
+        setTimeout(() => {
+          if (positionManagerRef?.current) {
+            Logger.log('BabylonScene', 'Updating PositionManager after window resize on mount');
+            const pm = positionManagerRef.current;
+            
+            const oldCanvasWidth = pm.canvasWidth;
+            const oldCanvasHeight = pm.canvasHeight;
+            const oldPosX = pm.positionX;
+            const oldPosY = pm.positionY;
+            const oldWidth = pm.modelWidthPx;
+            const oldHeight = pm.effectiveHeightPx;
+            
+            pm.updateCanvasDimensions();
+            
+            // Calculate position as ratio, maintain relative position
+            const posXRatio = (oldPosX + oldWidth / 2) / oldCanvasWidth;
+            const posYRatio = (oldPosY + oldHeight / 2) / oldCanvasHeight;
+            
+            const newPosX = (posXRatio * pm.canvasWidth) - modelWidth / 2;
+            const newPosY = (posYRatio * pm.canvasHeight) - modelHeight / 2;
+            
+            // Update model size AND position
+            pm.positionX = newPosX;
+            pm.positionY = newPosY;
+            pm.modelHeightPx = modelHeight;
+            pm.modelWidthPx = modelWidth;
+            pm.effectiveHeightPx = modelHeight;
+            
+            pm.updateCameraFrustum();
+            
+            Logger.log('BabylonScene', `Position maintained at ratio (${posXRatio.toFixed(2)}, ${posYRatio.toFixed(2)}): (${newPosX}, ${newPosY})`);
+          } else {
+            Logger.warn('BabylonScene', 'PositionManager not ready yet, will update on next zoom');
+          }
+        }, 200);
+      }).catch(err => {
+        Logger.warn('BabylonScene', 'Failed to resize Electron window on mount:', err);
+      });
+    }
+  }, [uiConfig?.modelSizePx, desktopAPI, isPreview, positionManagerRef]);
+  
   
   const { modelOverlayPos, setModelOverlayPos, setShowModelLoadingOverlay, setPendingDropData, openChat } = useApp();
   
@@ -487,8 +585,8 @@ const BabylonScene = ({
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         } : {
-          width: isDesktop ? '500px' : '100%',
-          height: isDesktop ? '500px' : canvasHeight,
+          width: isDesktop ? `${canvasSize.width}px` : '100%',
+          height: isDesktop ? `${canvasSize.height}px` : canvasHeight,
           display: 'block',
           outline: 'none',
           backgroundColor: 'transparent',

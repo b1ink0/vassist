@@ -137,6 +137,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       open: true,
+      fs: {
+        deny: [
+          '**/electron/server/**',
+          '**/.git/**',
+          '**/node_modules/**/.git/**',
+        ],
+      },
     },
   };
 });

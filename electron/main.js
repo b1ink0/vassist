@@ -85,12 +85,12 @@ function createInputWindow() {
 /**
  * Create the main application window with transparency
  */
-function createWindow() {
+async function createWindow() {
   // Get primary display dimensions
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
 
-  const initialWidth = 400;
-  const initialHeight = 500;
+  const initialWidth = 500;
+  const initialHeight = 600;
   
   mainWindow = new BrowserWindow({
     width: initialWidth,
@@ -480,6 +480,48 @@ ipcMain.handle('window:set-size', (event, width, height) => {
       height: Math.floor(height)
     });
   }
+});
+
+let windowScaleFactorWidth = 0.85;
+let windowScaleFactorHeight = 0.75;
+
+ipcMain.handle('window:update-size-for-zoom', (event, modelWidth, modelHeight) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow) {
+    const baseWidth = 400;
+    const baseHeight = 600;
+    const baseModelWidth = 400;
+    const baseModelHeight = 600;
+    
+    const modelWidthDelta = modelWidth - baseModelWidth;
+    const modelHeightDelta = modelHeight - baseModelHeight;
+    
+    const windowWidth = Math.max(baseWidth + (modelWidthDelta * windowScaleFactorWidth), 400);
+    const windowHeight = Math.max(baseHeight + (modelHeightDelta * windowScaleFactorHeight), 500);
+    
+    const currentBounds = senderWindow.getBounds();
+    const newY = currentBounds.y - (windowHeight - currentBounds.height);
+    
+    senderWindow.setBounds({
+      x: currentBounds.x,
+      y: newY,
+      width: Math.floor(windowWidth),
+      height: Math.floor(windowHeight)
+    });
+  }
+});
+
+ipcMain.handle('window:set-scale-factor', (event, newScaleFactorWidth, newScaleFactorHeight) => {
+  windowScaleFactorWidth = newScaleFactorWidth;
+  if (newScaleFactorHeight !== undefined) {
+    windowScaleFactorHeight = newScaleFactorHeight;
+  }
+  console.log(`Scale factors updated - Width: ${windowScaleFactorWidth}, Height: ${windowScaleFactorHeight}`);
+  return { width: windowScaleFactorWidth, height: windowScaleFactorHeight };
+});
+
+ipcMain.handle('window:get-scale-factor', () => {
+  return { width: windowScaleFactorWidth, height: windowScaleFactorHeight };
 });
 
 ipcMain.handle('window:get-size', () => {

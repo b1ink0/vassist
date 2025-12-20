@@ -188,7 +188,7 @@ const SettingsPanel = ({
         ><Icon name="close" size={16} /></button>
       </div>
 
-      <div className="flex border-b border-white/20 px-6 relative">
+      <div className="flex border-b border-white/20 relative">
         <div 
           className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
           style={{
@@ -199,7 +199,7 @@ const SettingsPanel = ({
         
         <button
           ref={(el) => (tabsRef.ui = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ui' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -210,7 +210,7 @@ const SettingsPanel = ({
         </button>
         <button
           ref={(el) => (tabsRef['3d'] = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === '3d' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -221,7 +221,7 @@ const SettingsPanel = ({
         </button>
         <button
           ref={(el) => (tabsRef.llm = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'llm' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -232,7 +232,7 @@ const SettingsPanel = ({
         </button>
         <button
           ref={(el) => (tabsRef.tts = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'tts' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -243,7 +243,7 @@ const SettingsPanel = ({
         </button>
         <button
           ref={(el) => (tabsRef.stt = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'stt' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -254,7 +254,7 @@ const SettingsPanel = ({
         </button>
         <button
           ref={(el) => (tabsRef['ai-plus'] = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ai-plus' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -276,7 +276,7 @@ const SettingsPanel = ({
             <UISettings isLightBackground={isLightBackground} />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
             <ThreeDSettings 
               isLightBackground={isLightBackground} 
               onRequestDeleteModelDialog={onRequestDeleteModelDialog}

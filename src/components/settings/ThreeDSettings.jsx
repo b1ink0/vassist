@@ -36,6 +36,16 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     reloadCustomAnimations,
   } = useAnimation();
 
+  const [activeSubTab, setActiveSubTab] = useState('display');
+  const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({ left: 0, width: 0 });
+  const subTabsRef = useState({
+    display: null,
+    performance: null,
+    models: null,
+    animations: null,
+    emotes: null,
+  })[0];
+
   // Model upload state
   const [models, setModels] = useState([]);
   const [modelUploadState, setModelUploadState] = useState({
@@ -70,6 +80,8 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [editingEmoteId, setEditingEmoteId] = useState(null);
   const [editingEmoteName, setEditingEmoteName] = useState('');
   const [emoteName, setEmoteName] = useState('');
+  const [selectedEmoteAudioFile, setSelectedEmoteAudioFile] = useState(null);
+  const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState(null);
   const emoteAudioFileInputRef = useRef(null);
   const emoteMotionFileInputRef = useRef(null);
   
@@ -106,6 +118,15 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     };
     loadPortraitClipping();
   }, [models]);
+
+  // Update sub-tab indicator position
+  useEffect(() => {
+    const activeTabElement = subTabsRef[activeSubTab];
+    if (activeTabElement) {
+      const { offsetLeft, offsetWidth } = activeTabElement;
+      setSubTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
+    }
+  }, [activeSubTab, subTabsRef]);
 
   const loadModels = async () => {
     try {
@@ -660,14 +681,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const handleEmoteAudioFileChange = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      emoteAudioFileInputRef.current.selectedFile = file;
+      setSelectedEmoteAudioFile(file);
     }
   };
 
   const handleEmoteMotionFileChange = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      emoteMotionFileInputRef.current.selectedFile = file;
+      setSelectedEmoteMotionFile(file);
     }
   };
 
@@ -678,8 +699,8 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         return;
       }
 
-      const audioFile = emoteAudioFileInputRef.current?.selectedFile;
-      const motionFile = emoteMotionFileInputRef.current?.selectedFile;
+      const audioFile = selectedEmoteAudioFile;
+      const motionFile = selectedEmoteMotionFile;
 
       if (!audioFile || !motionFile) {
         setEmoteUploadState({ uploading: false, progress: '', error: 'Please select both audio and motion files' });
@@ -706,10 +727,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       setEmoteUploadState({ uploading: false, progress: '', error: null });
       setEmoteName('');
-      emoteAudioFileInputRef.current.selectedFile = null;
-      emoteMotionFileInputRef.current.selectedFile = null;
-      emoteAudioFileInputRef.current.value = '';
-      emoteMotionFileInputRef.current.value = '';
+      setSelectedEmoteAudioFile(null);
+      setSelectedEmoteMotionFile(null);
+      if (emoteAudioFileInputRef.current) emoteAudioFileInputRef.current.value = '';
+      if (emoteMotionFileInputRef.current) emoteMotionFileInputRef.current.value = '';
       await loadEmotes();
     } catch (error) {
       console.error('Failed to upload emote:', error);
@@ -913,9 +934,85 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   };
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">Avatar Configuration</h3>
-      
+    <div className="flex flex-col h-full">
+      {/* Sub-tabs */}
+      <div className="flex border-b border-white/20 relative">
+        <div 
+          className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
+          style={{
+            left: `${subTabIndicatorStyle.left}px`,
+            width: `${subTabIndicatorStyle.width}px`,
+          }}
+        />
+        
+        <button
+          ref={(el) => (subTabsRef.display = el)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
+            activeSubTab === 'display' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveSubTab('display')}
+        >
+          Display
+        </button>
+        <button
+          ref={(el) => (subTabsRef.performance = el)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
+            activeSubTab === 'performance' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveSubTab('performance')}
+        >
+          Performance
+        </button>
+        <button
+          ref={(el) => (subTabsRef.models = el)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
+            activeSubTab === 'models' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveSubTab('models')}
+        >
+          Models
+        </button>
+        <button
+          ref={(el) => (subTabsRef.animations = el)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
+            activeSubTab === 'animations' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveSubTab('animations')}
+        >
+          Animations
+        </button>
+        <button
+          ref={(el) => (subTabsRef.emotes = el)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
+            activeSubTab === 'emotes' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveSubTab('emotes')}
+        >
+          Emotes
+        </button>
+      </div>
+
+      {/* Sub-tab content with sliding animation */}
+      <div className="flex-1 overflow-hidden">
+        <div 
+          className="flex flex-nowrap transition-transform duration-300 ease-out"
+          style={{
+            transform: `translateX(-${['display', 'performance', 'models', 'animations', 'emotes'].indexOf(activeSubTab) * 100}%)`,
+            height: '100%'
+          }}
+        >
+          {/* Display Tab */}
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
       {/* Enable Avatar Toggle */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
@@ -996,7 +1093,34 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             )}
           </div>
 
-          {/* Physics Toggle */}
+          {/* Position Preset */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Character Position</label>
+            <select
+              value={uiConfig.position?.preset || 'bottom-right'}
+              onChange={(e) => updateUIConfig('position.preset', e.target.value)}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            >
+              <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
+              {Object.entries(PositionPresets).map(([key, preset]) => (
+                <option key={key} value={key} className="bg-gray-900">
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-white/50">
+              {uiConfig.position?.preset === 'last-location'
+                ? 'Will load at the last dragged position. Drag to save new position.'
+                : 'Changes will apply on next page load or reload'}
+            </p>
+          </div>
+        </>
+      )}
+      </div>
+
+      {/* Performance Tab */}
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          {/* Physics Simulation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <div className="flex-1">
@@ -1285,31 +1409,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               </div>
             )}
           </div>
+        </div>
 
-          {/* Position Preset */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Character Position</label>
-            <select
-              value={uiConfig.position?.preset || 'bottom-right'}
-              onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-              {Object.entries(PositionPresets).map(([key, preset]) => (
-                <option key={key} value={key} className="bg-gray-900">
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-white/50">
-              {uiConfig.position?.preset === 'last-location'
-                ? 'Will load at the last dragged position. Drag to save new position.'
-                : 'Changes will apply on next page load or reload'}
-            </p>
-          </div>
-
+      {/* Models Tab */}
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Model Management Section */}
-          <div className="space-y-4 border-t border-white/10 pt-4">
+          <div className="space-y-4">
             <h4 className="text-sm font-semibold text-white mb-3">Custom Models</h4>
             
             {/* Model Upload */}
@@ -1376,7 +1481,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 
                 {/* Expandable Settings for Default Model */}
                 {expandedModelSettings === 'default' && (
-                  <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto">
+                  <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                     {/* Textures Section - Grouped by Type */}
                     {builtinModelMetadata.textures && builtinModelMetadata.textures.length > 0 ? (() => {
                       const groupedTextures = groupTexturesByType(builtinModelMetadata.textures);
@@ -1570,7 +1675,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                   
                   {/* Expandable Texture & Mesh Settings */}
                   {expandedModelSettings === model.id && (
-                    <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto">
+                    <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                       {/* Textures Section - Grouped by Type */}
                       {model.metadata?.textures && model.metadata.textures.length > 0 && (() => {
                         const groupedTextures = groupTexturesByType(model.metadata.textures);
@@ -1678,45 +1783,49 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               ))}
             </div>
           </div>
+      </div>
 
-          {/* Motion Management Section */}
-          <div className="space-y-4 border-t border-white/10 pt-4">
-            <h4 className="text-sm font-semibold text-white mb-3">Custom Animations</h4>
+      {/* Animations Tab */}
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          {/* Motion Management */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-white">Custom Animations</h4>
+          </div>
             
-            {/* Motion Upload */}
-            <div className="space-y-3">
-              <input
-                ref={motionFileInputRef}
-                type="file"
-                accept=".vmd"
-                multiple
-                onChange={handleMotionFileChange}
-                className="hidden"
-              />
-              
-              <button
-                onClick={() => motionFileInputRef.current?.click()}
-                disabled={motionUploadState.uploading}
-                className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
-                <p className="text-sm text-white/90 mb-1">
-                  {motionUploadState.uploading ? motionUploadState.progress : 'Upload VMD Animations'}
-                </p>
-                <p className="text-xs text-white/50">Click to browse (supports multiple files)</p>
-              </button>
+          {/* Motion Upload */}
+          <div className="space-y-2">
+            <input
+              ref={motionFileInputRef}
+              type="file"
+              accept=".vmd"
+              multiple
+              onChange={handleMotionFileChange}
+              className="hidden"
+            />
+            
+            <button
+              onClick={() => motionFileInputRef.current?.click()}
+              disabled={motionUploadState.uploading}
+              className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
+              <p className="text-sm text-white/90 mb-1">
+                {motionUploadState.uploading ? motionUploadState.progress : 'Upload VMD Animations'}
+              </p>
+              <p className="text-xs text-white/50">Click to browse (supports multiple files)</p>
+            </button>
 
-              {motionUploadState.error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
-                  <p className="text-xs text-red-200">{motionUploadState.error}</p>
-                </div>
-              )}
+            {motionUploadState.error && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
+                <p className="text-xs text-red-200">{motionUploadState.error}</p>
+              </div>
+            )}
+          </div>
 
-            </div>
-
-            {/* Motion List */}
-            {motions.length > 0 && (
-              <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar">
+          {/* Motion List */}
+          {motions.length > 0 && (
+            <div className="space-y-2">
+              <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                 {motions.map((motion) => {
                   return (
                     <div
@@ -1821,123 +1930,146 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                   );
                 })}
               </div>
+            </div>
+            )}
+
+          {/* Animation Management */}
+          <h4 className="text-sm font-semibold text-white pt-6 border-t border-white/10">Animation Management</h4>
+
+          {/* Animation Categories */}
+          <div className="space-y-4">
+              {Object.keys(AnimationCategory).map((categoryKey) => {
+                const category = AnimationCategory[categoryKey];
+                return (
+                  <AnimationCategorySection
+                    key={category}
+                    category={category}
+                    customMotions={customAnimations}
+                    disabledDefaultAnimations={disabledDefaultAnimations}
+                    onToggleAnimation={handleToggleAnimation}
+                    isLightBackground={isLightBackground}
+                  />
+                );
+              })}
+            </div>
+      </div>
+
+      {/* Emotes Tab */}
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          {/* Emote Upload */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-white">Emote Management</h4>
+          </div>
+
+          <div className="space-y-2">
+            {/* Emote Name Input */}
+            <div className="space-y-1">
+              <label className="text-xs text-white/70">Emote Name</label>
+              <input
+                type="text"
+                value={emoteName}
+                onChange={(e) => setEmoteName(e.target.value)}
+                placeholder="Enter emote name"
+                disabled={emoteUploadState.uploading}
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+              />
+            </div>
+
+            {/* Hidden File Inputs */}
+            <input
+              ref={emoteAudioFileInputRef}
+              type="file"
+              accept=".mp3,.wav,.ogg,.m4a"
+              onChange={handleEmoteAudioFileChange}
+              className="hidden"
+            />
+            <input
+              ref={emoteMotionFileInputRef}
+              type="file"
+              accept=".vmd"
+              onChange={handleEmoteMotionFileChange}
+              className="hidden"
+            />
+            
+            {/* Audio File Upload Button */}
+            <button
+              onClick={() => emoteAudioFileInputRef.current?.click()}
+              disabled={emoteUploadState.uploading}
+              className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
+              <p className="text-sm text-white/90">
+                {selectedEmoteAudioFile?.name || 'Upload Audio'}
+              </p>
+              <p className="text-xs text-white/50">MP3, WAV, OGG, M4A</p>
+            </button>
+
+            {/* Motion File Upload Button */}
+            <button
+              onClick={() => emoteMotionFileInputRef.current?.click()}
+              disabled={emoteUploadState.uploading}
+              className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
+              <p className="text-sm text-white/90">
+                {selectedEmoteMotionFile?.name || 'Upload Motion'}
+              </p>
+              <p className="text-xs text-white/50">VMD file</p>
+            </button>
+
+            {/* Upload Button */}
+            <button
+              onClick={handleEmoteUpload}
+              disabled={emoteUploadState.uploading || !emoteName.trim()}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
+            </button>
+
+            {emoteUploadState.error && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
+                <p className="text-xs text-red-200">{emoteUploadState.error}</p>
+              </div>
             )}
           </div>
 
-          {/* Emote Management Section */}
-          <div className="space-y-4 border-t border-white/10 pt-4">
-            <h4 className="text-sm font-semibold text-white mb-3">Emotes</h4>
-            
-            {/* Emote Upload */}
-            <div className="space-y-3">
-              {/* Emote Name Input */}
-              <div className="space-y-1">
-                <label className="text-xs text-white/70">Emote Name</label>
-                <input
-                  type="text"
-                  value={emoteName}
-                  onChange={(e) => setEmoteName(e.target.value)}
-                  placeholder="Enter emote name"
-                  disabled={emoteUploadState.uploading}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-                />
-              </div>
-
-              {/* Hidden File Inputs */}
-              <input
-                ref={emoteAudioFileInputRef}
-                type="file"
-                accept=".mp3,.wav,.ogg,.m4a"
-                onChange={handleEmoteAudioFileChange}
-                className="hidden"
-              />
-              <input
-                ref={emoteMotionFileInputRef}
-                type="file"
-                accept=".vmd"
-                onChange={handleEmoteMotionFileChange}
-                className="hidden"
-              />
-              
-              {/* Audio File Upload Button */}
-              <button
-                onClick={() => emoteAudioFileInputRef.current?.click()}
-                disabled={emoteUploadState.uploading}
-                className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
-                <p className="text-sm text-white/90">
-                  {emoteAudioFileInputRef.current?.selectedFile?.name || 'Upload Audio'}
-                </p>
-                <p className="text-xs text-white/50">MP3, WAV, OGG, M4A</p>
-              </button>
-
-              {/* Motion File Upload Button */}
-              <button
-                onClick={() => emoteMotionFileInputRef.current?.click()}
-                disabled={emoteUploadState.uploading}
-                className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
-                <p className="text-sm text-white/90">
-                  {emoteMotionFileInputRef.current?.selectedFile?.name || 'Upload Motion'}
-                </p>
-                <p className="text-xs text-white/50">VMD file</p>
-              </button>
-
-              {/* Upload Button */}
-              <button
-                onClick={handleEmoteUpload}
-                disabled={emoteUploadState.uploading || !emoteName.trim()}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
-              </button>
-
-              {emoteUploadState.error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
-                  <p className="text-xs text-red-200">{emoteUploadState.error}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Emote List */}
-            {emotes.length > 0 && (
-              <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar">
+          {/* Emote List */}
+          {emotes.length > 0 && (
+            <div className="space-y-2">
+              <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                 {emotes.map((emote) => {
                   const isEditing = editingEmoteId === emote.id;
                   return (
-                    <div key={emote.id} className="rounded-lg overflow-hidden">
-                      <div className="bg-white/5 backdrop-blur-sm p-3 hover:bg-white/10 transition-colors">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editingEmoteName}
-                                onChange={(e) => setEditingEmoteName(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSaveEmoteName(emote.id);
-                                  if (e.key === 'Escape') handleCancelEditEmote();
-                                }}
-                                className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
-                                autoFocus
-                              />
-                            ) : (
-                              <p className="text-sm font-medium text-white/90 truncate">
-                                {emote.name}
+                    <div key={emote.id} className="relative rounded-lg bg-white/5 border border-white/10">
+                      <div className="flex items-start justify-between gap-3 p-3">
+                        <div className="flex-1 min-w-0">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingEmoteName}
+                              onChange={(e) => setEditingEmoteName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveEmoteName(emote.id);
+                                if (e.key === 'Escape') handleCancelEditEmote();
+                              }}
+                              className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                              autoFocus
+                            />
+                          ) : (
+                            <p className="text-sm text-white font-medium truncate">
+                              {emote.name}
+                            </p>
+                          )}
+                          {isEditing && (
+                            <>
+                              <p className="text-xs text-white/50 truncate">
+                                {emote.metadata?.originalAudioFileName || 'Unknown'}
                               </p>
-                            )}
-                            {isEditing && (
-                              <>
-                                <p className="text-xs text-white/50 truncate">
-                                  {emote.metadata?.originalAudioFileName || 'Unknown'}
-                                </p>
-                                <p className="text-xs text-white/50 truncate">
-                                  {emote.metadata?.originalMotionFileName || 'Unknown'}
-                                </p>
-                              </>
-                            )}
+                              <p className="text-xs text-white/50 truncate">
+                                {emote.metadata?.originalMotionFileName || 'Unknown'}
+                              </p>
+                            </>
+                          )}
                           </div>
                           <div className="flex gap-1">
                             {isEditing ? (
@@ -1977,39 +2109,15 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             )}
                           </div>
                         </div>
-                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
-
-          {/* Animation Management */}
-          <div className="space-y-3 pt-6 border-t border-white/10">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-white">Animation Management</h4>
             </div>
-
-            {/* Animation Categories */}
-            <div className="space-y-4">
-              {Object.keys(AnimationCategory).map((categoryKey) => {
-                const category = AnimationCategory[categoryKey];
-                return (
-                  <AnimationCategorySection
-                    key={category}
-                    category={category}
-                    customMotions={customAnimations}
-                    disabledDefaultAnimations={disabledDefaultAnimations}
-                    onToggleAnimation={handleToggleAnimation}
-                    isLightBackground={isLightBackground}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
+          )}
+      </div>
+      </div>
+      </div>
 
       {/* Error Dialog */}
       {showErrorDialog && (
@@ -2071,7 +2179,7 @@ const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnim
           {defaultAnimations.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-white/70 mb-2">Default Animations</p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar">
+              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                 {defaultAnimations.map((anim) => {
                   const isEnabled = !disabledDefaultAnimations[anim.id];
                   const isLastEnabled = isEnabled && totalEnabledCount === 1;
@@ -2102,7 +2210,7 @@ const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnim
           {customMotionsInCategory.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-white/70 mb-2">Custom Animations</p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar">
+              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
                 {customMotionsInCategory.map((motion) => {
                   const isEnabled = motion.enabledByCategory && motion.enabledByCategory[category] === true;
                   const isLastEnabled = isEnabled && totalEnabledCount === 1;

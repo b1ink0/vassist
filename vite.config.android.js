@@ -122,6 +122,11 @@ export default defineConfig(({ mode }) => {
       port: 3002,
       fs: {
         allow: ['..'],
+        deny: [
+          '**/electron/server/**',
+          '**/.git/**',
+          '**/node_modules/**/.git/**',
+        ],
       },
     },
   };
