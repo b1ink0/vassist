@@ -9,6 +9,8 @@ import Toggle from '../../common/Toggle';
 import { GPTSoVITSLanguages } from '../../../config/aiConfig';
 import voiceStorageService from '../../../services/VoiceStorageService';
 import Logger from '../../../services/LoggerService';
+import GPTSoVITSSetup from './GPTSoVITSSetup';
+import { isDesktop } from '../../../utils/PlatformUtils';
 
 const getAudioDuration = (file) => {
   return new Promise((resolve, reject) => {
@@ -31,8 +33,6 @@ const GPTSoVITSConfig = ({
   onRequestDeleteVoiceDialog,
   refreshTrigger,
   isLightBackground = false,
-  errorMessage = '',
-  setErrorMessage = () => {},
 }) => {
   const [voices, setVoices] = useState([]);
   const [uploadingVoice, setUploadingVoice] = useState(false);
@@ -48,6 +48,7 @@ const GPTSoVITSConfig = ({
   const [editVoiceName, setEditVoiceName] = useState('');
   const [editReferenceText, setEditReferenceText] = useState('');
   const [editLanguage, setEditLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const loadVoices = async () => {
     try {
@@ -193,29 +194,39 @@ const GPTSoVITSConfig = ({
   };
 
   return (
-    <div className="space-y-4">
-      {showTitle && (
-        <h4 className="text-sm font-semibold text-white mb-3">Reference Voices</h4>
+    <div className="space-y-6">
+      {/* Setup section (desktop only) */}
+      {isDesktop && !isSetupMode && (
+        <div>
+          <h4 className="text-sm font-semibold text-white mb-3">Installation</h4>
+          <GPTSoVITSSetup isLightBackground={isLightBackground} />
+        </div>
       )}
+      
+      {/* Voice configuration section */}
+      <div className="space-y-4">
+        {showTitle && (
+          <h4 className="text-sm font-semibold text-white mb-3">Reference Voices</h4>
+        )}
 
-      <div>
-        <label className="block text-sm font-medium text-white/90 mb-2">Voice Name</label>
-        <input
-          type="text"
-          value={newVoiceName}
-          onChange={(e) => setNewVoiceName(e.target.value)}
-          placeholder="My Voice"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-        />
-      </div>
+        <div>
+          <label className="block text-sm font-medium text-white/90 mb-2">Voice Name</label>
+          <input
+            type="text"
+            value={newVoiceName}
+            onChange={(e) => setNewVoiceName(e.target.value)}
+            placeholder="My Voice"
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+          />
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-white/90 mb-2">Reference Text</label>
-        <textarea
-          value={newReferenceText}
-          onChange={(e) => setNewReferenceText(e.target.value)}
-          placeholder="Type the exact text spoken in the audio..."
-          rows={3}
+        <div>
+          <label className="block text-sm font-medium text-white/90 mb-2">Reference Text</label>
+          <textarea
+            value={newReferenceText}
+            onChange={(e) => setNewReferenceText(e.target.value)}
+            placeholder="Type the exact text spoken in the audio..."
+            rows={3}
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm resize-none`}
         />
         <p className="text-xs text-white/50 mt-1">Must match the audio exactly</p>
@@ -240,7 +251,7 @@ const GPTSoVITSConfig = ({
         <input
           ref={voiceFileInputRef}
           type="file"
-          accept=".mp3,.wav,.m4a"
+          accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a"
           onChange={(e) => setNewAudioFile(e.target.files[0])}
           className="hidden"
         />
@@ -277,6 +288,19 @@ const GPTSoVITSConfig = ({
               </>
             )}
           </button>
+        )}
+
+        {/* Error/Status Message */}
+        {errorMessage && (
+          <div className={`p-3 rounded-lg text-sm ${
+            errorMessage.includes('✅') 
+              ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+              : errorMessage.startsWith('error-status:') || errorMessage.startsWith('hourglass:')
+              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+          }`}>
+            {errorMessage.replace(/^(error-status:|hourglass:)/, '')}
+          </div>
         )}
       </div>
 
@@ -459,6 +483,7 @@ const GPTSoVITSConfig = ({
           </div>
         </details>
       )}
+      </div>
     </div>
   );
 };

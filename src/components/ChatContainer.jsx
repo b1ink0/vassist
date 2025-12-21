@@ -19,10 +19,11 @@ import { modelStorageService } from '../services/ModelStorageService';
 import { motionStorageService } from '../services/MotionStorageService';
 import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
 import { useDesktop } from '../contexts/DesktopContext';
+import { useAndroid } from '../contexts/AndroidContext';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
-import { isDesktop } from '../utils/PlatformUtils';
+import { isDesktop, isAndroid } from '../utils/PlatformUtils';
 
 /**
  * Chat container component.
@@ -74,6 +75,7 @@ const ChatContainer = ({
 
   const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext } = useConfig();
   const { api } = useDesktop();
+  const { api: androidAPI } = useAndroid();
 
   const buttonPosRef = useRef(buttonPosition);
   const buttonInitializedRef = useRef(false);
@@ -618,15 +620,26 @@ const ChatContainer = ({
   }, []);
 
   const handleDeleteLLMModelConfirm = useCallback(async (filename) => {
-    if (!isDesktop || !api?.llm) return;
-
     try {
-      const result = await api.llm.deleteModel(filename);
+      let result;
+      
+      if (isDesktop && api?.llm) {
+        result = await api.llm.deleteModel(filename);
+      } else if (isAndroid && androidAPI?.deleteLLMModel) {
+        const resultJson = androidAPI.deleteLLMModel(filename);
+        result = JSON.parse(resultJson);
+      } else {
+        Logger.error('ChatContainer', 'No deletion API available');
+        return;
+      }
+      
       if (result?.success) {
         Logger.log('ChatContainer', 'Deleted LLM model:', filename);
         
         // Trigger refresh
         setSettingsRefreshTrigger(prev => prev + 1);
+      } else {
+        Logger.error('ChatContainer', 'Delete failed:', result?.error);
       }
       
       setIsDeleteLLMModelDialogClosing(true);
@@ -642,7 +655,7 @@ const ChatContainer = ({
         setIsDeleteLLMModelDialogClosing(false);
       }, 200);
     }
-  }, [isDesktop, api]);
+  }, [api, androidAPI]);
 
   const handleDeleteLLMModelCancel = useCallback(() => {
     setIsDeleteLLMModelDialogClosing(true);

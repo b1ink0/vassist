@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electron', {
     close: () => ipcRenderer.invoke('window:close'),
     toggleAlwaysOnTop: () => ipcRenderer.invoke('window:toggle-always-on-top'),
     setIgnoreMouseEvents: (ignore, options) => ipcRenderer.invoke('window:set-ignore-mouse-events', ignore, options),
+    frontendReady: () => ipcRenderer.invoke('window:frontend-ready'),
     setPosition: (x, y) => ipcRenderer.invoke('window:set-position', x, y),
     getPosition: () => ipcRenderer.invoke('window:get-position'),
     setSize: (width, height) => ipcRenderer.invoke('window:set-size', width, height),
@@ -90,6 +91,23 @@ contextBridge.exposeInMainWorld('electron', {
       const subscription = (event, progress) => callback(progress);
       ipcRenderer.on('llm:download-progress', subscription);
       return () => ipcRenderer.removeListener('llm:download-progress', subscription);
+    },
+  },
+  
+  // GPT-SoVITS Setup
+  gptSovitsSetup: {
+    start: () => ipcRenderer.invoke('gptsovits:setup:start'),
+    cancel: () => ipcRenderer.invoke('gptsovits:setup:cancel'),
+    getStatus: () => ipcRenderer.invoke('gptsovits:setup:status'),
+    onLog: (callback) => {
+      const subscription = (event, log) => callback(log);
+      ipcRenderer.on('gptsovits:setup:log', subscription);
+      return () => ipcRenderer.removeListener('gptsovits:setup:log', subscription);
+    },
+    onComplete: (callback) => {
+      const subscription = (event, result) => callback(result);
+      ipcRenderer.on('gptsovits:setup:complete', subscription);
+      return () => ipcRenderer.removeListener('gptsovits:setup:complete', subscription);
     },
   },
 });

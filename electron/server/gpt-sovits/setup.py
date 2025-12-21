@@ -13,7 +13,13 @@ from pathlib import Path
 import urllib.request
 import zipfile
 import tarfile
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    print("Installing tqdm for progress bars...", flush=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "tqdm", "--no-warn-script-location"], check=True)
+    from tqdm import tqdm
 
 BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"
@@ -23,6 +29,11 @@ PYTHON_DIR = BASE_DIR / "python"
 IS_WINDOWS = platform.system() == 'Windows'
 IS_MACOS = platform.system() == 'Darwin'
 IS_ARM_MAC = IS_MACOS and platform.machine() == 'arm64'
+
+def log(message):
+    """Print with immediate flush for real-time streaming"""
+    print(message, flush=True)
+    sys.stdout.flush()
 
 def get_python_exe():
     """Get the Python executable path for current platform"""
@@ -35,7 +46,7 @@ def check_cuda_available():
     """Check if CUDA is available on the system (Windows/Linux only)"""
     if IS_MACOS:
         # macOS uses Metal Performance Shaders (MPS), not CUDA
-        print("ℹ macOS detected - will use Metal Performance Shaders (MPS) for GPU acceleration")
+        log("[INFO] macOS detected - will use Metal Performance Shaders (MPS) for GPU acceleration")
         return False
     
     try:
@@ -47,7 +58,7 @@ def check_cuda_available():
             timeout=5
         )
         if result.returncode == 0 and result.stdout.strip():
-            print(f"✓ NVIDIA GPU detected: {result.stdout.strip()}")
+            log(f"[GPU] NVIDIA GPU detected: {result.stdout.strip()}")
             return True
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
@@ -64,12 +75,12 @@ def check_cuda_available():
             # Extract CUDA version from output
             for line in result.stdout.split('\n'):
                 if 'release' in line.lower():
-                    print(f"✓ CUDA toolkit found: {line.strip()}")
+                    log(f"[GPU] CUDA toolkit found: {line.strip()}")
                     return True
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     
-    print("ℹ No CUDA/GPU detected, will use CPU version of PyTorch")
+    log("[INFO] No CUDA/GPU detected, will use CPU version of PyTorch")
     return False
 
 def download_file(url, dest):
@@ -77,7 +88,7 @@ def download_file(url, dest):
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     
-    print(f"Downloading {dest.name}...")
+    log(f"[DOWNLOAD] {dest.name}...")
     
     try:
         response = urllib.request.urlopen(url)
@@ -98,15 +109,15 @@ def download_file(url, dest):
                 f.write(chunk)
                 pbar.update(len(chunk))
         
-        print(f"✓ Downloaded {dest.name}")
+        log(f"[DOWNLOAD] ✓ {dest.name} complete")
     except Exception as e:
-        print(f"✗ Download failed: {e}")
+        log(f"[ERROR] Download failed: {e}")
         raise
 
 def setup_python_runtime():
     """Download and setup Python runtime for current platform"""
     if PYTHON_DIR.exists():
-        print(f"✓ Python runtime already exists at {PYTHON_DIR}")
+        log(f"[PYTHON] ✓ Runtime already exists at {PYTHON_DIR}")
         return
         
     PYTHON_DIR.mkdir(parents=True)
@@ -116,14 +127,15 @@ def setup_python_runtime():
         python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
         python_zip = PYTHON_DIR / "python.zip"
         
-        print("Setting up Python runtime for Windows...")
+        log("[PYTHON] Setting up embedded Python for Windows...")
         download_file(python_url, python_zip)
         
+        log("[PYTHON] Extracting runtime...")
         with zipfile.ZipFile(python_zip, 'r') as zip_ref:
             zip_ref.extractall(PYTHON_DIR)
         
         python_zip.unlink()
-        print("✓ Python runtime extracted")
+        log("[PYTHON] ✓ Runtime extracted")
         
         # Enable site-packages in embedded Python
         pth_file = PYTHON_DIR / "python310._pth"
@@ -136,75 +148,73 @@ def setup_python_runtime():
             pth_file.write_text(content)
         
         # Get pip
+        log("[PYTHON] Installing pip...")
         get_pip = PYTHON_DIR / "get-pip.py"
         download_file("https://bootstrap.pypa.io/get-pip.py", get_pip)
         
         python_exe = get_python_exe()
         subprocess.run([str(python_exe), str(get_pip)], check=True)
         
-        print("✓ pip installed")
+        log("[PYTHON] ✓ pip installed")
         
     elif IS_ARM_MAC:
-        # macOS ARM: Download standalone Python build for Apple Silicon
-        python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
+        log("[PYTHON] Verifying Python runtime (should be installed by bootstrap)...")
+        python_exe = get_python_exe()
         
-        print("Setting up Python runtime for macOS (Apple Silicon)...")
-        print("Note: Using system Python with virtual environment approach")
-        
-        # Create virtual environment using system Python
-        system_python = shutil.which('python3')
-        if not system_python:
-            print("✗ System Python3 not found. Please install Python 3.10+ from python.org")
-            print("  Download: https://www.python.org/downloads/macos/")
+        if not python_exe.exists():
+            log("[ERROR] Python runtime not found!")
+            log("[ERROR] Bootstrap should have installed Python to: " + str(PYTHON_DIR))
+            log("[ERROR] Please run bootstrap first or install manually")
             sys.exit(1)
         
-        # Check Python version
-        result = subprocess.run([system_python, '--version'], capture_output=True, text=True)
-        print(f"✓ Found system Python: {result.stdout.strip()}")
+        # Verify Python works
+        result = subprocess.run([str(python_exe), '--version'], capture_output=True, text=True)
+        log(f"[PYTHON] ✓ Found Python: {result.stdout.strip()}")
         
-        # Create virtual environment
-        subprocess.run([system_python, '-m', 'venv', str(PYTHON_DIR)], check=True)
-        print("✓ Virtual environment created")
-        
-        # Upgrade pip
-        python_exe = get_python_exe()
-        subprocess.run([str(python_exe), '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
-        print("✓ pip installed")
+        # Verify pip exists
+        log("[PYTHON] Verifying pip...")
+        result = subprocess.run([str(python_exe), '-m', 'pip', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            log(f"[PYTHON] ✓ pip ready: {result.stdout.strip()}")
+        else:
+            log("[ERROR] pip not found in Python installation")
+            sys.exit(1)
+        log("[PYTHON] ✓ pip installed")
     
     else:
-        print(f"✗ Unsupported platform: {platform.system()} {platform.machine()}")
-        print("  Supported: Windows x64, macOS Apple Silicon (M1/M2/M3)")
+        log(f"[ERROR] Unsupported platform: {platform.system()} {platform.machine()}")
+        log("[ERROR] Supported: Windows x64, macOS Apple Silicon (M1/M2/M3)")
         sys.exit(1)
 
 def install_pytorch():
     """Install PyTorch with platform-specific acceleration"""
     python_exe = get_python_exe()
     
-    print("\n" + "="*60)
-    print("Installing PyTorch...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[PYTORCH] Installing PyTorch...")
+    log("="*60)
     
     if IS_ARM_MAC:
         # macOS Apple Silicon: Install PyTorch with MPS (Metal Performance Shaders) support
-        print("Installing PyTorch for Apple Silicon (MPS acceleration)...")
-        print("This will enable GPU acceleration via Metal")
+        log("[PYTORCH] Installing for Apple Silicon (MPS acceleration)...")
+        log("[PYTORCH] This will enable GPU acceleration via Metal")
         try:
             subprocess.run([
                 str(python_exe), "-m", "pip", "install",
                 "torch", "torchaudio",
                 "--no-warn-script-location"
             ], check=True)
-            print("✓ PyTorch with MPS support installed")
+            log("[PYTORCH] ✓ PyTorch with MPS support installed")
             
             # Verify MPS is available
             result = subprocess.run([
                 str(python_exe), "-c",
                 "import torch; print(f'MPS available: {torch.backends.mps.is_available()}, Built: {torch.backends.mps.is_built()}')"
             ], capture_output=True, text=True, check=False)
-            print(result.stdout.strip())
+            log(f"[PYTORCH] {result.stdout.strip()}")
             
         except subprocess.CalledProcessError as e:
-            print(f"⚠ PyTorch installation failed: {e}")
+            log(f"[ERROR] PyTorch installation failed: {e}")
             sys.exit(1)
     
     elif IS_WINDOWS:
@@ -212,8 +222,8 @@ def install_pytorch():
         has_cuda = check_cuda_available()
         
         if has_cuda:
-            print("Installing PyTorch with CUDA 12.1 support (2.4GB download)...")
-            print("This may take 10-30 minutes depending on your internet speed.")
+            log("[PYTORCH] Installing with CUDA 12.1 support (2.4GB download)...")
+            log("[PYTORCH] This may take 10-30 minutes depending on your internet speed.")
             try:
                 subprocess.run([
                     str(python_exe), "-m", "pip", "install",
@@ -221,29 +231,39 @@ def install_pytorch():
                     "--index-url", "https://download.pytorch.org/whl/cu121",
                     "--no-warn-script-location"
                 ], check=True)
-                print("✓ PyTorch with CUDA installed")
+                log("[PYTORCH] ✓ PyTorch with CUDA installed")
                 
                 # Verify CUDA is available
                 result = subprocess.run([
                     str(python_exe), "-c",
                     "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
                 ], capture_output=True, text=True, check=False)
-                print(result.stdout.strip())
+                log(f"[PYTORCH] {result.stdout.strip()}")
                 
             except subprocess.CalledProcessError as e:
-                print(f"⚠ CUDA PyTorch installation failed: {e}")
-                print("Falling back to CPU version...")
+                log(f"[WARNING] CUDA PyTorch installation failed: {e}")
+                log("[PYTORCH] Falling back to CPU version...")
                 has_cuda = False
         
         if not has_cuda:
-            print("Installing PyTorch CPU version...")
-            subprocess.run([
-                str(python_exe), "-m", "pip", "install",
-                "torch", "torchaudio",
-                "--index-url", "https://download.pytorch.org/whl/cpu",
-                "--no-warn-script-location"
-            ], check=True)
-            print("✓ PyTorch CPU installed")
+            log("[PYTORCH] Installing CPU version...")
+            try:
+                result = subprocess.run([
+                    str(python_exe), "-m", "pip", "install",
+                    "torch", "torchaudio",
+                    "--index-url", "https://download.pytorch.org/whl/cpu",
+                    "--no-warn-script-location"
+                ], capture_output=True, text=True, check=True)
+                log(result.stdout)
+                if result.stderr:
+                    log(result.stderr)
+                log("[PYTORCH] ✓ PyTorch CPU installed")
+            except subprocess.CalledProcessError as e:
+                log(f"[ERROR] PyTorch CPU installation failed:")
+                log(f"Exit code: {e.returncode}")
+                log(f"STDOUT: {e.stdout}")
+                log(f"STDERR: {e.stderr}")
+                raise
 
 def install_dependencies():
     """Install Python dependencies"""
@@ -255,18 +275,27 @@ def install_dependencies():
     if IS_ARM_MAC:
         # macOS: Simpler approach - install all dependencies directly
         # No need to separate compilation packages on macOS
-        print("Installing dependencies...")
+        log("[INSTALL] Installing dependencies...")
         
         # Install PyTorch first
         install_pytorch()
         
         # Install all dependencies
-        subprocess.run([
-            str(python_exe), "-m", "pip", "install", "-r", str(requirements),
-            "--no-warn-script-location"
-        ], check=True)
-        
-        print("✓ All dependencies installed")
+        try:
+            result = subprocess.run([
+                str(python_exe), "-m", "pip", "install", "-r", str(requirements),
+                "--no-warn-script-location"
+            ], capture_output=True, text=True, check=True)
+            log(result.stdout)
+            if result.stderr:
+                log(result.stderr)
+            log("[INSTALL] ✓ All dependencies installed")
+        except subprocess.CalledProcessError as e:
+            log(f"[ERROR] Failed to install dependencies:")
+            log(f"Exit code: {e.returncode}")
+            log(f"STDOUT: {e.stdout}")
+            log(f"STDERR: {e.stderr}")
+            raise
         return
     
     # Windows: Original complex approach with system Python for compilation
@@ -280,7 +309,7 @@ def install_dependencies():
     env = os.environ.copy()
     if cmake_exe:
         cmake_path = str(Path(cmake_exe).parent)
-        print(f"✓ Found CMake at: {cmake_path}")
+        log(f"[CMAKE] ✓ Found at: {cmake_path}")
         env['PATH'] = cmake_path + os.pathsep + env.get('PATH', '')
         env['CMAKE_PROGRAM'] = cmake_exe
     
@@ -288,28 +317,55 @@ def install_dependencies():
     compile_packages = ['opencc', 'jieba_fast']
     
     # Create temp requirements without packages that need compilation
+    # Also remove --no-binary and --index-url directives
     with open(requirements, 'r', encoding='utf-8') as f:
         lines = f.readlines()
     
     with open(requirements_no_pyopenjtalk, 'w', encoding='utf-8') as f:
         for line in lines:
-            if not any(pkg in line for pkg in compile_packages):
-                f.write(line)
+            stripped = line.strip()
+            # Skip empty lines, comments, --index-url, and compilation packages
+            if not stripped or stripped.startswith('#'):
+                continue
+            if stripped.startswith('--index-url') or stripped.startswith('--no-binary'):
+                log(f"[INSTALL] Skipping directive: {stripped}")
+                continue
+            # Skip lines that mention compile packages
+            if any(pkg in line for pkg in compile_packages):
+                log(f"[INSTALL] Skipping compilation package: {stripped}")
+                continue
+            f.write(line)
     
     # Install PyTorch first (CUDA or CPU based on GPU availability)
-    install_pytorch()
+    try:
+        install_pytorch()
+    except Exception as e:
+        log(f"[ERROR] PyTorch installation failed: {e}")
+        import traceback
+        log(traceback.format_exc())
+        raise
     
     # Install all dependencies except pyopenjtalk to embedded Python
-    print("Installing dependencies to embedded Python...")
-    subprocess.run([
-        str(embedded_python_exe), "-m", "pip", "install", "-r", str(requirements_no_pyopenjtalk),
-        "--no-warn-script-location"
-    ], check=True)
+    log("[INSTALL] Installing dependencies to embedded Python...")
+    try:
+        result = subprocess.run([
+            str(embedded_python_exe), "-m", "pip", "install", "-r", str(requirements_no_pyopenjtalk),
+            "--no-warn-script-location"
+        ], capture_output=True, text=True, check=True)
+        log(result.stdout)
+        if result.stderr:
+            log(result.stderr)
+    except subprocess.CalledProcessError as e:
+        log(f"[ERROR] Failed to install dependencies:")
+        log(f"Exit code: {e.returncode}")
+        log(f"STDOUT: {e.stdout}")
+        log(f"STDERR: {e.stderr}")
+        raise
     
     # Try to compile packages with system Python, then copy to embedded
     if cmake_exe and system_python:
         for package_name in compile_packages:
-            print(f"Compiling {package_name} with system Python (has dev headers)...")
+            log(f"[COMPILE] {package_name} with system Python (has dev headers)...")
             try:
                 # Get package spec with version if specified
                 package_spec = package_name
@@ -334,72 +390,108 @@ def install_dependencies():
                 if package_path.exists():
                     import shutil as sh
                     sh.copytree(package_path, target_path, dirs_exist_ok=True)
-                    print(f"✓ {package_name} compiled and copied to embedded Python")
+                    log(f"[COMPILE] ✓ {package_name} compiled and copied to embedded Python")
                 
             except Exception as e:
-                print(f"⚠ {package_name} compilation failed: {e}")
-                print(f"  {package_name} will not be available")
+                log(f"[WARNING] {package_name} compilation failed: {e}")
+                log(f"[WARNING] {package_name} will not be available")
     else:
         if not cmake_exe:
-            print("⚠ CMake not found")
+            log("[WARNING] CMake not found")
         if not system_python:
-            print("⚠ System Python not found (needed for compiling C++ extensions)")
-        print("  Compiled packages (opencc, jieba_fast) will not be available")
-        print("  Note: pyopenjtalk-prebuilt is already installed and doesn't need compilation")
+            log("[WARNING] System Python not found (needed for compiling C++ extensions)")
+        log("[WARNING] Compiled packages (opencc, jieba_fast) will not be available")
+        log("[INFO] Note: pyopenjtalk-prebuilt is already installed and doesn't need compilation")
     
     # Clean up temp file if it exists
     if requirements_no_pyopenjtalk.exists():
         requirements_no_pyopenjtalk.unlink()
     
     # Uninstall decoders package (causes transformers import errors)
-    print("\n" + "="*60)
-    print("Removing incompatible decoders package...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[INSTALL] Removing incompatible decoders package...")
+    log("="*60)
     try:
         subprocess.run([
             str(python_exe), "-m", "pip", "uninstall", "-y", "decoders"
         ], check=False)
-        print("✓ Removed decoders package")
+        log("[INSTALL] ✓ Removed decoders package")
     except Exception as e:
-        print(f"⚠ Failed to remove decoders: {e}")
+        log(f"[WARNING] Failed to remove decoders: {e}")
     
-    print("✓ Dependencies installed")
+    log("[INSTALL] ✓ Dependencies installed")
 
 def clone_gptsovits_repo():
-    """Clone GPT-SoVITS source code repository"""
+    """Download GPT-SoVITS source code from GitHub as ZIP"""
     gptsovits_dir = BASE_DIR / "GPT-SoVITS"
     
     if gptsovits_dir.exists():
-        print(f"✓ GPT-SoVITS source already exists at {gptsovits_dir}")
+        log(f"[REPO] ✓ GPT-SoVITS source already exists at {gptsovits_dir}")
         return
     
-    print("\n" + "="*60)
-    print("Cloning GPT-SoVITS source code...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[REPO] Downloading GPT-SoVITS source code from GitHub...")
+    log("="*60)
+
+    # Download as ZIP from GitHub (no git required)
+    commit_hash = "bfca0f6b2dd9f846c76366be807f01a8873140a0"
+    zip_url = f"https://github.com/RVC-Boss/GPT-SoVITS/archive/{commit_hash}.zip"
+    zip_path = BASE_DIR / "gptsovits_source.zip"
     
     try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "clone", "https://github.com/RVC-Boss/GPT-SoVITS.git", str(gptsovits_dir)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print("✓ GPT-SoVITS source cloned successfully")
-        print(f"Location: {gptsovits_dir}")
-    except subprocess.CalledProcessError as e:
-        print(f"✗ Failed to clone GPT-SoVITS: {e}")
-        print("Please clone manually: git clone https://github.com/RVC-Boss/GPT-SoVITS.git")
-    except FileNotFoundError:
-        print("✗ Git not found. Please install git and try again.")
+        log(f"[REPO] Downloading from {zip_url}...")
+        download_file(zip_url, zip_path)
+        
+        log(f"[REPO] Extracting to {gptsovits_dir}...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # GitHub zips create a folder named "GPT-SoVITS-{commit_hash}"
+            # We need to extract and rename it to "GPT-SoVITS"
+            zip_ref.extractall(BASE_DIR)
+        
+        # Rename extracted folder - use shutil.move for better Windows compatibility
+        # Folder name will be GPT-SoVITS-{commit_hash[:7]}
+        extracted_dir = BASE_DIR / f"GPT-SoVITS-{commit_hash}"
+        if extracted_dir.exists():
+            # Delete target if it exists (in case of partial previous install)
+            if gptsovits_dir.exists():
+                log(f"[REPO] Removing existing partial installation...")
+                shutil.rmtree(gptsovits_dir)
+            
+            # Use shutil.move instead of Path.rename (more robust on Windows)
+            import time
+            time.sleep(0.5)  # Small delay to ensure extraction is complete
+            shutil.move(str(extracted_dir), str(gptsovits_dir))
+            log(f"[REPO] ✓ Renamed {extracted_dir.name} to {gptsovits_dir.name}")
+        
+        # Clean up ZIP file
+        if zip_path.exists():
+            zip_path.unlink()
+        
+        log("[REPO] ✓ GPT-SoVITS source downloaded and extracted successfully")
+        log(f"[REPO] Location: {gptsovits_dir}")
+        
+    except Exception as e:
+        log(f"[ERROR] Failed to download GPT-SoVITS: {e}")
+        log(f"[INFO] You can manually download and extract: {zip_url}")
+        # Clean up on failure
+        if zip_path.exists():
+            zip_path.unlink()
+        # Clean up extracted folder if rename failed
+        extracted_dir = BASE_DIR / "GPT-SoVITS-main"
+        if extracted_dir.exists():
+            try:
+                shutil.rmtree(extracted_dir)
+            except:
+                pass
+        raise
 
 def download_models():
     """Download pre-trained GPT-SoVITS models from Hugging Face"""
     MODELS_DIR.mkdir(exist_ok=True)
     
-    print("\n" + "="*60)
-    print("Downloading GPT-SoVITS v2Pro+ models from Hugging Face...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[MODELS] Downloading GPT-SoVITS v2Pro+ models from Hugging Face...")
+    log("="*60)
     
     # Base URL for Hugging Face
     hf_base = "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main"
@@ -422,18 +514,18 @@ def download_models():
         
         # Skip if already downloaded
         if dest.exists():
-            print(f"✓ {model_path} already exists, skipping...")
+            log(f"[MODELS] ✓ {model_path} already exists, skipping...")
             continue
         
         try:
             download_file(url, dest)
                 
         except Exception as e:
-            print(f"✗ Failed to download {model_path}: {e}")
-            print(f"  You can manually download from: {url}")
+            log(f"[ERROR] Failed to download {model_path}: {e}")
+            log(f"[INFO] You can manually download from: {url}")
     
-    print("\n✓ Model download complete!")
-    print(f"Models saved to: {MODELS_DIR}")
+    log("\n[MODELS] ✓ Model download complete!")
+    log(f"[MODELS] Saved to: {MODELS_DIR}")
 
 def download_bert_model():
     """Download Chinese RoBERTa model for GPT-SoVITS"""
@@ -441,27 +533,27 @@ def download_bert_model():
     
     bert_dir = MODELS_DIR / "chinese-roberta-wwm-ext-large"
     
-    print("\n" + "="*60)
-    print("Downloading BERT model for text processing...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[BERT] Downloading BERT model for text processing...")
+    log("="*60)
     
     if bert_dir.exists() and (bert_dir / "config.json").exists():
-        print(f"✓ BERT model already exists: {bert_dir}")
+        log(f"[BERT] ✓ Model already exists: {bert_dir}")
         return
     
     try:
-        print(f"Downloading hfl/chinese-roberta-wwm-ext-large from HuggingFace...")
-        print("(Only PyTorch weights - ~1.3GB)")
+        log(f"[BERT] Downloading hfl/chinese-roberta-wwm-ext-large from HuggingFace...")
+        log("[BERT] (Only PyTorch weights - ~1.3GB)")
         snapshot_download(
             repo_id="hfl/chinese-roberta-wwm-ext-large",
             local_dir=str(bert_dir),
             local_dir_use_symlinks=False,
             allow_patterns=["*.json", "*.txt", "*.bin", "*.model"]  # Only PyTorch + tokenizer files
         )
-        print(f"✓ BERT model downloaded to {bert_dir}")
+        log(f"[BERT] ✓ Model downloaded to {bert_dir}")
     except Exception as e:
-        print(f"✗ Failed to download BERT model: {e}")
-        print("  TTS text processing will not work until model is downloaded")
+        log(f"[ERROR] Failed to download BERT model: {e}")
+        log("[WARNING] TTS text processing will not work until model is downloaded")
 
 def download_hubert_model():
     """Download Chinese HuBERT model for audio feature extraction"""
@@ -469,46 +561,46 @@ def download_hubert_model():
     
     hubert_dir = MODELS_DIR / "chinese-hubert-base"
     
-    print("\n" + "="*60)
-    print("Downloading HuBERT model for audio features...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[HUBERT] Downloading HuBERT model for audio features...")
+    log("="*60)
     
     if hubert_dir.exists() and (hubert_dir / "pytorch_model.bin").exists():
-        print(f"✓ HuBERT model already exists: {hubert_dir}")
+        log(f"[HUBERT] ✓ Model already exists: {hubert_dir}")
         return
     
     try:
-        print(f"Downloading TencentGameMate/chinese-hubert-base from HuggingFace...")
-        print("(Only PyTorch weights - ~400MB)")
+        log(f"[HUBERT] Downloading TencentGameMate/chinese-hubert-base from HuggingFace...")
+        log("[HUBERT] (Only PyTorch weights - ~400MB)")
         snapshot_download(
             repo_id="TencentGameMate/chinese-hubert-base",
             local_dir=str(hubert_dir),
             local_dir_use_symlinks=False,
             allow_patterns=["*.json", "*.txt", "*.bin", "*.model"]  # Only PyTorch + config files
         )
-        print(f"✓ HuBERT model downloaded to {hubert_dir}")
+        log(f"[HUBERT] ✓ Model downloaded to {hubert_dir}")
     except Exception as e:
-        print(f"✗ Failed to download HuBERT model: {e}")
-        print("  TTS audio processing will not work until model is downloaded")
+        log(f"[ERROR] Failed to download HuBERT model: {e}")
+        log("[WARNING] TTS audio processing will not work until model is downloaded")
 
 def patch_gptsovits_for_api():
     """Patch GPT-SoVITS files for API usage"""
-    print("\n" + "="*60)
-    print("Patching GPT-SoVITS for API usage...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[PATCH] Configuring GPT-SoVITS for API usage...")
+    log("="*60)
     
     # Patch 1: inference_webui.py to skip auto-loading
     inference_file = BASE_DIR / "GPT-SoVITS" / "GPT_SoVITS" / "inference_webui.py"
     
     if not inference_file.exists():
-        print("✗ GPT-SoVITS inference_webui.py not found, skipping patch")
+        log("[PATCH] ✗ GPT-SoVITS inference_webui.py not found, skipping patch")
     else:
         # Read the file
         content = inference_file.read_text(encoding='utf-8')
         
         # Check if already patched
         if '_GPTSOVITS_INFER' in content:
-            print("✓ inference_webui.py already patched")
+            log("[PATCH] ✓ inference_webui.py already patched")
         else:
             # Patch: wrap auto-load in environment variable check
             old_code = 'change_gpt_weights(gpt_path)\nos.environ["HF_ENDPOINT"]'
@@ -520,49 +612,38 @@ os.environ["HF_ENDPOINT"]'''
             if old_code in content:
                 content = content.replace(old_code, new_code)
                 inference_file.write_text(content, encoding='utf-8')
-                print("✓ Patched inference_webui.py to skip auto-loading in API mode")
+                log("[PATCH] ✓ Patched inference_webui.py to skip auto-loading in API mode")
             else:
-                print("✗ Could not find code to patch in inference_webui.py (GPT-SoVITS may have been updated)")
+                log("[PATCH] ✗ Could not find code to patch in inference_webui.py (GPT-SoVITS may have been updated)")
     
     # Patch 2: sv.py to find speaker verification model in models/sv/
     sv_file = BASE_DIR / "GPT-SoVITS" / "GPT_SoVITS" / "sv.py"
     
     if not sv_file.exists():
-        print("✗ GPT-SoVITS sv.py not found, skipping patch")
+        log("[PATCH] ✗ GPT-SoVITS sv.py not found, skipping patch")
     else:
         # Read the file
         content = sv_file.read_text(encoding='utf-8')
         
         # Check if already patched
-        if '../../models/sv/pretrained_eres2netv2w24s4ep4.ckpt' in content:
-            print("✓ sv.py already patched")
+        if 'alt_path = os.path.join(os.path.dirname(__file__)' in content:
+            log("[PATCH] ✓ sv.py already patched")
         else:
-            # Find line with sv_path = os.environ.get
-            lines = content.split('\n')
+            # Replace the hardcoded sv_path line with fallback logic
+            old_sv_path = 'sv_path = "GPT_SoVITS/pretrained_models/sv/pretrained_eres2netv2w24s4ep4.ckpt"'
+            new_sv_path = '''sv_path = "GPT_SoVITS/pretrained_models/sv/pretrained_eres2netv2w24s4ep4.ckpt"
+# Fallback: Try relative path to electron/server/gpt-sovits/models/sv/
+if not os.path.exists(sv_path):
+    alt_path = os.path.join(os.path.dirname(__file__), "../../models/sv/pretrained_eres2netv2w24s4ep4.ckpt")
+    if os.path.exists(alt_path):
+        sv_path = alt_path'''
             
-            for i, line in enumerate(lines):
-                if 'sv_path = os.environ.get("sv_path"' in line:
-                    # Insert fallback logic after this line
-                    next_line_idx = i + 1
-                    
-                    # Insert fallback code - point to our models/sv/ directory
-                    fallback_code = [
-                        'if not os.path.exists(sv_path):',
-                        '    # Try relative path to electron/server/gpt-sovits/models/sv/',
-                        '    alt_path = os.path.join(os.path.dirname(__file__), "../../models/sv/pretrained_eres2netv2w24s4ep4.ckpt")',
-                        '    if os.path.exists(alt_path):',
-                        '        sv_path = alt_path',
-                    ]
-                    
-                    lines[next_line_idx:next_line_idx] = fallback_code
-                    
-                    # Write back
-                    content = '\n'.join(lines)
-                    sv_file.write_text(content, encoding='utf-8')
-                    print("✓ Patched sv.py to find SV model in ../../models/sv/ directory")
-                    break
+            if old_sv_path in content:
+                content = content.replace(old_sv_path, new_sv_path)
+                sv_file.write_text(content, encoding='utf-8')
+                log("[PATCH] ✓ Patched sv.py to find SV model in ../../models/sv/ directory")
             else:
-                print("✗ Could not find sv_path in sv.py (GPT-SoVITS may have been updated)")
+                log("[PATCH] ✗ Could not find sv_path line to patch (GPT-SoVITS structure changed)")
     
     # Patch 3: inference_webui.py to use soundfile instead of torchaudio.load
     if inference_file.exists():
@@ -570,7 +651,7 @@ os.environ["HF_ENDPOINT"]'''
         
         # Check if already patched
         if 'import soundfile as sf' in content and 'sf.read(filename)' in content:
-            print("✓ inference_webui.py already patched for soundfile")
+            log("[PATCH] ✓ inference_webui.py already patched for soundfile")
         else:
             # Replace torchaudio.load with soundfile.read
             old_audio_load = '    sr1 = int(hps.data.sampling_rate)\n    audio, sr0 = torchaudio.load(filename)'
@@ -583,17 +664,17 @@ os.environ["HF_ENDPOINT"]'''
             if old_audio_load in content:
                 content = content.replace(old_audio_load, new_audio_load)
                 inference_file.write_text(content, encoding='utf-8')
-                print("✓ Patched inference_webui.py to use soundfile instead of torchaudio.load")
+                log("[PATCH] ✓ Patched inference_webui.py to use soundfile instead of torchaudio.load")
             else:
-                print("✗ Could not find torchaudio.load code to patch (GPT-SoVITS may have been updated)")
+                log("[PATCH] ✗ Could not find torchaudio.load code to patch (GPT-SoVITS may have been updated)")
 
 def download_nltk_data():
     """Download required NLTK data for English text processing"""
     python_exe = get_python_exe()
     
-    print("\n" + "="*60)
-    print("Downloading NLTK data for English TTS...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[NLTK] Downloading NLTK data for English TTS...")
+    log("="*60)
     
     try:
         # Download English POS tagger (averaged_perceptron_tagger_eng)
@@ -601,10 +682,10 @@ def download_nltk_data():
             str(python_exe), "-c",
             "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('universal_tagset'); print('✓ NLTK data downloaded')"
         ], check=True)
-        print("✓ NLTK data downloaded successfully")
+        log("[NLTK] ✓ Data downloaded successfully")
     except Exception as e:
-        print(f"✗ Failed to download NLTK data: {e}")
-        print("  English TTS may not work properly")
+        log(f"[ERROR] Failed to download NLTK data: {e}")
+        log("[WARNING] English TTS may not work properly")
 
 def download_fast_langdetect_model():
     """Download fast-langdetect model for language detection"""
@@ -612,24 +693,24 @@ def download_fast_langdetect_model():
     langdetect_dir = BASE_DIR / "GPT-SoVITS" / "GPT_SoVITS" / "pretrained_models" / "fast_langdetect"
     langdetect_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n" + "="*60)
-    print("Downloading fast-langdetect model...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[LANGDETECT] Downloading fast-langdetect model...")
+    log("="*60)
     
     # Facebook FastText language detection model (~130MB)
     model_url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin"
     model_path = langdetect_dir / "lid.176.bin"
     
     if model_path.exists():
-        print(f"✓ fast-langdetect model already exists: {model_path}")
+        log(f"[LANGDETECT] ✓ Model already exists: {model_path}")
         return
     
     try:
         download_file(model_url, model_path)
-        print(f"✓ fast-langdetect model downloaded to {model_path}")
+        log(f"[LANGDETECT] ✓ Model downloaded to {model_path}")
     except Exception as e:
-        print(f"✗ Failed to download fast-langdetect model: {e}")
-        print("  Multi-language TTS may not work until model is downloaded")
+        log(f"[ERROR] Failed to download fast-langdetect model: {e}")
+        log("[WARNING] Multi-language TTS may not work until model is downloaded")
 
 def download_whisper_models():
     """Download Whisper GGML models for STT"""
@@ -637,75 +718,88 @@ def download_whisper_models():
     whisper_dir = BASE_DIR.parent / "models" / "whisper"
     whisper_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n" + "="*60)
-    print("Downloading Whisper STT models...")
-    print("="*60)
+    log("\n" + "="*60)
+    log("[WHISPER] Downloading Whisper STT models...")
+    log("="*60)
     
     # Download tiny.en model (~75MB, English only, 4x faster than base)
     model_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin"
     model_path = whisper_dir / "ggml-tiny.en.bin"
     
     if model_path.exists():
-        print(f"✓ Whisper model already exists: {model_path}")
+        log(f"[WHISPER] ✓ Model already exists: {model_path}")
         return
     
     try:
         download_file(model_url, model_path)
-        print(f"✓ Whisper model downloaded to {model_path}")
+        log(f"[WHISPER] ✓ Model downloaded to {model_path}")
     except Exception as e:
-        print(f"✗ Failed to download Whisper model: {e}")
-        print("  STT will not work until model is downloaded")
+        log(f"[ERROR] Failed to download Whisper model: {e}")
+        log("[WARNING] STT will not work until model is downloaded")
 
 def main():
-    print("="*60)
-    print("GPT-SoVITS TTS Server Setup")
-    print("="*60)
+    log("="*60)
+    log("GPT-SoVITS TTS Server Setup")
+    log("="*60)
     
     try:
         # Step 1: Setup Python runtime
+        log("\n[1/10] Setting up Python runtime...")
         setup_python_runtime()
         
         # Step 2: Install dependencies
+        log("\n[2/10] Installing Python dependencies...")
         install_dependencies()
         
         # Step 3: Clone GPT-SoVITS source
+        log("\n[3/10] Downloading GPT-SoVITS source code...")
         clone_gptsovits_repo()
         
         # Step 4: Patch GPT-SoVITS for API usage
+        log("\n[4/10] Configuring GPT-SoVITS for API mode...")
         patch_gptsovits_for_api()
         
         # Step 5: Download TTS models
+        log("\n[5/10] Downloading TTS models...")
         download_models()
         
         # Step 6: Download BERT model
+        log("\n[6/10] Downloading BERT model...")
         download_bert_model()
         
         # Step 7: Download HuBERT model
+        log("\n[7/10] Downloading HuBERT model...")
         download_hubert_model()
         
         # Step 8: Download NLTK data for English
+        log("\n[8/10] Downloading NLTK data...")
         download_nltk_data()
         
         # Step 9: Download fast-langdetect model
+        log("\n[9/10] Downloading language detection model...")
         download_fast_langdetect_model()
         
         # Step 10: Download Whisper STT models
+        log("\n[10/10] Downloading Whisper speech recognition models...")
         download_whisper_models()
         
-        print("\n" + "="*60)
-        print("✓ Setup complete!")
-        print("="*60)
+        log("\n" + "="*60)
+        log("✓ Setup complete!")
+        log("="*60)
         
         # Print platform-specific start command
         if IS_WINDOWS:
-            print(f"\nTo start server:")
-            print(f"  {PYTHON_DIR / 'python.exe'} {BASE_DIR / 'api.py'}")
+            log(f"\nTo start server:")
+            log(f"  {PYTHON_DIR / 'python.exe'} {BASE_DIR / 'api.py'}")
         elif IS_ARM_MAC:
-            print(f"\nTo start server:")
-            print(f"  {PYTHON_DIR / 'bin' / 'python3'} {BASE_DIR / 'api.py'}")
+            log(f"\nTo start server:")
+            log(f"  {PYTHON_DIR / 'bin' / 'python3'} {BASE_DIR / 'api.py'}")
         
     except Exception as e:
-        print(f"\n✗ Setup failed: {e}")
+        log(f"\n✗ Setup failed: {e}")
+        import traceback
+        log(f"\nFull error details:")
+        log(traceback.format_exc())
         sys.exit(1)
 
 if __name__ == "__main__":

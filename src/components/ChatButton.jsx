@@ -795,6 +795,32 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   if (!shouldRender) return null;
 
   const TOTAL_BUTTON_OFFSET = 168;
+  
+  const emotePanelWidth = 125;
+  const emotePanelHeight = Math.min(emotes.length * 43, 300);
+  const emotePanelGap = 8;
+  const buttonWidth = 48;
+  
+  let emotePanelLeft, emotePanelTop;
+  
+  if (isAndroid) {
+    const androidButtonX = 20;
+    const androidButtonY = window.innerHeight - 20 - buttonWidth;
+    const androidButtonOffset = TOTAL_BUTTON_OFFSET;
+    
+    emotePanelLeft = androidButtonX;
+    emotePanelTop = androidButtonY - androidButtonOffset - emotePanelHeight - emotePanelGap;
+  } else if (isDesktop) {
+    emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
+    emotePanelTop = buttonPos.y - emotePanelHeight - emotePanelGap;
+  } else {
+    if (isLeftSide) {
+      emotePanelLeft = buttonPos.x;
+    } else {
+      emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
+    }
+    emotePanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - emotePanelHeight - emotePanelGap;
+  }
 
   const androidPosition = isAndroid ? {
     left: '20px',
@@ -811,8 +837,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     {isEmotePanelOpen && (
       <div
         style={{
-          left: `${buttonPos.x - 77}px`,
-          top: `${buttonPos.y - 108 - Math.min(emotes.length * 43, 300) - 8}px`,
+          left: `${emotePanelLeft}px`,
+          top: `${emotePanelTop}px`,
           zIndex: isAndroid ? 201 : 10001,
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
@@ -828,8 +854,15 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           div::-webkit-scrollbar { display: none; }
         `}</style>
         {emotes.length === 0 ? (
-          <div style={{ scrollSnapAlign: 'center' }} className="flex items-center justify-center h-[35px] text-[10px] text-white/50 text-center p-1">
-            No emotes
+          <div 
+            style={{ scrollSnapAlign: 'center' }} 
+            className={`glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap ${
+              isLightBackground 
+                ? 'glass-button-dark' 
+                : ''
+            } backdrop-blur-[10px] text-white/50 cursor-default pointer-events-none`}
+          >
+            <span className="truncate">No emotes</span>
           </div>
         ) : (
           emotes.map((emote, index) => (

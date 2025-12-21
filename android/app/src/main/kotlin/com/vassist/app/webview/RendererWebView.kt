@@ -3,9 +3,11 @@ package com.vassist.app.webview
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.net.Uri
 import android.webkit.ConsoleMessage
 import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -32,10 +34,12 @@ class RendererWebView(
         const val ASSET_LOADER_DOMAIN = "vassist.app"
         // Serve from root since assets are in public/ folder
         const val BASE_URL = "https://$ASSET_LOADER_DOMAIN/index.html"
+        const val FILE_CHOOSER_REQUEST_CODE = 1001
     }
 
     private var firstLoad = true
     private var isPaused = false
+    var filePathCallback: ValueCallback<Array<Uri>>? = null
     
     /**
      * Pause the wallpaper rendering (called when wallpaper is not visible)
@@ -205,6 +209,23 @@ class RendererWebView(
             consoleMessage?.let {
                 Log.d(TAG, "Console: ${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
             }
+            return true
+        }
+        
+        // Enable file chooser for file inputs
+        override fun onShowFileChooser(
+            webView: WebView?,
+            filePathCallback: ValueCallback<Array<Uri>>?,
+            fileChooserParams: FileChooserParams?
+        ): Boolean {
+            Log.d(TAG, "onShowFileChooser called")
+            
+            // Cancel any existing file chooser
+            this@RendererWebView.filePathCallback?.onReceiveValue(null)
+            this@RendererWebView.filePathCallback = filePathCallback
+            
+            Log.w(TAG, "File chooser not available in wallpaper mode")
+            filePathCallback?.onReceiveValue(null)
             return true
         }
         

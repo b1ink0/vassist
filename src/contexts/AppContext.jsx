@@ -196,11 +196,21 @@ export const AppProvider = ({ children }) => {
         setIsAssistantReady(true);
         setIsChatUIReady(true);
         Logger.log('AppContext', 'Running in chat-only mode (no 3D model)');
+        
+        if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
+          api.window.frontendReady()
+            .then(() => {
+              Logger.log('AppContext', 'Notified Electron that frontend is ready (chat-only)');
+            })
+            .catch(err => {
+              Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
+            });
+        }
       }, 800);
       
       return () => clearTimeout(timer);
     }
-  }, [enableModelLoading]);
+  }, [enableModelLoading, api]);
 
   /**
    * Handle assistant ready callback
@@ -215,7 +225,18 @@ export const AppProvider = ({ children }) => {
     sceneRef.current = scene;
     
     Logger.log('AppContext', 'Position manager ref set, ready for position tracking');
-  }, []);
+    
+    // Notify Electron main process that frontend is ready
+    if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
+      api.window.frontendReady()
+        .then(() => {
+          Logger.log('AppContext', 'Notified Electron that frontend is ready');
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
+        });
+    }
+  }, [api]);
 
   // ========================================
   // VOICE & TTS TRACKING

@@ -9,7 +9,10 @@ import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import { useAndroid } from '../../contexts/AndroidContext';
 import DesktopLLMConfig from './llm/DesktopLLMConfig';
+import LocalLLMModelManager from './llm/LocalLLMModelManager';
+import { getLLMModelStorage } from '../../services/LLMModelStorageService';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
 
@@ -124,6 +127,8 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
     startChromeAIDownload,
   } = useConfig();
 
+  const { api: androidAPI } = useAndroid() 
+
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
@@ -231,7 +236,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
           {/* Info Banner */}
           <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
             <p className="text-xs text-green-300">
-              <span className="font-semibold">Android Local LLM (Qwen3)</span> - On-device AI using llama.cpp with Qwen3-0.6B model
+              <span className="font-semibold">Android Local LLM</span> - On-device AI using llama.cpp. Download and manage GGUF models below.
             </p>
           </div>
 
@@ -249,19 +254,18 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
             </p>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Model</label>
-            <input
-              type="text"
-              value={aiConfig['android-local']?.model ?? 'qwen3-local'}
-              onChange={(e) => updateAIConfig('android-local.model', e.target.value)}
-              placeholder="qwen3-local"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            />
-            <p className="text-xs text-white/50">
-              Model identifier (Qwen3-0.6B-Q4 by default)
-            </p>
-          </div>
+          {/* Model Management UI */}
+          <LocalLLMModelManager
+            storageService={getLLMModelStorage(androidAPI)}
+            selectedModel={aiConfig['android-local']?.model || null}
+            onModelSelect={(modelName) => updateAIConfig('android-local.model', modelName)}
+            customModelsPath={null}
+            onCustomPathChange={null}
+            isLightBackground={isLightBackground}
+            onRequestDeleteModel={onRequestDeleteLLMModel}
+            refreshTrigger={refreshTrigger}
+            supportsCustomFolder={false}
+          />
 
           {/* Temperature Slider */}
           <div className="space-y-2">

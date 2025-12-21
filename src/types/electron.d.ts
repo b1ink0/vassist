@@ -8,6 +8,7 @@ export interface ElectronWindow {
   close: () => Promise<void>;
   toggleAlwaysOnTop: () => Promise<boolean>;
   setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => Promise<void>;
+  frontendReady: () => Promise<void>;
   setPosition: (x: number, y: number) => Promise<void>;
   getPosition: () => Promise<{ x: number; y: number }>;
   setSize: (width: number, height: number) => Promise<void>;

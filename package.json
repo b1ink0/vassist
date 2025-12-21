@@ -13,9 +13,7 @@
     "build": "vite build --mode production",
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
-    "build:server": "cd electron/server && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release",
     "setup:desktop:tts": "cd electron/server/gpt-sovits && python setup.py",
-    "prebuild:desktop": "cd electron/server && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release",
     "build:desktop": "vite build --config vite.config.desktop.js --mode production",
     "build:desktop:win": "electron-builder --win",
     "build:desktop:mac": "electron-builder --mac",
@@ -49,7 +47,8 @@
     "openai": "^6.3.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "tailwindcss": "^4.1.14"
+    "tailwindcss": "^4.1.14",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

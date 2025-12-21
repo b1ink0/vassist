@@ -37,13 +37,64 @@ export default defineConfig(({ mode }) => {
           const serverDest = resolve(__dirname, 'dist-desktop/server');
           
           if (fs.existsSync(serverSrc)) {
-            fs.cpSync(serverSrc, serverDest, { 
-              recursive: true,
-              filter: (src) => {
-                const basename = path.basename(src);
-                return !basename.match(/^(\.git|node_modules|__pycache__|\.pytest_cache)$/);
+            const filesToCopy = [
+              { src: 'http-server.js', dest: 'http-server.js' },
+              { src: 'whisper-stt', dest: 'whisper-stt', isDir: true },
+            ];
+            
+            // Create dest directory
+            if (!fs.existsSync(serverDest)) {
+              fs.mkdirSync(serverDest, { recursive: true });
+            }
+            
+            filesToCopy.forEach(({ src, dest, isDir }) => {
+              const srcPath = path.join(serverSrc, src);
+              const destPath = path.join(serverDest, dest);
+              
+              if (fs.existsSync(srcPath)) {
+                if (isDir) {
+                  fs.cpSync(srcPath, destPath, { recursive: true });
+                } else {
+                  fs.copyFileSync(srcPath, destPath);
+                }
               }
             });
+            
+            // Copy gpt-sovits folder but exclude python/, GPT-SoVITS/, models/, temp/
+            const gptsovitsSrc = path.join(serverSrc, 'gpt-sovits');
+            const gptsovitsDest = path.join(serverDest, 'gpt-sovits');
+            
+            if (fs.existsSync(gptsovitsSrc)) {
+              fs.cpSync(gptsovitsSrc, gptsovitsDest, {
+                recursive: true,
+                filter: (src) => {
+                  const basename = path.basename(src);
+                  const relativePath = path.relative(gptsovitsSrc, src);
+                  
+                  // Exclude large/runtime folders
+                  if (relativePath.startsWith('python') || 
+                      relativePath.startsWith('GPT-SoVITS') || 
+                      relativePath.startsWith('models') || 
+                      relativePath.startsWith('temp')) {
+                    return false;
+                  }
+                  
+                  // Exclude common temp/cache files
+                  if (basename.match(/^(\.git|node_modules|__pycache__|\.pytest_cache)$/)) {
+                    return false;
+                  }
+                  
+                  return true;
+                }
+              });
+            }
+            
+            // Create models directory for LLM models
+            const modelsDir = path.join(serverDest, 'models');
+            if (!fs.existsSync(modelsDir)) {
+              fs.mkdirSync(modelsDir, { recursive: true });
+            }
+            
             console.log('✓ Copied server files to dist-desktop/server');
           }
         },
@@ -73,7 +124,8 @@ export default defineConfig(({ mode }) => {
                   'form-data',
                   'multer',
                   'util',
-                  'stream'
+                  'stream',
+                  'unzipper'
                 ],
               },
             },
@@ -96,7 +148,8 @@ export default defineConfig(({ mode }) => {
                   'form-data',
                   'multer',
                   'util',
-                  'stream'
+                  'stream',
+                  'unzipper'
                 ],
               },
             },
@@ -179,6 +232,17 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3001,
       strictPort: true,
+      watch: {
+        ignored: [
+          '**/electron/server/gpt-sovits/python/**',
+          '**/electron/server/gpt-sovits/GPT-SoVITS/**',
+          '**/electron/server/gpt-sovits/models/**',
+          '**/electron/server/gpt-sovits/temp/**',
+          '**/electron/server/models/**',
+          '**/node_modules/**',
+          '**/.git/**',
+        ],
+      },
       fs: {
         // Allow serving files from the public directory
         allow: ['..'],

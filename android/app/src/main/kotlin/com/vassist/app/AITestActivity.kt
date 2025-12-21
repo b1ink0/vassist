@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.vassist.app.ai.LlamaService
+import com.vassist.app.ai.LLMModelManager
 import com.vassist.app.ai.VitsService
 import com.vassist.app.ai.WhisperService
 import kotlinx.coroutines.*
@@ -46,6 +47,7 @@ class AITestActivity : ComponentActivity() {
     private var vitsService: VitsService? = null
     private var whisperService: WhisperService? = null
     private var llamaService: LlamaService? = null
+    private var modelManager: LLMModelManager? = null
     
     private var isRecording = false
     private var audioRecord: AudioRecord? = null
@@ -60,6 +62,8 @@ class AITestActivity : ComponentActivity() {
     private val _sttResult = mutableStateOf("")
     private val _llmResult = mutableStateOf("")
     private val _isLoading = mutableStateOf(false)
+    private val _availableModels = mutableStateOf<List<String>>(emptyList())
+    private val _selectedModel = mutableStateOf<String?>(null)
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -84,6 +88,10 @@ class AITestActivity : ComponentActivity() {
             requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
         
+        // Initialize model manager and load available models
+        modelManager = LLMModelManager(this)
+        loadAvailableModels()
+        
         setContent {
             VAssistTheme {
                 Surface(
@@ -99,6 +107,16 @@ class AITestActivity : ComponentActivity() {
                         sttResult = _sttResult.value,
                         llmResult = _llmResult.value,
                         isLoading = _isLoading.value,
+                        availableModels = _availableModels.value,
+                        selectedModel = _selectedModel.value,
+                        onModelSelected = { model -> 
+                            _selectedModel.value = model
+                            llamaService?.let {
+                                scope.launch { it.release() }
+                                llamaService = null
+                                _llamaStatus.value = "Not initialized"
+                            }
+                        },
                         onInitVits = { initVits() },
                         onInitWhisper = { initWhisper() },
                         onInitLlama = { initLlama() },
@@ -177,7 +195,31 @@ class AITestActivity : ComponentActivity() {
         }
     }
     
+    private fun loadAvailableModels() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val models = modelManager?.listModels() ?: emptyList()
+                val modelNames = models.mapNotNull { it["name"] as? String }
+                
+                withContext(Dispatchers.Main) {
+                    _availableModels.value = modelNames
+                    if (modelNames.isNotEmpty() && _selectedModel.value == null) {
+                        _selectedModel.value = modelNames[0]
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load models", e)
+            }
+        }
+    }
+    
     private fun initLlama() {
+        val selectedModel = _selectedModel.value
+        if (selectedModel == null) {
+            _status.value = "Please select a model first"
+            return
+        }
+        
         _isLoading.value = true
         _llamaStatus.value = "Initializing..."
         
@@ -189,7 +231,7 @@ class AITestActivity : ComponentActivity() {
                     _llamaStatus.value = "Loading model..."
                 }
                 
-                service.initialize()
+                service.initialize(modelPath = selectedModel)
                 llamaService = service
                 
                 withContext(Dispatchers.Main) {
@@ -467,6 +509,9 @@ fun AITestScreen(
     sttResult: String,
     llmResult: String,
     isLoading: Boolean,
+    availableModels: List<String>,
+    selectedModel: String?,
+    onModelSelected: (String) -> Unit,
     onInitVits: () -> Unit,
     onInitWhisper: () -> Unit,
     onInitLlama: () -> Unit,
@@ -650,9 +695,45 @@ fun AITestScreen(
         
         Spacer(modifier = Modifier.height(8.dp))
         
+        // Model Selector
+        var expanded by remember { mutableStateOf(false) }
+        
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded && !isLoading }
+        ) {
+            OutlinedTextField(
+                value = selectedModel ?: "No models available",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Select Model") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                enabled = availableModels.isNotEmpty() && !isLoading,
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            )
+            
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                availableModels.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model) },
+                        onClick = {
+                            onModelSelected(model)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
         Button(
             onClick = onInitLlama,
-            enabled = !isLoading,
+            enabled = !isLoading && selectedModel != null,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Initialize Llama")

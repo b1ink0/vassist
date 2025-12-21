@@ -15,6 +15,7 @@ import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
 import { AnimationProvider } from './contexts/AnimationContext'
 import { DesktopProvider } from './contexts/DesktopContext'
+import { AndroidProvider } from './contexts/AndroidContext'
 import { isAndroid, isInputWindow } from './utils/PlatformUtils'
 
 /**
@@ -71,32 +72,36 @@ function App({ mode = 'development' }) {
   if (actualMode === 'android') {
     if (isWallpaperMode()) {
       return (
-        <ConfigProvider>
-          <AnimationProvider>
-            <AppProvider>
-              <div className="relative w-full h-screen overflow-hidden bg-transparent">
-                <AndroidBackground />
-                <AndroidWrapper />
-              </div>
-            </AppProvider>
-          </AnimationProvider>
-        </ConfigProvider>
+        <AndroidProvider>
+          <ConfigProvider>
+            <AnimationProvider>
+              <AppProvider>
+                <div className="relative w-full h-screen overflow-hidden bg-transparent">
+                  <AndroidBackground />
+                  <AndroidWrapper />
+                </div>
+              </AppProvider>
+            </AnimationProvider>
+          </ConfigProvider>
+        </AndroidProvider>
       );
     }
     
     return (
-      <SetupProvider>
-        <ConfigProvider>
-          <AnimationProvider>
-            <AppProvider>
-              <div className="relative w-full h-screen overflow-hidden">
-                <AndroidBackground />
-                <AppWithSetup mode="android" />
-              </div>
-            </AppProvider>
-          </AnimationProvider>
-        </ConfigProvider>
-      </SetupProvider>
+      <AndroidProvider>
+        <SetupProvider>
+          <ConfigProvider>
+            <AnimationProvider>
+              <AppProvider>
+                <div className="relative w-full h-screen overflow-hidden">
+                  <AndroidBackground />
+                  <AppWithSetup mode="android" />
+                </div>
+              </AppProvider>
+            </AnimationProvider>
+          </ConfigProvider>
+        </SetupProvider>
+      </AndroidProvider>
     );
   }
   

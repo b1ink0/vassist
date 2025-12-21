@@ -103,6 +103,16 @@ class FullAppActivity : ComponentActivity() {
         fileChooserCallback = null
     }
     
+    private val modelImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            handleModelImport(uri)
+        } else {
+            aiBridge?.emitImportError("No file selected")
+        }
+    }
+    
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,9 +169,6 @@ class FullAppActivity : ComponentActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 Log.d(TAG, "Page finished loading: $url")
-                
-                // Initialize AI server AFTER WebView has finished loading
-                initializeLocalAI()
             }
             
             override fun onReceivedError(
@@ -225,20 +232,30 @@ class FullAppActivity : ComponentActivity() {
                         acceptTypes.mapNotNull { type ->
                             when {
                                 type.isNullOrEmpty() -> null
-                                type.startsWith(".") -> getMimeTypeFromExtension(type.substring(1))
+                                type.startsWith(".") -> {
+                                    val mime = getMimeTypeFromExtension(type.substring(1))
+                                    if (mime == "application/octet-stream") "*/*" else mime
+                                }
                                 type.contains("/") -> type
                                 else -> "*/*"
                             }
                         }.toTypedArray().ifEmpty { arrayOf("*/*") }
                     }
                     
-                    Log.d(TAG, "File chooser opened with MIME types: ${mimeTypes.joinToString()}")
+                    val hasMultipleAudioTypes = mimeTypes.count { it.startsWith("audio/") } > 1
+                    val finalMimeTypes = if (hasMultipleAudioTypes) {
+                        mimeTypes.filter { !it.startsWith("audio/") }.toTypedArray() + "audio/*"
+                    } else {
+                        mimeTypes
+                    }.distinct().toTypedArray()
+                    
+                    Log.d(TAG, "File chooser opened with MIME types: ${finalMimeTypes.joinToString()}")
                     
                     val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
                     
-                    val isImageOnly = mimeTypes.all { it.startsWith("image/") }
-                    val isVideoOnly = mimeTypes.all { it.startsWith("video/") }
-                    val isImageOrVideo = mimeTypes.all { it.startsWith("image/") || it.startsWith("video/") }
+                    val isImageOnly = finalMimeTypes.all { it.startsWith("image/") }
+                    val isVideoOnly = finalMimeTypes.all { it.startsWith("video/") }
+                    val isImageOrVideo = finalMimeTypes.all { it.startsWith("image/") || it.startsWith("video/") }
                     
                     when {
                         isImageOnly -> {
@@ -280,9 +297,9 @@ class FullAppActivity : ComponentActivity() {
                         else -> {
                             Log.d(TAG, "Using Document Picker for files")
                             if (allowMultiple) {
-                                filePickerLauncher.launch(mimeTypes)
+                                filePickerLauncher.launch(finalMimeTypes)
                             } else {
-                                singleFilePickerLauncher.launch(mimeTypes)
+                                singleFilePickerLauncher.launch(finalMimeTypes)
                             }
                         }
                     }
@@ -339,6 +356,9 @@ class FullAppActivity : ComponentActivity() {
         
         // Setup keyboard height detection using WindowInsets
         setupKeyboardListener()
+        
+        // Initialize AI server and JavaScript interface BEFORE loading page
+        initializeLocalAI()
         
         // Load the app in full app mode (with UI controls)
         webView.loadUrl(APP_URL)
@@ -425,44 +445,63 @@ class FullAppActivity : ComponentActivity() {
         try {
             val server = LocalAIServer.getInstance(this)
             aiServer = server
-            val bridge = LocalAIBridge(server)
+            val bridge = LocalAIBridge(server, this, webView) {
+                runOnUiThread {
+                    modelImportLauncher.launch(arrayOf("*/*"))
+                }
+            }
             aiBridge = bridge
             
             webView.addJavascriptInterface(bridge, LocalAIBridge.JS_INTERFACE_NAME)
             Log.i(TAG, "Added JavaScript interface: ${LocalAIBridge.JS_INTERFACE_NAME}")
             
+            // Start server in background
             scope.launch(Dispatchers.IO) {
                 try {
                     if (!server.isAlive) {
                         server.start()
                         Log.i(TAG, "Local AI server started on ${LocalAIServer.getBaseUrl()}")
                     }
-                    
-                    scope.launch(Dispatchers.Main) {
-                        webView.evaluateJavascript(
-                            """
-                            window.dispatchEvent(new CustomEvent('localAIReady', { 
-                                detail: { 
-                                    baseUrl: '${LocalAIServer.getBaseUrl()}',
-                                    endpoints: {
-                                        transcriptions: '${LocalAIServer.getBaseUrl()}/v1/audio/transcriptions',
-                                        speech: '${LocalAIServer.getBaseUrl()}/v1/audio/speech',
-                                        chatCompletions: '${LocalAIServer.getBaseUrl()}/v1/chat/completions'
-                                    }
-                                } 
-                            }));
-                            """.trimIndent(),
-                            null
-                        )
-                        Log.i(TAG, "Local AI server ready, notified WebView")
-                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start local AI server", e)
+                    Log.e(TAG, "Error starting AI server", e)
                 }
             }
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to setup local AI", e)
+        }
+    }
+    
+    private fun handleModelImport(uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                // Get file name from URI
+                val fileName = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIndex >= 0) {
+                        cursor.getString(nameIndex)
+                    } else null
+                } ?: "imported_model.gguf"
+
+                Log.i(TAG, "Importing model: $fileName from $uri")
+
+                // Use bridge to handle import
+                val result = aiBridge?.handleModelImport(uri, fileName) ?: mapOf(
+                    "success" to false,
+                    "error" to "AI Bridge not initialized"
+                )
+
+                // Notify JavaScript
+                if (result["success"] == true) {
+                    aiBridge?.emitImportComplete(result)
+                } else {
+                    aiBridge?.emitImportError(result["error"] as? String ?: "Unknown error")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "handleModelImport failed", e)
+                aiBridge?.emitImportError(e.message ?: "Import failed")
+            }
         }
     }
     

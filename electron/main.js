@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session } from 'electron';
 import { fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
@@ -14,6 +15,10 @@ import { LocalAIServer } from './server/http-server.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+
+const serverBasePath = process.env.VITE_DEV_SERVER_URL
+  ? path.join(process.cwd(), 'electron', 'server')
+  : path.join(__dirname, 'server');
 
 let mainWindow;
 let inputWindow;
@@ -55,7 +60,6 @@ function createInputWindow() {
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    parent: mainWindow,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -125,6 +129,7 @@ async function createWindow() {
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    mainWindow.setIgnoreMouseEvents(true);
     createInputWindow();
   });
 
@@ -390,6 +395,17 @@ app.on('before-quit', () => {
     }
   }
   
+  // Cancel any running setup
+  if (setupRunner) {
+    console.log('[GPT-SoVITS] Cancelling setup on app quit...');
+    try {
+      setupRunner.cancel();
+    } catch (error) {
+      console.error('[GPT-SoVITS] Setup cancel error:', error);
+    }
+    setupRunner = null;
+  }
+  
   stopGPTSoVITSServer();
   stopWhisperServer();
 });
@@ -430,6 +446,16 @@ ipcMain.handle('window:toggle-always-on-top', () => {
 ipcMain.handle('window:set-ignore-mouse-events', (event, ignore, options) => {
   if (mainWindow) {
     mainWindow.setIgnoreMouseEvents(ignore, options);
+  }
+});
+
+// Notify main process that frontend is ready (remove ignore mouse events)
+ipcMain.handle('window:frontend-ready', () => {
+  if (mainWindow) {
+    console.log('[Main] Frontend ready - enabling mouse events');
+    mainWindow.setIgnoreMouseEvents(false);
+    // Ensure main window is on top
+    mainWindow.moveTop();
   }
 });
 
@@ -710,6 +736,92 @@ ipcMain.handle('server:status', async () => {
 });
 
 // ============================================
+// GPT-SoVITS Setup Management
+// ============================================
+
+let setupRunner = null;
+
+ipcMain.handle('gptsovits:setup:start', async (event) => {
+  const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
+  const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+  
+  if (setupRunner) {
+    throw new Error('Setup already running');
+  }
+  
+  console.log('[GPT-SoVITS] Starting setup...');
+  setupRunner = new SetupRunner();
+  
+  // Start setup with log streaming
+  setupRunner.run((log) => {
+    // Send log to renderer
+    event.sender.send('gptsovits:setup:log', log);
+  }).then(() => {
+    console.log('[GPT-SoVITS] Setup complete');
+    event.sender.send('gptsovits:setup:complete', { success: true });
+    setupRunner = null;
+    
+    // Restart all servers after successful installation
+    console.log('[GPT-SoVITS] Restarting servers...');
+    stopGPTSoVITSServer();
+    stopWhisperServer();
+    
+    setTimeout(() => {
+      startGPTSoVITSServer();
+      startWhisperServer();
+      
+      // Restart HTTP server if it was running
+      if (server && server.getStatus().running) {
+        console.log('[Server] Restarting HTTP server...');
+        server.stop().then(() => {
+          setTimeout(() => server.start(), 1000);
+        }).catch(err => console.error('[Server] Restart error:', err));
+      }
+    }, 2000);
+  }).catch((error) => {
+    console.error('[GPT-SoVITS] Setup failed:', error);
+    event.sender.send('gptsovits:setup:complete', { 
+      success: false, 
+      error: error.message 
+    });
+    setupRunner = null;
+  });
+  
+  return { started: true };
+});
+
+ipcMain.handle('gptsovits:setup:cancel', async () => {
+  if (setupRunner) {
+    console.log('[GPT-SoVITS] Cancelling setup...');
+    setupRunner.cancel();
+    setupRunner = null;
+    return { cancelled: true };
+  }
+  return { cancelled: false, message: 'No setup running' };
+});
+
+ipcMain.handle('gptsovits:setup:status', async () => {
+  const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
+  const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+  const runner = new SetupRunner();
+  
+  try {
+    const status = runner.getStatus();
+    console.log('[GPT-SoVITS] Setup status:', status);
+    return status;
+  } catch (error) {
+    console.error('[GPT-SoVITS] Status check error:', error);
+    return {
+      isSetup: false,
+      pythonExists: false,
+      modelsExist: false,
+      gptsovitsExists: false,
+      error: error.message
+    };
+  }
+});
+
+// ============================================
 // LLM Model Management
 // ============================================
 
@@ -718,11 +830,19 @@ function getModelsDir(customPath = null) {
     return customPath;
   }
 
+  let modelsDir;
   if (process.env.VITE_DEV_SERVER_URL) {
-    return path.join(__dirname, '..', 'electron', 'server', 'models');
+    modelsDir = path.join(__dirname, '..', 'electron', 'server', 'models');
   } else {
-    return path.join(__dirname, 'server', 'models');
+    modelsDir = path.join(__dirname, 'server', 'models');
   }
+  
+  // Ensure directory exists
+  if (!fs.existsSync(modelsDir)) {
+    fs.mkdirSync(modelsDir, { recursive: true });
+  }
+  
+  return modelsDir;
 }
 
 // List models in models directory
@@ -1115,9 +1235,7 @@ function startGPTSoVITSServer() {
   }
 
   try {
-    const gptsovitsDir = process.env.VITE_DEV_SERVER_URL
-      ? path.join(process.cwd(), 'electron', 'server', 'gpt-sovits')
-      : path.join(app.getAppPath(), 'server', 'gpt-sovits');
+    const gptsovitsDir = path.join(serverBasePath, 'gpt-sovits');
     const pythonExe = path.join(gptsovitsDir, 'python', 'python.exe');
     const apiScript = path.join(gptsovitsDir, 'api.py');
 
@@ -1183,12 +1301,8 @@ function startWhisperServer() {
   }
 
   try {
-    const gptsovitsDir = process.env.VITE_DEV_SERVER_URL
-      ? path.join(process.cwd(), 'electron', 'server', 'gpt-sovits')
-      : path.join(app.getAppPath(), 'server', 'gpt-sovits');
-    const whisperDir = process.env.VITE_DEV_SERVER_URL
-      ? path.join(process.cwd(), 'electron', 'server', 'whisper-stt')
-      : path.join(app.getAppPath(), 'server', 'whisper-stt');
+    const gptsovitsDir = path.join(serverBasePath, 'gpt-sovits');
+    const whisperDir = path.join(serverBasePath, 'whisper-stt');
     const pythonExe = path.join(gptsovitsDir, 'python', 'python.exe'); 
     const serverScript = path.join(whisperDir, 'server.py');
 

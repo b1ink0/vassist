@@ -1797,7 +1797,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             <input
               ref={motionFileInputRef}
               type="file"
-              accept=".vmd"
+              accept="*/*,.vmd"
               multiple
               onChange={handleMotionFileChange}
               className="hidden"
@@ -1979,14 +1979,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             <input
               ref={emoteAudioFileInputRef}
               type="file"
-              accept=".mp3,.wav,.ogg,.m4a"
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a"
               onChange={handleEmoteAudioFileChange}
               className="hidden"
             />
             <input
               ref={emoteMotionFileInputRef}
               type="file"
-              accept=".vmd"
+              accept="*/*,.vmd"
               onChange={handleEmoteMotionFileChange}
               className="hidden"
             />

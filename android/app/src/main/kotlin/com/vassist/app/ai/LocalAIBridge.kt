@@ -3,6 +3,9 @@ package com.vassist.app.ai
 import android.util.Log
 import android.webkit.JavascriptInterface
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -12,14 +15,19 @@ import kotlinx.coroutines.runBlocking
  * - Get the local AI server URL
  * - Check model initialization status
  * - Get available voices
+ * - Manage LLM models (list, download, delete)
  * 
  * Usage in JavaScript:
  *   const baseUrl = AndroidAI.getServerUrl();
  *   const status = JSON.parse(AndroidAI.getStatus());
  *   const voices = JSON.parse(AndroidAI.getVoices());
+ *   const models = JSON.parse(AndroidAI.listLLMModels());
  */
 class LocalAIBridge(
-    private val server: LocalAIServer
+    private val server: LocalAIServer,
+    private val context: android.content.Context,
+    private val webView: android.webkit.WebView,
+    private val onModelImportRequest: () -> Unit
 ) {
     companion object {
         private const val TAG = "LocalAIBridge"
@@ -27,6 +35,7 @@ class LocalAIBridge(
     }
 
     private val gson = Gson()
+    private val modelManager = LLMModelManager(context)
 
     /**
      * Get the base URL of the local AI server
@@ -156,5 +165,240 @@ class LocalAIBridge(
         val json = gson.toJson(endpoints)
         Log.d(TAG, "getEndpoints() -> $json")
         return json
+    }
+
+    /**
+     * List all installed LLM models
+     * @return JSON string with format: {"success": true, "models": [...]}
+     */
+    @JavascriptInterface
+    fun listLLMModels(): String {
+        return try {
+            val models = modelManager.listModels()
+            val result = mapOf(
+                "success" to true,
+                "models" to models
+            )
+            gson.toJson(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "listLLMModels failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download model from URL (async)
+     * Use downloadProgress callback to track progress
+     * @param url Direct download URL
+     * @return JSON string with immediate acknowledgment: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadLLMModel(url: String): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = modelManager.downloadFromUrl(url, object : LLMModelManager.DownloadProgressListener {
+                    override fun onProgress(percent: Int, status: String) {
+                        emitDownloadProgress(percent, status)
+                    }
+                })
+                Log.i(TAG, "Download completed: $result")
+                
+                // Notify completion
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitDownloadProgress(100, "Download complete")
+                    emitDownloadComplete(result)
+                } else {
+                    emitDownloadError(result["error"] as? String ?: "Unknown error")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadLLMModel failed", e)
+                emitDownloadError(e.message ?: "Download failed")
+            }
+        }
+        
+        // Return immediately
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Download model from Ollama registry (async)
+     * @param modelName Ollama model name (e.g., "llama3.2:3b")
+     * @return JSON string with immediate acknowledgment: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun pullLLMModel(modelName: String): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = modelManager.pullFromOllama(modelName, object : LLMModelManager.DownloadProgressListener {
+                    override fun onProgress(percent: Int, status: String) {
+                        emitDownloadProgress(percent, status)
+                    }
+                })
+                Log.i(TAG, "Ollama pull completed: $result")
+                
+                // Notify completion
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitDownloadProgress(100, "Download complete")
+                    emitDownloadComplete(result)
+                } else {
+                    emitDownloadError(result["error"] as? String ?: "Unknown error")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "pullLLMModel failed", e)
+                emitDownloadError(e.message ?: "Download failed")
+            }
+        }
+        
+        // Return immediately
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+    
+    /**
+     * Emit download progress event to JavaScript
+     * Calls window.AndroidAI._onDownloadProgress(percent, status)
+     */
+    private fun emitDownloadProgress(percent: Int, status: String) {
+        val safeStatus = status.replace("\"", "\\\"")
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onDownloadProgress) {
+                window.AndroidAI._onDownloadProgress($percent, "$safeStatus");
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+    
+    /**
+     * Emit download complete event to JavaScript
+     * Calls window.AndroidAI._onDownloadComplete(result)
+     */
+    private fun emitDownloadComplete(result: Map<String, Any>) {
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onDownloadComplete) {
+                window.AndroidAI._onDownloadComplete(${gson.toJson(result)});
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+    
+    /**
+     * Emit download error event to JavaScript
+     * Calls window.AndroidAI._onDownloadError(error)
+     */
+    private fun emitDownloadError(error: String) {
+        val safeError = error.replace("\"", "\\\"")
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onDownloadError) {
+                window.AndroidAI._onDownloadError("$safeError");
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+
+    /**
+     * Delete a model file
+     * @param filename Model filename to delete
+     * @return JSON string with format: {"success": true/false, "error": "..."}
+     */
+    @JavascriptInterface
+    fun deleteLLMModel(filename: String): String {
+        return try {
+            val result = modelManager.deleteModel(filename)
+            gson.toJson(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteLLMModel failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Get the models directory path
+     * @return Absolute path to models directory
+     */
+    @JavascriptInterface
+    fun getLLMModelsDirectory(): String {
+        return modelManager.getModelsDirectory().absolutePath
+    }
+
+    /**
+     * Trigger file picker to import a GGUF model
+     * Opens native file picker for user to select a model file
+     * @return JSON string: {"success": true} immediately (actual import happens via callback)
+     */
+    @JavascriptInterface
+    fun importLLMModel(): String {
+        Log.d(TAG, "importLLMModel() - triggering file picker")
+        webView.post {
+            onModelImportRequest()
+        }
+        return gson.toJson(mapOf(
+            "success" to true,
+            "message" to "File picker opened"
+        ))
+    }
+
+    /**
+     * Internal method to handle actual file import after file is selected
+     * Called by FullAppActivity after user picks a file
+     * @param sourceUri URI of the selected file
+     * @param fileName Original file name
+     * @return Result map
+     */
+    fun handleModelImport(sourceUri: android.net.Uri, fileName: String): Map<String, Any> {
+        return modelManager.importFromUri(sourceUri, fileName)
+    }
+
+    /**
+     * Emit import completion event to JavaScript
+     */
+    fun emitImportComplete(result: Map<String, Any>) {
+        val json = gson.toJson(result)
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onImportComplete) {
+                window.AndroidAI._onImportComplete($json);
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+
+    /**
+     * Emit import error event to JavaScript
+     */
+    fun emitImportError(error: String) {
+        val safeError = error.replace("\"", "\\\"")
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onImportComplete) {
+                window.AndroidAI._onImportComplete({"success": false, "error": "$safeError"});
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
     }
 }
