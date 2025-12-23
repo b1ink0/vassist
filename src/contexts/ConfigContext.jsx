@@ -157,6 +157,56 @@ export const ConfigProvider = ({ children }) => {
           Logger.warn('ConfigContext', 'Failed to configure TTS Service:', error);
         }
 
+        // Update HTTP server TTS config (for desktop local provider)
+        if (isDesktop && savedTtsConfig?.provider === 'desktop-local' && api?.server) {
+          const { implementation } = savedTtsConfig['desktop-local'] || {};
+          try {
+            await api.server.updateTtsConfig({ implementation });
+            Logger.log('ConfigContext', `HTTP server TTS config updated: ${implementation}`);
+          } catch (error) {
+            Logger.warn('ConfigContext', 'Failed to update HTTP server TTS config:', error);
+          }
+        }
+
+        // Start TTS server based on configuration
+        if (isDesktop && savedTtsConfig?.provider === 'desktop-local') {
+          const { implementation } = savedTtsConfig['desktop-local'] || {};
+          
+          if (implementation === 'gpt-sovits-rust' && api?.gptSovitsRustSetup) {
+            // Start Rust TTS server
+            try {
+              // Check if setup is complete before starting server
+              const status = await api.gptSovitsRustSetup.getStatus();
+              if (status.isSetup) {
+                Logger.log('ConfigContext', 'Starting GPT-SoVITS Rust server (port 9882)...');
+                const result = await api.gptSovitsRustSetup.serverStart();
+                if (result.success) {
+                  Logger.log('ConfigContext', 'GPT-SoVITS Rust server started');
+                } else {
+                  Logger.warn('ConfigContext', 'Failed to start Rust server:', result.error);
+                }
+              } else {
+                Logger.log('ConfigContext', 'Rust server setup not complete, skipping auto-start');
+              }
+            } catch (error) {
+              Logger.warn('ConfigContext', 'Error checking/starting Rust server:', error);
+            }
+          } else if (implementation === 'gpt-sovits' && api?.gptSovitsSetup) {
+            // Start Python TTS server
+            try {
+              Logger.log('ConfigContext', 'Starting GPT-SoVITS Python server (port 9880)...');
+              const result = await api.gptSovitsSetup.serverStart();
+              if (result.success) {
+                Logger.log('ConfigContext', 'GPT-SoVITS Python server started');
+              } else {
+                Logger.warn('ConfigContext', 'Failed to start Python server:', result.error);
+              }
+            } catch (error) {
+              Logger.warn('ConfigContext', 'Error starting Python server:', error);
+            }
+          }
+        }
+
         // Load STT config
         const savedSttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
         setSttConfig(savedSttConfig);

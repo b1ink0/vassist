@@ -6,10 +6,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
-import { GPTSoVITSLanguages } from '../../../config/aiConfig';
+import { GPTSoVITSLanguages, GPTSoVITSImplementation } from '../../../config/aiConfig';
 import voiceStorageService from '../../../services/VoiceStorageService';
 import Logger from '../../../services/LoggerService';
 import GPTSoVITSSetup from './GPTSoVITSSetup';
+import GPTSoVITSRustSetup from './GPTSoVITSRustSetup';
 import { isDesktop } from '../../../utils/PlatformUtils';
 
 const getAudioDuration = (file) => {
@@ -195,11 +196,42 @@ const GPTSoVITSConfig = ({
 
   return (
     <div className="space-y-6">
+      {/* Implementation selector (desktop only) */}
+      {isDesktop && !isSetupMode && (
+        <div>
+          <label className="block text-sm font-medium text-white/90 mb-2">
+            <Icon name="cpu" size={14} className="inline mr-1" />
+            TTS Implementation
+          </label>
+          <select
+            value={config?.implementation || GPTSoVITSImplementation.RUST}
+            onChange={(e) => {
+              if (onChange) {
+                onChange('implementation', e.target.value);
+              }
+            }}
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+          >
+            <option value={GPTSoVITSImplementation.RUST}>GPT-SoVITS Rust (Recommended)</option>
+            <option value={GPTSoVITSImplementation.PYTHON}>GPT-SoVITS Python (Legacy)</option>
+          </select>
+          <p className="text-xs text-white/50 mt-1">
+            {config?.implementation === GPTSoVITSImplementation.RUST 
+              ? '✨ Faster performance, smaller deployment size' 
+              : '⚠️ Requires Python runtime, larger size'}
+          </p>
+        </div>
+      )}
+      
       {/* Setup section (desktop only) */}
       {isDesktop && !isSetupMode && (
         <div>
           <h4 className="text-sm font-semibold text-white mb-3">Installation</h4>
-          <GPTSoVITSSetup isLightBackground={isLightBackground} />
+          {config?.implementation === GPTSoVITSImplementation.RUST ? (
+            <GPTSoVITSRustSetup isLightBackground={isLightBackground} />
+          ) : (
+            <GPTSoVITSSetup isLightBackground={isLightBackground} />
+          )}
         </div>
       )}
       

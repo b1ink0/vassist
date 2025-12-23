@@ -6,10 +6,11 @@
  */
 
 import OpenAI from 'openai';
-import { TTSProviders } from '../config/aiConfig';
+import { TTSProviders, DefaultTTSConfig } from '../config/aiConfig';
 import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
 import Logger from './LoggerService';
 import voiceStorageService from './VoiceStorageService';
+import StorageServiceProxy from './proxies/StorageServiceProxy';
 
 class TTSService {
   constructor() {
@@ -462,7 +463,11 @@ class TTSService {
           throw new Error('GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.');
         }
         
-        Logger.log('other', `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang})`);
+        // Read implementation fresh from storage on each request
+        const currentTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        const currentImplementation = currentTtsConfig['desktop-local']?.implementation || 'gpt-sovits-rust';
+        
+        Logger.log('other', `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang}, impl: ${currentImplementation})`);
         
         const response = await fetch(`${state.client}/audio/speech`, {
           method: 'POST',
@@ -472,6 +477,7 @@ class TTSService {
             reference_audio: referenceAudioBase64,
             reference_text: refText,
             reference_language: refLang,
+            implementation: currentImplementation,
           }),
         });
         

@@ -46,6 +46,14 @@ export const TTSProviders = {
 };
 
 /**
+ * GPT-SoVITS Implementation Types
+ */
+export const GPTSoVITSImplementation = {
+  PYTHON: 'gpt-sovits-python',
+  RUST: 'gpt-sovits-rust',
+};
+
+/**
  * Available STT (Speech-to-Text) Providers
  */
 export const STTProviders = {
@@ -350,6 +358,7 @@ export const DefaultTTSConfig = {
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'gpt-sovits',
+    implementation: GPTSoVITSImplementation.RUST, // Default to Rust
     // Voice cloning reference
     referenceVoiceId: null, // Voice ID from IndexedDB
     referenceAudio: null, // Path to reference audio file 

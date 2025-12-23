@@ -14,6 +14,8 @@
     "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
     "setup:desktop:tts": "cd electron/server/gpt-sovits && python setup.py",
+    "setup:desktop:tts:rs": "cd electron/server/gpt-sovits-rs && cargo build --release",
+    "build:tts:rs": "cd electron/server/gpt-sovits-rs && LIBTORCH=$PWD/libtorch cargo build --release -j 8",
     "build:desktop": "vite build --config vite.config.desktop.js --mode production",
     "build:desktop:win": "electron-builder --win",
     "build:desktop:mac": "electron-builder --mac",

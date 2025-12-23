@@ -45,6 +45,72 @@ class VoiceStorageService {
   }
 
   /**
+   * Convert AudioBuffer to WAV Blob
+   * @param {AudioBuffer} audioBuffer - Audio buffer to convert
+   * @returns {Promise<Blob>} - WAV blob
+   */
+  async audioBufferToWav(audioBuffer) {
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numberOfChannels * bytesPerSample;
+    
+    const data = [];
+    for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+      data.push(audioBuffer.getChannelData(i));
+    }
+    
+    const interleaved = new Float32Array(audioBuffer.length * numberOfChannels);
+    for (let src = 0, dst = 0; src < audioBuffer.length; src++) {
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        interleaved[dst++] = data[channel][src];
+      }
+    }
+    
+    const dataLength = interleaved.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+    
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    // RIFF header
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(8, 'WAVE');
+    
+    // fmt chunk
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, format, true);
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    
+    // data chunk
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Write PCM samples
+    let offset = 44;
+    for (let i = 0; i < interleaved.length; i++) {
+      const sample = Math.max(-1, Math.min(1, interleaved[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+    
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  /**
    * Save a voice reference to storage
    * @param {string} voiceId - Unique voice ID (or null to generate)
    * @param {string} voiceName - User-editable voice name
@@ -73,19 +139,38 @@ class VoiceStorageService {
         throw new Error(`Audio file too large. Maximum size is ${this.MAX_FILE_SIZE / 1024 / 1024}MB`);
       }
 
+      // Convert to WAV if not already WAV (for Rust GPT-SoVITS compatibility)
+      let processedAudioFile = audioFile;
+      if (!audioFile.type.includes('wav')) {
+        try {
+          Logger.log('VoiceStorage', `Converting ${audioFile.type} to WAV format...`);
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const arrayBuffer = await audioFile.arrayBuffer();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          
+          // Convert to WAV
+          const wavBlob = await this.audioBufferToWav(audioBuffer);
+          processedAudioFile = new File([wavBlob], audioFile.name.replace(/\.[^.]+$/, '.wav'), { type: 'audio/wav' });
+          Logger.log('VoiceStorage', `Converted to WAV: ${processedAudioFile.size} bytes`);
+        } catch (error) {
+          Logger.warn('VoiceStorage', 'Failed to convert to WAV, storing original:', error);
+          // If conversion fails, store original
+        }
+      }
+
       if (!referenceText || referenceText.trim().length === 0) {
         throw new Error('Reference text is required');
       }
 
       const voiceData = {
         name: nameValidation.name,
-        audioData: audioFile,
+        audioData: processedAudioFile,
         referenceText: referenceText.trim(),
         language: language || 'en',
         metadata: {
-          fileName: audioFile.name || 'audio.wav',
-          fileType: audioFile.type,
-          fileSize: audioFile.size,
+          fileName: processedAudioFile.name || 'audio.wav',
+          fileType: processedAudioFile.type,
+          fileSize: processedAudioFile.size,
           duration: metadata.duration || null,
           uploadedAt: Date.now(),
           trained: false,

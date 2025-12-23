@@ -95,6 +95,46 @@ export default defineConfig(({ mode }) => {
               fs.mkdirSync(modelsDir, { recursive: true });
             }
             
+            // Copy Rust TTS server exe and setup scripts
+            const rustSrc = path.join(serverSrc, 'gpt-sovits-rs');
+            const rustDest = path.join(serverDest, 'gpt-sovits-rs');
+            
+            if (fs.existsSync(rustSrc)) {
+              if (!fs.existsSync(rustDest)) {
+                fs.mkdirSync(rustDest, { recursive: true });
+              }
+              
+              // Copy exe (platform-specific)
+              const exeName = process.platform === 'win32' ? 'gpt-sovits-server.exe' : 'gpt-sovits-server';
+              const exeSrc = path.join(rustSrc, exeName);
+              const exeDest = path.join(rustDest, exeName);
+              
+              if (fs.existsSync(exeSrc)) {
+                fs.copyFileSync(exeSrc, exeDest);
+                console.log(`✓ Copied ${exeName} to dist-desktop`);
+              }
+              
+              // Copy setup scripts
+              const setupFiles = ['bootstrap-rust.js', 'download-models.js', 'setup-runner-rust.js'];
+              setupFiles.forEach(file => {
+                const fileSrc = path.join(rustSrc, file);
+                const fileDest = path.join(rustDest, file);
+                if (fs.existsSync(fileSrc)) {
+                  fs.copyFileSync(fileSrc, fileDest);
+                }
+              });
+              
+              // Copy libtorch if it exists (runtime dependency)
+              const libtorchSrc = path.join(rustSrc, 'libtorch');
+              const libtorchDest = path.join(rustDest, 'libtorch');
+              if (fs.existsSync(libtorchSrc)) {
+                fs.cpSync(libtorchSrc, libtorchDest, { recursive: true });
+                console.log('✓ Copied libtorch runtime to dist-desktop');
+              }
+              
+              console.log('✓ Copied Rust TTS server to dist-desktop');
+            }
+            
             console.log('✓ Copied server files to dist-desktop/server');
           }
         },
@@ -238,6 +278,10 @@ export default defineConfig(({ mode }) => {
           '**/electron/server/gpt-sovits/GPT-SoVITS/**',
           '**/electron/server/gpt-sovits/models/**',
           '**/electron/server/gpt-sovits/temp/**',
+          '**/electron/server/gpt-sovits-rs/target/**',
+          '**/electron/server/gpt-sovits-rs/libtorch/**',
+          '**/electron/server/gpt-sovits-rs/models/**',
+          '**/electron/server/gpt-sovits-rs/portable/**',
           '**/electron/server/models/**',
           '**/node_modules/**',
           '**/.git/**',

@@ -39,6 +39,15 @@ export class LocalAIServer {
     this.idleTimer = null;
     this.IDLE_TIMEOUT = 5 * 60 * 1000;
     
+    // Callback for Rust TTS activity tracking
+    this.onRustTTSRequest = null;
+    this.onStopPythonTTS = null;
+    this.onStartPythonTTS = null;
+    this.onStopRustTTS = null;
+    
+    // Track currently running TTS server
+    this.currentTTSImplementation = null;
+    
     // Configuration
     this.config = {
       llm: {
@@ -53,7 +62,9 @@ export class LocalAIServer {
         proxyUrl: 'http://127.0.0.1:9881'
       },
       tts: {
-        proxyUrl: 'http://127.0.0.1:9880'
+        proxyUrl: 'http://127.0.0.1:9880',
+        implementation: 'gpt-sovits', // 'gpt-sovits' (Python) or 'gpt-sovits-rust'
+        rustProxyUrl: 'http://127.0.0.1:9882'
       }
     };
 
@@ -354,28 +365,75 @@ export class LocalAIServer {
   }
 
   async handleTextToSpeech(req, res) {
-    const { input, voice = 'default', reference_audio, reference_text, reference_language = 'en' } = req.body;
+    const { input, voice = 'default', reference_audio, reference_text, reference_language = 'en', implementation } = req.body;
 
     if (!input) {
       return res.status(400).json({ error: 'No text provided' });
     }
 
     try {
+      // Normalize implementation names (both 'gpt-sovits' and 'gpt-sovits-python' = Python server)
+      const requestedImpl = implementation || this.config.tts.implementation || 'gpt-sovits-rust';
+      const normalizedImpl = requestedImpl === 'gpt-sovits-rust' ? 'rust' : 'python';
+      const isRust = normalizedImpl === 'rust';
+      const ttsUrl = isRust ? this.config.tts.rustProxyUrl : this.config.tts.proxyUrl;
+      
+      // Check if we need to switch servers (only if implementation type actually changed)
+      if (this.currentTTSImplementation && this.currentTTSImplementation !== normalizedImpl) {
+        console.log(`[TTS] Switching from ${this.currentTTSImplementation} to ${normalizedImpl}`);
+        
+        // Stop the old server
+        if (this.currentTTSImplementation === 'rust' && this.onStopRustTTS) {
+          console.log('[TTS] Stopping Rust TTS server...');
+          await this.onStopRustTTS();
+        } else if (this.currentTTSImplementation === 'python' && this.onStopPythonTTS) {
+          console.log('[TTS] Stopping Python TTS server...');
+          await this.onStopPythonTTS();
+        }
+        
+        this.currentTTSImplementation = null;
+        
+        // Wait a moment for port to be released
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Start the requested server on-demand (only if not already running)
+      if (isRust && this.currentTTSImplementation !== 'rust') {
+        if (this.onRustTTSRequest) {
+          const startResult = await this.onRustTTSRequest();
+          if (startResult && !startResult.running) {
+            console.log('[TTS] Waiting for Rust server to start...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+        this.currentTTSImplementation = 'rust';
+      } else if (!isRust && this.currentTTSImplementation !== 'python') {
+        if (this.onStartPythonTTS) {
+          console.log('[TTS] Starting Python TTS server on-demand...');
+          await this.onStartPythonTTS();
+        }
+        this.currentTTSImplementation = 'python';
+      }
+      
+      // Use consistent format - both servers accept these fields
       const requestBody = {
-        input: input,
+        text: input,
+        input: input, // Python also accepts this
         reference_audio: reference_audio || null,
         reference_text: reference_text || '',
-        reference_language: reference_language
+        reference_language: reference_language,
+        text_language: reference_language
       };
       
-      console.log('[TTS] Forwarding to GPT-SoVITS:', {
+      console.log(`[TTS] Forwarding to ${isRust ? 'Rust' : 'Python'} GPT-SoVITS:`, {
         textLength: input.length,
         hasReferenceAudio: !!reference_audio,
         referenceTextLength: reference_text?.length || 0,
-        language: reference_language
+        language: reference_language,
+        url: ttsUrl
       });
       
-      const response = await axios.post(`${this.config.tts.proxyUrl}/tts`, requestBody, {
+      const response = await axios.post(`${ttsUrl}/tts`, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         responseType: 'arraybuffer',
         timeout: 30000

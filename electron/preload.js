@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('electron', {
     start: (options) => ipcRenderer.invoke('server:start', options),
     stop: () => ipcRenderer.invoke('server:stop'),
     getStatus: () => ipcRenderer.invoke('server:status'),
+    updateTtsConfig: (ttsConfig) => ipcRenderer.invoke('server:update-tts-config', ttsConfig),
   },
   
   // LLM Model Management
@@ -99,6 +100,7 @@ contextBridge.exposeInMainWorld('electron', {
     start: () => ipcRenderer.invoke('gptsovits:setup:start'),
     cancel: () => ipcRenderer.invoke('gptsovits:setup:cancel'),
     getStatus: () => ipcRenderer.invoke('gptsovits:setup:status'),
+    serverStart: () => ipcRenderer.invoke('gptsovits:server:start'),
     onLog: (callback) => {
       const subscription = (event, log) => callback(log);
       ipcRenderer.on('gptsovits:setup:log', subscription);
@@ -108,6 +110,23 @@ contextBridge.exposeInMainWorld('electron', {
       const subscription = (event, result) => callback(result);
       ipcRenderer.on('gptsovits:setup:complete', subscription);
       return () => ipcRenderer.removeListener('gptsovits:setup:complete', subscription);
+    },
+  },
+  
+  // GPT-SoVITS Rust Setup
+  gptSovitsRustSetup: {
+    start: () => ipcRenderer.invoke('gptsovits-rust:setup:start'),
+    cancel: () => ipcRenderer.invoke('gptsovits-rust:setup:cancel'),
+    getStatus: () => ipcRenderer.invoke('gptsovits-rust:setup:status'),
+    onProgress: (callback) => {
+      const subscription = (event, progress) => callback(progress);
+      ipcRenderer.on('gptsovits-rust:setup:progress', subscription);
+      return () => ipcRenderer.removeListener('gptsovits-rust:setup:progress', subscription);
+    },
+    onComplete: (callback) => {
+      const subscription = (event, result) => callback(result);
+      ipcRenderer.on('gptsovits-rust:setup:complete', subscription);
+      return () => ipcRenderer.removeListener('gptsovits-rust:setup:complete', subscription);
     },
   },
 });

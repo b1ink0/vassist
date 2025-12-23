@@ -1,0 +1,28 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# LibTorch runtime
+libtorch/
+*.dll
+*.so
+*.dylib
+
+# Models (downloaded at runtime)
+models/
+
+# Portable bundle artifacts
+portable/
+
+# Downloaded files
+*.zip
+*.tar.gz
+
+# Test outputs
+output_*.wav
+test_output.wav
+
+# Python files (we use Node.js instead)
+__pycache__/
+*.pyc
+*.pyo

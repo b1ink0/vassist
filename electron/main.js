@@ -24,6 +24,7 @@ let mainWindow;
 let inputWindow;
 let tray = null;
 let gptsovitsProcess = null;
+let gptsovitsRustProcess = null;
 let whisperProcess = null;
 
 /**
@@ -331,8 +332,11 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
   
-  // Start Python servers
-  startGPTSoVITSServer();
+  // TTS servers will be started by ConfigContext based on user's configuration
+  // Python (port 9880) OR Rust (port 9882) - not both
+  // ConfigContext.jsx checks config.tts.implementation and starts the appropriate server
+  
+  // Start Whisper STT server (port 9881)
   startWhisperServer();
   
   // Auto-start HTTP proxy server
@@ -341,6 +345,47 @@ app.whenReady().then(() => {
       if (!server) {
         server = new LocalAIServer();
       }
+      
+      // Set callback for Rust TTS on-demand start + activity tracking
+      server.onRustTTSRequest = async () => {
+        // Update activity (for idle timeout)
+        if (typeof updateRustServerActivity === 'function') {
+          updateRustServerActivity();
+        }
+        
+        // Start server if not running (on-demand)
+        if (!gptsovitsRustProcess) {
+          console.log('[GPT-SoVITS-Rust] Server not running, starting on-demand...');
+          try {
+            await startGPTSoVITSRustServer();
+            return { running: true };
+          } catch (error) {
+            console.error('[GPT-SoVITS-Rust] Failed to start on-demand:', error);
+            return { running: false, error: error.message };
+          }
+        }
+        
+        return { running: true };
+      };
+      
+      // Set callback for Python TTS start
+      server.onStartPythonTTS = async () => {
+        if (!gptsovitsProcess) {
+          console.log('[GPT-SoVITS] Starting Python TTS on-demand...');
+          startGPTSoVITSServer();
+          // Wait for server to be ready
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      };
+      
+      // Set callbacks for stopping servers
+      server.onStopRustTTS = async () => {
+        stopGPTSoVITSRustServer();
+      };
+      
+      server.onStopPythonTTS = async () => {
+        stopGPTSoVITSServer();
+      };
       
       // Prepare server configuration
       const serverConfig = {
@@ -355,7 +400,8 @@ app.whenReady().then(() => {
           proxyUrl: 'http://127.0.0.1:9881'
         },
         tts: {
-          proxyUrl: 'http://127.0.0.1:9880'
+          proxyUrl: 'http://127.0.0.1:9880',
+          rustProxyUrl: 'http://127.0.0.1:9882'
         }
       };
       
@@ -735,11 +781,35 @@ ipcMain.handle('server:status', async () => {
   }
 });
 
+// Update HTTP server TTS configuration
+ipcMain.handle('server:update-tts-config', async (event, ttsConfig) => {
+  if (!server) {
+    console.warn('[Server] Server not initialized, cannot update TTS config');
+    return { success: false, error: 'Server not initialized' };
+  }
+
+  try {
+    const { implementation } = ttsConfig;
+    
+    // Update TTS config in HTTP server
+    server.config.tts.implementation = implementation;
+    
+    console.log(`[Server] TTS config updated: implementation=${implementation}`);
+    console.log(`[Server] Will route to: ${implementation === 'gpt-sovits-rust' ? 'Rust (9882)' : 'Python (9880)'}`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[Server] Failed to update TTS config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // ============================================
 // GPT-SoVITS Setup Management
 // ============================================
 
 let setupRunner = null;
+let setupRunnerRust = null;
 
 ipcMain.handle('gptsovits:setup:start', async (event) => {
   const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
@@ -818,6 +888,107 @@ ipcMain.handle('gptsovits:setup:status', async () => {
       gptsovitsExists: false,
       error: error.message
     };
+  }
+});
+
+// ============================================
+// GPT-SoVITS Rust Setup Management
+// ============================================
+
+ipcMain.handle('gptsovits-rust:setup:start', async (event) => {
+  const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits-rs', 'setup-runner-rust.js');
+  const { default: SetupRunnerRust } = await import(pathToFileURL(setupRunnerPath).href);
+  
+  if (setupRunnerRust) {
+    throw new Error('Rust setup already running');
+  }
+  
+  console.log('[GPT-SoVITS-Rust] Starting setup...');
+  setupRunnerRust = new SetupRunnerRust();
+  
+  // Start setup with progress streaming
+  setupRunnerRust.run((progress) => {
+    // Send progress to renderer
+    event.sender.send('gptsovits-rust:setup:progress', progress);
+  }).then(() => {
+    console.log('[GPT-SoVITS-Rust] Setup complete');
+    event.sender.send('gptsovits-rust:setup:complete', { success: true });
+    setupRunnerRust = null;
+    
+    // Start Rust server after successful installation
+    console.log('[GPT-SoVITS-Rust] Starting server...');
+    setTimeout(() => {
+      startGPTSoVITSRustServer();
+    }, 1000);
+  }).catch((error) => {
+    console.error('[GPT-SoVITS-Rust] Setup failed:', error);
+    event.sender.send('gptsovits-rust:setup:complete', { 
+      success: false, 
+      error: error.message 
+    });
+    setupRunnerRust = null;
+  });
+  
+  return { started: true };
+});
+
+ipcMain.handle('gptsovits-rust:setup:cancel', async () => {
+  if (setupRunnerRust) {
+    console.log('[GPT-SoVITS-Rust] Cancelling setup...');
+    setupRunnerRust.cancel();
+    setupRunnerRust = null;
+    return { cancelled: true };
+  }
+  return { cancelled: false, message: 'No setup running' };
+});
+
+ipcMain.handle('gptsovits-rust:setup:status', async () => {
+  const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits-rs', 'setup-runner-rust.js');
+  const { default: SetupRunnerRust } = await import(pathToFileURL(setupRunnerPath).href);
+  const runner = new SetupRunnerRust();
+  
+  try {
+    const status = runner.getStatus();
+    console.log('[GPT-SoVITS-Rust] Setup status:', status);
+    return status;
+  } catch (error) {
+    console.error('[GPT-SoVITS-Rust] Status check error:', error);
+    return {
+      isSetup: false,
+      libtorchExists: false,
+      modelsExist: false,
+      error: error.message
+    };
+  }
+});
+
+// Handler to start Rust TTS server on-demand (called from frontend after config load)
+ipcMain.handle('gptsovits-rust:server:start', async () => {
+  try {
+    if (gptsovitsRustProcess) {
+      return { success: true, message: 'Server already running' };
+    }
+    
+    await startGPTSoVITSRustServer();
+    return { success: true };
+  } catch (error) {
+    console.error('[GPT-SoVITS-Rust] Failed to start server:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Handler to start Python TTS server on-demand (called from frontend after config load)
+ipcMain.handle('gptsovits:server:start', async () => {
+  try {
+    if (gptsovitsProcess) {
+      return { success: true, message: 'Server already running' };
+    }
+    
+    startGPTSoVITSServer();
+    return { success: true };
+  } catch (error) {
+    console.error('[GPT-SoVITS] Failed to start server:', error);
+    return { success: false, error: error.message };
   }
 });
 
@@ -1289,6 +1460,211 @@ function stopGPTSoVITSServer() {
     gptsovitsProcess.kill('SIGTERM');
     gptsovitsProcess = null;
   }
+}
+
+/**
+ * GPT-SoVITS Rust TTS Server Management
+ */
+let gptsovitsRustServerReady = false;
+let rustServerLastUsed = null;
+let rustServerIdleTimer = null;
+const RUST_IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+
+function updateRustServerActivity() {
+  rustServerLastUsed = Date.now();
+  
+  // Clear existing timer
+  if (rustServerIdleTimer) {
+    clearTimeout(rustServerIdleTimer);
+  }
+  
+  // Set new idle timeout
+  rustServerIdleTimer = setTimeout(() => {
+    const idleTime = Date.now() - (rustServerLastUsed || 0);
+    if (idleTime >= RUST_IDLE_TIMEOUT && gptsovitsRustProcess) {
+      console.log('[GPT-SoVITS-Rust] Stopping server due to inactivity (10min idle)');
+      stopGPTSoVITSRustServer();
+    }
+  }, RUST_IDLE_TIMEOUT);
+}
+
+async function waitForRustServerReady(maxWaitMs = 30000) {
+  const https = require('https');
+  const http = require('http');
+  const startTime = Date.now();
+  const checkInterval = 500;
+  
+  return new Promise((resolve, reject) => {
+    const checkHealth = () => {
+      if (Date.now() - startTime > maxWaitMs) {
+        reject(new Error('Rust server health check timeout'));
+        return;
+      }
+      
+      http.get('http://127.0.0.1:9882/health', (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.status === 'healthy') {
+              console.log('[GPT-SoVITS-Rust] Server ready');
+              gptsovitsRustServerReady = true;
+              resolve();
+            } else {
+              setTimeout(checkHealth, checkInterval);
+            }
+          } catch (e) {
+            setTimeout(checkHealth, checkInterval);
+          }
+        });
+      }).on('error', () => {
+        // Server not ready yet, try again
+        setTimeout(checkHealth, checkInterval);
+      });
+    };
+    
+    checkHealth();
+  });
+}
+
+async function startGPTSoVITSRustServer(retryCount = 0, maxRetries = 3) {
+  if (gptsovitsRustProcess) {
+    console.log('[GPT-SoVITS-Rust] Server already running');
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const rustDir = path.join(serverBasePath, 'gpt-sovits-rs');
+      const exeName = process.platform === 'win32' ? 'gpt-sovits-server.exe' : 'gpt-sovits-server';
+      const exePath = path.join(rustDir, 'target', 'release', exeName);
+      const libtorchLib = path.join(rustDir, 'libtorch', 'lib');
+
+      // Check if exe exists
+      if (!fs.existsSync(exePath)) {
+        console.error('[GPT-SoVITS-Rust] Executable not found. Run setup first.');
+        return reject(new Error('Rust executable not found'));
+      }
+
+      // Check if LibTorch exists
+      if (!fs.existsSync(libtorchLib)) {
+        console.error('[GPT-SoVITS-Rust] LibTorch not found. Run setup first.');
+        return reject(new Error('LibTorch not found'));
+      }
+
+      console.log('[GPT-SoVITS-Rust] Starting TTS server...');
+      if (retryCount > 0) {
+        console.log(`[GPT-SoVITS-Rust] Retry attempt ${retryCount}/${maxRetries}`);
+      }
+      console.log('[GPT-SoVITS-Rust] Exe:', exePath);
+      console.log('[GPT-SoVITS-Rust] LibTorch:', libtorchLib);
+      console.log('[GPT-SoVITS-Rust] Port: 9882');
+
+      gptsovitsRustServerReady = false;
+
+      gptsovitsRustProcess = spawn(exePath, ['9882'], {
+        cwd: rustDir,
+        env: {
+          ...process.env,
+          LD_LIBRARY_PATH: libtorchLib, // Linux/macOS
+          PATH: `${libtorchLib};${process.env.PATH}`, // Windows
+        }
+      });
+
+      gptsovitsRustProcess.stdout.on('data', (data) => {
+        console.log(`[GPT-SoVITS-Rust] ${data.toString().trim()}`);
+      });
+
+      gptsovitsRustProcess.stderr.on('data', (data) => {
+        console.error(`[GPT-SoVITS-Rust] ${data.toString().trim()}`);
+      });
+
+      gptsovitsRustProcess.on('error', (error) => {
+        console.error('[GPT-SoVITS-Rust] Failed to start:', error);
+        gptsovitsRustProcess = null;
+        gptsovitsRustServerReady = false;
+        
+        // Retry on error
+        if (retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+          console.log(`[GPT-SoVITS-Rust] Retrying in ${delay}ms...`);
+          setTimeout(() => {
+            startGPTSoVITSRustServer(retryCount + 1, maxRetries).then(resolve).catch(reject);
+          }, delay);
+        } else {
+          reject(error);
+        }
+      });
+
+      gptsovitsRustProcess.on('exit', (code, signal) => {
+        console.log(`[GPT-SoVITS-Rust] Process exited with code ${code}, signal ${signal}`);
+        const wasRunning = gptsovitsRustProcess !== null;
+        gptsovitsRustProcess = null;
+        gptsovitsRustServerReady = false;
+        
+        // Auto-restart on unexpected crash (if it was running and exit code is non-zero)
+        if (wasRunning && code !== 0 && code !== null && retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000;
+          console.log(`[GPT-SoVITS-Rust] Unexpected crash detected. Restarting in ${delay}ms...`);
+          setTimeout(() => {
+            startGPTSoVITSRustServer(retryCount + 1, maxRetries).then(resolve).catch(reject);
+          }, delay);
+        }
+      });
+
+      console.log('[GPT-SoVITS-Rust] Server started on http://127.0.0.1:9882');
+      
+      // Wait for server to be ready
+      waitForRustServerReady().then(() => {
+        // Start idle timeout tracking
+        updateRustServerActivity();
+        resolve();
+      }).catch(err => {
+        // Retry on health check failure
+        if (retryCount < maxRetries) {
+          console.log('[GPT-SoVITS-Rust] Health check failed, stopping and retrying...');
+          stopGPTSoVITSRustServer();
+          const delay = Math.pow(2, retryCount) * 1000;
+          setTimeout(() => {
+            startGPTSoVITSRustServer(retryCount + 1, maxRetries).then(resolve).catch(reject);
+          }, delay);
+        } else {
+          reject(err);
+        }
+      });
+      
+    } catch (error) {
+      console.error('[GPT-SoVITS-Rust] Start error:', error);
+      
+      // Retry on exception
+      if (retryCount < maxRetries) {
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`[GPT-SoVITS-Rust] Retrying in ${delay}ms...`);
+        setTimeout(() => {
+          startGPTSoVITSRustServer(retryCount + 1, maxRetries).then(resolve).catch(reject);
+        }, delay);
+      } else {
+        reject(error);
+      }
+    }
+  });
+}
+
+function stopGPTSoVITSRustServer() {
+  if (gptsovitsRustProcess) {
+    console.log('[GPT-SoVITS-Rust] Stopping server...');
+    gptsovitsRustProcess.kill('SIGTERM');
+    gptsovitsRustProcess = null;
+    gptsovitsRustServerReady = false;
+  }
+  
+  // Clear idle timer
+  if (rustServerIdleTimer) {
+    clearTimeout(rustServerIdleTimer);
+    rustServerIdleTimer = null;
+  }
+  rustServerLastUsed = null;
 }
 
 /**
