@@ -18,6 +18,7 @@ import { vmdConverterService } from '../../services/VMDConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
 import emoteStorageService from '../../services/EmoteStorageService';
+import JSZip from 'jszip';
 
 const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }) => {
   const {
@@ -84,6 +85,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState(null);
   const emoteAudioFileInputRef = useRef(null);
   const emoteMotionFileInputRef = useRef(null);
+  const emoteZipFileInputRef = useRef(null);
   
   const [expandedModelSettings, setExpandedModelSettings] = useState(null); // ID of model showing expanded settings
   
@@ -738,6 +740,135 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
+  const handleEmoteZipUpload = async (zipFile) => {
+    try {
+      setEmoteUploadState({ uploading: true, progress: 'Extracting ZIP...', error: null });
+
+      const zip = new JSZip();
+      const zipContent = await zip.loadAsync(zipFile);
+
+      const emoteFolders = [];
+      Object.keys(zipContent.files).forEach(path => {
+        const parts = path.split('/');
+        if (parts.length >= 2 && !zipContent.files[path].dir) {
+          const folderName = parts[0];
+          if (!emoteFolders.find(f => f.name === folderName)) {
+            emoteFolders.push({ name: folderName, files: [] });
+          }
+          const folder = emoteFolders.find(f => f.name === folderName);
+          folder.files.push(path);
+        }
+      });
+
+      if (emoteFolders.length === 0) {
+        throw new Error('No emote folders found in ZIP. Expected structure: EmoteName/audio.mp3 + EmoteName/motion.vmd');
+      }
+
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < emoteFolders.length; i++) {
+        const folder = emoteFolders[i];
+        const emoteName = folder.name;
+
+        try {
+          setEmoteUploadState({
+            uploading: true,
+            progress: `Processing ${i + 1}/${emoteFolders.length}: ${emoteName}...`,
+            error: null
+          });
+
+          const vmdFile = folder.files.find(f => f.toLowerCase().endsWith('.vmd'));
+          const audioFile = folder.files.find(f => {
+            const lower = f.toLowerCase();
+            return lower.endsWith('.mp3') || lower.endsWith('.wav') || 
+                   lower.endsWith('.ogg') || lower.endsWith('.m4a') || 
+                   lower.endsWith('.aac') || lower.endsWith('.flac');
+          });
+
+          if (!vmdFile || !audioFile) {
+            console.warn(`Skipping ${emoteName}: missing VMD or audio file`);
+            failedCount++;
+            continue;
+          }
+
+          const vmdBlob = await zipContent.files[vmdFile].async('blob');
+          const audioBlob = await zipContent.files[audioFile].async('blob');
+
+          const vmdFileName = vmdFile.split('/').pop();
+          const audioFileName = audioFile.split('/').pop();
+
+          const vmdFileObj = new File([vmdBlob], vmdFileName, { type: 'application/octet-stream' });
+          const audioFileObj = new File([audioBlob], audioFileName, { type: audioBlob.type || 'audio/mpeg' });
+
+          setEmoteUploadState({
+            uploading: true,
+            progress: `Converting ${i + 1}/${emoteFolders.length}: ${emoteName}...`,
+            error: null
+          });
+
+          const bvmdData = await vmdConverterService.convertVMDToBVMD(vmdFileObj);
+
+          setEmoteUploadState({
+            uploading: true,
+            progress: `Saving ${i + 1}/${emoteFolders.length}: ${emoteName}...`,
+            error: null
+          });
+
+          await emoteStorageService.saveEmote(
+            null,
+            emoteName,
+            audioFileObj,
+            bvmdData,
+            {
+              originalAudioFileName: audioFileName,
+              originalMotionFileName: vmdFileName,
+              audioMimeType: audioFileObj.type
+            }
+          );
+
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to process emote ${emoteName}:`, error);
+          failedCount++;
+        }
+      }
+
+      await loadEmotes();
+
+      if (failedCount > 0) {
+        setEmoteUploadState({
+          uploading: false,
+          progress: '',
+          error: `Imported ${successCount} emote(s), ${failedCount} failed`
+        });
+      } else {
+        setEmoteUploadState({
+          uploading: false,
+          progress: `Successfully imported ${successCount} emote(s)`,
+          error: null
+        });
+        setTimeout(() => {
+          setEmoteUploadState({ uploading: false, progress: '', error: null });
+        }, 3000);
+      }
+
+      if (emoteZipFileInputRef.current) {
+        emoteZipFileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Failed to process ZIP:', error);
+      setEmoteUploadState({ uploading: false, progress: '', error: error.message || 'ZIP import failed' });
+    }
+  };
+
+  const handleEmoteZipFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleEmoteZipUpload(file);
+    }
+  };
+
   const handleDeleteEmote = async (emoteId) => {
     if (window.confirm('Are you sure you want to delete this emote?')) {
       try {
@@ -772,6 +903,22 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const handleCancelEditEmote = () => {
     setEditingEmoteId(null);
     setEditingEmoteName('');
+  };
+
+  const handleToggleEmoteVisibility = async (emoteId, isVisible) => {
+    try {
+      await emoteStorageService.toggleEmoteVisibility(emoteId, isVisible);
+      
+      setEmotes(prev => prev.map(e => 
+        e.id === emoteId ? { ...e, isVisible } : e
+      ));
+      
+      console.log(`Emote ${emoteId} visibility set to: ${isVisible}`);
+    } catch (error) {
+      console.error('Failed to toggle emote visibility:', error);
+      setErrorDialogMessage(error.message || 'Failed to toggle emote visibility');
+      setShowErrorDialog(true);
+    }
   };
 
   // Handle toggling category for a motion
@@ -1990,7 +2137,39 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               onChange={handleEmoteMotionFileChange}
               className="hidden"
             />
+            <input
+              ref={emoteZipFileInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleEmoteZipFileChange}
+              className="hidden"
+            />
             
+            {/* Bulk Import Label */}
+            <div className="space-y-1">
+              <label className="text-xs text-white/70">Bulk Import</label>
+              <button
+                onClick={() => emoteZipFileInputRef.current?.click()}
+                disabled={emoteUploadState.uploading}
+                className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="upload" size={24} className="mx-auto mb-1 text-white/70" />
+                <p className="text-sm text-white/90">
+                  {emoteUploadState.uploading && emoteUploadState.progress ? emoteUploadState.progress : 'Import ZIP Package'}
+                </p>
+                <p className="text-xs text-white/50">Multiple emotes from ZIP</p>
+              </button>
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-2 bg-transparent text-white/40">OR</span>
+              </div>
+            </div>
+
             {/* Audio File Upload Button */}
             <button
               onClick={() => emoteAudioFileInputRef.current?.click()}
@@ -2025,6 +2204,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             >
               {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
             </button>
+
+            {emoteUploadState.progress && !emoteUploadState.uploading && !emoteUploadState.error && (
+              <div className="p-3 rounded-lg bg-green-500/10 border border-green-400/20">
+                <p className="text-xs text-green-200">{emoteUploadState.progress}</p>
+              </div>
+            )}
 
             {emoteUploadState.error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
@@ -2071,7 +2256,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             </>
                           )}
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex items-center gap-1">
                             {isEditing ? (
                               <>
                                 <button
@@ -2105,6 +2290,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                 >
                                   <Icon name="trash-2" size={16} />
                                 </button>
+                                <Toggle
+                                  checked={emote.isVisible !== false}
+                                  onChange={(checked) => handleToggleEmoteVisibility(emote.id, checked)}
+                                  size="sm"
+                                  isLightBackground={isLightBackground}
+                                  title="Show in emote panel"
+                                />
                               </>
                             )}
                           </div>

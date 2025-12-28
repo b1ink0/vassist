@@ -62,9 +62,14 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   useEffect(() => {
     if (isEmotePanelOpen) {
-      emoteStorageService.getEmotesList().then(setEmotes).catch(err => {
-        Logger.error('ChatButton', 'Failed to load emotes:', err);
-      });
+      emoteStorageService.getEmotesList()
+        .then(allEmotes => {
+          const visibleEmotes = allEmotes.filter(emote => emote.isVisible !== false);
+          setEmotes(visibleEmotes);
+        })
+        .catch(err => {
+          Logger.error('ChatButton', 'Failed to load emotes:', err);
+        });
     }
   }, [isEmotePanelOpen]);
 

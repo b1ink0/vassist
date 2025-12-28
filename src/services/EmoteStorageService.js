@@ -86,6 +86,7 @@ class EmoteStorageService {
         name: nameValidation.name,
         audioData: audioBlob,
         motionData: motionBlob,
+        isVisible: true,
         metadata: {
           originalAudioFileName: metadata.originalAudioFileName || 'unknown.mp3',
           originalMotionFileName: metadata.originalMotionFileName || 'unknown.vmd',
@@ -156,6 +157,7 @@ class EmoteStorageService {
       const emotesList = Object.entries(emotesMetadata).map(([id, data]) => ({
         id,
         name: data.value?.name || 'Unknown Emote',
+        isVisible: data.value?.isVisible !== undefined ? data.value?.isVisible : true,
         metadata: data.value?.metadata || {
           originalAudioFileName: 'unknown.mp3',
           originalMotionFileName: 'unknown.vmd',
@@ -210,6 +212,31 @@ class EmoteStorageService {
   }
 
   /**
+   * Toggle emote visibility in emote panel
+   * @param {string} emoteId - Emote ID
+   * @param {boolean} isVisible - Visibility state
+   * @returns {Promise<boolean>} - Success status
+   */
+  async toggleEmoteVisibility(emoteId, isVisible) {
+    try {
+      const emote = await this.getEmote(emoteId);
+      if (!emote) {
+        throw new Error(`Emote ${emoteId} not found`);
+      }
+
+      emote.isVisible = isVisible;
+
+      await storageServiceProxy.fileSave(emoteId, emote, this.CATEGORY);
+
+      Logger.log('EmoteStorage', `Emote ${emoteId} visibility set to: ${isVisible}`);
+      return true;
+    } catch (error) {
+      Logger.error('EmoteStorage', 'Failed to toggle emote visibility:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Delete an emote
    * @param {string} emoteId - Emote ID
    * @returns {Promise<boolean>} - Success status
@@ -221,7 +248,7 @@ class EmoteStorageService {
         throw new Error(`Emote ${emoteId} not found`);
       }
 
-      await storageServiceProxy.fileDelete(emoteId, this.CATEGORY);
+      await storageServiceProxy.fileRemove(emoteId, this.CATEGORY);
 
       Logger.log('EmoteStorage', `Emote ${emoteId} deleted`);
       return true;
