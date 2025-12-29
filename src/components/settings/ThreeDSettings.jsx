@@ -133,7 +133,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const loadModels = async () => {
     try {
       const modelsList = await modelStorageService.getModelsList();
-      setModels(modelsList);
+      // Filter out Unknown Model (default model without data)
+      const filteredModels = modelsList.filter(model => model.name !== 'Unknown Model');
+      setModels(filteredModels);
     } catch (error) {
       console.error('Failed to load models:', error);
     }

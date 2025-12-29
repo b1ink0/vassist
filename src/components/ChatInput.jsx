@@ -1066,6 +1066,8 @@ const ChatInput = forwardRef(({
                       ? 'Recording...' 
                       : hasAttachments
                       ? `${attachedImages.length + attachedAudios.length} file(s) attached`
+                      : isAndroid
+                      ? 'Type a message...'
                       : 'Type a message... (Enter to send, Shift+Enter for new line)'
                   }
                   className="w-full bg-transparent text-white border-none outline-none placeholder-white/40 resize-none custom-scrollbar min-h-[24px] max-h-[200px]"
@@ -1140,6 +1142,15 @@ const ChatInput = forwardRef(({
                     >
                       <Icon name="phone" size={18} />
                     </button>
+                    
+                    <button
+                      type="button"
+                      onClick={wrappedOnClose}
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
+                      title="Close"
+                    >
+                      <Icon name="close" size={18} />
+                    </button>
                   </div>
                   
                   <div className="flex items-center gap-1">
@@ -1155,15 +1166,6 @@ const ChatInput = forwardRef(({
                       title="Send message"
                     >
                       <Icon name="send" size={20} />
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={wrappedOnClose}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
-                      title="Close (Esc)"
-                    >
-                      <Icon name="close" size={20} />
                     </button>
                   </div>
                 </div>

@@ -5,8 +5,11 @@
 #include <string>
 #include <unistd.h>
 #include <sstream>
+#include <vector>
 #include "llama.h"
 #include "common.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
 
 #define TAG "llama-android.cpp"
 #define LOGi(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -19,6 +22,9 @@ jmethodID la_int_var_inc;
 
 // Cached token string for incomplete UTF-8 sequences
 static std::string cached_token_chars;
+
+// Global multimodal context (vision encoder)
+static mtmd_context * mtmd_ctx = nullptr;
 
 // Check if string is valid UTF-8
 bool is_valid_utf8(const char * string) {
@@ -360,3 +366,191 @@ Java_android_llama_cpp_LlamaAndroid_get_1chat_1template(JNIEnv *env, jobject, jl
     }
     return nullptr;
 }
+
+// ============================================================================
+// MULTIMODAL FUNCTIONS (Vision Support)
+// ============================================================================
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_android_llama_cpp_LlamaAndroid_init_1multimodal(
+    JNIEnv *env, 
+    jobject, 
+    jstring mmproj_path, 
+    jlong model_pointer
+) {
+    const char * path = env->GetStringUTFChars(mmproj_path, 0);
+    auto model = reinterpret_cast<llama_model *>(model_pointer);
+    
+    if (!model) {
+        LOGe("init_multimodal: model cannot be null");
+        env->ReleaseStringUTFChars(mmproj_path, path);
+        return JNI_FALSE;
+    }
+    
+    LOGi("Loading mmproj from: %s", path);
+    
+    // Free existing mtmd context if any
+    if (mtmd_ctx != nullptr) {
+        mtmd_free(mtmd_ctx);
+        mtmd_ctx = nullptr;
+    }
+    
+    // Initialize mtmd context params with defaults
+    mtmd_context_params ctx_params = mtmd_context_params_default();
+    
+    // Initialize mtmd context from mmproj file with text model
+    mtmd_ctx = mtmd_init_from_file(path, model, ctx_params);
+    
+    env->ReleaseStringUTFChars(mmproj_path, path);
+    
+    if (mtmd_ctx == nullptr) {
+        LOGe("Failed to load mmproj file");
+        return JNI_FALSE;
+    }
+    
+    LOGi("mmproj loaded successfully - multimodal enabled");
+    return JNI_TRUE;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_android_llama_cpp_LlamaAndroid_free_1multimodal(JNIEnv *, jobject) {
+    if (mtmd_ctx != nullptr) {
+        mtmd_free(mtmd_ctx);
+        mtmd_ctx = nullptr;
+        LOGi("mmproj freed - multimodal disabled");
+    }
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_android_llama_cpp_LlamaAndroid_is_1multimodal_1enabled(JNIEnv *, jobject) {
+    return mtmd_ctx != nullptr ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_android_llama_cpp_LlamaAndroid_get_1image_1marker(JNIEnv *env, jobject) {
+    const char * marker = mtmd_default_marker();
+    return env->NewStringUTF(marker);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
+        JNIEnv *env,
+        jobject,
+        jlong context_pointer,
+        jlong batch_pointer,
+        jobjectArray image_bytes_array,
+        jstring jtext,
+        jint n_len
+) {
+    cached_token_chars.clear();
+    
+    const auto context = reinterpret_cast<llama_context *>(context_pointer);
+    const auto batch = reinterpret_cast<llama_batch *>(batch_pointer);
+    
+    if (mtmd_ctx == nullptr) {
+        LOGe("completion_init_with_images: mtmd_ctx is null - model does not support vision");
+        LOGe("Please use a multimodal model (e.g., SmolVLM, Llama 3.2 Vision, etc.)");
+        env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), 
+                      "Model does not support vision - multimodal encoder (mmproj) not loaded. Use a vision-capable model.");
+        return 0;
+    }
+    
+    // Get prompt text
+    const auto text = env->GetStringUTFChars(jtext, 0);
+    std::string prompt_str(text);
+    env->ReleaseStringUTFChars(jtext, text);
+    
+    LOGi("Prompt (%zu chars): %s", prompt_str.length(), prompt_str.c_str());
+    
+    // Create bitmaps from image bytes
+    std::vector<mtmd_bitmap *> bitmaps;
+    jsize num_images = image_bytes_array != nullptr ? env->GetArrayLength(image_bytes_array) : 0;
+    
+    for (jsize i = 0; i < num_images; i++) {
+        jbyteArray image_bytes = (jbyteArray)env->GetObjectArrayElement(image_bytes_array, i);
+        if (image_bytes == nullptr) continue;
+        
+        jbyte* bytes = env->GetByteArrayElements(image_bytes, nullptr);
+        jsize length = env->GetArrayLength(image_bytes);
+        
+        if (bytes && length > 0) {
+            mtmd_bitmap * bmp = mtmd_helper_bitmap_init_from_buf(
+                mtmd_ctx, 
+                (const unsigned char *)bytes, 
+                length
+            );
+            if (bmp != nullptr) {
+                bitmaps.push_back(bmp);
+                LOGi("Loaded image %d: %d bytes", i, length);
+            } else {
+                LOGe("Failed to load image %d", i);
+            }
+        }
+        
+        env->ReleaseByteArrayElements(image_bytes, bytes, JNI_ABORT);
+    }
+    
+    // Prepare mtmd input text
+    mtmd_input_text input_text;
+    input_text.text = prompt_str.c_str();
+    input_text.add_special = true;
+    input_text.parse_special = true;
+    
+    // Tokenize with images
+    mtmd_input_chunks * chunks = mtmd_input_chunks_init();
+    
+    std::vector<const mtmd_bitmap *> bitmaps_c_ptr(bitmaps.size());
+    for (size_t i = 0; i < bitmaps.size(); i++) {
+        bitmaps_c_ptr[i] = bitmaps[i];
+    }
+    
+    int32_t res = mtmd_tokenize(
+        mtmd_ctx,
+        chunks,
+        &input_text,
+        bitmaps_c_ptr.data(),
+        bitmaps_c_ptr.size()
+    );
+    
+    if (res != 0) {
+        LOGe("mtmd_tokenize failed: %d", res);
+        // Clean up
+        for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
+        mtmd_input_chunks_free(chunks);
+        return 0;
+    }
+    
+    LOGi("Tokenized into %zu chunks", mtmd_input_chunks_size(chunks));
+    
+    // Evaluate all chunks (this handles both text and image encoding/decoding)
+    llama_pos n_past = 0;
+    int32_t eval_res = mtmd_helper_eval_chunks(
+        mtmd_ctx,
+        context,
+        chunks,
+        0,  // n_past
+        0,  // seq_id
+        512,  // n_batch
+        true,  // logits_last
+        &n_past
+    );
+    
+    // Clean up
+    for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
+    mtmd_input_chunks_free(chunks);
+    
+    if (eval_res != 0) {
+        LOGe("mtmd_helper_eval_chunks failed: %d", eval_res);
+        return 0;
+    }
+    
+    LOGi("Images and prompt processed, n_past = %d", n_past);
+    
+    return (jint)n_past;
+}
+

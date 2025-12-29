@@ -389,14 +389,88 @@ class PMXConverterService {
   }
 
   /**
+   * Process bulk model upload from nested ZIP files
+   * When a ZIP contains only ZIP files, extract and process each one
+   * @param {File|Blob} zipFile - Uploaded ZIP file containing multiple ZIPs
+   * @param {Function} progressCallback - Optional progress callback (step, message)
+   * @returns {Promise<string[]>} Array of model IDs
+   */
+  async processBulkModelUpload(zipFile, progressCallback = null) {
+    try {
+      const reportProgress = (step, message) => {
+        Logger.log('PMXConverter', `[BULK ${step}] ${message}`);
+        if (progressCallback) progressCallback(step, message);
+      };
+
+      reportProgress('extract', 'Extracting main ZIP archive...');
+      const filesMap = await zipExtractor.extract(zipFile);
+
+      // Extract nested ZIPs
+      const nestedZips = [];
+      for (const [filename, data] of filesMap.entries()) {
+        if (zipExtractor.isZipFile(data)) {
+          nestedZips.push({ filename, data });
+        }
+      }
+
+      if (nestedZips.length === 0) {
+        throw new Error('No ZIP files found in bulk import archive');
+      }
+
+      Logger.log('PMXConverter', `Found ${nestedZips.length} model ZIPs to process`);
+      reportProgress('process', `Processing ${nestedZips.length} models...`);
+
+      const modelIds = [];
+      let successCount = 0;
+      let failCount = 0;
+
+      // Process each nested ZIP one by one
+      for (let i = 0; i < nestedZips.length; i++) {
+        const { filename, data } = nestedZips[i];
+        const modelName = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9\s-_]/g, '');
+        
+        try {
+          reportProgress('convert', `[${i + 1}/${nestedZips.length}] Processing ${filename}...`);
+          
+          const zipBlob = new Blob([data], { type: 'application/zip' });
+          // Pass skipBulkCheck=true to prevent infinite recursion
+          const modelId = await this.processModelUpload(zipBlob, modelName, (step, msg) => {
+            if (progressCallback) {
+              progressCallback(step, `[${i + 1}/${nestedZips.length}] ${msg}`);
+            }
+          }, true);
+          
+          modelIds.push(modelId);
+          successCount++;
+          Logger.log('PMXConverter', `✓ Model ${i + 1}/${nestedZips.length} completed: ${modelName}`);
+          
+        } catch (error) {
+          failCount++;
+          Logger.error('PMXConverter', `✗ Failed to process ${filename}:`, error);
+          // Continue processing other models even if one fails
+        }
+      }
+
+      reportProgress('complete', `Bulk import complete: ${successCount} succeeded, ${failCount} failed`);
+      return modelIds;
+
+    } catch (error) {
+      Logger.error('PMXConverter', 'Bulk upload failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Process uploaded model ZIP file
    * Extracts, validates, finds PMX, converts to BPMX, and saves to storage
+   * Automatically detects if ZIP contains nested ZIPs for bulk import
    * @param {File|Blob} zipFile - Uploaded ZIP file
    * @param {string} modelName - User-provided model name
    * @param {Function} progressCallback - Optional progress callback (step, message)
-   * @returns {Promise<string>} Model ID
+   * @param {boolean} skipBulkCheck - Skip bulk import detection (used for nested processing)
+   * @returns {Promise<string|string[]>} Model ID or array of IDs for bulk import
    */
-  async processModelUpload(zipFile, modelName, progressCallback = null) {
+  async processModelUpload(zipFile, modelName, progressCallback = null, skipBulkCheck = false) {
     try {
       const reportProgress = (step, message) => {
         Logger.log('PMXConverter', `[${step}] ${message}`);
@@ -407,6 +481,31 @@ class PMXConverterService {
       
       const filesMap = await zipExtractor.extract(zipFile);
       
+      // Check if this is a bulk import (skip if this is already a nested ZIP being processed)
+      if (!skipBulkCheck) {
+        const allFiles = Array.from(filesMap.entries());
+        const zipFiles = allFiles.filter(([filename, data]) => zipExtractor.isZipFile(data));
+        const nonZipFiles = allFiles.filter(([filename, data]) => !zipExtractor.isZipFile(data));
+        
+        // If ALL files are ZIPs, treat as bulk import
+        if (zipFiles.length > 0 && nonZipFiles.length === 0) {
+          Logger.log('PMXConverter', `Detected bulk import: ${zipFiles.length} nested ZIPs`);
+          reportProgress('bulk', `Detected ${zipFiles.length} models for bulk import`);
+          return await this.processBulkModelUpload(zipFile, progressCallback);
+        }
+        
+        // Check if there's a PMX file directly
+        const hasPMX = Array.from(filesMap.keys()).some(f => f.toLowerCase().endsWith('.pmx'));
+        
+        // If no PMX found but there are ZIP files, try processing each ZIP
+        if (!hasPMX && zipFiles.length > 0) {
+          Logger.log('PMXConverter', `No PMX in main ZIP, but found ${zipFiles.length} nested ZIPs. Attempting bulk import...`);
+          reportProgress('bulk', `No direct PMX found, trying ${zipFiles.length} nested ZIPs`);
+          return await this.processBulkModelUpload(zipFile, progressCallback);
+        }
+      }
+      
+      // Normal single model processing
       reportProgress('validate', 'Validating contents...');
       
       const validation = this.validateModelZip(filesMap);
@@ -509,15 +608,20 @@ class PMXConverterService {
       }
       
       const hasPMX = info.fileList.some(f => f.toLowerCase().endsWith('.pmx'));
-      if (!hasPMX) {
-        errors.push('No PMX file found in archive');
+      const hasZIP = info.fileList.some(f => f.toLowerCase().endsWith('.zip'));
+      
+      // Valid if it has PMX files OR ZIP files (for bulk import)
+      if (!hasPMX && !hasZIP) {
+        errors.push('No PMX or ZIP files found in archive');
       }
       
       return {
         isValid: errors.length === 0,
         errors,
         fileCount: info.fileCount,
-        totalSize: info.totalSize
+        totalSize: info.totalSize,
+        hasPMX,
+        hasZIP
       };
       
     } catch (error) {

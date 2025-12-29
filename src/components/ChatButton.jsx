@@ -11,6 +11,7 @@ import { Icon } from './icons';
 import Logger from '../services/LoggerService';
 import emoteStorageService from '../services/EmoteStorageService';
 import emotePlayerService from '../services/EmotePlayerService';
+import { modelStorageService } from '../services/ModelStorageService';
 import ZoomControl from './ZoomControl';
 import { isAndroid, isDesktop } from '../utils/PlatformUtils';
 import { PositionPresets } from '../config/uiConfig';
@@ -50,6 +51,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const [isDragOverButton, setIsDragOverButton] = useState(false);
   const [isEmotePanelOpen, setIsEmotePanelOpen] = useState(false);
   const [emotes, setEmotes] = useState([]);
+  const [isAutoPlayActive, setIsAutoPlayActive] = useState(false);
+  const [isEmotePlaying, setIsEmotePlaying] = useState(false);
+  const [currentPlayingEmoteId, setCurrentPlayingEmoteId] = useState(null);
+  const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
+  const [models, setModels] = useState([]);
+  const [selectedModelId, setSelectedModelId] = useState(null);
   const dragDropServiceRef = useRef(null);
   const buttonRef = useRef(null);
   
@@ -72,6 +79,46 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         });
     }
   }, [isEmotePanelOpen]);
+
+  useEffect(() => {
+    if (isAvatarPanelOpen) {
+      modelStorageService.getModelsList()
+        .then(modelsList => {
+          // Filter out Unknown Model (default model without data)
+          const filteredModels = modelsList.filter(model => model.name !== 'Unknown Model');
+          setModels(filteredModels);
+          // Get current default model
+          modelStorageService.getDefaultModel()
+            .then(defaultModel => {
+              setSelectedModelId(defaultModel?.id || null);
+            })
+            .catch(err => {
+              Logger.error('ChatButton', 'Failed to get default model:', err);
+            });
+        })
+        .catch(err => {
+          Logger.error('ChatButton', 'Failed to load models:', err);
+        });
+    }
+  }, [isAvatarPanelOpen]);
+
+  // Track emote playing state
+  useEffect(() => {
+    const checkPlayingState = setInterval(() => {
+      const isPlaying = emotePlayerService.isEmotePlaying();
+      setIsEmotePlaying(isPlaying);
+      
+      // Update current playing emote ID
+      const currentEmoteId = emotePlayerService.getCurrentEmoteId();
+      setCurrentPlayingEmoteId(currentEmoteId);
+      
+      // Update auto-play active state
+      const autoPlayActive = emotePlayerService.isAutoPlayActive();
+      setIsAutoPlayActive(autoPlayActive);
+    }, 100);
+
+    return () => clearInterval(checkPlayingState);
+  }, []);
 
   /**
    * Detect background color under the button
@@ -797,16 +844,57 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const handleZoomOut = useCallback(() => handleZoom('out'), [handleZoom]);
   const handleZoomReset = useCallback(() => handleZoom('reset'), [handleZoom]);
 
+  const handleAutoPlayToggle = useCallback(async () => {
+    try {
+      if (isAutoPlayActive) {
+        emotePlayerService.stopAutoPlay();
+        setIsAutoPlayActive(false);
+        Logger.log('ChatButton', 'Auto-play stopped');
+      } else {
+        const emoteIds = emotes.map(e => e.id);
+        await emotePlayerService.startAutoPlay(emoteIds);
+        setIsAutoPlayActive(true);
+        setIsEmotePanelOpen(false);
+        Logger.log('ChatButton', 'Auto-play started');
+      }
+    } catch (err) {
+      Logger.error('ChatButton', 'Failed to toggle auto-play:', err);
+    }
+  }, [isAutoPlayActive, emotes]);
+
+  const handleModelSelect = useCallback(async (modelId) => {
+    try {
+      if (modelId === null) {
+        await modelStorageService.clearAllDefaults();
+      } else {
+        await modelStorageService.setDefaultModel(modelId);
+      }
+      setSelectedModelId(modelId);
+      setIsAvatarPanelOpen(false);
+      Logger.log('ChatButton', `Model ${modelId || 'default'} selected, reloading page...`);
+      window.location.reload();
+    } catch (err) {
+      Logger.error('ChatButton', 'Failed to select model:', err);
+    }
+  }, []);
+
   if (!shouldRender) return null;
 
-  const TOTAL_BUTTON_OFFSET = 168;
+  const TOTAL_BUTTON_OFFSET = 224;
   
   const emotePanelWidth = 125;
-  const emotePanelHeight = Math.min(emotes.length * 43, 300);
+  // Add extra height for Auto button (43px) when emotes exist
+  const emotePanelHeight = Math.min(emotes.length > 0 ? (emotes.length + 1) * 43 : 43, 300);
   const emotePanelGap = 8;
   const buttonWidth = 48;
+
+  const avatarPanelWidth = 125;
+  // Add 1 for default model
+  const avatarPanelHeight = Math.min((models.length + 1) * 43, 300);
+  const avatarPanelGap = 8;
   
   let emotePanelLeft, emotePanelTop;
+  let avatarPanelLeft, avatarPanelTop;
   
   if (isAndroid) {
     const androidButtonX = 20;
@@ -815,16 +903,25 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     
     emotePanelLeft = androidButtonX;
     emotePanelTop = androidButtonY - androidButtonOffset - emotePanelHeight - emotePanelGap;
+
+    avatarPanelLeft = androidButtonX;
+    avatarPanelTop = androidButtonY - androidButtonOffset - avatarPanelHeight - avatarPanelGap;
   } else if (isDesktop) {
     emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
     emotePanelTop = buttonPos.y - emotePanelHeight - emotePanelGap;
+
+    avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
+    avatarPanelTop = buttonPos.y - avatarPanelHeight - avatarPanelGap;
   } else {
     if (isLeftSide) {
       emotePanelLeft = buttonPos.x;
+      avatarPanelLeft = buttonPos.x;
     } else {
       emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
+      avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
     }
     emotePanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - emotePanelHeight - emotePanelGap;
+    avatarPanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - avatarPanelHeight - avatarPanelGap;
   }
 
   const androidPosition = isAndroid ? {
@@ -870,29 +967,138 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             <span className="truncate">No emotes</span>
           </div>
         ) : (
-          emotes.map((emote, index) => (
+          <>
+            {/* Auto-play button */}
             <button
-              key={emote.id}
-              onClick={async () => {
-                try {
-                  await emotePlayerService.playEmote(emote.id);
-                  setIsEmotePanelOpen(false);
-                } catch (err) {
-                  Logger.error('ChatButton', 'Failed to play emote:', err);
-                }
-              }}
+              onClick={handleAutoPlayToggle}
               style={{ scrollSnapAlign: 'center' }}
-              className={`glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+              className={`glass-button flex items-center justify-center gap-2 px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
                 isLightBackground 
                   ? 'glass-button-dark' 
                   : ''
-              } backdrop-blur-[10px]`}
-              title={emote.name}
+              } backdrop-blur-[10px] ${isAutoPlayActive ? 'ring-2 ring-white/50' : ''}`}
+              title={isAutoPlayActive ? 'Stop auto-play' : 'Start auto-play'}
             >
-              <span className="truncate">{emote.name}</span>
+              <svg 
+                width="14" 
+                height="14" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                className={isAutoPlayActive ? 'animate-[spin_2s_linear_infinite]' : ''}
+              >
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+              <span className="truncate">Auto</span>
             </button>
-          ))
+            
+            {/* Emote list */}
+            {emotes.map((emote, index) => (
+              <button
+                key={emote.id}
+                onClick={async () => {
+                  try {
+                    // Stop auto-play if active
+                    if (isAutoPlayActive) {
+                      emotePlayerService.stopAutoPlay();
+                      setIsAutoPlayActive(false);
+                    }
+                    await emotePlayerService.playEmote(emote.id);
+                    setIsEmotePanelOpen(false);
+                  } catch (err) {
+                    Logger.error('ChatButton', 'Failed to play emote:', err);
+                  }
+                }}
+                style={{ scrollSnapAlign: 'center' }}
+                className={`glass-button flex items-center justify-center gap-2 px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+                  isLightBackground 
+                    ? 'glass-button-dark' 
+                    : ''
+                } backdrop-blur-[10px] ${currentPlayingEmoteId === emote.id ? 'ring-2 ring-white/50' : ''}`}
+                title={emote.name}
+              >
+                {currentPlayingEmoteId === emote.id && (
+                  <svg 
+                    width="14" 
+                    height="14" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                    className="animate-[spin_2s_linear_infinite] flex-shrink-0"
+                  >
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                  </svg>
+                )}
+                <span className="truncate">{emote.name}</span>
+              </button>
+            ))}
+          </>
         )}
+      </div>
+    )}
+
+    {/* Avatar List */}
+    {isAvatarPanelOpen && (
+      <div
+        style={{
+          left: `${avatarPanelLeft}px`,
+          top: `${avatarPanelTop}px`,
+          zIndex: isAndroid ? 201 : 10001,
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          scrollSnapType: 'y mandatory',
+          ...(isDesktop && models.length > 6 ? {
+            maskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
+          } : {})
+        }}
+        className="fixed w-[125px] max-h-[300px] overflow-y-auto py-1"
+      >
+        <style>{`
+          div::-webkit-scrollbar { display: none; }
+        `}</style>
+        {/* Default Model */}
+        <button
+          onClick={() => handleModelSelect(null)}
+          style={{ scrollSnapAlign: 'center' }}
+          className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+            isLightBackground 
+              ? 'glass-button-dark' 
+              : ''
+          } backdrop-blur-[10px] ${selectedModelId === null ? 'ring-2 ring-white/50' : ''}`}
+          title="VAssist Default"
+        >
+          {selectedModelId === null && (
+            <Icon name="check" size={14} className="flex-shrink-0" />
+          )}
+          <span className="truncate flex-1">VAssist Default</span>
+        </button>
+
+        {/* Custom Models */}
+        {models.map((model) => (
+          <button
+            key={model.id}
+            onClick={() => handleModelSelect(model.id)}
+            style={{ scrollSnapAlign: 'center' }}
+            className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+              isLightBackground 
+                ? 'glass-button-dark' 
+                : ''
+            } backdrop-blur-[10px] ${selectedModelId === model.id ? 'ring-2 ring-white/50' : ''}`}
+            title={model.name}
+          >
+            {selectedModelId === model.id && (
+              <Icon name="check" size={14} className="flex-shrink-0" />
+            )}
+            <span className="truncate flex-1">{model.name}</span>
+          </button>
+        ))}
       </div>
     )}
 
@@ -921,7 +1127,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
       {/* Emote Button */}
       <button
-        onClick={() => setIsEmotePanelOpen(!isEmotePanelOpen)}
+        onClick={() => {
+          if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
+          setIsEmotePanelOpen(!isEmotePanelOpen);
+        }}
         className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
           isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
         }`}
@@ -929,6 +1138,24 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       >
         <Icon 
           name="music" 
+          size={24} 
+          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg ${isEmotePlaying ? 'animate-[spin_2s_linear_infinite]' : ''}`}
+        />
+      </button>
+
+      {/* Avatar Button */}
+      <button
+        onClick={() => {
+          if (isEmotePanelOpen) setIsEmotePanelOpen(false);
+          setIsAvatarPanelOpen(!isAvatarPanelOpen);
+        }}
+        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
+          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
+        }`}
+        title="Change Avatar"
+      >
+        <Icon 
+          name="user" 
           size={24} 
           className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
         />

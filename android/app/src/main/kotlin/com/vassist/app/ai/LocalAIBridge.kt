@@ -36,6 +36,7 @@ class LocalAIBridge(
 
     private val gson = Gson()
     private val modelManager = LLMModelManager(context)
+    private val sttTtsManager = STTTTSModelManager(context)
 
     /**
      * Get the base URL of the local AI server
@@ -394,6 +395,189 @@ class LocalAIBridge(
         val jsCode = """
             if (window.AndroidAI && window.AndroidAI._onImportComplete) {
                 window.AndroidAI._onImportComplete({"success": false, "error": "$safeError"});
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+
+    // ============================================================================
+    // STT/TTS Model Management
+    // ============================================================================
+
+    /**
+     * Get STT/TTS model status
+     * @return JSON string with model availability and sizes
+     */
+    @JavascriptInterface
+    fun getSTTTTSStatus(): String {
+        return try {
+            val status = sttTtsManager.getModelStatus()
+            gson.toJson(mapOf(
+                "success" to true,
+                "status" to status
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "getSTTTTSStatus failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download Whisper STT model (async with progress)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadWhisperModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadWhisperModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("whisper", percent, status)
+                        }
+                    }
+                )
+                
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("whisper", result)
+                } else {
+                    emitSTTTTSError("whisper", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadWhisperModel failed", e)
+                emitSTTTTSError("whisper", e.message ?: "Download failed")
+            }
+        }
+        
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Download VITS TTS model (async with progress)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadVitsModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadVitsModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("vits", percent, status)
+                        }
+                    }
+                )
+                
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("vits", result)
+                } else {
+                    emitSTTTTSError("vits", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadVitsModel failed", e)
+                emitSTTTTSError("vits", e.message ?: "Download failed")
+            }
+        }
+        
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete Whisper model files
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteWhisperModel(): String {
+        return try {
+            val success = sttTtsManager.deleteWhisperModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteWhisperModel failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Delete VITS model files
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteVitsModel(): String {
+        return try {
+            val success = sttTtsManager.deleteVitsModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteVitsModel failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Emit STT/TTS download progress to JavaScript
+     * Calls window.AndroidAI._onSTTTTSProgress(modelType, percent, status)
+     */
+    private fun emitSTTTTSProgress(modelType: String, percent: Int, status: String) {
+        val safeStatus = status.replace("\"", "\\\"")
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onSTTTTSProgress) {
+                window.AndroidAI._onSTTTTSProgress("$modelType", $percent, "$safeStatus");
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+
+    /**
+     * Emit STT/TTS download complete to JavaScript
+     * Calls window.AndroidAI._onSTTTTSComplete(modelType, result)
+     */
+    private fun emitSTTTTSComplete(modelType: String, result: Map<String, Any>) {
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onSTTTTSComplete) {
+                window.AndroidAI._onSTTTTSComplete("$modelType", ${gson.toJson(result)});
+            }
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCode, null)
+        }
+    }
+
+    /**
+     * Emit STT/TTS download error to JavaScript
+     * Calls window.AndroidAI._onSTTTTSError(modelType, error)
+     */
+    private fun emitSTTTTSError(modelType: String, error: String) {
+        val safeError = error.replace("\"", "\\\"")
+        val jsCode = """
+            if (window.AndroidAI && window.AndroidAI._onSTTTTSError) {
+                window.AndroidAI._onSTTTTSError("$modelType", "$safeError");
             }
         """.trimIndent()
         

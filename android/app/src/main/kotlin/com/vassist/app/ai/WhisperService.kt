@@ -3,6 +3,8 @@ package com.vassist.app.ai
 import android.content.Context
 import android.util.Log
 import com.k2fsa.sherpa.onnx.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -25,6 +27,7 @@ class WhisperService(private val context: Context) {
         private const val SAMPLE_RATE = 16000
     }
 
+    private val modelManager = STTTTSModelManager(context)
     private var recognizer: OfflineRecognizer? = null
     
     var isInitialized = false
@@ -141,7 +144,8 @@ class WhisperService(private val context: Context) {
     suspend fun transcribe(audioData: ByteArray, language: String? = null): String {
         val rec = recognizer
         if (!isInitialized || rec == null) {
-            throw IllegalStateException("WhisperService not initialized")
+            Log.e(TAG, "WhisperService not initialized - models may not be downloaded")
+            return "[Error: Whisper model not available. Please download the model from settings.]" 
         }
         
         try {

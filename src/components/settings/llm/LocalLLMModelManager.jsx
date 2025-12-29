@@ -482,6 +482,14 @@ const LocalLLMModelManager = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {model.hasImageSupport && (
+                    <div
+                      className="p-2 text-white/70"
+                      title="Supports vision/image input"
+                    >
+                      <Icon name="image" size={16} />
+                    </div>
+                  )}
                   <button
                     onClick={() => handleDelete(model.name)}
                     className="p-2 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"

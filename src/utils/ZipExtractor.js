@@ -94,6 +94,21 @@ class ZipExtractor {
       return false;
     }
   }
+
+  /**
+   * Check if a file is a ZIP file based on content
+   * @param {ArrayBuffer} data - File data
+   * @returns {boolean} True if file appears to be a ZIP
+   */
+  isZipFile(data) {
+    if (!data || data.byteLength < 4) {
+      return false;
+    }
+    // Check ZIP file signature (PK header: 0x50 0x4B 0x03 0x04 or 0x50 0x4B 0x05 0x06)
+    const view = new Uint8Array(data);
+    return view[0] === 0x50 && view[1] === 0x4B && 
+           ((view[2] === 0x03 && view[3] === 0x04) || (view[2] === 0x05 && view[3] === 0x06));
+  }
 }
 
 // Create singleton instance

@@ -4,8 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
+import com.google.gson.GsonBuilder
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.toList
@@ -18,6 +22,8 @@ import java.io.InputStream
 import java.io.OutputStreamWriter
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
+import java.lang.reflect.Type
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -56,7 +62,9 @@ class LocalAIServer(
         fun getBaseUrl(port: Int = DEFAULT_PORT): String = "http://127.0.0.1:$port"
     }
 
-    private val gson = Gson()
+    private val gson = GsonBuilder()
+        .registerTypeAdapter(MessageContent::class.java, MessageContentDeserializer())
+        .create()
     
     // Use a single-threaded dispatcher for native AI operations to avoid threading issues
     @OptIn(DelicateCoroutinesApi::class)
@@ -80,6 +88,9 @@ class LocalAIServer(
     var isInitialized = false
         private set
     
+    // Track currently loaded LLM model path
+    private var currentModelPath: String? = null
+    
     /**
      * Get or initialize Whisper service (thread-safe, non-blocking)
      */
@@ -95,7 +106,11 @@ class LocalAIServer(
                 val service = WhisperService(context)
                 service.initialize()
                 whisperService = service
-                Log.i(TAG, "Whisper service initialized")
+                if (!service.isInitialized) {
+                    Log.w(TAG, "Whisper service failed to initialize - models may not be downloaded")
+                } else {
+                    Log.i(TAG, "Whisper service initialized successfully")
+                }
                 service
             }
         }
@@ -116,7 +131,11 @@ class LocalAIServer(
                 val service = VitsService(context)
                 service.initialize()
                 vitsService = service
-                Log.i(TAG, "VITS service initialized")
+                if (!service.isInitialized) {
+                    Log.w(TAG, "VITS service failed to initialize - models may not be downloaded")
+                } else {
+                    Log.i(TAG, "VITS service initialized successfully")
+                }
                 service
             }
         }
@@ -135,9 +154,10 @@ class LocalAIServer(
             withContext(aiDispatcher) {
                 Log.i(TAG, "Lazy-loading Llama service on dedicated thread...")
                 val service = LlamaService(context)
-                service.initialize()
+                val modelPath = service.initialize()
                 llamaService = service
-                Log.i(TAG, "Llama service initialized: ${service.modelName}")
+                currentModelPath = modelPath
+                Log.i(TAG, "Llama service initialized with model: $modelPath")
                 service
             }
         }
@@ -434,19 +454,101 @@ class LocalAIServer(
         
         val maxTokens = request.max_tokens ?: 2048
         val stream = request.stream ?: false
+        val requestedModel = request.model
+        
+        // Load/swap model if needed (on-demand like Desktop)
+        if (requestedModel != null && requestedModel != "local") {
+            val modelPath = resolveModelPath(requestedModel)
+            Log.d(TAG, "Request model: $requestedModel, resolved: $modelPath")
+            Log.d(TAG, "Current model: $currentModelPath")
+            
+            if (modelPath != currentModelPath) {
+                Log.i(TAG, "Model switch requested: $currentModelPath -> $modelPath")
+                try {
+                    // Reload LlamaService with new model
+                    runBlocking(aiDispatcher) {
+                        llamaMutex.withLock {
+                            llamaService?.release()
+                            llamaService = null
+                            currentModelPath = null
+                            
+                            val service = LlamaService(context)
+                            service.initialize(modelPath)
+                            llamaService = service
+                            currentModelPath = modelPath
+                            Log.i(TAG, "Model switched successfully")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to switch model", e)
+                    return errorResponse(Response.Status.INTERNAL_ERROR, "Failed to load model: ${e.message}")
+                }
+            }
+        }
         
         // Convert to LlamaService format
-        val messages = request.messages.map { msg ->
-            LlamaService.ChatMessage(
-                role = msg.role ?: "user",
-                content = msg.content ?: ""
-            )
+        val llamaMessages = mutableListOf<LlamaService.ChatMessage>()
+        val images = mutableListOf<ByteArray>()
+        
+        // Only collect images from the LAST message to avoid re-processing old images on Android
+        val lastMessageIndex = request.messages.size - 1
+        
+        for ((index, msg) in request.messages.withIndex()) {
+            val content = msg.content
+            val textParts = mutableListOf<String>()
+            val isLastMessage = index == lastMessageIndex
+            
+            when (content) {
+                is MessageContent.TextContent -> {
+                    llamaMessages.add(LlamaService.ChatMessage(
+                        role = msg.role ?: "user",
+                        content = content.text
+                    ))
+                }
+                is MessageContent.MultipartContent -> {
+                    // Extract text and images from multipart content
+                    // Process parts in order to maintain proper text/image positioning
+                    for (part in content.parts) {
+                        when (part) {
+                            is ContentPart.TextPart -> textParts.add(part.text)
+                            is ContentPart.ImagePart -> {
+                                if (isLastMessage) {
+                                    // Only decode and process images from the latest message
+                                    val imageData = part.image_url.url
+                                    if (imageData.startsWith("data:image")) {
+                                        val base64Data = imageData.substringAfter("base64,")
+                                        val imageBytes = Base64.getDecoder().decode(base64Data)
+                                        images.add(imageBytes)
+                                        // Add mtmd default image marker - gets replaced with media_marker during tokenization
+                                        textParts.add("<__image__>")
+                                    }
+                                } else {
+                                    // For old messages, keep the text description but skip image processing
+                                    textParts.add("[image]")
+                                }
+                            }
+                        }
+                    }
+                    
+                    llamaMessages.add(LlamaService.ChatMessage(
+                        role = msg.role ?: "user",
+                        content = textParts.joinToString("")
+                    ))
+                }
+                null -> {
+                    // Handle null content
+                    llamaMessages.add(LlamaService.ChatMessage(
+                        role = msg.role ?: "user",
+                        content = ""
+                    ))
+                }
+            }
         }
         
         return if (stream) {
-            handleChatCompletionStreaming(messages, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local")
         } else {
-            handleChatCompletionSync(messages, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local")
         }
     }
     
@@ -455,13 +557,14 @@ class LocalAIServer(
      */
     private fun handleChatCompletionSync(
         messages: List<LlamaService.ChatMessage>,
+        images: List<ByteArray>,
         maxTokens: Int,
         model: String
     ): Response {
         return runBlocking(aiDispatcher) {
             try {
                 val llama = getLlamaService()
-                var response = llama.chatCompletionSync(messages, maxTokens)
+                var response = llama.chatCompletionSync(messages, maxTokens, images.ifEmpty { null })
                 
                 // Strip <think>...</think> blocks from response
                 response = stripThinkBlocks(response)
@@ -501,6 +604,7 @@ class LocalAIServer(
      */
     private fun handleChatCompletionStreaming(
         messages: List<LlamaService.ChatMessage>,
+        images: List<ByteArray>,
         maxTokens: Int,
         model: String
     ): Response {
@@ -525,7 +629,7 @@ class LocalAIServer(
                 
                 Log.d(TAG, "Starting streaming chat completion...")
                 
-                llama.chatCompletion(messages, maxTokens).collect { token ->
+                llama.chatCompletion(messages, maxTokens, images.ifEmpty { null }).collect { token ->
                     totalTokens++
                     buffer.append(token)
                     
@@ -556,23 +660,28 @@ class LocalAIServer(
                         Log.d(TAG, "Exited think block at token $totalTokens")
                     }
                     
-                    // If not in think block, send accumulated content
+                    // If not in think block, send tokens more aggressively
                     if (!inThinkBlock && buffer.isNotEmpty()) {
-                        // Don't send if buffer might be start of <think>
-                        if (!buffer.toString().startsWith("<") || buffer.length > 7) {
-                            val toSend = if (buffer.startsWith("<")) {
-                                // Might be partial tag, wait
-                                ""
-                            } else {
-                                val content = buffer.toString()
-                                buffer.clear()
-                                content
-                            }
-                            if (toSend.isNotEmpty()) {
-                                sendStreamChunk(writer, completionId, created, model, toSend)
-                                sentChars += toSend.length
-                            }
+                        // Check if buffer might be start of <think> tag
+                        val bufStr = buffer.toString()
+                        val possibleTag = bufStr.startsWith("<") && !bufStr.contains(">")
+                        
+                        if (!possibleTag) {
+                            // Send everything
+                            Log.d(TAG, "Sending chunk: '$bufStr'")
+                            sendStreamChunk(writer, completionId, created, model, bufStr)
+                            sentChars += bufStr.length
+                            buffer.clear()
+                        } else if (bufStr.length > 8) {
+                            // Too long to be <think>, send it
+                            Log.d(TAG, "Sending long buffer: '$bufStr'")
+                            sendStreamChunk(writer, completionId, created, model, bufStr)
+                            sentChars += bufStr.length
+                            buffer.clear()
+                        } else {
+                            Log.d(TAG, "Holding buffer (possible tag): '$bufStr'")
                         }
+                        // Otherwise keep buffering to see if it's really <think>
                     }
                 }
                 
@@ -644,6 +753,44 @@ class LocalAIServer(
             })
         }
         return newFixedLengthResponse(status, "application/json", gson.toJson(error))
+    }
+    
+    /**
+     * Resolve model name/path to absolute file path
+     * Searches in external models directory
+     */
+    private fun resolveModelPath(modelNameOrPath: String): String {
+        // If already absolute path, return it
+        val file = File(modelNameOrPath)
+        if (file.isAbsolute && file.exists()) {
+            return modelNameOrPath
+        }
+        
+        // Search in external models/llm directory
+        val modelsDir = File(context.getExternalFilesDir(null), "models/llm")
+        if (!modelsDir.exists()) {
+            throw IllegalArgumentException("Models directory does not exist: ${modelsDir.absolutePath}")
+        }
+        
+        // Try exact match first
+        val exactMatch = File(modelsDir, modelNameOrPath)
+        if (exactMatch.exists()) {
+            return exactMatch.absolutePath
+        }
+        
+        // Try case-insensitive match
+        val modelLower = modelNameOrPath.lowercase()
+        val files = modelsDir.listFiles() ?: emptyArray()
+        val match = files.find { 
+            it.name.lowercase() == modelLower || 
+            it.name.lowercase().contains(modelLower.split(":")[0])
+        }
+        
+        if (match != null) {
+            return match.absolutePath
+        }
+        
+        throw IllegalArgumentException("Model not found: $modelNameOrPath in ${modelsDir.absolutePath}")
     }
 
     /**
@@ -730,6 +877,48 @@ class LocalAIServer(
     
     data class ChatMessage(
         val role: String?,
-        val content: String?
+        val content: MessageContent?
     )
+    
+    // Support both string content and multipart content (for images)
+    sealed class MessageContent {
+        data class TextContent(val text: String) : MessageContent()
+        data class MultipartContent(val parts: List<ContentPart>) : MessageContent()
+    }
+    
+    sealed class ContentPart {
+        data class TextPart(val type: String, val text: String) : ContentPart()
+        data class ImagePart(val type: String, val image_url: ImageUrl) : ContentPart()
+    }
+    
+    data class ImageUrl(val url: String)
+    
+    // Custom deserializer to handle both string and array content
+    class MessageContentDeserializer : JsonDeserializer<MessageContent> {
+        override fun deserialize(
+            json: JsonElement,
+            typeOfT: Type,
+            context: JsonDeserializationContext
+        ): MessageContent {
+            return when {
+                json.isJsonPrimitive -> MessageContent.TextContent(json.asString)
+                json.isJsonArray -> {
+                    val parts = mutableListOf<ContentPart>()
+                    for (element in json.asJsonArray) {
+                        val obj = element.asJsonObject
+                        val type = obj.get("type").asString
+                        when (type) {
+                            "text" -> parts.add(ContentPart.TextPart(type, obj.get("text").asString))
+                            "image_url" -> {
+                                val imageUrl = obj.getAsJsonObject("image_url")
+                                parts.add(ContentPart.ImagePart(type, ImageUrl(imageUrl.get("url").asString)))
+                            }
+                        }
+                    }
+                    MessageContent.MultipartContent(parts)
+                }
+                else -> MessageContent.TextContent("")
+            }
+        }
+    }
 }

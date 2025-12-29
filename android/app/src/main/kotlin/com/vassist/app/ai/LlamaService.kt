@@ -42,12 +42,13 @@ class LlamaService(private val context: Context) {
      * @param modelPath Path to GGUF model file (absolute or relative to models/llm/)
      * @param contextSize Context window size
      * @param temperature Sampling temperature
+     * @return Absolute path to the loaded model
      */
     suspend fun initialize(
         modelPath: String? = null,
         contextSize: Int = DEFAULT_CONTEXT_SIZE,
         temperature: Float = DEFAULT_TEMPERATURE
-    ) {
+    ): String {
         try {
             val modelFile = resolveModelPath(modelPath)
             
@@ -73,6 +74,8 @@ class LlamaService(private val context: Context) {
             
             isInitialized = true
             
+            return modelFile.absolutePath
+            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize LLM", e)
             throw e
@@ -84,11 +87,13 @@ class LlamaService(private val context: Context) {
      * 
      * @param messages List of chat messages
      * @param maxTokens Maximum tokens to generate
+     * @param images Optional list of image byte arrays
      * @return Flow of generated text tokens
      */
     fun chatCompletion(
         messages: List<ChatMessage>,
-        maxTokens: Int = DEFAULT_MAX_TOKENS
+        maxTokens: Int = DEFAULT_MAX_TOKENS,
+        images: List<ByteArray>? = null
     ): Flow<String> {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
@@ -97,7 +102,7 @@ class LlamaService(private val context: Context) {
         val prompt = formatChatPrompt(messages)
         Log.d(TAG, "Chat prompt (${prompt.length} chars): ${prompt.take(200)}...")
         
-        return llama.complete(prompt, maxTokens)
+        return llama.complete(prompt, maxTokens, images)
     }
     
     /**
@@ -105,18 +110,20 @@ class LlamaService(private val context: Context) {
      * 
      * @param messages List of chat messages
      * @param maxTokens Maximum tokens to generate
+     * @param images Optional list of image byte arrays
      * @return Complete generated response
      */
     suspend fun chatCompletionSync(
         messages: List<ChatMessage>,
-        maxTokens: Int = DEFAULT_MAX_TOKENS
+        maxTokens: Int = DEFAULT_MAX_TOKENS,
+        images: List<ByteArray>? = null
     ): String {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
         val prompt = formatChatPrompt(messages)
-        return llama.generate(prompt, maxTokens)
+        return llama.generate(prompt, maxTokens, images)
     }
     
     /**

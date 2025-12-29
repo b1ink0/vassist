@@ -20,7 +20,8 @@ data class OllamaManifest(
 
 data class OllamaLayer(
     @SerializedName("digest") val digest: String,
-    @SerializedName("size") val size: Long
+    @SerializedName("size") val size: Long,
+    @SerializedName("mediaType") val mediaType: String? = null
 )
 
 /**
@@ -60,19 +61,24 @@ class LLMModelManager(private val context: Context) {
     }
     
     /**
-     * List all installed GGUF models
-     * @return List of model info maps with keys: name, size, modified
+     * List all installed GGUF models (excluding mmproj files)
+     * @return List of model info maps with keys: name, size, modified, hasImageSupport
      */
     fun listModels(): List<Map<String, Any>> {
         val modelsDir = getModelsDirectory()
         
         val models = modelsDir.listFiles { file -> 
-            file.extension.equals("gguf", ignoreCase = true) 
+            file.extension.equals("gguf", ignoreCase = true) &&
+            !file.name.startsWith("mmproj-", ignoreCase = true)
         }?.map { file ->
+            // Check if corresponding mmproj file exists
+            val mmprojFile = File(modelsDir, "mmproj-${file.name}")
+            
             mapOf(
                 "name" to file.name,
                 "size" to file.length(),
-                "modified" to file.lastModified()
+                "modified" to file.lastModified(),
+                "hasImageSupport" to mmprojFile.exists()
             )
         } ?: emptyList()
         
@@ -82,6 +88,7 @@ class LLMModelManager(private val context: Context) {
     
     /**
      * Download model from URL (e.g., HuggingFace)
+     * Also checks for and downloads mmproj files for vision-capable models
      * @param url Direct download URL
      * @param progressListener Progress callback (optional)
      * @return Map with success status and filename/error
@@ -106,7 +113,8 @@ class LLMModelManager(private val context: Context) {
             val modelsDir = getModelsDirectory()
             val destFile = File(modelsDir, filename)
             
-            // Download file
+            // Download main model file
+            progressListener?.onProgress(0, "Downloading model...")
             val connection = URL(url).openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -135,13 +143,13 @@ class LLMModelManager(private val context: Context) {
                         output.write(buffer, 0, bytesRead)
                         downloadedSize += bytesRead
                         
-                        val percent = ((downloadedSize * 100) / totalSize).toInt()
+                        val percent = ((downloadedSize * 50) / totalSize).toInt() // First 50% for main model
                         if (percent != lastReportedPercent) {
                             val downloadedMB = downloadedSize / (1024 * 1024)
                             val totalMB = totalSize / (1024 * 1024)
                             progressListener?.onProgress(
                                 percent,
-                                "Downloading: ${downloadedMB}MB / ${totalMB}MB"
+                                "Model: ${downloadedMB}MB / ${totalMB}MB"
                             )
                             lastReportedPercent = percent
                         }
@@ -151,8 +159,102 @@ class LLMModelManager(private val context: Context) {
             
             connection.disconnect()
             
-            progressListener?.onProgress(100, "Download complete: $filename")
+            progressListener?.onProgress(50, "Model downloaded, checking for vision encoder...")
             Log.i(TAG, "Successfully downloaded model: $filename")
+            
+            // Check if HuggingFace URL and try to find mmproj file
+            var mmprojDownloaded = false
+            if (url.contains("huggingface.co")) {
+                try {
+                    // Extract repo info from URL
+                    val urlPattern = Regex("huggingface\\.co/([^/]+/[^/]+)/resolve/([^/]+)/(.*)")
+                    val match = urlPattern.find(url)
+                    
+                    if (match != null) {
+                        val repo = match.groupValues[1]
+                        val branch = match.groupValues[2]
+                        
+                        Log.d(TAG, "Checking HuggingFace repo: $repo for mmproj files")
+                        
+                        // Check repo API for mmproj files
+                        val apiUrl = "https://huggingface.co/api/models/$repo/tree/$branch"
+                        val apiConnection = URL(apiUrl).openConnection() as HttpURLConnection
+                        apiConnection.requestMethod = "GET"
+                        apiConnection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                        apiConnection.connectTimeout = 10000
+                        apiConnection.readTimeout = 10000
+                        
+                        if (apiConnection.responseCode == 200) {
+                            val apiResponse = apiConnection.inputStream.bufferedReader().use { it.readText() }
+                            apiConnection.disconnect()
+                            
+                            // Look for mmproj file in response
+                            if (apiResponse.contains("mmproj") && apiResponse.contains(".gguf")) {
+                                val mmprojPattern = Regex("\"path\"\\s*:\\s*\"([^\"]*mmproj[^\"]*\\.gguf)\"")
+                                val mmprojMatch = mmprojPattern.find(apiResponse)
+                                
+                                if (mmprojMatch != null) {
+                                    val mmprojPath = mmprojMatch.groupValues[1]
+                                    val mmprojUrl = "https://huggingface.co/$repo/resolve/$branch/$mmprojPath"
+                                    
+                                    Log.i(TAG, "Found mmproj file, downloading: $mmprojPath")
+                                    progressListener?.onProgress(51, "Downloading vision encoder...")
+                                    
+                                    mmprojDownloaded = downloadMmprojFile(mmprojUrl, filename, progressListener)
+                                }
+                            }
+                        } else {
+                            apiConnection.disconnect()
+                        }
+                    }
+                    
+                    // If not found in main repo, try ggml-org fallback
+                    if (!mmprojDownloaded) {
+                        val baseModelName = filename.replace(Regex("-Q[0-9]_[0-9KML]+.*\\.gguf$"), "").replace(".gguf", "")
+                        val fallbackRepo = "ggml-org/$baseModelName-GGUF"
+                        
+                        Log.d(TAG, "Trying fallback repo: $fallbackRepo")
+                        
+                        val fallbackApiUrl = "https://huggingface.co/api/models/$fallbackRepo/tree/main"
+                        val fallbackConnection = URL(fallbackApiUrl).openConnection() as HttpURLConnection
+                        fallbackConnection.requestMethod = "GET"
+                        fallbackConnection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                        fallbackConnection.connectTimeout = 10000
+                        fallbackConnection.readTimeout = 10000
+                        
+                        if (fallbackConnection.responseCode == 200) {
+                            val fallbackResponse = fallbackConnection.inputStream.bufferedReader().use { it.readText() }
+                            fallbackConnection.disconnect()
+                            
+                            if (fallbackResponse.contains("mmproj") && fallbackResponse.contains(".gguf")) {
+                                val mmprojPattern = Regex("\"path\"\\s*:\\s*\"([^\"]*mmproj[^\"]*\\.gguf)\"")
+                                val mmprojMatch = mmprojPattern.find(fallbackResponse)
+                                
+                                if (mmprojMatch != null) {
+                                    val mmprojPath = mmprojMatch.groupValues[1]
+                                    val mmprojUrl = "https://huggingface.co/$fallbackRepo/resolve/main/$mmprojPath"
+                                    
+                                    Log.i(TAG, "Found mmproj in fallback repo, downloading: $mmprojPath")
+                                    progressListener?.onProgress(51, "Downloading vision encoder...")
+                                    
+                                    mmprojDownloaded = downloadMmprojFile(mmprojUrl, filename, progressListener)
+                                }
+                            }
+                        } else {
+                            fallbackConnection.disconnect()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to check for mmproj file: ${e.message}")
+                }
+            }
+            
+            if (mmprojDownloaded) {
+                progressListener?.onProgress(100, "Model with vision support ready")
+                Log.i(TAG, "Model has vision support (mmproj downloaded)")
+            } else {
+                progressListener?.onProgress(100, "Model ready: $filename")
+            }
             
             mapOf(
                 "success" to true,
@@ -165,6 +267,77 @@ class LLMModelManager(private val context: Context) {
                 "success" to false,
                 "error" to "Download failed: ${e.message}"
             )
+        }
+    }
+    
+    /**
+     * Download mmproj file for a model
+     * Returns true if successful, false otherwise
+     */
+    private fun downloadMmprojFile(
+        mmprojUrl: String,
+        mainModelFilename: String,
+        progressListener: DownloadProgressListener?
+    ): Boolean {
+        return try {
+            val modelsDir = getModelsDirectory()
+            val mmprojFilename = "mmproj-$mainModelFilename"
+            val mmprojDestFile = File(modelsDir, mmprojFilename)
+            
+            val connection = URL(mmprojUrl).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
+            
+            // Handle redirects
+            if (connection.responseCode == HttpURLConnection.HTTP_MOVED_PERM || 
+                connection.responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                connection.responseCode == HttpURLConnection.HTTP_SEE_OTHER) {
+                val redirectUrl = connection.getHeaderField("Location")
+                connection.disconnect()
+                return downloadMmprojFile(redirectUrl, mainModelFilename, progressListener)
+            }
+            
+            if (connection.responseCode != 200) {
+                connection.disconnect()
+                return false
+            }
+            
+            val totalSize = connection.contentLength.toLong()
+            var downloadedSize = 0L
+            var lastReportedPercent = 50
+            
+            connection.inputStream.use { input ->
+                FileOutputStream(mmprojDestFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        downloadedSize += bytesRead
+                        
+                        val percent = 50 + ((downloadedSize * 50) / totalSize).toInt() // 50-100% for mmproj
+                        if (percent != lastReportedPercent) {
+                            val downloadedMB = downloadedSize / (1024 * 1024)
+                            val totalMB = totalSize / (1024 * 1024)
+                            progressListener?.onProgress(
+                                percent,
+                                "Vision: ${downloadedMB}MB / ${totalMB}MB"
+                            )
+                            lastReportedPercent = percent
+                        }
+                    }
+                }
+            }
+            
+            connection.disconnect()
+            Log.i(TAG, "Successfully downloaded mmproj: $mmprojFilename")
+            true
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to download mmproj file: ${e.message}")
+            false
         }
     }
     
@@ -236,35 +409,39 @@ class LLMModelManager(private val context: Context) {
             
             val layers = manifest.layers?.filter { it.digest.startsWith("sha256:") } ?: emptyList()
             
-            Log.i(TAG, "Found ${layers.size} layers in manifest")
+            // Separate model layers from projector (mmproj) layers
+            val modelLayers = layers.filter { it.mediaType != "application/vnd.ollama.image.projector" }
+            val mmprojLayers = layers.filter { it.mediaType == "application/vnd.ollama.image.projector" }
+            
+            Log.i(TAG, "Found ${modelLayers.size} model layers and ${mmprojLayers.size} projector layers in manifest")
             layers.forEachIndexed { index, layer ->
-                Log.d(TAG, "Layer $index: ${layer.digest.substring(0, 19)}... (${layer.size / 1024 / 1024}MB)")
+                Log.d(TAG, "Layer $index: ${layer.digest.substring(0, 19)}... (${layer.size / 1024 / 1024}MB) - ${layer.mediaType ?: "unknown"}")
             }
             
-            if (layers.isEmpty()) {
+            if (modelLayers.isEmpty()) {
                 return@withContext mapOf(
                     "success" to false,
-                    "error" to "No layers found in manifest"
+                    "error" to "No model layers found in manifest"
                 )
             }
             
-            progressListener?.onProgress(2, "Found ${layers.size} layers to download")
+            progressListener?.onProgress(2, "Found ${modelLayers.size} model layers to download")
             
             val modelsDir = getModelsDirectory()
-            val downloadedFiles = mutableListOf<Pair<File, Long>>()
+            val downloadedModelFiles = mutableListOf<Pair<File, Long>>()
             
-            // Download each layer as separate file
-            layers.forEachIndexed { index, layer ->
+            // Download model layers
+            modelLayers.forEachIndexed { index, layer ->
                 try {
                     val blobUrl = "https://registry.ollama.ai/v2/$namespace/blobs/${layer.digest}"
                     val tempFileName = "${model.replace("/", "_")}-$tag-${layer.digest.substring(7, 19)}.tmp"
                     val tempFile = File(modelsDir, tempFileName)
                     
-                    Log.i(TAG, "Downloading layer ${index + 1}/${layers.size} from: $blobUrl")
+                    Log.i(TAG, "Downloading model layer ${index + 1}/${modelLayers.size} from: $blobUrl")
                     
                     progressListener?.onProgress(
-                        2 + (index * 93 / layers.size),
-                        "Starting layer ${index + 1}/${layers.size}..."
+                        2 + (index * 45 / modelLayers.size),
+                        "Model layer ${index + 1}/${modelLayers.size}..."
                     )
                     
                     val downloadedSize = downloadLayer(
@@ -272,16 +449,15 @@ class LLMModelManager(private val context: Context) {
                         tempFile,
                         layer.size,
                         index + 1,
-                        layers.size,
+                        modelLayers.size,
                         progressListener
                     )
                     
-                    Log.i(TAG, "Downloaded layer ${index + 1}: ${tempFile.name} (${downloadedSize / 1024 / 1024}MB)")
-                    downloadedFiles.add(Pair(tempFile, downloadedSize))
+                    Log.i(TAG, "Downloaded model layer ${index + 1}: ${tempFile.name} (${downloadedSize / 1024 / 1024}MB)")
+                    downloadedModelFiles.add(Pair(tempFile, downloadedSize))
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to download layer ${index + 1}/${layers.size}", e)
-                    // Clean up any partially downloaded files
-                    downloadedFiles.forEach { (file, _) ->
+                    Log.e(TAG, "Failed to download model layer ${index + 1}/${modelLayers.size}", e)
+                    downloadedModelFiles.forEach { (file, _) ->
                         if (file.exists()) {
                             file.delete()
                             Log.d(TAG, "Cleaned up: ${file.name}")
@@ -289,38 +465,107 @@ class LLMModelManager(private val context: Context) {
                     }
                     return@withContext mapOf(
                         "success" to false,
-                        "error" to "Failed to download layer ${index + 1}: ${e.message}"
+                        "error" to "Failed to download model layer ${index + 1}: ${e.message}"
                     )
                 }
             }
             
-            progressListener?.onProgress(95, "Processing files...")
+            // Download mmproj layers if they exist
+            val downloadedMmprojFiles = mutableListOf<Pair<File, Long>>()
+            if (mmprojLayers.isNotEmpty()) {
+                progressListener?.onProgress(47, "Found vision encoder, downloading...")
+                
+                mmprojLayers.forEachIndexed { index, layer ->
+                    try {
+                        val blobUrl = "https://registry.ollama.ai/v2/$namespace/blobs/${layer.digest}"
+                        val tempFileName = "mmproj-${model.replace("/", "_")}-$tag-${layer.digest.substring(7, 19)}.tmp"
+                        val tempFile = File(modelsDir, tempFileName)
+                        
+                        Log.i(TAG, "Downloading vision encoder layer ${index + 1}/${mmprojLayers.size} from: $blobUrl")
+                        
+                        progressListener?.onProgress(
+                            47 + (index * 45 / mmprojLayers.size),
+                            "Vision encoder ${index + 1}/${mmprojLayers.size}..."
+                        )
+                        
+                        val downloadedSize = downloadLayer(
+                            blobUrl,
+                            tempFile,
+                            layer.size,
+                            index + 1,
+                            mmprojLayers.size,
+                            progressListener
+                        )
+                        
+                        Log.i(TAG, "Downloaded vision encoder layer ${index + 1}: ${tempFile.name} (${downloadedSize / 1024 / 1024}MB)")
+                        downloadedMmprojFiles.add(Pair(tempFile, downloadedSize))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to download vision encoder layer ${index + 1}/${mmprojLayers.size}", e)
+                        downloadedModelFiles.forEach { (file, _) -> if (file.exists()) file.delete() }
+                        downloadedMmprojFiles.forEach { (file, _) -> if (file.exists()) file.delete() }
+                        return@withContext mapOf(
+                            "success" to false,
+                            "error" to "Failed to download vision encoder layer ${index + 1}: ${e.message}"
+                        )
+                    }
+                }
+            }
             
-            // Find largest file (the GGUF model)
-            val largestFile = downloadedFiles.maxByOrNull { it.second }
-                ?: throw Exception("No files downloaded")
+            progressListener?.onProgress(92, "Processing files...")
             
-            // Rename largest file to final name
+            // Find largest model file (the main GGUF model)
+            val largestModelFile = downloadedModelFiles.maxByOrNull { it.second }
+                ?: throw Exception("No model files downloaded")
+            
+            // Rename largest model file to final name
             val outputFilename = "${model.replace("/", "_")}-$tag.gguf"
             val destFile = File(modelsDir, outputFilename)
-            largestFile.first.renameTo(destFile)
+            largestModelFile.first.renameTo(destFile)
+            
+            // Process mmproj files if they exist
+            if (downloadedMmprojFiles.isNotEmpty()) {
+                progressListener?.onProgress(95, "Processing vision encoder...")
+                
+                val largestMmprojFile = downloadedMmprojFiles.maxByOrNull { it.second }
+                    ?: throw Exception("No mmproj files downloaded")
+                
+                val mmprojFilename = "mmproj-$outputFilename"
+                val mmprojDestFile = File(modelsDir, mmprojFilename)
+                largestMmprojFile.first.renameTo(mmprojDestFile)
+                
+                Log.i(TAG, "Saved vision encoder as: $mmprojFilename (${largestMmprojFile.second / 1024 / 1024}MB)")
+                
+                // Delete other mmproj files
+                downloadedMmprojFiles.forEach { (file, _) ->
+                    if (file != largestMmprojFile.first && file.exists()) {
+                        file.delete()
+                    }
+                }
+            }
             
             progressListener?.onProgress(97, "Cleaning up...")
             
-            // Delete other files
-            downloadedFiles.forEach { (file, _) ->
-                if (file != largestFile.first && file.exists()) {
+            // Delete other model files
+            downloadedModelFiles.forEach { (file, _) ->
+                if (file != largestModelFile.first && file.exists()) {
                     file.delete()
                 }
             }
             
             progressListener?.onProgress(100, "Model ready: $outputFilename")
-            Log.i(TAG, "Successfully pulled model: $outputFilename (${largestFile.second / 1024 / 1024}MB)")
+            Log.i(TAG, "Successfully pulled model: $outputFilename (${largestModelFile.second / 1024 / 1024}MB)")
+            if (downloadedMmprojFiles.isNotEmpty()) {
+                Log.i(TAG, "Model has vision support (mmproj included)")
+            }
             
             mapOf(
                 "success" to true,
                 "filename" to outputFilename,
-                "note" to "Model saved as $outputFilename"
+                "note" to if (downloadedMmprojFiles.isNotEmpty()) {
+                    "Model saved with vision support"
+                } else {
+                    "Model saved as $outputFilename"
+                }
             )
             
         } catch (e: Exception) {
@@ -483,7 +728,7 @@ class LLMModelManager(private val context: Context) {
     }
     
     /**
-     * Delete a model
+     * Delete a model (and its associated mmproj file if exists)
      * @param filename Model filename to delete
      * @return Map with success status and error (if any)
      */
@@ -507,16 +752,29 @@ class LLMModelManager(private val context: Context) {
                 )
             }
             
+            // Delete main model file
             val deleted = file.delete()
-            if (deleted) {
-                Log.i(TAG, "Deleted model: $filename")
-                mapOf("success" to true)
-            } else {
-                mapOf(
+            if (!deleted) {
+                return mapOf(
                     "success" to false,
                     "error" to "Failed to delete file"
                 )
             }
+            
+            Log.i(TAG, "Deleted model: $filename")
+            
+            // Also delete corresponding mmproj file if it exists (cascade delete)
+            val mmprojFile = File(modelsDir, "mmproj-$filename")
+            if (mmprojFile.exists()) {
+                val mmprojDeleted = mmprojFile.delete()
+                if (mmprojDeleted) {
+                    Log.i(TAG, "Cascade deleted mmproj file: mmproj-$filename")
+                } else {
+                    Log.w(TAG, "Failed to delete mmproj file: mmproj-$filename")
+                }
+            }
+            
+            mapOf("success" to true)
             
         } catch (e: Exception) {
             Log.e(TAG, "Delete failed", e)

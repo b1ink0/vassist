@@ -73,7 +73,7 @@ const ChatContainer = ({
     nextBranch,
   } = useApp();
 
-  const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext } = useConfig();
+  const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext, aiConfig } = useConfig();
   const { api } = useDesktop();
   const { api: androidAPI } = useAndroid();
 
@@ -624,7 +624,9 @@ const ChatContainer = ({
       let result;
       
       if (isDesktop && api?.llm) {
-        result = await api.llm.deleteModel(filename);
+        // Get custom models path from aiConfig
+        const customPath = aiConfig?.['desktop-local']?.customModelsPath || null;
+        result = await api.llm.deleteModel(filename, customPath);
       } else if (isAndroid && androidAPI?.deleteLLMModel) {
         const resultJson = androidAPI.deleteLLMModel(filename);
         result = JSON.parse(resultJson);

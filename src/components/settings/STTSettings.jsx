@@ -6,17 +6,21 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
+import { useAndroid } from '../../contexts/AndroidContext';
 import { STTProviders } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import OpenAISTTConfig from './stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from './stt/OpenAICompatibleSTTConfig';
 import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
 import DesktopSTTConfig from './stt/DesktopSTTConfig';
+import WhisperModelDownloader from './stt/WhisperModelDownloader';
 import Toggle from '../common/Toggle';
 
 const STTSettings = ({ isLightBackground, hasChromeAI }) => {
   const [devices, setDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  
+  const { api: androidAPI } = useAndroid();
   
   const {
     sttConfig,
@@ -107,6 +111,12 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
           {/* Android Local STT Configuration */}
           {sttConfig.provider === STTProviders.ANDROID_LOCAL && (
             <>
+              {/* Whisper Model Downloader */}
+              <WhisperModelDownloader 
+                androidAPI={androidAPI}
+                isLightBackground={isLightBackground}
+              />
+              
               <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Language</label>

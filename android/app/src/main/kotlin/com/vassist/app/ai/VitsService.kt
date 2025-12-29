@@ -195,6 +195,7 @@ class VitsService(private val context: Context) {
     /**
      * Initialize VITS TTS synchronously (blocking)
      * ONLY call this from a background thread!
+     * @return true if successful, false if models not available
      */
     fun initializeBlocking(onProgress: ((Float) -> Unit)? = null): Boolean {
         val latch = CountDownLatch(1)
@@ -286,7 +287,8 @@ class VitsService(private val context: Context) {
         onComplete: (ByteArray?, String?) -> Unit
     ) {
         if (!_isInitialized.get()) {
-            onComplete(null, "VitsService not initialized")
+            Log.e(TAG, "VitsService not initialized - models may not be downloaded")
+            onComplete(null, "VITS model not available. Please download the model from settings.")
             return
         }
         

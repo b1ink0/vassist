@@ -55,6 +55,13 @@ class LlamaAndroid private constructor() {
     private external fun kv_cache_clear(context: Long)
     private external fun system_info(): String
     private external fun completion_init(context: Long, batch: Long, text: String, nLen: Int): Int
+    private external fun completion_init_with_images(
+        context: Long, 
+        batch: Long, 
+        imageBytesArray: Array<ByteArray>?,
+        text: String, 
+        nLen: Int
+    ): Int
     private external fun completion_loop(
         context: Long,
         batch: Long,
@@ -66,6 +73,12 @@ class LlamaAndroid private constructor() {
     private external fun get_model_size(model: Long): Long
     private external fun get_model_n_params(model: Long): Long
     private external fun get_chat_template(model: Long): String?
+    
+    // Multimodal native methods
+    private external fun init_multimodal(mmprojPath: String, model: Long): Boolean
+    private external fun free_multimodal()
+    private external fun is_multimodal_enabled(): Boolean
+    private external fun get_image_marker(): String
 
     /**
      * Load a GGUF model from file
@@ -113,10 +126,116 @@ class LlamaAndroid private constructor() {
                     }
 
                     Log.i(tag, "Loaded model: $pathToModel")
-                    threadLocalState.set(State.Loaded(model, context, batch, sampler))
+                    
+                    // Auto-detect and load mmproj file if it exists
+                    // Format: mmproj-{modelname}.gguf (prefix, not suffix)
+                    val modelFile = java.io.File(pathToModel)
+                    val modelFilename = modelFile.name
+                    val mmprojFilename = "mmproj-$modelFilename"
+                    val mmprojFile = java.io.File(modelFile.parentFile, mmprojFilename)
+                    
+                    var loadedMmprojPath: String? = null
+                    if (mmprojFile.exists()) {
+                        Log.i(tag, "Found mmproj file: ${mmprojFile.absolutePath}")
+                        if (init_multimodal(mmprojFile.absolutePath, model)) {
+                            Log.i(tag, "Multimodal enabled successfully")
+                            loadedMmprojPath = mmprojFile.absolutePath
+                        } else {
+                            Log.w(tag, "Failed to load mmproj file")
+                        }
+                    } else {
+                        Log.d(tag, "No mmproj file found at: ${mmprojFile.absolutePath}")
+                    }
+                    
+                    threadLocalState.set(State.Loaded(model, context, batch, sampler, loadedMmprojPath))
                 }
                 else -> throw IllegalStateException("Model already loaded")
             }
+        }
+    }
+    
+    /**
+     * Initialize multimodal (vision) support by loading mmproj file
+     * 
+     * @param mmprojPath Absolute path to the mmproj GGUF file
+     * @return True if successful, false otherwise
+     */
+    suspend fun initMultimodal(mmprojPath: String): Boolean {
+        return withContext(runLoop) {
+            when (val state = threadLocalState.get()) {
+                is State.Loaded -> {
+                    val success = init_multimodal(mmprojPath, state.model)
+                    if (success) {
+                        threadLocalState.set(
+                            State.Loaded(
+                                state.model,
+                                state.context,
+                                state.batch,
+                                state.sampler,
+                                mmprojPath
+                            )
+                        )
+                        Log.i(tag, "Multimodal enabled: $mmprojPath")
+                    } else {
+                        Log.e(tag, "Failed to enable multimodal: $mmprojPath")
+                    }
+                    success
+                }
+                else -> {
+                    Log.e(tag, "Cannot init multimodal: no model loaded")
+                    false
+                }
+            }
+        }
+    }
+    
+    /**
+     * Free multimodal resources
+     */
+    suspend fun freeMultimodal() {
+        withContext(runLoop) {
+            free_multimodal()
+            when (val state = threadLocalState.get()) {
+                is State.Loaded -> {
+                    threadLocalState.set(
+                        State.Loaded(
+                            state.model,
+                            state.context,
+                            state.batch,
+                            state.sampler,
+                            null
+                        )
+                    )
+                }
+                else -> {}
+            }
+            Log.i(tag, "Multimodal disabled")
+        }
+    }
+    
+    /**
+     * Check if multimodal support is enabled
+     */
+    suspend fun isMultimodalEnabled(): Boolean {
+        return withContext(runLoop) {
+            is_multimodal_enabled()
+        }
+    }
+    
+    /**
+     * Get the marker string used to represent images in prompts.
+     * This marker should be used in the prompt text where the image should appear.
+     * For example: "What is in this image? {image_marker}"
+     * 
+     * @return The image marker string (e.g., "<image>")
+     */
+    suspend fun getImageMarker(): String {
+        return withContext(runLoop) {
+            if (!is_multimodal_enabled()) {
+                Log.e(tag, "Cannot get image marker: multimodal not enabled")
+                return@withContext "<image>"
+            }
+            get_image_marker()
         }
     }
 
@@ -125,14 +244,34 @@ class LlamaAndroid private constructor() {
      * 
      * @param prompt The input prompt
      * @param maxNewTokens Maximum number of tokens to generate
+     * @param images Optional list of image byte arrays for multimodal inference
      * @return Flow of generated text tokens
      */
-    fun complete(prompt: String, maxNewTokens: Int = maxTokens): Flow<String> = flow {
+    fun complete(
+        prompt: String, 
+        maxNewTokens: Int = maxTokens,
+        images: List<ByteArray>? = null
+    ): Flow<String> = flow {
         when (val state = threadLocalState.get()) {
             is State.Loaded -> {
                 kv_cache_clear(state.context)
                 
-                val ncur = IntVar(completion_init(state.context, state.batch, prompt, maxNewTokens))
+                // Initialize completion with images if provided
+                val ncur = if (!images.isNullOrEmpty() && is_multimodal_enabled()) {
+                    Log.i(tag, "Initializing completion with ${images.size} images")
+                    IntVar(completion_init_with_images(
+                        state.context, 
+                        state.batch, 
+                        images.toTypedArray(),
+                        prompt, 
+                        maxNewTokens
+                    ))
+                } else {
+                    if (!images.isNullOrEmpty()) {
+                        Log.w(tag, "Images provided but multimodal not enabled - ignoring images")
+                    }
+                    IntVar(completion_init(state.context, state.batch, prompt, maxNewTokens))
+                }
                 
                 while (ncur.value <= maxNewTokens) {
                     val token = completion_loop(
@@ -161,11 +300,16 @@ class LlamaAndroid private constructor() {
      * 
      * @param prompt The input prompt
      * @param maxNewTokens Maximum number of tokens to generate
+     * @param images Optional list of image byte arrays for multimodal inference
      * @return Complete generated text
      */
-    suspend fun generate(prompt: String, maxNewTokens: Int = maxTokens): String {
+    suspend fun generate(
+        prompt: String, 
+        maxNewTokens: Int = maxTokens,
+        images: List<ByteArray>? = null
+    ): String {
         val builder = StringBuilder()
-        complete(prompt, maxNewTokens).collect { token ->
+        complete(prompt, maxNewTokens, images).collect { token ->
             builder.append(token)
         }
         return builder.toString()
@@ -197,6 +341,10 @@ class LlamaAndroid private constructor() {
         withContext(runLoop) {
             when (val state = threadLocalState.get()) {
                 is State.Loaded -> {
+                    // Free multimodal if loaded
+                    if (state.mmprojPath != null) {
+                        free_multimodal()
+                    }
                     free_sampler(state.sampler)
                     free_batch(state.batch)
                     free_context(state.context)
@@ -262,7 +410,8 @@ class LlamaAndroid private constructor() {
             val model: Long,
             val context: Long,
             val batch: Long,
-            val sampler: Long
+            val sampler: Long,
+            val mmprojPath: String? = null  // Track loaded mmproj file
         ) : State
     }
 

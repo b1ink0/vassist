@@ -7,11 +7,13 @@
 import { useState, useMemo } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
+import { useAndroid } from '../../contexts/AndroidContext';
 import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice, GPTSoVITSLanguages } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
 import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
+import VitsModelDownloader from './tts/VitsModelDownloader';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 
@@ -20,6 +22,8 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
   const [cacheSize, setCacheSize] = useState(null);
   const [testText, setTestText] = useState('Hello, this is a test of the text to speech system.');
   const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
+  
+  const { api: androidAPI } = useAndroid();
   
   const {
     ttsConfig,
@@ -83,40 +87,48 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
         <>
           {/* Android Local TTS Configuration */}
           {ttsConfig.provider === TTSProviders.ANDROID_LOCAL && (
-            <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
-              <h4 className="text-sm font-semibold text-white/90">Android Local TTS</h4>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">Voice</label>
-                <p className="text-sm text-white/70">VCTK (Multi-speaker, 109 voices, English)</p>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-white/60">Speaker ID (0-108):</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="108"
-                    value={ttsConfig['android-local']?.speakerId || 0}
-                    onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-20 text-sm`}
-                  />
+            <>
+              {/* VITS Model Downloader */}
+              <VitsModelDownloader 
+                androidAPI={androidAPI}
+                isLightBackground={isLightBackground}
+              />
+              
+              <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+                <h4 className="text-sm font-semibold text-white/90">Android Local TTS</h4>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Voice</label>
+                  <p className="text-sm text-white/70">VCTK (Multi-speaker, 109 voices, English)</p>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-white/60">Speaker ID (0-108):</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="108"
+                      value={ttsConfig['android-local']?.speakerId || 0}
+                      onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
+                      className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-20 text-sm`}
+                    />
+                  </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Speed</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    value={ttsConfig['android-local']?.speed || 1.0}
+                    onChange={(e) => updateTTSConfig('android-local.speed', parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-xs text-white/60">{ttsConfig['android-local']?.speed || 1.0}x</span>
+                </div>
+                <p className="text-xs text-white/50">
+                  Powered by VITS VCTK running locally on your device
+                </p>
               </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">Speed</label>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.1"
-                  value={ttsConfig['android-local']?.speed || 1.0}
-                  onChange={(e) => updateTTSConfig('android-local.speed', parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <span className="text-xs text-white/60">{ttsConfig['android-local']?.speed || 1.0}x</span>
-              </div>
-              <p className="text-xs text-white/50">
-                Powered by VITS VCTK running locally on your device
-              </p>
-            </div>
+            </>
           )}
 
           {/* Desktop Local TTS Configuration */}
