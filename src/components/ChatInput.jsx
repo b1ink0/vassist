@@ -161,10 +161,17 @@ const ChatInput = forwardRef(({
       MicrophoneService.setSelectedDevice(deviceId);
     });
 
+    // Listen for voice state changes from main window
+    const unsubscribeVoiceState = api.ipc.on('state:voiceState', (state) => {
+      Logger.log('ChatInput', 'Voice state received from main window:', state);
+      setVoiceState(state);
+    });
+
     return () => {
       unsubscribePendingDrop?.();
       unsubscribeMicDevices?.();
       unsubscribeSelectedMic?.();
+      unsubscribeVoiceState?.();
     };
   }, [api]);
 
@@ -322,10 +329,8 @@ const ChatInput = forwardRef(({
       Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
       
-      // Desktop input window: Send state to main window via IPC
-      if (isInputWindow && api?.ipc) {
-        api.ipc.send('chatInput:voiceState', state);
-      }
+      // This only works in main window where VoiceConversationService actually runs
+      // Input window receives state via IPC (state:voiceState)
     };
 
     const handleTranscription = (text) => {
@@ -345,14 +350,20 @@ const ChatInput = forwardRef(({
       setRecordingError(error.message || 'Voice conversation error');
     };
 
-    VoiceConversationService.setStateChangeCallback(handleStateChange);
-    VoiceConversationService.setTranscriptionCallback(handleTranscription);
-    VoiceConversationService.setErrorCallback(handleError);
+    // Input window: Gets state via IPC (line 146-173), doesn't register callbacks
+    // Web/Extension: Registers callbacks directly
+    if (!isInputWindow) {
+      VoiceConversationService.setStateChangeCallback(handleStateChange);
+      VoiceConversationService.setTranscriptionCallback(handleTranscription);
+      VoiceConversationService.setErrorCallback(handleError);
+    }
 
     return () => {
-      VoiceConversationService.setStateChangeCallback(null);
-      VoiceConversationService.setTranscriptionCallback(null);
-      VoiceConversationService.setErrorCallback(null);
+      if (!isInputWindow) {
+        VoiceConversationService.setStateChangeCallback(null);
+        VoiceConversationService.setTranscriptionCallback(null);
+        VoiceConversationService.setErrorCallback(null);
+      }
     };
   }, [api, onVoiceTranscription]);
 
@@ -397,12 +408,18 @@ const ChatInput = forwardRef(({
           
           setAttachedImages([]);
           setAttachedAudios([]);
-          
           setRecordingError('');
-          await VoiceConversationService.start();
-          setIsVoiceMode(true);
           
-          if (onVoiceMode) onVoiceMode(true);
+          // Desktop input window: Send to main window via IPC (main window starts service)
+          // Web/Extension: Start service directly
+          if (isInputWindow && api?.ipc) {
+            api.ipc.send('chatInput:voiceMode', true);
+          } else {
+            await VoiceConversationService.start();
+            if (onVoiceMode) onVoiceMode(true);
+          }
+          
+          setIsVoiceMode(true);
         } catch (error) {
           Logger.error('ChatInput', 'Voice mode start error:', error);
           setRecordingError(error.message || 'Failed to start voice mode');
@@ -858,33 +875,40 @@ const ChatInput = forwardRef(({
     try {
       if (isVoiceMode) {
         Logger.log('ChatInput', 'Stopping voice conversation mode');
-        VoiceConversationService.stop();
-        setIsVoiceMode(false);
-        setVoiceState(ConversationStates.IDLE);
         
-        // Desktop input window: Send to main window via IPC
+        // Desktop input window: Send to main window via IPC (main window stops service)
+        // Web/Extension: Stop service directly
         if (isInputWindow && api?.ipc) {
           api.ipc.send('chatInput:voiceMode', false);
-        } else if (onVoiceMode) {
-          onVoiceMode(false);
+        } else {
+          VoiceConversationService.stop();
+          if (onVoiceMode) {
+            onVoiceMode(false);
+          }
         }
+        
+        setIsVoiceMode(false);
+        setVoiceState(ConversationStates.IDLE);
       } else {
         Logger.log('ChatInput', 'Starting voice conversation mode');
         TTSServiceProxy.stopPlayback();
         
         setAttachedImages([]);
         setAttachedAudios([]);
-        
         setRecordingError('');
-        await VoiceConversationService.start();
-        setIsVoiceMode(true);
         
-        // Desktop input window: Send to main window via IPC
+        // Desktop input window: Send to main window via IPC (main window starts service)
+        // Web/Extension: Start service directly
         if (isInputWindow && api?.ipc) {
           api.ipc.send('chatInput:voiceMode', true);
-        } else if (onVoiceMode) {
-          onVoiceMode(true);
+        } else {
+          await VoiceConversationService.start();
+          if (onVoiceMode) {
+            onVoiceMode(true);
+          }
         }
+        
+        setIsVoiceMode(true);
       }
     } catch (error) {
       Logger.error('ChatInput', 'Voice mode toggle error:', error);
@@ -898,6 +922,14 @@ const ChatInput = forwardRef(({
    */
   const handleInterrupt = () => {
     Logger.log('ChatInput', 'User interrupted');
+    
+    // In desktop input window, forward interrupt to main window via IPC
+    if (api?.ipc) {
+      Logger.log('ChatInput', 'Forwarding interrupt to main window via IPC');
+      api.ipc.send('voice:interrupt');
+    }
+    
+    // Also call locally (in case we're in main window or web mode)
     VoiceConversationService.interrupt();
   };
 
@@ -978,13 +1010,20 @@ const ChatInput = forwardRef(({
 
   const getVoiceStateDisplay = () => {
     Logger.log('ChatInput', 'Current voiceState:', voiceState, 'Expected LISTENING:', ConversationStates.LISTENING);
+    
+    // Show interrupt button if in SPEAKING state OR if TTS audio is currently playing
+    const isAudioPlaying = TTSServiceProxy.isCurrentlyPlaying();
+    const showInterrupt = voiceState === ConversationStates.SPEAKING || isAudioPlaying;
+    
     switch (voiceState) {
       case ConversationStates.LISTENING:
         return { icon: 'microphone', label: 'Listening...', class: 'listening', showInterrupt: false };
       case ConversationStates.THINKING:
         return { icon: 'thinking', label: 'Thinking...', class: 'thinking', showInterrupt: false };
+      case ConversationStates.GENERATING_VOICE:
+        return { icon: 'thinking', label: 'Generating voice...', class: 'generating-voice', showInterrupt: false };
       case ConversationStates.SPEAKING:
-        return { icon: 'speaker', label: 'Speaking...', class: 'speaking', showInterrupt: true };
+        return { icon: 'speaker', label: 'Speaking...', class: 'speaking', showInterrupt };
       case ConversationStates.INTERRUPTED:
         return { icon: 'pause', label: 'Interrupted', class: 'interrupted', showInterrupt: false };
       default:

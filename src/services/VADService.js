@@ -36,6 +36,7 @@ class VADService {
     }
 
     this.onSpeechStart = options.onSpeechStart || null;
+    this.onSpeechRealStart = options.onSpeechRealStart || null;
     this.onSpeechEnd = options.onSpeechEnd || null;
     this.onError = options.onError || null;
 
@@ -91,9 +92,16 @@ class VADService {
         
         // Callbacks
         onSpeechStart: () => {
-          Logger.log('VAD', 'Speech started');
+          Logger.log('VAD', 'Speech detection started');
           if (this.onSpeechStart) {
             this.onSpeechStart();
+          }
+        },
+        
+        onSpeechRealStart: () => {
+          Logger.log('VAD', 'Real human speech detected (above threshold)');
+          if (this.onSpeechRealStart) {
+            this.onSpeechRealStart();
           }
         },
         

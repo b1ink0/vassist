@@ -41,6 +41,7 @@ const ChatContainer = ({
   const {
     positionManagerRef,
     chatMessages: messages,
+    isVoiceMode,
     isChatContainerVisible: isVisible,
     isProcessing: isGenerating,
     isSpeaking,
@@ -805,11 +806,18 @@ const ChatContainer = ({
 
   /**
    * Sets up audio start callback for updating UI when audio starts playing.
+   * SKIP in voice mode - VoiceConversationService owns the callbacks
    */
   useEffect(() => {
+    if (isVoiceMode) {
+      Logger.log('ChatContainer', 'Voice mode - skipping TTS event listener setup (VoiceConversationService owns events)');
+      return;
+    }
+    
     let voiceMonitoringStarted = false;
     
-    TTSServiceProxy.setAudioStartCallback((sessionId) => {
+    const handleAudioStart = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio started playing for session:', sessionId);
       
       if (sessionId?.startsWith('manual_')) {
@@ -843,28 +851,20 @@ const ChatContainer = ({
         
         if (!voiceMonitoringStarted) {
           voiceMonitoringStarted = true;
-          Logger.log('ChatContainer', 'Starting TTS playback monitoring for voice mode');
-          import('../services/VoiceConversationService').then(({ default: VoiceConversationService }) => {
-            VoiceConversationService.monitorTTSPlayback();
-          });
+          Logger.log('ChatContainer', 'Voice mode detected, VoiceConversationService will handle state');
+          // VoiceConversationService handles state transitions via events
         }
       }
-    });
+    };
 
-    TTSServiceProxy.setAudioEndCallback((sessionId) => {
+    const handleAudioEnd = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio finished playing for session:', sessionId);
       
-      if (currentSessionRef.current === sessionId) {
-        // Only clear playing state if no more audio in queue and nothing currently playing
-        // This prevents icon from flickering to "speaker" while waiting for next chunk (especially with WASM delays)
-        if (!TTSServiceProxy.isAudioActive()) {
-          setPlayingMessageIndex(null);
-          currentSessionRef.current = null;
-        } else {
-          Logger.log('ChatContainer', 'Audio still active in queue, keeping playing state');
-        }
-      }
-    });
+      // Always clear playing state when audioEnd fires - it only fires when truly done
+      setPlayingMessageIndex(null);
+      currentSessionRef.current = null;
+    };
 
     const handleTTSAudioStart = (event) => {
       const { messageIndex, sessionId } = event.detail
@@ -885,14 +885,18 @@ const ChatContainer = ({
 
     window.addEventListener('ttsAudioStart', handleTTSAudioStart)
     window.addEventListener('ttsAudioEnd', handleTTSAudioEnd)
+    TTSServiceProxy.addEventListener('audioStart', handleAudioStart);
+    TTSServiceProxy.addEventListener('audioEnd', handleAudioEnd);
 
     return () => {
-      TTSServiceProxy.setAudioStartCallback(null);
-      TTSServiceProxy.setAudioEndCallback(null);
+      if (!isVoiceMode) {
+        TTSServiceProxy.removeEventListener('audioStart', handleAudioStart);
+        TTSServiceProxy.removeEventListener('audioEnd', handleAudioEnd);
+      }
       window.removeEventListener('ttsAudioStart', handleTTSAudioStart)
       window.removeEventListener('ttsAudioEnd', handleTTSAudioEnd)
     };
-  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex]);
+  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex, isVoiceMode]);
 
   /**
    * Scrolls to bottom without checking if user is near bottom.

@@ -41,11 +41,10 @@ class TTSService {
       this.lipSyncEnabled = true;
       // Worker handles VMD/BVMD in dev mode, no need for these services
 
-      this.onSpeakCallback = null;
-      this.onAudioFinishedCallback = null;
-      this.onStopCallback = null;
-      this.onAudioStartCallback = null;
-      this.onAudioEndCallback = null;
+      // Event emitter for TTS lifecycle events
+      this.eventTarget = new EventTarget();
+      this.hasSessionStarted = false; // Track if current session has fired start callback
+      this.completedSessions = new Set(); // Track sessions where all chunks have been generated
 
       // Kokoro heartbeat to keep model in memory
       this.kokoroHeartbeatInterval = null;
@@ -264,30 +263,53 @@ class TTSService {
   }
 
   /**
-   * Set callback for triggering speak animations
-   * @param {Function} callback - (text, bvmdBlobUrl) => void
+   * Add event listener for TTS lifecycle events
+   * Events: 'speak', 'audioStart', 'audioEnd', 'audioFinished', 'stop'
+   * @param {string} event - Event name
+   * @param {Function} listener - Event listener
    */
-  setSpeakCallback(callback) {
-    this.onSpeakCallback = callback;
-    Logger.log('TTSService', 'Speak callback registered');
+  addEventListener(event, listener) {
+    this.eventTarget.addEventListener(event, listener);
+    Logger.log('TTSService', `Event listener added for: ${event}`);
   }
 
   /**
-   * Set callback for when audio finishes playing (for sliding window generation)
-   * @param {Function} callback - () => void
+   * Remove event listener
+   * @param {string} event - Event name
+   * @param {Function} listener - Event listener
    */
-  setAudioFinishedCallback(callback) {
-    this.onAudioFinishedCallback = callback;
-    Logger.log('TTSService', 'Audio finished callback registered');
+  removeEventListener(event, listener) {
+    this.eventTarget.removeEventListener(event, listener);
+    Logger.log('TTSService', `Event listener removed for: ${event}`);
   }
 
   /**
-   * Set callback for when TTS is stopped/interrupted
-   * @param {Function} callback - () => void
+   * Dispatch TTS event
+   * @param {string} eventName - Event name
+   * @param {Object} detail - Event detail data
    */
-  setStopCallback(callback) {
-    this.onStopCallback = callback;
-    Logger.log('TTSService', 'Stop callback registered');
+  _dispatchEvent(eventName, detail = {}) {
+    const event = new CustomEvent(eventName, { detail });
+    this.eventTarget.dispatchEvent(event);
+  }
+
+  /**
+   * Mark a session as complete (all chunks generated)
+   * @param {string} sessionId - Session ID
+   */
+  markSessionComplete(sessionId) {
+    if (!sessionId) return;
+    this.completedSessions.add(sessionId);
+    Logger.log('TTSService', `Session marked complete: ${sessionId}`);
+  }
+
+  /**
+   * Check if a session is complete
+   * @param {string} sessionId - Session ID
+   * @returns {boolean}
+   */
+  isSessionComplete(sessionId) {
+    return this.completedSessions.has(sessionId);
   }
 
   /**
@@ -744,15 +766,10 @@ class TTSService {
     
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
-      const finishedSessionId = this.currentPlaybackSession; // Save before clearing
-      this.currentPlaybackSession = null; // Clear session when queue is empty
+      // DON'T clear currentPlaybackSession here - it might be needed for session completion check
+      // It will be cleared when audioEnd event fires with session completion
       Logger.log('TTSService', 'Queue empty, playback stopped');
-      
-      // Trigger audio end callback when entire session finishes
-      if (this.onAudioEndCallback && finishedSessionId) {
-        this.onAudioEndCallback(finishedSessionId);
-      }
-      
+      // Note: onAudioEndCallback is fired from audio.onended, not here
       return;
     }
 
@@ -771,21 +788,13 @@ class TTSService {
       Logger.error('TTSService', 'Playback error:', error);
     }
 
-    // Check again if stopped (in case stop was called while playing)
-    if (this.isStopped) {
-      this.isPlaying = false;
-      Logger.log('TTSService', 'Playback stopped, not playing next');
-      return;
-    }
+    // Dispatch audioFinished event when this audio finishes
+    // This is for sliding window TTS generation
+    this._dispatchEvent('audioFinished');
 
-    // Trigger callback when this audio finishes (before playing next)
-    // This is the RIGHT place - audio just finished, next one hasn't started yet
-    if (this.onAudioFinishedCallback) {
-      this.onAudioFinishedCallback();
-    }
-
-    // Play next in queue (will check isStopped flag again)
-    this.playNextInQueue();
+    // DON'T recursively call playNextInQueue here!
+    // The audio.onended handler will call playNextInQueue when the current audio finishes
+    // Calling it here causes simultaneous playback of multiple audio chunks
   }
 
   /**
@@ -809,24 +818,55 @@ class TTSService {
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
 
-      // Trigger callbacks when audio starts playing
+      // Trigger events when audio starts playing
       audio.addEventListener('play', () => {
-        Logger.log('TTSService', 'Audio playing, triggering callbacks');
+        Logger.log('TTSService', 'Audio playback started');
         
-        // Trigger speak callback for animation synchronization
-        if (bvmdUrl && this.onSpeakCallback) {
-          this.onSpeakCallback(text, bvmdUrl);
+        // Dispatch speak event for animation synchronization
+        if (bvmdUrl) {
+          this._dispatchEvent('speak', { text, bvmdUrl, sessionId });
         }
         
-        // Trigger audio start callback for UI updates (e.g., show pause icon)
-        if (this.onAudioStartCallback) {
-          this.onAudioStartCallback(sessionId);
+        // Dispatch audioStart event ONLY for first audio in current session
+        if (this.currentPlaybackSession && !this.hasSessionStarted) {
+          this.hasSessionStarted = true;
+          Logger.log('TTSService', `Dispatching audioStart event for session: ${this.currentPlaybackSession}`);
+          this._dispatchEvent('audioStart', { sessionId: this.currentPlaybackSession });
         }
       }, { once: true });
 
       audio.onended = () => {
         Logger.log('TTSService', 'Audio playback finished');
         this.currentAudio = null;
+        
+        // Check if there's more in queue FIRST
+        const hasMore = this.audioQueue.length > 0;
+        
+        // Play next or signal end
+        if (hasMore) {
+          this.playNextInQueue();
+        } else {
+          // No more audio in queue
+          this.isPlaying = false;
+          const finalSessionId = this.currentPlaybackSession;
+          
+          // Only dispatch audioEnd if session is COMPLETE (all chunks generated)
+          // This prevents firing the event while more chunks are still being generated
+          const sessionComplete = finalSessionId && this.isSessionComplete(finalSessionId);
+          
+          if (sessionComplete) {
+            // All chunks generated AND queue empty - truly done
+            this.currentPlaybackSession = null;
+            this.hasSessionStarted = false;
+            // DON'T delete from completedSessions yet - late-arriving chunks might still reference it
+            // It will be cleaned up when a new session starts or when resumePlayback() is called
+            Logger.log('TTSService', `Queue empty and session complete, dispatching audioEnd for: ${finalSessionId}`);
+            this._dispatchEvent('audioEnd', { sessionId: finalSessionId });
+          } else {
+            // Queue empty but more chunks might be coming - don't dispatch audioEnd yet
+            Logger.log('TTSService', `Queue empty but session not complete yet (${finalSessionId}), waiting for more chunks...`);
+          }
+        }
         
         resolve();
       };
@@ -861,6 +901,11 @@ class TTSService {
       }
       this.currentPlaybackSession = sessionId;
       this.isStopped = false; // Clear stopped flag for new session
+      
+      // Mark session as complete RIGHT NOW before playing
+      // This way when the last audio finishes, audio.onended will see it as complete
+      this.markSessionComplete(sessionId);
+      Logger.log('TTSService', `Session ${sessionId} marked complete BEFORE playback starts`);
     }
     
     for (const item of items) {
@@ -879,11 +924,7 @@ class TTSService {
     }
     
     Logger.log('TTSService', 'Sequence playback complete');
-    
-    // Clear session when sequence is complete
-    if (sessionId === this.currentPlaybackSession) {
-      this.currentPlaybackSession = null;
-    }
+    // Session was already marked complete at the start
   }
 
   /**
@@ -917,21 +958,17 @@ class TTSService {
     this.audioQueue = [];
     this.isPlaying = false;
     
-    // Clear current session
+    // Clear current session AND reset session started flag
     this.currentPlaybackSession = null;
+    this.hasSessionStarted = false; // CRITICAL: Reset so next session can fire audioStart
     
     Logger.log('TTSService', 'Playback stopped and queue cleared');
     
-    // Trigger audio end callback for UI cleanup (important for resetting speaker icon)
-    // Do this BEFORE stop callback so UI updates happen in right order
-    if (this.onAudioEndCallback && stoppedSessionId) {
-      this.onAudioEndCallback(stoppedSessionId);
-    }
+    // Dispatch stop event to notify animation manager
+    this._dispatchEvent('stop');
     
-    // Trigger stop callback to notify animation manager
-    if (this.onStopCallback) {
-      this.onStopCallback();
-    }
+    // Note: audioEnd event is NOT dispatched here - it should only fire from audio.onended
+    // This prevents duplicate events when stopping vs natural completion
   }
   
   /**
@@ -1301,7 +1338,8 @@ class TTSService {
       const state = this.tabStates.get(tabId);
       return state && state.isGenerating;
     }
-    return this.isPlaying;
+    // Check if there's an actual audio element currently playing
+    return this.currentAudio !== null;
   }
 
   /**

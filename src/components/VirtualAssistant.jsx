@@ -96,20 +96,25 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     // Initialize TTS Service with BVMD converter and animation callback
     TTSServiceProxy.initializeBVMDConverter(scene);
-    TTSServiceProxy.setSpeakCallback((text, bvmdUrl) => {
+    
+    // Listen to TTS events for animation control
+    TTSServiceProxy.addEventListener('speak', (event) => {
+      const { text, bvmdUrl, sessionId } = event.detail;
       // This will be called when audio starts playing
       Logger.log('VirtualAssistant', 'TTS triggering speak animation');
       if (manager && bvmdUrl) {
         manager.speak(text, bvmdUrl, 'talking');
       }
     });
-    TTSServiceProxy.setStopCallback(() => {
+    
+    TTSServiceProxy.addEventListener('stop', () => {
       // This will be called when TTS is stopped/interrupted
       Logger.log('VirtualAssistant', 'TTS stopped, returning to idle');
       if (manager) {
         manager.returnToIdle();
       }
     });
+    
     Logger.log('VirtualAssistant', 'TTS Service integrated with lip sync');
     
     emotePlayerService.setAnimationManager(manager);

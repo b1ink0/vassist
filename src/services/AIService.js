@@ -159,9 +159,16 @@ class AIService {
       } 
       else if (provider === AIProviders.OLLAMA || provider === 'ollama') {
         const ollamaConfig = config.ollama || config;
+        let endpoint = ollamaConfig.endpoint || 'http://localhost:11434';
+        
+        // Only append /v1 if not already present
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
         state.client = new OpenAI({
           apiKey: 'ollama',
-          baseURL: ollamaConfig.endpoint + '/v1',
+          baseURL: endpoint,
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
         

@@ -260,11 +260,13 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   // Register TTS callbacks for centralized playback state
+  // Poll isCurrentlyPlaying which now checks currentAudio !== null (actual playback)
   useEffect(() => {
     // Only poll when NOT in voice mode
     if (isVoiceMode) return;
     
     const interval = setInterval(() => {
+      // isCurrentlyPlaying now correctly returns true only when audio is actually playing
       const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
       setIsSpeaking(prev => {
         // Only update state if value actually changed to prevent unnecessary re-renders

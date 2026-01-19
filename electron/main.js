@@ -639,9 +639,24 @@ ipcMain.on('chatInput:voiceMode', (event, isActive) => {
   }
 });
 
-ipcMain.on('chatInput:voiceState', (event, state) => {
+// Voice interrupt from input window to main window
+ipcMain.on('voice:interrupt', () => {
   if (mainWindow && mainWindow.webContents) {
-    mainWindow.webContents.send('chatInput:voiceState', state);
+    mainWindow.webContents.send('voice:interrupt');
+  }
+});
+
+// VAD speech detected in input window - forward to main window for TTS interrupt check
+ipcMain.on('voice:vadSpeechDetected', () => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('voice:vadSpeechDetected');
+  }
+});
+
+// Forward voice state from main window to input window
+ipcMain.on('state:voiceState', (event, state) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:voiceState', state);
   }
 });
 

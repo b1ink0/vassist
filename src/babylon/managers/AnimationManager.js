@@ -932,6 +932,12 @@ export class AnimationManager {
       const cameraRuntimeHandle = mmdCamera.createRuntimeAnimation(cameraAnimation);
       mmdCamera.setRuntimeAnimation(cameraRuntimeHandle);
       
+      // Store runtime handle for proper cleanup/destruction later
+      this.currentCameraRuntimeHandle = cameraRuntimeHandle;
+      
+      // CRITICAL: Remove camera from animatables first (in case it's already there from previous play)
+      this.mmdRuntime.removeAnimatable(mmdCamera);
+      
       // CRITICAL: Add camera to mmdRuntime so it animates in sync with model
       // This is necessary for the camera to be evaluated on each frame
       this.mmdRuntime.addAnimatable(mmdCamera);
@@ -945,6 +951,7 @@ export class AnimationManager {
       Logger.error('AnimationManager', 'Failed to load camera animation:', error);
       this.currentCameraAnimation = null;
       this.currentCameraUrl = null;
+      this.currentCameraRuntimeHandle = null;
       this.cameraAnimationEnabled = false;
     }
   }
@@ -964,6 +971,13 @@ export class AnimationManager {
     if (mmdCamera) {
       // CRITICAL: Remove camera from runtime FIRST to stop evaluation
       this.mmdRuntime.removeAnimatable(mmdCamera);
+      
+      // CRITICAL: Destroy runtime animation handle properly (not just null)
+      if (this.currentCameraRuntimeHandle !== null) {
+        mmdCamera.destroyRuntimeAnimation(this.currentCameraRuntimeHandle);
+        this.currentCameraRuntimeHandle = null;
+        Logger.log('AnimationManager', 'Camera runtime animation destroyed');
+      }
       
       // Clear camera runtime animation
       mmdCamera.setRuntimeAnimation(null);
@@ -987,6 +1001,7 @@ export class AnimationManager {
     // Clear camera animation state
     this.currentCameraAnimation = null;
     this.currentCameraUrl = null;
+    this.currentCameraRuntimeHandle = null;
     this.cameraAnimationEnabled = false;
     this.originalCameraState = null;
   }
@@ -1667,6 +1682,11 @@ export class AnimationManager {
             // No more audio - return to IDLE
             Logger.log('AnimationManager', '[AUTO-RETURN TRIGGER] No active audio, transitioning to IDLE');
             
+            // Cleanup camera animation before transitioning to IDLE
+            if (this.cameraAnimationEnabled) {
+              this.cleanupCameraAnimation();
+            }
+            
             this._isTransitioning = true;
             this.transitionToState(AssistantState.IDLE).finally(() => {
               Logger.log('AnimationManager', '[AUTO-RETURN COMPLETE] Transition to IDLE finished');
@@ -1676,6 +1696,11 @@ export class AnimationManager {
         } else {
           // Not a speak animation - normal auto-return to IDLE
           Logger.log('AnimationManager', `[AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+          
+          // Cleanup camera animation before transitioning to IDLE
+          if (this.cameraAnimationEnabled) {
+            this.cleanupCameraAnimation();
+          }
           
           this._isTransitioning = true;
           this.transitionToState(AssistantState.IDLE).finally(() => {

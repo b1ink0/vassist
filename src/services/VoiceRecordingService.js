@@ -58,6 +58,7 @@ class VoiceRecordingService {
       this.onRecordingStart = callbacks.onRecordingStart || null;
       this.onRecordingStop = callbacks.onRecordingStop || null;
       this.onVolumeChange = callbacks.onVolumeChange || null;
+      this.onSpeechRealStart = callbacks.onSpeechRealStart || null;
       
       // Get audio constraints with selected microphone
       const constraints = MicrophoneService.getAudioConstraints();
@@ -76,6 +77,13 @@ class VoiceRecordingService {
           this.startRecording();
           if (this.onVolumeChange) {
             this.onVolumeChange(100); // Indicate speech activity
+          }
+        },
+        onSpeechRealStart: () => {
+          Logger.log('VoiceRecording', 'Real human speech confirmed (VAD threshold met)');
+          // Trigger interrupt check for confirmed human voice
+          if (this.onSpeechRealStart) {
+            this.onSpeechRealStart();
           }
         },
         onSpeechEnd: () => {
