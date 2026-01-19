@@ -180,6 +180,8 @@ export default defineConfig(({ mode }) => {
       __DESKTOP_MODE__: JSON.stringify(true),
       __DEV_MODE__: JSON.stringify(!isProduction),
       __PROD_MODE__: JSON.stringify(isProduction),
+      // Prevent onnxruntime-web from trying to use require()
+      'typeof require': JSON.stringify('undefined'),
     },
     
     build: {
@@ -206,22 +208,24 @@ export default defineConfig(({ mode }) => {
       plugins: () => [],
     },
     
-    assetsInclude: ['**/*.wasm'],
+    assetsInclude: ['**/*.wasm', '**/*.onnx'],
     
     optimizeDeps: {
       exclude: [
         '@babylonjs/havok',
         '@huggingface/transformers',
         'kokoro-js',
-        'onnxruntime-web',
       ],
       include: [
         'react',
         'react-dom',
+        '@ricky0123/vad-web',
       ],
       force: false,
-      esbuildOptions: {
-        target: 'esnext',
+      rollupOptions: {
+        output: {
+          format: 'es',
+        },
       },
       holdUntilCrawlEnd: true,
     },
