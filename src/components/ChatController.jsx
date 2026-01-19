@@ -64,16 +64,19 @@ const ChatController = ({
   /**
    * Track voice conversation state to update isSpeaking
    * Skip in input window as ChatInput handles it there
-   * Main window: Forward state to input window via IPC
+   * Desktop main window: Forward state to input window via IPC
+   * Web/Android: ChatInput registers callback directly, don't register here to avoid overwriting
    */
   useEffect(() => {
-    if (isInputWindow) return;
+    // Only register in desktop main window
+    // Web/Android: ChatInput handles state callback to avoid overwriting
+    if (isInputWindow || !isDesktop) return;
     
     const handleStateChange = (state) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
       
       // Desktop: Forward voice state to input window via IPC
-      if (isDesktop && api?.ipc) {
+      if (api?.ipc) {
         api.ipc.send('state:voiceState', state);
       }
     };
