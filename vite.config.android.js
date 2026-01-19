@@ -12,6 +12,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +61,7 @@ export default defineConfig(({ mode }) => {
       }),
       tailwindcss(),
       moveIndexHtmlPlugin(),
+      vadAssetsPlugin('dist-android'),
     ],
     
     define: {

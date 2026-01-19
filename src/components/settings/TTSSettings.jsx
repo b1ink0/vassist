@@ -151,6 +151,41 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             </>
           )}
 
+          {/* GPTSoVITS Remote TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.GPTSOVITS_REMOTE && (
+            <>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/90">Server URL</label>
+                <input
+                  type="text"
+                  value={ttsConfig['gptsovits-remote']?.endpoint || ''}
+                  onChange={(e) => updateTTSConfig('gptsovits-remote.endpoint', e.target.value)}
+                  placeholder="http://localhost:11438"
+                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                />
+                <p className="text-xs text-white/50">
+                  URL of your remote GPT-SoVITS server (will append /v1)
+                </p>
+              </div>
+              
+              {/* Voice Cloning Configuration - Reuse GPTSoVITSConfig */}
+              <GPTSoVITSConfig
+                config={ttsConfig['gptsovits-remote'] || {}}
+                onChange={(field, value) => {
+                  updateTTSConfig(`gptsovits-remote.${field}`, value);
+                }}
+                showTitle={false}
+                isSetupMode={false}
+                onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+                refreshTrigger={refreshTrigger}
+                isLightBackground={isLightBackground}
+                errorMessage={ttsConfigError}
+                setErrorMessage={setTtsConfigError}
+                skipSetup={true}
+              />
+            </>
+          )}
+
           {/* Kokoro TTS Configuration */}
           {ttsConfig.provider === TTSProviders.KOKORO && (
             <>

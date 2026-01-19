@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -14,6 +15,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       tailwindcss(),
+      vadAssetsPlugin('dist'),
     ],
     publicDir: 'public',
     define: {

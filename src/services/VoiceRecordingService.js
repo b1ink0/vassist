@@ -5,30 +5,23 @@
  * Used by both VoiceConversationService and AIToolbar dictation.
  * 
  * Features:
- * - Voice Activity Detection (VAD) for speech detection
+ * - Voice Activity Detection for accurate speech detection
  * - Automatic recording start on speech
  * - Automatic recording stop on silence
+ * - Volume level monitoring
  * - Continuous recording with auto-segmentation
  * - Transcription callbacks for real-time processing
  */
 
+import VADService from './VADService';
 import { STTServiceProxy } from './proxies';
 import Logger from './LoggerService';
+import MicrophoneService from './MicrophoneService';
 
 class VoiceRecordingService {
   constructor() {
-    // Audio context for VAD
-    this.audioContext = null;
-    this.analyser = null;
-    this.microphone = null;
+    // Audio stream
     this.audioStream = null;
-    
-    // VAD settings
-    this.vadThreshold = 5; // Volume threshold for speech detection (0-100)
-    this.silenceThreshold = 1500; // ms of silence before auto-stop
-    this.silenceTimer = null;
-    this.isSpeechDetected = false;
-    this.vadMonitoringActive = false;
     
     // Recording state
     this.mediaRecorder = null;
@@ -43,7 +36,7 @@ class VoiceRecordingService {
     this.onRecordingStop = null; // () => void - Called when recording stops (VAD detected silence)
     this.onVolumeChange = null; // (volume: number) => void - Real-time volume feedback
     
-    Logger.log('VoiceRecording', 'Service initialized');
+    Logger.log('VoiceRecording', 'Service initialized with VAD');
   }
 
   /**
@@ -57,7 +50,7 @@ class VoiceRecordingService {
     }
 
     try {
-      Logger.log('VoiceRecording', 'Starting VAD monitoring...');
+      Logger.log('VoiceRecording', 'Starting VAD...');
       
       // Set callbacks
       this.onTranscription = callbacks.onTranscription || null;
@@ -66,29 +59,39 @@ class VoiceRecordingService {
       this.onRecordingStop = callbacks.onRecordingStop || null;
       this.onVolumeChange = callbacks.onVolumeChange || null;
       
-      // Initialize audio context for VAD
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Get audio constraints with selected microphone
+      const constraints = MicrophoneService.getAudioConstraints();
+      Logger.log('VoiceRecording', 'Using audio constraints:', constraints);
       
       // Request microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
-      });
-
-      // Setup analyser for VAD
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.microphone = this.audioContext.createMediaStreamSource(this.audioStream);
-      this.microphone.connect(this.analyser);
+      this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       this.isActive = true;
-      this.vadMonitoringActive = true;
       
-      // Start VAD monitoring loop
-      this.startVADMonitoring();
+      // Start VAD with callbacks
+      await VADService.start({
+        stream: this.audioStream,
+        onSpeechStart: () => {
+          Logger.log('VoiceRecording', 'Speech detected - starting recording');
+          this.startRecording();
+          if (this.onVolumeChange) {
+            this.onVolumeChange(100); // Indicate speech activity
+          }
+        },
+        onSpeechEnd: () => {
+          Logger.log('VoiceRecording', 'Silence detected - stopping recording');
+          this.stopRecording();
+          if (this.onVolumeChange) {
+            this.onVolumeChange(0); // Indicate no speech activity
+          }
+        },
+        onError: (error) => {
+          Logger.error('VoiceRecording', 'VAD error:', error);
+          if (this.onError) {
+            this.onError(error);
+          }
+        },
+      });
       
       Logger.log('VoiceRecording', 'Started successfully');
       
@@ -104,34 +107,18 @@ class VoiceRecordingService {
   /**
    * Stop VAD monitoring and recording system
    */
-  stop() {
+  async stop() {
     Logger.log('VoiceRecording', 'Stopping...');
     
     // Stop any ongoing recording
     this.stopRecording();
     
-    // Stop VAD monitoring
-    this.stopVADMonitoring();
+    // Stop VAD
+    await VADService.stop();
     
-    // Cleanup audio resources
-    if (this.microphone) {
-      this.microphone.disconnect();
-      this.microphone = null;
-    }
-    
-    if (this.audioStream) {
-      this.audioStream.getTracks().forEach(track => track.stop());
-      this.audioStream = null;
-    }
-    
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-    
-    this.analyser = null;
+    // Cleanup audio stream (already stopped by VAD, but null out reference)
+    this.audioStream = null;
     this.isActive = false;
-    this.vadMonitoringActive = false;
     
     // Clear callbacks
     this.onTranscription = null;
@@ -141,95 +128,6 @@ class VoiceRecordingService {
     this.onVolumeChange = null;
     
     Logger.log('VoiceRecording', 'Stopped');
-  }
-
-  /**
-   * Start VAD monitoring loop
-   */
-  startVADMonitoring() {
-    if (!this.analyser) return;
-    
-    const bufferLength = this.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const checkVoiceActivity = () => {
-      if (!this.vadMonitoringActive) return;
-      
-      this.analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate average volume
-      const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-      const volume = Math.min(100, (average / 255) * 100);
-      
-      // Notify volume change
-      if (this.onVolumeChange) {
-        this.onVolumeChange(volume);
-      }
-      
-      // Debug: Log volume occasionally
-      if (Math.random() < 0.01) { // Log ~1% of the time
-        Logger.log('VoiceRecording', `Volume: ${volume.toFixed(1)}, Threshold: ${this.vadThreshold}, Recording: ${this.isRecording}`);
-      }
-      
-      // Speech detected
-      if (volume > this.vadThreshold) {
-        this.handleSpeechDetected();
-      } else {
-        this.handleSilenceDetected();
-      }
-      
-      // Continue monitoring
-      requestAnimationFrame(checkVoiceActivity);
-    };
-    
-    checkVoiceActivity();
-    Logger.log('VoiceRecording', 'VAD monitoring loop started');
-  }
-
-  /**
-   * Stop VAD monitoring
-   */
-  stopVADMonitoring() {
-    this.vadMonitoringActive = false;
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
-    }
-  }
-
-  /**
-   * Handle speech detected by VAD
-   */
-  handleSpeechDetected() {
-    // Clear silence timer
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
-    }
-    
-    // Start recording if not already
-    if (!this.isRecording && this.isActive) {
-      Logger.log('VoiceRecording', 'Speech detected - starting recording');
-      this.startRecording();
-    }
-    
-    this.isSpeechDetected = true;
-  }
-
-  /**
-   * Handle silence detected by VAD
-   */
-  handleSilenceDetected() {
-    if (!this.isSpeechDetected) return;
-    
-    // Start silence timer if recording
-    if (this.isRecording && !this.silenceTimer) {
-      this.silenceTimer = setTimeout(() => {
-        Logger.log('VoiceRecording', 'Silence detected - stopping recording');
-        this.stopRecording();
-        this.isSpeechDetected = false;
-      }, this.silenceThreshold);
-    }
   }
 
   /**
@@ -365,20 +263,6 @@ class VoiceRecordingService {
    */
   isCurrentlyRecording() {
     return this.isRecording;
-  }
-
-  /**
-   * Update VAD settings
-   */
-  updateVADSettings({ vadThreshold, silenceThreshold }) {
-    if (vadThreshold !== undefined) {
-      this.vadThreshold = vadThreshold;
-      Logger.log('VoiceRecording', `VAD threshold updated to ${vadThreshold}`);
-    }
-    if (silenceThreshold !== undefined) {
-      this.silenceThreshold = silenceThreshold;
-      Logger.log('VoiceRecording', `Silence threshold updated to ${silenceThreshold}ms`);
-    }
   }
 }
 

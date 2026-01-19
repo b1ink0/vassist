@@ -13,6 +13,7 @@ import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../service
 import DocumentInteractionService from '../services/DocumentInteractionService'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
+import { PromptConfig } from '../config/promptConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
 import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
@@ -62,10 +63,11 @@ const ChatController = ({
 
   /**
    * Track voice conversation state to update isSpeaking
-   * Note: This is now handled in AppContext, but we keep local tracking
-   * for any component-specific logic
+   * Skip in input window as ChatInput handles it there
    */
   useEffect(() => {
+    if (isInputWindow) return;
+    
     const handleStateChange = (state) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
     };
@@ -102,6 +104,28 @@ const ChatController = ({
   }, [isTempChat, currentChatId])
 
   /**
+   * Desktop: Listen for voice events from input window via IPC
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+
+    const unsubscribeVoiceTranscription = api.ipc.on('chatInput:voiceTranscription', (text) => {
+      Logger.log('ChatController', 'Voice transcription from input window:', text);
+      handleVoiceTranscription(text);
+    });
+
+    const unsubscribeVoiceMode = api.ipc.on('chatInput:voiceMode', (isActive) => {
+      Logger.log('ChatController', 'Voice mode from input window:', isActive);
+      handleVoiceModeChange(isActive);
+    });
+
+    return () => {
+      unsubscribeVoiceTranscription?.();
+      unsubscribeVoiceMode?.();
+    };
+  }, [api]);
+
+  /**
    * Abort streaming when chat is closed to stop TTS generation
    */
   useEffect(() => {
@@ -134,6 +158,32 @@ const ChatController = ({
       window.removeEventListener('abortTTSGeneration', handleAbortGeneration);
     };
   }, [])
+
+  /**
+   * Get system prompt from AI config based on provider and prompt type
+   * @param {Object} aiConfig - AI configuration object
+   * @returns {string} System prompt text
+   */
+  const getSystemPromptFromConfig = (aiConfig) => {
+    if (!aiConfig || !aiConfig.provider) {
+      return PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    const providerKey = aiConfig.provider === 'chrome-ai' ? 'chromeAi' : aiConfig.provider;
+    const providerConfig = aiConfig[providerKey];
+    
+    if (!providerConfig) {
+      return PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    const promptType = providerConfig.systemPromptType || 'default';
+    
+    if (promptType === 'custom') {
+      return providerConfig.systemPrompt || PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    return PromptConfig.systemPrompts[promptType]?.prompt || PromptConfig.systemPrompts.default.prompt;
+  };
 
   /**
    * Handles chat button click to toggle chat visibility.
@@ -247,19 +297,18 @@ const ChatController = ({
       ttsConfig = DefaultTTSConfig;
     }
     
-    const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt;
+    const systemPrompt = getSystemPromptFromConfig(savedConfig);
     const messages = ChatService.getFormattedMessages(systemPrompt);
     
     // DOCUMENT INTERACTION: Extract page context based on user query
-    // SKIP if user has attachments (images/audios) or using android-local/desktop-local provider
+    // SKIP if user has attachments (images/audios) or on Android/Desktop platforms
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
-    const isLocalProvider = savedConfig.provider === 'android-local' || savedConfig.provider === 'desktop-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isLocalProvider) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroid && !isDesktop) {
       Logger.log('ChatController', 'Starting document interaction analysis...');
       
       // Check if aborted before starting
@@ -314,6 +363,8 @@ const ChatController = ({
     }
     
     let fullResponse = '';
+    let fullResponseRaw = ''; // Raw response with <think> tags (for tracking)
+    let previousDisplayLength = 0; // Track how much we've already processed for TTS
     let hasSwitchedToSpeaking = false;
     let textBuffer = '';
     const allChunks = [];
@@ -419,8 +470,26 @@ const ChatController = ({
         return;
       }
       
-      fullResponse += chunk;
-      textBuffer += chunk;
+      // Add chunk to raw response
+      fullResponseRaw += chunk;
+      
+      // Remove all <think>...</think> blocks (including incomplete ones at the end)
+      // This regex handles complete think blocks
+      let displayResponse = fullResponseRaw.replace(/<think>[\s\S]*?<\/think>/g, '');
+      
+      // Remove incomplete opening <think> tag at the end (if chunk ended mid-tag)
+      displayResponse = displayResponse.replace(/<think>.*$/s, '');
+      
+      // Remove leading newlines/whitespace from the response
+      displayResponse = displayResponse.replace(/^\s+/, '');
+      
+      // Update fullResponse with filtered content
+      fullResponse = displayResponse;
+      
+      // Get only the new content since last update for TTS
+      const newContent = displayResponse.slice(previousDisplayLength);
+      textBuffer += newContent;
+      previousDisplayLength = displayResponse.length;
 
       const currentMessages = ChatService.getMessages();
       Logger.log('ChatController', 'Streaming chunk received, current message count:', currentMessages.length);
@@ -669,21 +738,20 @@ const ChatController = ({
       voiceTTSConfig = DefaultTTSConfig;
     }
     
-    const systemPrompt = voiceAIConfig.systemPrompt || DefaultAIConfig.systemPrompt
-    const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured()
+    const systemPrompt = getSystemPromptFromConfig(voiceAIConfig);
+    const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured();
 
     const messages = ChatService.getFormattedMessages(systemPrompt)
 
     // DOCUMENT INTERACTION: Extract page context for voice queries too
-    // SKIP if user has attachments (images/audios) or using android-local/desktop-local provider
+    // SKIP if user has attachments (images/audios) or on Android/Desktop platforms
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
-    const isLocalProviderVoice = voiceAIConfig.provider === 'android-local' || voiceAIConfig.provider === 'desktop-local';
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isLocalProviderVoice) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroid && !isDesktop) {
       // Check if aborted before starting
       if (abortController.signal.aborted) {
         Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');
@@ -729,6 +797,8 @@ const ChatController = ({
     }
 
     let fullResponse = ''
+    let fullResponseRaw = '' // Raw response with <think> tags (for tracking)
+    let previousDisplayLength = 0 // Track how much we've already processed for TTS
     let hasSwitchedToSpeaking = false
     let textBuffer = ''
     const allChunks = []
@@ -800,8 +870,25 @@ const ChatController = ({
         return;
       }
       
-      fullResponse += chunk
-      textBuffer += chunk
+      // Add chunk to raw response
+      fullResponseRaw += chunk
+      
+      // Remove all <think>...</think> blocks (including incomplete ones at the end)
+      let displayResponse = fullResponseRaw.replace(/<think>[\s\S]*?<\/think>/g, '')
+      
+      // Remove incomplete opening <think> tag at the end (if chunk ended mid-tag)
+      displayResponse = displayResponse.replace(/<think>.*$/s, '')
+      
+      // Remove leading newlines/whitespace from the response
+      displayResponse = displayResponse.replace(/^\s+/, '')
+      
+      // Update fullResponse with filtered content
+      fullResponse = displayResponse
+      
+      // Get only the new content since last update for TTS
+      const newContent = displayResponse.slice(previousDisplayLength)
+      textBuffer += newContent
+      previousDisplayLength = displayResponse.length
 
       const currentMessages = ChatService.getMessages()
       if (currentMessages.length > 0 && 

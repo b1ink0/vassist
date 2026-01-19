@@ -73,6 +73,7 @@ function createInputWindow() {
     inputWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     inputWindow.loadURL('app://./electron/index.html?window=input');
+    inputWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
   inputWindow.once('ready-to-show', () => {
@@ -310,6 +311,7 @@ app.whenReady().then(() => {
       '.css': 'text/css',
       '.json': 'application/json',
       '.wasm': 'application/wasm',
+      '.onnx': 'application/octet-stream',
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
       '.svg': 'image/svg+xml',
@@ -604,6 +606,42 @@ ipcMain.on('state:isChatInputVisible', (event, visible) => {
 ipcMain.on('state:pendingDropData', (event, data) => {
   if (inputWindow && inputWindow.webContents) {
     inputWindow.webContents.send('state:pendingDropData', data);
+  }
+});
+
+// Microphone device state sync between windows
+ipcMain.on('state:micDevices', (event, data) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:micDevices', data);
+  }
+});
+
+ipcMain.on('state:selectedMicId', (event, deviceId) => {
+  // Sync selected mic between main and input windows
+  if (mainWindow && mainWindow.webContents && event.sender !== mainWindow.webContents) {
+    mainWindow.webContents.send('state:selectedMicId', deviceId);
+  }
+  if (inputWindow && inputWindow.webContents && event.sender !== inputWindow.webContents) {
+    inputWindow.webContents.send('state:selectedMicId', deviceId);
+  }
+});
+
+// Voice conversation state sync from input window to main window
+ipcMain.on('chatInput:voiceTranscription', (event, text) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:voiceTranscription', text);
+  }
+});
+
+ipcMain.on('chatInput:voiceMode', (event, isActive) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:voiceMode', isActive);
+  }
+});
+
+ipcMain.on('chatInput:voiceState', (event, state) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('chatInput:voiceState', state);
   }
 });
 

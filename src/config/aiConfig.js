@@ -43,6 +43,7 @@ export const TTSProviders = {
   KOKORO: 'kokoro', // Kokoro-JS local TTS
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible', // Generic OpenAI-compatible TTS API
+  GPTSOVITS_REMOTE: 'gptsovits-remote', // Remote GPT-SoVITS server (all platforms)
 };
 
 /**
@@ -363,6 +364,20 @@ export const DefaultTTSConfig = {
     // Training config
     trained: false,
     checkpointPath: null,
+  },
+  
+  'gptsovits-remote': {
+    endpoint: 'http://localhost:11438', // Remote GPT-SoVITS server URL
+    model: 'gpt-sovits',
+    // Voice cloning reference (same as desktop-local)
+    referenceVoiceId: null,
+    referenceText: '',
+    referenceLanguage: GPTSoVITSLanguages.ENGLISH,
+    // TTS parameters
+    speed: 1.0,
+    topK: 15,
+    topP: 0.7,
+    temperature: 0.7,
   },
   
   chunkSize: 500,

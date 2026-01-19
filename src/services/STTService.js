@@ -10,6 +10,7 @@ import { STTProviders, DefaultSTTConfig } from '../config/aiConfig';
 import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
+import MicrophoneService from './MicrophoneService';
 
 class STTService {
   constructor() {
@@ -216,7 +217,6 @@ class STTService {
     if (!this.isConfigured()) {
       throw new Error('STTService not configured. Enable STT and configure settings first.');
     }
-
     if (this.isRecording) {
       Logger.warn('STTService', 'Already recording');
       return false;
@@ -225,18 +225,17 @@ class STTService {
     try {
       Logger.log('STTService', 'Requesting microphone access...');
       
-      // Request microphone access with optional deviceId
-      const constraints = { 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        } 
-      };
-      
-      if (deviceId) {
-        constraints.audio.deviceId = { exact: deviceId };
-      }
+      // Get audio constraints with selected microphone (or use provided deviceId)
+      const constraints = deviceId 
+        ? {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              deviceId: { exact: deviceId }
+            }
+          }
+        : MicrophoneService.getAudioConstraints();
       
       this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 

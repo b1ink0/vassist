@@ -205,6 +205,29 @@ class TTSService {
         state.provider = provider;
 
         Logger.log('other', `${logPrefix} - Desktop local TTS configured:`, { baseURL: endpoint, hasVoiceId: !!state.config.referenceVoiceId });
+      } else if (provider === TTSProviders.GPTSOVITS_REMOTE) {
+        const remoteConfig = config['gptsovits-remote'] || {};
+        let endpoint = remoteConfig.endpoint || 'http://localhost:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = endpoint;
+
+        state.config = {
+          model: remoteConfig.model || 'gpt-sovits',
+          speed: remoteConfig.speed || 1.0,
+          referenceVoiceId: remoteConfig.referenceVoiceId || null,
+          referenceText: remoteConfig.referenceText || '',
+          referenceLanguage: remoteConfig.referenceLanguage || 'en',
+          topK: remoteConfig.topK || 15,
+          topP: remoteConfig.topP || 0.7,
+          temperature: remoteConfig.temperature || 0.7,
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - GPTSoVITS Remote TTS configured:`, { baseURL: endpoint, hasVoiceId: !!state.config.referenceVoiceId });
       } else {
         throw new Error(`Unknown TTS provider: ${provider}`);
       }
@@ -324,7 +347,7 @@ class TTSService {
       try {
         Logger.log('other', `${logPrefix} - Generating speech (${text.length} chars)`);
         
-        if (state.provider === TTSProviders.DESKTOP_LOCAL) {
+        if (state.provider === TTSProviders.DESKTOP_LOCAL || state.provider === TTSProviders.GPTSOVITS_REMOTE) {
           let referenceAudioBase64 = null;
           let refText = state.config.referenceText;
           let refLang = state.config.referenceLanguage;
@@ -429,7 +452,7 @@ class TTSService {
       let arrayBuffer;
       let contentType = 'audio/mpeg';
       
-      if (state.provider === TTSProviders.DESKTOP_LOCAL) {
+      if (state.provider === TTSProviders.DESKTOP_LOCAL || state.provider === TTSProviders.GPTSOVITS_REMOTE) {
         let referenceAudioBase64 = null;
         let refText = state.config.referenceText;
         let refLang = state.config.referenceLanguage;

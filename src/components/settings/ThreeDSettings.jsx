@@ -83,8 +83,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [emoteName, setEmoteName] = useState('');
   const [selectedEmoteAudioFile, setSelectedEmoteAudioFile] = useState(null);
   const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState(null);
+  const [selectedEmoteCameraFile, setSelectedEmoteCameraFile] = useState(null);
   const emoteAudioFileInputRef = useRef(null);
   const emoteMotionFileInputRef = useRef(null);
+  const emoteCameraFileInputRef = useRef(null);
   const emoteZipFileInputRef = useRef(null);
   
   const [expandedModelSettings, setExpandedModelSettings] = useState(null); // ID of model showing expanded settings
@@ -696,6 +698,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
+  const handleEmoteCameraFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedEmoteCameraFile(file);
+    }
+  };
+
   const handleEmoteUpload = async () => {
     try {
       if (!emoteName.trim()) {
@@ -705,6 +714,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       const audioFile = selectedEmoteAudioFile;
       const motionFile = selectedEmoteMotionFile;
+      const cameraFile = selectedEmoteCameraFile; // Optional
 
       if (!audioFile || !motionFile) {
         setEmoteUploadState({ uploading: false, progress: '', error: 'Please select both audio and motion files' });
@@ -715,6 +725,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       const bvmdData = await vmdConverterService.convertVMDToBVMD(motionFile);
 
+      // Convert camera VMD if provided (optional)
+      let cameraBvmdData = null;
+      if (cameraFile) {
+        setEmoteUploadState({ uploading: true, progress: 'Converting camera animation...', error: null });
+        cameraBvmdData = await vmdConverterService.convertVMDToBVMD(cameraFile);
+      }
+
       setEmoteUploadState({ uploading: true, progress: 'Uploading emote...', error: null });
 
       await emoteStorageService.saveEmote(
@@ -722,9 +739,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         emoteName,
         audioFile,
         bvmdData,
+        cameraBvmdData, // Can be null
         {
           originalAudioFileName: audioFile.name,
           originalMotionFileName: motionFile.name,
+          originalCameraFileName: cameraFile ? cameraFile.name : null,
           audioMimeType: audioFile.type
         }
       );
@@ -733,8 +752,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       setEmoteName('');
       setSelectedEmoteAudioFile(null);
       setSelectedEmoteMotionFile(null);
+      setSelectedEmoteCameraFile(null);
       if (emoteAudioFileInputRef.current) emoteAudioFileInputRef.current.value = '';
       if (emoteMotionFileInputRef.current) emoteMotionFileInputRef.current.value = '';
+      if (emoteCameraFileInputRef.current) emoteCameraFileInputRef.current.value = '';
       await loadEmotes();
     } catch (error) {
       console.error('Failed to upload emote:', error);
@@ -780,7 +801,21 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             error: null
           });
 
-          const vmdFile = folder.files.find(f => f.toLowerCase().endsWith('.vmd'));
+          // Find VMD files - separate camera from model animation
+          const vmdFiles = folder.files.filter(f => f.toLowerCase().endsWith('.vmd'));
+          
+          // Detect camera VMD (case-insensitive: 'camera' or 'カメラ')
+          const cameraVmdFile = vmdFiles.find(f => {
+            const fileName = f.toLowerCase();
+            return fileName.includes('camera') || fileName.includes('カメラ'.toLowerCase());
+          });
+          
+          // Model animation VMD (not camera)
+          const modelVmdFile = vmdFiles.find(f => {
+            const fileName = f.toLowerCase();
+            return !(fileName.includes('camera') || fileName.includes('カメラ'.toLowerCase()));
+          });
+          
           const audioFile = folder.files.find(f => {
             const lower = f.toLowerCase();
             return lower.endsWith('.mp3') || lower.endsWith('.wav') || 
@@ -788,20 +823,29 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                    lower.endsWith('.aac') || lower.endsWith('.flac');
           });
 
-          if (!vmdFile || !audioFile) {
-            console.warn(`Skipping ${emoteName}: missing VMD or audio file`);
+          if (!modelVmdFile || !audioFile) {
+            console.warn(`Skipping ${emoteName}: missing model VMD or audio file`);
             failedCount++;
             continue;
           }
 
-          const vmdBlob = await zipContent.files[vmdFile].async('blob');
+          const vmdBlob = await zipContent.files[modelVmdFile].async('blob');
           const audioBlob = await zipContent.files[audioFile].async('blob');
+          
+          // Load camera VMD if found (optional)
+          let cameraBlob = null;
+          let cameraFileName = null;
+          if (cameraVmdFile) {
+            cameraBlob = await zipContent.files[cameraVmdFile].async('blob');
+            cameraFileName = cameraVmdFile.split('/').pop();
+          }
 
-          const vmdFileName = vmdFile.split('/').pop();
+          const vmdFileName = modelVmdFile.split('/').pop();
           const audioFileName = audioFile.split('/').pop();
 
           const vmdFileObj = new File([vmdBlob], vmdFileName, { type: 'application/octet-stream' });
           const audioFileObj = new File([audioBlob], audioFileName, { type: audioBlob.type || 'audio/mpeg' });
+          const cameraFileObj = cameraBlob ? new File([cameraBlob], cameraFileName, { type: 'application/octet-stream' }) : null;
 
           setEmoteUploadState({
             uploading: true,
@@ -810,6 +854,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           });
 
           const bvmdData = await vmdConverterService.convertVMDToBVMD(vmdFileObj);
+          
+          // Convert camera VMD if present
+          let cameraBvmdData = null;
+          if (cameraFileObj) {
+            cameraBvmdData = await vmdConverterService.convertVMDToBVMD(cameraFileObj);
+          }
 
           setEmoteUploadState({
             uploading: true,
@@ -822,9 +872,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             emoteName,
             audioFileObj,
             bvmdData,
+            cameraBvmdData, // Can be null
             {
               originalAudioFileName: audioFileName,
               originalMotionFileName: vmdFileName,
+              originalCameraFileName: cameraFileName,
               audioMimeType: audioFileObj.type
             }
           );
@@ -2140,6 +2192,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               className="hidden"
             />
             <input
+              ref={emoteCameraFileInputRef}
+              type="file"
+              accept="*/*,.vmd"
+              onChange={handleEmoteCameraFileChange}
+              className="hidden"
+            />
+            <input
               ref={emoteZipFileInputRef}
               type="file"
               accept=".zip,application/zip"
@@ -2196,6 +2255,19 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 {selectedEmoteMotionFile?.name || 'Upload Motion'}
               </p>
               <p className="text-xs text-white/50">VMD file</p>
+            </button>
+
+            {/* Camera File Upload Button (Optional) */}
+            <button
+              onClick={() => emoteCameraFileInputRef.current?.click()}
+              disabled={emoteUploadState.uploading}
+              className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="camera" size={24} className="mx-auto mb-1 text-white/70" />
+              <p className="text-sm text-white/90">
+                {selectedEmoteCameraFile?.name || 'Upload Camera (Optional)'}
+              </p>
+              <p className="text-xs text-white/50">VMD camera animation</p>
             </button>
 
             {/* Upload Button */}

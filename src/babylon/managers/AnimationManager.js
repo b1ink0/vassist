@@ -19,6 +19,8 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { MmdAnimationSpan, MmdCompositeAnimation } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
+// Import camera animation runtime to enable camera animation evaluation
+import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import {
   AssistantState,
   StateBehavior,
@@ -160,6 +162,21 @@ export class AnimationManager {
     this.animationQueue = [];
     this.isProcessingQueue = false; // Prevent re-entry during queue processing
     this.justStartedFromQueue = false; // Track if we just started an animation from queue (prevent immediate re-check)
+
+    // ========================================
+    // CAMERA ANIMATION SYSTEM (for emotes)
+    // ========================================
+    /**
+     * Camera animation system for emotes with camera VMD
+     * - currentCameraAnimation: Loaded camera animation
+     * - currentCameraUrl: Blob URL for cleanup
+     * - cameraAnimationEnabled: Whether camera animation is active
+     * - originalCameraState: Saved camera state before animation (for restoration)
+     */
+    this.currentCameraAnimation = null;
+    this.currentCameraUrl = null;
+    this.cameraAnimationEnabled = false;
+    this.originalCameraState = null;
 
     Logger.log('AnimationManager', 'Created');
   }
@@ -849,6 +866,132 @@ export class AnimationManager {
   }
 
   /**
+   * Load and setup camera animation for emotes
+   * Camera animations are only used for emotes (not for default animations)
+   * @param {string} cameraFilePath - Blob URL to camera VMD/BVMD file
+   * @returns {Promise<void>}
+   */
+  async loadCameraAnimation(cameraFilePath) {
+    if (!cameraFilePath) {
+      Logger.warn('AnimationManager', 'No camera file path provided - skipping camera animation');
+      return;
+    }
+
+    try {
+      Logger.log('AnimationManager', `Loading camera animation from: ${cameraFilePath}`);
+      
+      // Get camera from scene metadata
+      const mmdCamera = this.scene.metadata?.mmdCamera;
+      if (!mmdCamera) {
+        Logger.error('AnimationManager', 'MMD camera not found in scene metadata - cannot load camera animation');
+        return;
+      }
+
+      // CRITICAL: Save original camera state BEFORE applying animation
+      this.originalCameraState = {
+        position: mmdCamera.position.clone(),
+        rotation: mmdCamera.rotation.clone(),
+        distance: mmdCamera.distance,
+        fov: mmdCamera.fov
+      };
+      Logger.log('AnimationManager', 'Saved original camera state:', this.originalCameraState);
+
+      // Load camera animation using appropriate loader (BVMD or VMD)
+      let cameraAnimation;
+      if (cameraFilePath.endsWith('.vmd')) {
+        cameraAnimation = await this.vmdLoader.loadAsync('cameraAnim', cameraFilePath);
+      } else {
+        cameraAnimation = await this.bvmdLoader.loadAsync('cameraAnim', cameraFilePath);
+      }
+
+      // CRITICAL: Apply locomotion offset to camera animation
+      // Camera animations assume model is at origin, but our model has a locomotion offset
+      // We need to shift the camera's target to follow the offset model
+      if (this._introLocomotionOffset && cameraAnimation.cameraTrack) {
+        const offsetX = this._introLocomotionOffset.x;
+        const offsetZ = this._introLocomotionOffset.z || 0;
+        
+        Logger.log('AnimationManager', `Applying locomotion offset to camera animation: x=${offsetX.toFixed(2)}, z=${offsetZ.toFixed(2)}`);
+        
+        // Offset all camera position keyframes
+        const positionTrack = cameraAnimation.cameraTrack.positions;
+        if (positionTrack) {
+          for (let i = 0; i < positionTrack.length; i += 3) {
+            positionTrack[i] += offsetX;     // x
+            positionTrack[i + 2] += offsetZ; // z (y is i+1, don't offset vertical)
+          }
+          Logger.log('AnimationManager', `Camera animation positions offset by locomotion`);
+        }
+      }
+
+      // Store camera animation and URL for later cleanup
+      this.currentCameraAnimation = cameraAnimation;
+      this.currentCameraUrl = cameraFilePath;
+      
+      // Create runtime animation for camera
+      const cameraRuntimeHandle = mmdCamera.createRuntimeAnimation(cameraAnimation);
+      mmdCamera.setRuntimeAnimation(cameraRuntimeHandle);
+      
+      // CRITICAL: Add camera to mmdRuntime so it animates in sync with model
+      // This is necessary for the camera to be evaluated on each frame
+      this.mmdRuntime.addAnimatable(mmdCamera);
+      
+      // Enable camera animation
+      this.cameraAnimationEnabled = true;
+      
+      Logger.log('AnimationManager', `Camera animation loaded successfully: ${cameraAnimation.endFrame} frames, added to runtime`);
+      
+    } catch (error) {
+      Logger.error('AnimationManager', 'Failed to load camera animation:', error);
+      this.currentCameraAnimation = null;
+      this.currentCameraUrl = null;
+      this.cameraAnimationEnabled = false;
+    }
+  }
+
+  /**
+   * Cleanup camera animation
+   * Removes camera animation and resets camera to default position
+   */
+  cleanupCameraAnimation() {
+    if (!this.cameraAnimationEnabled) {
+      return;
+    }
+
+    Logger.log('AnimationManager', 'Cleaning up camera animation');
+    
+    const mmdCamera = this.scene.metadata?.mmdCamera;
+    if (mmdCamera) {
+      // CRITICAL: Remove camera from runtime FIRST to stop evaluation
+      this.mmdRuntime.removeAnimatable(mmdCamera);
+      
+      // Clear camera runtime animation
+      mmdCamera.setRuntimeAnimation(null);
+      
+      // CRITICAL: Restore original camera state to prevent weird positions
+      if (this.originalCameraState) {
+        mmdCamera.position.copyFrom(this.originalCameraState.position);
+        mmdCamera.rotation.copyFrom(this.originalCameraState.rotation);
+        mmdCamera.distance = this.originalCameraState.distance;
+        mmdCamera.fov = this.originalCameraState.fov;
+        Logger.log('AnimationManager', 'Camera restored to original state:', this.originalCameraState);
+      } else {
+        // Fallback: reset to default if no saved state
+        mmdCamera.rotation.set(0, 0, 0);
+        Logger.warn('AnimationManager', 'No saved camera state - reset rotation to default only');
+      }
+      
+      Logger.log('AnimationManager', 'Camera animation removed from runtime and reset');
+    }
+    
+    // Clear camera animation state
+    this.currentCameraAnimation = null;
+    this.currentCameraUrl = null;
+    this.cameraAnimationEnabled = false;
+    this.originalCameraState = null;
+  }
+
+  /**
    * Transition to a new state
    * Validates transition, selects appropriate animation, and starts playback
    * @param {string} newState - Target state from AssistantState
@@ -959,6 +1102,17 @@ export class AnimationManager {
     this.currentAnimationConfig = animationConfig;
     this.currentLoadedAnimation = loadedAnimation;
     this.currentAnimationDuration = loadedAnimation.endFrame;
+
+    // Load camera animation if provided (for emotes)
+    if (animationConfig.cameraFilePath) {
+      Logger.log('AnimationManager', `Camera file path detected: ${animationConfig.cameraFilePath}`);
+      await this.loadCameraAnimation(animationConfig.cameraFilePath);
+    } else {
+      // No camera animation - cleanup any previous camera animation
+      if (this.cameraAnimationEnabled) {
+        this.cleanupCameraAnimation();
+      }
+    }
 
     // Handle transition between different animations
     // Keep old spans active during transition for smooth blending
@@ -2377,6 +2531,11 @@ export class AnimationManager {
 
     // Clear animation queue
     this.clearQueue();
+    
+    // Cleanup camera animation if active
+    if (this.cameraAnimationEnabled) {
+      this.cleanupCameraAnimation();
+    }
 
     // Remove visibility change handler
     if (this.visibilityChangeHandler) {

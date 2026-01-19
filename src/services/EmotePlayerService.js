@@ -51,6 +51,13 @@ class EmotePlayerService {
 
       const audioUrl = URL.createObjectURL(emote.audioData);
       const motionUrl = URL.createObjectURL(emote.motionData);
+      
+      // Create camera animation URL if camera data exists (optional)
+      let cameraUrl = null;
+      if (emote.cameraData) {
+        cameraUrl = URL.createObjectURL(emote.cameraData);
+        Logger.log('EmotePlayer', `Camera animation loaded for emote: ${emote.name}`);
+      }
 
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
@@ -65,6 +72,7 @@ class EmotePlayerService {
           id: emoteId,
           name: emote.name,
           filePath: motionUrl,
+          cameraFilePath: cameraUrl, // Optional camera animation
           isCustom: true,
           customMotionId: emoteId,
           loop: false,
@@ -79,7 +87,7 @@ class EmotePlayerService {
       audio.addEventListener('ended', () => {
         Logger.log('EmotePlayer', 'Emote audio ended');
         
-        this.cleanup(audioUrl, motionUrl);
+        this.cleanup(audioUrl, motionUrl, cameraUrl);
         
         // If auto-play is active, play next emote after delay
         if (this.autoPlayActive) {
@@ -92,7 +100,7 @@ class EmotePlayerService {
       audio.addEventListener('error', (error) => {
         Logger.error('EmotePlayer', 'Audio playback error:', error);
         
-        this.cleanup(audioUrl, motionUrl);
+        this.cleanup(audioUrl, motionUrl, cameraUrl);
       });
 
       await audio.play();
@@ -122,10 +130,12 @@ class EmotePlayerService {
    * Cleanup blob URLs and reset state
    * @param {string} audioUrl - Audio blob URL to revoke
    * @param {string} motionUrl - Motion blob URL to revoke
+   * @param {string} cameraUrl - Optional camera blob URL to revoke
    */
-  cleanup(audioUrl, motionUrl) {
+  cleanup(audioUrl, motionUrl, cameraUrl = null) {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     if (motionUrl) URL.revokeObjectURL(motionUrl);
+    if (cameraUrl) URL.revokeObjectURL(cameraUrl);
     this.currentAudio = null;
     this.isPlaying = false;
     this.currentEmoteId = null;

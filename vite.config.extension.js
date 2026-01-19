@@ -12,6 +12,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { wrapContentScriptPlugin, copyAssetsPlugin } from './tools/vite-plugins/extension-plugins.js';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       wrapContentScriptPlugin(), // Wrap content script as IIFE
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
+      vadAssetsPlugin('dist-extension'),
     ],
     
     define: {

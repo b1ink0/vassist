@@ -13,6 +13,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +31,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       tailwindcss(),
+      vadAssetsPlugin('dist-desktop'),
       isProduction && {
         name: 'copy-server-files-production',
         closeBundle() {
@@ -125,7 +127,9 @@ export default defineConfig(({ mode }) => {
                   'multer',
                   'util',
                   'stream',
-                  'unzipper'
+                  'unzipper',
+                  '@ricky0123/vad-web',
+                  'onnxruntime-web'
                 ],
               },
             },
@@ -149,7 +153,9 @@ export default defineConfig(({ mode }) => {
                   'multer',
                   'util',
                   'stream',
-                  'unzipper'
+                  'unzipper',
+                  '@ricky0123/vad-web',
+                  'onnxruntime-web'
                 ],
               },
             },

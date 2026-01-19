@@ -327,6 +327,11 @@ class VoiceConversationService {
    */
   setStateChangeCallback(callback) {
     this.onStateChange = callback;
+    
+    // Immediately send current state if we're already active
+    if (callback && this.isActive) {
+      callback(this.currentState);
+    }
   }
 
   setTranscriptionCallback(callback) {

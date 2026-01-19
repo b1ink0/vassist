@@ -19,6 +19,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
+import { isInputWindow } from '../utils/PlatformUtils';
 
 const AppContext = createContext(null);
 
@@ -243,7 +244,10 @@ export const AppProvider = ({ children }) => {
   // ========================================
 
   // Track voice conversation state
+  // Skip in input window as ChatInput handles it there
   useEffect(() => {
+    if (isInputWindow) return;
+    
     const handleStateChange = (state) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
     };

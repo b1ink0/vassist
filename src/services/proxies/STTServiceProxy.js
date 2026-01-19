@@ -11,6 +11,7 @@ import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
 import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy.js';
 import { DefaultSTTConfig } from '../../config/aiConfig.js';
+import MicrophoneService from '../MicrophoneService.js';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {
@@ -109,18 +110,17 @@ class STTServiceProxy extends ServiceProxy {
       }
 
       try {
-        // Request microphone access with optional deviceId
-        const constraints = {
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          }
-        };
-        
-        if (deviceId) {
-          constraints.audio.deviceId = { exact: deviceId };
-        }
+        // Get audio constraints with selected microphone (or use provided deviceId)
+        const constraints = deviceId 
+          ? {
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                deviceId: { exact: deviceId }
+              }
+            }
+          : MicrophoneService.getAudioConstraints();
         
         this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 

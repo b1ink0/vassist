@@ -15,6 +15,7 @@ import { Icon } from './icons';
 import Logger from '../services/LoggerService';
 import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
+import MicrophoneService from '../services/MicrophoneService';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -96,6 +97,11 @@ const ChatInput = forwardRef(({
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDropServiceRef = useRef(null);
 
+  // Microphone selection state
+  const [micDevices, setMicDevices] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState(null);
+  const [showMicSelect, setShowMicSelect] = useState(false);
+
   // IPC wrapper functions for input window
   const wrappedOnSend = useCallback((message, images, audios) => {
     if (isInputWindow) {
@@ -146,8 +152,19 @@ const ChatInput = forwardRef(({
       setLocalPendingDropData(data);
     });
 
+    const unsubscribeMicDevices = api.ipc.on('state:micDevices', (data) => {
+      setMicDevices(data.devices);
+      setSelectedMicId(data.selectedDeviceId);
+    });
+
+    const unsubscribeSelectedMic = api.ipc.on('state:selectedMicId', (deviceId) => {
+      MicrophoneService.setSelectedDevice(deviceId);
+    });
+
     return () => {
       unsubscribePendingDrop?.();
+      unsubscribeMicDevices?.();
+      unsubscribeSelectedMic?.();
     };
   }, [api]);
 
@@ -301,29 +318,68 @@ const ChatInput = forwardRef(({
   }, []);
 
   useEffect(() => {
-    VoiceConversationService.setStateChangeCallback((state) => {
+    const handleStateChange = (state) => {
       Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
-    });
+      
+      // Desktop input window: Send state to main window via IPC
+      if (isInputWindow && api?.ipc) {
+        api.ipc.send('chatInput:voiceState', state);
+      }
+    };
 
-    VoiceConversationService.setTranscriptionCallback((text) => {
+    const handleTranscription = (text) => {
       Logger.log('ChatInput', 'Voice transcription:', text);
-      if (onVoiceTranscription) {
+      
+      // Desktop input window: Send to main window via IPC
+      if (isInputWindow && api?.ipc) {
+        api.ipc.send('chatInput:voiceTranscription', text);
+      } else if (onVoiceTranscription) {
+        // Regular mode: Call callback directly
         onVoiceTranscription(text);
       }
-    });
+    };
 
-    VoiceConversationService.setErrorCallback((error) => {
+    const handleError = (error) => {
       Logger.error('ChatInput', 'Voice error:', error);
       setRecordingError(error.message || 'Voice conversation error');
-    });
+    };
+
+    VoiceConversationService.setStateChangeCallback(handleStateChange);
+    VoiceConversationService.setTranscriptionCallback(handleTranscription);
+    VoiceConversationService.setErrorCallback(handleError);
 
     return () => {
       VoiceConversationService.setStateChangeCallback(null);
       VoiceConversationService.setTranscriptionCallback(null);
       VoiceConversationService.setErrorCallback(null);
     };
-  }, [onVoiceTranscription]);
+  }, [api, onVoiceTranscription]);
+
+  // Initialize microphone service and subscribe to device changes
+  useEffect(() => {
+    const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
+      setMicDevices(devices);
+      setSelectedMicId(selectedDeviceId);
+      
+      // Sync to input window on desktop
+      if (!isInputWindow && api?.ipc) {
+        api.ipc.send('state:micDevices', { devices, selectedDeviceId });
+      }
+    });
+
+    // Initialize devices on mount
+    const initDevices = async () => {
+      try {
+        await MicrophoneService.initialize();
+      } catch (error) {
+        Logger.log('ChatInput', 'Mic permission not granted yet');
+      }
+    };
+    initDevices();
+
+    return unsubscribe;
+  }, [api]);
 
   useEffect(() => {
     const handleStartVoiceMode = async () => {
@@ -806,7 +862,12 @@ const ChatInput = forwardRef(({
         setIsVoiceMode(false);
         setVoiceState(ConversationStates.IDLE);
         
-        if (onVoiceMode) onVoiceMode(false);
+        // Desktop input window: Send to main window via IPC
+        if (isInputWindow && api?.ipc) {
+          api.ipc.send('chatInput:voiceMode', false);
+        } else if (onVoiceMode) {
+          onVoiceMode(false);
+        }
       } else {
         Logger.log('ChatInput', 'Starting voice conversation mode');
         TTSServiceProxy.stopPlayback();
@@ -818,7 +879,12 @@ const ChatInput = forwardRef(({
         await VoiceConversationService.start();
         setIsVoiceMode(true);
         
-        if (onVoiceMode) onVoiceMode(true);
+        // Desktop input window: Send to main window via IPC
+        if (isInputWindow && api?.ipc) {
+          api.ipc.send('chatInput:voiceMode', true);
+        } else if (onVoiceMode) {
+          onVoiceMode(true);
+        }
       }
     } catch (error) {
       Logger.error('ChatInput', 'Voice mode toggle error:', error);
@@ -832,6 +898,32 @@ const ChatInput = forwardRef(({
    */
   const handleInterrupt = () => {
     Logger.log('ChatInput', 'User interrupted');
+    VoiceConversationService.interrupt();
+  };
+
+  /**
+   * Handles microphone device selection
+   */
+  const handleMicSelect = (deviceId) => {
+    Logger.log('ChatInput', 'Microphone selected:', deviceId);
+    MicrophoneService.setSelectedDevice(deviceId || null);
+    setShowMicSelect(false);
+    
+    // Sync selected mic across windows on desktop
+    if (api?.ipc) {
+      api.ipc.send('state:selectedMicId', deviceId || null);
+    }
+  };
+
+  /**
+   * Toggles microphone selection dropdown
+   */
+  const handleMicSelectToggle = () => {
+    setShowMicSelect(!showMicSelect);
+  };
+
+  /**
+   * Handles microphone button click for voice recording.
     
     const event = new CustomEvent('voiceInterrupt');
     window.dispatchEvent(event);
@@ -885,6 +977,7 @@ const ChatInput = forwardRef(({
   if (!shouldRender) return null;
 
   const getVoiceStateDisplay = () => {
+    Logger.log('ChatInput', 'Current voiceState:', voiceState, 'Expected LISTENING:', ConversationStates.LISTENING);
     switch (voiceState) {
       case ConversationStates.LISTENING:
         return { icon: 'microphone', label: 'Listening...', class: 'listening', showInterrupt: false };
@@ -1142,6 +1235,51 @@ const ChatInput = forwardRef(({
                     >
                       <Icon name="phone" size={18} />
                     </button>
+                    
+                    {/* Microphone selection */}
+                    <button
+                      type="button"
+                      onClick={handleMicSelectToggle}
+                      disabled={isRecording || isProcessingRecording}
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
+                        isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black'
+                      }`}
+                      title="Select Microphone"
+                    >
+                      <Icon name="chevron-down" size={18} />
+                    </button>
+                    
+                    {showMicSelect && (
+                      <select
+                        value={selectedMicId || ''}
+                        onChange={(e) => handleMicSelect(e.target.value)}
+                        onBlur={() => setShowMicSelect(false)}
+                        autoFocus
+                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
+                          !isLightBackground 
+                            ? 'bg-white/90 text-black border-white/20' 
+                            : 'bg-black/90 text-white border-white/10'
+                        } border shadow-2xl`}
+                        style={{
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                        }}
+                        size={Math.min(micDevices.length + 1, 5)}
+                      >
+                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
+                          Default Microphone
+                        </option>
+                        {micDevices.map((device) => (
+                          <option 
+                            key={device.deviceId} 
+                            value={device.deviceId}
+                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
+                          >
+                            {device.label || `Microphone ${device.deviceId.substring(0, 8)}...`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     
                     <button
                       type="button"

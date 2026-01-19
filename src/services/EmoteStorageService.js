@@ -43,15 +43,16 @@ class EmoteStorageService {
   }
 
   /**
-   * Save an emote to storage (audio + motion together)
+   * Save an emote to storage (audio + motion + optional camera together)
    * @param {string} emoteId - Unique emote ID (or null to generate)
    * @param {string} emoteName - User-editable emote name
    * @param {Blob|ArrayBuffer} audioData - Audio file data (MP3, WAV, OGG, etc.)
    * @param {Blob|ArrayBuffer} motionData - BVMD motion data
+   * @param {Blob|ArrayBuffer|null} cameraData - Optional BVMD camera animation data
    * @param {Object} metadata - Additional metadata
    * @returns {Promise<string>} - Emote ID
    */
-  async saveEmote(emoteId, emoteName, audioData, motionData, metadata = {}) {
+  async saveEmote(emoteId, emoteName, audioData, motionData, cameraData = null, metadata = {}) {
     try {
       const nameValidation = this.validateEmoteName(emoteName);
       if (!nameValidation.valid) {
@@ -82,17 +83,32 @@ class EmoteStorageService {
         throw new Error('Invalid motion data format. Expected Blob or ArrayBuffer.');
       }
 
+      // Convert camera animation to Blob if provided (optional)
+      let cameraBlob = null;
+      if (cameraData) {
+        if (cameraData instanceof ArrayBuffer) {
+          cameraBlob = new Blob([cameraData], { type: 'application/octet-stream' });
+        } else if (cameraData instanceof Blob) {
+          cameraBlob = cameraData;
+        } else {
+          throw new Error('Invalid camera data format. Expected Blob or ArrayBuffer.');
+        }
+      }
+
       const emoteData = {
         name: nameValidation.name,
         audioData: audioBlob,
         motionData: motionBlob,
+        cameraData: cameraBlob, // null if not provided
         isVisible: true,
         metadata: {
           originalAudioFileName: metadata.originalAudioFileName || 'unknown.mp3',
           originalMotionFileName: metadata.originalMotionFileName || 'unknown.vmd',
+          originalCameraFileName: metadata.originalCameraFileName || null,
           uploadedAt: Date.now(),
           audioSize: audioBlob.size,
           motionSize: motionBlob.size,
+          cameraSize: cameraBlob ? cameraBlob.size : 0,
           audioMimeType: audioBlob.type || 'audio/mpeg',
           ...metadata
         }

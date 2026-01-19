@@ -33,6 +33,7 @@ const GPTSoVITSConfig = ({
   onRequestDeleteVoiceDialog,
   refreshTrigger,
   isLightBackground = false,
+  skipSetup = false,
 }) => {
   const [voices, setVoices] = useState([]);
   const [uploadingVoice, setUploadingVoice] = useState(false);
@@ -195,8 +196,8 @@ const GPTSoVITSConfig = ({
 
   return (
     <div className="space-y-6">
-      {/* Setup section (desktop only) */}
-      {isDesktop && !isSetupMode && (
+      {/* Setup section (desktop only) - skip for remote servers */}
+      {isDesktop && !isSetupMode && !skipSetup && (
         <div>
           <h4 className="text-sm font-semibold text-white mb-3">Installation</h4>
           <GPTSoVITSSetup isLightBackground={isLightBackground} />
