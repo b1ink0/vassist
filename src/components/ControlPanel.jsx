@@ -421,6 +421,7 @@ const ControlPanel = ({
           left: `${buttonPos.x}px`,
           top: `${buttonPos.y}px`,
           zIndex: 9998,
+          maxWidth: '96vw',
         }}
         className={`w-12 h-12 bg-black/90 text-white border border-white/20 rounded-lg cursor-move shadow-lg backdrop-blur-sm flex items-center justify-center text-xl hover:bg-black transition-colors ${
           isDragging ? 'border-white/40' : ''
@@ -476,7 +477,7 @@ const ControlPanel = ({
         </button>
       </div>
 
-      <div className="flex border-b border-white/20 bg-black/50">
+      <div className="flex border-b border-white/20 bg-black/50 overflow-x-auto">
         <button
           onClick={() => setActiveTab('actions')}
           className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
