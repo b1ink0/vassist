@@ -421,7 +421,6 @@ const ControlPanel = ({
           left: `${buttonPos.x}px`,
           top: `${buttonPos.y}px`,
           zIndex: 9998,
-          maxWidth: '96vw',
         }}
         className={`w-12 h-12 bg-black/90 text-white border border-white/20 rounded-lg cursor-move shadow-lg backdrop-blur-sm flex items-center justify-center text-xl hover:bg-black transition-colors ${
           isDragging ? 'border-white/40' : ''
@@ -436,6 +435,7 @@ const ControlPanel = ({
             left: `${panelX}px`,
             top: `${panelY}px`,
             zIndex: 9997,
+            maxWidth: '96vw',
           }}
           className="pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm w-[520px]"
         >

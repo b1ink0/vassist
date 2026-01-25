@@ -50,7 +50,7 @@ const BabylonScene = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cleanupFnRef = useRef(null);
   
-  const { uiConfig } = useConfig();
+  const { uiConfig, updateUIConfig } = useConfig();
   const { api: desktopAPI } = useDesktop();
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
@@ -307,6 +307,7 @@ const BabylonScene = ({
         finalConfig = {
           ...finalConfig,
           ...sceneConfigRef.current,
+          updateUIConfig,
           onLoadProgress: (progress) => {
             setLoadingProgress(progress);
             if (onLoadProgressRef.current) {

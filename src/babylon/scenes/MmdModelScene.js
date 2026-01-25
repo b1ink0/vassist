@@ -92,8 +92,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   mmdCamera.ignoreParentScaling = true;
   mmdCamera.parent = cameraRoot;
 
-  // Enable orthographic mode for 2D-like appearance
+  // Default to 2D/ORTHOGRAPHIC mode
   mmdCamera.mode = Camera.ORTHOGRAPHIC_CAMERA;
+  
+  Logger.log('MmdModelScene', 'Camera initialized in 2D/ORTHOGRAPHIC mode');
   
   // Set orthographic frustum
   const orthoHeight = finalConfig.orthoHeight;
@@ -128,7 +130,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   camera.minZ = 1;
   camera.maxZ = 5000;
   camera.setPosition(new Vector3(0, 10, -45));
-  camera.attachControl(undefined, false);
   camera.inertia = 0.8;
   camera.speed = 10;
 
@@ -137,6 +138,422 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   scene.metadata.mmdCamera = mmdCamera;
   scene.metadata.arcRotateCamera = camera;
   scene.metadata.is3DViewActive = false;
+  
+  // Camera control constants
+  const CAMERA_3D_DISTANCE = -40;
+  const CAMERA_3D_DISTANCE_MIN = -100;
+  const CAMERA_3D_DISTANCE_MAX = -10;
+  const CAMERA_2D_HEIGHT_MIN = 300;
+  const CAMERA_2D_HEIGHT_MAX = 3500;
+  const CAMERA_2D_HEIGHT_DEFAULT = 600;
+  const CAMERA_2D_WIDTH_DEFAULT = 360;
+  const CAMERA_2D_ASPECT_RATIO = 0.6;
+  const CAMERA_ZOOM_SENSITIVITY_2D = 10;
+  const CAMERA_PINCH_SENSITIVITY = 0.2;
+  const CAMERA_PAN_SPEED_MULTIPLIER = 0.001;
+  const CAMERA_ROTATION_SENSITIVITY = 0.01;
+  
+  // Load camera state from UI config
+  const initialCameraMode = finalConfig.uiConfig?.camera?.mode || '3D';
+  const initialCameraLocked = finalConfig.uiConfig?.camera?.locked ?? true;
+  let cameraSaveEnabled = finalConfig.uiConfig?.camera?.savePosition ?? false;
+  
+  // Helper functions for camera controls
+  const applyZoom = (delta) => {
+    const positionManager = scene.metadata.positionManager;
+    if (!positionManager) return;
+    
+    if (mmdCamera.mode === Camera.ORTHOGRAPHIC_CAMERA) {
+      // In 2D mode, adjust model height which updates frustum via PositionManager
+      const currentHeight = positionManager.modelHeightPx || CAMERA_2D_HEIGHT_DEFAULT;
+      const currentWidth = positionManager.modelWidthPx || CAMERA_2D_WIDTH_DEFAULT;
+      const newHeight = currentHeight + (delta * CAMERA_ZOOM_SENSITIVITY_2D);
+      
+      // Clamp to reasonable sizes
+      const clampedHeight = Math.max(CAMERA_2D_HEIGHT_MIN, Math.min(newHeight, CAMERA_2D_HEIGHT_MAX));
+      const newWidth = clampedHeight * CAMERA_2D_ASPECT_RATIO;
+      
+      // Calculate position compensation to keep zoom centered
+      const heightDelta = clampedHeight - currentHeight;
+      const widthDelta = newWidth - currentWidth;
+      
+      // Adjust position to keep model centered during zoom
+      const oldPosX = positionManager.positionX;
+      const oldPosY = positionManager.positionY;
+      
+      positionManager.positionX = oldPosX - (widthDelta / 2);
+      positionManager.positionY = oldPosY - (heightDelta / 2);
+      positionManager.modelHeightPx = clampedHeight;
+      positionManager.modelWidthPx = newWidth;
+      positionManager.effectiveHeightPx = clampedHeight;
+      positionManager.updateCameraFrustum();
+      saveCameraState();
+    } else {
+      // In 3D mode, adjust distance
+      mmdCamera.distance += delta;
+      mmdCamera.distance = Math.max(CAMERA_3D_DISTANCE_MIN, Math.min(mmdCamera.distance, CAMERA_3D_DISTANCE_MAX));
+      saveCameraState();
+    }
+  };
+  
+  const applyPan = (deltaX, deltaY) => {
+    if (mmdCamera.position) {
+      const panSpeed = Math.abs(mmdCamera.distance) * CAMERA_PAN_SPEED_MULTIPLIER;
+      mmdCamera.position.x -= deltaX * panSpeed;
+      mmdCamera.position.y += deltaY * panSpeed;
+      saveCameraState();
+    }
+  };
+  
+  const applyRotation = (deltaX, deltaY) => {
+    mmdCamera.rotation.y -= deltaX * CAMERA_ROTATION_SENSITIVITY;
+    mmdCamera.rotation.x -= deltaY * CAMERA_ROTATION_SENSITIVITY;
+    saveCameraState();
+  };
+  
+  const saveCameraState = () => {
+    if (!finalConfig.updateUIConfig) return;
+    if (!cameraSaveEnabled) return;
+    
+    const positionManager = scene.metadata.positionManager;
+    const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
+    
+    if (currentMode === '3D') {
+      const state = {
+        distance: mmdCamera.distance,
+        rotation: { x: mmdCamera.rotation.x, y: mmdCamera.rotation.y },
+        position: { x: mmdCamera.position.x, y: mmdCamera.position.y },
+      };
+      Logger.log('MmdModelScene', 'Saving 3D camera state:', state);
+      finalConfig.updateUIConfig('camera.saved3D', state);
+    } else {
+      if (!positionManager) return;
+      const state = {
+        modelHeightPx: positionManager.modelHeightPx,
+        positionX: positionManager.positionX,
+        positionY: positionManager.positionY,
+        rotation: { x: mmdCamera.rotation.x, y: mmdCamera.rotation.y },
+      };
+      Logger.log('MmdModelScene', 'Saving 2D camera state:', state);
+      finalConfig.updateUIConfig('camera.saved2D', state);
+    }
+  };
+  
+  const loadCameraState = () => {
+    if (!cameraSaveEnabled) return;
+    
+    const positionManager = scene.metadata.positionManager;
+    const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
+    
+    if (currentMode === '3D') {
+      const saved = finalConfig.uiConfig?.camera?.saved3D;
+      if (saved) {
+        mmdCamera.distance = saved.distance ?? CAMERA_3D_DISTANCE;
+        if (saved.rotation) {
+          mmdCamera.rotation.x = saved.rotation.x ?? 0;
+          mmdCamera.rotation.y = saved.rotation.y ?? 0;
+        }
+        if (saved.position && mmdCamera.position) {
+          mmdCamera.position.x = saved.position.x ?? 0;
+          mmdCamera.position.y = saved.position.y ?? 0;
+        }
+        Logger.log('MmdModelScene', 'Loaded saved 3D camera state');
+      }
+    } else {
+      const saved = finalConfig.uiConfig?.camera?.saved2D;
+      if (saved && positionManager) {
+        if (saved.modelHeightPx) {
+          positionManager.modelHeightPx = saved.modelHeightPx;
+          positionManager.modelWidthPx = saved.modelHeightPx * CAMERA_2D_ASPECT_RATIO;
+          positionManager.effectiveHeightPx = saved.modelHeightPx;
+        }
+        if (saved.positionX !== undefined) positionManager.positionX = saved.positionX;
+        if (saved.positionY !== undefined) positionManager.positionY = saved.positionY;
+        if (saved.rotation) {
+          mmdCamera.rotation.x = saved.rotation.x ?? 0;
+          mmdCamera.rotation.y = saved.rotation.y ?? 0;
+        }
+        positionManager.updateCameraFrustum();
+        Logger.log('MmdModelScene', 'Loaded saved 2D camera state');
+      }
+    }
+  };
+  
+  const resetCameraState = () => {
+    const positionManager = scene.metadata.positionManager;
+    const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
+    
+    if (currentMode === '3D') {
+      mmdCamera.distance = CAMERA_3D_DISTANCE;
+      mmdCamera.rotation.x = 0;
+      mmdCamera.rotation.y = 0;
+      if (mmdCamera.position) {
+        mmdCamera.position.x = 0;
+        mmdCamera.position.y = 10;
+      }
+      Logger.log('MmdModelScene', 'Reset 3D camera to defaults');
+    } else {
+      if (positionManager) {
+        // Reset by re-applying the preset with current saved zoom (if any)
+        const modelSizePx = finalConfig.uiConfig?.modelSizePx;
+        positionManager.applyPreset(actualPreset, {
+          modelSizePx: modelSizePx || undefined
+        });
+        
+        mmdCamera.rotation.x = 0;
+        mmdCamera.rotation.y = 0;
+        Logger.log('MmdModelScene', `Reset 2D camera using preset: ${actualPreset}`);
+      }
+    }
+    
+    // Save the reset state if save is enabled
+    if (cameraSaveEnabled) {
+      saveCameraState();
+    }
+  };
+  
+  const attachCameraControls = () => {
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+    canvas.addEventListener('touchend', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+  };
+  
+  const detachCameraControls = () => {
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', onPointerUp);
+    canvas.removeEventListener('touchstart', onPointerDown);
+    canvas.removeEventListener('touchmove', onPointerMove);
+    canvas.removeEventListener('touchend', onPointerUp);
+    canvas.removeEventListener('wheel', onWheel);
+  };
+  
+  const setCameraMode = (mode) => {
+    if (mode === '3D') {
+      mmdCamera.mode = Camera.PERSPECTIVE_CAMERA;
+      mmdCamera.distance = CAMERA_3D_DISTANCE;
+    } else {
+      mmdCamera.mode = Camera.ORTHOGRAPHIC_CAMERA;
+      mmdCamera.distance = cameraDistance;
+      // Reset frustum to default size
+      const aspectRatio = engine.getAspectRatio(mmdCamera);
+      mmdCamera.orthoTop = orthoHeight;
+      mmdCamera.orthoBottom = -orthoHeight;
+      mmdCamera.orthoLeft = -orthoHeight * aspectRatio;
+      mmdCamera.orthoRight = orthoHeight * aspectRatio;
+    }
+  };
+  
+  // Set initial mode
+  setCameraMode(initialCameraMode);
+  Logger.log('MmdModelScene', `Camera initialized in ${initialCameraMode} mode with distance: ${mmdCamera.distance}`);
+  
+  // Camera lock state and manual control
+  let isCameraLocked = initialCameraLocked;
+  let isPointerDown = false;
+  let isPanning = false;
+  let lastPointerX = 0;
+  let lastPointerY = 0;
+  let initialPinchDistance = 0;
+  let isPinching = false;
+  
+  const getTouchDistance = (touch1, touch2) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+  
+  const getTouchCenter = (touch1, touch2) => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2
+    };
+  };
+  
+  const onPointerDown = (evt) => {
+    if (isCameraLocked) return;
+    
+    // Check for multi-touch (pinch zoom or pan)
+    if (evt.touches && evt.touches.length === 2) {
+      isPinching = true;
+      initialPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
+      const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+      lastPointerX = center.x;
+      lastPointerY = center.y;
+      isPointerDown = false; // Disable rotation during pinch
+      return;
+    }
+    
+    // Middle mouse button for panning
+    if (evt.button === 1) {
+      isPanning = true;
+      lastPointerX = evt.clientX;
+      lastPointerY = evt.clientY;
+      evt.preventDefault();
+      return;
+    }
+    
+    // Left mouse button or single touch for rotation
+    if (evt.button === 0 || evt.touches) {
+      isPointerDown = true;
+      lastPointerX = evt.clientX || (evt.touches && evt.touches[0].clientX);
+      lastPointerY = evt.clientY || (evt.touches && evt.touches[0].clientY);
+    }
+  };
+  
+  const onPointerMove = (evt) => {
+    if (isCameraLocked) return;
+    
+    // Handle pinch zoom and pan
+    if (evt.touches && evt.touches.length === 2) {
+      if (!isPinching) {
+        isPinching = true;
+        initialPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
+        const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+        lastPointerX = center.x;
+        lastPointerY = center.y;
+        return;
+      }
+      
+      const currentPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
+      const delta = (currentPinchDistance - initialPinchDistance) * CAMERA_PINCH_SENSITIVITY;
+      
+      applyZoom(delta);
+      
+      // Pan based on center movement
+      const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+      const deltaX = center.x - lastPointerX;
+      const deltaY = center.y - lastPointerY;
+      
+      applyPan(deltaX, deltaY);
+      
+      initialPinchDistance = currentPinchDistance;
+      lastPointerX = center.x;
+      lastPointerY = center.y;
+      evt.preventDefault();
+      return;
+    }
+    
+    // Handle panning with middle mouse
+    if (isPanning) {
+      const deltaX = evt.clientX - lastPointerX;
+      const deltaY = evt.clientY - lastPointerY;
+      
+      applyPan(deltaX, deltaY);
+      
+      lastPointerX = evt.clientX;
+      lastPointerY = evt.clientY;
+      evt.preventDefault();
+      return;
+    }
+    
+    // Handle rotation
+    if (!isPointerDown || isPinching) return;
+    
+    const clientX = evt.clientX || (evt.touches && evt.touches[0].clientX);
+    const clientY = evt.clientY || (evt.touches && evt.touches[0].clientY);
+    
+    const deltaX = clientX - lastPointerX;
+    const deltaY = clientY - lastPointerY;
+    
+    applyRotation(deltaX, deltaY);
+    
+    lastPointerX = clientX;
+    lastPointerY = clientY;
+  };
+  
+  const onPointerUp = () => {
+    isPointerDown = false;
+    isPinching = false;
+    isPanning = false;
+  };
+  
+  const onWheel = (evt) => {
+    if (isCameraLocked) return;
+    evt.preventDefault();
+    
+    const delta = evt.deltaY > 0 ? 2 : -2;
+    applyZoom(delta);
+  };
+
+  if (!isCameraLocked) {
+    attachCameraControls();
+    Logger.log('MmdModelScene', 'Camera controls attached (initial state: unlocked)');
+  }
+  
+  // Camera control functions (exposed for UI components like ChatButton)
+  scene.metadata.toggleCameraMode = () => {
+    const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
+    const newMode = currentMode === '2D' ? '3D' : '2D';
+    
+    setCameraMode(newMode);
+    loadCameraState();
+    
+    Logger.log('MmdModelScene', `Camera mode toggled: ${currentMode} → ${newMode}, distance: ${mmdCamera.distance}`);
+    
+    if (finalConfig.updateUIConfig) {
+      finalConfig.updateUIConfig('camera.mode', newMode);
+    }
+    
+    return newMode;
+  };
+  
+  scene.metadata.getCameraMode = () => {
+    return mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
+  };
+  
+  scene.metadata.resetCameraPosition = () => {
+    resetCameraState();
+    return true;
+  };
+  
+  scene.metadata.toggleCameraSave = () => {
+    const newSaveState = !cameraSaveEnabled;
+    cameraSaveEnabled = newSaveState;
+    
+    if (finalConfig.updateUIConfig) {
+      finalConfig.updateUIConfig('camera.savePosition', newSaveState);
+    }
+    
+    if (!newSaveState) {
+      resetCameraState();
+    } else {
+      saveCameraState();
+    }
+    
+    Logger.log('MmdModelScene', `Camera save ${newSaveState ? 'enabled' : 'disabled'}`);
+    return newSaveState;
+  };
+  
+  scene.metadata.isCameraSaveEnabled = () => {
+    return cameraSaveEnabled;
+  };
+  
+  scene.metadata.toggleCameraLock = () => {
+    isCameraLocked = !isCameraLocked;
+    
+    if (isCameraLocked) {
+      detachCameraControls();
+      Logger.log('MmdModelScene', 'Camera locked (manual rotation/zoom disabled)');
+    } else {
+      attachCameraControls();
+      Logger.log('MmdModelScene', 'Camera unlocked (manual rotation/zoom enabled)');
+    }
+    
+    if (finalConfig.updateUIConfig) {
+      finalConfig.updateUIConfig('camera.locked', isCameraLocked);
+    }
+    
+    return isCameraLocked;
+  };
+  
+  scene.metadata.isCameraLocked = () => {
+    return isCameraLocked;
+  };
 
   // ========================================
   // LIGHTING

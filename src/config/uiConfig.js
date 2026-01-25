@@ -246,6 +246,23 @@ export const DefaultUIConfig = {
   
   modelSizePx: null,
   
+  camera: {
+    mode: '2D',
+    locked: true,
+    savePosition: false,
+    saved3D: {
+      distance: -40,
+      rotation: { x: 0, y: 0 },
+      position: { x: 0, y: 0 },
+    },
+    saved2D: {
+      modelHeightPx: 600,
+      positionX: 0,
+      positionY: 0,
+      rotation: { x: 0, y: 0 },
+    },
+  },
+  
   backgroundDetection: {
     mode: BackgroundThemeModes.ADAPTIVE,
     sampleGridSize: 5,

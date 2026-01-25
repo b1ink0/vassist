@@ -143,6 +143,8 @@ export const iconMap = {
   'folder': HeroIconsSolid.FolderIcon,
   'help': HeroIconsSolid.QuestionMarkCircleIcon,
   'file': HeroIconsSolid.DocumentIcon,
+  'lock': HeroIconsSolid.LockClosedIcon,
+  'unlock': HeroIconsSolid.LockOpenIcon,
 };
 
 export default iconMap;

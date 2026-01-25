@@ -35,6 +35,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     startButtonDrag,
     endButtonDrag,
     setPendingDropData,
+    sceneRef,
   } = useApp();
   
   const { uiConfig, updateUIConfig } = useConfig();
@@ -878,6 +879,72 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, []);
 
+  const [_forceUpdate, setForceUpdate] = useState(0);
+
+  const handle3DToggle = useCallback(() => {
+    if (!sceneRef?.current) {
+      Logger.warn('ChatButton', 'Scene not available yet');
+      return;
+    }
+    
+    const scene = sceneRef.current;
+    if (!scene.metadata?.toggleCameraMode) {
+      Logger.error('ChatButton', 'Camera toggle function not available');
+      return;
+    }
+    
+    scene.metadata.toggleCameraMode();
+    setForceUpdate(prev => prev + 1);
+  }, [sceneRef]);
+
+  const handleCameraLockToggle = useCallback(() => {
+    if (!sceneRef?.current) {
+      Logger.warn('ChatButton', 'Scene not available yet');
+      return;
+    }
+    
+    const scene = sceneRef.current;
+    if (!scene.metadata?.toggleCameraLock) {
+      Logger.error('ChatButton', 'Camera lock toggle function not available');
+      return;
+    }
+    
+    scene.metadata.toggleCameraLock();
+    setForceUpdate(prev => prev + 1);
+  }, [sceneRef]);
+
+  const handleCameraReset = useCallback(() => {
+    if (!sceneRef?.current) {
+      Logger.warn('ChatButton', 'Scene not available yet');
+      return;
+    }
+    
+    const scene = sceneRef.current;
+    if (!scene.metadata?.resetCameraPosition) {
+      Logger.error('ChatButton', 'Camera reset function not available');
+      return;
+    }
+    
+    scene.metadata.resetCameraPosition();
+    setForceUpdate(prev => prev + 1);
+  }, [sceneRef]);
+
+  const handleCameraSaveToggle = useCallback(() => {
+    if (!sceneRef?.current) {
+      Logger.warn('ChatButton', 'Scene not available yet');
+      return;
+    }
+    
+    const scene = sceneRef.current;
+    if (!scene.metadata?.toggleCameraSave) {
+      Logger.error('ChatButton', 'Camera save toggle function not available');
+      return;
+    }
+    
+    scene.metadata.toggleCameraSave();
+    setForceUpdate(prev => prev + 1);
+  }, [sceneRef]);
+
   if (!shouldRender) return null;
 
   const TOTAL_BUTTON_OFFSET = 224;
@@ -893,6 +960,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const avatarPanelHeight = Math.min((models.length + 1) * 43, 300);
   const avatarPanelGap = 8;
   
+  const cameraControlsHeight = 35;
+  const cameraControlsGap = 8;
+  const cameraControlsOffset = cameraControlsHeight + cameraControlsGap; // Total offset for avatar panel
+  
   let emotePanelLeft, emotePanelTop;
   let avatarPanelLeft, avatarPanelTop;
   
@@ -905,13 +976,13 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     emotePanelTop = androidButtonY - androidButtonOffset - emotePanelHeight - emotePanelGap;
 
     avatarPanelLeft = androidButtonX;
-    avatarPanelTop = androidButtonY - androidButtonOffset - avatarPanelHeight - avatarPanelGap;
+    avatarPanelTop = androidButtonY - androidButtonOffset - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   } else if (isDesktop) {
     emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
     emotePanelTop = buttonPos.y - emotePanelHeight - emotePanelGap;
 
     avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
-    avatarPanelTop = buttonPos.y - avatarPanelHeight - avatarPanelGap;
+    avatarPanelTop = buttonPos.y - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   } else {
     if (isLeftSide) {
       emotePanelLeft = buttonPos.x;
@@ -921,7 +992,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
     }
     emotePanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - emotePanelHeight - emotePanelGap;
-    avatarPanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - avatarPanelHeight - avatarPanelGap;
+    avatarPanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   }
 
   const androidPosition = isAndroid ? {
@@ -1099,6 +1170,79 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             <span className="truncate flex-1">{model.name}</span>
           </button>
         ))}
+      </div>
+    )}
+
+    {/* Camera Controls - Positioned below Avatar List */}
+    {isAvatarPanelOpen && (
+      <div
+        style={{
+          left: `${avatarPanelLeft}px`,
+          // Position just below the avatar panel
+          top: `${avatarPanelTop + Math.min((models.length + 1) * 43, 300) + 8}px`,
+          zIndex: isAndroid ? 201 : 10001,
+        }}
+        className="fixed w-[185px] flex gap-1"
+      >
+        {/* 3D/2D Toggle Button */}
+        <button
+          onClick={handle3DToggle}
+          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+            isLightBackground ? 'glass-button-dark' : ''
+          } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'ring-2 ring-white/50' : ''}`}
+          title={sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'Switch to 2D Mode' : 'Switch to 3D Mode'}
+        >
+          <span className="font-medium">{sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? '3D' : '2D'}</span>
+        </button>
+
+        {/* Reset Camera Button */}
+        <button
+          onClick={handleCameraReset}
+          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+            isLightBackground ? 'glass-button-dark' : ''
+          } backdrop-blur-[10px]`}
+          title="Reset Camera Position"
+        >
+          <Icon 
+            name="refresh-cw" 
+            size={16} 
+          />
+        </button>
+
+        {/* Camera Lock Toggle Button */}
+        <button
+          onClick={handleCameraLockToggle}
+          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+            isLightBackground ? 'glass-button-dark' : ''
+          } backdrop-blur-[10px] ${!sceneRef?.current?.metadata?.isCameraLocked?.() ? 'ring-2 ring-white/50' : ''}`}
+          title={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'Unlock Camera' : 'Lock Camera'}
+        >
+          <Icon 
+            name={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'lock' : 'unlock'} 
+            size={16} 
+          />
+        </button>
+
+        {/* Camera Save Toggle Button */}
+        <button
+          onClick={handleCameraSaveToggle}
+          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+            isLightBackground ? 'glass-button-dark' : ''
+          } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'ring-2 ring-white/50' : ''}`}
+          title={sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'Disable Position Saving' : 'Enable Position Saving'}
+        >
+          <div className="relative w-4 h-4">
+            <Icon 
+              name="pin" 
+              size={16} 
+            />
+            {!sceneRef?.current?.metadata?.isCameraSaveEnabled?.() && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-6 h-0.5 bg-white/50 -rotate-45" />
+              </div>
+            )}
+          </div>
+        </button>
       </div>
     )}
 
