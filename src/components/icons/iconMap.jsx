@@ -145,6 +145,7 @@ export const iconMap = {
   'file': HeroIconsSolid.DocumentIcon,
   'lock': HeroIconsSolid.LockClosedIcon,
   'unlock': HeroIconsSolid.LockOpenIcon,
+  'box': HeroIconsSolid.CubeIcon,
 };
 
 export default iconMap;

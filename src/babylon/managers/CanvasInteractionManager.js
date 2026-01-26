@@ -73,6 +73,10 @@ export class CanvasInteractionManager {
   handleDocumentMouseMove(event) {
     // Skip if currently dragging (canvas already has pointer-events:auto)
     if (this.isDragging) return;
+    if (this.scene.metadata?.isCameraLocked && !this.scene.metadata.isCameraLocked()) {
+      // Camera is unlocked, don't interfere with pointer events
+      return;
+    }
     
     // Get canvas position
     const rect = this.canvas.getBoundingClientRect();

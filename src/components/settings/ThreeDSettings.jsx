@@ -16,6 +16,7 @@ import Icon from '../icons/Icon';
 import { pmxConverterService } from '../../services/PMXConverterService';
 import { vmdConverterService } from '../../services/VMDConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
+import { stageStorageService } from '../../services/StageStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
 import emoteStorageService from '../../services/EmoteStorageService';
 import JSZip from 'jszip';
@@ -57,6 +58,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [editingModelId, setEditingModelId] = useState(null);
   const [editingModelName, setEditingModelName] = useState('');
   const modelFileInputRef = useRef(null);
+
+  // Stage upload state
+  const [stages, setStages] = useState([]);
+  const [stageUploadState, setStageUploadState] = useState({
+    uploading: false,
+    progress: '',
+    error: null
+  });
+  const [editingStageId, setEditingStageId] = useState(null);
+  const [editingStageName, setEditingStageName] = useState('');
+  const stageFileInputRef = useRef(null);
 
   // Motion upload state
   const [motions, setMotions] = useState([]);
@@ -103,6 +115,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
   useEffect(() => {
     loadModels();
+    loadStages();
     loadMotions();
     loadEmotes();
     loadBuiltinModelMetadata();
@@ -287,6 +300,107 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const handleDeleteModel = async (modelId) => {
     if (onRequestDeleteModelDialog) {
       onRequestDeleteModelDialog(modelId);
+    }
+  };
+
+  const loadStages = async () => {
+    try {
+      const stagesList = await stageStorageService.getStagesList();
+      setStages(stagesList);
+    } catch (error) {
+      console.error('Failed to load stages:', error);
+    }
+  };
+
+  const handleStageUpload = async (file) => {
+    if (!file) return;
+
+    setStageUploadState({ uploading: true, progress: 'Validating...', error: null });
+
+    try {
+      const validation = await pmxConverterService.quickValidate(file);
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      const stageName = file.name.replace(/\.zip$/i, '');
+
+      await pmxConverterService.processModelUpload(file, stageName, (step, message) => {
+        setStageUploadState(prev => ({ ...prev, progress: message }));
+      }).then(async (modelId) => {
+        // Get the converted model data
+        const modelData = await modelStorageService.getModel(modelId);
+        
+        // Save as stage instead
+        const stageId = await stageStorageService.saveStage(
+          null,
+          stageName,
+          modelData.modelData,
+          modelData.metadata
+        );
+        
+        // Delete from models storage
+        await modelStorageService.deleteModel(modelId);
+        
+        return stageId;
+      });
+
+      setStageUploadState({ uploading: false, progress: '', error: null });
+      
+      await loadStages();
+      
+    } catch (error) {
+      setStageUploadState({ 
+        uploading: false, 
+        progress: '', 
+        error: error.message 
+      });
+    }
+  };
+
+  const handleStageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleStageUpload(file);
+  };
+
+  const handleSetDefaultStage = async (stageId) => {
+    try {
+      await stageStorageService.setDefaultStage(stageId);
+      await loadStages();
+    } catch (error) {
+      console.error('Failed to set default stage:', error);
+    }
+  };
+
+  const handleEditStage = (stageId, currentName) => {
+    setEditingStageId(stageId);
+    setEditingStageName(currentName);
+  };
+
+  const handleSaveStageName = async (stageId) => {
+    try {
+      await stageStorageService.updateStageName(stageId, editingStageName);
+      setEditingStageId(null);
+      setEditingStageName('');
+      await loadStages();
+    } catch (error) {
+      console.error('Failed to update stage name:', error);
+    }
+  };
+
+  const handleCancelEditStage = () => {
+    setEditingStageId(null);
+    setEditingStageName('');
+  };
+
+  const handleDeleteStage = async (stageId) => {
+    if (!confirm('Delete this stage?\n\nThis action cannot be undone.')) return;
+    
+    try {
+      await stageStorageService.deleteStage(stageId);
+      await loadStages();
+    } catch (error) {
+      console.error('Failed to delete stage:', error);
     }
   };
 
@@ -1984,7 +2098,148 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               ))}
             </div>
           </div>
-      </div>
+
+          {/* Stage Management Section */}
+          <div className="space-y-4 mt-8 pt-8 border-t border-white/10">
+            <h4 className="text-sm font-semibold text-white mb-3">Custom Stages</h4>
+            
+            {/* Stage Upload */}
+            <div className="space-y-3">
+              <input
+                ref={stageFileInputRef}
+                type="file"
+                accept=".zip"
+                onChange={handleStageFileChange}
+                className="hidden"
+              />
+              
+              <button
+                onClick={() => stageFileInputRef.current?.click()}
+                disabled={stageUploadState.uploading}
+                className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
+                <p className="text-sm text-white/90 mb-1">
+                  {stageUploadState.uploading ? stageUploadState.progress : 'Upload PMX Stage (ZIP)'}
+                </p>
+                <p className="text-xs text-white/50">Click to browse</p>
+              </button>
+
+              {stageUploadState.error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-400/20">
+                  <p className="text-xs text-red-200">{stageUploadState.error}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Stage List */}
+            <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar">
+              {/* No Stages */}
+              {stages.length === 0 ? (
+                <div className="rounded-lg bg-white/5 border border-white/10">
+                  <div className="p-3 flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium truncate">
+                        No Stage
+                      </p>
+                      <p className="text-xs text-white/50">Default stage will be used</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Toggle
+                        checked={true}
+                        onChange={() => {}}
+                        disabled={true}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Custom Stages */}
+                  {stages.map((stage) => (
+                    <div
+                      key={stage.id}
+                      className="relative rounded-lg bg-white/5 border border-white/10"
+                    >
+                      {/* Stage info and name editing */}
+                      <div className="flex items-center justify-between gap-3 p-3">
+                        <div className="flex-1 min-w-0">
+                          {editingStageId === stage.id ? (
+                            <input
+                              type="text"
+                              value={editingStageName}
+                              onChange={(e) => setEditingStageName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveStageName(stage.id);
+                                if (e.key === 'Escape') handleCancelEditStage();
+                              }}
+                              className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                              autoFocus
+                            />
+                          ) : (
+                            <p className="text-sm text-white font-medium truncate">
+                              {stage.name}
+                            </p>
+                          )}
+                          <p className="text-xs text-white/50">
+                            {(stage.metadata?.fileSize / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        
+                        {/* Right side controls */}
+                        <div className="flex items-center gap-1">
+                          {editingStageId === stage.id ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveStageName(stage.id)}
+                                className="p-1 rounded hover:bg-green-500/20 text-green-300 transition-colors"
+                                title="Save"
+                              >
+                                <Icon name="check" size={16} />
+                              </button>
+                              <button
+                                onClick={handleCancelEditStage}
+                                className="p-1 rounded hover:bg-red-500/20 text-red-300 transition-colors"
+                                title="Cancel"
+                              >
+                                <Icon name="x" size={16} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleEditStage(stage.id, stage.name)}
+                                className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                title="Edit name"
+                              >
+                                <Icon name="edit-2" size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStage(stage.id)}
+                                className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                                title="Delete"
+                              >
+                                <Icon name="trash-2" size={16} />
+                              </button>
+                              <Toggle
+                                checked={stage.isDefault}
+                                onChange={(checked) => {
+                                  if (checked) {
+                                    handleSetDefaultStage(stage.id);
+                                  }
+                                }}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
 
       {/* Animations Tab */}
       <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>

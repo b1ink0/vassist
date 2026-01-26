@@ -357,6 +357,13 @@ class StorageServiceProxy extends ServiceProxy {
           messageData.modelData = Array.from(new Uint8Array(buffer));
           messageData._modelBlobType = data.modelData.type || 'application/octet-stream';
         }
+        
+        // Handle stageData (StageStorageService)
+        if (messageData.stageData instanceof Blob) {
+          const buffer = await messageData.stageData.arrayBuffer();
+          messageData.stageData = Array.from(new Uint8Array(buffer));
+          messageData._stageBlobType = data.stageData.type || 'application/octet-stream';
+        }
       }
       
       return await bridge.sendMessage(MessageTypes.STORAGE_FILE_SAVE, { fileId, data: messageData, category });
@@ -398,6 +405,15 @@ class StorageServiceProxy extends ServiceProxy {
           const blob = new Blob([uint8Array], { type: blobType });
           result.modelData = blob;
           delete result._modelBlobType;
+        }
+        
+        // Handle stageData (StageStorageService)
+        if (Array.isArray(result.stageData)) {
+          const blobType = result._stageBlobType || 'application/octet-stream';
+          const uint8Array = new Uint8Array(result.stageData);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.stageData = blob;
+          delete result._stageBlobType;
         }
       }
       
@@ -469,6 +485,14 @@ class StorageServiceProxy extends ServiceProxy {
               const uint8Array = new Uint8Array(fileData.modelData);
               fileData.modelData = new Blob([uint8Array], { type: blobType });
               delete fileData._modelBlobType;
+            }
+            
+            // Handle stageData (StageStorageService)
+            if (Array.isArray(fileData.stageData)) {
+              const blobType = fileData._stageBlobType || 'application/octet-stream';
+              const uint8Array = new Uint8Array(fileData.stageData);
+              fileData.stageData = new Blob([uint8Array], { type: blobType });
+              delete fileData._stageBlobType;
             }
           }
         }

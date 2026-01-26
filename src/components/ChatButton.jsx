@@ -3,7 +3,6 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StorageServiceProxy } from '../services/proxies';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useDesktop } from '../contexts/DesktopContext';
@@ -12,6 +11,7 @@ import Logger from '../services/LoggerService';
 import emoteStorageService from '../services/EmoteStorageService';
 import emotePlayerService from '../services/EmotePlayerService';
 import { modelStorageService } from '../services/ModelStorageService';
+import { stageStorageService } from '../services/StageStorageService';
 import ZoomControl from './ZoomControl';
 import { isAndroid, isDesktop } from '../utils/PlatformUtils';
 import { PositionPresets } from '../config/uiConfig';
@@ -58,6 +58,9 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
   const [models, setModels] = useState([]);
   const [selectedModelId, setSelectedModelId] = useState(null);
+  const [panelMode, setPanelMode] = useState('avatar'); // 'avatar' or 'stage'
+  const [stages, setStages] = useState([]);
+  const [selectedStageId, setSelectedStageId] = useState(null);
   const dragDropServiceRef = useRef(null);
   const buttonRef = useRef(null);
   
@@ -82,7 +85,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   }, [isEmotePanelOpen]);
 
   useEffect(() => {
-    if (isAvatarPanelOpen) {
+    if (isAvatarPanelOpen && panelMode === 'avatar') {
       modelStorageService.getModelsList()
         .then(modelsList => {
           // Filter out Unknown Model (default model without data)
@@ -101,7 +104,26 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           Logger.error('ChatButton', 'Failed to load models:', err);
         });
     }
-  }, [isAvatarPanelOpen]);
+  }, [isAvatarPanelOpen, panelMode]);
+
+  useEffect(() => {
+    if (isAvatarPanelOpen && panelMode === 'stage') {
+      stageStorageService.getStagesList()
+        .then(stagesList => {
+          setStages(stagesList);
+          stageStorageService.getDefaultStage()
+            .then(defaultStage => {
+              setSelectedStageId(defaultStage?.id || null);
+            })
+            .catch(err => {
+              Logger.error('ChatButton', 'Failed to get default stage:', err);
+            });
+        })
+        .catch(err => {
+          Logger.error('ChatButton', 'Failed to load stages:', err);
+        });
+    }
+  }, [isAvatarPanelOpen, panelMode]);
 
   // Track emote playing state
   useEffect(() => {
@@ -879,6 +901,22 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, []);
 
+  const handleStageSelect = useCallback(async (stageId) => {
+    try {
+      if (stageId === null) {
+        await stageStorageService.clearAllDefaults();
+      } else {
+        await stageStorageService.setDefaultStage(stageId);
+      }
+      setSelectedStageId(stageId);
+      setIsAvatarPanelOpen(false);
+      Logger.log('ChatButton', `Stage ${stageId || 'none'} selected, reloading page...`);
+      window.location.reload();
+    } catch (err) {
+      Logger.error('ChatButton', 'Failed to select stage:', err);
+    }
+  }, []);
+
   const [_forceUpdate, setForceUpdate] = useState(0);
 
   const handle3DToggle = useCallback(() => {
@@ -950,19 +988,18 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const TOTAL_BUTTON_OFFSET = 224;
   
   const emotePanelWidth = 125;
-  // Add extra height for Auto button (43px) when emotes exist
   const emotePanelHeight = Math.min(emotes.length > 0 ? (emotes.length + 1) * 43 : 43, 300);
   const emotePanelGap = 8;
   const buttonWidth = 48;
 
   const avatarPanelWidth = 125;
-  // Add 1 for default model
-  const avatarPanelHeight = Math.min((models.length + 1) * 43, 300);
+  const maxListLength = Math.max(models.length, stages.length);
+  const avatarPanelHeight = Math.min((maxListLength + 1) * 43, 300);
   const avatarPanelGap = 8;
   
-  const cameraControlsHeight = 35;
+  const cameraControlsHeight = 35 * 2 + 4; 
   const cameraControlsGap = 8;
-  const cameraControlsOffset = cameraControlsHeight + cameraControlsGap; // Total offset for avatar panel
+  const cameraControlsOffset = cameraControlsHeight + cameraControlsGap;
   
   let emotePanelLeft, emotePanelTop;
   let avatarPanelLeft, avatarPanelTop;
@@ -977,20 +1014,20 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
     avatarPanelLeft = androidButtonX;
     avatarPanelTop = androidButtonY - androidButtonOffset - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
-  } else if (isDesktop) {
-    emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
-    emotePanelTop = buttonPos.y - emotePanelHeight - emotePanelGap;
-
-    avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
-    avatarPanelTop = buttonPos.y - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   } else {
-    if (isLeftSide) {
-      emotePanelLeft = buttonPos.x;
-      avatarPanelLeft = buttonPos.x;
-    } else {
+    if (isDesktop) {
       emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
       avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
+    } else {
+      if (isLeftSide) {
+        emotePanelLeft = buttonPos.x;
+        avatarPanelLeft = buttonPos.x;
+      } else {
+        emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
+        avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
+      }
     }
+    
     emotePanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - emotePanelHeight - emotePanelGap;
     avatarPanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   }
@@ -1114,7 +1151,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       </div>
     )}
 
-    {/* Avatar List */}
+    {/* Avatar/Stage List - Unified Panel */}
     {isAvatarPanelOpen && (
       <div
         style={{
@@ -1124,7 +1161,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
           scrollSnapType: 'y mandatory',
-          ...(isDesktop && models.length > 6 ? {
+          ...(isDesktop && (
+            (panelMode === 'avatar' && models.length > 6) || 
+            (panelMode === 'stage' && stages.length > 6)
+          ) ? {
             maskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
             WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
           } : {})
@@ -1134,42 +1174,85 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         <style>{`
           div::-webkit-scrollbar { display: none; }
         `}</style>
-        {/* Default Model */}
-        <button
-          onClick={() => handleModelSelect(null)}
-          style={{ scrollSnapAlign: 'center' }}
-          className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-            isLightBackground 
-              ? 'glass-button-dark' 
-              : ''
-          } backdrop-blur-[10px] ${selectedModelId === null ? 'ring-2 ring-white/50' : ''}`}
-          title="VAssist Default"
-        >
-          {selectedModelId === null && (
-            <Icon name="check" size={14} className="flex-shrink-0" />
-          )}
-          <span className="truncate flex-1">VAssist Default</span>
-        </button>
+        {panelMode === 'avatar' ? (
+          <>
+            {/* Default Model */}
+            <button
+              onClick={() => handleModelSelect(null)}
+              style={{ scrollSnapAlign: 'center' }}
+              className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+                isLightBackground 
+                  ? 'glass-button-dark' 
+                  : ''
+              } backdrop-blur-[10px] ${selectedModelId === null ? 'ring-2 ring-white/50' : ''}`}
+              title="VAssist Default"
+            >
+              {selectedModelId === null && (
+                <Icon name="check" size={14} className="flex-shrink-0" />
+              )}
+              <span className="truncate flex-1">VAssist Default</span>
+            </button>
 
-        {/* Custom Models */}
-        {models.map((model) => (
-          <button
-            key={model.id}
-            onClick={() => handleModelSelect(model.id)}
-            style={{ scrollSnapAlign: 'center' }}
-            className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-              isLightBackground 
-                ? 'glass-button-dark' 
-                : ''
-            } backdrop-blur-[10px] ${selectedModelId === model.id ? 'ring-2 ring-white/50' : ''}`}
-            title={model.name}
-          >
-            {selectedModelId === model.id && (
-              <Icon name="check" size={14} className="flex-shrink-0" />
-            )}
-            <span className="truncate flex-1">{model.name}</span>
-          </button>
-        ))}
+            {/* Custom Models */}
+            {models.map((model) => (
+              <button
+                key={model.id}
+                onClick={() => handleModelSelect(model.id)}
+                style={{ scrollSnapAlign: 'center' }}
+                className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+                  isLightBackground 
+                    ? 'glass-button-dark' 
+                    : ''
+                } backdrop-blur-[10px] ${selectedModelId === model.id ? 'ring-2 ring-white/50' : ''}`}
+                title={model.name}
+              >
+                {selectedModelId === model.id && (
+                  <Icon name="check" size={14} className="flex-shrink-0" />
+                )}
+                <span className="truncate flex-1">{model.name}</span>
+              </button>
+            ))}
+          </>
+        ) : (
+          <>
+            {/* No Stage Option */}
+            <button
+              onClick={() => handleStageSelect(null)}
+              style={{ scrollSnapAlign: 'center' }}
+              className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+                isLightBackground 
+                  ? 'glass-button-dark' 
+                  : ''
+              } backdrop-blur-[10px] ${selectedStageId === null ? 'ring-2 ring-white/50' : ''}`}
+              title="No Stage"
+            >
+              {selectedStageId === null && (
+                <Icon name="check" size={14} className="flex-shrink-0" />
+              )}
+              <span className="truncate flex-1">No Stage</span>
+            </button>
+
+            {/* Stage list */}
+            {stages.map((stage) => (
+              <button
+                key={stage.id}
+                onClick={() => handleStageSelect(stage.id)}
+                style={{ scrollSnapAlign: 'center' }}
+                className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
+                  isLightBackground 
+                    ? 'glass-button-dark' 
+                    : ''
+                } backdrop-blur-[10px] ${selectedStageId === stage.id ? 'ring-2 ring-white/50' : ''}`}
+                title={stage.name}
+              >
+                {selectedStageId === stage.id && (
+                  <Icon name="check" size={14} className="flex-shrink-0" />
+                )}
+                <span className="truncate flex-1">{stage.name}</span>
+              </button>
+            ))}
+          </>
+        )}
       </div>
     )}
 
@@ -1182,67 +1265,95 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           top: `${avatarPanelTop + Math.min((models.length + 1) * 43, 300) + 8}px`,
           zIndex: isAndroid ? 201 : 10001,
         }}
-        className="fixed w-[185px] flex gap-1"
+        className="fixed w-[125px] flex flex-col gap-1"
       >
-        {/* 3D/2D Toggle Button */}
-        <button
-          onClick={handle3DToggle}
-          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-            isLightBackground ? 'glass-button-dark' : ''
-          } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'ring-2 ring-white/50' : ''}`}
-          title={sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'Switch to 2D Mode' : 'Switch to 3D Mode'}
-        >
-          <span className="font-medium">{sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? '3D' : '2D'}</span>
-        </button>
+        <div className="flex gap-1 justify-between">
+          {/* 3D/2D Toggle Button */}
+          <button
+            onClick={handle3DToggle}
+            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+              isLightBackground ? 'glass-button-dark' : ''
+            } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'ring-2 ring-white/50' : ''}`}
+            title={sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'Switch to 2D Mode' : 'Switch to 3D Mode'}
+          >
+            <span className="font-medium">{sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? '3D' : '2D'}</span>
+          </button>
 
-        {/* Reset Camera Button */}
-        <button
-          onClick={handleCameraReset}
-          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-            isLightBackground ? 'glass-button-dark' : ''
-          } backdrop-blur-[10px]`}
-          title="Reset Camera Position"
-        >
-          <Icon 
-            name="refresh-cw" 
-            size={16} 
-          />
-        </button>
-
-        {/* Camera Lock Toggle Button */}
-        <button
-          onClick={handleCameraLockToggle}
-          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-            isLightBackground ? 'glass-button-dark' : ''
-          } backdrop-blur-[10px] ${!sceneRef?.current?.metadata?.isCameraLocked?.() ? 'ring-2 ring-white/50' : ''}`}
-          title={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'Unlock Camera' : 'Lock Camera'}
-        >
-          <Icon 
-            name={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'lock' : 'unlock'} 
-            size={16} 
-          />
-        </button>
-
-        {/* Camera Save Toggle Button */}
-        <button
-          onClick={handleCameraSaveToggle}
-          className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-            isLightBackground ? 'glass-button-dark' : ''
-          } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'ring-2 ring-white/50' : ''}`}
-          title={sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'Disable Position Saving' : 'Enable Position Saving'}
-        >
-          <div className="relative w-4 h-4">
+          {/* Reset Camera Button */}
+          <button
+            onClick={handleCameraReset}
+            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+              isLightBackground ? 'glass-button-dark' : ''
+            } backdrop-blur-[10px]`}
+            title="Reset Camera Position"
+          >
             <Icon 
-              name="pin" 
+              name="refresh-cw" 
               size={16} 
             />
-            {!sceneRef?.current?.metadata?.isCameraSaveEnabled?.() && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-6 h-0.5 bg-white/50 -rotate-45" />
-              </div>
-            )}
-          </div>
-        </button>
+          </button>
+
+          {/* Camera Lock Toggle Button */}
+          <button
+            onClick={handleCameraLockToggle}
+            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+              isLightBackground ? 'glass-button-dark' : ''
+            } backdrop-blur-[10px] ${!sceneRef?.current?.metadata?.isCameraLocked?.() ? 'ring-2 ring-white/50' : ''}`}
+            title={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'Unlock Camera' : 'Lock Camera'}
+          >
+            <Icon 
+              name={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'lock' : 'unlock'} 
+              size={16} 
+            />
+          </button>
+        </div>
+
+        <div className="flex gap-1 justify-between">
+          {/* Camera Save Toggle Button */}
+          <button
+            onClick={handleCameraSaveToggle}
+            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+              isLightBackground ? 'glass-button-dark' : ''
+            } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'ring-2 ring-white/50' : ''}`}
+            title={sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'Disable Position Saving' : 'Enable Position Saving'}
+          >
+            <div className="relative w-4 h-4">
+              <Icon 
+                name="pin" 
+                size={16} 
+              />
+              {!sceneRef?.current?.metadata?.isCameraSaveEnabled?.() && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-6 h-0.5 bg-white/50 -rotate-45" />
+                </div>
+              )}
+            </div>
+          </button>
+
+          {/* Stage Button */}
+          <button
+            onClick={() => {
+              if (isEmotePanelOpen) setIsEmotePanelOpen(false);
+              if (isAvatarPanelOpen && panelMode === 'stage') {
+                setPanelMode('avatar');
+              } else if (isAvatarPanelOpen && panelMode === 'avatar') {
+                setPanelMode('stage');
+              } else {
+                setPanelMode('stage');
+                setIsAvatarPanelOpen(true);
+              }
+            }}
+            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
+              isLightBackground ? 'glass-button-dark' : ''
+            } backdrop-blur-[10px]`}
+            title={isAvatarPanelOpen && panelMode === 'stage' ? 'Switch to Avatar List' : (isAvatarPanelOpen && panelMode === 'avatar' ? 'Switch to Stage List' : 'Select Stage')}
+          >
+            <Icon 
+              name={isAvatarPanelOpen && panelMode === 'avatar' ? 'box' : 'user'} 
+              size={16} 
+            />
+          </button>
+        </div>
       </div>
     )}
 
@@ -1295,7 +1406,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         }}
         className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
           isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-        }`}
+        } ${isAvatarPanelOpen && panelMode === 'avatar' ? 'ring-2 ring-white/50' : ''}`}
         title="Change Avatar"
       >
         <Icon 

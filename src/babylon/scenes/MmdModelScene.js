@@ -48,6 +48,7 @@ import Logger from '../../services/LoggerService';
 import { VmdLoader } from "babylon-mmd";
 import { pmxConverterService } from '../../services/PMXConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
+import { stageStorageService } from '../../services/StageStorageService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 
 /**
@@ -160,8 +161,11 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Helper functions for camera controls
   const applyZoom = (delta) => {
-    const positionManager = scene.metadata.positionManager;
-    if (!positionManager) return;
+    const positionManager = scene.metadata?.positionManager;
+    if (!positionManager) {
+      Logger.warn('MmdModelScene', 'PositionManager not initialized yet');
+      return;
+    }
     
     if (mmdCamera.mode === Camera.ORTHOGRAPHIC_CAMERA) {
       // In 2D mode, adjust model height which updates frustum via PositionManager
@@ -215,7 +219,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     if (!finalConfig.updateUIConfig) return;
     if (!cameraSaveEnabled) return;
     
-    const positionManager = scene.metadata.positionManager;
+    const positionManager = scene.metadata?.positionManager;
     const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
     
     if (currentMode === '3D') {
@@ -227,7 +231,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       Logger.log('MmdModelScene', 'Saving 3D camera state:', state);
       finalConfig.updateUIConfig('camera.saved3D', state);
     } else {
-      if (!positionManager) return;
+      if (!positionManager) {
+        Logger.warn('MmdModelScene', 'Cannot save 2D camera state - positionManager not initialized');
+        return;
+      }
       const state = {
         modelHeightPx: positionManager.modelHeightPx,
         positionX: positionManager.positionX,
@@ -242,7 +249,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const loadCameraState = () => {
     if (!cameraSaveEnabled) return;
     
-    const positionManager = scene.metadata.positionManager;
+    const positionManager = scene.metadata?.positionManager;
     const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
     
     if (currentMode === '3D') {
@@ -280,7 +287,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   };
   
   const resetCameraState = () => {
-    const positionManager = scene.metadata.positionManager;
+    const positionManager = scene.metadata?.positionManager;
     const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
     
     if (currentMode === '3D') {
@@ -313,6 +320,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   };
   
   const attachCameraControls = () => {
+    if (canvas.style.pointerEvents === 'none') {
+      canvas.style.pointerEvents = 'auto';
+      Logger.log('MmdModelScene', 'Canvas pointer events enabled for camera controls');
+    }
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
@@ -480,11 +491,6 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     applyZoom(delta);
   };
 
-  if (!isCameraLocked) {
-    attachCameraControls();
-    Logger.log('MmdModelScene', 'Camera controls attached (initial state: unlocked)');
-  }
-  
   // Camera control functions (exposed for UI components like ChatButton)
   scene.metadata.toggleCameraMode = () => {
     const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
@@ -541,6 +547,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       Logger.log('MmdModelScene', 'Camera locked (manual rotation/zoom disabled)');
     } else {
       attachCameraControls();
+      canvas.style.pointerEvents = 'auto';
       Logger.log('MmdModelScene', 'Camera unlocked (manual rotation/zoom enabled)');
     }
     
@@ -577,21 +584,21 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   directionalLight.intensity = 0.7;
   directionalLight.autoCalcShadowZBounds = false;
   directionalLight.autoUpdateExtends = false;
-  directionalLight.shadowMaxZ = 20;
-  directionalLight.shadowMinZ = -15;
-  directionalLight.orthoTop = 10;
-  directionalLight.orthoBottom = -5;
-  directionalLight.orthoLeft = -15;
-  directionalLight.orthoRight = 13;
+  directionalLight.shadowMaxZ = 30;
+  directionalLight.shadowMinZ = -20;
+  directionalLight.orthoTop = 20;
+  directionalLight.orthoBottom = -10;
+  directionalLight.orthoLeft = -20;
+  directionalLight.orthoRight = 20;
   directionalLight.shadowOrthoScale = 0;
 
   // Create shadow generator
-  const shadowGenerator = finalConfig.enableShadows ? new ShadowGenerator(1024, directionalLight, true) : null;
+  const shadowGenerator = finalConfig.enableShadows ? new ShadowGenerator(2048, directionalLight, true) : null;
   if (shadowGenerator) {
     shadowGenerator.usePercentageCloserFiltering = true;
     shadowGenerator.forceBackFacesOnly = false;
     shadowGenerator.bias = 0.01;
-    shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+    shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
     shadowGenerator.frustumEdgeFalloff = 0.1;
     shadowGenerator.transparencyShadow = true;
   }
@@ -605,6 +612,12 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   if (finalConfig.enableShadows) {
     ground.receiveShadows = true;
   }
+  
+  ground.visibility = 0;
+  
+  // Store ground in scene metadata so we can toggle it later
+  scene.metadata = scene.metadata || {};
+  scene.metadata.defaultGround = ground;
 
   // ========================================
   // MMD RUNTIME INITIALIZATION
@@ -781,6 +794,84 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   } catch (error) {
     Logger.error('MmdModelScene', 'Failed to load model:', error);
     throw new Error(`Failed to load MMD model: ${error.message}`);
+  }
+
+  // ========================================
+  // STAGE LOADING
+  // ========================================
+  
+  let stageMesh = null;
+  
+  try {
+    // Get default stage from storage
+    const defaultStage = await stageStorageService.getDefaultStage();
+    
+    if (defaultStage && defaultStage.stageData) {
+      Logger.log('MmdModelScene', `Loading stage: ${defaultStage.name}`);
+      
+      // Create blob URL from stage data
+      const stageBlob = defaultStage.stageData;
+      const stageBlobUrl = URL.createObjectURL(stageBlob);
+      
+      // Load stage model
+      const stageResult = await LoadAssetContainerAsync(
+        stageBlobUrl,
+        scene,
+        {
+          pluginExtension: '.bpmx',
+          pluginOptions: {
+            mmdmodel: {
+              materialBuilder: materialBuilder,
+              boundingBoxMargin: 60,
+              loggingEnabled: true,
+            },
+          },
+          onProgress: (event) => {
+            if (event.lengthComputable) {
+              const progress = (event.loaded / event.total) * 100;
+              Logger.log('MmdModelScene', `Stage loading: ${progress.toFixed(1)}%`);
+            }
+          }
+        }
+      );
+      
+      // Clean up blob URL
+      URL.revokeObjectURL(stageBlobUrl);
+      
+      Logger.log('MmdModelScene', 'Stage loaded, adding to scene...');
+      
+      // Add stage to scene
+      stageResult.addAllToScene();
+      stageMesh = stageResult.meshes[0];
+      
+      // Setup stage shadows
+      if (finalConfig.enableShadows && shadowGenerator) {
+        for (const mesh of stageMesh.metadata.meshes) {
+          mesh.receiveShadows = true;
+          shadowGenerator.addShadowCaster(mesh, false);
+        }
+      }
+      
+      // Parent stage to mmdRoot
+      stageMesh.parent = mmdRoot;
+      
+      // Store stage in scene metadata
+      scene.metadata.stageMesh = stageMesh;
+      
+      // Hide default ground when stage is loaded
+      if (scene.metadata.defaultGround) {
+        scene.metadata.defaultGround.setEnabled(false);
+        Logger.log('MmdModelScene', 'Default ground hidden (stage is active)');
+      }
+      
+      Logger.log('MmdModelScene', `✓ Stage "${defaultStage.name}" loaded successfully`);
+    } else {
+      Logger.log('MmdModelScene', 'No default stage selected, using default ground plane');
+    }
+  } catch (error) {
+    Logger.error('MmdModelScene', 'Failed to load stage:', error);
+    // Don't throw - fall back to default ground
+    Logger.warn('MmdModelScene', 'Falling back to default ground plane');
   }
 
   // ========================================
@@ -1170,6 +1261,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
 
   Logger.log('MmdModelScene', 'PositionManager initialized');
   
+  // Load saved camera state now that positionManager is ready
+  loadCameraState();
+  
   // Notify AnimationManager about PositionManager (for picking box creation)
   animationManager.setPositionManager(positionManager);
 
@@ -1343,6 +1437,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     animationManager.dispose();
     positionManager.dispose();
     interactionManager.dispose();
+    
+    // Dispose stage mesh if loaded
+    if (scene.metadata.stageMesh) {
+      Logger.log('MmdModelScene', 'Disposing stage mesh');
+      scene.metadata.stageMesh.dispose();
+      scene.metadata.stageMesh = null;
+    }
   });
 
   Logger.log('MmdModelScene', 'Scene build complete');
@@ -1350,6 +1451,14 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   Logger.log('MmdModelScene', '- PositionManager accessible via scene.metadata.positionManager');
   Logger.log('MmdModelScene', '- CanvasInteractionManager accessible via scene.metadata.interactionManager');
   Logger.log('MmdModelScene', '- Model accessible via scene.metadata.modelMesh and scene.metadata.mmdModel');
+
+  // Attach camera controls after scene is fully built and ready
+  scene.executeWhenReady(() => {
+    if (!isCameraLocked) {
+      attachCameraControls();
+      Logger.log('MmdModelScene', 'Camera controls attached after scene ready');
+    }
+  });
 
   // Call user's scene ready callback
   if (finalConfig.onSceneReady) {
