@@ -73,10 +73,6 @@ export class CanvasInteractionManager {
   handleDocumentMouseMove(event) {
     // Skip if currently dragging (canvas already has pointer-events:auto)
     if (this.isDragging) return;
-    if (this.scene.metadata?.isCameraLocked && !this.scene.metadata.isCameraLocked()) {
-      // Camera is unlocked, don't interfere with pointer events
-      return;
-    }
     
     // Get canvas position
     const rect = this.canvas.getBoundingClientRect();
@@ -85,8 +81,9 @@ export class CanvasInteractionManager {
     
     // Check if mouse is even over the canvas bounds
     if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
-      // Mouse is outside canvas - ensure click-through
-      if (this.canvas.style.pointerEvents !== 'none') {
+      // Mouse is outside canvas - ensure click-through only if camera is locked
+      const isCameraLocked = this.scene.metadata?.isCameraLocked && this.scene.metadata.isCameraLocked();
+      if (isCameraLocked && this.canvas.style.pointerEvents !== 'none') {
         this.canvas.style.pointerEvents = 'none';
         this.canvas.style.cursor = 'default';
       }
@@ -106,8 +103,11 @@ export class CanvasInteractionManager {
       this.isOverModel = true;
       this.canvas.style.cursor = 'grab';
     } else {
-      // Not over model - restore click-through
-      this.canvas.style.pointerEvents = 'none';
+      // Not over model - restore click-through only if camera is locked
+      const isCameraLocked = this.scene.metadata?.isCameraLocked && this.scene.metadata.isCameraLocked();
+      if (isCameraLocked) {
+        this.canvas.style.pointerEvents = 'none';
+      }
       this.canvas.style.cursor = 'default';
       this.isOverModel = false;
     }
