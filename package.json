@@ -112,5 +112,10 @@
       "icon": "build/icon.png",
       "category": "Utility"
     }
-  }
+  },
+  "trustedDependencies": [
+    "node-llama-cpp",
+    "onnxruntime-node",
+    "protobufjs"
+  ]
 }

@@ -42,7 +42,7 @@ class LlamaAndroid private constructor() {
 
     // Native method declarations
     private external fun log_to_android()
-    private external fun load_model(filename: String): Long
+    private external fun load_model(filename: String, nGpuLayers: Int): Long
     private external fun free_model(model: Long)
     private external fun new_context(model: Long, nCtx: Int): Long
     private external fun free_context(context: Long)
@@ -88,18 +88,35 @@ class LlamaAndroid private constructor() {
      * @param temperature Sampling temperature (default: 0.7)
      * @param topK Top-K sampling parameter (default: 40)
      * @param topP Top-P (nucleus) sampling parameter (default: 0.9)
+     * @param nGpuLayers Number of layers to offload to GPU (default: 0 for CPU, 99 for full GPU)
+     *                   Set to 0 for CPU-only, 99 for full GPU offload, or specific layer count
      */
     suspend fun load(
         pathToModel: String,
         contextSize: Int = 2048,
         temperature: Float = 0.7f,
         topK: Int = 40,
-        topP: Float = 0.9f
+        topP: Float = 0.9f,
+        nGpuLayers: Int = 0
     ) {
         withContext(runLoop) {
             when (threadLocalState.get()) {
                 is State.Idle -> {
-                    val model = load_model(pathToModel)
+                    val gpuLayers = if (nGpuLayers == 0) {
+                        val modelFile = java.io.File(pathToModel)
+                        val mmprojFilename = "mmproj-${modelFile.name}"
+                        val mmprojFile = java.io.File(modelFile.parentFile, mmprojFilename)
+                        if (mmprojFile.exists()) {
+                            Log.i(tag, "Multimodal model detected - enabling GPU (99 layers)")
+                            99  // Full GPU for vision models
+                        } else {
+                            0  // CPU for text-only models
+                        }
+                    } else {
+                        nGpuLayers
+                    }
+                    
+                    val model = load_model(pathToModel, gpuLayers)
                     if (model == 0L) throw IllegalStateException("load_model() failed")
 
                     val context = new_context(model, contextSize)

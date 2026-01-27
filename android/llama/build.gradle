@@ -18,11 +18,17 @@ android {
         
         externalNativeBuild {
             cmake {
+                def ndkPath = android.ndkDirectory.absolutePath.replace('\\', '/')
+                def glslcPath = "${ndkPath}/shader-tools/windows-x86_64/glslc.exe"
+                def projectPath = rootProject.projectDir.absolutePath.replace('\\', '/')
+                def hostToolchain = "${projectPath}/llama/src/main/cpp/host-toolchain-windows.cmake"
+                
                 arguments "-DLLAMA_CURL=OFF",
                          "-DLLAMA_BUILD_COMMON=ON",
                          "-DGGML_LLAMAFILE=OFF",
                          "-DCMAKE_BUILD_TYPE=Release",
-                         "-DGGML_OPENMP=OFF"
+                         "-DGGML_OPENMP=OFF",
+                         "-DGGML_VULKAN=ON"
                 cppFlags ""
             }
         }
