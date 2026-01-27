@@ -17,8 +17,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.BufferedWriter
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
@@ -26,6 +28,8 @@ import java.lang.reflect.Type
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**
  * LocalAIServer - OpenAI-compatible HTTP API server for on-device AI
@@ -90,6 +94,65 @@ class LocalAIServer(
     
     // Track currently loaded LLM model path
     private var currentModelPath: String? = null
+    
+    /**
+     * Custom Response that properly flushes chunked data for SSE streaming.
+     * NanoHTTPD's default ChunkedOutputStream doesn't flush, causing buffering.
+     */
+    private class FlushingChunkedResponse(
+        status: Status,
+        mimeType: String,
+        data: InputStream
+    ) : Response(status, mimeType, data, -1) {
+        
+        override fun send(outputStream: OutputStream) {
+            // Send headers normally
+            val pw = java.io.PrintWriter(java.io.BufferedWriter(java.io.OutputStreamWriter(outputStream, "UTF-8")), false)
+            pw.append("HTTP/1.1 ").append(this.status.description).append(" \r\n")
+            
+            if (this.mimeType != null) {
+                pw.append("Content-Type: ").append(this.mimeType).append("\r\n")
+            }
+            
+            // CORS headers - CRITICAL for browser clients
+            pw.append("Access-Control-Allow-Origin: *\r\n")
+            pw.append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n")
+            pw.append("Access-Control-Allow-Headers: Content-Type\r\n")
+            
+            // SSE headers
+            pw.append("Cache-Control: no-cache\r\n")
+            pw.append("Connection: keep-alive\r\n")
+            pw.append("Transfer-Encoding: chunked\r\n")
+            pw.append("\r\n")
+            pw.flush()
+            
+            // Stream chunked data with immediate flushing
+            try {
+                val buff = ByteArray(4096) // Smaller buffer for faster streaming
+                var read: Int
+                
+                while (this.data.read(buff).also { read = it } > 0) {
+                    // Write chunk size in hex
+                    outputStream.write(String.format("%x\r\n", read).toByteArray())
+                    // Write chunk data
+                    outputStream.write(buff, 0, read)
+                    // Write chunk terminator
+                    outputStream.write("\r\n".toByteArray())
+                    // CRITICAL: Flush immediately to send data to client
+                    outputStream.flush()
+                }
+                
+                // Send final chunk
+                outputStream.write("0\r\n\r\n".toByteArray())
+                outputStream.flush()
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error streaming response", e)
+            } finally {
+                this.data.close()
+            }
+        }
+    }
     
     /**
      * Get or initialize Whisper service (thread-safe, non-blocking)
@@ -611,15 +674,14 @@ class LocalAIServer(
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val created = System.currentTimeMillis() / 1000
         
-        // Create piped streams for SSE
-        val pipedOutput = PipedOutputStream()
-        val pipedInput = PipedInputStream(pipedOutput)
+        // Use queue-based streaming for immediate chunk delivery
+        val chunkQueue = LinkedBlockingQueue<ByteArray>()
+        val END_MARKER = ByteArray(0)
         
         // Launch streaming in background
         scope.launch(aiDispatcher) {
             try {
                 val llama = getLlamaService()
-                val writer = pipedOutput.bufferedWriter()
                 
                 // Buffer for detecting and stripping <think> blocks
                 val buffer = StringBuilder()
@@ -631,63 +693,77 @@ class LocalAIServer(
                 
                 llama.chatCompletion(messages, maxTokens, images.ifEmpty { null }).collect { token ->
                     totalTokens++
-                    buffer.append(token)
                     
-                    // Log every 10 tokens for debugging
+                    // Log every 20 tokens for debugging
                     if (totalTokens <= 5 || totalTokens % 20 == 0) {
-                        Log.d(TAG, "Token $totalTokens: '$token' (buffer: ${buffer.length} chars, inThink: $inThinkBlock)")
+                        Log.d(TAG, "Token $totalTokens: '$token' (inThink: $inThinkBlock)")
                     }
                     
-                    // Check for <think> start tag
-                    if (!inThinkBlock && buffer.contains("<think>")) {
-                        // Send everything before <think>
-                        val idx = buffer.indexOf("<think>")
+                    // If we've already sent content, no more think detection - just stream
+                    if (sentChars > 0) {
+                        Log.d(TAG, "Streaming token: '$token'")
+                        queueStreamChunk(chunkQueue, completionId, created, model, token)
+                        sentChars += token.length
+                        return@collect
+                    }
+                    
+                    // If in think block, accumulate until </think>
+                    if (inThinkBlock) {
+                        buffer.append(token)
+                        if (buffer.toString().contains("</think>")) {
+                            val bufStr = buffer.toString()
+                            val idx = bufStr.indexOf("</think>")
+                            val afterThink = bufStr.substring(idx + 8)
+                            buffer.clear()
+                            inThinkBlock = false
+                            Log.d(TAG, "Exited think block at token $totalTokens")
+                            
+                            // Send content after </think> and disable future checks
+                            if (afterThink.isNotEmpty()) {
+                                Log.d(TAG, "Streaming after think: '$afterThink'")
+                                queueStreamChunk(chunkQueue, completionId, created, model, afterThink)
+                                sentChars += afterThink.length
+                            }
+                        }
+                        return@collect
+                    }
+                    
+                    // Still at start - check if response begins with <think>
+                    buffer.append(token)
+                    val bufStr = buffer.toString()
+                    
+                    // Check if we have complete <think> tag
+                    if (bufStr.contains("<think>")) {
+                        inThinkBlock = true
+                        val idx = bufStr.indexOf("<think>")
+                        // Send anything before <think> (shouldn't be any at start, but just in case)
                         if (idx > 0) {
-                            val beforeThink = buffer.substring(0, idx)
-                            sendStreamChunk(writer, completionId, created, model, beforeThink)
+                            val beforeThink = bufStr.substring(0, idx)
+                            queueStreamChunk(chunkQueue, completionId, created, model, beforeThink)
                             sentChars += beforeThink.length
                         }
-                        buffer.delete(0, idx + 7) // Remove up to and including <think>
-                        inThinkBlock = true
+                        buffer.clear()
+                        buffer.append(bufStr.substring(idx + 7)) // Keep text after <think>
                         Log.d(TAG, "Entered think block at token $totalTokens")
+                        return@collect
                     }
                     
-                    // Check for </think> end tag
-                    if (inThinkBlock && buffer.contains("</think>")) {
-                        val idx = buffer.indexOf("</think>")
-                        buffer.delete(0, idx + 8) // Remove everything including </think>
-                        inThinkBlock = false
-                        Log.d(TAG, "Exited think block at token $totalTokens")
+                    // Check if buffer might be incomplete <think> tag (< or <t or <th etc)
+                    if ("<think>".startsWith(bufStr) && bufStr.length < 7) {
+                        // Still building potential <think> tag, wait
+                        return@collect
                     }
                     
-                    // If not in think block, send tokens more aggressively
-                    if (!inThinkBlock && buffer.isNotEmpty()) {
-                        // Check if buffer might be start of <think> tag
-                        val bufStr = buffer.toString()
-                        val possibleTag = bufStr.startsWith("<") && !bufStr.contains(">")
-                        
-                        if (!possibleTag) {
-                            // Send everything
-                            Log.d(TAG, "Sending chunk: '$bufStr'")
-                            sendStreamChunk(writer, completionId, created, model, bufStr)
-                            sentChars += bufStr.length
-                            buffer.clear()
-                        } else if (bufStr.length > 8) {
-                            // Too long to be <think>, send it
-                            Log.d(TAG, "Sending long buffer: '$bufStr'")
-                            sendStreamChunk(writer, completionId, created, model, bufStr)
-                            sentChars += bufStr.length
-                            buffer.clear()
-                        } else {
-                            Log.d(TAG, "Holding buffer (possible tag): '$bufStr'")
-                        }
-                        // Otherwise keep buffering to see if it's really <think>
-                    }
+                    Log.d(TAG, "Streaming start (no think): '$bufStr'")
+                    // First chars are NOT <think> - send everything and disable future checks
+                    queueStreamChunk(chunkQueue, completionId, created, model, bufStr)
+                    sentChars += bufStr.length
+                    buffer.clear()
                 }
                 
                 // Flush any remaining buffer (if not in think block)
                 if (!inThinkBlock && buffer.isNotEmpty()) {
-                    sendStreamChunk(writer, completionId, created, model, buffer.toString())
+                    queueStreamChunk(chunkQueue, completionId, created, model, buffer.toString())
                     sentChars += buffer.length
                 }
                 
@@ -707,27 +783,76 @@ class LocalAIServer(
                         })
                     })
                 }
-                writer.write("data: ${gson.toJson(finalChunk)}\n\n")
-                writer.write("data: [DONE]\n\n")
-                writer.flush()
-                writer.close()
+                val finalData = "data: ${gson.toJson(finalChunk)}\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8)
+                chunkQueue.put(finalData)
+                chunkQueue.put(END_MARKER) // Signal end of stream
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Streaming chat completion failed", e)
-                try {
-                    pipedOutput.close()
-                } catch (_: Exception) {}
+                chunkQueue.put(END_MARKER)
             }
         }
         
-        return newChunkedResponse(
+        // Create InputStream that reads from queue and returns exact chunk sizes
+        val queueInputStream = object : InputStream() {
+            private var currentChunk: ByteArray? = null
+            private var position = 0
+            
+            override fun read(): Int {
+                while (true) {
+                    val chunk = currentChunk
+                    if (chunk != null && position < chunk.size) {
+                        return chunk[position++].toInt() and 0xFF
+                    }
+                    
+                    // Need next chunk
+                    val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                    if (next.isEmpty()) return -1 // END_MARKER
+                    
+                    currentChunk = next
+                    position = 0
+                }
+            }
+            
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (len == 0) return 0
+                
+                val chunk = currentChunk
+                if (chunk != null && position < chunk.size) {
+                    // Return only what's left in current chunk - don't wait for more
+                    val available = chunk.size - position
+                    val toRead = minOf(available, len)
+                    System.arraycopy(chunk, position, b, off, toRead)
+                    position += toRead
+                    return toRead
+                }
+                
+                // Need next chunk
+                val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                if (next.isEmpty()) return -1 // END_MARKER
+                
+                currentChunk = next
+                position = 0
+                
+                // Return exact chunk size, not buffer size
+                val toRead = minOf(next.size, len)
+                System.arraycopy(next, 0, b, off, toRead)
+                position = toRead
+                return toRead
+            }
+            
+            override fun available(): Int {
+                // Always return 0 to force NanoHTTPD to send what it has
+                return 0
+            }
+        }
+        
+        // Use custom FlushingChunkedResponse that actually flushes the socket
+        return FlushingChunkedResponse(
             Response.Status.OK,
             "text/event-stream",
-            pipedInput
-        ).apply {
-            addHeader("Cache-Control", "no-cache")
-            addHeader("Connection", "keep-alive")
-        }
+            queueInputStream
+        )
     }
 
     /**
@@ -796,8 +921,11 @@ class LocalAIServer(
     /**
      * Send a streaming chunk for chat completion
      */
-    private fun sendStreamChunk(
-        writer: BufferedWriter,
+    /**
+     * Queue SSE chunk for immediate delivery
+     */
+    private fun queueStreamChunk(
+        queue: LinkedBlockingQueue<ByteArray>,
         completionId: String,
         created: Long,
         model: String,
@@ -818,8 +946,8 @@ class LocalAIServer(
                 })
             })
         }
-        writer.write("data: ${gson.toJson(chunk)}\n\n")
-        writer.flush()
+        val sseData = "data: ${gson.toJson(chunk)}\n\n".toByteArray(Charsets.UTF_8)
+        queue.put(sseData)
     }
 
     /**

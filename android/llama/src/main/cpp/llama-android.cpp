@@ -10,6 +10,7 @@
 #include "common.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "ggml-vulkan.h"
 
 #define TAG "llama-android.cpp"
 #define LOGi(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
