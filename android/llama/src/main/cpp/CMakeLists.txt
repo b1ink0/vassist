@@ -34,11 +34,13 @@ add_library(
     ${MTMD_SOURCE_DIR}/models/llama4.cpp
     ${MTMD_SOURCE_DIR}/models/llava.cpp
     ${MTMD_SOURCE_DIR}/models/minicpmv.cpp
+    ${MTMD_SOURCE_DIR}/models/mobilenetv5.cpp
     ${MTMD_SOURCE_DIR}/models/pixtral.cpp
     ${MTMD_SOURCE_DIR}/models/qwen2vl.cpp
     ${MTMD_SOURCE_DIR}/models/qwen3vl.cpp
     ${MTMD_SOURCE_DIR}/models/siglip.cpp
     ${MTMD_SOURCE_DIR}/models/whisper-enc.cpp
+    ${MTMD_SOURCE_DIR}/models/youtuvl.cpp
 )
 
 # mtmd needs llama and common libraries
