@@ -117,6 +117,8 @@ class WhisperService(private val context: Context) {
             
             if (whisperAssets.isEmpty()) return false
             
+            Log.i(TAG, "Found pre-packaged Whisper models in assets (${whisperAssets.size} files)")
+            
             for (filename in whisperAssets) {
                 val inputStream = assetManager.open("models/whisper/$filename")
                 val outputFile = File(modelDir, filename)
@@ -124,11 +126,12 @@ class WhisperService(private val context: Context) {
                     inputStream.copyTo(output)
                 }
                 inputStream.close()
-                Log.d(TAG, "Copied model file: $filename")
+                Log.d(TAG, "Copied pre-packaged model: $filename")
             }
+            Log.i(TAG, "✓ Whisper models loaded from pre-packaged assets")
             true
         } catch (e: Exception) {
-            Log.d(TAG, "No bundled whisper models in assets: ${e.message}")
+            Log.d(TAG, "No pre-packaged Whisper models - will need download: ${e.message}")
             false
         }
     }

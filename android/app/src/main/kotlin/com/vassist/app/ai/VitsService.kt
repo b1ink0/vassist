@@ -242,7 +242,7 @@ class VitsService(private val context: Context) {
             
             if (vitsAssets.isEmpty()) return false
             
-            Log.i(TAG, "Copying VITS assets: ${vitsAssets.joinToString()}")
+            Log.i(TAG, "Found pre-packaged VITS models in assets (${vitsAssets.size} files)")
             
             for (asset in vitsAssets) {
                 val assetPath = "models/vits/$asset"
@@ -259,16 +259,17 @@ class VitsService(private val context: Context) {
                             inputStream.copyTo(outputStream)
                         }
                     }
-                    Log.d(TAG, "Copied: $assetPath -> ${outputFile.absolutePath}")
+                    val sizeMB = (outputFile.length() / 1024.0 / 1024.0).let { "%.1f".format(it) }
+                    Log.d(TAG, "Copied pre-packaged model: $asset ($sizeMB MB)")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to copy: $assetPath - ${e.message}")
                 }
             }
             
-            Log.i(TAG, "Finished copying VITS assets")
+            Log.i(TAG, "✓ VITS models loaded from pre-packaged assets")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error copying VITS models from assets: ${e.message}", e)
+            Log.d(TAG, "No pre-packaged VITS models - will need download: ${e.message}")
             false
         }
     }

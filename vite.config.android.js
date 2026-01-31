@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
+import { androidModelsPlugin } from './tools/vite-plugins/android-models-plugin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,8 +45,9 @@ function moveIndexHtmlPlugin() {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const isProduction = mode === 'production';
+  const packageModels = process.argv.includes('--package-models');
   
   return {
     // Base path for WebViewAssetLoader: https://vassist.app/
@@ -60,6 +62,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       tailwindcss(),
+      androidModelsPlugin(packageModels),
       moveIndexHtmlPlugin(),
       vadAssetsPlugin('dist-android'),
     ],
