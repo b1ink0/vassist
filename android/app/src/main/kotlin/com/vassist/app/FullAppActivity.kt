@@ -358,8 +358,14 @@ class FullAppActivity : ComponentActivity() {
         // Initialize AI server and JavaScript interface BEFORE loading page
         initializeLocalAI()
         
-        // Load the app in full app mode (with UI controls)
-        webView.loadUrl(APP_URL)
+        // Restore WebView state if available, otherwise load URL
+        if (savedInstanceState != null) {
+            webView.restoreState(savedInstanceState)
+            Log.d(TAG, "Restored WebView state from savedInstanceState")
+        } else {
+            webView.loadUrl(APP_URL)
+            Log.d(TAG, "Loading WebView from URL: $APP_URL")
+        }
     }
     
     /**
@@ -554,6 +560,12 @@ class FullAppActivity : ComponentActivity() {
             fileChooserCallback = null
             cameraPhotoUri = null
         }
+    }
+    
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView.saveState(outState)
+        Log.d(TAG, "Saved WebView state to Bundle")
     }
     
     override fun onDestroy() {
