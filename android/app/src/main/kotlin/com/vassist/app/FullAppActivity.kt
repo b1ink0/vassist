@@ -45,6 +45,7 @@ class FullAppActivity : ComponentActivity() {
         private const val TAG = "FullAppActivity"
         // Load in full app mode (not wallpaper mode)
         const val APP_URL = "https://${RendererWebView.ASSET_LOADER_DOMAIN}/index.html?mode=app"
+        private const val REQUEST_CHOOSE_IMAGE = 1001
     }
     
     private lateinit var webView: WebView
@@ -58,6 +59,8 @@ class FullAppActivity : ComponentActivity() {
     
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
+    private var cameraPhotoUri: Uri? = null
+    
     private val microphonePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -225,6 +228,9 @@ class FullAppActivity : ComponentActivity() {
                 fileChooserCallback = filePathCallback
                 
                 try {
+                    // Check if capture attribute is present (for camera)
+                    val isCaptureMode = fileChooserParams?.isCaptureEnabled ?: false
+                    
                     val acceptTypes = fileChooserParams?.acceptTypes ?: arrayOf("*/*")
                     val mimeTypes = if (acceptTypes.isEmpty() || (acceptTypes.size == 1 && acceptTypes[0].isNullOrEmpty())) {
                         arrayOf("*/*")
@@ -259,16 +265,8 @@ class FullAppActivity : ComponentActivity() {
                     
                     when {
                         isImageOnly -> {
-                            Log.d(TAG, "Using Photo Picker for images")
-                            if (allowMultiple) {
-                                multiplePhotoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            } else {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            }
+                            Log.d(TAG, "Creating chooser for camera and gallery")
+                            showImageChooser()
                         }
                         isVideoOnly -> {
                             Log.d(TAG, "Using Photo Picker for videos")
@@ -502,6 +500,59 @@ class FullAppActivity : ComponentActivity() {
                 Log.e(TAG, "handleModelImport failed", e)
                 aiBridge?.emitImportError(e.message ?: "Import failed")
             }
+        }
+    }
+    
+    private fun showImageChooser() {
+        try {
+            // Create camera intent
+            val photoFile = java.io.File.createTempFile(
+                "camera_photo_${System.currentTimeMillis()}",
+                ".jpg",
+                cacheDir
+            )
+            
+            val photoUri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                photoFile
+            )
+            cameraPhotoUri = photoUri
+            
+            val cameraIntent = android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(android.provider.MediaStore.EXTRA_OUTPUT, photoUri)
+            }
+            
+            // Create gallery intent using ACTION_GET_CONTENT for better compatibility
+            val galleryIntent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            }
+            
+            // Create chooser with camera as one of the options (not as initial intent)
+            val chooserIntent = android.content.Intent.createChooser(galleryIntent, "Select Image")
+            chooserIntent.putExtra(android.content.Intent.EXTRA_INITIAL_INTENTS, arrayOf(cameraIntent))
+            
+            startActivityForResult(chooserIntent, REQUEST_CHOOSE_IMAGE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing image chooser", e)
+            fileChooserCallback?.onReceiveValue(null)
+            fileChooserCallback = null
+        }
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == REQUEST_CHOOSE_IMAGE) {
+            if (resultCode == RESULT_OK) {
+                val uri = data?.data ?: cameraPhotoUri
+                fileChooserCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: arrayOf())
+            } else {
+                fileChooserCallback?.onReceiveValue(null)
+            }
+            fileChooserCallback = null
+            cameraPhotoUri = null
         }
     }
     

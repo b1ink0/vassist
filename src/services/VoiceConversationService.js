@@ -33,7 +33,7 @@ class VoiceConversationService {
     
     // Callbacks
     this.onStateChange = null; // (state) => void
-    this.onTranscription = null; // (text) => void
+    this.onTranscription = null; // (text, images?) => void 
     this.onResponse = null; // (text) => void
     this.onError = null; // (error) => void
     
@@ -106,7 +106,7 @@ class VoiceConversationService {
           // Transition to THINKING state while transcription is being processed
           this.changeState(ConversationStates.THINKING);
         },
-        onVolumeChange: (volume) => {
+        onVolumeChange: (_volume) => {
           // Optional: Could use for UI feedback only
           // Actual interrupt logic is in onRecordingStart above
         }

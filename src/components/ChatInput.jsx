@@ -46,7 +46,7 @@ const ChatInput = forwardRef(({
   
   // Local state for input window (synced from main window)
   const [localPendingDropData, setLocalPendingDropData] = useState(null);
-  const [localIsVisible, setLocalIsVisible] = useState(true); // Input window is always visible when open
+  const [localIsVisible, _setLocalIsVisible] = useState(true); // Input window is always visible when open
   
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -111,6 +111,14 @@ const ChatInput = forwardRef(({
     }
   }, [onSend, api]);
 
+  const wrappedOnVoiceTranscription = useCallback((text, images) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:voiceTranscription', { text, images });
+    } else {
+      onVoiceTranscription(text, images);
+    }
+  }, [onVoiceTranscription, api]);
+
   const wrappedSetPendingDropData = useCallback((data) => {
     if (isInputWindow) {
       api?.ipc.send('chatInput:setPendingDropData', data);
@@ -167,13 +175,28 @@ const ChatInput = forwardRef(({
       setVoiceState(state);
     });
 
+    const unsubscribeTranscription = api.ipc.on('voice:transcriptionReceived', (text) => {
+      Logger.log('ChatInput', 'Transcription received from main window:', text);
+      
+      const images = attachedImages.length > 0 
+        ? attachedImages.map(img => img.dataUrl) 
+        : [];
+      
+      Logger.log('ChatInput', 'Sending back to main window with images:', images.length);
+      
+      api.ipc.send('chatInput:voiceTranscription', { text, images });
+      
+      setAttachedImages([]);
+    });
+
     return () => {
       unsubscribePendingDrop?.();
       unsubscribeMicDevices?.();
       unsubscribeSelectedMic?.();
       unsubscribeVoiceState?.();
+      unsubscribeTranscription?.();
     };
-  }, [api]);
+  }, [api, attachedImages]);
 
   /**
    * Auto-resizes textarea based on content.
@@ -334,15 +357,18 @@ const ChatInput = forwardRef(({
     };
 
     const handleTranscription = (text) => {
-      Logger.log('ChatInput', 'Voice transcription:', text);
+      Logger.log('ChatInput', 'Voice transcription:', text, 'with images:', attachedImages.length);
+      Logger.log('ChatInput', 'Attached images details:', attachedImages);
       
-      // Desktop input window: Send to main window via IPC
-      if (isInputWindow && api?.ipc) {
-        api.ipc.send('chatInput:voiceTranscription', text);
-      } else if (onVoiceTranscription) {
-        // Regular mode: Call callback directly
-        onVoiceTranscription(text);
-      }
+      const images = attachedImages.length > 0 
+        ? attachedImages.map(img => img.dataUrl) 
+        : null;
+      
+      Logger.log('ChatInput', 'Images array to send:', images ? `${images.length} images` : 'null');
+      
+      wrappedOnVoiceTranscription(text, images);
+      
+      setAttachedImages([]);
     };
 
     const handleError = (error) => {
@@ -365,14 +391,14 @@ const ChatInput = forwardRef(({
         VoiceConversationService.setErrorCallback(null);
       }
     };
-  }, [api, onVoiceTranscription]);
+  }, [api, onVoiceTranscription, attachedImages]);
 
   // Initialize microphone service and subscribe to device changes
   useEffect(() => {
     const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
       setMicDevices(devices);
       setSelectedMicId(selectedDeviceId);
-      
+      attachedImages, wrappedOnVoiceTranscription
       // Sync to input window on desktop
       if (!isInputWindow && api?.ipc) {
         api.ipc.send('state:micDevices', { devices, selectedDeviceId });
@@ -383,7 +409,7 @@ const ChatInput = forwardRef(({
     const initDevices = async () => {
       try {
         await MicrophoneService.initialize();
-      } catch (error) {
+      } catch {
         Logger.log('ChatInput', 'Mic permission not granted yet');
       }
     };
@@ -433,7 +459,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('startVoiceMode', handleStartVoiceMode);
     };
-  }, [isVoiceMode, effectiveIsVisible, onVoiceMode]);
+  }, [isVoiceMode, effectiveIsVisible, onVoiceMode, api]);
 
   /**
    * Processes drag-and-drop data (text, images, audios).
@@ -889,6 +915,8 @@ const ChatInput = forwardRef(({
         
         setIsVoiceMode(false);
         setVoiceState(ConversationStates.IDLE);
+        setAttachedImages([]);
+        setAttachedAudios([]);
       } else {
         Logger.log('ChatInput', 'Starting voice conversation mode');
         TTSServiceProxy.stopPlayback();
@@ -1072,7 +1100,7 @@ const ChatInput = forwardRef(({
             </div>
           </div>
         )}
-        {hasAttachments && !isVoiceMode && (
+        {hasAttachments && (
           <div className={`w-full max-w-3xl mb-2 ${isInputWindow ? '' : 'mx-auto'}`}>
             <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg ${
               isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
@@ -1138,6 +1166,24 @@ const ChatInput = forwardRef(({
         )}
 
         <form onSubmit={handleSubmit} className={`max-w-3xl flex gap-2 items-end ${isInputWindow ? '' : 'mx-auto'}`}>
+          {/* Hidden file inputs - always rendered so refs work in both modes */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            multiple
+            onChange={handleAudioSelect}
+            className="hidden"
+          />
+          
           {isVoiceMode ? (
             <>
               <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between ${
@@ -1156,10 +1202,20 @@ const ChatInput = forwardRef(({
                       className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20 flex items-center gap-1.5`}
                     >
                       <Icon name="hand-stop" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>Stop</span>
                     </button>
                   )}
-                  
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                      attachedImages.length > 0 ? 'bg-blue-500/20 text-blue-400' : ''
+                    }`}
+                    title={attachedImages.length > 0 ? `${attachedImages.length} image(s)` : 'Attach image'}
+                  >
+                    <Icon name="image" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                    {attachedImages.length > 0 && <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>{attachedImages.length}</span>}
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleVoiceModeToggle}
@@ -1208,23 +1264,6 @@ const ChatInput = forwardRef(({
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageSelect}
-                      className="hidden"
-                    />
-                    <input
-                      ref={audioInputRef}
-                      type="file"
-                      accept="audio/*"
-                      multiple
-                      onChange={handleAudioSelect}
-                      className="hidden"
-                    />
-                    
                     <button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}

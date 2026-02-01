@@ -627,9 +627,16 @@ ipcMain.on('state:selectedMicId', (event, deviceId) => {
 });
 
 // Voice conversation state sync from input window to main window
-ipcMain.on('chatInput:voiceTranscription', (event, text) => {
+ipcMain.on('chatInput:voiceTranscription', (event, data) => {
   if (mainWindow && mainWindow.webContents) {
-    mainWindow.webContents.send('chatInput:voiceTranscription', text);
+    mainWindow.webContents.send('chatInput:voiceTranscription', data);
+  }
+});
+
+// Main window sends transcription to input window, input window sends back with images
+ipcMain.on('voice:transcriptionReceived', (event, text) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('voice:transcriptionReceived', text);
   }
 });
 
