@@ -45,6 +45,7 @@ export const iconMap = {
   'phone': HeroIconsSolid.PhoneIcon,
   'image': HeroIconsSolid.PhotoIcon,
   'photo': HeroIconsSolid.PhotoIcon,
+  'camera': HeroIconsSolid.CameraIcon,
   'music': HeroIconsSolid.MusicalNoteIcon,
   'document': HeroIconsSolid.DocumentIcon,
   'note': HeroIconsSolid.DocumentTextIcon,

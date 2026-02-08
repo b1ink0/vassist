@@ -288,7 +288,7 @@ protocol.registerSchemesAsPrivileged([
  */
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media' || permission === 'microphone') {
+    if (permission === 'media') {
       callback(true);
     } else {
       callback(false);
@@ -623,6 +623,36 @@ ipcMain.on('state:selectedMicId', (event, deviceId) => {
   }
   if (inputWindow && inputWindow.webContents && event.sender !== inputWindow.webContents) {
     inputWindow.webContents.send('state:selectedMicId', deviceId);
+  }
+});
+
+// Camera device state sync between windows
+ipcMain.on('state:cameraDevices', (event, data) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:cameraDevices', data);
+  }
+});
+
+// Camera control from input window to main window
+ipcMain.on('camera:selectDevice', (event, deviceId) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('camera:selectDevice', deviceId);
+  }
+});
+
+ipcMain.on('camera:toggle', (event) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('camera:toggle');
+  }
+});
+
+ipcMain.on('state:selectedCameraId', (event, deviceId) => {
+  // Sync selected camera between main and input windows
+  if (mainWindow && mainWindow.webContents && event.sender !== mainWindow.webContents) {
+    mainWindow.webContents.send('state:selectedCameraId', deviceId);
+  }
+  if (inputWindow && inputWindow.webContents && event.sender !== inputWindow.webContents) {
+    inputWindow.webContents.send('state:selectedCameraId', deviceId);
   }
 });
 

@@ -693,12 +693,16 @@ class ChatHistoryService {
       try {
         // Use a timeout to avoid hanging
         const titlePromise = (async () => {
-          const prompt = `Generate a very short title (max 50 characters) for this chat based on the first user message. Only return the title, nothing else.\n\nUser message: "${firstUserMsg.content}"`;
+          const prompt = `Generate a very short title (max 50 characters) for this chat based on the first user message. Only return the title, nothing else.
+
+User message: "${firstUserMsg.content}"
+
+/no_think`;
           
           Logger.log('ChatHistoryService', 'Sending prompt to AIService for title generation');
           const response = await this.aiService.sendMessage([
             { role: 'user', content: prompt }
-          ]);
+          ], null, null, { disableRouting: true }); // Disable routing for title generation
           Logger.log('ChatHistoryService', 'AIService response:', response);
           return response;
         })();

@@ -4,6 +4,7 @@
 
 import AppContent from './components/AppContent'
 import ChatInput from './components/ChatInput'
+import CameraPreview from './components/CameraPreview'
 import AndroidContent from '../android-src/AndroidContent'
 import AndroidBackground from './components/AndroidBackground'
 import DemoSite from './components/DemoSite'
@@ -96,6 +97,7 @@ function App({ mode = 'development' }) {
                 <div className="relative w-full h-screen overflow-hidden">
                   <AndroidBackground />
                   <AppWithSetup mode="android" />
+                  <CameraPreview />
                 </div>
               </AppProvider>
             </AnimationProvider>
@@ -117,6 +119,7 @@ function App({ mode = 'development' }) {
                 onVoiceTranscription={() => {}} 
                 onVoiceMode={() => {}} 
               />
+              <CameraPreview />
             </AppProvider>
           </ConfigProvider>
         </DesktopProvider>
@@ -132,6 +135,7 @@ function App({ mode = 'development' }) {
                 <DesktopWindowControls />
                 <div className="relative w-full h-screen overflow-hidden">
                   <AppWithSetup mode="desktop" />
+                  <CameraPreview />
                 </div>
               </AppProvider>
             </AnimationProvider>
@@ -151,9 +155,13 @@ function App({ mode = 'development' }) {
               <div className="relative w-full h-screen overflow-hidden">
                 <DemoSite />
                 <AppWithSetup mode="development" />
+                <CameraPreview />
               </div>
             ) : (
-              <AppWithSetup mode="extension" />
+              <>
+                <AppWithSetup mode="extension" />
+                <CameraPreview />
+              </>
             )}
           </AppProvider>
         </AnimationProvider>

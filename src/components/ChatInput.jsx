@@ -16,6 +16,7 @@ import Logger from '../services/LoggerService';
 import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
 import MicrophoneService from '../services/MicrophoneService';
+import CameraService from '../services/CameraService';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -101,6 +102,12 @@ const ChatInput = forwardRef(({
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicId, setSelectedMicId] = useState(null);
   const [showMicSelect, setShowMicSelect] = useState(false);
+
+  // Camera selection state
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState(null);
+  const [showCameraSelect, setShowCameraSelect] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
 
   // IPC wrapper functions for input window
   const wrappedOnSend = useCallback((message, images, audios) => {
@@ -391,6 +398,7 @@ const ChatInput = forwardRef(({
         VoiceConversationService.setErrorCallback(null);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, onVoiceTranscription, attachedImages]);
 
   // Initialize microphone service and subscribe to device changes
@@ -398,7 +406,7 @@ const ChatInput = forwardRef(({
     const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
       setMicDevices(devices);
       setSelectedMicId(selectedDeviceId);
-      attachedImages, wrappedOnVoiceTranscription
+      
       // Sync to input window on desktop
       if (!isInputWindow && api?.ipc) {
         api.ipc.send('state:micDevices', { devices, selectedDeviceId });
@@ -417,6 +425,82 @@ const ChatInput = forwardRef(({
 
     return unsubscribe;
   }, [api]);
+
+  // Initialize camera service
+  useEffect(() => {
+    Logger.log('ChatInput', 'Camera initialization useEffect triggered, isInputWindow:', isInputWindow);
+    
+    if (isInputWindow) {
+      Logger.log('ChatInput', 'Input window: Setting up IPC listeners for camera state');
+      // Listen for camera state from main window
+      if (api?.ipc) {
+        const unsubscribeCameraDevices = api.ipc.on('state:cameraDevices', (data) => {
+          Logger.log('ChatInput', 'Input window: Received camera state via IPC:', data);
+          setCameraDevices(data.devices);
+          setSelectedCameraId(data.selectedDeviceId);
+          setIsCameraActive(data.isActive);
+        });
+        
+        return () => {
+          unsubscribeCameraDevices();
+        };
+      }
+      return;
+    }
+
+    Logger.log('ChatInput', 'Web/Android/Extension: Setting up CameraService subscription');
+    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
+      Logger.log('ChatInput', 'CameraService state changed:', { devices: devices.length, selectedDeviceId, isActive });
+      setCameraDevices(devices);
+      setSelectedCameraId(selectedDeviceId);
+      setIsCameraActive(isActive);
+    });
+
+    const initDevices = async () => {
+      try {
+        Logger.log('ChatInput', 'Web/Android/Extension: Initializing CameraService...');
+        await CameraService.initialize();
+        Logger.log('ChatInput', 'Web/Android/Extension: CameraService initialized successfully');
+      } catch (error) {
+        Logger.error('ChatInput', 'Web/Android/Extension: Camera initialization failed:', error);
+      }
+    };
+    initDevices();
+
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, isInputWindow]);
+
+  // Listen for camera control IPC messages
+  useEffect(() => {
+    if (isInputWindow || !api?.ipc) {
+      return;
+    }
+
+    Logger.log('ChatInput', 'Main window: Setting up camera IPC listeners');
+    
+    const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId) => {
+      Logger.log('ChatInput', 'Main window: Received IPC camera:selectDevice:', deviceId);
+      await CameraService.setSelectedDevice(deviceId);
+    });
+
+    const unsubscribeToggle = api.ipc.on('camera:toggle', async () => {
+      if (isCameraActive) {
+        Logger.log('ChatInput', 'Main window: Stopping camera via IPC');
+        await CameraService.stop();
+      } else {
+        Logger.log('ChatInput', 'Main window: Starting camera via IPC');
+        await CameraService.start();
+      }
+    });
+
+    return () => {
+      Logger.log('ChatInput', 'Main window: Cleaning up camera IPC listeners');
+      unsubscribeSelectDevice();
+      unsubscribeToggle();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, isInputWindow, isCameraActive]);
 
   useEffect(() => {
     const handleStartVoiceMode = async () => {
@@ -908,6 +992,11 @@ const ChatInput = forwardRef(({
           api.ipc.send('chatInput:voiceMode', false);
         } else {
           VoiceConversationService.stop();
+          if (CameraService.isRunning()) {
+            Logger.log('ChatInput', 'Stopping camera after voice call ended');
+            await CameraService.stop();
+          }
+          
           if (onVoiceMode) {
             onVoiceMode(false);
           }
@@ -983,12 +1072,48 @@ const ChatInput = forwardRef(({
   };
 
   /**
-   * Handles microphone button click for voice recording.
+   * Handles camera device selection
+   */
+  const handleCameraSelect = async (deviceId) => {
+    Logger.log('ChatInput', 'Camera selected:', deviceId);
     
-    const event = new CustomEvent('voiceInterrupt');
-    window.dispatchEvent(event);
-    
-    VoiceConversationService.interrupt();
+    if (isInputWindow && api?.ipc) {
+      api.ipc.send('camera:selectDevice', deviceId || null);
+    } else {
+      await CameraService.setSelectedDevice(deviceId || null);
+    }
+    setShowCameraSelect(false);
+  };
+
+  /**
+   * Toggles camera selection dropdown
+   */
+  const handleCameraSelectToggle = () => {
+    setShowCameraSelect(!showCameraSelect);
+  };
+
+  /**
+   * Handles camera button click (toggle on/off)
+   */
+  const handleCameraClick = async () => {
+    try {
+      Logger.log('ChatInput', 'Camera button clicked, isInputWindow:', isInputWindow, 'isCameraActive:', isCameraActive);
+      
+      if (isInputWindow && api?.ipc) {
+        Logger.log('ChatInput', 'Input window: Sending camera:toggle IPC to main window');
+        api.ipc.send('camera:toggle');
+      } else {
+        if (isCameraActive) {
+          Logger.log('ChatInput', 'Stopping camera');
+          await CameraService.stop();
+        } else {
+          Logger.log('ChatInput', 'Starting camera');
+          await CameraService.start();
+        }
+      }
+    } catch (error) {
+      Logger.error('ChatInput', 'Camera toggle error:', error);
+    }
   };
 
   /**
@@ -1215,6 +1340,61 @@ const ChatInput = forwardRef(({
                     <Icon name="image" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     {attachedImages.length > 0 && <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>{attachedImages.length}</span>}
                   </button>
+
+                  {/* Camera button with dropdown */}
+                  <div className="relative flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleCameraClick}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                        isCameraActive ? 'bg-green-500/20 text-green-400' : ''
+                      }`}
+                      title={isCameraActive ? 'Stop Camera' : 'Start Camera'}
+                    >
+                      <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={handleCameraSelectToggle}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-1 py-1.5 rounded-lg hover:bg-white/10 text-sm`}
+                      title="Select Camera"
+                    >
+                      <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                    </button>
+                    
+                    {showCameraSelect && (
+                      <select
+                        value={selectedCameraId || ''}
+                        onChange={(e) => handleCameraSelect(e.target.value)}
+                        onBlur={() => setShowCameraSelect(false)}
+                        autoFocus
+                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
+                          !isLightBackground 
+                            ? 'bg-white/90 text-black border-white/20' 
+                            : 'bg-black/90 text-white border-white/10'
+                        } border shadow-2xl`}
+                        style={{
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                        }}
+                        size={Math.min(cameraDevices.length + 1, 5)}
+                      >
+                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
+                          Default Camera
+                        </option>
+                        {cameraDevices.map((device, index) => (
+                          <option 
+                            key={device.deviceId || index} 
+                            value={device.deviceId || ''}
+                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
+                          >
+                            {device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
 
                   <button
                     type="button"

@@ -20,6 +20,7 @@ import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
 import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
+import CameraService from '../services/CameraService';
 
 /**
  * Main chat controller component.
@@ -370,6 +371,10 @@ const ChatController = ({
         } else {
           Logger.log('ChatController', 'Stopping VoiceConversationService in main window');
           VoiceConversationService.stop();
+          if (CameraService.isRunning()) {
+            Logger.log('ChatController', 'Stopping camera after voice call ended');
+            await CameraService.stop();
+          }
         }
       } catch (error) {
         Logger.error('ChatController', 'Voice mode change error:', error);
@@ -456,6 +461,80 @@ const ChatController = ({
       unsubscribeVadSpeechDetected?.();
     };
   }, [api, handleVoiceTranscription, handleVoiceModeChange]);
+
+  /**
+   * Desktop Main Window: Initialize camera and listen for IPC commands from input window
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    Logger.log('ChatController', 'Main window: Initializing camera service...');
+
+    // Subscribe to camera state changes
+    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
+      Logger.log('ChatController', 'Camera state changed:', { devices: devices.length, selectedDeviceId, isActive });
+      
+      if (api?.ipc) {
+        const serializedDevices = devices.map(device => ({
+          deviceId: device.deviceId,
+          label: device.label,
+          kind: device.kind,
+          groupId: device.groupId
+        }));
+        api.ipc.send('state:cameraDevices', { 
+          devices: serializedDevices, 
+          selectedDeviceId, 
+          isActive 
+        });
+      }
+    });
+
+    const initCamera = async () => {
+      try {
+        await CameraService.initialize();
+        Logger.log('ChatController', 'Camera initialized successfully');
+      } catch (error) {
+        Logger.error('ChatController', 'Camera initialization failed:', error);
+      }
+    };
+    initCamera();
+
+    if (api?.ipc) {
+      const unsubscribeToggle = api.ipc.on('camera:toggle', async () => {
+        Logger.log('ChatController', 'IPC: Camera toggle received');
+        try {
+          if (CameraService.isRunning()) {
+            await CameraService.stop();
+          } else {
+            await CameraService.start();
+          }
+        } catch (error) {
+          Logger.error('ChatController', 'Camera toggle failed:', error);
+        }
+      });
+
+      const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId) => {
+        Logger.log('ChatController', 'IPC: Camera select device:', deviceId);
+        try {
+          await CameraService.setSelectedDevice(deviceId);
+        } catch (error) {
+          Logger.error('ChatController', 'Camera select device failed:', error);
+        }
+      });
+
+      return () => {
+        unsubscribe?.();
+        unsubscribeToggle?.();
+        unsubscribeSelectDevice?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, []);
 
   /**
    * Abort streaming when chat is closed to stop TTS generation

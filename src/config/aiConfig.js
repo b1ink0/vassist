@@ -242,6 +242,17 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+    },
   },
   
   ollama: {
@@ -253,6 +264,17 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+    },
   },
   
   'android-local': {
@@ -262,6 +284,17 @@ export const DefaultAIConfig = {
     maxTokens: 2048,
     systemPromptType: 'default',
     systemPrompt: '',
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+    },
   },
   
   'desktop-local': {
@@ -274,6 +307,17 @@ export const DefaultAIConfig = {
     threads: 4,
     systemPromptType: 'default',
     systemPrompt: '',
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+    },
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
