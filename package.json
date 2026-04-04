@@ -13,7 +13,7 @@
     "dev:all": "concurrently \"vite\" \"vite build --config vite.config.extension.js --mode development --watch\"",
     "dev:preview:desktop": "vite build --config vite.config.desktop.js --mode development && bunx electron .",
     "build": "vite build --mode production",
-    "build:extension": "vite build --config vite.config.esxtension.js --mode production",
+    "build:extension": "vite build --config vite.config.extension.js --mode production",
     "build:extension:zip": "ZIP=true vite build --config vite.config.extension.js --mode production",
     "setup:desktop:tts": "cd electron/server/gpt-sovits && python setup.py",
     "build:desktop": "vite build --config vite.config.desktop.js --mode development",
