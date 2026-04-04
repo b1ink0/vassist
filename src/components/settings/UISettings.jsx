@@ -13,7 +13,7 @@ import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
 import Logger from '../../services/LoggerService';
-import { isAndroid } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import BackgroundSettings from './BackgroundSettings';
 
 const UISettings = ({ isLightBackground }) => {
@@ -24,6 +24,7 @@ const UISettings = ({ isLightBackground }) => {
 
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);
+  const allowPositionSelection = !isAndroid && !isDesktop;
 
   const isExtensionMode = ExtensionBridge.isExtensionMode();
 
@@ -32,9 +33,9 @@ const UISettings = ({ isLightBackground }) => {
       <h3 className="text-base font-semibold text-white mb-4">UI Configuration</h3>
       
       {/* Documentation Link */}
-      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-400/20">
+      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-3">
-          <Icon name="book" size={20} className="text-blue-300 flex-shrink-0 mt-0.5" />
+          <Icon name="book" size={20} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold text-white mb-1">Documentation</h4>
             <p className="text-xs text-white/70 mb-2">
@@ -44,7 +45,7 @@ const UISettings = ({ isLightBackground }) => {
               href="https://b1ink0.github.io/vassist/docs/intro"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
             >
               View Documentation
               <Icon name="arrow-top-right" size={14} />
@@ -54,7 +55,7 @@ const UISettings = ({ isLightBackground }) => {
       </div>
       
       {/* Start Setup Again Button */}
-      <div className="space-y-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+      <div className="space-y-2 p-3 rounded-lg bg-white/10 border border-white/20">
         <button
           onClick={async () => {
             if (isResetting) return;
@@ -78,7 +79,7 @@ const UISettings = ({ isLightBackground }) => {
           <Icon name="refresh" size={16} />
           {isResetting ? 'Resetting...' : 'Start Setup Wizard Again'}
         </button>
-        <p className="text-xs text-purple-300">
+        <p className="text-xs">
           Re-run the initial setup wizard to reconfigure your assistant
         </p>
       </div>
@@ -142,7 +143,7 @@ const UISettings = ({ isLightBackground }) => {
       </div>
 
       {/* Chat Position - visible when avatar is disabled */}
-      {!uiConfig.enableModelLoading && (
+      {!uiConfig.enableModelLoading && allowPositionSelection && (
         <div className="space-y-2 border-t border-white/10 pt-4">
           <h4 className="text-sm font-semibold text-white mb-3">Chat Position</h4>
           <label className="block text-sm font-medium text-white/90">Chat Window Position</label>
@@ -290,17 +291,20 @@ const UISettings = ({ isLightBackground }) => {
       </div>
 
       {/* Keyboard Shortcuts */}
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
-        
-        <ShortcutsConfig
-          shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
-          onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
-          isLightBackground={isLightBackground}
-        />
-      </div>
+      {!isAndroid ? (
+        <div className="space-y-4 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
+          
+          <ShortcutsConfig
+            shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
+            onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+        ) : null
+      }
 
-      {/* Developer Options - Moved to bottom */}
+      {/* Developer Options */}
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
         

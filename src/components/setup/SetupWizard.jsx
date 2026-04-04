@@ -152,7 +152,6 @@ const SetupWizard = () => {
               } transition-all flex items-center gap-1`}
             >
               <span className="hidden sm:inline">{isLastStep ? 'Finish' : 'Next'}</span>
-              <span className="sm:hidden">→</span>
               <Icon name="arrow-right" size={16} className="hidden sm:block" />
             </button>
           </div>

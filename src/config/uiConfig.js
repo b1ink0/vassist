@@ -9,8 +9,8 @@
  */
 export const BackgroundThemeModes = {
   ADAPTIVE: 'adaptive', // Auto-detect background brightness
-  LIGHT: 'light',       // Force light theme (dark chat on light background)
-  DARK: 'dark',         // Force dark theme (light chat on dark background)
+  LIGHT: 'dark',       // Force light theme (dark chat on light background)
+  DARK: 'light',         // Force dark theme (light chat on dark background)
 };
 
 /**

@@ -20,16 +20,16 @@ const FlagCopyButton = ({ flagUrl, flagValue }) => {
 
   return (
     <div className="flex items-start gap-2 p-2 bg-white/5 rounded border border-white/10">
-      <Icon name="flag" size={14} className="text-purple-400 mt-1 flex-shrink-0" />
+      <Icon name="flag" size={14} className="text-white/80 mt-1 flex-shrink-0" />
       <div className="flex-1 min-w-0">
-        <code className="text-xs text-blue-300 break-all block">{flagUrl}</code>
-        <p className="text-[10px] text-white/60 mt-1">Set to: <span className="text-yellow-300">{flagValue}</span></p>
+        <code className="text-xs text-white/70 break-all block">{flagUrl}</code>
+        <p className="text-[10px] text-white/60 mt-1">Set to: <span className="text-white/80">{flagValue}</span></p>
       </div>
       <button
         onClick={handleCopy}
         className="flex-shrink-0 px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
       >
-        <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green-400" : "text-white/80"} />
+        <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-white" : "text-white/80"} />
       </button>
     </div>
   );
@@ -38,6 +38,7 @@ const FlagCopyButton = ({ flagUrl, flagValue }) => {
 const LLMProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
+  const isWebMode = !isAndroid && !isDesktop;
   const defaultProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
   const [apiKey, setApiKey] = useState('');
@@ -62,18 +63,19 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     downloadAttempts: 0,
   });
 
-  const chromeAIAvailable = setupData?.chromeAI?.ready || false;
-
   useEffect(() => {
     // Check Chrome AI status when component mounts
-    if (!isAndroid) {
+    if (isWebMode) {
       checkChromeAIStatus();
     }
     
     // Load existing setup data if any (only on first mount)
     const llmData = setupData?.llm;
     if (llmData) {
-      if (llmData.provider) setSelectedProvider(llmData.provider);
+      if (llmData.provider) {
+        const normalizedProvider = (!isWebMode && llmData.provider === 'chrome-ai') ? defaultProvider : llmData.provider;
+        setSelectedProvider(normalizedProvider);
+      }
       
       // Load provider-specific configs
       if (llmData.openai?.apiKey) setApiKey(llmData.openai.apiKey);
@@ -257,7 +259,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       cons: ['Requires model download', 'GPU recommended']
     }] : []),
     // Chrome AI - only on non-Android/non-Desktop (web mode)
-    ...(!isAndroid && !isDesktop ? [{
+    ...(isWebMode ? [{
       id: 'chrome-ai',
       name: 'Chrome AI',
       description: 'Free, local AI powered by Google',
@@ -364,7 +366,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
   return (
     <div className="setup-step space-y-3 sm:space-y-4">
       <div className="mb-2 sm:mb-3">
-        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
           LLM Provider
         </h2>
         <p className="text-xs sm:text-sm text-white/90">
@@ -386,10 +388,10 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       {selectedProvider === 'android-local' && (
         <div className="space-y-3">
           {/* Info Banner */}
-          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <div className="flex items-start gap-2">
-              <Icon name="cpu" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-green-300">
+              <Icon name="cpu" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-white/70">
                 <span className="font-semibold">Android Local AI</span> - On-device language model using Qwen3-0.6B. Runs entirely on your device, no internet needed!
               </p>
             </div>
@@ -398,7 +400,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
           {/* Status */}
           <div className="p-3 rounded-lg bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <div className="w-2 h-2 rounded-full bg-white/70"></div>
               <span className="text-sm font-semibold text-white/90">Ready to use!</span>
             </div>
             <p className="text-xs text-white/60">
@@ -422,7 +424,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                   value={androidEndpoint}
                   onChange={(e) => setAndroidEndpoint(e.target.value)}
                   placeholder="http://127.0.0.1:8765"
-                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
                   Local HTTP server running on your Android device
@@ -461,7 +463,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Get from{' '}
@@ -469,7 +471,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                   href="https://platform.openai.com/api-keys"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300"
+                  className="text-white/80 hover:text-white/70"
                 >
                   platform.openai.com
                 </a>
@@ -492,7 +494,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 value={ollamaEndpoint}
                 onChange={(e) => setOllamaEndpoint(e.target.value)}
                 placeholder="http://localhost:11434"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
             </div>
             <div>
@@ -504,14 +506,14 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 value={ollamaModel}
                 onChange={(e) => setOllamaModel(e.target.value)}
                 placeholder="llama2"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 <a
                   href="https://ollama.ai/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300"
+                  className="text-white/80 hover:text-white/70"
                 >
                   ollama.ai
                 </a>
@@ -524,10 +526,10 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       {selectedProvider === 'chrome-ai' && (
         <div className="space-y-4">
           {/* Info Banner */}
-          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <div className="flex items-start gap-2">
-              <Icon name="ai" size={18} className="text-blue-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-blue-300">
+              <Icon name="ai" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-white/70">
                 <span className="font-semibold">Chrome Built-in AI</span> - On-device language model using Gemini Nano. No API key needed, works offline!
               </p>
             </div>
@@ -577,14 +579,14 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                       
                       {/* Timeout Message */}
                       {chromeAIStatus.downloadTimedOut && (
-                        <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20 space-y-2">
-                          <p className="text-xs text-blue-300">
+                        <div className="p-2 rounded bg-white/10 border border-white/20 space-y-2">
+                          <p className="text-xs text-white/70">
                             <Icon name="info" size={12} className="inline mr-1" />
                             The download is likely happening in the background. Track real-time progress at:
                           </p>
                           <div className="flex items-start gap-2 p-2 bg-white/5 rounded border border-white/10">
-                            <Icon name="globe" size={14} className="text-blue-400 mt-1 flex-shrink-0" />
-                            <code className="text-xs text-blue-300 break-all flex-1">chrome://on-device-internals/</code>
+                            <Icon name="globe" size={14} className="text-white/80 mt-1 flex-shrink-0" />
+                            <code className="text-xs text-white/70 break-all flex-1">chrome://on-device-internals/</code>
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText('chrome://on-device-internals/');
@@ -616,8 +618,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                       
                       {/* Show message after 3 attempts */}
                       {chromeAIStatus.downloadAttempts >= 3 && (
-                        <div className="mt-2 p-2 rounded bg-blue-500/10 border border-blue-500/20">
-                          <p className="text-xs text-blue-300">
+                        <div className="mt-2 p-2 rounded bg-white/10 border border-white/20">
+                          <p className="text-xs text-white/70">
                             <Icon name="info" size={12} className="inline mr-1" />
                             The model may already be downloading in the background. Please wait a few minutes and click "Refresh Status" to check progress.
                           </p>
@@ -630,7 +632,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                   <button
                     onClick={checkChromeAIStatus}
                     disabled={chromeAIStatus.checking}
-                    className="mt-2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 disabled:opacity-50"
+                    className="mt-2 text-xs text-white/80 hover:text-white/70 flex items-center gap-1 disabled:opacity-50"
                   >
                     <Icon name="refresh" size={12} className={chromeAIStatus.checking ? 'animate-spin' : ''} />
                     <span>{chromeAIStatus.checking ? 'Checking...' : 'Refresh Status'}</span>
@@ -660,7 +662,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 flagValue="Enabled"
               />
               <p className="text-white/50 mt-2">
-                Enable these flags and restart Chrome, then visit <code className="text-blue-300">chrome://components</code> to download "Optimization Guide On Device Model"
+                Enable these flags and restart Chrome, then visit <code className="text-white/70">chrome://components</code> to download "Optimization Guide On Device Model"
               </p>
             </div>
           </details>

@@ -669,9 +669,9 @@ const BabylonScene = ({
       <div className={`relative ${previewClassName}`} style={{ width: previewWidth, height: previewHeight }}>
         {canvasContent}
         {!isReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl">
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-white/10 to-white/10 rounded-2xl">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500/30 border-t-purple-500 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/30 border-t-white/80 mx-auto mb-4"></div>
               <p className="text-white/70 text-sm font-medium">
                 Loading 3D Model... {Math.round(loadingProgress || 0)}%
               </p>

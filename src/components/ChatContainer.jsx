@@ -25,6 +25,8 @@ import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
 import { isDesktop, isAndroid } from '../utils/PlatformUtils';
 
+const ANDROID_CHAT_TOP_OFFSET = 32;
+
 /**
  * Chat container component.
  * 
@@ -212,6 +214,10 @@ const ChatContainer = ({
     const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
     const isSmallScreen = window.innerWidth <= 768;
 
+    if (isAndroid) {
+      return { x: 8, y: ANDROID_CHAT_TOP_OFFSET };
+    }
+
     if (isSmallScreen) {
       const containerWidth = Math.min(400, window.innerWidth - 16);
       const containerHeight = modelDisabled ? 400 : 500;
@@ -311,6 +317,11 @@ const ChatContainer = ({
     if (!isVisible) return;
     
     const handleModelPosition = () => {
+      if (isAndroid) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
       if (window.innerWidth <= 768) {
         setContainerPos(calculateContainerPosition());
         return;
@@ -1116,6 +1127,8 @@ const ChatContainer = ({
   if (!modelDisabled && (containerPos.x === 0 && containerPos.y === 0)) return null;
 
   const ttsEnabled = ttsConfig.enabled;
+  const androidChatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+  const androidContainerHeight = Math.max(320, window.innerHeight - ANDROID_CHAT_TOP_OFFSET - androidChatInputHeight + 40);
 
   return (
     <>
@@ -1154,7 +1167,9 @@ const ChatContainer = ({
         style={{
           position: 'fixed',
           left: `${containerPos.x}px`,
-          top: `${containerPos.y}px`,
+          top: isAndroid ? `${ANDROID_CHAT_TOP_OFFSET}px` : `${containerPos.y}px`,
+          height: isAndroid ? `${androidContainerHeight}px` : undefined,
+          maxHeight: isAndroid ? `${androidContainerHeight}px` : undefined,
           zIndex: 9999,
           borderColor: isDragOver 
             ? 'rgba(59, 130, 246, 0.6)' 
@@ -1195,7 +1210,7 @@ const ChatContainer = ({
       </div>
       
       {/* Action buttons at BOTTOM - reorganized: left/center/right layout */}
-      <div className="relative flex items-center justify-between gap-2 px-6 pb-1">
+      <div className="relative flex items-center justify-between gap-2 pb-1">
         {/* LEFT: Settings + History */}
         <div className="flex items-center gap-2">
           <button
@@ -1255,9 +1270,7 @@ const ChatContainer = ({
           )}
         </div>
         
-        {/* RIGHT: Temp Chat + Model Visibility Toggle */}
         <div className="flex items-center gap-2">
-          {/* Model Visibility Toggle - always visible */}
           <button
             onClick={() => updateUIConfig('enableModelLoading', !uiConfig.enableModelLoading)}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
@@ -1280,7 +1293,7 @@ const ChatContainer = ({
         </div>
       </div>
 
-      {/* Messages container - removed mask to enable backdrop-filter blur */}
+      {/* Messages container */}
       <div 
         ref={messagesContainerRef}
         className="flex-1 relative overflow-hidden"
@@ -1289,13 +1302,13 @@ const ChatContainer = ({
           WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
         } : undefined}
       >
-        {!isDesktop && (
+        {!(isDesktop || isAndroid) && (
           <div 
             className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
           />
         )}
         
-        {!isDesktop && (
+        {!(isDesktop || isAndroid) && (
           <div 
             className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
           />
@@ -1304,16 +1317,12 @@ const ChatContainer = ({
         {/* Scrollable messages */}
         <div 
           ref={scrollRef}
-          className="absolute inset-0 flex flex-col gap-3 px-6 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
+          className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
         >
           {messages.length === 0 ? (
-            /* Welcome message - improved design */
             <div className="flex flex-col items-center justify-center h-full gap-6">
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
-                <div className="w-full flex justify-center items-center text-6xl mb-4"><Icon name="chat" size={16} /></div>
-                <h2 className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xl font-semibold mb-2`}>
-                  Start a Conversation
-                </h2>
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                <div className="w-full flex justify-center items-center text-6xl mb-4"><Icon name="chat" size={18} /></div>
                 <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm opacity-70`}>
                   Type a message below to begin chatting with your AI assistant
                 </p>

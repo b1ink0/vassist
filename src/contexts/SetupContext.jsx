@@ -8,8 +8,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import StorageServiceProxy from '../services/proxies/StorageServiceProxy';
 import Logger from '../services/LoggerService';
+import { isAndroid, isDesktop } from '../utils/PlatformUtils';
 
 const SetupContext = createContext(null);
+
+const DEFAULT_LLM_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
+const DEFAULT_TTS_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'kokoro');
+const DEFAULT_STT_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai-multimodal');
 
 export const useSetup = () => {
   const context = useContext(SetupContext);
@@ -33,7 +38,7 @@ const DEFAULT_SETUP_STATE = {
   completedSteps: [],
   setupData: {
     llm: {
-      provider: 'chrome-ai',
+      provider: DEFAULT_LLM_PROVIDER,
       chromeAi: {
         enableImageSupport: true,
         enableAudioSupport: true,
@@ -50,7 +55,7 @@ const DEFAULT_SETUP_STATE = {
     
     tts: {
       enabled: false,
-      provider: 'kokoro',
+      provider: DEFAULT_TTS_PROVIDER,
       kokoro: {
         voice: 'af_heart',
         speed: 1.0,
@@ -92,7 +97,7 @@ const DEFAULT_SETUP_STATE = {
     
     stt: {
       enabled: false,
-      provider: 'chrome-ai-multimodal',
+      provider: DEFAULT_STT_PROVIDER,
     },
     
     aiFeatures: {
@@ -296,7 +301,7 @@ export function SetupProvider({ children }) {
       Logger.log('SetupContext', 'Completing setup with data:', setupState.setupData);
       
       const aiConfig = {
-        provider: setupState.setupData.llm?.provider || 'chrome-ai',
+        provider: setupState.setupData.llm?.provider || DEFAULT_LLM_PROVIDER,
         chromeAi: {
           temperature: 1.0,
           topK: 3,
@@ -339,7 +344,7 @@ export function SetupProvider({ children }) {
       
       const ttsConfig = {
         enabled: setupState.setupData.tts?.enabled ?? false,
-        provider: setupState.setupData.tts?.provider || 'kokoro',
+        provider: setupState.setupData.tts?.provider || DEFAULT_TTS_PROVIDER,
         kokoro: {
           modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
           voice: setupState.setupData.tts?.kokoro?.voice || 'af_heart',
@@ -368,7 +373,7 @@ export function SetupProvider({ children }) {
       
       const sttConfig = {
         enabled: setupState.setupData.stt?.enabled ?? false,
-        provider: setupState.setupData.stt?.provider || 'chrome-ai-multimodal',
+        provider: setupState.setupData.stt?.provider || DEFAULT_STT_PROVIDER,
         'chrome-ai-multimodal': {
           temperature: setupState.setupData.sttConfig?.chromeAi?.temperature || 0.1,
           topK: setupState.setupData.sttConfig?.chromeAi?.topK || 3,

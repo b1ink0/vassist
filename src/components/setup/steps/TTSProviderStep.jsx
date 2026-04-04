@@ -18,6 +18,7 @@ import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 const TTSProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
+  const isWebMode = !isAndroid && !isDesktop;
   
   // TTS state
   const defaultTTSProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'kokoro');
@@ -96,7 +97,12 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     const sttConfigData = setupData?.sttConfig;
     
     if (ttsData) {
-      if (ttsData.provider) setSelectedProvider(ttsData.provider);
+      if (ttsData.provider) {
+        const normalizedTTSProvider = (isAndroid || isDesktop) && ttsData.provider === 'kokoro'
+          ? defaultTTSProvider
+          : ttsData.provider;
+        setSelectedProvider(normalizedTTSProvider);
+      }
       if (ttsData.kokoro) setKokoroConfig(ttsData.kokoro);
       if (ttsData.openai?.apiKey) setOpenAIKey(ttsData.openai.apiKey);
       if (ttsData.openai?.model) setOpenAIModel(ttsData.openai.model);
@@ -116,7 +122,12 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       if (ttsData['desktop-local']?.trained) setDesktopTrained(ttsData['desktop-local'].trained);
     }
     
-    if (sttData?.provider) setSelectedSTTProvider(sttData.provider);
+    if (sttData?.provider) {
+      const normalizedSTTProvider = (!isWebMode && sttData.provider === STTProviders.CHROME_AI_MULTIMODAL)
+        ? defaultSTTProvider
+        : sttData.provider;
+      setSelectedSTTProvider(normalizedSTTProvider);
+    }
     if (sttConfigData) {
       setSTTConfig(sttConfigData);
       if (sttConfigData['android-local']?.endpoint) setAndroidSTTEndpoint(sttConfigData['android-local'].endpoint);
@@ -172,7 +183,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     
     const sttData = {
       enabled: selectedSTTProvider !== 'disabled',
-      provider: selectedSTTProvider === 'disabled' ? STTProviders.CHROME_AI_MULTIMODAL : selectedSTTProvider,
+      provider: selectedSTTProvider === 'disabled' ? defaultSTTProvider : selectedSTTProvider,
     };
     
     // Add android-local to sttConfig
@@ -202,6 +213,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     androidTTSEndpoint,
     selectedSTTProvider, sttConfig, androidSTTEndpoint, desktopSTTEndpoint, desktopSTTModel,
     desktopTTSEndpoint, desktopReferenceAudio, desktopReferenceText, desktopReferenceLanguage, desktopSpeed, desktopTopK, desktopTopP, desktopTemperature, desktopTrained,
+    defaultSTTProvider,
     updateSetupData
   ]);
 
@@ -411,16 +423,6 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       description: 'On-device STT using Whisper',
       recommended: true,
       available: true,
-      requirements: 'Ready to use! Pre-installed on device'
-    }] : []),
-    // Desktop Local STT - only on Desktop
-    ...(isDesktop ? [{
-      id: STTProviders.DESKTOP_LOCAL,
-      name: 'Desktop Local',
-      iconName: 'microphone',
-      description: 'On-device STT using Whisper',
-      recommended: true,
-      available: true,
       requirements: 'Ready to use! Pre-installed on desktop'
     }] : []),
     {
@@ -432,7 +434,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       available: true,
       requirements: 'None - text input only'
     },
-    ...(!isAndroid ? [{
+    ...(isWebMode ? [{
       id: STTProviders.CHROME_AI_MULTIMODAL,
       name: 'Chrome AI',
       iconName: 'microphone',
@@ -574,7 +576,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   return (
     <div className="setup-step space-y-3 sm:space-y-4">
       <div className="mb-2 sm:mb-3">
-        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
           Voice Provider
         </h2>
         <p className="text-xs sm:text-sm text-white/90">
@@ -595,7 +597,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       {selectedProvider === 'disabled' && (
         <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
           <div className="flex items-start gap-3">
-            <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
+            <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm text-white/90">
               <p className="font-semibold">Text-to-Speech Disabled</p>
               <p className="text-white/70">
@@ -610,10 +612,10 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       {selectedProvider === 'android-local' && (
         <div className="space-y-3">
           {/* Info Banner */}
-          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <div className="flex items-start gap-2">
-              <Icon name="speaker" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-green-300">
+              <Icon name="speaker" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-white/70">
                 <span className="font-semibold">Android Local TTS</span> - On-device text-to-speech using VITS VCTK neural network with 109 different voices!
               </p>
             </div>
@@ -622,7 +624,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
           {/* Status */}
           <div className="p-3 rounded-lg bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <div className="w-2 h-2 rounded-full bg-white/70"></div>
               <span className="text-sm font-semibold text-white/90">Ready to use!</span>
             </div>
             <p className="text-xs text-white/60">
@@ -646,7 +648,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                   value={androidTTSEndpoint}
                   onChange={(e) => setAndroidTTSEndpoint(e.target.value)}
                   placeholder="http://127.0.0.1:8765"
-                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
                   Local HTTP server for TTS on your Android device
@@ -717,7 +719,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 value={openAIKey}
                 onChange={(e) => setOpenAIKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Same API key as LLM provider. Get it from{' '}
@@ -725,7 +727,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                   href="https://platform.openai.com/api-keys"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300"
+                  className="text-white/80 hover:text-white/70"
                 >
                   platform.openai.com
                 </a>
@@ -736,7 +738,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <select
                 value={openAIModel}
                 onChange={(e) => setOpenAIModel(e.target.value)}
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-white/30"
               >
                 <option value="tts-1" className="bg-gray-900">tts-1 (Standard)</option>
                 <option value="tts-1-hd" className="bg-gray-900">tts-1-hd (HD)</option>
@@ -747,7 +749,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <select
                 value={openAIVoice}
                 onChange={(e) => setOpenAIVoice(e.target.value)}
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-white/30"
               >
                 <option value="alloy" className="bg-gray-900">Alloy</option>
                 <option value="echo" className="bg-gray-900">Echo</option>
@@ -798,7 +800,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 value={customEndpoint}
                 onChange={(e) => setCustomEndpoint(e.target.value)}
                 placeholder="http://localhost:8000"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Base URL (will append /v1/audio/speech)
@@ -813,7 +815,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 value={customApiKey}
                 onChange={(e) => setCustomApiKey(e.target.value)}
                 placeholder="Leave empty if not required"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 API key for authentication
@@ -826,7 +828,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
                 placeholder="tts"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
             </div>
             <div>
@@ -836,7 +838,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 value={customVoice}
                 onChange={(e) => setCustomVoice(e.target.value)}
                 placeholder="default"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
               />
             </div>
             <div className="pt-1">
@@ -870,7 +872,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       {/* STT Section */}
       <div className="mt-6 pt-6 border-t border-white/10">
         <div className="mb-3">
-          <h3 className="text-lg sm:text-xl font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <h3 className="text-lg sm:text-xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
             Speech-to-Text
           </h3>
           <p className="text-xs sm:text-sm text-white/90">
@@ -894,7 +896,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         {selectedSTTProvider === 'disabled' && (
           <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
             <div className="flex items-start gap-3">
-              <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
+              <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
               <div className="space-y-2 text-sm text-white/90">
                 <p className="font-semibold">Speech-to-Text Disabled</p>
                 <p className="text-white/70">
@@ -909,10 +911,10 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         {selectedSTTProvider === STTProviders.ANDROID_LOCAL && (
           <div className="space-y-3">
             {/* Info Banner */}
-            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="p-3 rounded-lg bg-white/10 border border-white/20">
               <div className="flex items-start gap-2">
-                <Icon name="microphone" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-green-300">
+                <Icon name="microphone" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-white/70">
                   <span className="font-semibold">Android Local STT</span> - On-device speech recognition using Whisper. Runs entirely on your device!
                 </p>
               </div>
@@ -921,7 +923,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             {/* Status */}
             <div className="p-3 rounded-lg bg-white/5 border border-white/10">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <div className="w-2 h-2 rounded-full bg-white/70"></div>
                 <span className="text-sm font-semibold text-white/90">Ready to use!</span>
               </div>
               <p className="text-xs text-white/60">
@@ -945,7 +947,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                     value={androidSTTEndpoint}
                     onChange={(e) => setAndroidSTTEndpoint(e.target.value)}
                     placeholder="http://127.0.0.1:8765"
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-purple-400"
+                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
                   />
                   <p className="text-[10px] text-white/50 mt-1">
                     Local HTTP server for STT on your Android device
@@ -971,7 +973,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
           />
         )}
 
-        {selectedSTTProvider === STTProviders.CHROME_AI_MULTIMODAL && (
+        {isWebMode && selectedSTTProvider === STTProviders.CHROME_AI_MULTIMODAL && (
           <ChromeAISTTConfig
             config={sttConfig.chromeAi}
             onChange={(newConfig) => handleSTTConfigChange('chromeAi', newConfig)}

@@ -37,6 +37,7 @@ const ChatController = ({
   const { api } = useDesktop();
   const chatInputRef = useRef(null);
   const streamAbortControllerRef = useRef(null); // Track current stream to allow cancellation
+  const hasAutoOpenedAndroidChatRef = useRef(false);
   
   const {
     assistantRef,
@@ -711,6 +712,25 @@ const ChatController = ({
       window.removeEventListener('openChatFromDrag', handleOpenChatFromDrag)
     }
   }, [handleChatOpen])
+
+  useEffect(() => {
+    if (!isAndroid || !modelDisabled) return;
+    if (!isAssistantReady) return;
+    if (hasAutoOpenedAndroidChatRef.current) return;
+    if (isChatContainerVisible || isChatInputVisible) return;
+
+    hasAutoOpenedAndroidChatRef.current = true;
+    Logger.log('ChatController', 'Auto-opening chat on Android in chat-only mode');
+    setIsChatInputVisible(true);
+    setIsChatContainerVisible(true);
+  }, [
+    modelDisabled,
+    isAssistantReady,
+    isChatContainerVisible,
+    isChatInputVisible,
+    setIsChatInputVisible,
+    setIsChatContainerVisible,
+  ]);
 
   /**
    * Listens for drag-drop events and stores as pending if chat isn't open yet.

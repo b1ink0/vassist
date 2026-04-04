@@ -38,6 +38,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        if (savedInstanceState == null) {
+            openFullApp()
+        }
     }
     
     private fun openWallpaperPicker() {

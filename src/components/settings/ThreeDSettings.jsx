@@ -19,6 +19,7 @@ import { modelStorageService } from '../../services/ModelStorageService';
 import { stageStorageService } from '../../services/StageStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
 import emoteStorageService from '../../services/EmoteStorageService';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import JSZip from 'jszip';
 
 const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }) => {
@@ -37,6 +38,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     toggleCustomAnimation,
     reloadCustomAnimations,
   } = useAnimation();
+  const allowPositionSelection = !isAndroid && !isDesktop;
 
   const [activeSubTab, setActiveSubTab] = useState('display');
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({ left: 0, width: 0 });
@@ -1327,7 +1329,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           }}
         >
           {/* Display Tab */}
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
       {/* Enable Avatar Toggle */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
@@ -1408,33 +1410,34 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             )}
           </div>
 
-          {/* Position Preset */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Character Position</label>
-            <select
-              value={uiConfig.position?.preset || 'bottom-right'}
-              onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-              {Object.entries(PositionPresets).map(([key, preset]) => (
-                <option key={key} value={key} className="bg-gray-900">
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-white/50">
-              {uiConfig.position?.preset === 'last-location'
-                ? 'Will load at the last dragged position. Drag to save new position.'
-                : 'Changes will apply on next page load or reload'}
-            </p>
-          </div>
+          {allowPositionSelection && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-white/90">Character Position</label>
+              <select
+                value={uiConfig.position?.preset || 'bottom-right'}
+                onChange={(e) => updateUIConfig('position.preset', e.target.value)}
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              >
+                <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
+                {Object.entries(PositionPresets).map(([key, preset]) => (
+                  <option key={key} value={key} className="bg-gray-900">
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-white/50">
+                {uiConfig.position?.preset === 'last-location'
+                  ? 'Will load at the last dragged position. Drag to save new position.'
+                  : 'Changes will apply on next page load or reload'}
+              </p>
+            </div>
+          )}
         </>
       )}
       </div>
 
       {/* Performance Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Physics Simulation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -1727,7 +1730,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         </div>
 
       {/* Models Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Model Management Section */}
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-white mb-3">Custom Models</h4>
@@ -2242,7 +2245,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         </div>
 
       {/* Animations Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Motion Management */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Custom Animations</h4>
@@ -2411,7 +2414,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Emotes Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Emote Upload */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Emote Management</h4>

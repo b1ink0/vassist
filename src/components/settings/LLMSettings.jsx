@@ -543,7 +543,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
       {aiConfig.provider === AIProviders.ANDROID_LOCAL && isAndroid && (
         <>
           {/* Info Banner */}
-          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <p className="text-xs text-green-300">
               <span className="font-semibold">Android Local LLM</span> - On-device AI using llama.cpp. Download and manage GGUF models below.
             </p>

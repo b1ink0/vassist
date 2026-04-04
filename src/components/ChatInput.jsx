@@ -41,6 +41,8 @@ const ChatInput = forwardRef(({
     isChatInputVisible: isVisible,
     pendingDropData,
     setPendingDropData,
+    isSettingsPanelOpen,
+    isHistoryPanelOpen,
   } = useApp();
   
   const { uiConfig } = useConfig();
@@ -1261,11 +1263,12 @@ const ChatInput = forwardRef(({
 
   const voiceStateDisplay = getVoiceStateDisplay();
   const hasAttachments = attachedImages.length > 0 || attachedAudios.length > 0;
+  const shouldFollowKeyboard = isAndroid && keyboardOffset > 0 && !isSettingsPanelOpen && !isHistoryPanelOpen;
 
   return (
     <div 
       className="fixed bottom-0 left-0 right-0 z-[10001] flex justify-center pointer-events-none"
-      style={isAndroid && keyboardOffset > 0 ? {
+      style={shouldFollowKeyboard ? {
         transform: `translateY(-${keyboardOffset}px)`,
         transition: 'transform 0.1s ease-out'
       } : undefined}
