@@ -129,7 +129,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                     </div>
                   )}
 
-                  <div className="p-4">
+                  <div className="p-2 md:p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Icon name="maximize" size={20} className="text-purple-400" />
                       <h3 className="text-base font-semibold text-white">Standard Mode</h3>
@@ -178,7 +178,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                     </div>
                   )}
 
-                  <div className="p-4">
+                  <div className="p-2 md:p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Icon name="user" size={20} className="text-blue-400" />
                       <h3 className="text-base font-semibold text-white">Portrait Mode</h3>
@@ -319,7 +319,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                 </p>
               </div>
 
-              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <div className="p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                 <div className="flex items-start gap-2">
                   <Icon name="info" size={16} className="text-blue-300 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-blue-200">
@@ -334,7 +334,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
       </div>
 
       {/* Additional Info */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-2 md:p-4 mb-6">
         <div className="flex items-start gap-3">
           <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
           <div>

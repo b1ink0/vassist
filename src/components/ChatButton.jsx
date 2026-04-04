@@ -1076,7 +1076,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         {emotes.length === 0 ? (
           <div 
             style={{ scrollSnapAlign: 'center' }} 
-            className={`glass-button flex items-center justify-center px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap ${
+            className={`glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap ${
               isLightBackground 
                 ? 'glass-button-dark' 
                 : ''
@@ -1090,7 +1090,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             <button
               onClick={handleAutoPlayToggle}
               style={{ scrollSnapAlign: 'center' }}
-              className={`glass-button flex items-center justify-center gap-2 px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+              className={`glass-button flex items-center justify-center gap-2 px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
                 isLightBackground 
                   ? 'glass-button-dark' 
                   : ''
@@ -1131,7 +1131,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                   }
                 }}
                 style={{ scrollSnapAlign: 'center' }}
-                className={`glass-button flex items-center justify-center gap-2 px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
+                className={`glass-button flex items-center justify-center gap-2 px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
                   isLightBackground 
                     ? 'glass-button-dark' 
                     : ''

@@ -52,7 +52,7 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
 
   return (
     <section className="relative py-12 sm:py-16 px-3 sm:px-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="max-w-7xl mx-auto px-2 md:px-4 sm:px-6">
         <div className="text-center mb-12">
           <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 ${theme.gradient}`}>
             Document Interaction Demo
@@ -65,7 +65,7 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
         <div className="mb-8 text-center flex flex-wrap justify-center gap-4">
           <button
             onClick={() => setShowHiddenContent(!showHiddenContent)}
-            className={`cursor-pointer px-6 py-3 rounded-lg font-semibold transition-all ${isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-200 hover:bg-slate-300'} ${theme.textPrimary} inline-flex items-center gap-2`}
+            className={`cursor-pointer px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-200 hover:bg-slate-300'} ${theme.textPrimary} inline-flex items-center gap-2`}
           >
             <Icon name={showHiddenContent ? 'eye-off' : 'eye'} size={20} />
             {showHiddenContent ? 'Hide' : 'Show'} Hidden Content
@@ -86,7 +86,7 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
               </div>
               <button
                 onClick={() => handleTryAction(action.question)}
-                className={`cursor-pointer w-full px-4 py-2 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 flex items-center justify-center gap-2`}
+                className={`cursor-pointer w-full px-2 md:px-4 py-2 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 flex items-center justify-center gap-2`}
               >
                 <Icon name="play" size={16} />
                 Try This
@@ -106,26 +106,26 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
               <table className={`w-full ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 <thead className={isDark ? 'bg-white/10' : 'bg-slate-100'}>
                   <tr>
-                    <th className="px-4 py-3 text-left">Day</th>
-                    <th className="px-4 py-3 text-left">Condition</th>
-                    <th className="px-4 py-3 text-left">Temp</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-left">Day</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-left">Condition</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-left">Temp</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className={isDark ? 'border-t border-white/10' : 'border-t'}>
-                    <td className="px-4 py-3">Monday</td>
-                    <td className="px-4 py-3">Sunny</td>
-                    <td className="px-4 py-3">75°F / 55°F</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Monday</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Sunny</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">75°F / 55°F</td>
                   </tr>
                   <tr className={isDark ? 'border-t border-white/10' : 'border-t'}>
-                    <td className="px-4 py-3">Tuesday</td>
-                    <td className="px-4 py-3">Cloudy</td>
-                    <td className="px-4 py-3">72°F / 58°F</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Tuesday</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Cloudy</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">72°F / 58°F</td>
                   </tr>
                   <tr className={isDark ? 'border-t border-white/10' : 'border-t'}>
-                    <td className="px-4 py-3">Wednesday</td>
-                    <td className="px-4 py-3">Rainy</td>
-                    <td className="px-4 py-3">65°F / 52°F</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Wednesday</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">Rainy</td>
+                    <td className="px-2 md:px-4 py-2 md:py-3">65°F / 52°F</td>
                   </tr>
                 </tbody>
               </table>
@@ -143,15 +143,15 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
             <div className="mb-8">
               <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Contact Form</h4>
               <form className="space-y-3">
-                <input type="text" placeholder="Name" className={`w-full px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
-                <input type="email" placeholder="Email" className={`w-full px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
-                <textarea placeholder="Message" rows={3} className={`w-full px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
+                <input type="text" placeholder="Name" className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
+                <input type="email" placeholder="Email" className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
+                <textarea placeholder="Message" rows={3} className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
               </form>
             </div>
 
             <div className="mb-8">
               <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Code Example</h4>
-              <pre className={`p-4 rounded ${isDark ? 'bg-black/30' : 'bg-slate-900'} overflow-x-auto`}>
+              <pre className={`p-2 md:p-4 rounded ${isDark ? 'bg-black/30' : 'bg-slate-900'} overflow-x-auto`}>
                 <code className="text-sm">
 {`// React Component with Custom Hook
 function useDebounce(value, delay) {

@@ -1292,7 +1292,7 @@ const ChatInput = forwardRef(({
             }}
           >
             <div 
-              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
             >
               <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
                 <Icon name="attachment" size={20} /> Drop
@@ -1351,7 +1351,7 @@ const ChatInput = forwardRef(({
         )}
 
         {recordingError && (
-          <div className={`glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
+          <div className={`glass-error max-w-3xl mx-auto mb-2 px-2 md:px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
             isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
           }`}>
             <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm`}>{recordingError}</span>
@@ -1386,7 +1386,7 @@ const ChatInput = forwardRef(({
           
           {isVoiceMode ? (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between ${
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-2 md:py-3 rounded-xl flex items-center justify-between ${
                 isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
               }`}>
                 <div className="flex items-center gap-3">
@@ -1523,9 +1523,7 @@ const ChatInput = forwardRef(({
                       ? 'Recording...' 
                       : hasAttachments
                       ? `${attachedImages.length + attachedAudios.length} file(s) attached`
-                      : isAndroid
-                      ? 'Type a message...'
-                      : 'Type a message... (Enter to send, Shift+Enter for new line)'
+                      : 'Type a message...'
                   }
                   className="w-full bg-transparent text-white border-none outline-none placeholder-white/40 resize-none custom-scrollbar min-h-[24px] max-h-[200px]"
                   rows={1}

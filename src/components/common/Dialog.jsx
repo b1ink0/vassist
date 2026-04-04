@@ -89,8 +89,8 @@ const Dialog = ({
 
   // Determine confirm button styles
   const confirmButtonClass = confirmStyle === 'error' 
-    ? 'glass-error px-4 py-2 rounded-lg text-sm font-medium'
-    : 'glass-button px-4 py-2 rounded-lg text-sm font-medium';
+    ? 'glass-error px-2 md:px-4 py-2 rounded-lg text-sm font-medium'
+    : 'glass-button px-2 md:px-4 py-2 rounded-lg text-sm font-medium';
 
   return (
     <div 
@@ -143,7 +143,7 @@ const Dialog = ({
           <button
             onClick={onCancel}
             disabled={isProcessing}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 rounded-lg text-sm disabled:opacity-50`}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 rounded-lg text-sm disabled:opacity-50`}
           >
             {cancelLabel}
           </button>

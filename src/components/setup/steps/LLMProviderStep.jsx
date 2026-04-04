@@ -608,7 +608,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                     <>
                       <button
                         onClick={handleDownloadModel}
-                        className="mt-3 glass-button px-4 py-2 text-xs font-medium rounded-lg w-full flex items-center justify-center gap-2"
+                        className="mt-3 glass-button px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full flex items-center justify-center gap-2"
                       >
                         <Icon name="download" size={14} />
                         <span>Start Model Download</span>
@@ -674,7 +674,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
           <button
             onClick={testConnection}
             disabled={testing}
-            className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+            className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {testing ? (
               <>

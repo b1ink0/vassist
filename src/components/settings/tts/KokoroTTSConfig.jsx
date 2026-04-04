@@ -88,12 +88,12 @@ const KokoroTTSConfig = ({
   const deviceOptions = getDeviceOptions();
 
   return (
-    <div className="space-y-4 p-4 rounded-lg bg-white/5 border border-white/10">
+    <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
       {showTitle && <h4 className="text-sm font-semibold text-white/90">Kokoro TTS Configuration</h4>}
       
       {/* Setup Instructions - Only show in setup mode */}
       {isSetupMode && (
-        <div className="space-y-3 p-4 rounded-lg bg-blue-500/10 border border-blue-400/30">
+        <div className="space-y-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-400/30">
           <div className="flex items-start gap-3">
             <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm text-blue-100">
@@ -308,7 +308,7 @@ const KokoroTTSConfig = ({
             <button 
               onClick={onInitialize}
               disabled={kokoroStatus.downloading || kokoroStatus.initialized || kokoroStatus.checking}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
                 isSetupMode && !kokoroStatus.initialized ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-transparent animate-pulse' : ''
               }`}
             >

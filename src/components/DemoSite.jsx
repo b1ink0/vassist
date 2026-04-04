@@ -325,7 +325,7 @@ const DemoSite = () => {
       <div className={`fixed inset-0 opacity-40 ${isDark ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] " : "bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgwLDAsMCwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')]"}`}></div>
       
       <nav className={`fixed top-0 left-0 right-0 z-40 backdrop-blur-md border-b transition-all duration-500 ${pageTheme === 'dark' ? 'bg-slate-900/80 border-white/10' : 'bg-white/80 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 md:py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 sm:gap-3">
             <img 
               src={logoSvg} 
@@ -413,7 +413,7 @@ const DemoSite = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-12 px-2">
               <button 
                 onClick={() => openChat?.()}
-                className={`w-full sm:w-auto group px-6 sm:px-8 py-3 sm:py-4 ${theme.ctaGradient} rounded-xl font-semibold text-base sm:text-lg hover:scale-105 hover:shadow-2xl flex items-center justify-center gap-2`}
+                className={`w-full sm:w-auto group px-6 sm:px-8 py-2 md:py-3 sm:py-4 ${theme.ctaGradient} rounded-xl font-semibold text-base sm:text-lg hover:scale-105 hover:shadow-2xl flex items-center justify-center gap-2`}
               >
                 <span>Try It Now</span>
                 <span className="group-hover:translate-x-1 transition-transform">→</span>
@@ -421,7 +421,7 @@ const DemoSite = () => {
               
               <button 
                 onClick={() => window.open('https://github.com/b1ink0/vassist/releases', '_blank')}
-                className={`w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg transition-all border ${isDark ? 'bg-white/10 backdrop-blur-sm text-white border-white/20 hover:bg-white/20' : 'bg-slate-100 text-slate-900 border-slate-200 hover:bg-slate-200'} flex items-center justify-center gap-2`}
+                className={`w-full sm:w-auto px-6 sm:px-8 py-2 md:py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg transition-all border ${isDark ? 'bg-white/10 backdrop-blur-sm text-white border-white/20 hover:bg-white/20' : 'bg-slate-100 text-slate-900 border-slate-200 hover:bg-slate-200'} flex items-center justify-center gap-2`}
               >
                 <Icon name="download" size={20} />
                 <span>Install Extension</span>
@@ -490,7 +490,7 @@ const DemoSite = () => {
                 <Icon name="note" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Summarize</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <p id="summarize-text" className={`text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
                   Artificial intelligence has rapidly evolved over the past decade, transforming industries 
                   from healthcare to finance. Machine learning algorithms can now process vast amounts of data, 
@@ -516,7 +516,7 @@ const DemoSite = () => {
                     selection?.addRange(range);
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Summarize →
               </button>
@@ -527,7 +527,7 @@ const DemoSite = () => {
                 <Icon name="globe" size={28} className={isDark ? 'text-green-400' : 'text-green-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Translate</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <p id="translate-text" className={`text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
                   Good morning! How are you today? I hope you're having a wonderful day. 
                   Technology has made it easier than ever to communicate across languages and cultures. 
@@ -551,7 +551,7 @@ const DemoSite = () => {
                     selection?.addRange(range);
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Translate →
               </button>
@@ -562,7 +562,7 @@ const DemoSite = () => {
                 <Icon name="write" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Improve & Rewrite</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <textarea 
                   id="rewrite-text"
                   value={toolbarRewriteText}
@@ -585,7 +585,7 @@ const DemoSite = () => {
                     document.dispatchEvent(new Event('selectionchange'));
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Rewrite →
               </button>
@@ -596,7 +596,7 @@ const DemoSite = () => {
                 <Icon name="edit" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>AI Writer</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <textarea 
                   id="writer-text"
                   value={toolbarWriterText}
@@ -617,7 +617,7 @@ const DemoSite = () => {
                     element.focus();
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Writer →
               </button>
@@ -628,7 +628,7 @@ const DemoSite = () => {
                 <Icon name="search" size={28} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Language Detector</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <p id="language-text" className={`text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
                   Bonjour! Comment allez-vous? Je suis très heureux de vous rencontrer aujourd'hui.
                 </p>
@@ -649,7 +649,7 @@ const DemoSite = () => {
                     selection?.addRange(range);
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Language Detector →
               </button>
@@ -660,7 +660,7 @@ const DemoSite = () => {
                 <Icon name="microphone" size={28} className={isDark ? 'text-red-500' : 'text-red-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Voice Dictation</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <textarea 
                   id="dictation-text"
                   className={`w-full text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/90 bg-transparent' : 'text-slate-900 bg-transparent'} border-none outline-none resize-none min-h-[80px] focus:ring-0`}
@@ -680,7 +680,7 @@ const DemoSite = () => {
                     element.focus();
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Dictation →
               </button>
@@ -691,7 +691,7 @@ const DemoSite = () => {
                 <Icon name="book" size={28} className={isDark ? 'text-orange-400' : 'text-orange-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Dictionary</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <p id="dictionary-text" className={`text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
                   The word <span className="font-semibold">serendipity</span> means finding something good without looking for it.
                 </p>
@@ -716,7 +716,7 @@ const DemoSite = () => {
                     document.dispatchEvent(event);
                   }
                 }}
-                className={`w-full sm:w-auto px-6 py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
+                className={`w-full sm:w-auto px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 hover:shadow-lg`}
               >
                 Try Dictionary →
               </button>
@@ -764,14 +764,14 @@ const DemoSite = () => {
                 <Icon name="settings" size={28} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
                 <h3 className={`text-xl sm:text-2xl font-bold ${theme.textPrimary}`}>Customize Your Experience</h3>
               </div>
-              <div className={`${theme.subtleBg} p-4 sm:p-6 rounded-xl mb-4`}>
+              <div className={`${theme.subtleBg} p-2 md:p-4 sm:p-6 rounded-xl mb-4`}>
                 <h4 className={`text-base sm:text-lg font-semibold ${theme.textPrimary} mb-3`}>
                   <span className="inline-flex items-center"><Icon name="ai" size={18} className="text-cyan-400" /></span> Enable Colored Icons for Toolbar
                 </h4>
                 <p className={`text-sm sm:text-base leading-relaxed ${isDark ? 'text-white/80' : 'text-slate-700'} mb-4`}>
                   If you prefer a more colorful and vibrant toolbar, you can enable colored icons to make each feature stand out with its unique color.
                 </p>
-                <div className={`p-4 rounded-lg ${isDark ? 'bg-white/5 border border-white/10' : 'bg-slate-100 border border-slate-200'}`}>
+                <div className={`p-2 md:p-4 rounded-lg ${isDark ? 'bg-white/5 border border-white/10' : 'bg-slate-100 border border-slate-200'}`}>
                   <p className={`text-sm ${isDark ? 'text-white/90' : 'text-slate-800'} font-medium mb-2`}>Follow these steps:</p>
                   <ol className={`text-xs sm:text-sm ${isDark ? 'text-white/70' : 'text-slate-600'} space-y-2 list-decimal list-inside`}>
                     <li>Click the <span className="inline-flex items-center font-semibold"><Icon name="ai" size={14} className="text-cyan-400" /></span> <strong>Vassist button</strong> (floating button on the page)</li>
@@ -867,7 +867,7 @@ const DemoSite = () => {
               <button
                 onClick={handleSummarize}
                 disabled={isSummarizeLoading || !summarizeText.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isSummarizeLoading || !summarizeText.trim()
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -945,7 +945,7 @@ const DemoSite = () => {
               <button
                 onClick={handleTranslate}
                 disabled={isTranslateLoading || !translateText.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isTranslateLoading || !translateText.trim()
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -995,7 +995,7 @@ const DemoSite = () => {
               <button
                 onClick={handleDetectLanguage}
                 disabled={isDetectLoading || !detectText.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isDetectLoading || !detectText.trim()
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -1073,7 +1073,7 @@ const DemoSite = () => {
               <button
                 onClick={handleRewrite}
                 disabled={isRewriteLoading || !improveText.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isRewriteLoading || !improveText.trim()
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -1151,7 +1151,7 @@ const DemoSite = () => {
               <button
                 onClick={handleWriter}
                 disabled={isWriterLoading || !writerPrompt.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isWriterLoading || !writerPrompt.trim()
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -1203,7 +1203,7 @@ const DemoSite = () => {
               <button
                 onClick={handlePromptSubmit}
                 disabled={isPromptLoading || !promptText.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
+                className={`w-full px-2 md:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all mb-3 ${
                   isPromptLoading || !promptText.trim() 
                     ? (isDark ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-300')
                     : `${theme.ctaGradient} hover:scale-105`
@@ -1250,7 +1250,7 @@ const DemoSite = () => {
               </div>
 
               <div className="space-y-3">
-                <div className={`${pageTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'} p-4 rounded-lg border`}>
+                <div className={`${pageTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'} p-2 md:p-4 rounded-lg border`}>
                   <p className={`${pageTheme === 'light' ? 'text-slate-800' : 'text-white/80'}`}>
                     Hello! Click the theme toggle buttons in the top navigation to see how the entire demo site changes. 
                     The extension automatically detects your website's background color and adjusts accordingly!
@@ -1260,13 +1260,13 @@ const DemoSite = () => {
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setPageTheme('dark')} 
-                    className={`px-4 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${pageTheme === 'dark' ? 'bg-purple-600 text-white scale-105' : (pageTheme === 'light' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-white/5 text-white hover:bg-white/10')}`}
+                    className={`px-2 md:px-4 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${pageTheme === 'dark' ? 'bg-purple-600 text-white scale-105' : (pageTheme === 'light' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-white/5 text-white hover:bg-white/10')}`}
                   >
                     <Icon name="moon" size={16} /> Dark
                   </button>
                   <button 
                     onClick={() => setPageTheme('light')} 
-                    className={`px-4 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${pageTheme === 'light' ? 'bg-blue-600 text-white scale-105' : (pageTheme === 'dark' ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-200 text-slate-700')}`}
+                    className={`px-2 md:px-4 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${pageTheme === 'light' ? 'bg-blue-600 text-white scale-105' : (pageTheme === 'dark' ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-200 text-slate-700')}`}
                   >
                     <Icon name="sun" size={16} /> Light
                   </button>
@@ -1401,13 +1401,13 @@ const DemoSite = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 
                 onClick={() => openChat?.()}
-                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all flex items-center gap-3 ${theme.ctaGradient} hover:scale-105 hover:shadow-2xl`}
+                className={`px-8 py-2 md:py-4 rounded-xl font-semibold text-lg transition-all flex items-center gap-3 ${theme.ctaGradient} hover:scale-105 hover:shadow-2xl`}
               >
                 <Icon name="chat" size={20} className="text-white" /> Open Chat
               </button>
               <button 
                 onClick={handleVoiceChatClick}
-                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all flex items-center gap-3 ${isDark ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20' : 'bg-slate-100 text-slate-900 border border-slate-200 hover:bg-slate-200'}`}
+                className={`px-8 py-2 md:py-4 rounded-xl font-semibold text-lg transition-all flex items-center gap-3 ${isDark ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20' : 'bg-slate-100 text-slate-900 border border-slate-200 hover:bg-slate-200'}`}
               >
                 <Icon name="microphone" size={20} /> Try Voice Mode
               </button>

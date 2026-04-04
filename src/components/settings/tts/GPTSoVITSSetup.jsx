@@ -126,7 +126,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
   return (
     <div className="space-y-4">
       {/* Status indicator */}
-      <div className={`p-4 rounded-lg ${
+      <div className={`p-2 md:p-4 rounded-lg ${
         isInstalled
           ? 'bg-green-500/10 border border-green-500/30' 
           : 'bg-yellow-500/10 border border-yellow-500/30'
@@ -154,7 +154,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
             onClick={isPartialInstall ? handleReinstall : handleStartSetup}
             disabled={isSetupRunning}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} 
-              flex-1 px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2
+              flex-1 px-2 md:px-4 py-2 md:py-3 rounded-lg font-medium flex items-center justify-center gap-2
               disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {isSetupRunning ? (
@@ -173,7 +173,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
           {isSetupRunning && (
             <button
               onClick={handleCancelSetup}
-              className="glass-button px-4 py-3 rounded-lg hover:bg-red-500/20 transition-colors"
+              className="glass-button px-2 md:px-4 py-2 md:py-3 rounded-lg hover:bg-red-500/20 transition-colors"
               title="Cancel Installation"
             >
               <Icon name="x" size={16} />
@@ -189,7 +189,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
             onClick={handleVerifyInstall}
             disabled={isSetupRunning}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} 
-              flex-1 px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2
+              flex-1 px-2 md:px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2
               hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {isSetupRunning ? (
@@ -209,7 +209,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
             onClick={handleReinstall}
             disabled={isSetupRunning}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} 
-              flex-1 px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2
+              flex-1 px-2 md:px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2
               hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             <Icon name="refresh-cw" size={14} />
@@ -272,7 +272,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
       
       {/* Info panel */}
       {!isInstalled && !isSetupRunning && (
-        <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
+        <div className="p-2 md:p-4 bg-white/5 border border-white/10 rounded-lg">
           <p className="text-xs text-white/70 mb-2 font-medium">
             What will be installed:
           </p>

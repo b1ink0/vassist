@@ -212,7 +212,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
         <button 
           onClick={() => testSTTRecording(selectedDeviceId)}
           disabled={!sttConfig.enabled || sttTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test Recording (3s)
         </button>

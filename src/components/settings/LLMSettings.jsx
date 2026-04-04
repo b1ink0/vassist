@@ -711,7 +711,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
                   {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
                     <button
                       onClick={startChromeAIDownload}
-                      className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                      className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
                     >
                       Start Model Download
                     </button>
@@ -728,7 +728,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
               ) : (
                 <button
                   onClick={checkChromeAIAvailability}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
                 >
                   Check Status
                 </button>
@@ -863,7 +863,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
         <button 
           onClick={testAIConnection}
           disabled={aiTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test Connection
         </button>

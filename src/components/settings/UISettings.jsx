@@ -73,7 +73,7 @@ const UISettings = ({ isLightBackground }) => {
             }
           }}
           disabled={isResetting}
-          className="glass-button w-full px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+          className="glass-button w-full px-2 md:px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
           <Icon name="refresh" size={16} />
           {isResetting ? 'Resetting...' : 'Start Setup Wizard Again'}

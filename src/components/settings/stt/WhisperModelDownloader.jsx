@@ -97,7 +97,7 @@ const WhisperModelDownloader = ({ androidAPI, isLightBackground = false }) => {
   if (!status) return null;
 
   return (
-    <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-3">
+    <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10 space-y-3">
       <div className="flex items-center gap-2">
         <Icon name="download" size={16} className="text-white/70" />
         <h4 className="text-sm font-semibold text-white/90">Whisper Model</h4>

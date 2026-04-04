@@ -159,7 +159,7 @@ const ChatBubble = ({
         maxWidth: '350px',
         minWidth: '200px',
       }}
-      className={`${bubbleClasses} glass-accelerated rounded-2xl p-4 shadow-2xl`}
+      className={`${bubbleClasses} glass-accelerated rounded-2xl p-2 md:p-4 shadow-2xl`}
     >
       <div className="glass-text text-sm leading-relaxed">
         {displayText}

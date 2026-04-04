@@ -186,7 +186,7 @@ const AIFeaturesConfig = ({
     <div className="space-y-6">
       {/* Chrome AI Flags Warning - Only show for Chrome < 138 */}
       {isChromeAI && needsFlags && (
-        <div className="space-y-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <div className="space-y-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <div className="flex items-center gap-2">
             <span className="text-lg">ℹ️</span>
             <h4 className="text-sm font-semibold text-blue-300">Chrome AI Additional Flags Required</h4>

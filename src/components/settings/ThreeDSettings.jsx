@@ -1327,7 +1327,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           }}
         >
           {/* Display Tab */}
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
       {/* Enable Avatar Toggle */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
@@ -1351,7 +1351,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         <div className="space-y-2">
           <button
             onClick={reloadScene}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
           >
             <Icon name="refresh" size={16} />
             Reload Avatar
@@ -1434,7 +1434,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Performance Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Physics Simulation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -1727,7 +1727,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         </div>
 
       {/* Models Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Model Management Section */}
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-white mb-3">Custom Models</h4>
@@ -1745,7 +1745,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               <button
                 onClick={() => modelFileInputRef.current?.click()}
                 disabled={modelUploadState.uploading}
-                className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
                 <p className="text-sm text-white/90 mb-1">
@@ -1892,7 +1892,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                     {/* No textures/meshes message */}
                     {(!builtinModelMetadata.textures || builtinModelMetadata.textures.length === 0) && 
                      (!builtinModelMetadata.meshParts || builtinModelMetadata.meshParts.length === 0) && (
-                      <p className="text-xs text-white/50 text-center py-4">
+                      <p className="text-xs text-white/50 text-center py-2 md:py-4">
                         Texture and mesh configuration will be available after the model loads
                       </p>
                     )}
@@ -2116,7 +2116,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               <button
                 onClick={() => stageFileInputRef.current?.click()}
                 disabled={stageUploadState.uploading}
-                className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
                 <p className="text-sm text-white/90 mb-1">
@@ -2242,7 +2242,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         </div>
 
       {/* Animations Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Motion Management */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Custom Animations</h4>
@@ -2262,7 +2262,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             <button
               onClick={() => motionFileInputRef.current?.click()}
               disabled={motionUploadState.uploading}
-              className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
               <p className="text-sm text-white/90 mb-1">
@@ -2411,7 +2411,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Emotes Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
           {/* Emote Upload */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Emote Management</h4>
@@ -2529,7 +2529,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             <button
               onClick={handleEmoteUpload}
               disabled={emoteUploadState.uploading || !emoteName.trim()}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
             </button>

@@ -116,7 +116,7 @@ const SetupWizard = () => {
         {/* Content area */}
         <div 
           ref={contentRef}
-          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-4 sm:p-6`}
+          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-2 md:p-4 sm:p-6`}
           style={{ 
             scrollbarWidth: 'thin', 
             scrollbarColor: isLightBackground 

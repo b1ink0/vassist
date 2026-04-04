@@ -40,7 +40,7 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
   const { nextStep } = useSetup();
 
   return (
-    <div className="setup-step flex flex-col items-center justify-center min-h-full text-center space-y-4 sm:space-y-6 py-4">
+    <div className="setup-step flex flex-col items-center justify-center min-h-full text-center space-y-4 sm:space-y-6 py-2 md:py-4">
       {/* Logo */}
       <div className="flex items-center justify-center mb-2 sm:mb-4">
         <div className="relative w-24 h-24 sm:w-32 sm:h-32">
@@ -56,7 +56,7 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
         <h1 className="text-3xl sm:text-4xl font-bold text-white">
           Quick Start
         </h1>
-        <p className="text-sm sm:text-base text-white/90 max-w-md mx-auto px-4">
+        <p className="text-sm sm:text-base text-white/90 max-w-md mx-auto px-2 md:px-4">
           Welcome to your AI Virtual Companion
         </p>
       </div>
@@ -64,18 +64,18 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
       {/* Start Button */}
       <button
         onClick={nextStep}
-        className="glass-button rounded-lg px-8 py-3 sm:px-10 sm:py-4 text-base sm:text-lg font-semibold mt-4 sm:mt-8"
+        className="glass-button rounded-lg px-8 py-2 md:py-3 sm:px-10 sm:py-4 text-base sm:text-lg font-semibold mt-2 md:mt-4 sm:mt-8"
       >
         Get Started →
       </button>
 
       {/* Documentation Link */}
-      <div className="mt-4 text-sm text-white/80">
+      <div className="mt-2 md:mt-4 text-sm text-white/80">
         <a 
           href="https://b1ink0.github.io/vassist/docs/intro"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all"
+          className="inline-flex items-center gap-2 px-2 md:px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all"
         >
           <Icon name="book" size={16} />
           <span>View Full Documentation</span>
@@ -84,14 +84,14 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
       </div>
 
       {/* Chrome AI Requirements */}
-      <div className="mt-6 sm:mt-8 max-w-2xl mx-auto px-4">
+      <div className="mt-6 sm:mt-8 max-w-2xl mx-auto px-2 md:px-4">
         <details className="group text-left">
           <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-center gap-2 hover:text-white transition-colors">
             <Icon name="info" size={16} />
             <span>Using Chrome Built-in AI? Click here first</span>
             <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
           </summary>
-          <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-3">
+          <div className="mt-4 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-3">
             <p className="text-xs text-blue-200 mb-3">
               If you plan to use Chrome's built-in AI features (free, on-device), you'll need to enable these flags <strong>before</strong> starting setup:
             </p>

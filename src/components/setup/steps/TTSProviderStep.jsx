@@ -761,7 +761,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <button
                 onClick={testConnection}
                 disabled={!openAIKey || testing}
-                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {testing ? (
                   <>
@@ -843,7 +843,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <button
                 onClick={testConnection}
                 disabled={!customEndpoint || testing}
-                className="glass-button rounded-lg px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {testing ? (
                   <>

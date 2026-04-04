@@ -208,7 +208,7 @@ const LocalLLMModelManager = ({
     <div className="space-y-3">
       {/* Custom Models Folder (Desktop only) */}
       {supportsCustomFolder && onCustomPathChange && (
-        <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+        <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
           <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
             <Icon name="folder" size={16} />
             Models Folder
@@ -225,7 +225,7 @@ const LocalLLMModelManager = ({
             <div className="flex gap-2">
               <button
                 onClick={handleChooseFolder}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${customModelsPath ? 'flex-1' : 'w-full'}`}
+                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${customModelsPath ? 'flex-1' : 'w-full'}`}
               >
                 <Icon name="folder" size={14} />
                 <span>Choose</span>
@@ -248,7 +248,7 @@ const LocalLLMModelManager = ({
       )}
 
       {/* Import Model */}
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
           <Icon name="upload" size={16} />
           Import Model
@@ -257,7 +257,7 @@ const LocalLLMModelManager = ({
         <button
           onClick={handleImportClick}
           disabled={loading}
-          className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
           <p className="text-sm text-white/90 mb-1">
@@ -268,7 +268,7 @@ const LocalLLMModelManager = ({
       </div>
 
       {/* Download Section */}
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
           <Icon name="download" size={16} />
           Download Model
@@ -348,7 +348,7 @@ const LocalLLMModelManager = ({
           <button
             onClick={handleDownload}
             disabled={loading || (downloadMethod === 'huggingface' ? !downloadUrl.trim() : !ollamaModel.trim())}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {loading ? (
               <>
@@ -439,7 +439,7 @@ const LocalLLMModelManager = ({
       )}
 
       {/* Model List */}
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white/90 flex items-center gap-2">
             <Icon name="folder" size={16} />

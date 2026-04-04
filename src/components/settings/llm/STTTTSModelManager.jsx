@@ -144,7 +144,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
 
   if (!status) {
     return (
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <p className="text-sm text-white/50">Loading model status...</p>
       </div>
     );
@@ -163,7 +163,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
       </div>
 
       {/* Whisper STT Model */}
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Icon name="microphone" size={16} className="text-white/70" />
@@ -217,7 +217,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           {whisperStatus.downloaded ? (
             <button
               onClick={() => handleDelete('whisper')}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              className="flex-1 px-2 md:px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <Icon name="trash" size={14} />
               <span>Delete</span>
@@ -226,7 +226,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
             <button
               onClick={() => handleDownload('whisper')}
               disabled={loading || downloadProgress.whisper}
-              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {downloadProgress.whisper ? (
                 <>
@@ -263,7 +263,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
       </div>
 
       {/* VITS TTS Model */}
-      <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Icon name="speaker" size={16} className="text-white/70" />
@@ -321,7 +321,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           {vitsStatus.downloaded ? (
             <button
               onClick={() => handleDelete('vits')}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              className="flex-1 px-2 md:px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <Icon name="trash" size={14} />
               <span>Delete</span>
@@ -330,7 +330,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
             <button
               onClick={() => handleDownload('vits')}
               disabled={loading || downloadProgress.vits}
-              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {downloadProgress.vits ? (
                 <>

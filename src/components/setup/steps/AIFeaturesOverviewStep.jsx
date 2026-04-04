@@ -175,7 +175,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
           </p>
         </div>
 
-        <div className="rounded-lg p-4 border border-white/10 bg-white/5">
+        <div className="rounded-lg p-2 md:p-4 border border-white/10 bg-white/5">
           <ShortcutsConfig
             shortcuts={shortcuts}
             onShortcutsChange={handleShortcutsChange}
@@ -185,7 +185,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
       </div>
 
       {/* Documentation Link - Final Step */}
-      <div className="mt-8 p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-400/30">
+      <div className="mt-8 p-2 md:p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-400/30">
         <div className="flex items-start gap-3">
           <Icon name="book" size={20} className="text-purple-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -197,7 +197,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
               href="https://b1ink0.github.io/vassist/docs/intro"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/30 transition-all text-xs font-medium text-white"
+              className="inline-flex items-center gap-2 px-2 md:px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/30 transition-all text-xs font-medium text-white"
             >
               <Icon name="arrow-top-right" size={14} />
               <span>Open Documentation</span>

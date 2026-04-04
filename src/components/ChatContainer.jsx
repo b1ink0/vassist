@@ -1182,7 +1182,7 @@ const ChatContainer = ({
         }}
       >
         <div 
-          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
           style={{
             transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
             transition: 'transform 200ms ease-in-out'
@@ -1374,7 +1374,7 @@ const ChatContainer = ({
                         <div className="flex flex-col items-start">
                           <div className="flex items-start gap-2 max-w-[80%]">
                             <div className="flex flex-col gap-1.5">
-                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
+                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-2 md:px-4 py-2 md:py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
                                 <div className="loading-dots">
                                   <span className="loading-dot"></span>
                                   <span className="loading-dot"></span>

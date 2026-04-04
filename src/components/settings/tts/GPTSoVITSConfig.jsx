@@ -260,7 +260,7 @@ const GPTSoVITSConfig = ({
         <button
           onClick={() => voiceFileInputRef.current?.click()}
           disabled={uploadingVoice}
-          className="w-full p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
           <p className="text-sm text-white/90 mb-1">
@@ -275,7 +275,7 @@ const GPTSoVITSConfig = ({
           <button
             onClick={handleSaveNewVoice}
             disabled={uploadingVoice || !newVoiceName || !newReferenceText}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
           >
             {uploadingVoice ? (
               <>
