@@ -125,6 +125,13 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, [isAvatarPanelOpen, panelMode]);
 
+  useEffect(() => {
+    if (isChatOpen || modelDisabled) {
+      setIsEmotePanelOpen(false);
+      setIsAvatarPanelOpen(false);
+    }
+  }, [isChatOpen, modelDisabled]);
+
   // Track emote playing state
   useEffect(() => {
     const checkPlayingState = setInterval(() => {
@@ -1032,19 +1039,22 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     avatarPanelTop = buttonPos.y - TOTAL_BUTTON_OFFSET - avatarPanelHeight - avatarPanelGap - cameraControlsOffset;
   }
 
+  const showUtilityButtons = !isChatOpen && !modelDisabled;
+  const visualButtonOffset = showUtilityButtons ? TOTAL_BUTTON_OFFSET : 0;
+
   const androidPosition = isAndroid ? {
     left: '20px',
     bottom: '20px',
     top: 'auto',
   } : {
     left: `${buttonPos.x}px`,
-    top: `${buttonPos.y - TOTAL_BUTTON_OFFSET}px`,
+    top: `${buttonPos.y - visualButtonOffset}px`,
   };
 
   return (
     <>
     {/* Emote List */}
-    {isEmotePanelOpen && (
+    {isEmotePanelOpen && !isChatOpen && !modelDisabled && (
       <div
         style={{
           left: `${emotePanelLeft}px`,
@@ -1152,7 +1162,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     )}
 
     {/* Avatar/Stage List - Unified Panel */}
-    {isAvatarPanelOpen && (
+    {isAvatarPanelOpen && !isChatOpen && !modelDisabled && (
       <div
         style={{
           left: `${avatarPanelLeft}px`,
@@ -1257,7 +1267,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     )}
 
     {/* Camera Controls - Positioned below Avatar List */}
-    {isAvatarPanelOpen && (
+    {isAvatarPanelOpen && !isChatOpen && !modelDisabled && (
       <div
         style={{
           left: `${avatarPanelLeft}px`,
@@ -1365,6 +1375,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       className="fixed flex flex-col gap-2 items-center"
     >
 
+      {showUtilityButtons && (
+      <>
       {/* Reload Button */}
       <button
         onClick={() => window.location.reload()}
@@ -1426,6 +1438,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         isLightBackground={isLightBackground}
         isVisible={isVisible}
       />
+      </>
+      )}
 
       {/* Chat Button */}
       <button

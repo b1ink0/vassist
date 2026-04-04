@@ -210,15 +210,27 @@ const ChatContainer = ({
    */
   const calculateContainerPosition = useCallback(() => {
     const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+    const isSmallScreen = window.innerWidth <= 768;
+
+    if (isSmallScreen) {
+      const containerWidth = Math.min(400, window.innerWidth - 16);
+      const containerHeight = modelDisabled ? 400 : 500;
+      const availableHeight = window.innerHeight - chatInputHeight;
+
+      const containerX = Math.max(8, Math.min((window.innerWidth - containerWidth) / 2, window.innerWidth - containerWidth - 8));
+      const containerY = Math.max(10, Math.min((availableHeight - containerHeight) / 2, availableHeight - containerHeight - 10));
+
+      return { x: containerX, y: containerY };
+    }
     
     if (modelDisabled) {
       const buttonPos = buttonPosRef.current;
-      const containerWidth = 400;
+      const containerWidth = Math.min(400, window.innerWidth - 16);
       const containerHeight = 400;
       const offsetY = 5;
       const buttonSize = 48;
       
-      const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+      const containerX = Math.max(8, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 8));
       let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
       containerY = Math.max(10, containerY);
       const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
@@ -228,7 +240,7 @@ const ChatContainer = ({
     } else if (positionManagerRef?.current) {
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
-        const containerWidth = 400;
+        const containerWidth = Math.min(400, window.innerWidth - 16);
         const containerHeight = 500;
         const offsetX = 15;
         const windowWidth = window.innerWidth;
@@ -236,8 +248,8 @@ const ChatContainer = ({
         
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - containerWidth - offsetX;
-        const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-        const wouldOverflowLeft = leftX < 10;
+        const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+        const wouldOverflowLeft = leftX < 8;
         const modelRightEdge = modelPos.x + modelPos.width;
         const wouldOverlapRight = modelRightEdge > rightX;
         
@@ -254,7 +266,7 @@ const ChatContainer = ({
         }
         
         let containerX = shouldBeOnLeft ? leftX : rightX;
-        containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+        containerX = Math.max(8, Math.min(containerX, windowWidth - containerWidth - 8));
         let containerY = modelPos.y;
         containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
         
@@ -299,18 +311,23 @@ const ChatContainer = ({
     if (!isVisible) return;
     
     const handleModelPosition = () => {
+      if (window.innerWidth <= 768) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
       // Events are already RAF-throttled by PositionManager, just update directly
       // Use .current to access latest refs without recreating handler
       const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
       
       if (modelDisabled) {
         const buttonPos = buttonPosRef.current;
-        const containerWidth = 400;
+        const containerWidth = Math.min(400, window.innerWidth - 16);
         const containerHeight = 400;
         const offsetY = 5;
         const buttonSize = 48;
         
-        const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+        const containerX = Math.max(8, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 8));
         let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
         containerY = Math.max(10, containerY);
         const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
@@ -320,7 +337,7 @@ const ChatContainer = ({
       } else if (positionManagerRef?.current) {
         try {
           const modelPos = positionManagerRef.current.getPositionPixels();
-          const containerWidth = 400;
+          const containerWidth = Math.min(400, window.innerWidth - 16);
           const containerHeight = 500;
           const offsetX = 15;
           const windowWidth = window.innerWidth;
@@ -328,8 +345,8 @@ const ChatContainer = ({
           
           const rightX = modelPos.x + modelPos.width + offsetX;
           const leftX = modelPos.x - containerWidth - offsetX;
-          const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-          const wouldOverflowLeft = leftX < 10;
+          const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+          const wouldOverflowLeft = leftX < 8;
           const modelRightEdge = modelPos.x + modelPos.width;
           const wouldOverlapRight = modelRightEdge > rightX;
           
@@ -343,7 +360,7 @@ const ChatContainer = ({
           }
           
           let containerX = shouldBeOnLeft ? leftX : rightX;
-          containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+          containerX = Math.max(8, Math.min(containerX, windowWidth - containerWidth - 8));
           let containerY = modelPos.y;
           containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
           
@@ -1150,7 +1167,7 @@ const ChatContainer = ({
             ? '0 4px 20px rgba(255, 255, 255, 0.2)'
             : 'none',
         }}
-        className="flex flex-col-reverse gap-3 w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
+        className="flex flex-col-reverse gap-3 w-[calc(100vw-16px)] max-w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
       >
       {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
       <div 

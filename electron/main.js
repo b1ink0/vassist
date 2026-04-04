@@ -3,7 +3,7 @@
  * Creates a transparent window for the desktop app
  */
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session, desktopCapturer } from 'electron';
 import { fileURLToPath } from 'url';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
@@ -293,6 +293,145 @@ app.whenReady().then(() => {
     } else {
       callback(false);
     }
+  });
+  
+  // Enable screen sharing
+  // Note: Electron requires either a custom picker UI or using desktopCapturer
+  // We'll use the handler to provide all sources and let Chromium show the picker
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'display-capture') {
+      return true;
+    }
+    return false;
+  });
+  
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    desktopCapturer.getSources({ 
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 1920, height: 1080 }
+    }).then((sources) => {
+      // If no sources available, deny
+      if (sources.length === 0) {
+        return callback({});
+      }
+      
+      let callbackCalled = false;
+      let cleanupDone = false;
+      
+      const safeCallback = (result) => {
+        if (!callbackCalled) {
+          callbackCalled = true;
+          callback(result);
+        }
+      };
+      
+      // Create picker window with React component
+      let pickerWindow = new BrowserWindow({
+        width: 900,
+        height: 600,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        alwaysOnTop: true,
+        autoHideMenuBar: true,
+        frame: false,
+        backgroundColor: '#1a1a1a',
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.mjs'),
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: false,
+          devTools: true,
+        }
+      });
+
+      // Open dev tools
+      pickerWindow.webContents.openDevTools({ mode: 'detach' });
+
+      // Load React app with screenPicker mode
+      if (process.env.VITE_DEV_SERVER_URL) {
+        pickerWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/electron/index.html?mode=screenPicker');
+      } else {
+        pickerWindow.loadURL('app://./electron/index.html?mode=screenPicker');
+      }
+
+      // Serialize sources data 
+      const sourcesData = sources.map(source => ({
+        id: source.id,
+        name: source.name,
+        thumbnail: source.thumbnail.toDataURL(),
+        appIcon: source.appIcon ? source.appIcon.toDataURL() : null
+      }));
+
+      console.log('Picker: Total sources:', sources.length);
+      console.log('Picker: Serialized sources:', sourcesData.length);
+
+      // Handle picker ready - send sources
+      const handlePickerReady = () => {
+        console.log('Picker ready, sending sources...');
+        if (pickerWindow && pickerWindow.webContents) {
+          pickerWindow.webContents.send('picker:sources', sourcesData);
+        }
+      };
+
+      // Handle source selection
+      const handlePickerSelect = (event, sourceId) => {
+        console.log('Picker: Source selected:', sourceId);
+        const selectedSource = sources.find(s => s.id === sourceId);
+        if (selectedSource) {
+          safeCallback({ video: selectedSource, audio: 'loopback' });
+        } else {
+          safeCallback({});
+        }
+        cleanup();
+      };
+
+      // Handle cancel
+      const handlePickerCancel = () => {
+        console.log('Picker: Cancelled');
+        // Don't call callback - just cleanup and let the 'closed' handler deal with it
+        cleanup();
+      };
+
+      // Cleanup function
+      const cleanup = () => {
+        if (cleanupDone) return;
+        cleanupDone = true;
+        
+        console.log('Picker: Cleanup started');
+        ipcMain.removeListener('picker:ready', handlePickerReady);
+        ipcMain.removeListener('picker:select', handlePickerSelect);
+        ipcMain.removeListener('picker:cancel', handlePickerCancel);
+        
+        if (pickerWindow && !pickerWindow.isDestroyed()) {
+          console.log('Picker: Closing window');
+          pickerWindow.destroy();
+        }
+        pickerWindow = null;
+        console.log('Picker: Cleanup complete');
+      };
+
+      // Register handlers
+      ipcMain.on('picker:ready', handlePickerReady);
+      ipcMain.on('picker:select', handlePickerSelect);
+      ipcMain.on('picker:cancel', handlePickerCancel);
+
+      // Handle window close (user closes via X or ESC)
+      pickerWindow.on('closed', () => {
+        console.log('Picker: Window closed event');
+        // Deny the request by calling callback with no video source
+        if (!callbackCalled) {
+          callbackCalled = true;
+          // Don't provide any sources - this denies the request
+          callback();
+        }
+        cleanup();
+      });
+
+    }).catch((error) => {
+      console.error('Failed to get desktop sources:', error);
+      callback({});
+    });
   });
   
   // Register protocol handler that serves files with proper CORS headers
@@ -633,6 +772,13 @@ ipcMain.on('state:cameraDevices', (event, data) => {
   }
 });
 
+// Screen share state sync from main window to input window
+ipcMain.on('state:screenShare', (event, data) => {
+  if (inputWindow && inputWindow.webContents) {
+    inputWindow.webContents.send('state:screenShare', data);
+  }
+});
+
 // Camera control from input window to main window
 ipcMain.on('camera:selectDevice', (event, deviceId) => {
   if (mainWindow && mainWindow.webContents) {
@@ -640,9 +786,16 @@ ipcMain.on('camera:selectDevice', (event, deviceId) => {
   }
 });
 
-ipcMain.on('camera:toggle', (event) => {
+ipcMain.on('camera:toggle', () => {
   if (mainWindow && mainWindow.webContents) {
     mainWindow.webContents.send('camera:toggle');
+  }
+});
+
+// Screen share IPC handler - relay from input window to main window
+ipcMain.on('screenShare:toggle', () => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('screenShare:toggle');
   }
 });
 

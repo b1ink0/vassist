@@ -4,20 +4,23 @@
 
 import AppContent from './components/AppContent'
 import ChatInput from './components/ChatInput'
-import CameraPreview from './components/CameraPreview'
+import VideoPreview from './components/VideoPreview'
+import CameraService from './services/CameraService'
+import ScreenShareService from './services/ScreenShareService'
 import AndroidContent from '../android-src/AndroidContent'
 import AndroidBackground from './components/AndroidBackground'
 import DemoSite from './components/DemoSite'
 import SetupWizard from './components/setup/SetupWizard'
 import LoadingIndicator from './components/LoadingIndicator'
 import DesktopWindowControls from './components/DesktopWindowControls'
+import DesktopScreenShareDialog from './components/DesktopScreenShareDialog'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
 import { AnimationProvider } from './contexts/AnimationContext'
 import { DesktopProvider } from './contexts/DesktopContext'
 import { AndroidProvider } from './contexts/AndroidContext'
-import { isAndroid, isInputWindow } from './utils/PlatformUtils'
+import { isAndroid, isInputWindow, isScreenPicker } from './utils/PlatformUtils'
 
 /**
  * Application wrapper component that handles setup flow.
@@ -97,7 +100,7 @@ function App({ mode = 'development' }) {
                 <div className="relative w-full h-screen overflow-hidden">
                   <AndroidBackground />
                   <AppWithSetup mode="android" />
-                  <CameraPreview />
+                  <VideoPreview service={CameraService} type="camera" />
                 </div>
               </AppProvider>
             </AnimationProvider>
@@ -108,6 +111,14 @@ function App({ mode = 'development' }) {
   }
   
   if (actualMode === 'desktop') {
+    if (isScreenPicker) {
+      return (
+        <DesktopProvider>
+          <DesktopScreenShareDialog />
+        </DesktopProvider>
+      );
+    }
+    
     if (isInputWindow) {
       return (
         <DesktopProvider>
@@ -119,7 +130,8 @@ function App({ mode = 'development' }) {
                 onVoiceTranscription={() => {}} 
                 onVoiceMode={() => {}} 
               />
-              <CameraPreview />
+              <VideoPreview service={CameraService} type="camera" />
+              <VideoPreview service={ScreenShareService} type="screen" />
             </AppProvider>
           </ConfigProvider>
         </DesktopProvider>
@@ -135,7 +147,8 @@ function App({ mode = 'development' }) {
                 <DesktopWindowControls />
                 <div className="relative w-full h-screen overflow-hidden">
                   <AppWithSetup mode="desktop" />
-                  <CameraPreview />
+                  <VideoPreview service={CameraService} type="camera" />
+                  <VideoPreview service={ScreenShareService} type="screen" />
                 </div>
               </AppProvider>
             </AnimationProvider>
@@ -155,12 +168,14 @@ function App({ mode = 'development' }) {
               <div className="relative w-full h-screen overflow-hidden">
                 <DemoSite />
                 <AppWithSetup mode="development" />
-                <CameraPreview />
+                <VideoPreview service={CameraService} type="camera" />
+                <VideoPreview service={ScreenShareService} type="screen" />
               </div>
             ) : (
               <>
                 <AppWithSetup mode="extension" />
-                <CameraPreview />
+                <VideoPreview service={CameraService} type="camera" />
+                <VideoPreview service={ScreenShareService} type="screen" />
               </>
             )}
           </AppProvider>

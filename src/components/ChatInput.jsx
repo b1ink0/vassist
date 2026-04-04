@@ -17,6 +17,7 @@ import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
 import MicrophoneService from '../services/MicrophoneService';
 import CameraService from '../services/CameraService';
+import ScreenShareService from '../services/ScreenShareService';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -108,6 +109,9 @@ const ChatInput = forwardRef(({
   const [selectedCameraId, setSelectedCameraId] = useState(null);
   const [showCameraSelect, setShowCameraSelect] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  
+  // Screen share state (Desktop only)
+  const [isScreenShareActive, setIsScreenShareActive] = useState(false);
 
   // IPC wrapper functions for input window
   const wrappedOnSend = useCallback((message, images, audios) => {
@@ -469,6 +473,52 @@ const ChatInput = forwardRef(({
 
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, isInputWindow]);
+
+  // Initialize screen share service
+  useEffect(() => {
+    Logger.log('ChatInput', 'Screen share initialization useEffect triggered, isInputWindow:', isInputWindow);
+    
+    // Input window: Listen for state from main window via IPC
+    if (isInputWindow) {
+      Logger.log('ChatInput', 'Input window: Setting up IPC listener for screen share state');
+      if (api?.ipc) {
+        const unsubscribeScreenShare = api.ipc.on('state:screenShare', (data) => {
+          Logger.log('ChatInput', 'Input window: Received screen share state via IPC:', data);
+          setIsScreenShareActive(data.isActive);
+        });
+        
+        return () => {
+          unsubscribeScreenShare();
+        };
+      }
+      return;
+    }
+    
+    // Android not supported
+    if (isAndroid) {
+      Logger.log('ChatInput', 'Android: Screen share not supported, skipping initialization');
+      return;
+    }
+
+    Logger.log('ChatInput', 'Web/Desktop/Extension: Setting up ScreenShareService subscription');
+    const unsubscribe = ScreenShareService.subscribe(({ isActive }) => {
+      Logger.log('ChatInput', 'ScreenShareService state changed:', { isActive });
+      setIsScreenShareActive(isActive);
+    });
+
+    const initScreenShare = async () => {
+      try {
+        Logger.log('ChatInput', 'Web/Desktop/Extension: Initializing ScreenShareService...');
+        await ScreenShareService.initialize();
+        Logger.log('ChatInput', 'Web/Desktop/Extension: ScreenShareService initialized successfully');
+      } catch (error) {
+        Logger.error('ChatInput', 'Web/Desktop/Extension: Screen share initialization failed:', error);
+      }
+    };
+    initScreenShare();
+
+    return unsubscribe;
   }, [api, isInputWindow]);
 
   // Listen for camera control IPC messages
@@ -1117,6 +1167,31 @@ const ChatInput = forwardRef(({
   };
 
   /**
+   * Handles screen share button click (toggle on/off)
+   */
+  const handleScreenShareClick = async () => {
+    try {
+      Logger.log('ChatInput', 'Screen share button clicked, isScreenShareActive:', isScreenShareActive);
+      
+      // Input window: Send IPC to main window using api from hook
+      if (isInputWindow && api?.ipc) {
+        Logger.log('ChatInput', 'Input window: Sending screenShare:toggle IPC');
+        api.ipc.send('screenShare:toggle');
+        return;
+      }
+      
+      // Direct control for main window / web / dev / extension
+      if (isScreenShareActive) {
+        await ScreenShareService.stop();
+      } else {
+        await ScreenShareService.start();
+      }
+    } catch (error) {
+      Logger.error('ChatInput', 'Screen share toggle error:', error);
+    }
+  };
+
+  /**
    * Handles microphone button click for voice recording.
    */
   const handleMicClick = async () => {
@@ -1197,7 +1272,7 @@ const ChatInput = forwardRef(({
     >
       <div 
         ref={containerRef}
-        className={`relative p-4 w-full max-w-3xl pointer-events-auto ${isInputWindow ? 'flex flex-col justify-end' : ''}`}
+        className={`relative md:p-4 p-2 w-full max-w-3xl pointer-events-auto ${isInputWindow ? 'flex flex-col justify-end' : ''}`}
         style={{
           touchAction: 'none',
           ...(isInputWindow ? { minHeight: '400px' } : {})
@@ -1395,6 +1470,20 @@ const ChatInput = forwardRef(({
                       </select>
                     )}
                   </div>
+                  
+                  {/* Screen Share button (Chrome-based platforms) */}
+                  {!isAndroid && (
+                    <button
+                      type="button"
+                      onClick={handleScreenShareClick}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                        isScreenShareActive ? 'bg-blue-500/20 text-blue-400' : ''
+                      }`}
+                      title={isScreenShareActive ? 'Stop Screen Share' : 'Start Screen Share'}
+                    >
+                      <Icon name="maximize" size={16} className={isScreenShareActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
+                    </button>
+                  )}
 
                   <button
                     type="button"

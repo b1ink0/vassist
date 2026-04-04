@@ -13,3 +13,5 @@ export const isProduction = typeof __PROD_MODE__ !== 'undefined' && __PROD_MODE_
 export const isDev = !isAndroid && !isExtension && !isDesktop;
 
 export const isInputWindow = isDesktop && typeof window !== 'undefined' && window.location.search.includes('window=input');
+
+export const isScreenPicker = isDesktop && typeof window !== 'undefined' && window.location.search.includes('mode=screenPicker');

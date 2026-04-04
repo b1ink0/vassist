@@ -21,6 +21,7 @@ import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
 import CameraService from '../services/CameraService';
+import ScreenShareService from '../services/ScreenShareService';
 
 /**
  * Main chat controller component.
@@ -375,6 +376,11 @@ const ChatController = ({
             Logger.log('ChatController', 'Stopping camera after voice call ended');
             await CameraService.stop();
           }
+          // Stop screen share when voice mode ends
+          if (ScreenShareService.isRunning()) {
+            Logger.log('ChatController', 'Stopping screen share after voice call ended');
+            await ScreenShareService.stop();
+          }
         }
       } catch (error) {
         Logger.error('ChatController', 'Voice mode change error:', error);
@@ -534,7 +540,59 @@ const ChatController = ({
     return () => {
       unsubscribe?.();
     };
-  }, []);
+  }, [api]);
+
+  // Initialize screen share service (Desktop main window only for IPC)
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    Logger.log('ChatController', 'Main window: Initializing screen share service...');
+
+    // Subscribe to screen share state changes
+    const unsubscribe = ScreenShareService.subscribe(({ isActive }) => {
+      Logger.log('ChatController', 'Screen share state changed:', { isActive });
+      
+      if (api?.ipc) {
+        api.ipc.send('state:screenShare', { isActive });
+      }
+    });
+
+    const initScreenShare = async () => {
+      try {
+        await ScreenShareService.initialize();
+        Logger.log('ChatController', 'Screen share initialized successfully');
+      } catch (error) {
+        Logger.error('ChatController', 'Screen share initialization failed:', error);
+      }
+    };
+    initScreenShare();
+
+    if (api?.ipc) {
+      const unsubscribeToggle = api.ipc.on('screenShare:toggle', async () => {
+        Logger.log('ChatController', 'IPC: Screen share toggle received');
+        try {
+          if (ScreenShareService.isRunning()) {
+            await ScreenShareService.stop();
+          } else {
+            await ScreenShareService.start();
+          }
+        } catch (error) {
+          Logger.error('ChatController', 'Screen share toggle failed:', error);
+        }
+      });
+
+      return () => {
+        unsubscribe?.();
+        unsubscribeToggle?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [api]);
 
   /**
    * Abort streaming when chat is closed to stop TTS generation

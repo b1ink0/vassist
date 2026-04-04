@@ -32,6 +32,25 @@ export default defineConfig(({ mode }) => {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
       },
+      watch: {
+        ignored: [
+          '**/electron/server/**',
+          '**/android/**',
+          '**/dist-android/**',
+          '**/dist-desktop/**',
+          '**/dist-extension/**',
+          '**/release/**',
+        ],
+      },
+      warmup: {
+        clientFiles: [
+          './src/main.jsx',
+          './src/App.jsx',
+          './src/components/**/*.jsx',
+          './src/services/**/*.js',
+          './src/hooks/**/*.js',
+        ],
+      },
       fs: {
         deny: [
           '**/electron/server/**',
@@ -63,11 +82,19 @@ export default defineConfig(({ mode }) => {
     },
     assetsInclude: ['**/*.wasm'],
     optimizeDeps: {
+      entries: ['index.html'],
+      include: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        '@ricky0123/vad-web',
+        'onnxruntime-web',
+        'onnxruntime-web/wasm',
+      ],
       exclude: [
         '@babylonjs/havok',
         '@huggingface/transformers',
         'kokoro-js',
-        'onnxruntime-web',
       ],
     },
   };

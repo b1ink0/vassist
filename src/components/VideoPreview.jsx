@@ -1,37 +1,63 @@
 /**
- * @fileoverview Draggable camera preview component
+ * @fileoverview Draggable video preview component
+ * Works with both camera and screen share
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import CameraService from '../services/CameraService';
 import Logger from '../services/LoggerService';
 import { Icon } from './icons';
 import { isAndroid } from '../utils/PlatformUtils';
 
 /**
- * Draggable camera preview component
- * Displays live camera feed in a draggable window
+ * Draggable video preview component
+ * Displays live camera or screen share feed in a draggable window
+ * 
+ * @param {Object} props
+ * @param {Object} props.service - Video service (CameraService or ScreenShareService)
+ * @param {string} props.type - Type of preview ('camera' or 'screen')
  */
-const CameraPreview = () => {
+const VideoPreview = ({ service, type = 'camera' }) => {
   const [isActive, setIsActive] = useState(false);
   const [stream, setStream] = useState(null);
-  const initialX = isAndroid ? window.innerWidth - 160 : window.innerWidth - 240;
+  
+  // Different sizes for camera vs screen share
+  const getInitialDimensions = () => {
+    if (type === 'screen') {
+      // Screen share is wider
+      return {
+        width: isAndroid ? 180 : 280,
+        height: isAndroid ? 100 : 160
+      };
+    } else {
+      // Camera
+      return {
+        width: isAndroid ? 140 : 220,
+        height: isAndroid ? 105 : 165
+      };
+    }
+  };
+  
+  const initialDims = getInitialDimensions();
+  const initialX = type === 'screen' 
+    ? (isAndroid ? window.innerWidth - 200 : window.innerWidth - 300)
+    : (isAndroid ? window.innerWidth - 160 : window.innerWidth - 240);
+    
   const [position, setPosition] = useState({ x: initialX, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
-  const initialWidth = isAndroid ? 140 : 220;
-  const initialHeight = isAndroid ? 105 : 165;
-  const [dimensions, setDimensions] = useState({ width: initialWidth, height: initialHeight });
+  const [dimensions, setDimensions] = useState(initialDims);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartElementPos = useRef({ x: 0, y: 0 });
   const videoRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Subscribe to camera state
+  // Subscribe to service state
   useEffect(() => {
-    const unsubscribe = CameraService.subscribe(({ isActive: active }) => {
+    if (!service) return;
+    
+    const unsubscribe = service.subscribe(({ isActive: active }) => {
       setIsActive(active);
       if (active) {
-        const currentStream = CameraService.getStream();
+        const currentStream = service.getStream();
         setStream(currentStream);
       } else {
         setStream(null);
@@ -39,7 +65,7 @@ const CameraPreview = () => {
     });
 
     return unsubscribe;
-  }, []);
+  }, [service]);
 
   // Update video element when stream changes
   useEffect(() => {
@@ -50,20 +76,28 @@ const CameraPreview = () => {
     
     const handleLoadedMetadata = () => {
       const aspectRatio = video.videoWidth / video.videoHeight;
-      const previewWidth = isAndroid ? 140 : 220;
+      
+      // Calculate preview width based on type and platform
+      let previewWidth;
+      if (type === 'screen') {
+        previewWidth = isAndroid ? 180 : 280;
+      } else {
+        previewWidth = isAndroid ? 140 : 220;
+      }
+      
       const previewHeight = Math.round(previewWidth / aspectRatio);
       setDimensions({ width: previewWidth, height: previewHeight });
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.play().catch(err => {
-      Logger.error('CameraPreview', 'Failed to play video:', err);
+      Logger.error('VideoPreview', `Failed to play ${type} video:`, err);
     });
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [stream]);
+  }, [stream, type]);
 
   const isDraggingRef = useRef(false);
   const positionRef = useRef(position);
@@ -103,7 +137,7 @@ const CameraPreview = () => {
     newY = Math.max(0, Math.min(newY, maxY));
 
     setPosition({ x: newX, y: newY });
-  }, []);
+  }, [dimensions.width, dimensions.height]);
 
   const handleMouseUp = useCallback(() => {
     if (isDraggingRef.current) {
@@ -141,7 +175,7 @@ const CameraPreview = () => {
     newY = Math.max(0, Math.min(newY, maxY));
 
     setPosition({ x: newX, y: newY });
-  }, []);
+  }, [dimensions.width, dimensions.height]);
 
   const handleTouchEnd = useCallback(() => {
     if (isDraggingRef.current) {
@@ -149,16 +183,19 @@ const CameraPreview = () => {
     }
   }, []);
 
+  // Camera cycle button handler (only for camera type)
   const handleCycleCamera = async () => {
-    const devices = CameraService.getDevices();
+    if (type !== 'camera' || !service.getDevices) return;
+    
+    const devices = service.getDevices();
     if (devices.length <= 1) return;
     
-    const currentDeviceId = CameraService.getSelectedDeviceId();
+    const currentDeviceId = service.getSelectedDeviceId();
     const currentIndex = devices.findIndex(d => d.deviceId === currentDeviceId);
     const nextIndex = (currentIndex + 1) % devices.length;
     const nextDevice = devices[nextIndex];
     
-    await CameraService.setSelectedDevice(nextDevice.deviceId);
+    await service.setSelectedDevice(nextDevice.deviceId);
   };
 
   useEffect(() => {
@@ -208,8 +245,8 @@ const CameraPreview = () => {
         style={{ pointerEvents: 'none' }}
       />
       
-      {/* Camera cycle button */}
-      {CameraService.getDevices().length > 1 && (
+      {/* Camera cycle button (only for camera) */}
+      {type === 'camera' && service.getDevices && service.getDevices().length > 1 && (
         <button
           onClick={handleCycleCamera}
           className="absolute bottom-2 right-2"
@@ -221,4 +258,4 @@ const CameraPreview = () => {
   );
 };
 
-export default CameraPreview;
+export default VideoPreview;
