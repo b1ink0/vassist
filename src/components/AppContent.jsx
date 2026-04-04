@@ -18,9 +18,12 @@ import Logger from '../services/LoggerService';
  * 
  * @param {Object} props
  * @param {string} props.mode - Application mode ('development'|'extension')
+ * @param {boolean} props.requireSetupOnChatClick - Redirect chat button to setup flow
+ * @param {Function} props.onRequireSetup - Callback to start setup flow
+ * @param {boolean} props.forcePortraitMode - Force portrait mode for runtime preview
  * @returns {JSX.Element}
  */
-function AppContent({ mode = 'development' }) {
+function AppContent({ mode = 'development', requireSetupOnChatClick = false, onRequireSetup, forcePortraitMode = false }) {
   const [currentState, setCurrentState] = useState('IDLE');
   
   const {
@@ -81,6 +84,7 @@ function AppContent({ mode = 'development' }) {
         ref={assistantRef}
         onReady={handleAssistantReady}
         mode={mode}
+        forcePortraitMode={forcePortraitMode}
       />
     );
   }, [enableModelLoading, shouldMountModel, shouldWaitForKokoro, handleAssistantReady, mode, assistantRef, sceneKey]);
@@ -105,6 +109,8 @@ function AppContent({ mode = 'development' }) {
           <div className={`transition-opacity duration-700 ${isChatUIReady ? 'opacity-100' : 'opacity-0'}`}>
             <ChatController
               modelDisabled={!enableModelLoading}
+              requireSetupOnChatClick={requireSetupOnChatClick}
+              onRequireSetup={onRequireSetup}
             />
           </div>
           

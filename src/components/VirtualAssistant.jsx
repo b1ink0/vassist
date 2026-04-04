@@ -22,6 +22,7 @@ import emotePlayerService from '../services/EmotePlayerService';
  * @param {Object} props - Component props
  * @param {Function} props.onReady - Callback when assistant is initialized
  * @param {boolean} props.isPreview - Enable preview mode for setup wizard
+ * @param {boolean} props.forcePortraitMode - Force portrait layout at runtime
  * @param {string} props.previewWidth - Width for preview mode
  * @param {string} props.previewHeight - Height for preview mode
  * @param {string} props.previewClassName - Additional CSS classes for preview
@@ -34,6 +35,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const { 
     onReady,
     isPreview = false,
+    forcePortraitMode = false,
     previewWidth = '100%',
     previewHeight = '100%',
     previewClassName = '',
@@ -442,7 +444,9 @@ const VirtualAssistant = forwardRef((props, ref) => {
           previewHeight={previewHeight}
           previewClassName={previewClassName}
           sceneConfig={{ 
-            uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
+            uiConfig: isPreview
+              ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } }
+              : (forcePortraitMode ? { ...uiConfig, enablePortraitMode: true } : uiConfig),
             enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
             renderQuality: isPreview ? 'low' : (uiConfig?.renderQuality || 'medium'),
             customQuality: uiConfig?.customQuality,

@@ -32,7 +32,9 @@ import ScreenShareService from '../services/ScreenShareService';
  * @returns {JSX.Element} Chat controller component
  */
 const ChatController = ({ 
-  modelDisabled = false
+  modelDisabled = false,
+  requireSetupOnChatClick = false,
+  onRequireSetup,
 }) => {
   const { api } = useDesktop();
   const chatInputRef = useRef(null);
@@ -658,6 +660,11 @@ const ChatController = ({
    */
   const handleChatButtonClick = useCallback(() => {
     Logger.log('ChatController', 'Chat button clicked')
+    if (requireSetupOnChatClick) {
+      Logger.log('ChatController', 'Setup required before chat - opening setup wizard');
+      onRequireSetup?.();
+      return;
+    }
     
     if (isChatContainerVisible || isChatInputVisible) {
       Logger.log('ChatController', 'Closing chat')
@@ -677,7 +684,7 @@ const ChatController = ({
         }, 100);
       }
     }
-  }, [isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
+  }, [requireSetupOnChatClick, onRequireSetup, isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
   /**
    * Handles chat open from drag-drop.

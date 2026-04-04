@@ -5,6 +5,7 @@
 
 import * as HeroIconsSolid from '@heroicons/react/24/solid';
 import * as HeroIconsOutline from '@heroicons/react/24/outline';
+import { FaGithub } from 'react-icons/fa';
 
 export const iconMap = {
   'close': HeroIconsSolid.XMarkIcon,
@@ -51,6 +52,7 @@ export const iconMap = {
   'note': HeroIconsSolid.DocumentTextIcon,
   'article': HeroIconsSolid.NewspaperIcon,
   'book': HeroIconsSolid.BookOpenIcon,
+  'github': FaGithub,
   'test': HeroIconsSolid.BeakerIcon,
   'happy': HeroIconsSolid.FaceSmileIcon,
   'thinking': HeroIconsSolid.QuestionMarkCircleIcon,
