@@ -9,6 +9,73 @@
 
 import { resourceLoader } from '../utils/ResourceLoader.js';
 import Logger from '../services/LoggerService';
+import { isDesktop, isProduction } from '../utils/PlatformUtils';
+
+const RenderQualityPresets = {
+  low: {
+    samples: 1,
+    bloomEnabled: false,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 32,
+    bloomScale: 0.5,
+    bloomWeight: 0.15,
+    bloomThreshold: 0.95,
+    contrast: 1.15,
+    exposure: 1.0,
+    saturation: 10,
+  },
+  medium: {
+    samples: 2,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 32,
+    bloomScale: 0.5,
+    bloomWeight: 0.2,
+    bloomThreshold: 0.9,
+    contrast: 1.2,
+    exposure: 1.05,
+    saturation: 15,
+  },
+  high: {
+    samples: 4,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 48,
+    bloomScale: 0.5,
+    bloomWeight: 0.25,
+    bloomThreshold: 0.85,
+    contrast: 1.2,
+    exposure: 1.1,
+    saturation: 15,
+  },
+  ultra: {
+    samples: 8,
+    bloomEnabled: true,
+    chromaticAberrationEnabled: false,
+    fxaaEnabled: true,
+    bloomKernel: 48,
+    bloomScale: 0.5,
+    bloomWeight: 0.25,
+    bloomThreshold: 0.8,
+    contrast: 1.2,
+    exposure: 1.1,
+    saturation: 18,
+  },
+};
+
+const RenderQualityPresetsAndroid = {
+  low: RenderQualityPresets.low,
+  medium: RenderQualityPresets.medium,
+  high: { ...RenderQualityPresets.high, samples: 2, bloomKernel: 32 },
+  ultra: { ...RenderQualityPresets.ultra, samples: 4 },
+};
+
+export function getRenderQualityPresets(isAndroid = false) {
+  return isAndroid ? RenderQualityPresetsAndroid : RenderQualityPresets;
+}
 
 /**
  * Default scene configuration
@@ -16,8 +83,8 @@ import Logger from '../services/LoggerService';
 const SceneConfig = {
   enableModelLoading: true,
   
-  modelUrl: "res/assets/model/vassist_default.bpmx",
-  cameraAnimationUrl: "res/private_test/motion/2.bvmd",
+  modelUrl: isDesktop ? "/res/assets/model/vassist_default.bpmx" : "res/assets/model/vassist_default.bpmx",
+  cameraAnimationUrl: isDesktop ? "/res/private_test/motion/2.bvmd" : "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
   
   orthoHeight: 12,
@@ -47,27 +114,26 @@ const SceneConfig = {
 export async function resolveResourceURLs(config) {
   Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
-  if (!resourceLoader.isExtensionMode()) {
-    Logger.log('sceneConfig', 'Dev mode - returning config as-is');
+  const needsResolution = resourceLoader.isExtensionMode() || (isDesktop && isProduction);
+  
+  if (!needsResolution) {
+    Logger.log('sceneConfig', 'Dev/Web mode - using paths as-is');
     return config;
   }
-
-  Logger.log('sceneConfig', 'Extension mode - resolving URLs...');
+  
+  Logger.log('sceneConfig', `${isDesktop && isProduction ? 'Desktop Production' : 'Extension'} mode - resolving URLs...`);
   const resolvedConfig = { ...config };
   
-  if (config.modelUrl) {
-    Logger.log('sceneConfig', 'Resolving modelUrl:', config.modelUrl);
+  if (config.modelUrl && !config.modelUrl.startsWith('blob:')) {
     resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
     Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
   }
   
-  if (config.cameraAnimationUrl) {
-    Logger.log('sceneConfig', 'Resolving cameraAnimationUrl:', config.cameraAnimationUrl);
+  if (config.cameraAnimationUrl && !config.cameraAnimationUrl.startsWith('blob:')) {
     resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
     Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
   }
   
-  Logger.log('sceneConfig', 'Final resolved config:', resolvedConfig);
   return resolvedConfig;
 }
 
@@ -85,10 +151,38 @@ export function getSceneConfig() {
  * Get scene configuration with resolved URLs (async)
  * Use this in extension mode to ensure URLs are properly resolved
  * 
+ * Checks for custom default model from IndexedDB first
+ * 
  * @returns {Promise<Object>} Scene configuration with resolved URLs
  */
 export async function getSceneConfigAsync() {
   const config = getSceneConfig();
+  
+  try {
+    const { modelStorageService } = await import('../services/ModelStorageService.js');
+    const customDefaultModel = await modelStorageService.getDefaultModel();
+    
+    
+    if (customDefaultModel && customDefaultModel.modelData) {
+      const customModelUrl = URL.createObjectURL(customDefaultModel.modelData);
+      
+      config.modelUrl = customModelUrl;
+      config.modelId = customDefaultModel.id;
+      config.modelFileName = customDefaultModel.name || 'model.bpmx';
+      config.portraitClipping = customDefaultModel.metadata?.portraitClipping ?? 12;
+      config._customModelBlobUrl = customModelUrl;
+    } else {
+      config.modelId = 'builtin_default_model';
+      config.modelFileName = 'vassist_default.bpmx';
+      config.portraitClipping = 12;
+    }
+  } catch (error) {
+    Logger.error('sceneConfig', 'Failed to load custom default model:', error);
+    config.modelId = 'builtin_default_model';
+    config.modelFileName = 'vassist_default.bpmx';
+  }
+  
+  Logger.log('sceneConfig', 'Calling resolveResourceURLs with config.modelUrl:', config.modelUrl);
   return resolveResourceURLs(config);
 }
 
@@ -205,4 +299,5 @@ export default {
   isFeatureEnabled,
   createSceneConfig,
   validateSceneConfig,
+  getRenderQualityPresets,
 };

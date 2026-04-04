@@ -2,6 +2,7 @@
  * Shared Audio Worker
  * Handles audio processing, VMD generation, and BVMD conversion in dev mode
  * Runs in SharedWorker context (no AudioContext available)
+ * Also supports regular Worker context for Android WebView (SharedWorker not supported)
  * Main thread must decode audio and send PCM data
  */
 
@@ -17,16 +18,44 @@ class SharedAudioWorker {
         this.ports = new Set();
         this.scene = null; // Babylon scene for BVMD conversion
         this.isReady = false;
+        this.isSharedWorker = typeof self.onconnect !== 'undefined' || self.constructor.name === 'SharedWorkerGlobalScope';
         
-        // CRITICAL: Register connection handler IMMEDIATELY (synchronously)
-        // Must be set before any async operations or connections will be missed
-        self.onconnect = (e) => {
-            const port = e.ports[0];
-            this.ports.add(port);
+        if (this.isSharedWorker) {
+            // SharedWorker context: Register connection handler
+            // CRITICAL: Must be set before any async operations or connections will be missed
+            self.onconnect = (e) => {
+                const port = e.ports[0];
+                this.ports.add(port);
+                
+                Logger.log('SharedAudioWorker', 'New connection, total ports:', this.ports.size);
+                
+                port.onmessage = async (event) => {
+                    try {
+                        // Wait for initialization to complete before processing
+                        if (!this.isReady) {
+                            Logger.log('SharedAudioWorker', 'Waiting for initialization...');
+                            await this.initPromise;
+                        }
+                        
+                        const response = await this.handleMessage(event.data);
+                        port.postMessage(response);
+                    } catch (error) {
+                        Logger.error('SharedAudioWorker', 'Error:', error);
+                        port.postMessage({
+                            type: MessageTypes.ERROR,
+                            requestId: event.data.requestId,
+                            error: error.message
+                        });
+                    }
+                };
+                
+                port.start();
+            };
+        } else {
+            // Regular Worker context (Android WebView): Use self.onmessage
+            Logger.log('SharedAudioWorker', 'Running as regular Worker (Android mode)');
             
-            Logger.log('SharedAudioWorker', 'New connection, total ports:', this.ports.size);
-            
-            port.onmessage = async (event) => {
+            self.onmessage = async (event) => {
                 try {
                     // Wait for initialization to complete before processing
                     if (!this.isReady) {
@@ -35,19 +64,17 @@ class SharedAudioWorker {
                     }
                     
                     const response = await this.handleMessage(event.data);
-                    port.postMessage(response);
+                    self.postMessage(response);
                 } catch (error) {
                     Logger.error('SharedAudioWorker', 'Error:', error);
-                    port.postMessage({
+                    self.postMessage({
                         type: MessageTypes.ERROR,
                         requestId: event.data.requestId,
                         error: error.message
                     });
                 }
             };
-            
-            port.start();
-        };
+        }
         
         // Start async initialization
         this.initPromise = this.init();
@@ -231,9 +258,15 @@ class SharedAudioWorker {
                     }
                 };
                 
-                // Broadcast to all ports
-                for (const port of this.ports) {
-                    port.postMessage(progressMessage);
+                // Broadcast progress to all listeners
+                if (this.isSharedWorker) {
+                    // SharedWorker: broadcast to all ports
+                    for (const port of this.ports) {
+                        port.postMessage(progressMessage);
+                    }
+                } else {
+                    // Regular Worker: post to main thread
+                    self.postMessage(progressMessage);
                 }
             });
             

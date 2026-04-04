@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { createSceneConfig, resolveResourceURLs } from '../config/sceneConfig';
+import { getSceneConfigAsync } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
 import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
+import { useDesktop } from '../contexts/DesktopContext';
 import { FPSLimitOptions } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
+import { isAndroid, isDesktop } from '../utils/PlatformUtils';
 
 /**
  * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
@@ -48,7 +50,8 @@ const BabylonScene = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cleanupFnRef = useRef(null);
   
-  const { uiConfig } = useConfig();
+  const { uiConfig, updateUIConfig } = useConfig();
+  const { api: desktopAPI } = useDesktop();
   const fpsLimit = uiConfig?.fpsLimit || FPSLimitOptions.FPS_60;
   
   const [isDragOver, setIsDragOver] = useState(false);
@@ -56,9 +59,111 @@ const BabylonScene = ({
   const overlayRef = useRef(null);
   const dragDropServiceRef = useRef(null);
   
+  const [canvasSize, setCanvasSize] = useState(() => {
+    if (isDesktop && typeof window !== 'undefined') {
+      if (uiConfig?.modelSizePx?.width && uiConfig?.modelSizePx?.height) {
+        const baseModelWidth = 400;
+        const baseModelHeight = 600;
+        const scaleFactorWidth = 0.85;
+        const scaleFactorHeight = 0.75;
+        const baseWidth = 400;
+        const baseHeight = 600;
+        
+        const modelWidthDelta = uiConfig.modelSizePx.width - baseModelWidth;
+        const modelHeightDelta = uiConfig.modelSizePx.height - baseModelHeight;
+        
+        const width = Math.max(baseWidth + (modelWidthDelta * scaleFactorWidth), 400);
+        const height = Math.max(baseHeight + (modelHeightDelta * scaleFactorHeight), 500);
+        Logger.log('BabylonScene', `Initializing canvas with saved size: ${width}x${height}`);
+        return { width, height };
+      }
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+    }
+    return { width: 500, height: 500 };
+  });
+
+  useEffect(() => {
+    const handleCanvasSizeUpdate = (event) => {
+      const { width, height } = event.detail;
+      setCanvasSize({ width, height });
+      Logger.log('BabylonScene', `Canvas size updated to ${width}x${height}`);
+    };
+
+    window.addEventListener('updateCanvasSize', handleCanvasSizeUpdate);
+
+    return () => {
+      window.removeEventListener('updateCanvasSize', handleCanvasSizeUpdate);
+    };
+  }, []);
+  
+  // On mount, if desktop and saved config exists, resize Electron window to match
+  useEffect(() => {
+    if (!isDesktop || !desktopAPI?.window || isPreview) return;
+    
+    if (uiConfig?.modelSizePx?.width && uiConfig?.modelSizePx?.height) {
+      const { width: modelWidth, height: modelHeight } = uiConfig.modelSizePx;
+      Logger.log('BabylonScene', `Applying saved zoom to Electron window on mount: ${modelWidth}x${modelHeight}`);
+      
+      desktopAPI.window.updateWindowSizeForZoom(modelWidth, modelHeight).then(() => {
+        return desktopAPI.window.getSize();
+      }).then(windowSize => {
+        Logger.log('BabylonScene', `Electron window resized to: ${windowSize.width}x${windowSize.height}`);
+        setCanvasSize({ width: windowSize.width, height: windowSize.height });
+        
+        setTimeout(() => {
+          if (positionManagerRef?.current) {
+            Logger.log('BabylonScene', 'Updating PositionManager after window resize on mount');
+            const pm = positionManagerRef.current;
+            
+            const oldCanvasWidth = pm.canvasWidth;
+            const oldCanvasHeight = pm.canvasHeight;
+            const oldPosX = pm.positionX;
+            const oldPosY = pm.positionY;
+            const oldWidth = pm.modelWidthPx;
+            const oldHeight = pm.effectiveHeightPx;
+            
+            pm.updateCanvasDimensions();
+            
+            // Calculate position as ratio, maintain relative position
+            const posXRatio = (oldPosX + oldWidth / 2) / oldCanvasWidth;
+            const posYRatio = (oldPosY + oldHeight / 2) / oldCanvasHeight;
+            
+            const newPosX = (posXRatio * pm.canvasWidth) - modelWidth / 2;
+            const newPosY = (posYRatio * pm.canvasHeight) - modelHeight / 2;
+            
+            // Update model size AND position
+            pm.positionX = newPosX;
+            pm.positionY = newPosY;
+            pm.modelHeightPx = modelHeight;
+            pm.modelWidthPx = modelWidth;
+            pm.effectiveHeightPx = modelHeight;
+            
+            pm.updateCameraFrustum();
+            
+            Logger.log('BabylonScene', `Position maintained at ratio (${posXRatio.toFixed(2)}, ${posYRatio.toFixed(2)}): (${newPosX}, ${newPosY})`);
+          } else {
+            Logger.warn('BabylonScene', 'PositionManager not ready yet, will update on next zoom');
+          }
+        }, 200);
+      }).catch(err => {
+        Logger.warn('BabylonScene', 'Failed to resize Electron window on mount:', err);
+      });
+    }
+  }, [uiConfig?.modelSizePx, desktopAPI, isPreview, positionManagerRef]);
+  
+  
   const { modelOverlayPos, setModelOverlayPos, setShowModelLoadingOverlay, setPendingDropData, openChat } = useApp();
   
   const isFirstMountRef = useRef(true);
+  
+  const initialHeightRef = useRef(null);
+  
+  if (initialHeightRef.current === null && typeof window !== 'undefined') {
+    initialHeightRef.current = window.innerHeight;
+  }
   
   const onSceneReadyRef = useRef(onSceneReady);
   const onLoadProgressRef = useRef(onLoadProgress);
@@ -154,11 +259,24 @@ const BabylonScene = ({
       canvas.dataset.babylonInitialized = 'true';
       delete canvas.dataset.babylonInitializing;
       
+      // Get device pixel ratio - limit to 2x on Android to balance quality vs performance
+      const rawDPR = window.devicePixelRatio || 1;
+      const maxDPR = isAndroid ? 2 : 3; // Cap at 2x on Android, 3x on other platforms
+      const effectiveDPR = Math.min(rawDPR, maxDPR);
+      
+      Logger.log('BabylonScene', `Device pixel ratio: ${rawDPR}, effective: ${effectiveDPR}, isAndroid: ${isAndroid}`);
+      
       const engine = new Engine(canvas, true, {
         preserveDrawingBuffer: true,
         stencil: true,
         alpha: true,
+        adaptToDeviceRatio: true, // Enable high-DPI rendering
+        powerPreference: isAndroid ? 'high-performance' : 'default',
       });
+      
+      // Set hardware scaling level to control resolution (lower = higher quality)
+      // 1 / effectiveDPR ensures we render at the device's native resolution (capped)
+      engine.setHardwareScalingLevel(1 / effectiveDPR);
       
       if (fpsLimit !== FPSLimitOptions.NATIVE && fpsLimit !== 'native') {
         const targetFPS = typeof fpsLimit === 'number' ? fpsLimit : 60;
@@ -180,16 +298,26 @@ const BabylonScene = ({
       let scene;
 
       if (sceneBuilder) {
-        let finalConfig = createSceneConfig({
+        Logger.log('BabylonScene', 'About to call getSceneConfigAsync()...');
+        // Get scene config with custom model check
+        let finalConfig = await getSceneConfigAsync();
+        Logger.log('BabylonScene', 'getSceneConfigAsync() returned, finalConfig.modelUrl:', finalConfig.modelUrl);
+        
+        // Merge with user-provided config
+        finalConfig = {
+          ...finalConfig,
           ...sceneConfigRef.current,
+          updateUIConfig,
           onLoadProgress: (progress) => {
             setLoadingProgress(progress);
             if (onLoadProgressRef.current) {
               onLoadProgressRef.current(progress);
             }
           },
-        });
-        finalConfig = await resolveResourceURLs(finalConfig);
+        };
+        
+        Logger.log('BabylonScene', 'After merge, finalConfig.modelUrl:', finalConfig.modelUrl);
+        
         scene = await sceneBuilder(canvas, engine, finalConfig);
         
         if (cancelled) {
@@ -256,6 +384,31 @@ const BabylonScene = ({
         engine.resize();
       };
       window.addEventListener('resize', handleResize);
+      
+      // Android wallpaper visibility handler - pause/resume rendering
+      const handleWallpaperVisibility = (event) => {
+        const { visible } = event.detail;
+        Logger.log('BabylonScene', `Wallpaper visibility changed: ${visible}`);
+        
+        if (visible) {
+          engine.runRenderLoop(() => {
+            scene.render();
+          });
+          if (scene?.metadata?.animationManager) {
+            scene.metadata.animationManager.resume?.();
+          }
+        } else {
+          engine.stopRenderLoop();
+          if (scene?.metadata?.animationManager) {
+            scene.metadata.animationManager.pause?.();
+          }
+        }
+      };
+      
+      // Only add wallpaper visibility listener on Android
+      if (isAndroid) {
+        window.addEventListener('wallpaperVisibility', handleWallpaperVisibility);
+      }
 
       const cleanupBabylon = () => {
         Logger.log('BabylonScene', 'Cleaning up Babylon resources...');
@@ -266,6 +419,11 @@ const BabylonScene = ({
         }
         
         window.removeEventListener('resize', handleResize);
+        
+        // Remove wallpaper visibility listener
+        if (isAndroid) {
+          window.removeEventListener('wallpaperVisibility', handleWallpaperVisibility);
+        }
         
         if (engine) {
           engine.stopRenderLoop();
@@ -409,6 +567,10 @@ const BabylonScene = ({
     };
   }, [isReady, openChat, setPendingDropData, isPreview]);
 
+  const canvasHeight = isAndroid && initialHeightRef.current 
+    ? `${initialHeightRef.current}px` 
+    : '100vh';
+
   const canvasContent = (
     <>
       <canvas
@@ -424,8 +586,8 @@ const BabylonScene = ({
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         } : {
-          width: '100%',
-          height: '100vh',
+          width: isDesktop ? `${canvasSize.width}px` : '100%',
+          height: isDesktop ? `${canvasSize.height}px` : canvasHeight,
           display: 'block',
           outline: 'none',
           backgroundColor: 'transparent',
@@ -433,7 +595,7 @@ const BabylonScene = ({
           top: 0,
           left: 0,
           pointerEvents: 'none',
-          zIndex: 9999,
+          zIndex: isAndroid ? 100 : 9999,
           opacity: isReady ? 1 : 0,
           transition: 'opacity 700ms ease-in-out'
         }}
@@ -448,7 +610,7 @@ const BabylonScene = ({
             top: `${modelOverlayPos.y}px`,
             width: `${modelOverlayPos.width}px`,
             height: `${modelOverlayPos.height}px`,
-            zIndex: 10000,
+            zIndex: isAndroid ? 101 : 10000,
             pointerEvents: isDragging ? 'auto' : 'none',
             borderRadius: '24px'
           }}
@@ -507,9 +669,9 @@ const BabylonScene = ({
       <div className={`relative ${previewClassName}`} style={{ width: previewWidth, height: previewHeight }}>
         {canvasContent}
         {!isReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl">
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-white/10 to-white/10 rounded-2xl">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500/30 border-t-purple-500 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/30 border-t-white/80 mx-auto mb-4"></div>
               <p className="text-white/70 text-sm font-medium">
                 Loading 3D Model... {Math.round(loadingProgress || 0)}%
               </p>

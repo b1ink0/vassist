@@ -1,0 +1,15 @@
+/* Import shared styles */
+@import "../src/index.css";
+
+/* Desktop mode overrides */
+:root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+html,
+body,
+#root {
+  background: transparent !important;
+  background-color: transparent !important;
+}

@@ -1,0 +1,48 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="575.06"
+    android:viewportHeight="575.06">
+  <group android:scaleX="0.69"
+      android:scaleY="0.69"
+      android:translateX="89.1343"
+      android:translateY="89.1343">
+    <path
+        android:pathData="M108.01,2.38L467.05,2.38A105.63,105.63 0,0 1,572.68 108.01L572.68,467.05A105.63,105.63 0,0 1,467.05 572.68L108.01,572.68A105.63,105.63 0,0 1,2.38 467.05L2.38,108.01A105.63,105.63 0,0 1,108.01 2.38z"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4.7559"
+        android:strokeLineCap="round">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:startX="-0"
+            android:startY="287.53"
+            android:endX="575.06"
+            android:endY="287.53"
+            android:type="linear">
+          <item android:offset="0" android:color="#FF1C1C1E"/>
+          <item android:offset="1" android:color="#FF48484A"/>
+        </gradient>
+      </aapt:attr>
+      <aapt:attr name="android:strokeColor">
+        <gradient
+            android:startX="-0"
+            android:startY="287.53"
+            android:endX="575.06"
+            android:endY="287.53"
+            android:type="linear">
+          <item android:offset="0" android:color="#FF1C1C1E"/>
+          <item android:offset="1" android:color="#FF48484A"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+    <path
+        android:pathData="m125.97,156.42a19.58,19.58 0,0 0,-7.45 1.7,19.58 19.58,0 0,0 -9.86,25.87l98.98,220.88a19.58,19.58 0,0 0,34.93 1.59l41.99,-74.7L393.46,331.76l31.26,73.53a19.58,19.58 0,0 0,25.67 10.36,19.58 19.58,0 0,0 10.36,-25.67l-34.4,-80.91a19.58,19.58 0,0 0,-3.65 -8.59L368.54,173.08a19.58,19.58 0,0 0,-9.63 -13.53,19.58 19.58,0 0,0 -23.55,3.54 19.58,19.58 0,0 0,-3.62 4.83L227.48,353.41 144.39,167.98A19.58,19.58 0,0 0,125.97 156.42ZM346.56,221.46 L376.81,292.61h-70.24z"
+        android:strokeAlpha="0"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4.135"
+        android:fillColor="#ffffff"
+        android:strokeColor="#000000"
+        android:strokeLineCap="round"/>
+  </group>
+</vector>

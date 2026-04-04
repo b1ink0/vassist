@@ -4,28 +4,47 @@
  * Handles Text-to-Speech provider selection and configuration
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
-import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice } from '../../config/aiConfig';
+import { useAndroid } from '../../contexts/AndroidContext';
+import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice, GPTSoVITSLanguages } from '../../config/aiConfig';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
+import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
+import VitsModelDownloader from './tts/VitsModelDownloader';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 
-const TTSSettings = ({ isLightBackground }) => {
+const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTrigger }) => {
   const [clearingCache, setClearingCache] = useState(false);
   const [cacheSize, setCacheSize] = useState(null);
+  const [testText, setTestText] = useState('Hello, this is a test of the text to speech system.');
+  const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
+  
+  const { api: androidAPI } = useAndroid();
   
   const {
     ttsConfig,
     ttsTesting,
+    ttsConfigError,
+    setTtsConfigError,
     updateTTSConfig,
     testTTSConnection,
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,
   } = useConfig();
+
+  // Filter providers based on platform
+  const availableProviders = useMemo(() => {
+    if (isAndroid) {
+      return TTSProviders;
+    }
+    const { ANDROID_LOCAL, ...otherProviders } = TTSProviders;
+    return otherProviders;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -52,15 +71,121 @@ const TTSSettings = ({ isLightBackground }) => {
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
           disabled={!ttsConfig.enabled}
         >
-          {Object.entries(TTSProviders).map(([key, value]) => (
+          {Object.entries(availableProviders).map(([key, value]) => (
             <option key={value} value={value} className="bg-gray-900">{key}</option>
           ))}
         </select>
+        {isAndroid && (
+          <p className="text-xs text-white/50">
+            Using native Android TTS via local VITS model
+          </p>
+        )}
       </div>
 
       {/* Configuration sections - only show when enabled */}
       {ttsConfig.enabled && (
         <>
+          {/* Android Local TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.ANDROID_LOCAL && (
+            <>
+              {/* VITS Model Downloader */}
+              <VitsModelDownloader 
+                androidAPI={androidAPI}
+                isLightBackground={isLightBackground}
+              />
+              
+              <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
+                <h4 className="text-sm font-semibold text-white/90">Android Local TTS</h4>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Voice</label>
+                  <p className="text-sm text-white/70">VCTK (Multi-speaker, 109 voices, English)</p>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-white/60">Speaker ID (0-108):</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="108"
+                      value={ttsConfig['android-local']?.speakerId || 0}
+                      onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
+                      className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-20 text-sm`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/90">Speed</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    value={ttsConfig['android-local']?.speed || 1.0}
+                    onChange={(e) => updateTTSConfig('android-local.speed', parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-xs text-white/60">{ttsConfig['android-local']?.speed || 1.0}x</span>
+                </div>
+                <p className="text-xs text-white/50">
+                  Powered by VITS VCTK running locally on your device
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Desktop Local TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && isDesktop && (
+            <>
+              <h4 className="text-sm font-semibold text-white/90 mb-3">Desktop Local TTS (GPT-SoVITS)</h4>
+              <GPTSoVITSConfig
+                config={ttsConfig['desktop-local'] || {}}
+                onChange={(field, value) => {
+                  updateTTSConfig(`desktop-local.${field}`, value);
+                }}
+                showTitle={false}
+                isSetupMode={false}
+                onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+                refreshTrigger={refreshTrigger}
+                isLightBackground={isLightBackground}
+                errorMessage={ttsConfigError}
+                setErrorMessage={setTtsConfigError}
+              />
+            </>
+          )}
+
+          {/* GPTSoVITS Remote TTS Configuration */}
+          {ttsConfig.provider === TTSProviders.GPTSOVITS_REMOTE && (
+            <>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/90">Server URL</label>
+                <input
+                  type="text"
+                  value={ttsConfig['gptsovits-remote']?.endpoint || ''}
+                  onChange={(e) => updateTTSConfig('gptsovits-remote.endpoint', e.target.value)}
+                  placeholder="http://localhost:11438"
+                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                />
+                <p className="text-xs text-white/50">
+                  URL of your remote GPT-SoVITS server (will append /v1)
+                </p>
+              </div>
+              
+              {/* Voice Cloning Configuration - Reuse GPTSoVITSConfig */}
+              <GPTSoVITSConfig
+                config={ttsConfig['gptsovits-remote'] || {}}
+                onChange={(field, value) => {
+                  updateTTSConfig(`gptsovits-remote.${field}`, value);
+                }}
+                showTitle={false}
+                isSetupMode={false}
+                onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+                refreshTrigger={refreshTrigger}
+                isLightBackground={isLightBackground}
+                errorMessage={ttsConfigError}
+                setErrorMessage={setTtsConfigError}
+                skipSetup={true}
+              />
+            </>
+          )}
+
           {/* Kokoro TTS Configuration */}
           {ttsConfig.provider === TTSProviders.KOKORO && (
             <>
@@ -89,7 +214,7 @@ const TTSSettings = ({ isLightBackground }) => {
 
               {/* Cache Management - Only in Settings */}
               {kokoroStatus.initialized && (
-                <div className="space-y-2 p-4 rounded-lg bg-white/5 border border-white/10">
+                <div className="space-y-2 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
                   <h4 className="text-sm font-semibold text-white/90">Cache Management</h4>
                   <div className="flex gap-2">
                     <button 
@@ -108,9 +233,6 @@ const TTSSettings = ({ isLightBackground }) => {
                     </button>
                     <button 
                       onClick={async () => {
-                        if (!confirm('Clear Kokoro model cache? You will need to re-download the model (~86MB).')) {
-                          return;
-                        }
                         try {
                           setClearingCache(true);
                           await TTSServiceProxy.clearKokoroCache();
@@ -118,7 +240,6 @@ const TTSSettings = ({ isLightBackground }) => {
                           await checkKokoroStatus();
                         } catch (error) {
                           Logger.error('other', 'Failed to clear cache:', error);
-                          alert('Failed to clear cache: ' + error.message);
                         } finally {
                           setClearingCache(false);
                         }
@@ -265,11 +386,39 @@ const TTSSettings = ({ isLightBackground }) => {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-4">
+      <div className="space-y-3 pt-4">
+        {/* Test Text Input */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Test Text</label>
+          <input
+            type="text"
+            value={testText}
+            onChange={(e) => setTestText(e.target.value)}
+            placeholder="Enter text to test TTS..."
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          />
+        </div>
+        
+        {/* Test Language (only for GPT-SoVITS) */}
+        {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Test Language</label>
+            <select
+              value={testLanguage}
+              onChange={(e) => setTestLanguage(e.target.value)}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            >
+              <option value={GPTSoVITSLanguages.ENGLISH}>English</option>
+              <option value={GPTSoVITSLanguages.JAPANESE}>Japanese (日本語)</option>
+              <option value={GPTSoVITSLanguages.CHINESE}>Chinese (中文)</option>
+            </select>
+          </div>
+        )}
+        
         <button 
-          onClick={testTTSConnection}
+          onClick={() => testTTSConnection(testText)}
           disabled={!ttsConfig.enabled || ttsTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test TTS
         </button>

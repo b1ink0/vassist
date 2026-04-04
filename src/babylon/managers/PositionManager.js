@@ -12,8 +12,9 @@
  * - No hardcoded magic numbers - everything calculated from actual dimensions
  */
 
-import { PositionPresets } from '../../config/uiConfig.js';
+import { PositionPresets, AndroidPresetOverride } from '../../config/uiConfig.js';
 import Logger from '../../services/LoggerService';
+import { isAndroid } from '../../utils/PlatformUtils';
 
 export class PositionManager {
   /**
@@ -187,7 +188,12 @@ export class PositionManager {
       preset = 'center';
     }
     
-    const config = PositionPresets[preset];
+    const baseConfig = PositionPresets[preset];
+    const config = isAndroid ? { ...baseConfig, ...AndroidPresetOverride } : baseConfig;
+    
+    if (isAndroid) {
+      Logger.log('PositionManager', 'Using Android preset override', AndroidPresetOverride);
+    }
     
     // Use Portrait Mode model size if enabled, otherwise use standard size
     const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
@@ -197,8 +203,17 @@ export class PositionManager {
       ? config.portraitModelSize 
       : config.modelSize;
     
+    // Apply saved zoom from uiConfig if available
     let modelWidth = options.modelSizePx?.width || modelSize.width;
     let modelHeight = options.modelSizePx?.height || modelSize.height;
+    
+    if (options.modelSizePx) {
+      modelWidth = options.modelSizePx.width || modelWidth;
+      modelHeight = options.modelSizePx.height || modelHeight;
+      Logger.log('PositionManager', `Applied saved zoom from config: ${modelWidth}x${modelHeight}`);
+    } else {
+      Logger.log('PositionManager', `Using default model size: ${modelWidth}x${modelHeight}`);
+    }
     
     let cameraHeight = modelHeight; // Height used for camera frustum (zoom)
     let effectiveHeight = modelHeight; // Height used for positioning/boundaries

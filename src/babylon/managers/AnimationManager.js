@@ -18,12 +18,14 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Camera } from "@babylonjs/core/Cameras/camera";
 import { MmdAnimationSpan, MmdCompositeAnimation } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
+// Import camera animation runtime to enable camera animation evaluation
+import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import {
   AssistantState,
   StateBehavior,
   TransitionSettings,
-  getRandomAnimation,
   getAnimationsByCategory,
   getAnimationsByName,
   isValidTransition,
@@ -52,8 +54,11 @@ export class AnimationManager {
    * @param {MmdRuntime} mmdRuntime - MMD runtime instance
    * @param {MmdModel} mmdModel - MMD model instance
    * @param {BvmdLoader} bvmdLoader - BVMD loader instance for loading animations
+   * @param {VmdLoader} vmdLoader - VMD loader instance
+   * @param {Function} getRandomAnimation - Function to get random animation from category (from AnimationContext)
+   * @param {Function} getEnabledAnimations - Function to get enabled animations for category (from AnimationContext)
    */
-  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader) {
+  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader, getRandomAnimation, getEnabledAnimations) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     Logger.log('AnimationManager ${this.instanceId}', '🆕 Creating new instance');
@@ -64,6 +69,10 @@ export class AnimationManager {
     this.mmdModel = mmdModel;
     this.bvmdLoader = bvmdLoader;
     this.vmdLoader = vmdLoader;
+    
+    // Animation context functions
+    this.getRandomAnimation = getRandomAnimation;
+    this.getEnabledAnimations = getEnabledAnimations;
 
     // Animation loading cache
     this.loadedAnimations = new Map(); // filePath -> loaded animation
@@ -118,6 +127,7 @@ export class AnimationManager {
     this.blinkDelayBetween = 0; // Configurable delay between blinks (frames), initially 0
     this.blinkEnabled = true; // Enable/disable blinking system
     this.blinkSpeedMultiplier = 1.5; // Speed multiplier for blink animation (higher = faster)
+    this._blinkMorphsApplied = false; // Track if blink morphs are currently applied (for cleanup)
     
     // Visibility change handling
     this.visibilityChangeHandler = null;
@@ -153,6 +163,21 @@ export class AnimationManager {
     this.animationQueue = [];
     this.isProcessingQueue = false; // Prevent re-entry during queue processing
     this.justStartedFromQueue = false; // Track if we just started an animation from queue (prevent immediate re-check)
+
+    // ========================================
+    // CAMERA ANIMATION SYSTEM (for emotes)
+    // ========================================
+    /**
+     * Camera animation system for emotes with camera VMD
+     * - currentCameraAnimation: Loaded camera animation
+     * - currentCameraUrl: Blob URL for cleanup
+     * - cameraAnimationEnabled: Whether camera animation is active
+     * - originalCameraState: Saved camera state before animation (for restoration)
+     */
+    this.currentCameraAnimation = null;
+    this.currentCameraUrl = null;
+    this.cameraAnimationEnabled = false;
+    this.originalCameraState = null;
 
     Logger.log('AnimationManager', 'Created');
   }
@@ -312,9 +337,8 @@ export class AnimationManager {
     // Create composite animation
     this.compositeAnimation = new MmdCompositeAnimation('assistantComposite');
     
-    // Add composite animation to model
-    this.mmdModel.addAnimation(this.compositeAnimation);
-    this.mmdModel.setAnimation('assistantComposite');
+    this.runtimeAnimationHandle = this.mmdModel.createRuntimeAnimation(this.compositeAnimation);
+    this.mmdModel.setRuntimeAnimation(this.runtimeAnimationHandle);
 
     // Register onBeforeRender observer for dynamic span management
     this.registerRenderObserver();
@@ -328,7 +352,7 @@ export class AnimationManager {
     if (playIntro) {
       // Play intro animation using INTRO state (loop: false, autoReturn: IDLE)
       Logger.log('AnimationManager', 'Playing intro animation...');
-      const introAnim = getRandomAnimation('intro');
+      const introAnim = this.getRandomAnimation('intro');
       
       if (introAnim) {
         // Load intro animation FIRST to read its locomotion
@@ -378,13 +402,93 @@ export class AnimationManager {
   /**
    * Load animation on-demand with deduplication
    * Multiple calls to same filePath return same cached animation
-   * @param {Object} animationConfig - Animation config from AnimationRegistry
+   * Supports both file-based animations (filePath) and custom animations (customMotionId)
+   * @param {Object} animationConfig - Animation config from AnimationRegistry or AnimationContext
    * @returns {Promise<Animation>} Loaded animation
    */
   async loadAnimation(animationConfig) {
     if (this.disposed) return null;
     
-    const { filePath, id, name } = animationConfig;
+    const { filePath, id, name, isCustom, customMotionId, preserveRootBone } = animationConfig;
+    
+    // Handle custom animations (from MotionStorageService)
+    if (isCustom && customMotionId) {
+      const cacheKey = `custom_${customMotionId}`;
+      
+      // 1. Already loaded? Return cached
+      if (this.loadedAnimations.has(cacheKey)) {
+        Logger.log('AnimationManager', `Using cached custom animation: ${name} (${customMotionId})`);
+        return this.loadedAnimations.get(cacheKey);
+      }
+
+      // 2. Currently loading? Wait for existing promise
+      if (this.loadingPromises.has(cacheKey)) {
+        Logger.log('AnimationManager', `Waiting for in-flight custom load: ${name} (${customMotionId})`);
+        return await this.loadingPromises.get(cacheKey);
+      }
+
+      // 3. Load custom animation from storage
+      Logger.log('AnimationManager', `Loading custom animation: ${name} (${customMotionId})`);
+      
+      const loadPromise = (async () => {
+        try {
+          // Import MotionStorageService dynamically to avoid circular dependencies
+          const { motionStorageService } = await import('../../services/MotionStorageService');
+          
+          // Get motion data from storage
+          const motion = await motionStorageService.getMotion(customMotionId);
+          if (!motion || !motion.motionData) {
+            throw new Error(`Custom motion ${customMotionId} not found or has no data`);
+          }
+          
+          // Convert Blob to ArrayBuffer
+          const arrayBuffer = await motion.motionData.arrayBuffer();
+          
+          // Create blob URL for the BVMD loader
+          const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: 'application/octet-stream' }));
+          
+          // Load using BVMD loader (custom animations are always BVMD)
+          const animation = await this.bvmdLoader.loadAsync(customMotionId, blobUrl);
+          
+          // Clean up blob URL
+          URL.revokeObjectURL(blobUrl);
+          
+          // Apply transformations
+          if (this._shouldFlipAnimations) {
+            this._flipAnimationXAxis(animation);
+          }
+          if (!preserveRootBone) {
+            this._applyLocomotionOffset(animation);
+          }
+          if (this.scene.metadata?.isPortraitMode && !preserveRootBone) {
+            this._fixRootBoneForPortraitMode(animation);
+          }
+          
+          Logger.log('AnimationManager', `Loaded custom animation: ${name}, duration: ${animation.endFrame} frames`);
+          return animation;
+        } catch (error) {
+          Logger.error('AnimationManager', `Failed to load custom animation: ${name}`, error);
+          throw error;
+        }
+      })();
+      
+      // Store promise to prevent duplicate loads
+      this.loadingPromises.set(cacheKey, loadPromise);
+      
+      try {
+        const animation = await loadPromise;
+        this.loadedAnimations.set(cacheKey, animation);
+        return animation;
+      } finally {
+        this.loadingPromises.delete(cacheKey);
+      }
+    }
+
+    // Handle file-based animations (default animations)
+    if (!filePath) {
+      Logger.error('AnimationManager', `Animation ${name} has no filePath and is not a custom animation`);
+      return null;
+    }
 
     // 1. Already loaded? Return cached
     if (this.loadedAnimations.has(filePath)) {
@@ -426,10 +530,13 @@ export class AnimationManager {
       }
 
       // Apply intro locomotion offset to this animation if we have one
-      this._applyLocomotionOffset(animation);
+      if (!preserveRootBone) {
+        this._applyLocomotionOffset(animation);
+      }
 
       // Fix root bone position for Portrait Mode to prevent drifting
-      if (this.scene.metadata?.isPortraitMode) {
+      if (this.scene.metadata?.isPortraitMode && !preserveRootBone) {
+        Logger.log('AnimationManager', `Portrait Mode: Fixing root bone for "${name}"`);
         this._fixRootBoneForPortraitMode(animation);
       }
 
@@ -598,7 +705,7 @@ export class AnimationManager {
       Logger.log('AnimationManager', 'Loading blink animation...');
       
       // Get blink animation from registry
-      const blinkAnimConfig = getRandomAnimation('blink');
+      const blinkAnimConfig = this.getRandomAnimation('blink');
       
       if (!blinkAnimConfig) {
         Logger.warn('AnimationManager', 'No blink animations found in registry - blinking disabled');
@@ -760,6 +867,147 @@ export class AnimationManager {
   }
 
   /**
+   * Load and setup camera animation for emotes
+   * Camera animations are only used for emotes (not for default animations)
+   * @param {string} cameraFilePath - Blob URL to camera VMD/BVMD file
+   * @returns {Promise<void>}
+   */
+  async loadCameraAnimation(cameraFilePath) {
+    if (!cameraFilePath) {
+      Logger.warn('AnimationManager', 'No camera file path provided - skipping camera animation');
+      return;
+    }
+
+    try {
+      Logger.log('AnimationManager', `Loading camera animation from: ${cameraFilePath}`);
+      
+      // Get camera from scene metadata
+      const mmdCamera = this.scene.metadata?.mmdCamera;
+      if (!mmdCamera) {
+        Logger.error('AnimationManager', 'MMD camera not found in scene metadata - cannot load camera animation');
+        return;
+      }
+
+      this.originalCameraState = {
+        position: mmdCamera.position.clone(),
+        rotation: mmdCamera.rotation.clone(),
+        distance: mmdCamera.distance,
+        fov: mmdCamera.fov,
+        mode: mmdCamera.mode,
+        orthoTop: mmdCamera.orthoTop,
+        orthoBottom: mmdCamera.orthoBottom,
+        orthoLeft: mmdCamera.orthoLeft,
+        orthoRight: mmdCamera.orthoRight
+      };
+
+      // Load camera animation using appropriate loader (BVMD or VMD)
+      let cameraAnimation;
+      if (cameraFilePath.endsWith('.vmd')) {
+        cameraAnimation = await this.vmdLoader.loadAsync('cameraAnim', cameraFilePath);
+      } else {
+        cameraAnimation = await this.bvmdLoader.loadAsync('cameraAnim', cameraFilePath);
+      }
+      
+      if (cameraAnimation) {
+        mmdCamera.mode = Camera.PERSPECTIVE_CAMERA;
+      } else {
+        Logger.warn('AnimationManager', 'No camera animation loaded - keeping ORTHOGRAPHIC mode');
+        return;
+      }
+
+      // CRITICAL: Apply locomotion offset to camera animation
+      // Camera animations assume model is at origin, but our model has a locomotion offset
+      // We need to shift the camera's target to follow the offset model
+      if (this._introLocomotionOffset && cameraAnimation.cameraTrack) {
+        const offsetX = this._introLocomotionOffset.x;
+        const offsetZ = this._introLocomotionOffset.z || 0;
+        
+        // Offset all camera position keyframes
+        const positionTrack = cameraAnimation.cameraTrack.positions;
+        if (positionTrack) {
+          for (let i = 0; i < positionTrack.length; i += 3) {
+            positionTrack[i] += offsetX;     // x
+            positionTrack[i + 2] += offsetZ; // z (y is i+1, don't offset vertical)
+          }
+        }
+      }
+
+      // Store camera animation and URL
+      this.currentCameraAnimation = cameraAnimation;
+      this.currentCameraUrl = cameraFilePath;
+      
+      // Create runtime animation handle (adds to camera's _animationHandleMap)
+      const cameraRuntimeHandle = mmdCamera.createRuntimeAnimation(cameraAnimation);
+      
+      // Store handle for cleanup
+      this.currentCameraRuntimeHandle = cameraRuntimeHandle;
+      
+      // Set as current animation (this makes it active for evaluation)
+      mmdCamera.setRuntimeAnimation(cameraRuntimeHandle);
+      
+      this.cameraAnimationEnabled = true;
+      
+      Logger.log('AnimationManager', `Camera animation loaded: ${cameraAnimation.endFrame} frames`);
+      
+    } catch (error) {
+      Logger.error('AnimationManager', 'Failed to load camera animation:', error);
+      this.currentCameraAnimation = null;
+      this.currentCameraUrl = null;
+      this.currentCameraRuntimeHandle = null;
+      this.cameraAnimationEnabled = false;
+    }
+  }
+
+  /**
+   * Clean up and dispose of camera animation resources
+   */
+  cleanupCameraAnimation() {
+    if (!this.currentCameraAnimation) return;
+    
+    const mmdCamera = this.scene.metadata?.mmdCamera;
+    if (mmdCamera) {
+      // Clear current animation (stops evaluation)
+      mmdCamera.setRuntimeAnimation(null);
+      
+      // Destroy the runtime animation handle (removes from map and disposes)
+      if (this.currentCameraRuntimeHandle !== null && this.currentCameraRuntimeHandle !== undefined) {
+        mmdCamera.destroyRuntimeAnimation(this.currentCameraRuntimeHandle);
+        this.currentCameraRuntimeHandle = null;
+      }
+      
+      // NOTE: No need to remove from animatables since we never added it
+      
+      // CRITICAL: Restore original camera state properly
+      if (this.originalCameraState) {
+        // Restore position, rotation, distance, fov
+        mmdCamera.position.copyFrom(this.originalCameraState.position);
+        mmdCamera.rotation.copyFrom(this.originalCameraState.rotation);
+        mmdCamera.distance = this.originalCameraState.distance;
+        mmdCamera.fov = this.originalCameraState.fov;
+        
+        // Restore camera mode to ORTHOGRAPHIC
+        mmdCamera.mode = this.originalCameraState.mode;
+        
+        // Restore orthographic frustum (like MmdModelScene sets it up)
+        mmdCamera.orthoTop = this.originalCameraState.orthoTop;
+        mmdCamera.orthoBottom = this.originalCameraState.orthoBottom;
+        mmdCamera.orthoLeft = this.originalCameraState.orthoLeft;
+        mmdCamera.orthoRight = this.originalCameraState.orthoRight;
+      } else {
+        // Fallback: reset to default
+        mmdCamera.rotation.set(0, 0, 0);
+      }
+    }
+    
+    // Clear camera animation state
+    this.currentCameraAnimation = null;
+    this.currentCameraUrl = null;
+    this.currentCameraRuntimeHandle = null;
+    this.cameraAnimationEnabled = false;
+    this.originalCameraState = null;
+  }
+
+  /**
    * Transition to a new state
    * Validates transition, selects appropriate animation, and starts playback
    * @param {string} newState - Target state from AssistantState
@@ -828,7 +1076,7 @@ export class AnimationManager {
         // Randomly pick from allowed animations
         const allowedCategories = behavior.allowedAnimations;
         const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
-        animationConfig = getRandomAnimation(randomCategory);
+        animationConfig = this.getRandomAnimation(randomCategory);
         Logger.log('AnimationManager', `[TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
       } else {
         // Use first animation from first allowed category
@@ -871,29 +1119,57 @@ export class AnimationManager {
     this.currentLoadedAnimation = loadedAnimation;
     this.currentAnimationDuration = loadedAnimation.endFrame;
 
+    // Load camera animation if provided (for emotes)
+    if (animationConfig.cameraFilePath) {
+      Logger.log('AnimationManager', `Camera file path detected: ${animationConfig.cameraFilePath}`);
+      await this.loadCameraAnimation(animationConfig.cameraFilePath);
+    } else {
+      // No camera animation - cleanup any previous camera animation
+      if (this.cameraAnimationEnabled) {
+        this.cleanupCameraAnimation();
+      }
+    }
+
     // Handle transition between different animations
     // Keep old spans active during transition for smooth blending
     const allOldSpans = Array.from(this.spanMap.values()).flat();
     
-    // Filter out spans that already have ease-out (they're from a previous transition)
-    // We should remove those immediately, not keep them for another transition!
-    const oldSpans = allOldSpans.filter(span => {
-      if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
-        Logger.log('AnimationManager', `Removing span at offset ${span.offset} - already easing out from previous transition`);
-        this.compositeAnimation.removeSpan(span);
-        return false; // Don't include in transition
-      }
-      return true; // Include in new transition
-    });
-    
-    if (oldSpans.length > 0) {
-      Logger.log('AnimationManager', `Keeping ${oldSpans.length} old spans for transition blending`);
+    if (animationConfig.preserveRootBone) {
+      Logger.log('AnimationManager', `Emote: Completely resetting composite animation (was ${allOldSpans.length} spans)`);
       
-      // Apply ease-out to old spans
-      // CRITICAL: We need to truncate the old span's endFrame to the current position + transition duration
-      // This makes the ease-out start IMMEDIATELY from the current playback position
-      const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
-      const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
+      // Remove ALL existing spans
+      for (const span of allOldSpans) {
+        this.compositeAnimation.removeSpan(span);
+      }
+      
+      // Clear all tracking state
+      this.spanMap.clear();
+      this.oldSpansToRemove = null;
+      this.currentCycle = 0;
+      this.lastAddedCycle = -1;
+      this.firstActiveCycle = 0;
+      
+      this.compositeAnimation = new MmdCompositeAnimation('assistantComposite_emote');
+      
+      this.mmdModel.setRuntimeAnimation(null);
+      this.runtimeAnimationHandle = this.mmdModel.createRuntimeAnimation(this.compositeAnimation);
+      this.mmdModel.setRuntimeAnimation(this.runtimeAnimationHandle);
+      
+      Logger.log('AnimationManager', 'Emote: Fresh composite animation created');
+    } else {
+      const oldSpans = allOldSpans.filter(span => {
+        if (span.easeOutFrameTime !== undefined && span.easeOutFrameTime > 0) {
+          Logger.log('AnimationManager', `Removing span at offset ${span.offset} - already easing out from previous transition`);
+          this.compositeAnimation.removeSpan(span);
+          return false; // Don't include in transition
+        }
+        return true; // Include in new transition
+      });
+    
+      if (oldSpans.length > 0) {
+        Logger.log('AnimationManager', `Keeping ${oldSpans.length} old spans for transition blending`);
+        const transitionFrames = animationConfig.transitionFrames || TransitionSettings.DEFAULT_TRANSITION_FRAMES;
+        const currentTimelineFrame = this.mmdRuntime.currentFrameTime;
       
       // Track the latest end time across ALL old spans
       let latestSpanEndTime = currentTimelineFrame;
@@ -935,7 +1211,7 @@ export class AnimationManager {
       this.oldSpansRemovalFrame = latestSpanEndTime + 2;
       
       Logger.log('AnimationManager', `Scheduled old span removal at frame ${this.oldSpansRemovalFrame.toFixed(2)} (last span ends at ${latestSpanEndTime.toFixed(2)})`);
-    
+      }
     }
     
     // Reset cycle tracking for new animation
@@ -1283,8 +1559,26 @@ export class AnimationManager {
       return;
     }
     
-    // REMOVED: Don't zero out morphs here - let animations apply naturally
-    // We'll override them in onAfterRender instead
+    // We'll override them in onAfterRen
+    
+    // CRITICAL: Sync camera animation time with model animation for looping emotes
+    // Camera animation needs to loop when the emote model animation loops
+    if (this.cameraAnimationEnabled && this.currentCameraAnimation) {
+      const mmdCamera = this.scene.metadata?.mmdCamera;
+      if (mmdCamera && mmdCamera.currentAnimation) {
+        const cameraAnimDuration = this.currentCameraAnimation.endFrame;
+        const absoluteFrame = this.mmdRuntime.currentFrameTime;
+        
+        // Calculate camera animation time relative to when emote started
+        const relativeFrame = absoluteFrame - this.animationStartFrame;
+        
+        // Loop the camera animation by taking modulo of duration
+        const loopedCameraFrame = relativeFrame % cameraAnimDuration;
+        
+        // Manually evaluate camera animation at the looped frame time
+        mmdCamera.currentAnimation.animate(loopedCameraFrame);
+      }
+    }
     
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
       return;
@@ -1407,6 +1701,11 @@ export class AnimationManager {
             // No more audio - return to IDLE
             Logger.log('AnimationManager', '[AUTO-RETURN TRIGGER] No active audio, transitioning to IDLE');
             
+            // Cleanup camera animation before transitioning to IDLE
+            if (this.cameraAnimationEnabled) {
+              this.cleanupCameraAnimation();
+            }
+            
             this._isTransitioning = true;
             this.transitionToState(AssistantState.IDLE).finally(() => {
               Logger.log('AnimationManager', '[AUTO-RETURN COMPLETE] Transition to IDLE finished');
@@ -1416,6 +1715,11 @@ export class AnimationManager {
         } else {
           // Not a speak animation - normal auto-return to IDLE
           Logger.log('AnimationManager', `[AUTO-RETURN TRIGGER] Starting transition to IDLE with ${(duration - currentFrame).toFixed(2)} frames remaining for smooth ease-out`);
+          
+          // Cleanup camera animation before transitioning to IDLE
+          if (this.cameraAnimationEnabled) {
+            this.cleanupCameraAnimation();
+          }
           
           this._isTransitioning = true;
           this.transitionToState(AssistantState.IDLE).finally(() => {
@@ -1475,7 +1779,16 @@ export class AnimationManager {
    * Simple approach: Calculate blink timing based on absolute time, apply directly
    */
   onAfterRender() {
-    if (this.disposed || !this.blinkEnabled || !this.blinkAnimation) {
+    const shouldDisableBlink = this.disposed || !this.blinkEnabled || !this.blinkAnimation || this.currentAnimationConfig?.disableBlinking;
+    
+    if (shouldDisableBlink) {
+      if (this._blinkMorphsApplied) {
+        const morphController = this.mmdModel.morph;
+        for (const morphTrack of this.blinkAnimation.morphTracks) {
+          morphController.setMorphWeight(morphTrack.name, 0);
+        }
+        this._blinkMorphsApplied = false;
+      }
       return;
     }
     
@@ -1504,8 +1817,8 @@ export class AnimationManager {
         // OVERRIDE morph weight (this runs AFTER animations, so we replace their values)
         morphController.setMorphWeight(morphTrack.name, weight);
       }
+      this._blinkMorphsApplied = true;
     }
-    // If not blinking (in delay period), let base animation's morphs show through
   }
 
   /**
@@ -1586,7 +1899,7 @@ export class AnimationManager {
         const maxAttempts = 10;
         
         while (attempts < maxAttempts) {
-          newAnimation = getRandomAnimation('idle');
+          newAnimation = this.getRandomAnimation('idle');
           // Make sure it's different from current
           if (newAnimation && newAnimation.id !== this.currentAnimationConfig?.id) {
             break;
@@ -2221,6 +2534,37 @@ export class AnimationManager {
   }
 
   /**
+   * Pause animation playback (for Android wallpaper when not visible)
+   */
+  pause() {
+    if (this._isPaused) return;
+    this._isPaused = true;
+    
+    Logger.log('AnimationManager', 'Pausing animation playback');
+    
+    // Pause the MMD runtime
+    if (this.mmdRuntime) {
+      this._pausedTimeScale = this.mmdRuntime.timeScale;
+      this.mmdRuntime.timeScale = 0;
+    }
+  }
+
+  /**
+   * Resume animation playback (for Android wallpaper when visible again)
+   */
+  resume() {
+    if (!this._isPaused) return;
+    this._isPaused = false;
+    
+    Logger.log('AnimationManager', 'Resuming animation playback');
+    
+    // Resume the MMD runtime
+    if (this.mmdRuntime) {
+      this.mmdRuntime.timeScale = this._pausedTimeScale ?? 1;
+    }
+  }
+
+  /**
    * Dispose and cleanup
    */
   dispose() {
@@ -2231,6 +2575,11 @@ export class AnimationManager {
 
     // Clear animation queue
     this.clearQueue();
+    
+    // Cleanup camera animation if active
+    if (this.cameraAnimationEnabled) {
+      this.cleanupCameraAnimation();
+    }
 
     // Remove visibility change handler
     if (this.visibilityChangeHandler) {

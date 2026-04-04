@@ -18,6 +18,8 @@ import {
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
+import { useDesktop } from './DesktopContext';
+import { isInputWindow } from '../utils/PlatformUtils';
 
 const AppContext = createContext(null);
 
@@ -30,6 +32,8 @@ export const useApp = () => {
 };
 
 export const AppProvider = ({ children }) => {
+  const { api } = useDesktop();
+  
   // ========================================
   // ASSISTANT STATE
   // ========================================
@@ -97,6 +101,11 @@ export const AppProvider = ({ children }) => {
   // SAVED MODEL POSITION (for tab visibility unmount/remount)
   // ========================================
   const [savedModelPosition, setSavedModelPosition] = useState(null);
+
+  // ========================================
+  // SCENE RELOAD STATE
+  // ========================================
+  const [sceneKey, setSceneKey] = useState(0);
 
   // ========================================
   // ASSISTANT INITIALIZATION
@@ -188,11 +197,21 @@ export const AppProvider = ({ children }) => {
         setIsAssistantReady(true);
         setIsChatUIReady(true);
         Logger.log('AppContext', 'Running in chat-only mode (no 3D model)');
+        
+        if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
+          api.window.frontendReady()
+            .then(() => {
+              Logger.log('AppContext', 'Notified Electron that frontend is ready (chat-only)');
+            })
+            .catch(err => {
+              Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
+            });
+        }
       }, 800);
       
       return () => clearTimeout(timer);
     }
-  }, [enableModelLoading]);
+  }, [enableModelLoading, api]);
 
   /**
    * Handle assistant ready callback
@@ -207,14 +226,28 @@ export const AppProvider = ({ children }) => {
     sceneRef.current = scene;
     
     Logger.log('AppContext', 'Position manager ref set, ready for position tracking');
-  }, []);
+    
+    // Notify Electron main process that frontend is ready
+    if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
+      api.window.frontendReady()
+        .then(() => {
+          Logger.log('AppContext', 'Notified Electron that frontend is ready');
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
+        });
+    }
+  }, [api]);
 
   // ========================================
   // VOICE & TTS TRACKING
   // ========================================
 
   // Track voice conversation state
+  // Skip in input window as ChatInput handles it there
   useEffect(() => {
+    if (isInputWindow) return;
+    
     const handleStateChange = (state) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
     };
@@ -227,11 +260,13 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   // Register TTS callbacks for centralized playback state
+  // Poll isCurrentlyPlaying which now checks currentAudio !== null (actual playback)
   useEffect(() => {
     // Only poll when NOT in voice mode
     if (isVoiceMode) return;
     
     const interval = setInterval(() => {
+      // isCurrentlyPlaying now correctly returns true only when audio is actually playing
       const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
       setIsSpeaking(prev => {
         // Only update state if value actually changed to prevent unnecessary re-renders
@@ -835,6 +870,66 @@ export const AppProvider = ({ children }) => {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [uiConfig, parseKeyEvent, toggleChat]);
 
+  /**
+   * Register global shortcuts in Electron and listen for shortcut events
+   */
+  useEffect(() => {
+    // Only in desktop mode
+    if (!__DESKTOP_MODE__ || !api?.shortcuts) return;
+    
+    // Register shortcuts when config changes
+    if (uiConfig?.shortcuts) {
+      api.shortcuts.register(uiConfig.shortcuts)
+        .then(() => {
+          Logger.log('AppContext', 'Global shortcuts registered in Electron');
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to register shortcuts:', err);
+        });
+    }
+    
+    // Listen for shortcut events from main process
+    const cleanupOpenChat = api.shortcuts.onOpenChat(() => {
+      Logger.log('AppContext', 'Open Chat shortcut triggered from Electron');
+      toggleChat();
+    });
+    
+    const cleanupToggleModel = api.shortcuts.onToggleModel(() => {
+      Logger.log('AppContext', 'Toggle Model shortcut triggered from Electron');
+      
+      const newValue = !uiConfig.enableModelLoading;
+      
+      setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
+      setEnableModelLoading(newValue);
+      
+      // Create updated config and notify listeners
+      const updatedConfig = { ...uiConfig, enableModelLoading: newValue };
+      window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: updatedConfig }));
+      
+      StorageServiceProxy.configSave('uiConfig', updatedConfig)
+        .then(() => {
+          Logger.log('AppContext', 'Avatar visibility toggled via Electron shortcut:', newValue);
+        })
+        .catch(err => {
+          Logger.error('AppContext', 'Failed to toggle avatar via Electron shortcut:', err);
+        });
+    });
+    
+    return () => {
+      cleanupOpenChat?.();
+      cleanupToggleModel?.();
+    };
+  }, [uiConfig, toggleChat, api]);
+
+  // ========================================
+  // SCENE RELOAD
+  // ========================================
+  const reloadScene = useCallback(() => {
+    Logger.log('AppContext', 'Reloading 3D scene - clearing saved position');
+    setSavedModelPosition(null);
+    setSceneKey(prev => prev + 1);
+  }, []);
+
   // ========================================
   // CONTEXT VALUE
   // ========================================
@@ -944,6 +1039,10 @@ export const AppProvider = ({ children }) => {
     handleSummarize,
     handleTranslate,
     handleAddToChat,
+
+    // Scene actions
+    sceneKey,
+    reloadScene,
 
     // Config state
     uiConfig,

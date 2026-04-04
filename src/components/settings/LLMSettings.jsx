@@ -4,11 +4,303 @@
  * Handles provider selection and configuration for OpenAI, Ollama, and Chrome AI
  */
 
+import { useMemo } from 'react';
+import * as React from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import { useAndroid } from '../../contexts/AndroidContext';
+import { useDesktop } from '../../contexts/DesktopContext';
+import DesktopLLMConfig from './llm/DesktopLLMConfig';
+import LocalLLMModelManager from './llm/LocalLLMModelManager';
+import { getLLMModelStorage } from '../../services/LLMModelStorageService';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
+import { Icon } from '../icons';
+
+const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }) => {
+  const examples = providerKey === 'openai' ? {
+    vision: 'gpt-4-vision-preview',
+    router: 'gpt-3.5-turbo'
+  } : {
+    vision: 'llava:7b',
+    router: 'llama3.2:1b'
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Main Routing Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+        <div>
+          <label className="text-sm font-medium text-white/90">Enable Model Routing</label>
+          <p className="text-xs text-white/50 mt-0.5">Use separate models for vision/routing tasks</p>
+        </div>
+        <Toggle
+          checked={routing?.enabled === true}
+          onChange={(checked) => onChange('routing', { ...routing, enabled: checked })}
+        />
+      </div>
+
+      {routing?.enabled && (
+        <>
+          {/* Vision Model */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/80">Vision Model</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/60">Use main LLM</span>
+                <Toggle
+                  checked={routing?.visionModel?.useSameAsMain !== false}
+                  onChange={(checked) => onChange('routing', { 
+                    ...routing, 
+                    visionModel: { ...routing?.visionModel, useSameAsMain: checked }
+                  })}
+                />
+              </div>
+            </div>
+            {routing?.visionModel?.useSameAsMain === false && (
+              <input
+                type="text"
+                value={routing?.visionModel?.modelName || ''}
+                onChange={(e) => onChange('routing', { 
+                  ...routing, 
+                  visionModel: { ...routing?.visionModel, modelName: e.target.value }
+                })}
+                placeholder={`e.g., ${examples.vision}`}
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+              />
+            )}
+          </div>
+
+          {/* Router Model */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/80">Router Model</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/60">Use main LLM</span>
+                <Toggle
+                  checked={routing?.routerModel?.useSameAsMain !== false}
+                  onChange={(checked) => onChange('routing', { 
+                    ...routing, 
+                    routerModel: { ...routing?.routerModel, useSameAsMain: checked }
+                  })}
+                />
+              </div>
+            </div>
+            {routing?.routerModel?.useSameAsMain === false && (
+              <input
+                type="text"
+                value={routing?.routerModel?.modelName || ''}
+                onChange={(e) => onChange('routing', { 
+                  ...routing, 
+                  routerModel: { ...routing?.routerModel, modelName: e.target.value }
+                })}
+                placeholder={`e.g., ${examples.router}`}
+                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, customModelsPath }) => {
+  const [models, setModels] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadModels = async () => {
+      if (!storageService) return;
+      setLoading(true);
+      try {
+        const result = await storageService.listModels(customModelsPath);
+        if (result?.success) {
+          setModels(result.models || []);
+        }
+      } catch (err) {
+        console.error('Failed to load models:', err);
+      }
+      setLoading(false);
+    };
+    loadModels();
+  }, [storageService, refreshTrigger, customModelsPath]);
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return 'Unknown';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) {
+      return `${(mb / 1024).toFixed(1)} GB`;
+    }
+    return `${mb.toFixed(0)} MB`;
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Main Routing Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+        <div>
+          <label className="text-sm font-medium text-white/90">Enable Model Routing</label>
+          <p className="text-xs text-white/50 mt-0.5">Use separate models for vision/routing tasks</p>
+        </div>
+        <Toggle
+          checked={routing?.enabled === true}
+          onChange={(checked) => onChange('routing', { ...routing, enabled: checked })}
+        />
+      </div>
+
+      {routing?.enabled && (
+        <>
+          {/* Vision Model */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/80">Vision Model</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/60">Use main LLM</span>
+                <Toggle
+                  checked={routing?.visionModel?.useSameAsMain !== false}
+                  onChange={(checked) => onChange('routing', { 
+                    ...routing, 
+                    visionModel: { ...routing?.visionModel, useSameAsMain: checked }
+                  })}
+                />
+              </div>
+            </div>
+            {routing?.visionModel?.useSameAsMain === false && (
+              <>
+                {loading ? (
+                  <div className="text-xs text-white/50 py-2">Loading models...</div>
+                ) : models.length === 0 ? (
+                  <div className="text-xs text-white/40 py-2">No models found</div>
+                ) : (
+                  <div className="space-y-2">
+                    {models.map((model) => (
+                      <div
+                        key={model.name}
+                        className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Icon name="document" size={14} className="text-white/70 flex-shrink-0" />
+                            <span className="text-sm font-medium text-white/90 truncate">
+                              {model.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-white/50">
+                            <span>{formatBytes(model.size)}</span>
+                            {model.modified && (
+                              <span>{new Date(model.modified).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {model.hasImageSupport && (
+                            <div
+                              className="p-2 text-white/70"
+                              title="Supports vision/image input"
+                            >
+                              <Icon name="image" size={16} />
+                            </div>
+                          )}
+                          <Toggle
+                            checked={routing?.visionModel?.selectedModel === model.name}
+                            onChange={(checked) => {
+                              if (checked) {
+                                onChange('routing', { 
+                                  ...routing, 
+                                  visionModel: { ...routing?.visionModel, selectedModel: model.name }
+                                });
+                              }
+                            }}
+                            title="Select as vision model"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Router Model */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/80">Router Model</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/60">Use main LLM</span>
+                <Toggle
+                  checked={routing?.routerModel?.useSameAsMain !== false}
+                  onChange={(checked) => onChange('routing', { 
+                    ...routing, 
+                    routerModel: { ...routing?.routerModel, useSameAsMain: checked }
+                  })}
+                />
+              </div>
+            </div>
+            {routing?.routerModel?.useSameAsMain === false && (
+              <>
+                {loading ? (
+                  <div className="text-xs text-white/50 py-2">Loading models...</div>
+                ) : models.length === 0 ? (
+                  <div className="text-xs text-white/40 py-2">No models found</div>
+                ) : (
+                  <div className="space-y-2">
+                    {models.map((model) => (
+                      <div
+                        key={model.name}
+                        className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Icon name="document" size={14} className="text-white/70 flex-shrink-0" />
+                            <span className="text-sm font-medium text-white/90 truncate">
+                              {model.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-white/50">
+                            <span>{formatBytes(model.size)}</span>
+                            {model.modified && (
+                              <span>{new Date(model.modified).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {model.hasImageSupport && (
+                            <div
+                              className="p-2 text-white/70"
+                              title="Supports vision/image input"
+                            >
+                              <Icon name="image" size={16} />
+                            </div>
+                          )}
+                          <Toggle
+                            checked={routing?.routerModel?.selectedModel === model.name}
+                            onChange={(checked) => {
+                              if (checked) {
+                                onChange('routing', { 
+                                  ...routing, 
+                                  routerModel: { ...routing?.routerModel, selectedModel: model.name }
+                                });
+                              }
+                            }}
+                            title="Select as router model"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
   <div className="space-y-2">
@@ -109,7 +401,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
   );
 };
 
-const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
+const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, refreshTrigger }) => {
   const {
     aiConfig,
     aiTesting,
@@ -120,6 +412,18 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
+
+  const { api: androidAPI } = useAndroid();
+  const { api: desktopAPI } = useDesktop();
+
+  // Filter providers based on platform
+  const availableProviders = useMemo(() => {
+    if (isAndroid) {
+      return AIProviders;
+    }
+    const { ANDROID_LOCAL, CHROME_AI, ...otherProviders } = AIProviders;
+    return otherProviders;
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -133,7 +437,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
           onChange={(e) => updateAIConfig('provider', e.target.value)}
           className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
         >
-          {Object.entries(AIProviders).map(([key, value]) => (
+          {Object.entries(availableProviders).map(([key, value]) => (
             <option key={value} value={value} className="bg-gray-900">{key}</option>
           ))}
         </select>
@@ -174,6 +478,17 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
           <ImageSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
           <AudioSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
           <SystemPromptSection providerKey="openai" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          
+          {/* Model Routing */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+            <ModelConfigRemote
+              providerKey="openai"
+              routing={aiConfig.openai?.routing}
+              onChange={(field, value) => updateAIConfig(`openai.${field}`, value)}
+              isLightBackground={isLightBackground}
+            />
+          </div>
         </>
       )}
 
@@ -210,6 +525,138 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
           <ImageSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
           <AudioSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
           <SystemPromptSection providerKey="ollama" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          
+          {/* Model Routing */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+            <ModelConfigRemote
+              providerKey="ollama"
+              routing={aiConfig.ollama?.routing}
+              onChange={(field, value) => updateAIConfig(`ollama.${field}`, value)}
+              isLightBackground={isLightBackground}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Android Local LLM Configuration */}
+      {aiConfig.provider === AIProviders.ANDROID_LOCAL && isAndroid && (
+        <>
+          {/* Info Banner */}
+          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+            <p className="text-xs text-green-300">
+              <span className="font-semibold">Android Local LLM</span> - On-device AI using llama.cpp. Download and manage GGUF models below.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
+            <input
+              type="text"
+              value={aiConfig['android-local']?.endpoint ?? 'http://127.0.0.1:8765'}
+              onChange={(e) => updateAIConfig('android-local.endpoint', e.target.value)}
+              placeholder="http://127.0.0.1:8765"
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            />
+            <p className="text-xs text-white/50">
+              Local HTTP server on Android device
+            </p>
+          </div>
+
+          {/* Model Management UI */}
+          <LocalLLMModelManager
+            storageService={getLLMModelStorage(androidAPI)}
+            selectedModel={aiConfig['android-local']?.model || null}
+            onModelSelect={(modelName) => updateAIConfig('android-local.model', modelName)}
+            customModelsPath={null}
+            onCustomPathChange={null}
+            isLightBackground={isLightBackground}
+            onRequestDeleteModel={onRequestDeleteLLMModel}
+            refreshTrigger={refreshTrigger}
+            supportsCustomFolder={false}
+          />
+
+          {/* Temperature Slider */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">
+              Temperature: {aiConfig['android-local']?.temperature || 0.7}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={aiConfig['android-local']?.temperature || 0.7}
+              onChange={(e) => updateAIConfig('android-local.temperature', parseFloat(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-white/50">
+              Controls randomness (0 = deterministic, 2 = very creative)
+            </p>
+          </div>
+
+          {/* Max Tokens */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">
+              Max Tokens: {aiConfig['android-local']?.maxTokens || 2048}
+            </label>
+            <input
+              type="range"
+              min="64"
+              max="2048"
+              step="64"
+              value={aiConfig['android-local']?.maxTokens || 2048}
+              onChange={(e) => updateAIConfig('android-local.maxTokens', parseInt(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-white/50">
+              Maximum response length (higher = slower)
+            </p>
+          </div>
+
+          <SystemPromptSection providerKey="android-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          
+          {/* Model Routing */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+            <ModelConfigLocal
+              routing={aiConfig['android-local']?.routing}
+              onChange={(field, value) => updateAIConfig(`android-local.${field}`, value)}
+              storageService={getLLMModelStorage(androidAPI)}
+              refreshTrigger={refreshTrigger}
+              customModelsPath={null}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Desktop Local LLM Configuration */}
+      {aiConfig.provider === AIProviders.DESKTOP_LOCAL && isDesktop && (
+        <>
+          <DesktopLLMConfig
+            config={aiConfig['desktop-local'] || {}}
+            onChange={(updates) => {
+              Object.entries(updates).forEach(([key, value]) => {
+                updateAIConfig(`desktop-local.${key}`, value);
+              });
+            }}
+            isSetupMode={false}
+            isLightBackground={isLightBackground}
+            onRequestDeleteModel={onRequestDeleteLLMModel}
+            refreshTrigger={refreshTrigger}
+          />          <SystemPromptSection providerKey="desktop-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          
+          {/* Model Routing */}
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+            <ModelConfigLocal
+              routing={aiConfig['desktop-local']?.routing}
+              onChange={(field, value) => updateAIConfig(`desktop-local.${field}`, value)}
+              storageService={getLLMModelStorage(desktopAPI)}
+              refreshTrigger={refreshTrigger}
+              customModelsPath={aiConfig['desktop-local']?.customModelsPath}
+            />
+          </div>
         </>
       )}
 
@@ -264,7 +711,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
                   {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
                     <button
                       onClick={startChromeAIDownload}
-                      className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                      className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
                     >
                       Start Model Download
                     </button>
@@ -281,7 +728,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
               ) : (
                 <button
                   onClick={checkChromeAIAvailability}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
                 >
                   Check Status
                 </button>
@@ -416,7 +863,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI }) => {
         <button 
           onClick={testAIConnection}
           disabled={aiTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test Connection
         </button>

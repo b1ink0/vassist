@@ -5,6 +5,7 @@
 
 import * as HeroIconsSolid from '@heroicons/react/24/solid';
 import * as HeroIconsOutline from '@heroicons/react/24/outline';
+import { FaGithub } from 'react-icons/fa';
 
 export const iconMap = {
   'close': HeroIconsSolid.XMarkIcon,
@@ -18,11 +19,19 @@ export const iconMap = {
   'attachment': HeroIconsSolid.PaperClipIcon,
   'clipboard': HeroIconsSolid.ClipboardIcon,
   'edit': HeroIconsSolid.PencilIcon,
+  'edit-2': HeroIconsSolid.PencilSquareIcon,
   'write': HeroIconsSolid.PencilSquareIcon,
   'delete': HeroIconsSolid.TrashIcon,
+  'trash': HeroIconsSolid.TrashIcon,
+  'trash-2': HeroIconsSolid.TrashIcon,
+  'upload': HeroIconsSolid.ArrowUpTrayIcon,
   'refresh': HeroIconsSolid.ArrowPathIcon,
   'regenerate': HeroIconsSolid.ArrowPathIcon,
   'add': HeroIconsSolid.PlusIcon,
+  'plus': HeroIconsSolid.PlusIcon,
+  'minus': HeroIconsSolid.MinusIcon,
+  'zoomIn': HeroIconsSolid.MagnifyingGlassPlusIcon,
+  'zoomOut': HeroIconsSolid.MagnifyingGlassMinusIcon,
   'loading': HeroIconsOutline.ArrowPathIcon,
   'success': HeroIconsSolid.CheckCircleIcon,
   'error-status': HeroIconsSolid.XCircleIcon,
@@ -37,11 +46,13 @@ export const iconMap = {
   'phone': HeroIconsSolid.PhoneIcon,
   'image': HeroIconsSolid.PhotoIcon,
   'photo': HeroIconsSolid.PhotoIcon,
+  'camera': HeroIconsSolid.CameraIcon,
   'music': HeroIconsSolid.MusicalNoteIcon,
   'document': HeroIconsSolid.DocumentIcon,
   'note': HeroIconsSolid.DocumentTextIcon,
   'article': HeroIconsSolid.NewspaperIcon,
   'book': HeroIconsSolid.BookOpenIcon,
+  'github': FaGithub,
   'test': HeroIconsSolid.BeakerIcon,
   'happy': HeroIconsSolid.FaceSmileIcon,
   'thinking': HeroIconsSolid.QuestionMarkCircleIcon,
@@ -123,6 +134,21 @@ export const iconMap = {
   'casual': HeroIconsSolid.ChatBubbleLeftRightIcon,
   'compress': HeroIconsSolid.ArrowsPointingInIcon,
   'clarity': HeroIconsSolid.EyeIcon,
+  'chevron-down': HeroIconsSolid.ChevronDownIcon,
+  'chevron-right': HeroIconsSolid.ChevronRightIcon,
+  'adjustments-horizontal': HeroIconsSolid.AdjustmentsHorizontalIcon,
+  'alert-triangle': HeroIconsSolid.ExclamationTriangleIcon,
+  'alert-circle': HeroIconsSolid.ExclamationCircleIcon,
+  'hard-drive': HeroIconsSolid.CircleStackIcon,
+  'clock': HeroIconsSolid.ClockIcon,
+  'loader': HeroIconsOutline.ArrowPathIcon,
+  'refresh-cw': HeroIconsSolid.ArrowPathIcon,
+  'folder': HeroIconsSolid.FolderIcon,
+  'help': HeroIconsSolid.QuestionMarkCircleIcon,
+  'file': HeroIconsSolid.DocumentIcon,
+  'lock': HeroIconsSolid.LockClosedIcon,
+  'unlock': HeroIconsSolid.LockOpenIcon,
+  'box': HeroIconsSolid.CubeIcon,
 };
 
 export default iconMap;

@@ -167,16 +167,38 @@ async function registerHandlers() {
     
     // Convert serialized data back to Blob if needed
     let storageData = data;
-    if (data && typeof data === 'object' && Array.isArray(data.data)) {
-      Logger.log('Background', 'Converting Uint8Array back to Blob for storage');
-      const blobType = data._blobType || 'application/octet-stream';
-      const uint8Array = new Uint8Array(data.data);
-      const blob = new Blob([uint8Array], { type: blobType });
-      storageData = {
-        ...data,
-        data: blob, // Now it's a Blob again
-      };
-      delete storageData._blobType;
+    if (data && typeof data === 'object') {
+      storageData = { ...data };
+      
+      // Handle data.data (general file storage)
+      if (Array.isArray(data.data)) {
+        Logger.log('Background', 'Converting data.data Uint8Array back to Blob');
+        const blobType = data._blobType || 'application/octet-stream';
+        const uint8Array = new Uint8Array(data.data);
+        const blob = new Blob([uint8Array], { type: blobType });
+        storageData.data = blob;
+        delete storageData._blobType;
+      }
+      
+      // Handle motionData (MotionStorageService)
+      if (Array.isArray(data.motionData)) {
+        Logger.log('Background', 'Converting motionData Uint8Array back to Blob');
+        const blobType = data._motionBlobType || 'application/octet-stream';
+        const uint8Array = new Uint8Array(data.motionData);
+        const blob = new Blob([uint8Array], { type: blobType });
+        storageData.motionData = blob;
+        delete storageData._motionBlobType;
+      }
+      
+      // Handle modelData (ModelStorageService)
+      if (Array.isArray(data.modelData)) {
+        Logger.log('Background', 'Converting modelData Uint8Array back to Blob');
+        const blobType = data._modelBlobType || 'application/octet-stream';
+        const uint8Array = new Uint8Array(data.modelData);
+        const blob = new Blob([uint8Array], { type: blobType });
+        storageData.modelData = blob;
+        delete storageData._modelBlobType;
+      }
     }
     
     try {
@@ -193,12 +215,34 @@ async function registerHandlers() {
     const { fileId } = message.data;
     const result = await storageManager.files.load(fileId);
     
-    // Convert Blob to Array for message serialization (structured clone limitation)
-    if (result && typeof result === 'object' && result.data instanceof Blob) {
-      Logger.log('Background', 'Converting Blob to Uint8Array for transfer');
-      const buffer = await result.data.arrayBuffer();
-      result.data = Array.from(new Uint8Array(buffer));
-      result._blobType = result._blobType || 'application/octet-stream';
+    // Convert Blobs to Arrays for message serialization (structured clone limitation)
+    if (result && typeof result === 'object') {
+      // Handle data.data (general file storage)
+      if (result.data instanceof Blob) {
+        Logger.log('Background', 'Converting data.data Blob to Uint8Array for transfer');
+        const blobType = result.data.type || 'application/octet-stream';
+        const buffer = await result.data.arrayBuffer();
+        result.data = Array.from(new Uint8Array(buffer));
+        result._blobType = blobType;
+      }
+      
+      // Handle motionData (MotionStorageService)
+      if (result.motionData instanceof Blob) {
+        Logger.log('Background', 'Converting motionData Blob to Uint8Array for transfer');
+        const blobType = result.motionData.type || 'application/octet-stream';
+        const buffer = await result.motionData.arrayBuffer();
+        result.motionData = Array.from(new Uint8Array(buffer));
+        result._motionBlobType = blobType;
+      }
+      
+      // Handle modelData (ModelStorageService)
+      if (result.modelData instanceof Blob) {
+        Logger.log('Background', 'Converting modelData Blob to Uint8Array for transfer');
+        const blobType = result.modelData.type || 'application/octet-stream';
+        const buffer = await result.modelData.arrayBuffer();
+        result.modelData = Array.from(new Uint8Array(buffer));
+        result._modelBlobType = blobType;
+      }
     }
     
     return result;
@@ -220,7 +264,45 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_BY_CATEGORY, async (message) => {
     const { category } = message.data;
-    return await storageManager.files.getByCategory(category);
+    const files = await storageManager.files.getByCategory(category);
+    
+    // Convert Blobs to Arrays for all files in the result
+    if (files && typeof files === 'object') {
+      for (const [_fileId, fileData] of Object.entries(files)) {
+        if (fileData && typeof fileData === 'object') {
+          // Handle data.data (general file storage)
+          if (fileData.data instanceof Blob) {
+            const blobType = fileData.data.type || 'application/octet-stream';
+            const buffer = await fileData.data.arrayBuffer();
+            fileData.data = Array.from(new Uint8Array(buffer));
+            fileData._blobType = blobType;
+          }
+          
+          // Handle motionData (MotionStorageService)
+          if (fileData.motionData instanceof Blob) {
+            const blobType = fileData.motionData.type || 'application/octet-stream';
+            const buffer = await fileData.motionData.arrayBuffer();
+            fileData.motionData = Array.from(new Uint8Array(buffer));
+            fileData._motionBlobType = blobType;
+          }
+          
+          // Handle modelData (ModelStorageService)
+          if (fileData.modelData instanceof Blob) {
+            const blobType = fileData.modelData.type || 'application/octet-stream';
+            const buffer = await fileData.modelData.arrayBuffer();
+            fileData.modelData = Array.from(new Uint8Array(buffer));
+            fileData._modelBlobType = blobType;
+          }
+        }
+      }
+    }
+    
+    return files;
+  });
+
+  backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_METADATA_BY_CATEGORY, async (message) => {
+    const { category } = message.data;
+    return await storageManager.files.getMetadataByCategory(category);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_CLEAR, async () => {

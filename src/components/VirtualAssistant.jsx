@@ -10,7 +10,10 @@ import { AssistantState, getAnimationForEmotion } from '../config/animationConfi
 import { TTSServiceProxy } from '../services/proxies';
 import { useConfig } from '../contexts/ConfigContext';
 import { useApp } from '../contexts/AppContext';
+import { useDesktop } from '../contexts/DesktopContext';
+import { useAnimation } from '../contexts/AnimationContext';
 import Logger from '../services/LoggerService';
+import emotePlayerService from '../services/EmotePlayerService';
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.
@@ -19,6 +22,7 @@ import Logger from '../services/LoggerService';
  * @param {Object} props - Component props
  * @param {Function} props.onReady - Callback when assistant is initialized
  * @param {boolean} props.isPreview - Enable preview mode for setup wizard
+ * @param {boolean} props.forcePortraitMode - Force portrait layout at runtime
  * @param {string} props.previewWidth - Width for preview mode
  * @param {string} props.previewHeight - Height for preview mode
  * @param {string} props.previewClassName - Additional CSS classes for preview
@@ -31,6 +35,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
   const { 
     onReady,
     isPreview = false,
+    forcePortraitMode = false,
     previewWidth = '100%',
     previewHeight = '100%',
     previewClassName = '',
@@ -39,6 +44,8 @@ const VirtualAssistant = forwardRef((props, ref) => {
   } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
   const { savedModelPosition, setSavedModelPosition } = useApp();
+  const { api: desktopAPI } = useDesktop();
+  const { getRandomAnimation, getEnabledAnimations } = useAnimation();
   
   const [animationManager, setAnimationManager] = useState(null);
   const [positionManager, setPositionManager] = useState(null);
@@ -91,21 +98,29 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     // Initialize TTS Service with BVMD converter and animation callback
     TTSServiceProxy.initializeBVMDConverter(scene);
-    TTSServiceProxy.setSpeakCallback((text, bvmdUrl) => {
+    
+    // Listen to TTS events for animation control
+    TTSServiceProxy.addEventListener('speak', (event) => {
+      const { text, bvmdUrl, sessionId } = event.detail;
       // This will be called when audio starts playing
       Logger.log('VirtualAssistant', 'TTS triggering speak animation');
       if (manager && bvmdUrl) {
         manager.speak(text, bvmdUrl, 'talking');
       }
     });
-    TTSServiceProxy.setStopCallback(() => {
+    
+    TTSServiceProxy.addEventListener('stop', () => {
       // This will be called when TTS is stopped/interrupted
       Logger.log('VirtualAssistant', 'TTS stopped, returning to idle');
       if (manager) {
         manager.returnToIdle();
       }
     });
+    
     Logger.log('VirtualAssistant', 'TTS Service integrated with lip sync');
+    
+    emotePlayerService.setAnimationManager(manager);
+    Logger.log('VirtualAssistant', 'EmotePlayerService connected to AnimationManager');
     
     // Call onReady callback if provided
     if (onReady) {
@@ -429,9 +444,16 @@ const VirtualAssistant = forwardRef((props, ref) => {
           previewHeight={previewHeight}
           previewClassName={previewClassName}
           sceneConfig={{ 
-            uiConfig: isPreview ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } } : uiConfig,
+            uiConfig: isPreview
+              ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } }
+              : (forcePortraitMode ? { ...uiConfig, enablePortraitMode: true } : uiConfig),
             enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
-            savedModelPosition: isPreview ? null : savedModelPosition
+            renderQuality: isPreview ? 'low' : (uiConfig?.renderQuality || 'medium'),
+            customQuality: uiConfig?.customQuality,
+            savedModelPosition: isPreview ? null : savedModelPosition,
+            getRandomAnimation,
+            getEnabledAnimations,
+            desktopAPI,
           }}
         />
       )}

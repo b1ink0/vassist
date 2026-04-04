@@ -12,13 +12,20 @@ import DragDropService from '../services/DragDropService';
 import UtilService from '../services/UtilService';
 import SettingsPanel from './SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
-import ChatEditDialog from './ChatEditDialog';
-import ChatDeleteDialog from './ChatDeleteDialog';
+import Dialog from './common/Dialog';
 import ChatMessage from './ChatMessage';
 import chatHistoryService from '../services/ChatHistoryService';
+import { modelStorageService } from '../services/ModelStorageService';
+import { motionStorageService } from '../services/MotionStorageService';
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
+import { useDesktop } from '../contexts/DesktopContext';
+import { useAndroid } from '../contexts/AndroidContext';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
+import { isDesktop, isAndroid } from '../utils/PlatformUtils';
+
+const ANDROID_CHAT_TOP_OFFSET = 32;
 
 /**
  * Chat container component.
@@ -36,6 +43,7 @@ const ChatContainer = ({
   const {
     positionManagerRef,
     chatMessages: messages,
+    isVoiceMode,
     isChatContainerVisible: isVisible,
     isProcessing: isGenerating,
     isSpeaking,
@@ -68,7 +76,9 @@ const ChatContainer = ({
     nextBranch,
   } = useApp();
 
-  const { updateUIConfig, uiConfig } = useConfig();
+  const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext, aiConfig } = useConfig();
+  const { api } = useDesktop();
+  const { api: androidAPI } = useAndroid();
 
   const buttonPosRef = useRef(buttonPosition);
   const buttonInitializedRef = useRef(false);
@@ -97,6 +107,17 @@ const ChatContainer = ({
   const [isEditDialogClosing, setIsEditDialogClosing] = useState(false);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   
+  const [deletingModelId, setDeletingModelId] = useState(null);
+  const [deletingMotionId, setDeletingMotionId] = useState(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState(null);
+  const [deletingLLMModel, setDeletingLLMModel] = useState(null);
+  const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] = useState(false);
+  const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] = useState(false);
+  const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] = useState(false);
+  const [isDeleteLLMModelDialogClosing, setIsDeleteLLMModelDialogClosing] = useState(false);
+  const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+  
   const streamedMessageIdsRef = useRef(new Set());
   
   const completedMessageIdsRef = useRef(new Set());
@@ -106,6 +127,8 @@ const ChatContainer = ({
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
   }, [buttonPosition]);
+
+  useDesktopWindowResize();
 
   /**
    * Detects when to force-complete streaming animation.
@@ -189,15 +212,31 @@ const ChatContainer = ({
    */
   const calculateContainerPosition = useCallback(() => {
     const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+    const isSmallScreen = window.innerWidth <= 768;
+
+    if (isAndroid) {
+      return { x: 8, y: ANDROID_CHAT_TOP_OFFSET };
+    }
+
+    if (isSmallScreen) {
+      const containerWidth = Math.min(400, window.innerWidth - 16);
+      const containerHeight = modelDisabled ? 400 : 500;
+      const availableHeight = window.innerHeight - chatInputHeight;
+
+      const containerX = Math.max(8, Math.min((window.innerWidth - containerWidth) / 2, window.innerWidth - containerWidth - 8));
+      const containerY = Math.max(10, Math.min((availableHeight - containerHeight) / 2, availableHeight - containerHeight - 10));
+
+      return { x: containerX, y: containerY };
+    }
     
     if (modelDisabled) {
       const buttonPos = buttonPosRef.current;
-      const containerWidth = 400;
+      const containerWidth = Math.min(400, window.innerWidth - 16);
       const containerHeight = 400;
       const offsetY = 5;
       const buttonSize = 48;
       
-      const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+      const containerX = Math.max(8, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 8));
       let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
       containerY = Math.max(10, containerY);
       const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
@@ -207,7 +246,7 @@ const ChatContainer = ({
     } else if (positionManagerRef?.current) {
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
-        const containerWidth = 400;
+        const containerWidth = Math.min(400, window.innerWidth - 16);
         const containerHeight = 500;
         const offsetX = 15;
         const windowWidth = window.innerWidth;
@@ -215,22 +254,25 @@ const ChatContainer = ({
         
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - containerWidth - offsetX;
-        const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-        const wouldOverflowLeft = leftX < 10;
+        const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+        const wouldOverflowLeft = leftX < 8;
         const modelRightEdge = modelPos.x + modelPos.width;
         const wouldOverlapRight = modelRightEdge > rightX;
         
+        // Always place on right side in desktop mode
         let shouldBeOnLeft = false;
-        if (wouldOverflowRight) {
-          shouldBeOnLeft = true;
-        } else if (wouldOverlapRight && !wouldOverflowLeft) {
-          shouldBeOnLeft = true;
-        } else if (modelPos.x > windowWidth * 0.7) {
-          shouldBeOnLeft = true;
+        if (!isDesktop) {
+          if (wouldOverflowRight) {
+            shouldBeOnLeft = true;
+          } else if (wouldOverlapRight && !wouldOverflowLeft) {
+            shouldBeOnLeft = true;
+          } else if (modelPos.x > windowWidth * 0.7) {
+            shouldBeOnLeft = true;
+          }
         }
         
         let containerX = shouldBeOnLeft ? leftX : rightX;
-        containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+        containerX = Math.max(8, Math.min(containerX, windowWidth - containerWidth - 8));
         let containerY = modelPos.y;
         containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
         
@@ -275,18 +317,28 @@ const ChatContainer = ({
     if (!isVisible) return;
     
     const handleModelPosition = () => {
+      if (isAndroid) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
+      if (window.innerWidth <= 768) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
       // Events are already RAF-throttled by PositionManager, just update directly
       // Use .current to access latest refs without recreating handler
       const chatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
       
       if (modelDisabled) {
         const buttonPos = buttonPosRef.current;
-        const containerWidth = 400;
+        const containerWidth = Math.min(400, window.innerWidth - 16);
         const containerHeight = 400;
         const offsetY = 5;
         const buttonSize = 48;
         
-        const containerX = Math.max(10, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 10));
+        const containerX = Math.max(8, Math.min(buttonPos.x - (containerWidth - buttonSize) / 2, window.innerWidth - containerWidth - 8));
         let containerY = buttonPos.y - containerHeight - chatInputHeight - offsetY;
         containerY = Math.max(10, containerY);
         const maxY = window.innerHeight - containerHeight - chatInputHeight - offsetY;
@@ -296,7 +348,7 @@ const ChatContainer = ({
       } else if (positionManagerRef?.current) {
         try {
           const modelPos = positionManagerRef.current.getPositionPixels();
-          const containerWidth = 400;
+          const containerWidth = Math.min(400, window.innerWidth - 16);
           const containerHeight = 500;
           const offsetX = 15;
           const windowWidth = window.innerWidth;
@@ -304,8 +356,8 @@ const ChatContainer = ({
           
           const rightX = modelPos.x + modelPos.width + offsetX;
           const leftX = modelPos.x - containerWidth - offsetX;
-          const wouldOverflowRight = rightX + containerWidth > windowWidth - 10;
-          const wouldOverflowLeft = leftX < 10;
+          const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+          const wouldOverflowLeft = leftX < 8;
           const modelRightEdge = modelPos.x + modelPos.width;
           const wouldOverlapRight = modelRightEdge > rightX;
           
@@ -319,7 +371,7 @@ const ChatContainer = ({
           }
           
           let containerX = shouldBeOnLeft ? leftX : rightX;
-          containerX = Math.max(10, Math.min(containerX, windowWidth - containerWidth - 10));
+          containerX = Math.max(8, Math.min(containerX, windowWidth - containerWidth - 8));
           let containerY = modelPos.y;
           containerY = Math.max(10, Math.min(containerY, windowHeight - containerHeight - 10));
           
@@ -445,6 +497,9 @@ const ChatContainer = ({
       await chatHistoryService.updateChatTitle(chatId, newTitle);
       Logger.log('ChatContainer', 'Updated chat title:', chatId, newTitle);
       
+      // Trigger chat history panel refresh
+      setHistoryRefreshTrigger(prev => prev + 1);
+      
       setIsEditDialogClosing(true);
       setTimeout(() => {
         setEditingChatId(null);
@@ -474,6 +529,9 @@ const ChatContainer = ({
       await chatHistoryService.deleteChat(chatId);
       Logger.log('ChatContainer', 'Deleted chat:', chatId);
       
+      // Trigger chat history panel refresh
+      setHistoryRefreshTrigger(prev => prev + 1);
+      
       setIsDeleteDialogClosing(true);
       setTimeout(() => {
         setDeletingChatId(null);
@@ -489,6 +547,152 @@ const ChatContainer = ({
     setTimeout(() => {
       setDeletingChatId(null);
       setIsDeleteDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteModelDialog = useCallback((modelId) => {
+    setDeletingModelId(modelId);
+  }, []);
+
+  const handleDeleteModelConfirm = useCallback(async (modelId) => {
+    try {
+      await modelStorageService.deleteModel(modelId);
+      Logger.log('ChatContainer', 'Deleted model:', modelId);
+      
+      setIsDeleteModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingModelId(null);
+        setIsDeleteModelDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete model:', error);
+    }
+  }, []);
+
+  const handleDeleteModelCancel = useCallback(() => {
+    setIsDeleteModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingModelId(null);
+      setIsDeleteModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteMotionDialog = useCallback((motionId) => {
+    setDeletingMotionId(motionId);
+  }, []);
+
+  const handleDeleteMotionConfirm = useCallback(async (motionId) => {
+    try {
+      await motionStorageService.deleteMotion(motionId);
+      Logger.log('ChatContainer', 'Deleted motion:', motionId);
+      
+      setIsDeleteMotionDialogClosing(true);
+      setTimeout(() => {
+        setDeletingMotionId(null);
+        setIsDeleteMotionDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete motion:', error);
+    }
+  }, []);
+
+  const handleDeleteMotionCancel = useCallback(() => {
+    setIsDeleteMotionDialogClosing(true);
+    setTimeout(() => {
+      setDeletingMotionId(null);
+      setIsDeleteMotionDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteVoiceDialog = useCallback((voiceId) => {
+    setDeletingVoiceId(voiceId);
+  }, []);
+
+  const handleDeleteVoiceConfirm = useCallback(async (voiceId) => {
+    try {
+      const { default: voiceStorageService } = await import('../services/VoiceStorageService');
+      await voiceStorageService.deleteVoice(voiceId);
+      Logger.log('ChatContainer', 'Deleted voice:', voiceId);
+      
+      if (ttsConfig?.gptsovits?.referenceVoiceId === voiceId) {
+        updateTTSConfig('gptsovits.referenceVoiceId', null);
+        updateTTSConfig('gptsovits.referenceText', '');
+      }
+      
+      setSettingsRefreshTrigger(prev => {
+        const newValue = prev + 1;
+        return newValue;
+      });
+      
+      setIsDeleteVoiceDialogClosing(true);
+      setTimeout(() => {
+        setDeletingVoiceId(null);
+        setIsDeleteVoiceDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete voice:', error);
+    }
+  }, [ttsConfig, updateTTSConfig]);
+
+  const handleDeleteVoiceCancel = useCallback(() => {
+    setIsDeleteVoiceDialogClosing(true);
+    setTimeout(() => {
+      setDeletingVoiceId(null);
+      setIsDeleteVoiceDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteLLMModel = useCallback((filename) => {
+    setDeletingLLMModel(filename);
+  }, []);
+
+  const handleDeleteLLMModelConfirm = useCallback(async (filename) => {
+    try {
+      let result;
+      
+      if (isDesktop && api?.llm) {
+        // Get custom models path from aiConfig
+        const customPath = aiConfig?.['desktop-local']?.customModelsPath || null;
+        result = await api.llm.deleteModel(filename, customPath);
+      } else if (isAndroid && androidAPI?.deleteLLMModel) {
+        const resultJson = androidAPI.deleteLLMModel(filename);
+        result = JSON.parse(resultJson);
+      } else {
+        Logger.error('ChatContainer', 'No deletion API available');
+        return;
+      }
+      
+      if (result?.success) {
+        Logger.log('ChatContainer', 'Deleted LLM model:', filename);
+        
+        // Trigger refresh
+        setSettingsRefreshTrigger(prev => prev + 1);
+      } else {
+        Logger.error('ChatContainer', 'Delete failed:', result?.error);
+      }
+      
+      setIsDeleteLLMModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingLLMModel(null);
+        setIsDeleteLLMModelDialogClosing(false);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete LLM model:', error);
+      setIsDeleteLLMModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingLLMModel(null);
+        setIsDeleteLLMModelDialogClosing(false);
+      }, 200);
+    }
+  }, [api, androidAPI]);
+
+  const handleDeleteLLMModelCancel = useCallback(() => {
+    setIsDeleteLLMModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingLLMModel(null);
+      setIsDeleteLLMModelDialogClosing(false);
     }, 200);
   }, []);
 
@@ -630,11 +834,18 @@ const ChatContainer = ({
 
   /**
    * Sets up audio start callback for updating UI when audio starts playing.
+   * SKIP in voice mode - VoiceConversationService owns the callbacks
    */
   useEffect(() => {
+    if (isVoiceMode) {
+      Logger.log('ChatContainer', 'Voice mode - skipping TTS event listener setup (VoiceConversationService owns events)');
+      return;
+    }
+    
     let voiceMonitoringStarted = false;
     
-    TTSServiceProxy.setAudioStartCallback((sessionId) => {
+    const handleAudioStart = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio started playing for session:', sessionId);
       
       if (sessionId?.startsWith('manual_')) {
@@ -668,28 +879,20 @@ const ChatContainer = ({
         
         if (!voiceMonitoringStarted) {
           voiceMonitoringStarted = true;
-          Logger.log('ChatContainer', 'Starting TTS playback monitoring for voice mode');
-          import('../services/VoiceConversationService').then(({ default: VoiceConversationService }) => {
-            VoiceConversationService.monitorTTSPlayback();
-          });
+          Logger.log('ChatContainer', 'Voice mode detected, VoiceConversationService will handle state');
+          // VoiceConversationService handles state transitions via events
         }
       }
-    });
+    };
 
-    TTSServiceProxy.setAudioEndCallback((sessionId) => {
+    const handleAudioEnd = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio finished playing for session:', sessionId);
       
-      if (currentSessionRef.current === sessionId) {
-        // Only clear playing state if no more audio in queue and nothing currently playing
-        // This prevents icon from flickering to "speaker" while waiting for next chunk (especially with WASM delays)
-        if (!TTSServiceProxy.isAudioActive()) {
-          setPlayingMessageIndex(null);
-          currentSessionRef.current = null;
-        } else {
-          Logger.log('ChatContainer', 'Audio still active in queue, keeping playing state');
-        }
-      }
-    });
+      // Always clear playing state when audioEnd fires - it only fires when truly done
+      setPlayingMessageIndex(null);
+      currentSessionRef.current = null;
+    };
 
     const handleTTSAudioStart = (event) => {
       const { messageIndex, sessionId } = event.detail
@@ -710,14 +913,18 @@ const ChatContainer = ({
 
     window.addEventListener('ttsAudioStart', handleTTSAudioStart)
     window.addEventListener('ttsAudioEnd', handleTTSAudioEnd)
+    TTSServiceProxy.addEventListener('audioStart', handleAudioStart);
+    TTSServiceProxy.addEventListener('audioEnd', handleAudioEnd);
 
     return () => {
-      TTSServiceProxy.setAudioStartCallback(null);
-      TTSServiceProxy.setAudioEndCallback(null);
+      if (!isVoiceMode) {
+        TTSServiceProxy.removeEventListener('audioStart', handleAudioStart);
+        TTSServiceProxy.removeEventListener('audioEnd', handleAudioEnd);
+      }
       window.removeEventListener('ttsAudioStart', handleTTSAudioStart)
       window.removeEventListener('ttsAudioEnd', handleTTSAudioEnd)
     };
-  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex]);
+  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex, isVoiceMode]);
 
   /**
    * Scrolls to bottom without checking if user is near bottom.
@@ -920,6 +1127,8 @@ const ChatContainer = ({
   if (!modelDisabled && (containerPos.x === 0 && containerPos.y === 0)) return null;
 
   const ttsEnabled = ttsConfig.enabled;
+  const androidChatInputHeight = chatInputRef?.current?.getBoundingClientRect().height || 140;
+  const androidContainerHeight = Math.max(320, window.innerHeight - ANDROID_CHAT_TOP_OFFSET - androidChatInputHeight + 40);
 
   return (
     <>
@@ -958,7 +1167,9 @@ const ChatContainer = ({
         style={{
           position: 'fixed',
           left: `${containerPos.x}px`,
-          top: `${containerPos.y}px`,
+          top: isAndroid ? `${ANDROID_CHAT_TOP_OFFSET}px` : `${containerPos.y}px`,
+          height: isAndroid ? `${androidContainerHeight}px` : undefined,
+          maxHeight: isAndroid ? `${androidContainerHeight}px` : undefined,
           zIndex: 9999,
           borderColor: isDragOver 
             ? 'rgba(59, 130, 246, 0.6)' 
@@ -971,7 +1182,7 @@ const ChatContainer = ({
             ? '0 4px 20px rgba(255, 255, 255, 0.2)'
             : 'none',
         }}
-        className="flex flex-col-reverse gap-3 w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
+        className="flex flex-col-reverse gap-3 w-[calc(100vw-16px)] max-w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
       >
       {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
       <div 
@@ -986,7 +1197,7 @@ const ChatContainer = ({
         }}
       >
         <div 
-          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
           style={{
             transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
             transition: 'transform 200ms ease-in-out'
@@ -999,7 +1210,7 @@ const ChatContainer = ({
       </div>
       
       {/* Action buttons at BOTTOM - reorganized: left/center/right layout */}
-      <div className="relative flex items-center justify-between gap-2 px-6 pb-1">
+      <div className="relative flex items-center justify-between gap-2 pb-1">
         {/* LEFT: Settings + History */}
         <div className="flex items-center gap-2">
           <button
@@ -1059,9 +1270,7 @@ const ChatContainer = ({
           )}
         </div>
         
-        {/* RIGHT: Temp Chat + Model Visibility Toggle */}
         <div className="flex items-center gap-2">
-          {/* Model Visibility Toggle - always visible */}
           <button
             onClick={() => updateUIConfig('enableModelLoading', !uiConfig.enableModelLoading)}
             className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
@@ -1084,34 +1293,36 @@ const ChatContainer = ({
         </div>
       </div>
 
-      {/* Messages container - removed mask to enable backdrop-filter blur */}
+      {/* Messages container */}
       <div 
         ref={messagesContainerRef}
         className="flex-1 relative overflow-hidden"
+        style={isDesktop ? {
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
+        } : undefined}
       >
-        {/* Top glass bar - matches message style */}
-        <div 
-          className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
-        />
+        {!(isDesktop || isAndroid) && (
+          <div 
+            className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+          />
+        )}
         
-        {/* Bottom glass bar - matches message style */}
-        <div 
-          className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
-        />
+        {!(isDesktop || isAndroid) && (
+          <div 
+            className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+          />
+        )}
         
         {/* Scrollable messages */}
         <div 
           ref={scrollRef}
-          className="absolute inset-0 flex flex-col gap-3 px-6 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
+          className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
         >
           {messages.length === 0 ? (
-            /* Welcome message - improved design */
             <div className="flex flex-col items-center justify-center h-full gap-6">
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
-                <div className="w-full flex justify-center items-center text-6xl mb-4"><Icon name="chat" size={16} /></div>
-                <h2 className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xl font-semibold mb-2`}>
-                  Start a Conversation
-                </h2>
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
+                <div className="w-full flex justify-center items-center text-6xl mb-4"><Icon name="chat" size={18} /></div>
                 <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm opacity-70`}>
                   Type a message below to begin chatting with your AI assistant
                 </p>
@@ -1172,7 +1383,7 @@ const ChatContainer = ({
                         <div className="flex flex-col items-start">
                           <div className="flex items-start gap-2 max-w-[80%]">
                             <div className="flex flex-col gap-1.5">
-                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-4 py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
+                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-2 md:px-4 py-2 md:py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
                                 <div className="loading-dots">
                                   <span className="loading-dot"></span>
                                   <span className="loading-dot"></span>
@@ -1199,6 +1410,11 @@ const ChatContainer = ({
             onClose={handleSettingsPanelClose} 
             isLightBackground={isLightBackground}
             animationClass={isSettingsPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
+            onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+            onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
+            onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+            refreshTrigger={settingsRefreshTrigger}
           />
         </div>
       )}
@@ -1212,6 +1428,7 @@ const ChatContainer = ({
             onSelectChat={handleSelectChat}
             onRequestEditDialog={handleRequestEditDialog}
             onRequestDeleteDialog={handleRequestDeleteDialog}
+            refreshTrigger={historyRefreshTrigger}
             animationClass={isHistoryPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
           />
         </div>
@@ -1220,12 +1437,17 @@ const ChatContainer = ({
       {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {editingChatId && (
         <div className="absolute inset-0 z-20">
-          <ChatEditDialog
-            chatId={editingChatId}
-            initialTitle={editingChatTitle}
+          <Dialog
+            type="edit"
+            title="Edit Chat Title"
+            itemId={editingChatId}
+            initialValue={editingChatTitle}
+            inputPlaceholder="Enter new title..."
+            inputMaxLength={100}
             isLightBackground={isLightBackground}
             animationClass={isEditDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
-            onSave={handleEditDialogSave}
+            confirmLabel="Save"
+            onConfirm={handleEditDialogSave}
             onCancel={handleEditDialogCancel}
           />
         </div>
@@ -1234,12 +1456,89 @@ const ChatContainer = ({
       {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {deletingChatId && (
         <div className="absolute inset-0 z-20">
-          <ChatDeleteDialog
-            chatId={deletingChatId}
+          <Dialog
+            type="delete"
+            title="Delete Chat?"
+            message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
+            itemId={deletingChatId}
             isLightBackground={isLightBackground}
             animationClass={isDeleteDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
             onConfirm={handleDeleteDialogConfirm}
             onCancel={handleDeleteDialogCancel}
+          />
+        </div>
+      )}
+
+      {/* Model Delete Dialog - renders outside SettingsPanel */}
+      {deletingModelId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Model?"
+            message="This will permanently delete this custom model. This cannot be undone."
+            itemId={deletingModelId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteModelDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteModelConfirm}
+            onCancel={handleDeleteModelCancel}
+          />
+        </div>
+      )}
+
+      {/* Motion Delete Dialog - renders outside SettingsPanel */}
+      {deletingMotionId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Animation?"
+            message="This will permanently delete this custom animation. This cannot be undone."
+            itemId={deletingMotionId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteMotionDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteMotionConfirm}
+            onCancel={handleDeleteMotionCancel}
+          />
+        </div>
+      )}
+
+      {/* Voice Delete Dialog - renders outside SettingsPanel */}
+      {deletingVoiceId && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Voice?"
+            message="This will permanently delete this reference voice. This cannot be undone."
+            itemId={deletingVoiceId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteVoiceDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteVoiceConfirm}
+            onCancel={handleDeleteVoiceCancel}
+          />
+        </div>
+      )}
+
+      {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
+      {deletingLLMModel && (
+        <div className="absolute inset-0 z-20">
+          <Dialog
+            type="delete"
+            title="Delete Model?"
+            message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}
+            itemId={deletingLLMModel}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteLLMModelDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteLLMModelConfirm}
+            onCancel={handleDeleteLLMModelCancel}
           />
         </div>
       )}

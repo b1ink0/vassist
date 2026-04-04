@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from './icons';;
 import ChromeAIValidator from '../services/ChromeAIValidator';
 import UISettings from './settings/UISettings';
+import ThreeDSettings from './settings/ThreeDSettings';
 import LLMSettings from './settings/LLMSettings';
 import TTSSettings from './settings/TTSSettings';
 import STTSettings from './settings/STTSettings';
@@ -21,14 +22,29 @@ import Logger from '../services/LoggerService';
  * @param {Function} props.onClose - Callback when panel is closed
  * @param {boolean} props.isLightBackground - Whether chat has light background
  * @param {string} props.animationClass - CSS animation class
+ * @param {Function} props.onRequestDeleteModelDialog - Callback to show delete model dialog
+ * @param {Function} props.onRequestDeleteMotionDialog - Callback to show delete motion dialog
+ * @param {Function} props.onRequestDeleteVoiceDialog - Callback to show delete voice dialog
+ * @param {Function} props.onRequestDeleteLLMModel - Callback to show delete LLM model dialog
+ * @param {number} props.refreshTrigger - Trigger to refresh lists after delete
  * @returns {JSX.Element} Settings panel component
  */
-const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
+const SettingsPanel = ({ 
+  onClose, 
+  isLightBackground, 
+  animationClass = '',
+  onRequestDeleteModelDialog,
+  onRequestDeleteMotionDialog,
+  onRequestDeleteVoiceDialog,
+  onRequestDeleteLLMModel,
+  refreshTrigger
+}) => {
   const [activeTab, setActiveTab] = useState('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
   const tabsRef = useState({
     ui: null,
+    '3d': null,
     llm: null,
     tts: null,
     stt: null,
@@ -137,7 +153,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
 
   return (
     <div className={`absolute inset-0 flex flex-col glass-container ${isLightBackground ? 'glass-container-dark' : ''} rounded-2xl overflow-hidden ${animationClass}`}>
-      <div className="flex justify-between items-center px-6 py-4 border-b border-white/20">
+      <div className="flex justify-between items-center px-4 md:px-6 py-2 md:py-4 border-b border-white/20">
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-white shrink-0">Settings</h2>
           
@@ -172,7 +188,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         ><Icon name="close" size={16} /></button>
       </div>
 
-      <div className="flex border-b border-white/20 px-6 relative">
+      <div className="flex border-b border-white/20 relative">
         <div 
           className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
           style={{
@@ -183,7 +199,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         
         <button
           ref={(el) => (tabsRef.ui = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ui' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -193,8 +209,19 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
           UI
         </button>
         <button
+          ref={(el) => (tabsRef['3d'] = el)}
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
+            activeTab === '3d' 
+              ? 'text-white' 
+              : 'text-white/60 hover:text-white/90'
+          }`}
+          onClick={() => setActiveTab('3d')}
+        >
+          3D
+        </button>
+        <button
           ref={(el) => (tabsRef.llm = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'llm' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -205,7 +232,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         </button>
         <button
           ref={(el) => (tabsRef.tts = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'tts' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -216,7 +243,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         </button>
         <button
           ref={(el) => (tabsRef.stt = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'stt' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -227,7 +254,7 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         </button>
         <button
           ref={(el) => (tabsRef['ai-plus'] = el)}
-          className={`px-4 py-3 text-sm font-medium transition-all duration-300 ease-out ${
+          className={`flex-1 py-2 md:py-3 text-sm font-medium transition-all duration-300 ease-out ${
             activeTab === 'ai-plus' 
               ? 'text-white' 
               : 'text-white/60 hover:text-white/90'
@@ -242,26 +269,44 @@ const SettingsPanel = ({ onClose, isLightBackground, animationClass = '' }) => {
         <div 
           className="absolute inset-0 flex transition-transform duration-300 ease-out"
           style={{
-            transform: `translateX(-${['ui', 'llm', 'tts', 'stt', 'ai-plus'].indexOf(activeTab) * 100}%)`
+            transform: `translateX(-${['ui', '3d', 'llm', 'tts', 'stt', 'ai-plus'].indexOf(activeTab) * 100}%)`
           }}
         >
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full overflow-y-auto px-4 md:px-6 py-2 md:py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
             <UISettings isLightBackground={isLightBackground} />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
-            <LLMSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />
+          <div className="flex-shrink-0 w-full overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <ThreeDSettings 
+              isLightBackground={isLightBackground} 
+              onRequestDeleteModelDialog={onRequestDeleteModelDialog}
+              onRequestDeleteMotionDialog={onRequestDeleteMotionDialog}
+              refreshTrigger={refreshTrigger}
+            />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
-            <TTSSettings isLightBackground={isLightBackground} />
+          <div className="flex-shrink-0 w-full overflow-y-auto px-4 md:px-6 py-2 md:py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <LLMSettings 
+              isLightBackground={isLightBackground} 
+              hasChromeAI={hasChromeAI} 
+              onRequestDeleteLLMModel={onRequestDeleteLLMModel}
+              refreshTrigger={refreshTrigger}
+            />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full overflow-y-auto px-4 md:px-6 py-2 md:py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+            <TTSSettings
+              isLightBackground={isLightBackground}
+              onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+              refreshTrigger={refreshTrigger}
+            />
+          </div>
+
+          <div className="flex-shrink-0 w-full overflow-y-auto px-4 md:px-6 py-2 md:py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
             <STTSettings isLightBackground={isLightBackground} hasChromeAI={hasChromeAI} />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto px-6 py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full overflow-y-auto px-4 md:px-6 py-2 md:py-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
             <AIFeaturesSettings isLightBackground={isLightBackground} />
           </div>
         </div>

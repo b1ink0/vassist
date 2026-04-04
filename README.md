@@ -1,12 +1,12 @@
 <div align="center">
   <img src="public/VA.svg" alt="VAssist Logo" width="64" />
   <h1>VAssist</h1>
-  <p>Chrome extension with AI toolbar, chat interface, and animated virtual companion. Runs locally using Chrome's built-in AI.</p>
+  <p>Cross-platform AI assistant available as a Browser Extension, Desktop App, and Android App, with in-page tools, full chat, voice interaction, and a customizable virtual companion.</p>
 </div>
 
 <div align="center">
 
-[🎮 Try Demo](https://vassist-demo.vercel.app) • [📖 Documentation](https://b1ink0.github.io/vassist/docs/intro) • [🚀 Installation](#installation) • [💻 Contributing](CONTRIBUTING.md)
+[Try Demo](https://vassist-demo.vercel.app) • [Documentation](https://b1ink0.github.io/vassist/docs/intro) • [Installation](#installation)
 
 </div>
 
@@ -16,43 +16,32 @@
   <img src="./assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
 </div>
 
-VAssist has three main components:
+VAssist is built around three core surfaces:
 
-- **AI Toolbar** - Appears when selecting text or focusing inputs. Provides summarize, translate, rewrite, grammar fix, tone change, image analysis, dictation
-- **Chat Interface** - Chat with AI about current page or anything else. Supports image/audio attachments, voice mode, conversation history with branching
-- **Virtual Companion** - Animated character that appears on pages. Shows different states (idle, thinking, speaking) with lip-synced speech
+- **Chat Interface** - Full conversation workspace with streaming, attachments, voice mode, and history branching
+- **Virtual Companion** - Animated assistant with responsive states and interaction feedback
+- **AI Toolbar** - Appears on selection/focus and runs rewrite, summarize, translate, writer, dictation, and image tools
 
-Works on Chrome 138+ with built-in AI enabled. All processing happens on device. No external API calls unless you configure third-party providers.
+The experience is provider-configurable from setup/settings, so chat/voice/tools can run with different LLM, STT, and TTS backends.
 
 [View full documentation →](https://b1ink0.github.io/vassist/docs/intro)
 
 ## Features
 
-### AI Toolbar
+VAssist combines three workflows in one interface:
 
-<div align="center">
-  <img src="./assets/toolbars.png" alt="AI Toolbar" />
-</div>
-
-Select any text on any website and a sleek toolbar pops up with powerful AI tools at your fingertips.
-
----
+- In-page tools for rewrite, summarize, translate, writing, dictation, and image actions
+- Full chat with streaming, attachments, page context, and history branching
+- A customizable 3D companion with PMX models, stages, VMD motions, and emotes
+- Android live wallpaper mode for running the companion avatar on the home screen
 
 ### Chat Interface
 
 <div align="center">
-  <img src="./assets/chat.png" alt="AI Toolbar" />
+  <img src="./assets/chat.png" alt="Chat Interface" />
 </div>
 
-Open the chat window anytime to have natural conversations with Gemini Nano running right in your browser.
-
-- Page Context - Ask questions about the current page you're viewing
-- File Attachments - Drag and drop images or audio files for context
-- Voice Mode - Hands-free conversation with TTS and STT
-- Chat History - Auto-saved conversations with search and branching
-- Message Actions - Edit messages, regenerate responses, TTS playback
-- Smooth Animations - Words fade in smoothly one at a time as AI responds
-- Temporary Chats - Start sessions that don't save to history
+Open full chat for streaming responses, page context, attachments, and history branching.
 
 ---
 
@@ -62,150 +51,121 @@ Open the chat window anytime to have natural conversations with Gemini Nano runn
   <img src="./assets/companion.png" alt="Virtual Companion" />
 </div>
 
-A fully animated character appears on your screen, making the experience more interactive and fun. The character responds with expressions and gestures, bringing some personality to your browsing.
-
-- Display Modes - Full body or portrait mode
-- Animations - Idle movements, thinking states, lip-synced speech
-- Positioning - Drag anywhere on screen, position saved per preset
+Use a customizable companion with model/stage/motion/emote controls and runtime-aware behavior.
 
 ---
 
-### Toolbar Features
-
-**📝 Summarize**  
+### AI Toolbar
 
 <div align="center">
-  <img src="./assets/summarize.png" alt="AI Toolbar" />
+  <img src="./assets/toolbars.png" alt="AI Toolbar" />
 </div>
 
-Turn walls of text into digestible chunks. Uses Chrome's Summarizer API to give you:
-- Headline - One punchy line
-- Key Points - Bullet list of main ideas  
-- Teaser - Short preview that hooks you in
+Select text in-page to open quick rewrite, summarize, translate, writer, dictation, and image actions.
 
 ---
 
-**🌍 Translate**  
+### Provider and Runtime Details
 
-<div align="center">
-  <img src="./assets/translate.png" alt="AI Toolbar" />
-</div>
+VAssist lets you configure LLM, STT, and TTS providers independently from setup/settings.
 
-<div align="center">
-  <img src="./assets/language_detector.png" alt="AI Toolbar" />
-</div>
+- LLM providers: Chrome AI, OpenAI, Ollama, android-local, desktop-local
+- STT providers: Chrome AI Multimodal, OpenAI, OpenAI-compatible, android-local, desktop-local
+- TTS providers: Kokoro, OpenAI, OpenAI-compatible, GPT-SoVITS remote, android-local, desktop-local
 
-Speak the language, any language. Powered by Chrome's Translator API and Language Detector API:
-- Translate to 100+ languages instantly
-- Auto-detect what language you're reading
-- Works completely offline
+<details>
+<summary>Local provider implementation details</summary>
 
----
+- android-local runs through the in-app Android local AI server and uses llama.cpp with GGUF model management; mmproj pairing is supported for vision-capable models
+- desktop-local runs through the desktop local AI server and uses node-llama-cpp for local LLM inference
+- Android local STT is handled by WhisperService (whisper-tiny.en) using sherpa-onnx on-device inference
+- Android local TTS is handled by VitsService (vits-vctk, multi-speaker) using sherpa-onnx on-device inference
+- Desktop local STT is proxied by the local server to the Faster Whisper Python service
+- Desktop local TTS is proxied by the local server to GPT-SoVITS and returned as WAV audio
+- Both local runtimes expose OpenAI-style audio routes for transcription and speech through the local server surface
 
-**✍️ Rewrite**  
+</details>
 
-<div align="center">
-  <img src="./assets/rewrite.png" alt="AI Toolbar" />
-</div>
-
-Make your words shine. Chrome's Rewriter API helps you:
-- Fix Spelling & Grammar - Clean up mistakes
-- Change Tone - Go formal, casual, or professional
-- Adjust Length - Make it shorter, expand it, or keep it concise
-- Improve Clarity - Simplify complex sentences
-- Custom Rewrites - Tell it exactly what you want
 
 ---
 
-**📚 Dictionary**  
-Your personal word expert. Uses Chrome's Prompt API (Gemini Nano):
-- Get definitions on the spot
-- Find synonyms and antonyms
-- Learn pronunciation
-- See real usage examples
+### Companion Customization
 
----
-
-**🎨 Writer**  
-
-<div align="center">
-  <img src="./assets/writer.png" alt="AI Toolbar" />
-</div>
-
-Generate fresh content from scratch. Powered by Chrome's Writer API:
-- Create content based on your ideas
-- Works with your selected text as context
-- Perfect for brainstorming and drafting
-
----
-
-**🖼️ Image Tools**  
-Just hover over any image to:
-- Describe - AI tells you what's in the image (Multimodal Prompt API)
-- Extract Text - Pull out text from screenshots (OCR)
-- Identify Objects - Spot and label things in photos
-
----
-
-**🎤 Voice Dictation**  
-
-<div align="center">
-  <img src="./assets/dictation.png" alt="AI Toolbar" />
-</div>
-
-Talk instead of type. Multimodal Input API lets you dictate directly into text fields.
-
----
-
-**📄 Document Interaction**  
-Work smarter with web content:
-- Page Context - Ask questions about the current page you're viewing
-- Smart Summaries - Get instant summaries of articles and documents
-- Content Analysis - Understand complex content with AI assistance
-- Works seamlessly with Chrome's built-in AI
+- Upload custom PMX companion models and PMX stages
+- Import VMD animations, assign categories, and control which motions are enabled
+- Create/import emotes with motion, audio, and camera variants
+- Apply the configured avatar as an Android live wallpaper from the app setup flow
 
 ## Installation
 
-### Requirements
+### Install From Releases
 
-- Chrome Browser version 138 or newer
-- Chrome AI flags enabled (see below)
+Download artifacts from [releases](https://github.com/b1ink0/vassist/releases):
 
-### Quick Start
+- Desktop App: install the desktop installer package for your OS
+- Android App: install the APK on your Android device
+- Browser Extension: download `vassist-extension.zip`
 
-**Step 1: Check Chrome Version**
+<details>
+<summary>Extension install (Chrome)</summary>
 
-Open `chrome://version` and verify you have version 138+. Update at `chrome://settings/help` if needed.
+1. Download `vassist-extension.zip` from [releases](https://github.com/b1ink0/vassist/releases).
+2. Extract the zip file.
+3. Open `chrome://extensions`.
+4. Enable **Developer mode** (top-right toggle).
+5. Click **Load unpacked**.
+6. Select the extracted folder.
 
-**Step 2: Enable Chrome AI Flags**
+</details>
 
-Visit each URL and set to the specified value:
+### Build From Source
 
-| Chrome Flag URL | Setting |
-|-----------------|---------|
-| `chrome://flags/#optimization-guide-on-device-model` | **Enabled BypassPerfRequirement** |
-| `chrome://flags/#prompt-api-for-gemini-nano` | **Enabled** |
-| `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` | **Enabled** |
-| `chrome://flags/#writer-api-for-gemini-nano` | **Enabled** |
-| `chrome://flags/#rewriter-api-for-gemini-nano` | **Enabled** |
-| `chrome://flags/#summarization-api-for-gemini-nano` | **Enabled** |
-| `chrome://flags/#translation-api` | **Enabled** |
-| `chrome://flags/#language-detection-api` | **Enabled** |
+#### Requirements
 
-Click **Relaunch** after enabling all flags.
+- Bun (recommended) or Node.js
+- Chrome (for extension runtime)
+- Android Studio + SDK (for Android build/run)
 
-**Step 3: Install Extension**
+1. Clone and install dependencies:
 
-1. Download `vassist-extension.zip` from [releases](https://github.com/b1ink0/vassist/releases)
-2. Extract the zip file
-3. Open `chrome://extensions`
-4. Enable **Developer mode** (top-right toggle)
-5. Click **Load unpacked**
-6. Select the extracted folder
+```bash
+git clone https://github.com/b1ink0/vassist.git
+cd vassist
+bun install
+```
 
-**Step 4: First Launch**
+2. Choose your runtime:
 
-Click the extension icon to run the setup wizard.
+- Extension: `bun run dev:extension` (or build zip with `bun run build:extension:zip`)
+- Desktop app: `bun run dev:desktop` (or production build with `bun run build:desktop:production`)
+- Android app: `bun run dev:android` (or production build with `bun run build:android`)
+
+<details>
+<summary>Android run (Capacitor dev flow)</summary>
+
+1. Build and sync Android assets:
+
+```bash
+bun run dev:android
+```
+
+2. Open Android project:
+
+```bash
+bun run cap:open:android
+```
+
+3. Run from Android Studio on emulator/device.
+4. Use the Android app option to set VAssist as your live wallpaper.
+
+</details>
+
+<details>
+<summary>Optional Chrome AI mode</summary>
+
+If you specifically want Chrome built-in AI providers, enable the required Chrome AI flags in your browser.
+
+</details>
 
 [Detailed installation guide →](https://b1ink0.github.io/vassist/docs/installation)
 
@@ -218,20 +178,31 @@ git clone https://github.com/b1ink0/vassist.git
 cd vassist
 bun install
 
-bun run dev                    # Start demo site
+bun run dev:extension          # Extension development build (watch)
+bun run dev:desktop            # Desktop renderer development
+bun run dev:android            # Android web build + Capacitor sync
 bun run build:extension        # Build extension
 bun run build:extension:zip    # Create distributable
+bun run build:desktop:production
+bun run build:android
 ```
 
 ## Built With
 
 - **React** - UI framework
 - **Vite** - Build tool
+- **Electron** - Desktop runtime
+- **Capacitor (Android)** - Android runtime bridge
 - **Babylon.js** - Character rendering and animation
+- **babylon-mmd** - PMX/VMD companion pipeline
 - **Tailwind CSS** - Styling
 - **Dexie.js** - IndexedDB wrapper
 - **Kokoro.js** - On-device TTS
-- **Chrome AI APIs** - Gemini Nano
+- **node-llama-cpp** - Desktop local LLM integration
+- **llama.cpp** - Android local LLM backend (native)
+- **Express + NanoHTTPD** - Local OpenAI-style API servers
+- **Whisper + VITS integrations** - Local STT/TTS service backends
+- **Chrome AI APIs** - Native on-device AI integration
 
 ## License
 

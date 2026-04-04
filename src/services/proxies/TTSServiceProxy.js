@@ -107,51 +107,40 @@ class TTSServiceProxy extends ServiceProxy {
   }
 
   /**
-   * Set callback for triggering speak animations
-   * @param {Function} callback - (text, bvmdBlobUrl) => void
+   * Add event listener for TTS lifecycle events
+   * @param {string} event - Event name
+   * @param {Function} listener - Event listener
    */
-  setSpeakCallback(callback) {
-    // Always set on direct service since playback happens in main world for both modes
-    this.directService.setSpeakCallback(callback);
-    this.speakCallback = callback;
+  addEventListener(event, listener) {
+    // Always use direct service for playback events
+    this.directService.addEventListener(event, listener);
   }
 
   /**
-   * Set callback for when audio finishes playing
-   * @param {Function} callback - () => void
+   * Remove event listener
+   * @param {string} event - Event name
+   * @param {Function} listener - Event listener
    */
-  setAudioFinishedCallback(callback) {
-    // Always set on direct service since playback happens in main world for both modes
-    this.directService.setAudioFinishedCallback(callback);
-    this.audioFinishedCallback = callback;
+  removeEventListener(event, listener) {
+    // Always use direct service for playback events
+    this.directService.removeEventListener(event, listener);
   }
 
   /**
-   * Set callback for when TTS is stopped/interrupted
-   * @param {Function} callback - () => void
+   * Mark a TTS session as complete (all chunks generated)
+   * @param {string} sessionId - Session ID to mark as complete
    */
-  setStopCallback(callback) {
-    // Always set on direct service since playback happens in main world for both modes
-    this.directService.setStopCallback(callback);
-    this.stopCallback = callback;
+  markSessionComplete(sessionId) {
+    this.directService.markSessionComplete(sessionId);
   }
 
   /**
-   * Set callback for when audio playback starts
-   * @param {Function} callback - (sessionId) => void
+   * Check if a TTS session is marked as complete
+   * @param {string} sessionId - Session ID to check
+   * @returns {boolean} True if session is complete
    */
-  setAudioStartCallback(callback) {
-    // Always use direct service for playback callbacks
-    this.directService.onAudioStartCallback = callback;
-  }
-
-  /**
-   * Set callback for when audio playback ends
-   * @param {Function} callback - (sessionId) => void
-   */
-  setAudioEndCallback(callback) {
-    // Always use direct service for playback callbacks
-    this.directService.onAudioEndCallback = callback;
+  isSessionComplete(sessionId) {
+    return this.directService.isSessionComplete(sessionId);
   }
 
   /**
@@ -177,7 +166,8 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {Promise<{audio: Blob|ArrayBuffer, bvmdUrl: string|null}>} Audio and BVMD URL
    */
   async generateSpeech(text, generateLipSync = true) {
-    await this.ensureConfigured();
+    try {
+      await this.ensureConfigured();
     
     if (this.isExtension) {
       // Extension mode flow:
@@ -272,7 +262,13 @@ class TTSServiceProxy extends ServiceProxy {
       
     } else {
       // Dev mode: Direct service handles everything
-      return await this.directService.generateSpeech(text, generateLipSync);
+      const result = await this.directService.generateSpeech(text, generateLipSync);
+      Logger.log('TTSServiceProxy', 'directService.generateSpeech returned:', result ? 'success' : 'null');
+      return result;
+    }
+    } catch (error) {
+      Logger.error('TTSServiceProxy', 'generateSpeech failed:', error);
+      throw error;
     }
   }
 
@@ -433,6 +429,14 @@ class TTSServiceProxy extends ServiceProxy {
     if (this.stopCallback) {
       this.stopCallback();
     }
+  }
+
+  /**
+   * Reset session flags to prepare for new TTS session
+   * Ensures audioStart event will fire for the next session
+   */
+  resetSessionFlags() {
+    this.directService.hasSessionStarted = false;
   }
 
   /**

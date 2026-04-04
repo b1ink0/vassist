@@ -73,9 +73,13 @@ class ChatHistoryService {
         finalMessages = messages;
       }
 
-      // Generate title if not provided or is default
+      // Generate title if not provided AND not already in cache
       let finalTitle = title;
-      if (!finalTitle || finalTitle === 'Untitled Chat') {
+      const cachedChat = this.cache.chats.get(chatId);
+      
+      if (cachedChat && cachedChat.title && cachedChat.title !== 'Untitled Chat') {
+        finalTitle = cachedChat.title;
+      } else if (!finalTitle || finalTitle === 'Untitled Chat') {
         Logger.log('ChatHistoryService', 'Generating title for chat:', chatId);
         finalTitle = await this._generateTitleFromMessages(finalMessages);
       }
@@ -689,12 +693,16 @@ class ChatHistoryService {
       try {
         // Use a timeout to avoid hanging
         const titlePromise = (async () => {
-          const prompt = `Generate a very short title (max 50 characters) for this chat based on the first user message. Only return the title, nothing else.\n\nUser message: "${firstUserMsg.content}"`;
+          const prompt = `Generate a very short title (max 50 characters) for this chat based on the first user message. Only return the title, nothing else.
+
+User message: "${firstUserMsg.content}"
+
+/no_think`;
           
           Logger.log('ChatHistoryService', 'Sending prompt to AIService for title generation');
           const response = await this.aiService.sendMessage([
             { role: 'user', content: prompt }
-          ]);
+          ], null, null, { disableRouting: true }); // Disable routing for title generation
           Logger.log('ChatHistoryService', 'AIService response:', response);
           return response;
         })();

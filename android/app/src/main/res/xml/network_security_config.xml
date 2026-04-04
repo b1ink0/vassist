@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext (HTTP) traffic to local network addresses -->
+    <!-- This is needed for local LLM servers like Ollama, LM Studio, etc. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Specific domain configs -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- localhost -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        
+        <!-- Common local network ranges -->
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">172.16.0.0</domain>
+        
+        <!-- Allow any IP in local ranges -->
+        <domain includeSubdomains="false">10.*</domain>
+        <domain includeSubdomains="false">192.168.*</domain>
+        <domain includeSubdomains="false">172.16.*</domain>
+    </domain-config>
+</network-security-config>

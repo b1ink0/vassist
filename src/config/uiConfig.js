@@ -9,8 +9,8 @@
  */
 export const BackgroundThemeModes = {
   ADAPTIVE: 'adaptive', // Auto-detect background brightness
-  LIGHT: 'light',       // Force light theme (dark chat on light background)
-  DARK: 'dark',         // Force dark theme (light chat on dark background)
+  LIGHT: 'dark',       // Force light theme (dark chat on light background)
+  DARK: 'light',         // Force dark theme (light chat on dark background)
 };
 
 /**
@@ -139,13 +139,72 @@ export const PositionPresets = {
 };
 
 /**
+ * Android-specific preset configuration
+ */
+export const AndroidPresetOverride = {
+  modelSize: { width: 600, height: 1000 },
+  portraitModelSize: { width: 600, height: 1000 },
+  padding: 0,
+  offset: { x: 2.5, y: 7 },
+  portraitOffset: { x: 0, y: 6.2 },
+  customBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitCustomBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitClipPlaneY: 12,
+};
+
+/**
  * FPS Limit Options for rendering
  */
 export const FPSLimitOptions = {
+  FPS_15: 15,
+  FPS_24: 24,
   FPS_30: 30,
   FPS_60: 60,
   FPS_90: 90,
   NATIVE: 'native', // No limit - matches monitor refresh rate
+};
+
+/**
+ * Physics Engine Options
+ * - BULLET: Bullet Physics (WASM) - Better performance, requires SharedArrayBuffer
+ * - HAVOK: Havok Physics - Used in extension mode
+ */
+export const PhysicsEngineOptions = {
+  BULLET: 'bullet',
+  HAVOK: 'havok',
+};
+
+/**
+ * Render Quality Options
+ * Controls post-processing effects and rendering quality
+ * - LOW: Minimal effects, best performance (mobile/low-end)
+ * - MEDIUM: Balanced quality and performance (default)
+ * - HIGH: Full effects, good quality (desktop)
+ * - ULTRA: Maximum quality, highest GPU usage (high-end desktop)
+ * - CUSTOM: User-defined settings
+ */
+export const RenderQualityOptions = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  ULTRA: 'ultra',
+  CUSTOM: 'custom',
+};
+
+/**
+ * Default Custom Render Quality Settings
+ */
+export const DefaultCustomQualitySettings = {
+  samples: 2,                    // MSAA samples: 1, 2, 4, 8
+  bloomEnabled: true,
+  bloomKernel: 32,               // 16, 32, 48, 64
+  bloomScale: 0.5,               // 0.1 - 1.0
+  bloomWeight: 0.2,              // 0.05 - 0.5
+  bloomThreshold: 0.9,           // 0.5 - 1.0
+  fxaaEnabled: true,
+  contrast: 1.2,                 // 0.5 - 2.0
+  exposure: 1.05,                // 0.5 - 2.0
+  saturation: 15,                // -50 - 50
 };
 
 /**
@@ -155,6 +214,14 @@ export const DefaultUIConfig = {
   enableModelLoading: true,
   
   enablePortraitMode: false,
+  
+  enablePhysics: true,
+  
+  physicsEngine: PhysicsEngineOptions.BULLET,
+  
+  renderQuality: RenderQualityOptions.MEDIUM,
+  
+  customQuality: { ...DefaultCustomQualitySettings },
   
   fpsLimit: FPSLimitOptions.FPS_60,
   
@@ -175,6 +242,25 @@ export const DefaultUIConfig = {
   position: {
     preset: 'bottom-right',
     lastLocation: null,
+  },
+  
+  modelSizePx: null,
+  
+  camera: {
+    mode: '2D',
+    locked: true,
+    savePosition: false,
+    saved3D: {
+      distance: -40,
+      rotation: { x: 0, y: 0 },
+      position: { x: 0, y: 0 },
+    },
+    saved2D: {
+      modelHeightPx: 600,
+      positionX: 0,
+      positionY: 0,
+      rotation: { x: 0, y: 0 },
+    },
   },
   
   backgroundDetection: {

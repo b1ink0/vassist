@@ -6,8 +6,10 @@
 
 import OpenAI from 'openai';
 import { AIProviders } from '../config/aiConfig';
+import { PromptConfig } from '../config/promptConfig';
 import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
+import FrameCaptureService from './FrameCaptureService';
 
 class AIService {
   constructor() {
@@ -149,6 +151,7 @@ class AIService {
           maxTokens: openaiConfig.maxTokens,
           enableImageSupport: openaiConfig.enableImageSupport !== false,
           enableAudioSupport: openaiConfig.enableAudioSupport !== false,
+          routing: openaiConfig.routing || { enabled: false },
         };
         
         Logger.log('other', `${logPrefix} - OpenAI configured:`, {
@@ -159,9 +162,16 @@ class AIService {
       } 
       else if (provider === AIProviders.OLLAMA || provider === 'ollama') {
         const ollamaConfig = config.ollama || config;
+        let endpoint = ollamaConfig.endpoint || 'http://localhost:11434';
+        
+        // Only append /v1 if not already present
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
         state.client = new OpenAI({
           apiKey: 'ollama',
-          baseURL: ollamaConfig.endpoint + '/v1',
+          baseURL: endpoint,
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
         
@@ -171,10 +181,68 @@ class AIService {
           maxTokens: ollamaConfig.maxTokens,
           enableImageSupport: ollamaConfig.enableImageSupport !== false,
           enableAudioSupport: ollamaConfig.enableAudioSupport !== false,
+          routing: ollamaConfig.routing || { enabled: false },
         };
         
         Logger.log('other', `${logPrefix} - Ollama configured:`, {
           endpoint: ollamaConfig.endpoint,
+          model: state.config.model,
+        });
+      }
+      else if (provider === AIProviders.ANDROID_LOCAL || provider === 'android-local') {
+        const androidConfig = config['android-local'] || {};
+        let endpoint = androidConfig.endpoint || 'http://127.0.0.1:8765';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'android-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+        
+        state.config = {
+          model: androidConfig.model || 'qwen3-local',
+          temperature: androidConfig.temperature || 0.7,
+          maxTokens: androidConfig.maxTokens || 2048,
+          enableImageSupport: false,
+          routing: androidConfig.routing || { enabled: false },
+          enableAudioSupport: false,
+        };
+        
+        Logger.log('other', `${logPrefix} - Android local LLM configured:`, {
+          endpoint: endpoint,
+          model: state.config.model,
+        });
+      }
+      else if (provider === AIProviders.DESKTOP_LOCAL || provider === 'desktop-local') {
+        const desktopConfig = config['desktop-local'] || {};
+        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+        
+        state.config = {
+          model: desktopConfig.model || 'qwen3:0.6b',
+          temperature: desktopConfig.temperature || 0.7,
+          maxTokens: desktopConfig.maxTokens || 2048,
+          customModelsPath: desktopConfig.customModelsPath || null,
+          enableImageSupport: false,
+          routing: desktopConfig.routing || { enabled: false },
+          enableAudioSupport: false,
+        };
+        
+        Logger.log('other', `${logPrefix} - Desktop local LLM configured:`, {
+          endpoint: endpoint,
           model: state.config.model,
         });
       } else {
@@ -342,13 +410,391 @@ class AIService {
    * @returns {Object} Request body for API call
    */
   _prepareRequestBody(state, formattedMessages) {
-    return {
+    const body = {
       model: state.config.model,
       messages: formattedMessages,
       temperature: state.config.temperature,
       max_tokens: state.config.maxTokens,
       stream: true,
     };
+    
+    if ((state.provider === AIProviders.DESKTOP_LOCAL || state.provider === 'desktop-local') && state.config.customModelsPath) {
+      body.customModelsPath = state.config.customModelsPath;
+    }
+    
+    return body;
+  }
+
+  /**
+   * Check if routing should be applied
+   * @param {Object} config - Provider config
+   * @param {Array} messages - Messages array
+   * @returns {boolean} True if routing should be applied
+   */
+  _shouldApplyRouting(config, messages) {
+    // Check if routing is enabled
+    if (!config.routing || !config.routing.enabled) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Strip images from messages array
+   * @param {Array} messages - Messages array
+   * @returns {Array} Messages without images
+   */
+  _stripImagesFromMessages(messages) {
+    return messages.map(msg => {
+      if (msg.images) {
+        const { images, ...rest } = msg;
+        return rest;
+      }
+      return msg;
+    });
+  }
+
+  /**
+   * Parse JSON response, handling potential markdown code blocks
+   * @param {string} response - Raw response text
+   * @returns {Object|null} Parsed JSON or null
+   */
+  _parseJSONResponse(response) {
+    try {
+      // Try direct parse first
+      return JSON.parse(response);
+    } catch (e) {
+      // Try to extract JSON from markdown code block
+      const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[1]);
+        } catch (e2) {
+          Logger.error('AIService', 'Failed to parse JSON from markdown block:', e2);
+        }
+      }
+      
+      // Try to find JSON object in response
+      const objectMatch = response.match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        try {
+          return JSON.parse(objectMatch[0]);
+        } catch (e3) {
+          Logger.error('AIService', 'Failed to parse extracted JSON:', e3);
+        }
+      }
+      
+      Logger.error('AIService', 'Failed to parse JSON response:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Apply multi-model routing when enabled
+   * @param {Array} messages - Original messages
+   * @param {Function} onStream - Streaming callback
+   * @param {number} tabId - Tab ID
+   * @param {Object} config - Provider config
+   * @returns {Promise<Object>} Result object
+   */
+  async _applyRouting(messages, onStream, tabId, config) {
+    const logPrefix = this.isExtensionMode ? `[AIService Routing] Tab ${tabId}` : '[AIService Routing]';
+    Logger.log('other', `${logPrefix} - Starting multi-model routing`);
+
+    const state = this._getState(tabId);
+    const userMessage = messages[messages.length - 1];
+    const userText = typeof userMessage.content === 'string' ? userMessage.content : 
+                     (Array.isArray(userMessage.content) ? userMessage.content.find(c => c.type === 'text')?.text || userMessage.content.find(c => c.type === 'text')?.value || '' : '');
+
+    const manualImages = userMessage.images && userMessage.images.length > 0 ? userMessage.images : null;
+
+    try {
+      Logger.log('other', `${logPrefix} - Step 1: Router deciding if vision needed`);
+      
+      const routerMessages = [
+        {
+          role: 'system',
+          content: PromptConfig.routing.routerSystemPrompt
+        },
+        {
+          role: 'user',
+          content: PromptConfig.routing.generateVisionPrompt(userText)
+        }
+      ];
+
+      const routerModelName = this._getModelOverride(config.routing.routerModel, state.provider);
+
+      const routerResult = await this.sendMessage(routerMessages, null, tabId, { 
+        modelOverride: routerModelName,
+        useUtilitySession: true 
+      });
+      
+      if (!routerResult.success) {
+        Logger.error('other', `${logPrefix} - Router failed, falling back to main LLM`);
+        
+        const errorContext = `[Note: Routing system encountered an error: ${routerResult.error?.message || 'Router failed'}. Proceeding with best effort.]`;
+        const fallbackMessages = [
+          ...messages.slice(0, -1),
+          {
+            role: 'user',
+            content: `${userText}\n\n${errorContext}`,
+            images: manualImages
+          }
+        ];
+
+        const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+        state.config = tempConfig;
+        
+        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        
+        state.config = config;
+        return result;
+      }
+
+      const routerDecision = this._parseJSONResponse(routerResult.response);
+      
+      // Router returned invalid JSON - fallback to main LLM
+      if (!routerDecision) {
+        Logger.error('other', `${logPrefix} - Invalid router response, falling back to main LLM`);
+        
+        const errorContext = `[Note: Routing system returned invalid response. Proceeding with best effort.]`;
+        const fallbackMessages = [
+          ...messages.slice(0, -1),
+          {
+            role: 'user',
+            content: `${userText}\n\n${errorContext}`,
+            images: manualImages
+          }
+        ];
+
+        const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+        state.config = tempConfig;
+        
+        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        
+        state.config = config;
+        return result;
+      }
+
+      Logger.log('other', `${logPrefix} - Router decision:`, routerDecision);
+
+      const needsVision = routerDecision.needsVision !== false; // Default to true for backwards compat
+      
+      if (!needsVision && !manualImages) {
+        Logger.log('other', `${logPrefix} - Router decided vision not needed, proceeding text-only`);
+        
+        const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+        state.config = tempConfig;
+        
+        const result = await this.sendMessage(messages, onStream, tabId);
+        
+        state.config = config;
+        return result;
+      }
+
+      // Vision is needed - get images (manual or captured)
+      let imageToUse = manualImages;
+      let captureContext = '';
+
+      if (!imageToUse && FrameCaptureService.isEnabled()) {
+        Logger.log('other', `${logPrefix} - No manual image, attempting frame capture...`);
+        
+        const captureResult = await FrameCaptureService.getLatestFrame();
+        
+        if (captureResult.success && captureResult.frame) {
+          imageToUse = [captureResult.frame];
+          captureContext = '[Frame captured from active source]';
+          Logger.log('other', `${logPrefix} - Frame capture successful`);
+        } else {
+          captureContext = `[Frame capture attempted but failed: ${captureResult.error}. Proceeding without visual context.]`;
+          Logger.warn('other', `${logPrefix} - Frame capture failed: ${captureResult.error}`);
+        }
+      } else if (manualImages) {
+        captureContext = '[Vision analysis from attached image]';
+      }
+
+      // If no images available, fall back to text-only
+      if (!imageToUse) {
+        Logger.log('other', `${logPrefix} - Vision needed but no images available, falling back to text-only`);
+        
+        const errorContext = `[Note: Vision analysis was needed but no visual input available. ${captureContext || 'Frame capture not enabled.'}]`;
+        const fallbackMessages = [
+          ...messages.slice(0, -1),
+          {
+            role: 'user',
+            content: `${userText}\n\n${errorContext}`
+          }
+        ];
+
+        const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+        state.config = tempConfig;
+        
+        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        
+        state.config = config;
+        return result;
+      }
+
+      // Router missing visionPrompt - use generic fallback
+      let visionPromptToUse = routerDecision.visionPrompt;
+      if (!visionPromptToUse) {
+        Logger.warn('other', `${logPrefix} - Router missing visionPrompt, using generic`);
+        visionPromptToUse = 'Describe what you see in this image in detail.';
+      }
+
+      const skipVLM = config.routing.visionModel && config.routing.visionModel.useSameAsMain;
+      
+      let visionAnalysis = '';
+      let visionStatus = '';
+
+      if (skipVLM) {
+        // Main LLM supports vision - skip VLM step
+        Logger.log('other', `${logPrefix} - Step 2: Skipping VLM (vision = main model)`);
+        
+        visionAnalysis = visionPromptToUse;
+        visionStatus = `${captureContext}\n[Main LLM will analyze image directly with guidance: ${routerDecision.focus || 'general_description'}]`;
+      } else {
+        // Run separate VLM
+        Logger.log('other', `${logPrefix} - Step 2: Vision model analyzing image`);
+        
+        const visionPrompt = PromptConfig.routing.visionAnalysisPrompt(visionPromptToUse);
+        const visionMessages = [
+          {
+            role: 'user',
+            content: visionPrompt,
+            images: imageToUse
+          }
+        ];
+
+        // Get vision model config
+        const visionModelName = this._getModelOverride(config.routing.visionModel, state.provider);
+        
+        let visionResult = null;
+        const maxRetries = 2;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          Logger.log('other', `${logPrefix} - Vision analysis attempt ${attempt}/${maxRetries}`);
+          
+          visionResult = await this.sendMessage(visionMessages, null, tabId, { 
+            modelOverride: visionModelName,
+            useUtilitySession: true 
+          });
+          
+          if (visionResult.success) {
+            break;
+          }
+          
+          if (attempt < maxRetries) {
+            Logger.warn('other', `${logPrefix} - Vision attempt ${attempt} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+          }
+        }
+        
+        if (visionResult && visionResult.success) {
+          visionAnalysis = visionResult.response;
+          visionStatus = captureContext;
+          Logger.log('other', `${logPrefix} - Vision analysis complete (${visionAnalysis.length} chars):`);
+          Logger.log('other', `${logPrefix} - VLM Response: ${visionAnalysis}`);
+        } else {
+          visionAnalysis = `Unable to analyze visual content due to: ${visionResult?.error?.message || 'Unknown error'}`;
+          visionStatus = `${captureContext}\n[Vision analysis failed after ${maxRetries} attempts]`;
+          Logger.error('other', `${logPrefix} - Vision analysis failed after ${maxRetries} attempts`);
+        }
+      }
+
+      Logger.log('other', `${logPrefix} - Step 3: Sending to main LLM with vision context`);
+      
+      let finalMessages;
+      
+      if (skipVLM) {
+        // Main LLM supports vision - send image + router's guidance
+        const enhancedPrompt = `${userText}\n\n${visionStatus}\n${visionAnalysis}`;
+        
+        // Remove images from previous messages, only keep latest
+        const previousMessages = this._stripImagesFromMessages(messages.slice(0, -1));
+        
+        finalMessages = [
+          ...previousMessages,
+          {
+            role: 'user',
+            content: enhancedPrompt,
+            images: imageToUse 
+          }
+        ];
+        
+        Logger.log('other', `${logPrefix} - Main LLM will analyze image directly`);
+      } else {
+        const enhancedPrompt = `${userText}\n\n${visionStatus}\n[Vision Analysis]\n${visionAnalysis}`;
+        const messagesWithoutImages = this._stripImagesFromMessages(messages);
+        
+        finalMessages = [
+          ...messagesWithoutImages.slice(0, -1),
+          {
+            role: 'user',
+            content: enhancedPrompt 
+          }
+        ];
+        
+        Logger.log('other', `${logPrefix} - Enhanced prompt with VLM context (${enhancedPrompt.length} chars):`);
+        Logger.log('other', `${logPrefix} - ${enhancedPrompt}`);
+      }
+
+      const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+      state.config = tempConfig;
+      
+      const result = await this.sendMessage(finalMessages, onStream, tabId);
+      
+      state.config = config;
+      
+      Logger.log('other', `${logPrefix} - Routing complete`);
+      return result;
+
+    } catch (error) {
+      Logger.error('other', `${logPrefix} - Routing failed:`, error);
+      
+      // Fallback: Send error as context to main LLM
+      const errorContext = `[Note: Multi-model routing encountered an error: ${error.message}. ${captureContext || 'No visual context available.'}]`;
+      
+      const fallbackMessages = [
+        ...messages.slice(0, -1),
+        {
+          role: 'user',
+          content: `${userText}\n\n${errorContext}`
+        }
+      ];
+
+      const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
+      state.config = tempConfig;
+      
+      const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+      
+      state.config = config;
+      
+      return result;
+    }
+  }
+
+  /**
+   * Get model override from config
+   * @param {Object} modelConfig - Model config object
+   * @param {string} provider - Provider name
+   * @returns {string|null} Model name or null
+   */
+  _getModelOverride(modelConfig, provider) {
+    if (!modelConfig || modelConfig.useSameAsMain) {
+      return null;
+    }
+
+    if (provider === 'openai' || provider === 'ollama') {
+      return modelConfig.modelName || null;
+    }
+
+    if (provider === 'android-local' || provider === 'desktop-local') {
+      return modelConfig.selectedModel || null;
+    }
+
+    return null;
   }
 
   /**
@@ -357,7 +803,7 @@ class AIService {
    * @param {Array} messages - Array of message objects
    * @param {Function|null} onStream - Callback for streaming tokens
    * @param {number|null} tabId - Tab ID (extension mode only)
-   * @param {Object} options - Additional options { useUtilitySession: boolean }
+   * @param {Object} options - Additional options { useUtilitySession: boolean, modelOverride: string, disableRouting: boolean }
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
   async sendMessage(messages, onStream = null, tabId = null, options = {}) {
@@ -368,6 +814,11 @@ class AIService {
     }
 
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+
+    // Check if routing should be applied (only if not already in a routing sub-call and not explicitly disabled)
+    if (!options.modelOverride && !options.useUtilitySession && !options.disableRouting && this._shouldApplyRouting(state.config, messages)) {
+      return await this._applyRouting(messages, onStream, tabId, state.config);
+    }
     
     // Check if any message contains images or audios
     const hasImages = messages.some(m => m.images && m.images.length > 0);
@@ -376,10 +827,11 @@ class AIService {
     
     Logger.log('other', `${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
-      model: state.config.model || 'chrome-ai',
+      model: options.modelOverride || state.config.model || 'chrome-ai',
       hasImages,
       hasAudios,
       useUtilitySession: options.useUtilitySession || false,
+      modelOverride: options.modelOverride || null,
     });
 
     // Format messages for multi-modal if needed
@@ -398,6 +850,10 @@ class AIService {
     try {
       // Prepare request body
       const requestBody = this._prepareRequestBody(state, formattedMessages);
+      
+      if (options.modelOverride) {
+        requestBody.model = options.modelOverride;
+      }
       
       // Create streaming request with abort signal
       const stream = await state.client.chat.completions.create(requestBody, {

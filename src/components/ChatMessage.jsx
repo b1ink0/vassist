@@ -207,7 +207,7 @@ const ChatMessage = ({
                   : isUser
                   ? `glass-message-user ${isLightBackground ? 'glass-message-user-dark' : ''}`
                   : `glass-message ${isLightBackground ? 'glass-message-dark' : ''}`
-              } px-4 py-3 ${
+              } px-2 md:px-4 py-2 md:py-3 ${
                 isError
                   ? 'rounded-3xl'
                   : isUser

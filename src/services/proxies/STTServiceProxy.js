@@ -11,6 +11,7 @@ import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
 import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy.js';
 import { DefaultSTTConfig } from '../../config/aiConfig.js';
+import MicrophoneService from '../MicrophoneService.js';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {
@@ -94,9 +95,10 @@ class STTServiceProxy extends ServiceProxy {
 
   /**
    * Start recording audio from microphone
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording() {
+  async startRecording(deviceId = null) {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -108,14 +110,19 @@ class STTServiceProxy extends ServiceProxy {
       }
 
       try {
-        // Request microphone access
-        this.audioStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          }
-        });
+        // Get audio constraints with selected microphone (or use provided deviceId)
+        const constraints = deviceId 
+          ? {
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                deviceId: { exact: deviceId }
+              }
+            }
+          : MicrophoneService.getAudioConstraints();
+        
+        this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 
         // Create MediaRecorder
         const mimeType = this.getSupportedMimeType();
@@ -197,7 +204,7 @@ class STTServiceProxy extends ServiceProxy {
         throw error;
       }
     } else {
-      return await this.directService.startRecording();
+      return await this.directService.startRecording(deviceId);
     }
   }
 
@@ -251,9 +258,10 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Test STT with a sample recording
    * @param {number} duration - Recording duration in seconds
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3) {
+  async testRecording(duration = 3, deviceId = null) {
     if (this.isExtension) {
       return new Promise((resolve, reject) => {
         const originalTranscription = this.onTranscription;
@@ -271,14 +279,14 @@ class STTServiceProxy extends ServiceProxy {
           reject(error);
         };
         
-        this.startRecording().then(() => {
+        this.startRecording(deviceId).then(() => {
           setTimeout(() => {
             this.stopRecording();
           }, duration * 1000);
         }).catch(reject);
       });
     } else {
-      return await this.directService.testRecording(duration);
+      return await this.directService.testRecording(duration, deviceId);
     }
   }
 

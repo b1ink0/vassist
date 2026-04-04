@@ -8,10 +8,16 @@ import { TTSServiceProxy } from '../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
 import BackgroundDetector from '../utils/BackgroundDetector';
 import DragDropService from '../services/DragDropService';
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
+import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
+import { useDesktop } from '../contexts/DesktopContext';
+import MicrophoneService from '../services/MicrophoneService';
+import CameraService from '../services/CameraService';
+import ScreenShareService from '../services/ScreenShareService';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -35,9 +41,16 @@ const ChatInput = forwardRef(({
     isChatInputVisible: isVisible,
     pendingDropData,
     setPendingDropData,
+    isSettingsPanelOpen,
+    isHistoryPanelOpen,
   } = useApp();
   
   const { uiConfig } = useConfig();
+  const { api } = useDesktop();
+  
+  // Local state for input window (synced from main window)
+  const [localPendingDropData, setLocalPendingDropData] = useState(null);
+  const [localIsVisible, _setLocalIsVisible] = useState(true); // Input window is always visible when open
   
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -48,7 +61,8 @@ const ChatInput = forwardRef(({
   const [isLightBackground, setIsLightBackground] = useState(false);
   const containerRef = useRef(null);
   const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(isVisible);
+  const [shouldRender, setShouldRender] = useState(isInputWindow ? true : isVisible);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   
   useEffect(() => {
     if (ref) {
@@ -59,20 +73,22 @@ const ChatInput = forwardRef(({
       }
     }
   }, [ref]);
-
+  
   useEffect(() => {
-    if (isVisible) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
-      const timeout = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
-      }, 200);
-      return () => clearTimeout(timeout);
-    }
-  }, [isVisible, shouldRender]);
+    if (!isAndroid) return;
+    
+    const handleKeyboardHeight = (event) => {
+      const { height } = event.detail;
+      Logger.log('ChatInput', `Native keyboard height: ${height}px`);
+      setKeyboardOffset(height);
+    };
+    
+    window.addEventListener('keyboardHeightChange', handleKeyboardHeight);
+    
+    return () => {
+      window.removeEventListener('keyboardHeightChange', handleKeyboardHeight);
+    };
+  }, []);
   
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
@@ -84,6 +100,116 @@ const ChatInput = forwardRef(({
   
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDropServiceRef = useRef(null);
+
+  // Microphone selection state
+  const [micDevices, setMicDevices] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState(null);
+  const [showMicSelect, setShowMicSelect] = useState(false);
+
+  // Camera selection state
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState(null);
+  const [showCameraSelect, setShowCameraSelect] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  
+  // Screen share state (Desktop only)
+  const [isScreenShareActive, setIsScreenShareActive] = useState(false);
+
+  // IPC wrapper functions for input window
+  const wrappedOnSend = useCallback((message, images, audios) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:send', { message, images, audios });
+    } else {
+      onSend(message, images, audios);
+    }
+  }, [onSend, api]);
+
+  const wrappedOnVoiceTranscription = useCallback((text, images) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:voiceTranscription', { text, images });
+    } else {
+      onVoiceTranscription(text, images);
+    }
+  }, [onVoiceTranscription, api]);
+
+  const wrappedSetPendingDropData = useCallback((data) => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:setPendingDropData', data);
+    } else {
+      setPendingDropData(data);
+    }
+  }, [setPendingDropData, api]);
+
+  const wrappedOnClose = useCallback(() => {
+    if (isInputWindow) {
+      api?.ipc.send('chatInput:close');
+    } else {
+      onClose();
+    }
+  }, [onClose, api]);
+
+  const effectiveIsVisible = isInputWindow ? localIsVisible : isVisible;
+  const effectivePendingDropData = isInputWindow ? localPendingDropData : pendingDropData;
+
+  useEffect(() => {
+    if (isInputWindow) return;
+    if (effectiveIsVisible) {
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      setIsClosing(true);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 200);
+      return () => clearTimeout(timeout);
+    }
+  }, [effectiveIsVisible, shouldRender]);
+
+  useEffect(() => {
+    if (!isInputWindow || !api?.ipc) return;
+
+    const unsubscribePendingDrop = api.ipc.on('state:pendingDropData', (data) => {
+      setLocalPendingDropData(data);
+    });
+
+    const unsubscribeMicDevices = api.ipc.on('state:micDevices', (data) => {
+      setMicDevices(data.devices);
+      setSelectedMicId(data.selectedDeviceId);
+    });
+
+    const unsubscribeSelectedMic = api.ipc.on('state:selectedMicId', (deviceId) => {
+      MicrophoneService.setSelectedDevice(deviceId);
+    });
+
+    // Listen for voice state changes from main window
+    const unsubscribeVoiceState = api.ipc.on('state:voiceState', (state) => {
+      Logger.log('ChatInput', 'Voice state received from main window:', state);
+      setVoiceState(state);
+    });
+
+    const unsubscribeTranscription = api.ipc.on('voice:transcriptionReceived', (text) => {
+      Logger.log('ChatInput', 'Transcription received from main window:', text);
+      
+      const images = attachedImages.length > 0 
+        ? attachedImages.map(img => img.dataUrl) 
+        : [];
+      
+      Logger.log('ChatInput', 'Sending back to main window with images:', images.length);
+      
+      api.ipc.send('chatInput:voiceTranscription', { text, images });
+      
+      setAttachedImages([]);
+    });
+
+    return () => {
+      unsubscribePendingDrop?.();
+      unsubscribeMicDevices?.();
+      unsubscribeSelectedMic?.();
+      unsubscribeVoiceState?.();
+      unsubscribeTranscription?.();
+    };
+  }, [api, attachedImages]);
 
   /**
    * Auto-resizes textarea based on content.
@@ -98,7 +224,7 @@ const ChatInput = forwardRef(({
   };
 
   useEffect(() => {
-    if (!isVisible) return;
+    if (!effectiveIsVisible) return;
     
     let detectionTimeout = null;
     let scrollTimeout = null;
@@ -169,19 +295,27 @@ const ChatInput = forwardRef(({
       window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
-  }, [isVisible, uiConfig?.backgroundDetection?.mode]);
+  }, [effectiveIsVisible, uiConfig?.backgroundDetection?.mode]);
+
+  useDesktopWindowResize(isInputWindow ? containerRef : null, {
+    minWidth: 400,
+    minHeight: 100,
+    maxWidth: 800,
+    maxHeight: 400,
+    padding: 10
+  });
 
   useEffect(() => {
-    if (isVisible && textareaRef.current && !isVoiceMode) {
+    if (effectiveIsVisible && textareaRef.current && !isVoiceMode) {
       textareaRef.current.focus();
       adjustTextareaHeight();
       Logger.log('ChatInput', 'Focused textarea');
-    } else if (!isVisible) {
+    } else if (!effectiveIsVisible) {
       setAttachedImages([]);
       setAttachedAudios([]);
       setMessage('');
     }
-  }, [isVisible, isVoiceMode]);
+  }, [effectiveIsVisible, isVoiceMode]);
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -227,33 +361,202 @@ const ChatInput = forwardRef(({
   }, []);
 
   useEffect(() => {
-    VoiceConversationService.setStateChangeCallback((state) => {
+    const handleStateChange = (state) => {
       Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
-    });
+      
+      // This only works in main window where VoiceConversationService actually runs
+      // Input window receives state via IPC (state:voiceState)
+    };
 
-    VoiceConversationService.setTranscriptionCallback((text) => {
-      Logger.log('ChatInput', 'Voice transcription:', text);
-      if (onVoiceTranscription) {
-        onVoiceTranscription(text);
+    const handleTranscription = (text) => {
+      Logger.log('ChatInput', 'Voice transcription:', text, 'with images:', attachedImages.length);
+      Logger.log('ChatInput', 'Attached images details:', attachedImages);
+      
+      const images = attachedImages.length > 0 
+        ? attachedImages.map(img => img.dataUrl) 
+        : null;
+      
+      Logger.log('ChatInput', 'Images array to send:', images ? `${images.length} images` : 'null');
+      
+      wrappedOnVoiceTranscription(text, images);
+      
+      setAttachedImages([]);
+    };
+
+    const handleError = (error) => {
+      Logger.error('ChatInput', 'Voice error:', error);
+      setRecordingError(error.message || 'Voice conversation error');
+    };
+
+    // Input window: Gets state via IPC (line 146-173), doesn't register callbacks
+    // Web/Extension: Registers callbacks directly
+    if (!isInputWindow) {
+      VoiceConversationService.setStateChangeCallback(handleStateChange);
+      VoiceConversationService.setTranscriptionCallback(handleTranscription);
+      VoiceConversationService.setErrorCallback(handleError);
+    }
+
+    return () => {
+      if (!isInputWindow) {
+        VoiceConversationService.setStateChangeCallback(null);
+        VoiceConversationService.setTranscriptionCallback(null);
+        VoiceConversationService.setErrorCallback(null);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, onVoiceTranscription, attachedImages]);
+
+  // Initialize microphone service and subscribe to device changes
+  useEffect(() => {
+    const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
+      setMicDevices(devices);
+      setSelectedMicId(selectedDeviceId);
+      
+      // Sync to input window on desktop
+      if (!isInputWindow && api?.ipc) {
+        api.ipc.send('state:micDevices', { devices, selectedDeviceId });
       }
     });
 
-    VoiceConversationService.setErrorCallback((error) => {
-      Logger.error('ChatInput', 'Voice error:', error);
-      setRecordingError(error.message || 'Voice conversation error');
+    // Initialize devices on mount
+    const initDevices = async () => {
+      try {
+        await MicrophoneService.initialize();
+      } catch {
+        Logger.log('ChatInput', 'Mic permission not granted yet');
+      }
+    };
+    initDevices();
+
+    return unsubscribe;
+  }, [api]);
+
+  // Initialize camera service
+  useEffect(() => {
+    Logger.log('ChatInput', 'Camera initialization useEffect triggered, isInputWindow:', isInputWindow);
+    
+    if (isInputWindow) {
+      Logger.log('ChatInput', 'Input window: Setting up IPC listeners for camera state');
+      // Listen for camera state from main window
+      if (api?.ipc) {
+        const unsubscribeCameraDevices = api.ipc.on('state:cameraDevices', (data) => {
+          Logger.log('ChatInput', 'Input window: Received camera state via IPC:', data);
+          setCameraDevices(data.devices);
+          setSelectedCameraId(data.selectedDeviceId);
+          setIsCameraActive(data.isActive);
+        });
+        
+        return () => {
+          unsubscribeCameraDevices();
+        };
+      }
+      return;
+    }
+
+    Logger.log('ChatInput', 'Web/Android/Extension: Setting up CameraService subscription');
+    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
+      Logger.log('ChatInput', 'CameraService state changed:', { devices: devices.length, selectedDeviceId, isActive });
+      setCameraDevices(devices);
+      setSelectedCameraId(selectedDeviceId);
+      setIsCameraActive(isActive);
+    });
+
+    const initDevices = async () => {
+      try {
+        Logger.log('ChatInput', 'Web/Android/Extension: Initializing CameraService...');
+        await CameraService.initialize();
+        Logger.log('ChatInput', 'Web/Android/Extension: CameraService initialized successfully');
+      } catch (error) {
+        Logger.error('ChatInput', 'Web/Android/Extension: Camera initialization failed:', error);
+      }
+    };
+    initDevices();
+
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, isInputWindow]);
+
+  // Initialize screen share service
+  useEffect(() => {
+    Logger.log('ChatInput', 'Screen share initialization useEffect triggered, isInputWindow:', isInputWindow);
+    
+    // Input window: Listen for state from main window via IPC
+    if (isInputWindow) {
+      Logger.log('ChatInput', 'Input window: Setting up IPC listener for screen share state');
+      if (api?.ipc) {
+        const unsubscribeScreenShare = api.ipc.on('state:screenShare', (data) => {
+          Logger.log('ChatInput', 'Input window: Received screen share state via IPC:', data);
+          setIsScreenShareActive(data.isActive);
+        });
+        
+        return () => {
+          unsubscribeScreenShare();
+        };
+      }
+      return;
+    }
+    
+    // Android not supported
+    if (isAndroid) {
+      Logger.log('ChatInput', 'Android: Screen share not supported, skipping initialization');
+      return;
+    }
+
+    Logger.log('ChatInput', 'Web/Desktop/Extension: Setting up ScreenShareService subscription');
+    const unsubscribe = ScreenShareService.subscribe(({ isActive }) => {
+      Logger.log('ChatInput', 'ScreenShareService state changed:', { isActive });
+      setIsScreenShareActive(isActive);
+    });
+
+    const initScreenShare = async () => {
+      try {
+        Logger.log('ChatInput', 'Web/Desktop/Extension: Initializing ScreenShareService...');
+        await ScreenShareService.initialize();
+        Logger.log('ChatInput', 'Web/Desktop/Extension: ScreenShareService initialized successfully');
+      } catch (error) {
+        Logger.error('ChatInput', 'Web/Desktop/Extension: Screen share initialization failed:', error);
+      }
+    };
+    initScreenShare();
+
+    return unsubscribe;
+  }, [api, isInputWindow]);
+
+  // Listen for camera control IPC messages
+  useEffect(() => {
+    if (isInputWindow || !api?.ipc) {
+      return;
+    }
+
+    Logger.log('ChatInput', 'Main window: Setting up camera IPC listeners');
+    
+    const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId) => {
+      Logger.log('ChatInput', 'Main window: Received IPC camera:selectDevice:', deviceId);
+      await CameraService.setSelectedDevice(deviceId);
+    });
+
+    const unsubscribeToggle = api.ipc.on('camera:toggle', async () => {
+      if (isCameraActive) {
+        Logger.log('ChatInput', 'Main window: Stopping camera via IPC');
+        await CameraService.stop();
+      } else {
+        Logger.log('ChatInput', 'Main window: Starting camera via IPC');
+        await CameraService.start();
+      }
     });
 
     return () => {
-      VoiceConversationService.setStateChangeCallback(null);
-      VoiceConversationService.setTranscriptionCallback(null);
-      VoiceConversationService.setErrorCallback(null);
+      Logger.log('ChatInput', 'Main window: Cleaning up camera IPC listeners');
+      unsubscribeSelectDevice();
+      unsubscribeToggle();
     };
-  }, [onVoiceTranscription]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, isInputWindow, isCameraActive]);
 
   useEffect(() => {
     const handleStartVoiceMode = async () => {
-      if (!isVoiceMode && isVisible) {
+      if (!isVoiceMode && effectiveIsVisible) {
         Logger.log('ChatInput', 'External voice mode start requested');
         try {
           if (!STTServiceProxy.isConfigured()) {
@@ -267,12 +570,18 @@ const ChatInput = forwardRef(({
           
           setAttachedImages([]);
           setAttachedAudios([]);
-          
           setRecordingError('');
-          await VoiceConversationService.start();
-          setIsVoiceMode(true);
           
-          if (onVoiceMode) onVoiceMode(true);
+          // Desktop input window: Send to main window via IPC (main window starts service)
+          // Web/Extension: Start service directly
+          if (isInputWindow && api?.ipc) {
+            api.ipc.send('chatInput:voiceMode', true);
+          } else {
+            await VoiceConversationService.start();
+            if (onVoiceMode) onVoiceMode(true);
+          }
+          
+          setIsVoiceMode(true);
         } catch (error) {
           Logger.error('ChatInput', 'Voice mode start error:', error);
           setRecordingError(error.message || 'Failed to start voice mode');
@@ -286,7 +595,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('startVoiceMode', handleStartVoiceMode);
     };
-  }, [isVoiceMode, isVisible, onVoiceMode]);
+  }, [isVoiceMode, effectiveIsVisible, onVoiceMode, api]);
 
   /**
    * Processes drag-and-drop data (text, images, audios).
@@ -376,7 +685,7 @@ const ChatInput = forwardRef(({
       }
     }
     
-    onSend(
+    wrappedOnSend(
       trimmedMessage || defaultPrompt,
       attachedImages.map(img => img.dataUrl),
       attachedAudios.map(audio => audio.dataUrl)
@@ -385,11 +694,11 @@ const ChatInput = forwardRef(({
     setMessage('');
     setAttachedImages([]);
     setAttachedAudios([]);
-  }, [message, attachedImages, attachedAudios, onSend]);
+  }, [message, attachedImages, attachedAudios, wrappedOnSend]);
 
   useEffect(() => {
     const handleChatDragDrop = (e) => {
-      if (!isVisible || isVoiceMode) return;
+      if (!effectiveIsVisible || isVoiceMode) return;
       processDropData(e.detail);
       
       // Handle auto-send if requested
@@ -406,20 +715,20 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('chatDragDrop', handleChatDragDrop);
     };
-  }, [isVisible, isVoiceMode, processDropData]);
+  }, [effectiveIsVisible, isVoiceMode, processDropData]);
 
   useEffect(() => {
-    if (!pendingDropData || !isVisible || isVoiceMode) return;
+    if (!effectivePendingDropData || !effectiveIsVisible || isVoiceMode) return;
 
     Logger.log('ChatInput', 'Processing pending drop data');
-    processDropData(pendingDropData);
+    processDropData(effectivePendingDropData);
 
-    setPendingDropData(null);
-  }, [pendingDropData, isVisible, isVoiceMode, processDropData, setPendingDropData]);
+    wrappedSetPendingDropData(null);
+  }, [effectivePendingDropData, effectiveIsVisible, isVoiceMode, processDropData, wrappedSetPendingDropData]);
 
   useEffect(() => {
     const handleFocusInput = () => {
-      if (textareaRef.current && isVisible && !isVoiceMode) {
+      if (textareaRef.current && effectiveIsVisible && !isVoiceMode) {
         textareaRef.current.focus();
       }
     };
@@ -429,12 +738,12 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('focusChatInput', handleFocusInput);
     };
-  }, [isVisible, isVoiceMode]);
+  }, [effectiveIsVisible, isVoiceMode]);
 
   // Auto-send listener for demo actions
   useEffect(() => {
     const handleAutoSend = () => {
-      if (isVisible && !isVoiceMode && message.trim()) {
+      if (effectiveIsVisible && !isVoiceMode && message.trim()) {
         Logger.log('ChatInput', 'Auto-sending message from demo action');
         setTimeout(() => {
           // Click the submit button to trigger the form submission
@@ -448,7 +757,7 @@ const ChatInput = forwardRef(({
     return () => {
       window.removeEventListener('chatAutoSend', handleAutoSend);
     };
-  }, [isVisible, isVoiceMode, message]);
+  }, [effectiveIsVisible, isVoiceMode, message]);
 
 
   /**
@@ -581,7 +890,7 @@ const ChatInput = forwardRef(({
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       Logger.log('ChatInput', 'Escape pressed - closing');
-      onClose();
+      wrappedOnClose();
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -640,11 +949,11 @@ const ChatInput = forwardRef(({
    */
   useEffect(() => {
     Logger.log('ChatInput', 'Drag-drop setup effect running', { 
-      isVisible, 
+      isVisible: effectiveIsVisible, 
       hasContainer: !!containerRef.current 
     });
     
-    if (!isVisible) {
+    if (!effectiveIsVisible) {
       Logger.log('ChatInput', 'Skipping drag-drop setup - not visible');
       return;
     }
@@ -707,7 +1016,7 @@ const ChatInput = forwardRef(({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible]);
+  }, [effectiveIsVisible]);
 
   /**
    * Toggles voice conversation mode.
@@ -728,23 +1037,47 @@ const ChatInput = forwardRef(({
     try {
       if (isVoiceMode) {
         Logger.log('ChatInput', 'Stopping voice conversation mode');
-        VoiceConversationService.stop();
+        
+        // Desktop input window: Send to main window via IPC (main window stops service)
+        // Web/Extension: Stop service directly
+        if (isInputWindow && api?.ipc) {
+          api.ipc.send('chatInput:voiceMode', false);
+        } else {
+          VoiceConversationService.stop();
+          if (CameraService.isRunning()) {
+            Logger.log('ChatInput', 'Stopping camera after voice call ended');
+            await CameraService.stop();
+          }
+          
+          if (onVoiceMode) {
+            onVoiceMode(false);
+          }
+        }
+        
         setIsVoiceMode(false);
         setVoiceState(ConversationStates.IDLE);
-        
-        if (onVoiceMode) onVoiceMode(false);
+        setAttachedImages([]);
+        setAttachedAudios([]);
       } else {
         Logger.log('ChatInput', 'Starting voice conversation mode');
         TTSServiceProxy.stopPlayback();
         
         setAttachedImages([]);
         setAttachedAudios([]);
-        
         setRecordingError('');
-        await VoiceConversationService.start();
-        setIsVoiceMode(true);
         
-        if (onVoiceMode) onVoiceMode(true);
+        // Desktop input window: Send to main window via IPC (main window starts service)
+        // Web/Extension: Start service directly
+        if (isInputWindow && api?.ipc) {
+          api.ipc.send('chatInput:voiceMode', true);
+        } else {
+          await VoiceConversationService.start();
+          if (onVoiceMode) {
+            onVoiceMode(true);
+          }
+        }
+        
+        setIsVoiceMode(true);
       }
     } catch (error) {
       Logger.error('ChatInput', 'Voice mode toggle error:', error);
@@ -759,10 +1092,105 @@ const ChatInput = forwardRef(({
   const handleInterrupt = () => {
     Logger.log('ChatInput', 'User interrupted');
     
-    const event = new CustomEvent('voiceInterrupt');
-    window.dispatchEvent(event);
+    // In desktop input window, forward interrupt to main window via IPC
+    if (api?.ipc) {
+      Logger.log('ChatInput', 'Forwarding interrupt to main window via IPC');
+      api.ipc.send('voice:interrupt');
+    }
     
+    // Also call locally (in case we're in main window or web mode)
     VoiceConversationService.interrupt();
+  };
+
+  /**
+   * Handles microphone device selection
+   */
+  const handleMicSelect = (deviceId) => {
+    Logger.log('ChatInput', 'Microphone selected:', deviceId);
+    MicrophoneService.setSelectedDevice(deviceId || null);
+    setShowMicSelect(false);
+    
+    // Sync selected mic across windows on desktop
+    if (api?.ipc) {
+      api.ipc.send('state:selectedMicId', deviceId || null);
+    }
+  };
+
+  /**
+   * Toggles microphone selection dropdown
+   */
+  const handleMicSelectToggle = () => {
+    setShowMicSelect(!showMicSelect);
+  };
+
+  /**
+   * Handles camera device selection
+   */
+  const handleCameraSelect = async (deviceId) => {
+    Logger.log('ChatInput', 'Camera selected:', deviceId);
+    
+    if (isInputWindow && api?.ipc) {
+      api.ipc.send('camera:selectDevice', deviceId || null);
+    } else {
+      await CameraService.setSelectedDevice(deviceId || null);
+    }
+    setShowCameraSelect(false);
+  };
+
+  /**
+   * Toggles camera selection dropdown
+   */
+  const handleCameraSelectToggle = () => {
+    setShowCameraSelect(!showCameraSelect);
+  };
+
+  /**
+   * Handles camera button click (toggle on/off)
+   */
+  const handleCameraClick = async () => {
+    try {
+      Logger.log('ChatInput', 'Camera button clicked, isInputWindow:', isInputWindow, 'isCameraActive:', isCameraActive);
+      
+      if (isInputWindow && api?.ipc) {
+        Logger.log('ChatInput', 'Input window: Sending camera:toggle IPC to main window');
+        api.ipc.send('camera:toggle');
+      } else {
+        if (isCameraActive) {
+          Logger.log('ChatInput', 'Stopping camera');
+          await CameraService.stop();
+        } else {
+          Logger.log('ChatInput', 'Starting camera');
+          await CameraService.start();
+        }
+      }
+    } catch (error) {
+      Logger.error('ChatInput', 'Camera toggle error:', error);
+    }
+  };
+
+  /**
+   * Handles screen share button click (toggle on/off)
+   */
+  const handleScreenShareClick = async () => {
+    try {
+      Logger.log('ChatInput', 'Screen share button clicked, isScreenShareActive:', isScreenShareActive);
+      
+      // Input window: Send IPC to main window using api from hook
+      if (isInputWindow && api?.ipc) {
+        Logger.log('ChatInput', 'Input window: Sending screenShare:toggle IPC');
+        api.ipc.send('screenShare:toggle');
+        return;
+      }
+      
+      // Direct control for main window / web / dev / extension
+      if (isScreenShareActive) {
+        await ScreenShareService.stop();
+      } else {
+        await ScreenShareService.start();
+      }
+    } catch (error) {
+      Logger.error('ChatInput', 'Screen share toggle error:', error);
+    }
   };
 
   /**
@@ -811,13 +1239,21 @@ const ChatInput = forwardRef(({
   if (!shouldRender) return null;
 
   const getVoiceStateDisplay = () => {
+    Logger.log('ChatInput', 'Current voiceState:', voiceState, 'Expected LISTENING:', ConversationStates.LISTENING);
+    
+    // Show interrupt button if in SPEAKING state OR if TTS audio is currently playing
+    const isAudioPlaying = TTSServiceProxy.isCurrentlyPlaying();
+    const showInterrupt = voiceState === ConversationStates.SPEAKING || isAudioPlaying;
+    
     switch (voiceState) {
       case ConversationStates.LISTENING:
         return { icon: 'microphone', label: 'Listening...', class: 'listening', showInterrupt: false };
       case ConversationStates.THINKING:
         return { icon: 'thinking', label: 'Thinking...', class: 'thinking', showInterrupt: false };
+      case ConversationStates.GENERATING_VOICE:
+        return { icon: 'thinking', label: 'Generating voice...', class: 'generating-voice', showInterrupt: false };
       case ConversationStates.SPEAKING:
-        return { icon: 'speaker', label: 'Speaking...', class: 'speaking', showInterrupt: true };
+        return { icon: 'speaker', label: 'Speaking...', class: 'speaking', showInterrupt };
       case ConversationStates.INTERRUPTED:
         return { icon: 'pause', label: 'Interrupted', class: 'interrupted', showInterrupt: false };
       default:
@@ -827,16 +1263,22 @@ const ChatInput = forwardRef(({
 
   const voiceStateDisplay = getVoiceStateDisplay();
   const hasAttachments = attachedImages.length > 0 || attachedAudios.length > 0;
+  const shouldFollowKeyboard = isAndroid && keyboardOffset > 0 && !isSettingsPanelOpen && !isHistoryPanelOpen;
 
   return (
     <div 
-      className="fixed bottom-0 left-0 right-0 z-[1001] flex justify-center pointer-events-none"
+      className="fixed bottom-0 left-0 right-0 z-[10001] flex justify-center pointer-events-none"
+      style={shouldFollowKeyboard ? {
+        transform: `translateY(-${keyboardOffset}px)`,
+        transition: 'transform 0.1s ease-out'
+      } : undefined}
     >
       <div 
         ref={containerRef}
-        className="relative p-4 w-full max-w-3xl pointer-events-auto"
+        className={`relative md:p-4 p-2 w-full max-w-3xl pointer-events-auto ${isInputWindow ? 'flex flex-col justify-end' : ''}`}
         style={{
-          touchAction: 'none'
+          touchAction: 'none',
+          ...(isInputWindow ? { minHeight: '400px' } : {})
         }}
       >
         {!isVoiceMode && isDragOver && (
@@ -853,7 +1295,7 @@ const ChatInput = forwardRef(({
             }}
           >
             <div 
-              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
             >
               <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
                 <Icon name="attachment" size={20} /> Drop
@@ -861,8 +1303,8 @@ const ChatInput = forwardRef(({
             </div>
           </div>
         )}
-        {hasAttachments && !isVoiceMode && (
-          <div className="max-w-3xl mx-auto mb-2">
+        {hasAttachments && (
+          <div className={`w-full max-w-3xl mb-2 ${isInputWindow ? '' : 'mx-auto'}`}>
             <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg ${
               isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
             }`}>
@@ -912,7 +1354,7 @@ const ChatInput = forwardRef(({
         )}
 
         {recordingError && (
-          <div className={`glass-error max-w-3xl mx-auto mb-2 px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
+          <div className={`glass-error max-w-3xl mx-auto mb-2 px-2 md:px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
             isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
           }`}>
             <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm`}>{recordingError}</span>
@@ -926,10 +1368,28 @@ const ChatInput = forwardRef(({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2 items-end">
+        <form onSubmit={handleSubmit} className={`max-w-3xl flex gap-2 items-end ${isInputWindow ? '' : 'mx-auto'}`}>
+          {/* Hidden file inputs - always rendered so refs work in both modes */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            multiple
+            onChange={handleAudioSelect}
+            className="hidden"
+          />
+          
           {isVoiceMode ? (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-3 rounded-xl flex items-center justify-between ${
+              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-2 md:py-3 rounded-xl flex items-center justify-between ${
                 isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
               }`}>
                 <div className="flex items-center gap-3">
@@ -945,10 +1405,89 @@ const ChatInput = forwardRef(({
                       className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20 flex items-center gap-1.5`}
                     >
                       <Icon name="hand-stop" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>Stop</span>
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                      attachedImages.length > 0 ? 'bg-blue-500/20 text-blue-400' : ''
+                    }`}
+                    title={attachedImages.length > 0 ? `${attachedImages.length} image(s)` : 'Attach image'}
+                  >
+                    <Icon name="image" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                    {attachedImages.length > 0 && <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>{attachedImages.length}</span>}
+                  </button>
+
+                  {/* Camera button with dropdown */}
+                  <div className="relative flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleCameraClick}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                        isCameraActive ? 'bg-green-500/20 text-green-400' : ''
+                      }`}
+                      title={isCameraActive ? 'Stop Camera' : 'Start Camera'}
+                    >
+                      <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={handleCameraSelectToggle}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-1 py-1.5 rounded-lg hover:bg-white/10 text-sm`}
+                      title="Select Camera"
+                    >
+                      <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                    </button>
+                    
+                    {showCameraSelect && (
+                      <select
+                        value={selectedCameraId || ''}
+                        onChange={(e) => handleCameraSelect(e.target.value)}
+                        onBlur={() => setShowCameraSelect(false)}
+                        autoFocus
+                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
+                          !isLightBackground 
+                            ? 'bg-white/90 text-black border-white/20' 
+                            : 'bg-black/90 text-white border-white/10'
+                        } border shadow-2xl`}
+                        style={{
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                        }}
+                        size={Math.min(cameraDevices.length + 1, 5)}
+                      >
+                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
+                          Default Camera
+                        </option>
+                        {cameraDevices.map((device, index) => (
+                          <option 
+                            key={device.deviceId || index} 
+                            value={device.deviceId || ''}
+                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
+                          >
+                            {device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   
+                  {/* Screen Share button (Chrome-based platforms) */}
+                  {!isAndroid && (
+                    <button
+                      type="button"
+                      onClick={handleScreenShareClick}
+                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                        isScreenShareActive ? 'bg-blue-500/20 text-blue-400' : ''
+                      }`}
+                      title={isScreenShareActive ? 'Stop Screen Share' : 'Start Screen Share'}
+                    >
+                      <Icon name="maximize" size={16} className={isScreenShareActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleVoiceModeToggle}
@@ -960,7 +1499,7 @@ const ChatInput = forwardRef(({
                   
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={wrappedOnClose}
                     className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg hover:bg-white/10`}
                     title="Close (Esc)"
                   >
@@ -987,7 +1526,7 @@ const ChatInput = forwardRef(({
                       ? 'Recording...' 
                       : hasAttachments
                       ? `${attachedImages.length + attachedAudios.length} file(s) attached`
-                      : 'Type a message... (Enter to send, Shift+Enter for new line)'
+                      : 'Type a message...'
                   }
                   className="w-full bg-transparent text-white border-none outline-none placeholder-white/40 resize-none custom-scrollbar min-h-[24px] max-h-[200px]"
                   rows={1}
@@ -995,23 +1534,6 @@ const ChatInput = forwardRef(({
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageSelect}
-                      className="hidden"
-                    />
-                    <input
-                      ref={audioInputRef}
-                      type="file"
-                      accept="audio/*"
-                      multiple
-                      onChange={handleAudioSelect}
-                      className="hidden"
-                    />
-                    
                     <button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
@@ -1061,6 +1583,60 @@ const ChatInput = forwardRef(({
                     >
                       <Icon name="phone" size={18} />
                     </button>
+                    
+                    {/* Microphone selection */}
+                    <button
+                      type="button"
+                      onClick={handleMicSelectToggle}
+                      disabled={isRecording || isProcessingRecording}
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
+                        isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black'
+                      }`}
+                      title="Select Microphone"
+                    >
+                      <Icon name="chevron-down" size={18} />
+                    </button>
+                    
+                    {showMicSelect && (
+                      <select
+                        value={selectedMicId || ''}
+                        onChange={(e) => handleMicSelect(e.target.value)}
+                        onBlur={() => setShowMicSelect(false)}
+                        autoFocus
+                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
+                          !isLightBackground 
+                            ? 'bg-white/90 text-black border-white/20' 
+                            : 'bg-black/90 text-white border-white/10'
+                        } border shadow-2xl`}
+                        style={{
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                        }}
+                        size={Math.min(micDevices.length + 1, 5)}
+                      >
+                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
+                          Default Microphone
+                        </option>
+                        {micDevices.map((device) => (
+                          <option 
+                            key={device.deviceId} 
+                            value={device.deviceId}
+                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
+                          >
+                            {device.label || `Microphone ${device.deviceId.substring(0, 8)}...`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={wrappedOnClose}
+                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
+                      title="Close"
+                    >
+                      <Icon name="close" size={18} />
+                    </button>
                   </div>
                   
                   <div className="flex items-center gap-1">
@@ -1076,15 +1652,6 @@ const ChatInput = forwardRef(({
                       title="Send message"
                     >
                       <Icon name="send" size={20} />
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
-                      title="Close (Esc)"
-                    >
-                      <Icon name="close" size={20} />
                     </button>
                   </div>
                 </div>

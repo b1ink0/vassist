@@ -1,0 +1,47 @@
+
+# Core dependencies
+--index-url https://pypi.org/simple
+
+--no-binary=opencc
+numpy<2.0
+scipy
+tensorboard
+librosa==0.10.2
+numba
+pytorch-lightning>=2.4
+gradio<5
+ffmpeg-python
+onnxruntime-gpu
+tqdm
+cn2an
+pypinyin
+pyopenjtalk-prebuilt
+g2p_en
+modelscope
+sentencepiece
+transformers==4.46.0
+peft==0.12.0
+chardet
+PyYAML
+psutil
+jieba_fast
+jieba
+split-lang
+fast_langdetect>=0.3.1
+wordsegment
+rotary_embedding_torch
+ToJyutping
+g2pk2
+ko_pron
+opencc
+pyopenjtalk-prebuilt
+fastapi[standard]>=0.115.2
+x_transformers
+torchmetrics<=1.5
+pydantic<=2.10.6
+ctranslate2>=4.0,<5
+av>=11
+soundfile
+
+# Faster Whisper STT (GPU-accelerated)
+faster-whisper>=1.0.0

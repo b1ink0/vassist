@@ -37,8 +37,8 @@ const ProviderSelection = ({
               rounded-lg transition-all duration-300
               ${compact ? 'p-2 sm:p-3' : 'p-6'}
               ${available ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}
-              ${selectedProvider === provider.id ? 'border-2 border-purple-400 shadow-lg shadow-purple-500/20' : 'border-2 border-white/10'}
-              ${available ? 'hover:border-purple-400/50' : ''}
+              ${selectedProvider === provider.id ? 'border-2 border-white/30 shadow-lg shadow-white/20' : 'border-2 border-white/10'}
+              ${available ? 'hover:border-white/30' : ''}
             `}
           >
             <div className={`flex items-start ${compact ? 'gap-2' : 'gap-4'}`}>
@@ -59,17 +59,17 @@ const ProviderSelection = ({
                     {provider.name}
                   </h3>
                   {provider.recommended && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-green-500/20 text-green-300 rounded-full`}>
+                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/80 rounded-full`}>
                       Recommended
                     </span>
                   )}
                   {selectedProvider === provider.id && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-purple-500/20 text-purple-300 rounded-full`}>
+                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/70 rounded-full`}>
                       Selected
                     </span>
                   )}
                   {!available && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-yellow-500/20 text-yellow-300 rounded-full`}>
+                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/70 rounded-full`}>
                       Unavailable
                     </span>
                   )}
@@ -93,11 +93,11 @@ const ProviderSelection = ({
                     {/* Pros */}
                     {provider.pros && provider.pros.length > 0 && (
                       <div>
-                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-green-400 mb-1`}>Pros:</p>
+                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-white/80 mb-1`}>Pros:</p>
                         <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
                           {provider.pros.map((pro, idx) => (
                             <li key={idx} className="flex items-start gap-1.5">
-                              <Icon name="check" size={10} className="text-green-400 mt-0.5 flex-shrink-0" />
+                              <Icon name="check" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />
                               <span>{pro}</span>
                             </li>
                           ))}
@@ -108,11 +108,11 @@ const ProviderSelection = ({
                     {/* Cons */}
                     {provider.cons && provider.cons.length > 0 && (
                       <div>
-                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-yellow-400 mb-1`}>Cons:</p>
+                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-white/80 mb-1`}>Cons:</p>
                         <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
                           {provider.cons.map((con, idx) => (
                             <li key={idx} className="flex items-start gap-1.5">
-                              <Icon name="warning" size={10} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                              <Icon name="warning" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />
                               <span>{con}</span>
                             </li>
                           ))}

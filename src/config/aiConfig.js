@@ -5,10 +5,30 @@
  * All settings are editable via the Control Panel Config tab.
  */
 
+const isAndroidMode = typeof __ANDROID_MODE__ !== 'undefined' && __ANDROID_MODE__;
+const isDesktopMode = typeof __DESKTOP_MODE__ !== 'undefined' && __DESKTOP_MODE__;
+
+/**
+ * Android Local AI Server Configuration
+ */
+const ANDROID_LOCAL_SERVER = {
+  baseUrl: 'http://127.0.0.1:8765',
+};
+
+/**
+ * Desktop Local AI Server Configuration
+ * Single unified HTTP server (like Android) that proxies to native binaries
+ */
+const DESKTOP_LOCAL_SERVER = {
+  baseUrl: 'http://127.0.0.1:11438', // Unified endpoint - Electron handles internal routing
+};
+
 /**
  * Available AI Providers
  */
 export const AIProviders = {
+  ANDROID_LOCAL: 'android-local',
+  DESKTOP_LOCAL: 'desktop-local',
   CHROME_AI: 'chrome-ai',
   OPENAI: 'openai',
   OLLAMA: 'ollama',
@@ -18,18 +38,34 @@ export const AIProviders = {
  * Available TTS Providers
  */
 export const TTSProviders = {
+  ANDROID_LOCAL: 'android-local',
+  DESKTOP_LOCAL: 'desktop-local',
   KOKORO: 'kokoro', // Kokoro-JS local TTS
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible', // Generic OpenAI-compatible TTS API
+  GPTSOVITS_REMOTE: 'gptsovits-remote', // Remote GPT-SoVITS server (all platforms)
 };
 
 /**
  * Available STT (Speech-to-Text) Providers
  */
 export const STTProviders = {
+  ANDROID_LOCAL: 'android-local',
+  DESKTOP_LOCAL: 'desktop-local',
   CHROME_AI_MULTIMODAL: 'chrome-ai-multimodal',
   OPENAI: 'openai',
   OPENAI_COMPATIBLE: 'openai-compatible',
+};
+
+/**
+ * GPT-SoVITS Supported Languages
+ */
+export const GPTSoVITSLanguages = {
+  ENGLISH: 'en',
+  CHINESE: 'zh',
+  JAPANESE: 'ja',
+  KOREAN: 'ko',
+  CANTONESE: 'yue',
 };
 
 /**
@@ -185,7 +221,7 @@ export const TranslationLanguages = [
  * Default AI Configuration
  */
 export const DefaultAIConfig = {
-  provider: AIProviders.CHROME_AI,
+  provider: isAndroidMode ? AIProviders.ANDROID_LOCAL : (isDesktopMode ? AIProviders.DESKTOP_LOCAL : AIProviders.CHROME_AI),
   
   chromeAi: {
     temperature: 1.0,
@@ -206,6 +242,17 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+    },
   },
   
   ollama: {
@@ -217,6 +264,60 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        modelName: '',
+      },
+    },
+  },
+  
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'qwen3-local',
+    temperature: 0.7,
+    maxTokens: 2048,
+    systemPromptType: 'default',
+    systemPrompt: '',
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+    },
+  },
+  
+  'desktop-local': {
+    endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
+    model: 'qwen3:0.6b', // Default model name
+    temperature: 0.7,
+    maxTokens: 2048,
+    contextSize: 4096,
+    gpuLayers: 99, // Use GPU acceleration
+    threads: 4,
+    systemPromptType: 'default',
+    systemPrompt: '',
+    routing: {
+      enabled: false,
+      visionModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+      routerModel: {
+        useSameAsMain: true,
+        selectedModel: '',
+      },
+    },
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
@@ -259,7 +360,7 @@ export const DefaultAIConfig = {
 export const DefaultTTSConfig = {
   enabled: false,
   
-  provider: TTSProviders.KOKORO,
+  provider: isAndroidMode ? TTSProviders.ANDROID_LOCAL : (isDesktopMode ? TTSProviders.DESKTOP_LOCAL : TTSProviders.KOKORO),
   
   kokoro: {
     modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
@@ -284,6 +385,45 @@ export const DefaultTTSConfig = {
     speed: 1.0,
   },
   
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'vits-local',
+    voice: 'default',
+    speed: 1.0,
+  },
+  
+  'desktop-local': {
+    endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
+    model: 'gpt-sovits',
+    // Voice cloning reference
+    referenceVoiceId: null, // Voice ID from IndexedDB
+    referenceAudio: null, // Path to reference audio file 
+    referenceText: '', // Text spoken in reference audio
+    referenceLanguage: GPTSoVITSLanguages.ENGLISH,
+    // TTS parameters
+    speed: 1.0,
+    topK: 15,
+    topP: 0.7,
+    temperature: 0.7,
+    // Training config
+    trained: false,
+    checkpointPath: null,
+  },
+  
+  'gptsovits-remote': {
+    endpoint: 'http://localhost:11438', // Remote GPT-SoVITS server URL
+    model: 'gpt-sovits',
+    // Voice cloning reference (same as desktop-local)
+    referenceVoiceId: null,
+    referenceText: '',
+    referenceLanguage: GPTSoVITSLanguages.ENGLISH,
+    // TTS parameters
+    speed: 1.0,
+    topK: 15,
+    topP: 0.7,
+    temperature: 0.7,
+  },
+  
   chunkSize: 500,
   minChunkSize: 100,
 };
@@ -293,7 +433,7 @@ export const DefaultTTSConfig = {
  */
 export const DefaultSTTConfig = {
   enabled: false,
-  provider: STTProviders.CHROME_AI_MULTIMODAL,
+  provider: isAndroidMode ? STTProviders.ANDROID_LOCAL : (isDesktopMode ? STTProviders.DESKTOP_LOCAL : STTProviders.CHROME_AI_MULTIMODAL),
   
   'chrome-ai-multimodal': {
     temperature: 0.1,
@@ -314,6 +454,19 @@ export const DefaultSTTConfig = {
     model: 'whisper',
     language: 'en',
     temperature: 0,
+  },
+  
+  'android-local': {
+    endpoint: ANDROID_LOCAL_SERVER.baseUrl,
+    model: 'whisper-local',
+    language: 'en',
+  },
+  
+  'desktop-local': {
+    endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
+    model: 'ggml-small.en.bin', // Default whisper model
+    language: 'en',
+    threads: 4,
   },
   
   recordingFormat: 'webm',
@@ -366,6 +519,18 @@ export function validateAIConfig(config) {
     }
     if (!config.ollama?.model || config.ollama.model.trim() === '') {
       errors.push('Ollama Model is required');
+    }
+  }
+  
+  if (config.provider === AIProviders.ANDROID_LOCAL) {
+    if (config['android-local']?.endpoint && config['android-local'].endpoint.trim() === '') {
+      errors.push('Android Local Endpoint cannot be empty');
+    }
+  }
+  
+  if (config.provider === AIProviders.DESKTOP_LOCAL) {
+    if (config['desktop-local']?.endpoint && config['desktop-local'].endpoint.trim() === '') {
+      errors.push('Desktop Local Endpoint cannot be empty');
     }
   }
   
@@ -446,6 +611,21 @@ export function validateTTSConfig(config) {
     }
   }
   
+  if (config.provider === TTSProviders.ANDROID_LOCAL) {
+    if (config['android-local']?.endpoint && config['android-local'].endpoint.trim() === '') {
+      errors.push('Android Local TTS Endpoint cannot be empty');
+    }
+  }
+  
+  if (config.provider === TTSProviders.DESKTOP_LOCAL) {
+    if (config['desktop-local']?.endpoint && config['desktop-local'].endpoint.trim() === '') {
+      errors.push('Desktop Local TTS Endpoint cannot be empty');
+    }
+    if (!config['desktop-local']?.referenceText && config['desktop-local']?.trained) {
+      errors.push('GPT-SoVITS reference text is required for voice cloning');
+    }
+  }
+  
   return {
     valid: errors.length === 0,
     errors,
@@ -504,19 +684,30 @@ export function validateSTTConfig(config) {
     }
   }
   
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  if (config.provider === STTProviders.ANDROID_LOCAL) {
+    if (config['android-local']?.endpoint && config['android-local'].endpoint.trim() === '') {
+      errors.push('Android Local STT Endpoint cannot be empty');
+    }
+  }
+  
+  if (config.provider === STTProviders.DESKTOP_LOCAL) {
+    if (config['desktop-local']?.endpoint && config['desktop-local'].endpoint.trim() === '') {
+      errors.push('Desktop Local STT Endpoint cannot be empty');
+    }
+    if (!config['desktop-local']?.model || config['desktop-local'].model.trim() === '') {
+      errors.push('Desktop Local Whisper model path is required');
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
-/**
- * Get provider display name
- * @param {string} provider - Provider key
- * @returns {string} Display name
- */
 export function getProviderDisplayName(provider) {
   switch (provider) {
+    case AIProviders.ANDROID_LOCAL:
+      return 'Android Local LLM';
+    case AIProviders.DESKTOP_LOCAL:
+      return 'Desktop Local LLM';
     case AIProviders.OPENAI:
       return 'OpenAI';
     case AIProviders.OLLAMA:
@@ -538,6 +729,7 @@ export default {
   KokoroVoices,
   KokoroQuantization,
   KokoroDevice,
+  GPTSoVITSLanguages,
   DefaultAIConfig,
   DefaultTTSConfig,
   DefaultSTTConfig,

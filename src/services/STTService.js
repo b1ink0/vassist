@@ -10,6 +10,7 @@ import { STTProviders, DefaultSTTConfig } from '../config/aiConfig';
 import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
+import MicrophoneService from './MicrophoneService';
 
 class STTService {
   constructor() {
@@ -132,6 +133,48 @@ class STTService {
         state.provider = provider;
 
         Logger.log('other', `${logPrefix} - Generic STT configured:`, { baseURL: endpoint });
+      } else if (provider === STTProviders.ANDROID_LOCAL) {
+        const androidConfig = config['android-local'] || {};
+        let endpoint = androidConfig.endpoint || 'http://127.0.0.1:8765';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'android-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+
+        state.config = {
+          model: androidConfig.model || 'whisper-local',
+          language: androidConfig.language || 'en',
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - Android local STT configured:`, { baseURL: endpoint });
+      } else if (provider === STTProviders.DESKTOP_LOCAL) {
+        const desktopConfig = config['desktop-local'] || {};
+        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
+        
+        if (!endpoint.endsWith('/v1')) {
+          endpoint = endpoint.replace(/\/$/, '') + '/v1';
+        }
+        
+        state.client = new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        });
+
+        state.config = {
+          model: desktopConfig.model || 'whisper-base',
+          language: desktopConfig.language || 'en',
+        };
+        state.provider = provider;
+
+        Logger.log('other', `${logPrefix} - Desktop local STT configured:`, { baseURL: endpoint });
       } else {
         throw new Error(`Unknown STT provider: ${provider}`);
       }
@@ -167,13 +210,13 @@ class STTService {
 
   /**
    * Start recording audio from microphone
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording() {
+  async startRecording(deviceId = null) {
     if (!this.isConfigured()) {
       throw new Error('STTService not configured. Enable STT and configure settings first.');
     }
-
     if (this.isRecording) {
       Logger.warn('STTService', 'Already recording');
       return false;
@@ -182,14 +225,19 @@ class STTService {
     try {
       Logger.log('STTService', 'Requesting microphone access...');
       
-      // Request microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        } 
-      });
+      // Get audio constraints with selected microphone (or use provided deviceId)
+      const constraints = deviceId 
+        ? {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              deviceId: { exact: deviceId }
+            }
+          }
+        : MicrophoneService.getAudioConstraints();
+      
+      this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       // Create MediaRecorder
       const mimeType = this.getSupportedMimeType();
@@ -326,7 +374,18 @@ class STTService {
     }
 
     try {
-      const audioFile = new File([audioBlob], 'recording.webm', { type: audioBlob.type });
+      let fileBlob = audioBlob;
+      let fileName = 'recording.webm';
+      
+      if (state.provider === STTProviders.ANDROID_LOCAL || state.provider === 'android-local' ||
+          state.provider === STTProviders.DESKTOP_LOCAL || state.provider === 'desktop-local') {
+        Logger.log('other', `${logPrefix} - Converting audio to WAV for local STT...`);
+        fileBlob = await this.convertToWav(audioBlob);
+        fileName = 'recording.wav';
+        Logger.log('other', `${logPrefix} - Converted to WAV: ${fileBlob.size} bytes`);
+      }
+      
+      const audioFile = new File([fileBlob], fileName, { type: fileBlob.type });
       const params = { 
         file: audioFile, 
         model: state.config.model 
@@ -434,9 +493,10 @@ class STTService {
   /**
    * Test STT with a sample recording
    * @param {number} duration - Recording duration in seconds (default: 3)
+   * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3) {
+  async testRecording(duration = 3, deviceId = null) {
     return new Promise((resolve, reject) => {
       // Setup temporary callbacks
       const originalTranscription = this.onTranscription;
@@ -454,8 +514,8 @@ class STTService {
         reject(error);
       };
       
-      // Start recording
-      this.startRecording().then(() => {
+      // Start recording with deviceId
+      this.startRecording(deviceId).then(() => {
         // Auto-stop after duration
         setTimeout(() => {
           this.stopRecording();
@@ -539,6 +599,106 @@ class STTService {
    */
   setRecordingStopCallback(callback) {
     this.onRecordingStop = callback;
+  }
+
+  /**
+   * Convert an audio blob to WAV format at 16kHz mono (required for sherpa-onnx Whisper)
+   * @param {Blob} audioBlob - Input audio blob (webm, mp4, etc.)
+   * @returns {Promise<Blob>} WAV formatted audio blob
+   */
+  async convertToWav(audioBlob) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      // Target: 16kHz mono
+      const targetSampleRate = 16000;
+      const numChannels = 1;
+      const duration = audioBuffer.duration;
+      const numSamples = Math.floor(duration * targetSampleRate);
+      
+      // Get mono audio data (mix channels if stereo)
+      let channelData;
+      if (audioBuffer.numberOfChannels === 1) {
+        channelData = audioBuffer.getChannelData(0);
+      } else {
+        // Mix stereo to mono
+        const left = audioBuffer.getChannelData(0);
+        const right = audioBuffer.getChannelData(1);
+        channelData = new Float32Array(left.length);
+        for (let i = 0; i < left.length; i++) {
+          channelData[i] = (left[i] + right[i]) / 2;
+        }
+      }
+      
+      // Resample if necessary
+      let samples;
+      if (audioBuffer.sampleRate !== targetSampleRate) {
+        const ratio = audioBuffer.sampleRate / targetSampleRate;
+        samples = new Float32Array(numSamples);
+        for (let i = 0; i < numSamples; i++) {
+          const srcIndex = i * ratio;
+          const srcIndexFloor = Math.floor(srcIndex);
+          const srcIndexCeil = Math.min(srcIndexFloor + 1, channelData.length - 1);
+          const t = srcIndex - srcIndexFloor;
+          samples[i] = channelData[srcIndexFloor] * (1 - t) + channelData[srcIndexCeil] * t;
+        }
+      } else {
+        samples = channelData;
+      }
+      
+      const wavBuffer = this.createWavBuffer(samples, targetSampleRate, numChannels);
+      
+      audioContext.close();
+      return new Blob([wavBuffer], { type: 'audio/wav' });
+    } catch (error) {
+      audioContext.close();
+      throw error;
+    }
+  }
+
+  /**
+   * Create a WAV file buffer from float samples
+   */
+  createWavBuffer(samples, sampleRate, numChannels) {
+    const bytesPerSample = 2; // 16-bit
+    const dataLength = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    this.writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    this.writeString(view, 8, 'WAVE');
+    this.writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true); // byte rate
+    view.setUint16(32, numChannels * bytesPerSample, true); // block align
+    view.setUint16(34, bytesPerSample * 8, true); // bits per sample
+    this.writeString(view, 36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Convert float samples to 16-bit PCM
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++) {
+      const sample = Math.max(-1, Math.min(1, samples[i]));
+      const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+    
+    return buffer;
+  }
+
+  writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
   }
 }
 

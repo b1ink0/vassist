@@ -435,10 +435,11 @@ const ControlPanel = ({
             left: `${panelX}px`,
             top: `${panelY}px`,
             zIndex: 9997,
+            maxWidth: '96vw',
           }}
           className="pointer-events-auto bg-black/90 rounded-lg shadow-2xl border border-white/20 backdrop-blur-sm w-[520px]"
         >
-      <div className="flex justify-between items-center p-4 border-b border-white/20">
+      <div className="flex justify-between items-center p-2 md:p-4 border-b border-white/20">
         <div className="flex items-center gap-1">
           <h3 className="m-0 text-base font-semibold text-white">Dev Control Panel</h3>
           <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
@@ -476,7 +477,7 @@ const ControlPanel = ({
         </button>
       </div>
 
-      <div className="flex border-b border-white/20 bg-black/50">
+      <div className="flex border-b border-white/20 bg-black/50 overflow-x-auto">
         <button
           onClick={() => setActiveTab('actions')}
           className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
@@ -549,7 +550,7 @@ const ControlPanel = ({
         </button>
       </div>
 
-      <div className="p-4 max-h-[60vh] overflow-y-auto">
+      <div className="p-2 md:p-4 max-h-[60vh] overflow-y-auto">
         {activeTab === 'actions' && (
           <div className="space-y-2">
             <p className="text-xs text-gray-400 mb-3">Trigger assistant actions</p>
@@ -913,7 +914,7 @@ const ControlPanel = ({
                   setLoggerEnabled(newState);
                   await Logger.setEnabled(newState);
                 }}
-                className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={`px-2 md:px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
                   loggerEnabled
                     ? 'bg-green-500 text-white hover:bg-green-600'
                     : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
@@ -999,7 +1000,7 @@ const ControlPanel = ({
                   searchTerm === '' || 
                   cat.category.toLowerCase().includes(searchTerm.toLowerCase())
                 ).length === 0 && (
-                  <div className="text-center text-xs text-gray-500 py-4">
+                  <div className="text-center text-xs text-gray-500 py-2 md:py-4">
                     {searchTerm ? 'No categories match your search' : 'No categories found'}
                   </div>
                 )}

@@ -1,0 +1,31 @@
+/**
+ * @fileoverview Global environment variable type declarations
+ */
+
+declare global {
+  /**
+   * True when building for Chrome Extension, false otherwise
+   * @constant
+   */
+  const __EXTENSION_MODE__: boolean;
+
+  /**
+   * True when building for Electron Desktop app, false otherwise
+   * @constant
+   */
+  const __DESKTOP_MODE__: boolean;
+
+  /**
+   * True when building in development mode, false for production
+   * @constant
+   */
+  const __DEV_MODE__: boolean;
+
+  /**
+   * True when building for Android WebView, false for other platforms
+   * @constant
+   */
+  const __ANDROID_MODE__: boolean;
+}
+
+export {};

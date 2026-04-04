@@ -12,6 +12,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { wrapContentScriptPlugin, copyAssetsPlugin } from './tools/vite-plugins/extension-plugins.js';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,12 +27,16 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       wrapContentScriptPlugin(), // Wrap content script as IIFE
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
+      vadAssetsPlugin('dist-extension'),
     ],
     
     define: {
       // Build-time constants for mode detection
       __EXTENSION_MODE__: JSON.stringify(true),
+      __ANDROID_MODE__: JSON.stringify(false),
+      __DESKTOP_MODE__: JSON.stringify(false),
       __DEV_MODE__: JSON.stringify(!isProduction),
+      __PROD_MODE__: JSON.stringify(isProduction),
     },
     
     build: {
@@ -134,6 +139,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       open: true,
+      fs: {
+        deny: [
+          '**/electron/server/**',
+          '**/.git/**',
+          '**/node_modules/**/.git/**',
+        ],
+      },
     },
   };
 });

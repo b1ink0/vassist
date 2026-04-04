@@ -112,7 +112,7 @@ const parseMarkdown = (text) => {
     }
     if (line.startsWith('## ')) {
       elements.push(
-        <h2 key={elementKey++} className="text-xl font-bold mt-4 mb-2 text-white">
+        <h2 key={elementKey++} className="text-xl font-bold mt-2 md:mt-4 mb-2 text-white">
           {parseInline(line.slice(3))}
         </h2>
       );
@@ -120,7 +120,7 @@ const parseMarkdown = (text) => {
     }
     if (line.startsWith('# ')) {
       elements.push(
-        <h1 key={elementKey++} className="text-2xl font-bold mt-4 mb-3 text-white">
+        <h1 key={elementKey++} className="text-2xl font-bold mt-2 md:mt-4 mb-3 text-white">
           {parseInline(line.slice(2))}
         </h1>
       );

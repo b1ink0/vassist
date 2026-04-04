@@ -90,7 +90,7 @@ const ChromeAISTTConfig = ({
               {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && onStartDownload && (
                 <button
                   onClick={onStartDownload}
-                  className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                  className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
                 >
                   <div className="flex items-center justify-center gap-2">
                     <Icon name="download" size={14} />

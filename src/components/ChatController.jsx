@@ -7,14 +7,21 @@ import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
 import AIToolbar from './AIToolbar'
+import { InputWindowManager } from './InputWindowManager'
 import ChatService from '../services/ChatService'
 import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
 import DocumentInteractionService from '../services/DocumentInteractionService'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
+import { PromptConfig } from '../config/promptConfig'
 import chatHistoryService from '../services/ChatHistoryService'
 import { useApp } from '../contexts/AppContext'
+import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
 import Logger from '../services/LoggerService';
+import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
+import { useDesktop } from '../contexts/DesktopContext';
+import CameraService from '../services/CameraService';
+import ScreenShareService from '../services/ScreenShareService';
 
 /**
  * Main chat controller component.
@@ -25,10 +32,14 @@ import Logger from '../services/LoggerService';
  * @returns {JSX.Element} Chat controller component
  */
 const ChatController = ({ 
-  modelDisabled = false
+  modelDisabled = false,
+  requireSetupOnChatClick = false,
+  onRequireSetup,
 }) => {
+  const { api } = useDesktop();
   const chatInputRef = useRef(null);
   const streamAbortControllerRef = useRef(null); // Track current stream to allow cancellation
+  const hasAutoOpenedAndroidChatRef = useRef(false);
   
   const {
     assistantRef,
@@ -36,9 +47,10 @@ const ChatController = ({
     isChatInputVisible,
     isChatContainerVisible,
     chatMessages,
-    isVoiceMode,
+    isVoiceMode: _isVoiceMode,
     currentChatId,
     isTempChat,
+    pendingDropData,
     setIsChatInputVisible,
     setIsChatContainerVisible,
     setChatMessages,
@@ -49,16 +61,352 @@ const ChatController = ({
     setPendingDropData,
     regenerateWithStreamingRef,
     editWithStreamingRef,
+    closeChat,
   } = useApp();
+
+  useDesktopWindowResize();
+
+  /**
+   * Handles AI response in voice mode.
+   * Gets AI response and speaks it through VoiceConversationService.
+   */
+  const handleVoiceAIResponse = useCallback(async () => {
+    const abortController = new AbortController();
+    streamAbortControllerRef.current = abortController;
+    
+    setIsProcessing(true)
+
+    if (!AIServiceProxy.isConfigured()) {
+      ChatService.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.');
+      setChatMessages([...ChatService.getMessages()]);
+      streamAbortControllerRef.current = null;
+      setIsProcessing(false);
+      VoiceConversationService.changeState(ConversationStates.LISTENING);
+      return;
+    }
+
+    Logger.log('ChatController', '[Voice] Checking assistant ready state:', {
+      hasRef: !!assistantRef.current,
+      isReady: assistantRef.current?.isReady?.(),
+    });
+    
+    if (assistantRef.current?.isReady()) {
+      Logger.log('ChatController', '[Voice] Starting BUSY state (thinking animation)')
+      await assistantRef.current.setState('BUSY')
+      Logger.log('ChatController', '[Voice] BUSY state set successfully')
+    } else {
+      Logger.warn('ChatController', '[Voice] Assistant not ready, skipping BUSY state')
+    }
+
+    let voiceAIConfig;
+    let voiceTTSConfig;
+    try {
+      voiceAIConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      voiceTTSConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+    } catch (error) {
+      Logger.error('ChatController', 'Failed to load configs in handleVoiceAIResponse:', error);
+      voiceAIConfig = DefaultAIConfig;
+      voiceTTSConfig = DefaultTTSConfig;
+    }
+    
+    const systemPrompt = getSystemPromptFromConfig(voiceAIConfig);
+    const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured();
+
+    const messages = ChatService.getFormattedMessages(systemPrompt)
+
+    const lastUserMessage = ChatService.getLastUserMessage();
+    const hasAttachments = lastUserMessage && (
+      (lastUserMessage.images && lastUserMessage.images.length > 0) ||
+      (lastUserMessage.audios && lastUserMessage.audios.length > 0)
+    );
+    
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroid && !isDesktop) {
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');
+        streamAbortControllerRef.current = null;
+        return;
+      }
+      
+      try {
+        const aiSendMessage = async (messages, onStream, options) => {
+          return await AIServiceProxy.sendMessage(messages, onStream, options);
+        };
+        
+        const pageContext = await DocumentInteractionService.getContextForQuery(
+          lastUserMessage.content,
+          aiSendMessage,
+          abortController.signal
+        );
+        
+        if (abortController.signal.aborted) {
+          Logger.log('ChatController', '[Voice] Stream cancelled after document interaction');
+          streamAbortControllerRef.current = null;
+          return;
+        }
+        
+        if (pageContext) {
+          Logger.log('ChatController', '[Voice] Injecting page context into AI prompt');
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage && lastMessage.role === 'user') {
+            lastMessage.content = pageContext + lastMessage.content;
+          }
+        }
+      } catch (error) {
+        Logger.warn('ChatController', '[Voice] Failed to extract page context:', error);
+      }
+    } else if (hasAttachments) {
+      Logger.log('ChatController', '[Voice] Skipping document interaction - user has attachments (images/audios)');
+    }
+
+    if (ttsEnabled) {
+      TTSServiceProxy.resumePlayback()
+    }
+
+    let fullResponse = ''
+    let fullResponseRaw = ''
+    let previousDisplayLength = 0
+    let hasSwitchedToSpeaking = false
+    let textBuffer = ''
+    const allChunks = []
+    let nextChunkToGenerate = 0
+    const MAX_QUEUED_AUDIO = 3
+    let isGeneratingChunk = false
+
+    const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const generateTTSChunk = async (chunkIndex) => {
+      if (chunkIndex >= allChunks.length) return
+      
+      const chunkText = allChunks[chunkIndex]
+      
+      try {
+        const queueLength = TTSServiceProxy.getQueueLength()
+        Logger.log('ChatController', `[Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
+        
+        const result = await TTSServiceProxy.generateSpeech(chunkText, true)
+        
+        if (!result || !result.audio) {
+          Logger.warn('ChatController', `[Voice] TTS generation returned null for chunk ${chunkIndex}`)
+          return
+        }
+        
+        const { audio, bvmdUrl } = result
+        
+        const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, voiceTTSSessionId)
+        
+        Logger.log('ChatController', `[Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
+      } catch (error) {
+        Logger.error('ChatController', '[Voice] TTS chunk ${chunkIndex} failed:', error)
+      }
+    }
+
+    const tryGenerateNextChunk = async () => {
+      if (isGeneratingChunk) {
+        return
+      }
+      
+      const queueLength = TTSServiceProxy.getQueueLength()
+      if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
+        isGeneratingChunk = true
+        await generateTTSChunk(nextChunkToGenerate++)
+        isGeneratingChunk = false
+        
+        tryGenerateNextChunk()
+      }
+    }
+
+    const handleAudioFinished = () => {
+      tryGenerateNextChunk()
+    }
+    TTSServiceProxy.addEventListener('audioFinished', handleAudioFinished)
+
+    if (ttsEnabled) {
+      Logger.log('ChatController', `[Voice] Starting TTS session ${voiceTTSSessionId} (not marking complete until LLM done)`);
+    }
+
+    const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
+      if (abortController.signal.aborted) {
+        Logger.log('ChatController', '[Voice] Streaming callback aborted, ignoring chunk');
+        return;
+      }
+      
+      fullResponseRaw += chunk
+      
+      let displayResponse = fullResponseRaw.replace(/<think>[\s\S]*?<\/think>/g, '')
+      displayResponse = displayResponse.replace(/<think>.*$/s, '')
+      displayResponse = displayResponse.replace(/^\s+/, '')
+      
+      fullResponse = displayResponse
+      
+      const newContent = displayResponse.slice(previousDisplayLength)
+      textBuffer += newContent
+      previousDisplayLength = displayResponse.length
+
+      const currentMessages = ChatService.getMessages()
+      if (currentMessages.length > 0 && 
+          currentMessages[currentMessages.length - 1].role === 'assistant') {
+        ChatService.updateLastMessage(fullResponse)
+      } else {
+        ChatService.addMessage('assistant', fullResponse)
+      }
+      setChatMessages([...ChatService.getMessages()])
+
+      if (!ttsEnabled && !hasSwitchedToSpeaking && fullResponse.length > 10 && assistantRef.current?.isReady()) {
+        Logger.log('ChatController', '[Voice] Starting speaking animation (no TTS)')
+        assistantRef.current.triggerAction('speak')
+        hasSwitchedToSpeaking = true
+      }
+
+      if (ttsEnabled) {
+        const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer)
+        
+        if (sentenceEnd) {
+          const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim()
+          textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length)
+          
+          if (chunkToSpeak && chunkToSpeak.length >= 3 && chunkToSpeak.trim().length >= 3) {
+            allChunks.push(chunkToSpeak)
+            tryGenerateNextChunk()
+          }
+        }
+      }
+    })
+
+    if (result.cancelled) {
+      Logger.log('ChatController', 'Voice generation cancelled by user')
+      VoiceConversationService.changeState(ConversationStates.LISTENING)
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle()
+      }
+      streamAbortControllerRef.current = null;
+      setIsProcessing(false)
+      return
+    }
+
+    if (!result.success) {
+      Logger.error('ChatController', 'Voice AI error:', result.error);
+      ChatService.addMessage('assistant', `Error: ${result.error.message}`);
+      setChatMessages([...ChatService.getMessages()]);
+      VoiceConversationService.changeState(ConversationStates.LISTENING)
+      if (assistantRef.current?.isReady()) {
+        assistantRef.current.idle()
+      }
+      streamAbortControllerRef.current = null;
+      setIsProcessing(false)
+      return
+    }
+
+    Logger.log('ChatController', '[Voice] AI response complete:', fullResponse)
+
+    if (ttsEnabled && textBuffer.trim().length > 0) {
+      const finalChunk = textBuffer.trim()
+      allChunks.push(finalChunk)
+      tryGenerateNextChunk()
+    }
+
+    if (ttsEnabled && allChunks.length > 0) {
+      VoiceConversationService.changeState(ConversationStates.GENERATING_VOICE);
+      Logger.log('ChatController', `[Voice] Transitioning to GENERATING_VOICE state (${allChunks.length} TTS chunks to generate)`);
+      
+      TTSServiceProxy.resetSessionFlags();
+      
+      Logger.log('ChatController', `[Voice] Waiting for ${allChunks.length} TTS chunks to generate and queue...`)
+      
+      while (nextChunkToGenerate < allChunks.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      
+      Logger.log('ChatController', '[Voice] All TTS chunks generated and queued')
+      
+      TTSServiceProxy.markSessionComplete(voiceTTSSessionId);
+      Logger.log('ChatController', `[Voice] Session ${voiceTTSSessionId} marked complete`);
+    } else {
+      Logger.warn('ChatController', '[Voice] No TTS generated, returning to listening')
+      VoiceConversationService.changeState(ConversationStates.LISTENING)
+    }
+
+    TTSServiceProxy.removeEventListener('audioFinished', handleAudioFinished)
+
+    streamAbortControllerRef.current = null;
+    setIsProcessing(false);
+  }, [setIsProcessing, setChatMessages, assistantRef]);
+
+  const handleVoiceTranscription = useCallback(async (text, images = null, skipForward = false) => {
+    Logger.log('ChatController', 'Voice transcription received:', text, 'with images:', images?.length || 0, 'skipForward:', skipForward)
+    
+    if (!text || !text.trim()) {
+      Logger.warn('ChatController', 'Empty transcription, returning to listening')
+      setTimeout(() => {
+        if (VoiceConversationService.isConversationActive()) {
+          VoiceConversationService.changeState(ConversationStates.LISTENING)
+        }
+      }, 500)
+      return
+    }
+    
+    // Desktop: Forward transcription to input window so it can send back with images
+    // Skip if skipForward=true (already from input window)
+    if (!skipForward && isDesktop && !isInputWindow && api?.ipc) {
+      Logger.log('ChatController', 'Forwarding transcription to input window for image attachment');
+      api.ipc.send('voice:transcriptionReceived', text);
+      // Input window will send back via chatInput:voiceTranscription with images array
+      return;
+    }
+    
+    // Add message and process
+    ChatService.addMessage('user', text, images, null);
+    setChatMessages(ChatService.getMessages());
+    
+    await handleVoiceAIResponse()
+  }, [setChatMessages, handleVoiceAIResponse, api]);
+
+  const handleVoiceModeChange = useCallback(async (active) => {
+    Logger.log('ChatController', 'Voice mode changed:', active);
+    setIsVoiceMode(active);
+    
+    if (isDesktop && !isInputWindow) {
+      try {
+        if (active) {
+          Logger.log('ChatController', 'Starting VoiceConversationService in main window');
+          await VoiceConversationService.start();
+        } else {
+          Logger.log('ChatController', 'Stopping VoiceConversationService in main window');
+          VoiceConversationService.stop();
+          if (CameraService.isRunning()) {
+            Logger.log('ChatController', 'Stopping camera after voice call ended');
+            await CameraService.stop();
+          }
+          // Stop screen share when voice mode ends
+          if (ScreenShareService.isRunning()) {
+            Logger.log('ChatController', 'Stopping screen share after voice call ended');
+            await ScreenShareService.stop();
+          }
+        }
+      } catch (error) {
+        Logger.error('ChatController', 'Voice mode change error:', error);
+      }
+    }
+  }, [setIsVoiceMode]);
 
   /**
    * Track voice conversation state to update isSpeaking
-   * Note: This is now handled in AppContext, but we keep local tracking
-   * for any component-specific logic
+   * Web/Android: ChatInput registers callback directly, don't register here to avoid overwriting
    */
   useEffect(() => {
+    // Only register in desktop main window
+    // Web/Android: ChatInput handles state callback to avoid overwriting
+    if (isInputWindow || !isDesktop) return;
+    
     const handleStateChange = (state) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
+      
+      // Desktop: Forward voice state to input window via IPC
+      if (api?.ipc) {
+        api.ipc.send('state:voiceState', state);
+      }
     };
 
     VoiceConversationService.setStateChangeCallback(handleStateChange);
@@ -66,23 +414,7 @@ const ChatController = ({
     return () => {
       VoiceConversationService.setStateChangeCallback(null);
     };
-  }, [setIsSpeaking]);
-
-  /**
-   * Poll TTSService to track playback state for non-voice mode
-   * This ensures stop button works even in regular chat when TTS is playing
-   * Note: This is now handled in AppContext, but we keep local tracking
-   */
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isVoiceMode) {
-        const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
-        setIsSpeaking(isPlaying);
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isVoiceMode, setIsSpeaking]);
+  }, [setIsSpeaking, api]);
 
   useEffect(() => {
     if (isTempChat && currentChatId) {
@@ -93,6 +425,179 @@ const ChatController = ({
   }, [isTempChat, currentChatId])
 
   /**
+   * Desktop: Listen for voice events from input window via IPC
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+
+    const unsubscribeVoiceTranscription = api.ipc.on('chatInput:voiceTranscription', (data) => {
+      Logger.log('ChatController', 'Voice transcription from input window:', data);
+      if (typeof data === 'string') {
+        handleVoiceTranscription(data, null, true);
+      } else {
+        handleVoiceTranscription(data.text, data.images, true);
+      }
+    });
+
+    const unsubscribeVoiceMode = api.ipc.on('chatInput:voiceMode', (isActive) => {
+      Logger.log('ChatController', 'Voice mode from input window:', isActive);
+      handleVoiceModeChange(isActive);
+    });
+
+    const unsubscribeVoiceInterrupt = api.ipc.on('voice:interrupt', () => {
+      Logger.log('ChatController', 'Voice interrupt from input window');
+      VoiceConversationService.interrupt();
+    });
+
+    const unsubscribeVadSpeechDetected = api.ipc.on('voice:vadSpeechDetected', () => {
+      // Check if TTS is currently playing in main window
+      if (VoiceConversationService.currentState === ConversationStates.SPEAKING) {
+        Logger.log('ChatController', 'VAD speech detected while speaking - interrupting TTS');
+        
+        // Dispatch event to trigger force-complete animation
+        const event = new CustomEvent('voiceInterrupt');
+        window.dispatchEvent(event);
+        
+        TTSServiceProxy.stopPlayback();
+        VoiceConversationService.interrupt();
+      }
+    });
+
+    return () => {
+      unsubscribeVoiceTranscription?.();
+      unsubscribeVoiceMode?.();
+      unsubscribeVoiceInterrupt?.();
+      unsubscribeVadSpeechDetected?.();
+    };
+  }, [api, handleVoiceTranscription, handleVoiceModeChange]);
+
+  /**
+   * Desktop Main Window: Initialize camera and listen for IPC commands from input window
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    Logger.log('ChatController', 'Main window: Initializing camera service...');
+
+    // Subscribe to camera state changes
+    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
+      Logger.log('ChatController', 'Camera state changed:', { devices: devices.length, selectedDeviceId, isActive });
+      
+      if (api?.ipc) {
+        const serializedDevices = devices.map(device => ({
+          deviceId: device.deviceId,
+          label: device.label,
+          kind: device.kind,
+          groupId: device.groupId
+        }));
+        api.ipc.send('state:cameraDevices', { 
+          devices: serializedDevices, 
+          selectedDeviceId, 
+          isActive 
+        });
+      }
+    });
+
+    const initCamera = async () => {
+      try {
+        await CameraService.initialize();
+        Logger.log('ChatController', 'Camera initialized successfully');
+      } catch (error) {
+        Logger.error('ChatController', 'Camera initialization failed:', error);
+      }
+    };
+    initCamera();
+
+    if (api?.ipc) {
+      const unsubscribeToggle = api.ipc.on('camera:toggle', async () => {
+        Logger.log('ChatController', 'IPC: Camera toggle received');
+        try {
+          if (CameraService.isRunning()) {
+            await CameraService.stop();
+          } else {
+            await CameraService.start();
+          }
+        } catch (error) {
+          Logger.error('ChatController', 'Camera toggle failed:', error);
+        }
+      });
+
+      const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId) => {
+        Logger.log('ChatController', 'IPC: Camera select device:', deviceId);
+        try {
+          await CameraService.setSelectedDevice(deviceId);
+        } catch (error) {
+          Logger.error('ChatController', 'Camera select device failed:', error);
+        }
+      });
+
+      return () => {
+        unsubscribe?.();
+        unsubscribeToggle?.();
+        unsubscribeSelectDevice?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [api]);
+
+  // Initialize screen share service (Desktop main window only for IPC)
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    Logger.log('ChatController', 'Main window: Initializing screen share service...');
+
+    // Subscribe to screen share state changes
+    const unsubscribe = ScreenShareService.subscribe(({ isActive }) => {
+      Logger.log('ChatController', 'Screen share state changed:', { isActive });
+      
+      if (api?.ipc) {
+        api.ipc.send('state:screenShare', { isActive });
+      }
+    });
+
+    const initScreenShare = async () => {
+      try {
+        await ScreenShareService.initialize();
+        Logger.log('ChatController', 'Screen share initialized successfully');
+      } catch (error) {
+        Logger.error('ChatController', 'Screen share initialization failed:', error);
+      }
+    };
+    initScreenShare();
+
+    if (api?.ipc) {
+      const unsubscribeToggle = api.ipc.on('screenShare:toggle', async () => {
+        Logger.log('ChatController', 'IPC: Screen share toggle received');
+        try {
+          if (ScreenShareService.isRunning()) {
+            await ScreenShareService.stop();
+          } else {
+            await ScreenShareService.start();
+          }
+        } catch (error) {
+          Logger.error('ChatController', 'Screen share toggle failed:', error);
+        }
+      });
+
+      return () => {
+        unsubscribe?.();
+        unsubscribeToggle?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [api]);
+
+  /**
    * Abort streaming when chat is closed to stop TTS generation
    */
   useEffect(() => {
@@ -101,7 +606,6 @@ const ChatController = ({
       streamAbortControllerRef.current.abort();
       streamAbortControllerRef.current = null;
       TTSServiceProxy.stopPlayback();
-      TTSServiceProxy.setAudioFinishedCallback(null);
     }
   }, [isChatContainerVisible])
 
@@ -115,7 +619,6 @@ const ChatController = ({
         streamAbortControllerRef.current.abort();
         streamAbortControllerRef.current = null;
         TTSServiceProxy.stopPlayback();
-        TTSServiceProxy.setAudioFinishedCallback(null);
       }
     };
 
@@ -127,10 +630,41 @@ const ChatController = ({
   }, [])
 
   /**
+   * Get system prompt from AI config based on provider and prompt type
+   * @param {Object} aiConfig - AI configuration object
+   * @returns {string} System prompt text
+   */
+  const getSystemPromptFromConfig = (aiConfig) => {
+    if (!aiConfig || !aiConfig.provider) {
+      return PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    const providerKey = aiConfig.provider === 'chrome-ai' ? 'chromeAi' : aiConfig.provider;
+    const providerConfig = aiConfig[providerKey];
+    
+    if (!providerConfig) {
+      return PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    const promptType = providerConfig.systemPromptType || 'default';
+    
+    if (promptType === 'custom') {
+      return providerConfig.systemPrompt || PromptConfig.systemPrompts.default.prompt;
+    }
+    
+    return PromptConfig.systemPrompts[promptType]?.prompt || PromptConfig.systemPrompts.default.prompt;
+  };
+
+  /**
    * Handles chat button click to toggle chat visibility.
    */
   const handleChatButtonClick = useCallback(() => {
     Logger.log('ChatController', 'Chat button clicked')
+    if (requireSetupOnChatClick) {
+      Logger.log('ChatController', 'Setup required before chat - opening setup wizard');
+      onRequireSetup?.();
+      return;
+    }
     
     if (isChatContainerVisible || isChatInputVisible) {
       Logger.log('ChatController', 'Closing chat')
@@ -142,13 +676,15 @@ const ChatController = ({
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
       
-      // Focus input after chat opens
-      setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
-        window.dispatchEvent(event);
-      }, 100);
+      // Focus input after chat opens (skip on Android to avoid keyboard popup)
+      if (!isAndroid) {
+        setTimeout(() => {
+          const event = new CustomEvent('focusChatInput');
+          window.dispatchEvent(event);
+        }, 100);
+      }
     }
-  }, [isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
+  }, [requireSetupOnChatClick, onRequireSetup, isChatContainerVisible, isChatInputVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
   /**
    * Handles chat open from drag-drop.
@@ -159,11 +695,13 @@ const ChatController = ({
       setIsChatInputVisible(true)
       setIsChatContainerVisible(true)
       
-      // Focus input after chat opens
-      setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
-        window.dispatchEvent(event);
-      }, 100);
+      // Focus input after chat opens (skip on Android to avoid keyboard popup)
+      if (!isAndroid) {
+        setTimeout(() => {
+          const event = new CustomEvent('focusChatInput');
+          window.dispatchEvent(event);
+        }, 100);
+      }
     }
   }, [isChatInputVisible, isChatContainerVisible, setIsChatInputVisible, setIsChatContainerVisible])
 
@@ -181,6 +719,25 @@ const ChatController = ({
       window.removeEventListener('openChatFromDrag', handleOpenChatFromDrag)
     }
   }, [handleChatOpen])
+
+  useEffect(() => {
+    if (!isAndroid || !modelDisabled) return;
+    if (!isAssistantReady) return;
+    if (hasAutoOpenedAndroidChatRef.current) return;
+    if (isChatContainerVisible || isChatInputVisible) return;
+
+    hasAutoOpenedAndroidChatRef.current = true;
+    Logger.log('ChatController', 'Auto-opening chat on Android in chat-only mode');
+    setIsChatInputVisible(true);
+    setIsChatContainerVisible(true);
+  }, [
+    modelDisabled,
+    isAssistantReady,
+    isChatContainerVisible,
+    isChatInputVisible,
+    setIsChatInputVisible,
+    setIsChatContainerVisible,
+  ]);
 
   /**
    * Listens for drag-drop events and stores as pending if chat isn't open yet.
@@ -234,18 +791,18 @@ const ChatController = ({
       ttsConfig = DefaultTTSConfig;
     }
     
-    const systemPrompt = savedConfig.systemPrompt || DefaultAIConfig.systemPrompt;
+    const systemPrompt = getSystemPromptFromConfig(savedConfig);
     const messages = ChatService.getFormattedMessages(systemPrompt);
     
     // DOCUMENT INTERACTION: Extract page context based on user query
-    // SKIP if user has attachments (images/audios)
+    // SKIP if user has attachments (images/audios) or on Android/Desktop platforms
     const lastUserMessage = ChatService.getLastUserMessage();
     const hasAttachments = lastUserMessage && (
       (lastUserMessage.images && lastUserMessage.images.length > 0) ||
       (lastUserMessage.audios && lastUserMessage.audios.length > 0)
     );
     
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
+    if (lastUserMessage && lastUserMessage.content && !hasAttachments && !isAndroid && !isDesktop) {
       Logger.log('ChatController', 'Starting document interaction analysis...');
       
       // Check if aborted before starting
@@ -300,6 +857,8 @@ const ChatController = ({
     }
     
     let fullResponse = '';
+    let fullResponseRaw = ''; // Raw response with <think> tags (for tracking)
+    let previousDisplayLength = 0; // Track how much we've already processed for TTS
     let hasSwitchedToSpeaking = false;
     let textBuffer = '';
     const allChunks = [];
@@ -390,14 +949,15 @@ const ChatController = ({
       }
     };
 
-    TTSServiceProxy.setAudioFinishedCallback(() => {
+    const handleAudioFinished = () => {
       // Only continue generating if not aborted
       if (!abortController.signal.aborted) {
         tryGenerateNextChunk();
       } else {
         Logger.log('ChatController', 'Audio finished but generation aborted, not generating next chunk');
       }
-    });
+    };
+    TTSServiceProxy.addEventListener('audioFinished', handleAudioFinished);
 
     const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
       if (abortController.signal.aborted) {
@@ -405,8 +965,26 @@ const ChatController = ({
         return;
       }
       
-      fullResponse += chunk;
-      textBuffer += chunk;
+      // Add chunk to raw response
+      fullResponseRaw += chunk;
+      
+      // Remove all <think>...</think> blocks (including incomplete ones at the end)
+      // This regex handles complete think blocks
+      let displayResponse = fullResponseRaw.replace(/<think>[\s\S]*?<\/think>/g, '');
+      
+      // Remove incomplete opening <think> tag at the end (if chunk ended mid-tag)
+      displayResponse = displayResponse.replace(/<think>.*$/s, '');
+      
+      // Remove leading newlines/whitespace from the response
+      displayResponse = displayResponse.replace(/^\s+/, '');
+      
+      // Update fullResponse with filtered content
+      fullResponse = displayResponse;
+      
+      // Get only the new content since last update for TTS
+      const newContent = displayResponse.slice(previousDisplayLength);
+      textBuffer += newContent;
+      previousDisplayLength = displayResponse.length;
 
       const currentMessages = ChatService.getMessages();
       Logger.log('ChatController', 'Streaming chunk received, current message count:', currentMessages.length);
@@ -446,7 +1024,7 @@ const ChatController = ({
     if (result.cancelled) {
       Logger.log('ChatController', 'Generation cancelled by user');
       TTSServiceProxy.stopPlayback();
-      TTSServiceProxy.setAudioFinishedCallback(null); // Clear callback to stop TTS generation loop
+      TTSServiceProxy.removeEventListener('audioFinished', handleAudioFinished);
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
@@ -458,13 +1036,20 @@ const ChatController = ({
     if (!result.success) {
       const errorMessage = result.error?.message || 'Unknown error occurred';
       Logger.error('ChatController', 'AI error:', result.error);
+      
+      // Add error message to chat
       ChatService.addMessage('assistant', `Error: ${errorMessage}`);
       setChatMessages([...ChatService.getMessages()]);
+      
+      // Clean up TTS and event listeners
       TTSServiceProxy.stopPlayback();
-      TTSServiceProxy.setAudioFinishedCallback(null); // Clear callback to stop TTS generation loop
+      TTSServiceProxy.removeEventListener('audioFinished', handleAudioFinished);
+      
+      // Reset assistant animation
       if (assistantRef.current?.isReady()) {
         assistantRef.current.idle();
       }
+      
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
       return { success: false, error: errorMessage };
@@ -487,7 +1072,7 @@ const ChatController = ({
       }
     }
     
-    TTSServiceProxy.setAudioFinishedCallback(null);
+    TTSServiceProxy.removeEventListener('audioFinished', handleAudioFinished);
     
     // Clear abort controller on successful completion
     streamAbortControllerRef.current = null;
@@ -588,295 +1173,75 @@ const ChatController = ({
   };
 
   /**
-   * Handles voice mode transcription.
-   * 
-   * @param {string} text - Transcribed text from speech
+   * Register transcription callback with VoiceConversationService
+   * Main window only - ChatInput not rendered in desktop main window
    */
-  const handleVoiceTranscription = async (text) => {
-    Logger.log('ChatController', 'Voice transcription received:', text)
-    
-    if (!text || !text.trim()) {
-      Logger.warn('ChatController', 'Empty transcription, returning to listening')
-      setTimeout(() => {
-        if (VoiceConversationService.isConversationActive()) {
-          VoiceConversationService.changeState(ConversationStates.LISTENING)
-        }
-      }, 500)
-      return
-    }
-    
-    ChatService.addMessage('user', text);
-    setChatMessages(ChatService.getMessages());
-    
-    await handleVoiceAIResponse()
-  }
+  useEffect(() => {
+    if (isInputWindow) return;
+
+    VoiceConversationService.setTranscriptionCallback(handleVoiceTranscription);
+
+    return () => {
+      VoiceConversationService.setTranscriptionCallback(null);
+    };
+  }, [handleVoiceTranscription]);
 
   /**
-   * Handles AI response in voice mode.
-   * Gets AI response and speaks it through VoiceConversationService.
+   * IPC bridge for desktop mode - listen for events from input window
    */
-  const handleVoiceAIResponse = async () => {
-    // Create abort controller for this stream
-    const abortController = new AbortController();
-    streamAbortControllerRef.current = abortController;
-    
-    setIsProcessing(true)
-
-    if (!AIServiceProxy.isConfigured()) {
-      ChatService.addMessage('assistant', 'Error: AI not configured. Please configure in Control Panel.');
-      setChatMessages([...ChatService.getMessages()]);
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      VoiceConversationService.changeState(ConversationStates.LISTENING);
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
       return;
     }
 
-    Logger.log('ChatController', '[Voice] Checking assistant ready state:', {
-      hasRef: !!assistantRef.current,
-      isReady: assistantRef.current?.isReady?.(),
+    if (!api?.ipc) return;
+
+    const unsubscribeSend = api.ipc.on('chatInput:send', ({ message, images, audios }) => {
+      Logger.log('ChatController', 'Received send from input window via IPC', { message, images, audios });
+      handleMessageSend(message, images, audios);
     });
-    
-    if (assistantRef.current?.isReady()) {
-      Logger.log('ChatController', '[Voice] Starting BUSY state (thinking animation)')
-      await assistantRef.current.setState('BUSY')
-      Logger.log('ChatController', '[Voice] BUSY state set successfully')
-    } else {
-      Logger.warn('ChatController', '[Voice] Assistant not ready, skipping BUSY state')
-    }
 
-    let voiceAIConfig;
-    let voiceTTSConfig;
-    try {
-      voiceAIConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
-      voiceTTSConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
-    } catch (error) {
-      Logger.error('ChatController', 'Failed to load configs in handleVoiceAIResponse:', error);
-      voiceAIConfig = DefaultAIConfig;
-      voiceTTSConfig = DefaultTTSConfig;
-    }
-    
-    const systemPrompt = voiceAIConfig.systemPrompt || DefaultAIConfig.systemPrompt
-    const ttsEnabled = voiceTTSConfig.enabled && TTSServiceProxy.isConfigured()
+    const unsubscribePendingDrop = api.ipc.on('chatInput:setPendingDropData', (data) => {
+      Logger.log('ChatController', 'Received setPendingDropData from input window via IPC', data);
+      setPendingDropData(data);
+    });
 
-    const messages = ChatService.getFormattedMessages(systemPrompt)
+    const unsubscribeClose = api.ipc.on('chatInput:close', () => {
+      Logger.log('ChatController', 'Received close from input window via IPC');
+      closeChat();
+    });
 
-    // DOCUMENT INTERACTION: Extract page context for voice queries too
-    // SKIP if user has attachments (images/audios)
-    const lastUserMessage = ChatService.getLastUserMessage();
-    const hasAttachments = lastUserMessage && (
-      (lastUserMessage.images && lastUserMessage.images.length > 0) ||
-      (lastUserMessage.audios && lastUserMessage.audios.length > 0)
-    );
-    
-    if (lastUserMessage && lastUserMessage.content && !hasAttachments) {
-      // Check if aborted before starting
-      if (abortController.signal.aborted) {
-        Logger.log('ChatController', '[Voice] Document interaction cancelled before starting');
-        streamAbortControllerRef.current = null;
-        return;
-      }
-      
-      try {
-        // Create AI send function for the analyzer (with utility session option)
-        const aiSendMessage = async (messages, onStream, options) => {
-          return await AIServiceProxy.sendMessage(messages, onStream, options);
-        };
-        
-        const pageContext = await DocumentInteractionService.getContextForQuery(
-          lastUserMessage.content,
-          aiSendMessage,
-          abortController.signal
-        );
-        
-        // Check if aborted after document interaction
-        if (abortController.signal.aborted) {
-          Logger.log('ChatController', '[Voice] Stream cancelled after document interaction');
-          streamAbortControllerRef.current = null;
-          return;
-        }
-        
-        if (pageContext) {
-          Logger.log('ChatController', '[Voice] Injecting page context into AI prompt');
-          const lastMessage = messages[messages.length - 1];
-          if (lastMessage && lastMessage.role === 'user') {
-            lastMessage.content = pageContext + lastMessage.content;
-          }
-        }
-      } catch (error) {
-        Logger.warn('ChatController', '[Voice] Failed to extract page context:', error);
-      }
-    } else if (hasAttachments) {
-      Logger.log('ChatController', '[Voice] Skipping document interaction - user has attachments (images/audios)');
-    }
-
-    if (ttsEnabled) {
-      TTSServiceProxy.resumePlayback()
-    }
-
-    let fullResponse = ''
-    let hasSwitchedToSpeaking = false
-    let textBuffer = ''
-    const allChunks = []
-    let nextChunkToGenerate = 0
-    const MAX_QUEUED_AUDIO = 3
-    let isGeneratingChunk = false
-
-    const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-    /**
-     * Generates TTS chunk with lip sync for voice mode.
-     * 
-     * @param {number} chunkIndex - Index of chunk to generate
-     */
-    const generateTTSChunk = async (chunkIndex) => {
-      if (chunkIndex >= allChunks.length) return
-      
-      const chunkText = allChunks[chunkIndex]
-      
-      try {
-        const queueLength = TTSServiceProxy.getQueueLength()
-        Logger.log('ChatController', `[Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`)
-        
-        const result = await TTSServiceProxy.generateSpeech(chunkText, true)
-        
-        if (!result || !result.audio) {
-          Logger.warn('ChatController', `[Voice] TTS generation returned null for chunk ${chunkIndex}`)
-          return
-        }
-        
-        const { audio, bvmdUrl } = result
-        
-        const audioBlob = audio instanceof Blob ? audio : new Blob([audio], { type: 'audio/mp3' });
-        const audioUrl = URL.createObjectURL(audioBlob)
-        
-        TTSServiceProxy.queueAudio(chunkText, audioUrl, bvmdUrl, voiceTTSSessionId)
-        
-        Logger.log('ChatController', `[Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? ' with lip sync' : ''} (queue now: ${TTSServiceProxy.getQueueLength()})`)
-      } catch (error) {
-        Logger.error('ChatController', '[Voice] TTS chunk ${chunkIndex} failed:', error)
-      }
-    }
-
-    /**
-     * Generates next chunk if queue has space.
-     */
-    const tryGenerateNextChunk = async () => {
-      if (isGeneratingChunk) {
-        return
-      }
-      
-      const queueLength = TTSServiceProxy.getQueueLength()
-      if (queueLength < MAX_QUEUED_AUDIO && nextChunkToGenerate < allChunks.length) {
-        isGeneratingChunk = true
-        await generateTTSChunk(nextChunkToGenerate++)
-        isGeneratingChunk = false
-        
-        tryGenerateNextChunk()
-      }
-    }
-
-    TTSServiceProxy.setAudioFinishedCallback(() => {
-      tryGenerateNextChunk()
-    })
-
-    const result = await AIServiceProxy.sendMessage(messages, async (chunk) => {
-      if (abortController.signal.aborted) {
-        Logger.log('ChatController', '[Voice] Streaming callback aborted, ignoring chunk');
-        return;
-      }
-      
-      fullResponse += chunk
-      textBuffer += chunk
-
-      const currentMessages = ChatService.getMessages()
-      if (currentMessages.length > 0 && 
-          currentMessages[currentMessages.length - 1].role === 'assistant') {
-        ChatService.updateLastMessage(fullResponse)
-      } else {
-        ChatService.addMessage('assistant', fullResponse)
-      }
-      setChatMessages([...ChatService.getMessages()])
-
-      if (!ttsEnabled && !hasSwitchedToSpeaking && fullResponse.length > 10 && assistantRef.current?.isReady()) {
-        Logger.log('ChatController', '[Voice] Starting speaking animation (no TTS)')
-        assistantRef.current.triggerAction('speak')
-        hasSwitchedToSpeaking = true
-      }
-
-      if (ttsEnabled) {
-        const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer)
-        
-        if (sentenceEnd) {
-          const chunkToSpeak = textBuffer.substring(0, sentenceEnd.index + sentenceEnd[0].length).trim()
-          textBuffer = textBuffer.substring(sentenceEnd.index + sentenceEnd[0].length)
-          
-          if (chunkToSpeak && chunkToSpeak.length >= 3 && chunkToSpeak.trim().length >= 3) {
-            allChunks.push(chunkToSpeak)
-            tryGenerateNextChunk()
-          }
-        }
-      }
-    })
-
-    if (result.cancelled) {
-      Logger.log('ChatController', 'Voice generation cancelled by user')
-      VoiceConversationService.changeState(ConversationStates.LISTENING)
-      if (assistantRef.current?.isReady()) {
-        assistantRef.current.idle()
-      }
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false)
-      return
-    }
-
-    if (!result.success) {
-      Logger.error('ChatController', 'Voice AI error:', result.error);
-      ChatService.addMessage('assistant', `Error: ${result.error.message}`);
-      setChatMessages([...ChatService.getMessages()]);
-      VoiceConversationService.changeState(ConversationStates.LISTENING)
-      if (assistantRef.current?.isReady()) {
-        assistantRef.current.idle()
-      }
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false)
-      return
-    }
-
-    Logger.log('ChatController', '[Voice] AI response complete:', fullResponse)
-
-    if (ttsEnabled && textBuffer.trim().length > 0) {
-      const finalChunk = textBuffer.trim()
-      allChunks.push(finalChunk)
-      tryGenerateNextChunk()
-    }
-
-    if (ttsEnabled && allChunks.length > 0) {
-      Logger.log('ChatController', `[Voice] Waiting for ${allChunks.length} TTS chunks...`)
-      
-      while (nextChunkToGenerate < allChunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-      
-      Logger.log('ChatController', '[Voice] All TTS generations complete')
-    } else {
-      Logger.warn('ChatController', '[Voice] No TTS generated, returning to listening')
-      VoiceConversationService.changeState(ConversationStates.LISTENING)
-    }
-
-    // Clear abort controller on successful completion
-    streamAbortControllerRef.current = null;
-    setIsProcessing(false);
-  }
+    return () => {
+      unsubscribeSend?.();
+      unsubscribePendingDrop?.();
+      unsubscribeClose?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setPendingDropData, api]);
 
   /**
-   * Handles voice mode toggle.
-   * 
-   * @param {boolean} active - Whether voice mode is active
+   * IPC state broadcast for desktop mode - send state changes to input window
+   * This runs only in the main window to broadcast state to input window
    */
-  const handleVoiceModeChange = useCallback((active) => {
-    Logger.log('ChatController', 'Voice mode changed:', active)
-    setIsVoiceMode(active)
-  }, [setIsVoiceMode])
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    if (!api?.ipc) return;
+
+    api.ipc.send('state:isChatInputVisible', isChatInputVisible);
+  }, [isChatInputVisible, api]);
+
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    if (!api?.ipc) return;
+
+    api.ipc.send('state:pendingDropData', pendingDropData);
+  }, [pendingDropData, api]);
 
   /**
    * Handles drag-drop onto ChatContainer.
@@ -932,6 +1297,9 @@ const ChatController = ({
 
   return (
     <>
+      {/* Desktop input window manager */}
+      {isDesktop && <InputWindowManager />}
+      
       {/* AI Toolbar - appears on text/image selection */}
       <AIToolbar />
       
@@ -947,13 +1315,15 @@ const ChatController = ({
       />
 
       {/* Chat Input - bottom screen */}
-      <ChatInput
-        ref={chatInputRef}
-        onSend={handleMessageSend}
-        onClose={handleChatInputClose}
-        onVoiceTranscription={handleVoiceTranscription}
-        onVoiceMode={handleVoiceModeChange}
-      />
+      {!isDesktop && (
+        <ChatInput
+          ref={chatInputRef}
+          onSend={handleMessageSend}
+          onClose={handleChatInputClose}
+          onVoiceTranscription={handleVoiceTranscription}
+          onVoiceMode={handleVoiceModeChange}
+        />
+      )}
 
       {/* Chat Container - message bubbles */}
       <ChatContainer

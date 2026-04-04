@@ -5,7 +5,7 @@
  */
 
 import { useConfig } from '../../contexts/ConfigContext';
-import { BackgroundThemeModes, PositionPresets, FPSLimitOptions } from '../../config/uiConfig';
+import { BackgroundThemeModes, PositionPresets } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
 import ShortcutsConfig from '../common/ShortcutsConfig';
@@ -13,6 +13,8 @@ import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
 import Logger from '../../services/LoggerService';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import BackgroundSettings from './BackgroundSettings';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -22,6 +24,7 @@ const UISettings = ({ isLightBackground }) => {
 
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);
+  const allowPositionSelection = !isAndroid && !isDesktop;
 
   const isExtensionMode = ExtensionBridge.isExtensionMode();
 
@@ -30,9 +33,9 @@ const UISettings = ({ isLightBackground }) => {
       <h3 className="text-base font-semibold text-white mb-4">UI Configuration</h3>
       
       {/* Documentation Link */}
-      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-400/20">
+      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-3">
-          <Icon name="book" size={20} className="text-blue-300 flex-shrink-0 mt-0.5" />
+          <Icon name="book" size={20} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold text-white mb-1">Documentation</h4>
             <p className="text-xs text-white/70 mb-2">
@@ -42,7 +45,7 @@ const UISettings = ({ isLightBackground }) => {
               href="https://b1ink0.github.io/vassist/docs/intro"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
             >
               View Documentation
               <Icon name="arrow-top-right" size={14} />
@@ -52,7 +55,7 @@ const UISettings = ({ isLightBackground }) => {
       </div>
       
       {/* Start Setup Again Button */}
-      <div className="space-y-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+      <div className="space-y-2 p-3 rounded-lg bg-white/10 border border-white/20">
         <button
           onClick={async () => {
             if (isResetting) return;
@@ -71,12 +74,12 @@ const UISettings = ({ isLightBackground }) => {
             }
           }}
           disabled={isResetting}
-          className="glass-button w-full px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+          className="glass-button w-full px-2 md:px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
           <Icon name="refresh" size={16} />
           {isResetting ? 'Resetting...' : 'Start Setup Wizard Again'}
         </button>
-        <p className="text-xs text-purple-300">
+        <p className="text-xs">
           Re-run the initial setup wizard to reconfigure your assistant
         </p>
       </div>
@@ -139,126 +142,11 @@ const UISettings = ({ isLightBackground }) => {
         )}
       </div>
 
-      {/* Virtual Companion Settings */}
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">Virtual Companion</h4>
-        
-        {/* Enable Avatar Toggle */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex-1">
-              <label className="text-sm text-white font-medium">Enable Avatar</label>
-              <p className="text-xs text-white/50 mt-0.5">
-                {uiConfig.enableModelLoading 
-                  ? 'Virtual assistant with animated avatar' 
-                  : 'Chat-only mode (no avatar)'}
-              </p>
-            </div>
-            <Toggle
-              checked={uiConfig.enableModelLoading}
-              onChange={(checked) => updateUIConfig('enableModelLoading', checked)}
-            />
-          </div>
-        </div>
-
-        {/* Character Display Settings - Only show when avatar is enabled */}
-        {uiConfig.enableModelLoading && (
-          <>
-          {/* Portrait Mode Toggle */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Portrait Mode</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  {uiConfig.enablePortraitMode 
-                    ? 'Upper body framing with closer camera view' 
-                    : 'Full body view with standard camera'}
-                </p>
-              </div>
-              <Toggle
-                checked={uiConfig.enablePortraitMode || false}
-                onChange={(checked) => updateUIConfig('enablePortraitMode', checked)}
-              />
-            </div>
-          </div>
-
-          {/* Physics Toggle */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Physics Simulation</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  {uiConfig.enablePhysics !== false
-                    ? 'Realistic hair and cloth movement' 
-                    : 'Disable physics for better performance'}
-                </p>
-              </div>
-              <Toggle
-                checked={uiConfig.enablePhysics !== false}
-                onChange={(checked) => updateUIConfig('enablePhysics', checked)}
-              />
-            </div>
-          </div>
-
-          {/* FPS Limit */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Frame Rate Limit</label>
-            <select
-              value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
-              onChange={(e) => {
-                const value = e.target.value === 'native' ? 'native' : parseInt(e.target.value);
-                updateUIConfig('fpsLimit', value);
-              }}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
-              <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
-              <option value={FPSLimitOptions.NATIVE} className="bg-gray-900">Native (Monitor Rate)</option>
-            </select>
-            {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native' ? (
-              <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
-                <Icon name="alert-triangle" size={14} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-yellow-200/90">
-                  Native refresh rate may impact performance on high-refresh monitors (144Hz+)
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-white/50">
-                Limits rendering to {uiConfig.fpsLimit || 60} frames per second
-              </p>
-            )}
-          </div>
-
-          {/* Position Preset */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Character Position</label>
-            <select
-              value={uiConfig.position?.preset || 'bottom-right'}
-              onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-              {Object.entries(PositionPresets).map(([key, preset]) => (
-                <option key={key} value={key} className="bg-gray-900">
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-white/50">
-              {uiConfig.position?.preset === 'last-location'
-                ? 'Will load at the last dragged position. Drag to save new position.'
-                : 'Changes will apply on next page load or reload'}
-            </p>
-          </div>
-          </>
-        )}
-      </div>
-
-      {/* Chat Position for chat-only mode */}
-      {!uiConfig.enableModelLoading && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">Chat Position</label>
+      {/* Chat Position - visible when avatar is disabled */}
+      {!uiConfig.enableModelLoading && allowPositionSelection && (
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold text-white mb-3">Chat Position</h4>
+          <label className="block text-sm font-medium text-white/90">Chat Window Position</label>
           <select
             value={uiConfig.position?.preset || 'bottom-right'}
             onChange={(e) => updateUIConfig('position.preset', e.target.value)}
@@ -346,6 +234,11 @@ const UISettings = ({ isLightBackground }) => {
         )}
       </div>
 
+      {/* Custom Background Images - Android Only */}
+      {isAndroid && (
+        <BackgroundSettings isLightBackground={isLightBackground} />
+      )}
+
       {/* AI Toolbar Settings */}
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">AI Toolbar</h4>
@@ -398,17 +291,20 @@ const UISettings = ({ isLightBackground }) => {
       </div>
 
       {/* Keyboard Shortcuts */}
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
-        
-        <ShortcutsConfig
-          shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
-          onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
-          isLightBackground={isLightBackground}
-        />
-      </div>
+      {!isAndroid ? (
+        <div className="space-y-4 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
+          
+          <ShortcutsConfig
+            shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
+            onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+        ) : null
+      }
 
-      {/* Developer Options - Moved to bottom */}
+      {/* Developer Options */}
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
         

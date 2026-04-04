@@ -313,26 +313,34 @@ const AIToolbar = () => {
   }, []);
 
   /**
-   * Set up TTS callbacks for speaker icon
+   * Set up TTS event listeners for speaker icon
    */
   useEffect(() => {
-    TTSServiceProxy.setAudioStartCallback((sessionId) => {
+    const handleAudioStart = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('AIToolbar', 'TTS audio started:', sessionId);
       if (sessionId === currentSessionId) {
         setIsSpeaking(true);
       }
-    });
+    };
 
-    TTSServiceProxy.setAudioEndCallback((sessionId) => {
+    const handleAudioEnd = (event) => {
+      const { sessionId } = event.detail;
       Logger.log('AIToolbar', 'TTS audio ended:', sessionId);
+      // Update speaking state regardless of sessionId match
+      // The event only fires when playback truly ends
+      setIsSpeaking(false);
       if (sessionId === currentSessionId) {
-        setIsSpeaking(false);
+        setCurrentSessionId(null);
       }
-    });
+    };
+
+    TTSServiceProxy.addEventListener('audioStart', handleAudioStart);
+    TTSServiceProxy.addEventListener('audioEnd', handleAudioEnd);
 
     return () => {
-      TTSServiceProxy.setAudioStartCallback(null);
-      TTSServiceProxy.setAudioEndCallback(null);
+      TTSServiceProxy.removeEventListener('audioStart', handleAudioStart);
+      TTSServiceProxy.removeEventListener('audioEnd', handleAudioEnd);
     };
   }, [currentSessionId]);
   

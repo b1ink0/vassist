@@ -48,7 +48,7 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
   return (
     <div className="setup-step">
       <div className="mb-4">
-        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
           Quick Tutorial
         </h2>
         <p className="text-xs sm:text-sm text-white/90">
@@ -96,10 +96,10 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
       </div>
 
       {/* Bottom Info */}
-      <div className="mt-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+      <div className="mt-4 p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-2">
-          <Icon name="info" size={16} className="text-purple-400 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-purple-300">
+          <Icon name="info" size={16} className="text-white/80 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-white/70">
             <span className="font-semibold">Pro Tip:</span> All these features are accessible anytime! Look for the chat button, character controls, and settings icon once you complete setup.
           </p>
         </div>

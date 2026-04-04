@@ -116,7 +116,7 @@ const SetupWizard = () => {
         {/* Content area */}
         <div 
           ref={contentRef}
-          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-4 sm:p-6`}
+          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-2 md:p-4 sm:p-6`}
           style={{ 
             scrollbarWidth: 'thin', 
             scrollbarColor: isLightBackground 
@@ -152,7 +152,6 @@ const SetupWizard = () => {
               } transition-all flex items-center gap-1`}
             >
               <span className="hidden sm:inline">{isLastStep ? 'Finish' : 'Next'}</span>
-              <span className="sm:hidden">→</span>
               <Icon name="arrow-right" size={16} className="hidden sm:block" />
             </button>
           </div>

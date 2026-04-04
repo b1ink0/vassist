@@ -4,11 +4,13 @@ import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 import VirtualAssistant from '../../VirtualAssistant';
 import { PositionPresets } from '../../../config/uiConfig';
+import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
 const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
   const normalRef = useRef(null);
   const portraitRef = useRef(null);
+  const allowPositionSelection = !isAndroid && !isDesktop;
   
   // Character enabled state (on by default)
   const [characterEnabled, setCharacterEnabled] = useState(
@@ -74,7 +76,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
   return (
     <div className="setup-step character-intro-step">
       <div className="step-header mb-8">
-        <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
           Virtual Companion
         </h2>
         <p className="text-white/90">
@@ -115,28 +117,28 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                 <div 
                   className={`relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${
                     displayMode === 'normal' 
-                      ? 'border-purple-400 bg-purple-500/10' 
+                      ? 'border-white/30 bg-white/10' 
                       : 'border-white/10 bg-white/5 hover:border-white/20'
                   }`}
                   onClick={() => handleDisplayModeChange('normal')}
                 >
                   {displayMode === 'normal' && (
                     <div className="absolute top-3 right-3 z-10">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/90 border border-purple-400">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30">
                         <Icon name="check" size={14} className="text-white" />
                         <span className="text-xs text-white font-medium">Selected</span>
                       </div>
                     </div>
                   )}
 
-                  <div className="p-4">
+                  <div className="p-2 md:p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Icon name="maximize" size={20} className="text-purple-400" />
+                      <Icon name="maximize" size={20} className="text-white/80" />
                       <h3 className="text-base font-semibold text-white">Standard Mode</h3>
                     </div>
                     
                     {/* Preview */}
-                    <div className="aspect-video rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-white/10 overflow-hidden mb-3 relative">
+                    <div className="aspect-video rounded-lg bg-gradient-to-br from-white/20 to-white/10 border border-white/10 overflow-hidden mb-3 relative">
                       <VirtualAssistant
                         ref={normalRef}
                         isPreview={true}
@@ -149,11 +151,11 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
 
                     <div className="space-y-2 text-xs">
                       <div className="flex items-start gap-2 text-white/80">
-                        <Icon name="check" size={12} className="text-green-400 flex-shrink-0 mt-0.5" />
+                        <Icon name="check" size={12} className="text-white/80 flex-shrink-0 mt-0.5" />
                         <span>Complete character visible</span>
                       </div>
                       <div className="flex items-start gap-2 text-white/80">
-                        <Icon name="check" size={12} className="text-green-400 flex-shrink-0 mt-0.5" />
+                        <Icon name="check" size={12} className="text-white/80 flex-shrink-0 mt-0.5" />
                         <span>Full range of animations</span>
                       </div>
                     </div>
@@ -164,28 +166,28 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                 <div 
                   className={`relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${
                     displayMode === 'portrait' 
-                      ? 'border-blue-400 bg-blue-500/10' 
+                      ? 'border-white/30 bg-white/10' 
                       : 'border-white/10 bg-white/5 hover:border-white/20'
                   }`}
                   onClick={() => handleDisplayModeChange('portrait')}
                 >
                   {displayMode === 'portrait' && (
                     <div className="absolute top-3 right-3 z-10">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/90 border border-blue-400">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30">
                         <Icon name="check" size={14} className="text-white" />
                         <span className="text-xs text-white font-medium">Selected</span>
                       </div>
                     </div>
                   )}
 
-                  <div className="p-4">
+                  <div className="p-2 md:p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Icon name="user" size={20} className="text-blue-400" />
+                      <Icon name="user" size={20} className="text-white/80" />
                       <h3 className="text-base font-semibold text-white">Portrait Mode</h3>
                     </div>
                     
                     {/* Preview */}
-                    <div className="aspect-video rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-white/10 overflow-hidden mb-3 relative">
+                    <div className="aspect-video rounded-lg bg-gradient-to-br from-white/20 to-white/10 border border-white/10 overflow-hidden mb-3 relative">
                       <VirtualAssistant
                         ref={portraitRef}
                         isPreview={true}
@@ -198,11 +200,11 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
 
                     <div className="space-y-2 text-xs">
                       <div className="flex items-start gap-2 text-white/80">
-                        <Icon name="check" size={12} className="text-green-400 flex-shrink-0 mt-0.5" />
+                        <Icon name="check" size={12} className="text-white/80 flex-shrink-0 mt-0.5" />
                         <span>Upper body focus</span>
                       </div>
                       <div className="flex items-start gap-2 text-white/80">
-                        <Icon name="check" size={12} className="text-green-400 flex-shrink-0 mt-0.5" />
+                        <Icon name="check" size={12} className="text-white/80 flex-shrink-0 mt-0.5" />
                         <span>Compact and space-efficient</span>
                       </div>
                     </div>
@@ -211,71 +213,72 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
               </div>
             </div>
 
-            {/* Position Selection */}
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-4">Screen Position</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {positions.map((position) => {
-                  const isSelected = selectedPosition === position.key;
-                  
-                  return (
-                    <button
-                      key={position.key}
-                      onClick={() => handlePositionChange(position.key)}
-                      className={`relative p-3 rounded-lg border-2 transition-all duration-300 text-left ${
-                        isSelected
-                          ? 'border-purple-400 bg-purple-500/20 shadow-lg shadow-purple-500/30'
-                          : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
-                      }`}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-1 right-1">
-                          <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
-                            <Icon name="check" size={12} className="text-white" />
+            {allowPositionSelection && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Screen Position</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {positions.map((position) => {
+                    const isSelected = selectedPosition === position.key;
+                    
+                    return (
+                      <button
+                        key={position.key}
+                        onClick={() => handlePositionChange(position.key)}
+                        className={`relative p-3 rounded-lg border-2 transition-all duration-300 text-left ${
+                          isSelected
+                            ? 'border-white/30 bg-white/10 shadow-lg shadow-white/20'
+                            : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-1 right-1">
+                            <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                              <Icon name="check" size={12} className="text-white" />
+                            </div>
                           </div>
+                        )}
+
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
+                          isSelected ? 'bg-white/20' : 'bg-white/10'
+                        }`}>
+                          <Icon 
+                            name={position.icon} 
+                            size={20} 
+                            className={isSelected ? 'text-white/70' : 'text-white/60'} 
+                          />
                         </div>
-                      )}
 
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
-                        isSelected ? 'bg-purple-500/30' : 'bg-white/10'
-                      }`}>
-                        <Icon 
-                          name={position.icon} 
-                          size={20} 
-                          className={isSelected ? 'text-purple-300' : 'text-white/60'} 
-                        />
-                      </div>
+                        <h4 className="text-xs font-semibold text-white mb-1">
+                          {position.label}
+                        </h4>
+                        <p className="text-[10px] text-white/60">
+                          {position.description}
+                        </p>
 
-                      <h4 className="text-xs font-semibold text-white mb-1">
-                        {position.label}
-                      </h4>
-                      <p className="text-[10px] text-white/60">
-                        {position.description}
-                      </p>
-
-                      {position.key === 'bottom-right' && (
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 mt-1">
-                          Default
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                        {position.key === 'bottom-right' && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/80 border border-white/20 mt-1">
+                            Default
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-white/60 mt-3 flex items-center gap-1.5">
+                  <Icon name="idea" size={14} className="text-white/80" />
+                  You can drag the character anywhere on screen later
+                </p>
               </div>
-              <p className="text-xs text-white/60 mt-3 flex items-center gap-1.5">
-                <Icon name="idea" size={14} className="text-yellow-400" />
-                You can drag the character anywhere on screen later
-              </p>
-            </div>
+            )}
           </>
         ) : (
           /* Character DISABLED - Show Chat-Only Benefits */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: Preview */}
             <div className="space-y-4">
-              <div className="aspect-video rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-white/10 overflow-hidden relative flex items-center justify-center">
+              <div className="aspect-video rounded-lg bg-gradient-to-br from-white/20 to-white/10 border border-white/10 overflow-hidden relative flex items-center justify-center">
                 <div className="text-center p-6">
-                  <Icon name="message-circle" size={64} className="text-purple-400 mx-auto mb-3 opacity-50" />
+                  <Icon name="message-circle" size={64} className="text-white/80 mx-auto mb-3 opacity-50" />
                   <p className="text-white/60 text-sm">
                     Chat-Only Mode
                   </p>
@@ -284,24 +287,24 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
 
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Icon name="sparkles" size={16} className="text-blue-400" />
+                  <Icon name="sparkles" size={16} className="text-white/80" />
                   Chat-Only Benefits
                 </h3>
                 <ul className="space-y-2 text-xs text-white/70">
                   <li className="flex items-start gap-2">
-                    <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                    <Icon name="check" size={14} className="text-white/80 flex-shrink-0 mt-0.5" />
                     <span>Lightweight and minimal interface</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                    <Icon name="check" size={14} className="text-white/80 flex-shrink-0 mt-0.5" />
                     <span>Clean, distraction-free experience</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                    <Icon name="check" size={14} className="text-white/80 flex-shrink-0 mt-0.5" />
                     <span>Full AI capabilities remain available</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <Icon name="check" size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                    <Icon name="check" size={14} className="text-white/80 flex-shrink-0 mt-0.5" />
                     <span>Simple floating chat button interface</span>
                   </li>
                 </ul>
@@ -319,10 +322,10 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                 </p>
               </div>
 
-              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <div className="p-2 md:p-4 rounded-lg bg-white/10 border border-white/20">
                 <div className="flex items-start gap-2">
-                  <Icon name="info" size={16} className="text-blue-300 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-200">
+                  <Icon name="info" size={16} className="text-white/70 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-white/70">
                     <strong>You can always enable the 3D character later</strong> from settings. 
                     This just sets your initial preference.
                   </p>
@@ -334,9 +337,9 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
       </div>
 
       {/* Additional Info */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
+      <div className="bg-white/10 border border-white/20 rounded-xl p-2 md:p-4 mb-6">
         <div className="flex items-start gap-3">
-          <Icon name="info" size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
+          <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
           <div>
             <h4 className="text-sm font-semibold text-white mb-1">You can change this later</h4>
             <p className="text-xs text-white/80">
