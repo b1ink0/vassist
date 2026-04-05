@@ -395,6 +395,7 @@ export const DefaultTTSConfig = {
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'gpt-sovits',
+    pytorchBackend: 'auto', // auto | cpu | cuda | rocm | sycl | metal
     // Voice cloning reference
     referenceVoiceId: null, // Voice ID from IndexedDB
     referenceAudio: null, // Path to reference audio file 

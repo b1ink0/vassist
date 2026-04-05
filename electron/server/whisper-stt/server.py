@@ -30,6 +30,8 @@ app.add_middleware(
 # Global model instance
 whisper_model = None
 model_name = None
+WHISPER_MODEL_DIR = Path(os.environ.get("WHISPER_MODEL_DIR", str(Path(__file__).parent / "models")))
+WHISPER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
     """Load faster-whisper model with GPU support"""
@@ -46,7 +48,7 @@ def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
                 model_name_str, 
                 device=device,
                 compute_type=compute_type,
-                download_root=str(Path(__file__).parent / "models")
+                download_root=str(WHISPER_MODEL_DIR)
             )
             model_name = model_name_str
             print(f"[Whisper] Model loaded successfully on {device}")
@@ -56,7 +58,7 @@ def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
                 model_name_str,
                 device="cpu",
                 compute_type="int8",
-                download_root=str(Path(__file__).parent / "models")
+                download_root=str(WHISPER_MODEL_DIR)
             )
             model_name = model_name_str
             print(f"[Whisper] Model loaded on CPU")

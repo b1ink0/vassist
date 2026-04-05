@@ -96,7 +96,7 @@ contextBridge.exposeInMainWorld('electron', {
   
   // GPT-SoVITS Setup
   gptSovitsSetup: {
-    start: () => ipcRenderer.invoke('gptsovits:setup:start'),
+    start: (options = {}) => ipcRenderer.invoke('gptsovits:setup:start', options),
     cancel: () => ipcRenderer.invoke('gptsovits:setup:cancel'),
     getStatus: () => ipcRenderer.invoke('gptsovits:setup:status'),
     onLog: (callback) => {

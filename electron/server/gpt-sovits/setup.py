@@ -9,6 +9,7 @@ import sys
 import subprocess
 import shutil
 import platform
+import json
 from pathlib import Path
 import urllib.request
 import zipfile
@@ -21,7 +22,8 @@ except ImportError:
     subprocess.run([sys.executable, "-m", "pip", "install", "tqdm", "--no-warn-script-location"], check=True)
     from tqdm import tqdm
 
-BASE_DIR = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).parent
+BASE_DIR = Path(os.environ.get("GPTSOVITS_DATA_DIR", str(SCRIPT_DIR)))
 MODELS_DIR = BASE_DIR / "models"
 PYTHON_DIR = BASE_DIR / "python"
 
@@ -30,10 +32,26 @@ IS_WINDOWS = platform.system() == 'Windows'
 IS_MACOS = platform.system() == 'Darwin'
 IS_ARM_MAC = IS_MACOS and platform.machine() == 'arm64'
 
+SUPPORTED_TORCH_BACKENDS = {'auto', 'cpu', 'cuda', 'rocm', 'sycl', 'metal'}
+TORCH_INDEX_URLS = {
+    'cpu': 'https://download.pytorch.org/whl/cpu',
+    'cuda': 'https://download.pytorch.org/whl/cu121',
+    'rocm': 'https://download.pytorch.org/whl/rocm6.2.4',
+    'sycl': 'https://download.pytorch.org/whl/xpu',
+}
+
 def log(message):
     """Print with immediate flush for real-time streaming"""
     print(message, flush=True)
     sys.stdout.flush()
+
+def get_requested_torch_backend():
+    """Read requested backend from environment with safe default."""
+    backend = os.environ.get('GPTSOVITS_TORCH_BACKEND', 'auto').strip().lower()
+    if backend not in SUPPORTED_TORCH_BACKENDS:
+        log(f"[PYTORCH] Unknown backend '{backend}', falling back to auto")
+        return 'auto'
+    return backend
 
 def get_python_exe():
     """Get the Python executable path for current platform"""
@@ -41,6 +59,34 @@ def get_python_exe():
         return PYTHON_DIR / "python.exe"
     else:
         return PYTHON_DIR / "bin" / "python3"
+
+def inspect_torch_installation(python_exe):
+    """Inspect installed torch build type from the embedded runtime."""
+    probe = subprocess.run([
+        str(python_exe), "-c",
+        (
+            "import json, platform, torch; "
+            "v=torch.__version__; "
+            "cuda=getattr(torch.version,'cuda',None); "
+            "hip=getattr(torch.version,'hip',None); "
+            "mps_built=hasattr(torch.backends,'mps') and torch.backends.mps.is_built(); "
+            "xpu_ok=hasattr(torch,'xpu') and torch.xpu.is_available(); "
+            "build=('cuda' if ('+cu' in v or cuda) else "
+            "'rocm' if ('+rocm' in v or hip) else "
+            "'sycl' if ('+xpu' in v or xpu_ok) else "
+            "'cpu' if '+cpu' in v else "
+            "'metal' if (platform.system()=='Darwin' and mps_built) else 'unknown'); "
+            "print(json.dumps({'version': v, 'build': build, 'cuda_available': torch.cuda.is_available(), 'cuda_version': cuda, 'hip_version': hip, 'xpu_available': bool(xpu_ok), 'mps_built': bool(mps_built)}))"
+        )
+    ], capture_output=True, text=True, check=False)
+
+    if probe.returncode != 0:
+        return None
+
+    try:
+        return json.loads(probe.stdout.strip())
+    except Exception:
+        return None
 
 def check_cuda_available():
     """Check if CUDA is available on the system (Windows/Linux only)"""
@@ -186,7 +232,7 @@ def setup_python_runtime():
         log("[ERROR] Supported: Windows x64, macOS Apple Silicon (M1/M2/M3)")
         sys.exit(1)
 
-def install_pytorch():
+def install_pytorch(requested_backend='auto'):
     """Install PyTorch with platform-specific acceleration"""
     python_exe = get_python_exe()
     
@@ -196,7 +242,11 @@ def install_pytorch():
     
     if IS_ARM_MAC:
         # macOS Apple Silicon: Install PyTorch with MPS (Metal Performance Shaders) support
-        log("[PYTORCH] Installing for Apple Silicon (MPS acceleration)...")
+        if requested_backend not in ('auto', 'metal', 'cpu'):
+            log(f"[PYTORCH] Backend '{requested_backend}' is not supported on Apple Silicon, using metal")
+        effective_backend = 'metal' if requested_backend != 'cpu' else 'cpu'
+
+        log(f"[PYTORCH] Installing for Apple Silicon ({effective_backend.upper()} mode)...")
         log("[PYTORCH] This will enable GPU acceleration via Metal")
         try:
             subprocess.run([
@@ -218,58 +268,97 @@ def install_pytorch():
             sys.exit(1)
     
     elif IS_WINDOWS:
-        # Windows: Check for CUDA
-        has_cuda = check_cuda_available()
-        
-        if has_cuda:
-            log("[PYTORCH] Installing with CUDA 12.1 support (2.4GB download)...")
+        index_map = TORCH_INDEX_URLS
+
+        if requested_backend == 'auto':
+            requested_backend = 'cuda' if check_cuda_available() else 'cpu'
+
+        if requested_backend == 'metal':
+            log(f"[PYTORCH] Backend '{requested_backend}' is not supported on Windows, falling back to CPU")
+            requested_backend = 'cpu'
+
+        if requested_backend == 'rocm':
+            log("[PYTORCH] ROCm selected on Windows - using configured ROCm index URL")
+        if requested_backend == 'sycl':
+            log("[PYTORCH] SYCL/XPU selected on Windows - using configured XPU index URL")
+
+        index_url = index_map.get(requested_backend, index_map['cpu'])
+
+        log(f"[PYTORCH] Installing backend: {requested_backend.upper()}")
+        if requested_backend == 'cuda':
             log("[PYTORCH] This may take 10-30 minutes depending on your internet speed.")
-            try:
-                subprocess.run([
-                    str(python_exe), "-m", "pip", "install",
-                    "torch", "torchaudio",
-                    "--index-url", "https://download.pytorch.org/whl/cu121",
-                    "--no-warn-script-location"
-                ], check=True)
-                log("[PYTORCH] ✓ PyTorch with CUDA installed")
-                
-                # Verify CUDA is available
+
+        try:
+            result = subprocess.run([
+                str(python_exe), "-m", "pip", "install",
+                "torch", "torchaudio",
+                "--index-url", index_url,
+                "--upgrade",
+                "--force-reinstall",
+                "--no-cache-dir",
+                "--no-warn-script-location"
+            ], capture_output=True, text=True, check=True)
+            log(result.stdout)
+            if result.stderr:
+                log(result.stderr)
+
+            install_info = inspect_torch_installation(python_exe)
+            if install_info:
+                log(f"[PYTORCH] Installed torch: {install_info.get('version')} ({install_info.get('build')})")
+                if requested_backend != 'cpu' and install_info.get('build') == 'cpu':
+                    raise RuntimeError(
+                        f"Requested backend {requested_backend.upper()} but torch build is CPU ({install_info.get('version')})"
+                    )
+            else:
+                log("[PYTORCH] Warning: Unable to inspect installed torch build")
+
+            log(f"[PYTORCH] ✓ PyTorch {requested_backend.upper()} installed")
+
+            if requested_backend == 'cuda':
                 result = subprocess.run([
                     str(python_exe), "-c",
-                    "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+                    "import torch; print(f'CUDA available: {torch.cuda.is_available()}, torch.version.cuda: {torch.version.cuda}, torch.__version__: {torch.__version__}')"
                 ], capture_output=True, text=True, check=False)
                 log(f"[PYTORCH] {result.stdout.strip()}")
-                
-            except subprocess.CalledProcessError as e:
-                log(f"[WARNING] CUDA PyTorch installation failed: {e}")
+        except (subprocess.CalledProcessError, RuntimeError) as e:
+            if requested_backend != 'cpu':
+                log(f"[WARNING] PyTorch {requested_backend.upper()} installation failed: {e}")
                 log("[PYTORCH] Falling back to CPU version...")
-                has_cuda = False
-        
-        if not has_cuda:
-            log("[PYTORCH] Installing CPU version...")
-            try:
+                cpu_url = index_map['cpu']
                 result = subprocess.run([
                     str(python_exe), "-m", "pip", "install",
                     "torch", "torchaudio",
-                    "--index-url", "https://download.pytorch.org/whl/cpu",
+                    "--index-url", cpu_url,
+                    "--upgrade",
+                    "--force-reinstall",
+                    "--no-cache-dir",
                     "--no-warn-script-location"
                 ], capture_output=True, text=True, check=True)
                 log(result.stdout)
                 if result.stderr:
                     log(result.stderr)
+                install_info = inspect_torch_installation(python_exe)
+                if install_info:
+                    log(f"[PYTORCH] Installed torch: {install_info.get('version')} ({install_info.get('build')})")
                 log("[PYTORCH] ✓ PyTorch CPU installed")
-            except subprocess.CalledProcessError as e:
+            else:
                 log(f"[ERROR] PyTorch CPU installation failed:")
-                log(f"Exit code: {e.returncode}")
-                log(f"STDOUT: {e.stdout}")
-                log(f"STDERR: {e.stderr}")
+                if isinstance(e, subprocess.CalledProcessError):
+                    log(f"Exit code: {e.returncode}")
+                    log(f"STDOUT: {e.stdout}")
+                    log(f"STDERR: {e.stderr}")
+                else:
+                    log(str(e))
                 raise
 
 def install_dependencies():
     """Install Python dependencies"""
     python_exe = get_python_exe()
     
-    requirements = BASE_DIR / "requirements.txt"
+    requested_backend = get_requested_torch_backend()
+    log(f"[PYTORCH] Requested backend from settings: {requested_backend}")
+
+    requirements = SCRIPT_DIR / "requirements.txt"
     requirements_no_pyopenjtalk = BASE_DIR / "requirements_temp.txt"
     
     if IS_ARM_MAC:
@@ -278,7 +367,7 @@ def install_dependencies():
         log("[INSTALL] Installing dependencies...")
         
         # Install PyTorch first
-        install_pytorch()
+        install_pytorch(requested_backend)
         
         # Install all dependencies
         try:
@@ -338,7 +427,7 @@ def install_dependencies():
     
     # Install PyTorch first (CUDA or CPU based on GPU availability)
     try:
-        install_pytorch()
+        install_pytorch(requested_backend)
     except Exception as e:
         log(f"[ERROR] PyTorch installation failed: {e}")
         import traceback

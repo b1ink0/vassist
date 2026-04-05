@@ -8,8 +8,18 @@ import { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import { useDesktop } from '../../../contexts/DesktopContext';
 
-const GPTSoVITSSetup = ({ isLightBackground = false }) => {
+const TORCH_BACKEND_OPTIONS = [
+  { value: 'auto', label: 'Auto Detect' },
+  { value: 'cpu', label: 'CPU' },
+  { value: 'cuda', label: 'CUDA (NVIDIA)' },
+  { value: 'rocm', label: 'ROCm (AMD)' },
+  { value: 'sycl', label: 'SYCL/XPU (Intel GPU)' },
+  { value: 'metal', label: 'Metal (Apple Silicon)' },
+];
+
+const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange }) => {
   const { api: desktopAPI } = useDesktop();
+  const [selectedBackend, setSelectedBackend] = useState((config?.pytorchBackend || 'auto').toLowerCase());
   
   // Setup state
   const [setupStatus, setSetupStatus] = useState(null);
@@ -67,6 +77,12 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
       logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
     }
   }, [logs]);
+
+  // Keep local backend in sync when external config changes.
+  useEffect(() => {
+    const nextBackend = (config?.pytorchBackend || 'auto').toLowerCase();
+    setSelectedBackend(prev => (prev === nextBackend ? prev : nextBackend));
+  }, [config?.pytorchBackend]);
   
   const handleStartSetup = async () => {
     setIsSetupRunning(true);
@@ -75,7 +91,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
     setSetupError(null);
     
     try {
-      await desktopAPI.gptSovitsSetup.start();
+      await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend });
     } catch (error) {
       setSetupError(error.message);
       setIsSetupRunning(false);
@@ -106,7 +122,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
     setSetupError(null);
     
     try {
-      await desktopAPI.gptSovitsSetup.start();
+      await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend });
     } catch (error) {
       setSetupError(error.message);
       setIsSetupRunning(false);
@@ -146,39 +162,64 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
           </span>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">PyTorch Backend</label>
+        <select
+          value={selectedBackend}
+          onChange={(e) => {
+            const nextBackend = e.target.value;
+            setSelectedBackend(nextBackend);
+            onConfigChange?.('pytorchBackend', nextBackend);
+          }}
+          disabled={isSetupRunning}
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+        >
+          {TORCH_BACKEND_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value} className="bg-gray-900">
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-white/50">
+          Unsupported choices automatically fall back to a compatible backend.
+        </p>
+      </div>
       
       {/* Install/Cancel buttons */}
       {!isInstalled && (
-        <div className="flex gap-2">
-          <button
-            onClick={isPartialInstall ? handleReinstall : handleStartSetup}
-            disabled={isSetupRunning}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} 
-              flex-1 px-2 md:px-4 py-2 md:py-3 rounded-lg font-medium flex items-center justify-center gap-2
-              disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {isSetupRunning ? (
-              <>
-                <Icon name="loader" size={16} className="animate-spin" />
-                Installing...
-              </>
-            ) : (
-              <>
-                <Icon name="download" size={16} />
-                {isPartialInstall ? 'Re-install GPT-SoVITS' : 'Install GPT-SoVITS'}
-              </>
-            )}
-          </button>
-          
-          {isSetupRunning && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
             <button
-              onClick={handleCancelSetup}
-              className="glass-button px-2 md:px-4 py-2 md:py-3 rounded-lg hover:bg-red-500/20 transition-colors"
-              title="Cancel Installation"
+              onClick={isPartialInstall ? handleReinstall : handleStartSetup}
+              disabled={isSetupRunning}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} 
+                flex-1 px-2 md:px-4 py-2 md:py-3 rounded-lg font-medium flex items-center justify-center gap-2
+                disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              <Icon name="x" size={16} />
+              {isSetupRunning ? (
+                <>
+                  <Icon name="loader" size={16} className="animate-spin" />
+                  Installing...
+                </>
+              ) : (
+                <>
+                  <Icon name="download" size={16} />
+                  {isPartialInstall ? 'Re-install GPT-SoVITS' : 'Install GPT-SoVITS'}
+                </>
+              )}
             </button>
-          )}
+            
+            {isSetupRunning && (
+              <button
+                onClick={handleCancelSetup}
+                className="glass-button px-2 md:px-4 py-2 md:py-3 rounded-lg hover:bg-red-500/20 transition-colors"
+                title="Cancel Installation"
+              >
+                <Icon name="x" size={16} />
+              </button>
+            )}
+          </div>
         </div>
       )}
       
@@ -283,7 +324,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false }) => {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-white/30">•</span>
-              <span>PyTorch with GPU support (~2-3GB)</span>
+              <span>PyTorch backend: {selectedBackend.toUpperCase()} (~2-3GB for GPU builds)</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-white/30">•</span>

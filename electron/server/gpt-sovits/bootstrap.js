@@ -13,7 +13,7 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const BASE_DIR = __dirname;
+const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || __dirname;
 const PYTHON_DIR = path.join(BASE_DIR, 'python');
 
 const IS_WINDOWS = process.platform === 'win32';

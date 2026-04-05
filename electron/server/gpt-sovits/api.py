@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Directories
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(os.environ.get("GPTSOVITS_DATA_DIR", str(Path(__file__).parent)))
 MODELS_DIR = BASE_DIR / "models"
 CHECKPOINTS_DIR = BASE_DIR / "checkpoints"
 TEMP_DIR = Path(tempfile.gettempdir()) / "gptsovits"
@@ -71,15 +71,14 @@ app.add_middleware(
 )
 
 # Paths
-BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"
 CHECKPOINTS_DIR = BASE_DIR / "checkpoints"
 TEMP_DIR = BASE_DIR / "temp"
 
 # Create directories
-MODELS_DIR.mkdir(exist_ok=True)
-CHECKPOINTS_DIR.mkdir(exist_ok=True)
-TEMP_DIR.mkdir(exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Language mapping for GPT-SoVITS webui module
 # i18n("英文") returns "English", i18n("中文") returns "Chinese", etc.

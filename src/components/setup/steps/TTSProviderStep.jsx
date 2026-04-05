@@ -34,9 +34,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [desktopTopK, setDesktopTopK] = useState(15);
   const [desktopTopP, setDesktopTopP] = useState(0.7);
   const [desktopTemperature, setDesktopTemperature] = useState(0.7);
+  const [desktopPytorchBackend, setDesktopPytorchBackend] = useState('auto');
   const [desktopTrained, setDesktopTrained] = useState(false);
-  const [trainingProgress, setTrainingProgress] = useState(null);
-  const [desktopReferenceAudioPath, setDesktopReferenceAudioPath] = useState(null);
   
   // Kokoro config state
   const [kokoroConfig, setKokoroConfig] = useState(DefaultTTSConfig.kokoro || {});
@@ -119,6 +118,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       if (ttsData['desktop-local']?.topK) setDesktopTopK(ttsData['desktop-local'].topK);
       if (ttsData['desktop-local']?.topP) setDesktopTopP(ttsData['desktop-local'].topP);
       if (ttsData['desktop-local']?.temperature) setDesktopTemperature(ttsData['desktop-local'].temperature);
+      if (ttsData['desktop-local']?.pytorchBackend) setDesktopPytorchBackend(ttsData['desktop-local'].pytorchBackend);
       if (ttsData['desktop-local']?.trained) setDesktopTrained(ttsData['desktop-local'].trained);
     }
     
@@ -170,6 +170,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       'desktop-local': {
         endpoint: desktopTTSEndpoint,
         model: 'gpt-sovits',
+        pytorchBackend: desktopPytorchBackend,
         referenceAudio: desktopReferenceAudio,
         referenceText: desktopReferenceText,
         referenceLanguage: desktopReferenceLanguage,
@@ -212,7 +213,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     customEndpoint, customApiKey, customModel, customVoice,
     androidTTSEndpoint,
     selectedSTTProvider, sttConfig, androidSTTEndpoint, desktopSTTEndpoint, desktopSTTModel,
-    desktopTTSEndpoint, desktopReferenceAudio, desktopReferenceText, desktopReferenceLanguage, desktopSpeed, desktopTopK, desktopTopP, desktopTemperature, desktopTrained,
+    desktopTTSEndpoint, desktopReferenceAudio, desktopReferenceText, desktopReferenceLanguage, desktopSpeed, desktopTopK, desktopTopP, desktopTemperature, desktopPytorchBackend, desktopTrained,
     defaultSTTProvider,
     updateSetupData
   ]);
@@ -664,6 +665,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
           config={{
             endpoint: desktopTTSEndpoint,
             model: 'GPT-SoVITS',
+            pytorchBackend: desktopPytorchBackend,
             referenceAudio: desktopReferenceAudio,
             referenceText: desktopReferenceText,
             referenceLanguage: desktopReferenceLanguage,
@@ -674,16 +676,17 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             trained: desktopTrained,
             checkpointPath: ''
           }}
-          onChange={(updates) => {
-            if (updates.endpoint !== undefined) setDesktopTTSEndpoint(updates.endpoint);
-            if (updates.referenceAudio !== undefined) setDesktopReferenceAudio(updates.referenceAudio);
-            if (updates.referenceText !== undefined) setDesktopReferenceText(updates.referenceText);
-            if (updates.referenceLanguage !== undefined) setDesktopReferenceLanguage(updates.referenceLanguage);
-            if (updates.speed !== undefined) setDesktopSpeed(updates.speed);
-            if (updates.topK !== undefined) setDesktopTopK(updates.topK);
-            if (updates.topP !== undefined) setDesktopTopP(updates.topP);
-            if (updates.temperature !== undefined) setDesktopTemperature(updates.temperature);
-            if (updates.trained !== undefined) setDesktopTrained(updates.trained);
+          onChange={(field, value) => {
+            if (field === 'endpoint') setDesktopTTSEndpoint(value);
+            if (field === 'pytorchBackend') setDesktopPytorchBackend(value);
+            if (field === 'referenceAudio') setDesktopReferenceAudio(value);
+            if (field === 'referenceText') setDesktopReferenceText(value);
+            if (field === 'referenceLanguage') setDesktopReferenceLanguage(value);
+            if (field === 'speed') setDesktopSpeed(value);
+            if (field === 'topK') setDesktopTopK(value);
+            if (field === 'topP') setDesktopTopP(value);
+            if (field === 'temperature') setDesktopTemperature(value);
+            if (field === 'trained') setDesktopTrained(value);
           }}
           isSetupMode={true}
           showTitle={false}

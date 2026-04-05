@@ -12,7 +12,8 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const BASE_DIR = __dirname;
+const SCRIPT_DIR = __dirname;
+const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
 const PYTHON_DIR = path.join(BASE_DIR, 'python');
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -68,7 +69,7 @@ class SetupRunner {
   /**
    * Run setup.py with embedded Python
    */
-  async runSetup() {
+  async runSetup(options = {}) {
     this.log({ type: 'info', message: '\n=== PHASE 2: DEPENDENCIES & MODELS ===\n' });
     
     const pythonExe = this.getPythonExe();
@@ -82,13 +83,17 @@ class SetupRunner {
       throw new Error('setup.py not found');
     }
     
+    const selectedBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
+
     return new Promise((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
         cwd: BASE_DIR,
         env: { 
           ...process.env, 
           PYTHONUNBUFFERED: '1',  // Disable Python output buffering
-          PYTHONIOENCODING: 'utf-8'  // Force UTF-8 encoding
+          PYTHONIOENCODING: 'utf-8',  // Force UTF-8 encoding
+          GPTSOVITS_TORCH_BACKEND: selectedBackend,
+          GPTSOVITS_DATA_DIR: BASE_DIR
         }
       });
       
@@ -128,7 +133,7 @@ class SetupRunner {
    * Run full setup process
    * @param {Function} logCallback - Called with { type, message } for each log line
    */
-  async run(logCallback) {
+  async run(logCallback, options = {}) {
     this.logCallback = logCallback;
     this.cancelled = false;
     
@@ -138,6 +143,7 @@ class SetupRunner {
       this.log({ type: 'info', message: '='.repeat(60) + '\n' });
       this.log({ type: 'info', message: 'This will download ~5GB of data (Python, PyTorch, models)\n' });
       this.log({ type: 'info', message: 'Estimated time: 10-30 minutes depending on internet speed\n' });
+      this.log({ type: 'info', message: `Selected PyTorch backend: ${(options?.torchBackend || 'auto').toString().trim().toLowerCase()}\n` });
       this.log({ type: 'info', message: '='.repeat(60) + '\n\n' });
       
       // Phase 1: Bootstrap Python (if needed)
@@ -152,7 +158,7 @@ class SetupRunner {
       }
       
       // Phase 2: Run setup.py to install everything else
-      await this.runSetup();
+      await this.runSetup(options);
       
     } catch (error) {
       this.log({ type: 'error', message: `\n✗ Setup failed: ${error.message}\n` });

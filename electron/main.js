@@ -20,6 +20,44 @@ const serverBasePath = process.env.VITE_DEV_SERVER_URL
   ? path.join(process.cwd(), 'electron', 'server')
   : path.join(__dirname, 'server');
 
+function getRuntimeServerBasePath() {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    return serverBasePath;
+  }
+  return path.join(app.getPath('userData'), 'server');
+}
+
+function getGPTSoVITSDataDir() {
+  return path.join(getRuntimeServerBasePath(), 'gpt-sovits');
+}
+
+function ensureRuntimeServerScripts() {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    return;
+  }
+
+  const runtimeServerDir = getRuntimeServerBasePath();
+  const runtimeGPTDir = path.join(runtimeServerDir, 'gpt-sovits');
+  const runtimeWhisperDir = path.join(runtimeServerDir, 'whisper-stt');
+
+  fs.mkdirSync(runtimeGPTDir, { recursive: true });
+  fs.mkdirSync(runtimeWhisperDir, { recursive: true });
+
+  const filesToCopy = [
+    { src: path.join(serverBasePath, 'gpt-sovits', 'setup.py'), dest: path.join(runtimeGPTDir, 'setup.py') },
+    { src: path.join(serverBasePath, 'gpt-sovits', 'api.py'), dest: path.join(runtimeGPTDir, 'api.py') },
+    { src: path.join(serverBasePath, 'gpt-sovits', 'requirements.txt'), dest: path.join(runtimeGPTDir, 'requirements.txt') },
+    { src: path.join(serverBasePath, 'whisper-stt', 'server.py'), dest: path.join(runtimeWhisperDir, 'server.py') },
+  ];
+
+  for (const { src, dest } of filesToCopy) {
+    if (!fs.existsSync(src)) {
+      continue;
+    }
+    fs.copyFileSync(src, dest);
+  }
+}
+
 let mainWindow;
 let inputWindow;
 let tray = null;
@@ -1027,7 +1065,13 @@ ipcMain.handle('server:status', async () => {
 
 let setupRunner = null;
 
-ipcMain.handle('gptsovits:setup:start', async (event) => {
+ipcMain.handle('gptsovits:setup:start', async (event, options = {}) => {
+  ensureRuntimeServerScripts();
+
+  const gptSovitsDataDir = getGPTSoVITSDataDir();
+  fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+  process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+
   const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
   const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
   
@@ -1035,14 +1079,17 @@ ipcMain.handle('gptsovits:setup:start', async (event) => {
     throw new Error('Setup already running');
   }
   
+  const selectedBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
+
   console.log('[GPT-SoVITS] Starting setup...');
+  console.log('[GPT-SoVITS] Selected PyTorch backend:', selectedBackend);
   setupRunner = new SetupRunner();
   
   // Start setup with log streaming
   setupRunner.run((log) => {
     // Send log to renderer
     event.sender.send('gptsovits:setup:log', log);
-  }).then(() => {
+  }, { torchBackend: selectedBackend }).then(() => {
     console.log('[GPT-SoVITS] Setup complete');
     event.sender.send('gptsovits:setup:complete', { success: true });
     setupRunner = null;
@@ -1087,6 +1134,12 @@ ipcMain.handle('gptsovits:setup:cancel', async () => {
 });
 
 ipcMain.handle('gptsovits:setup:status', async () => {
+  ensureRuntimeServerScripts();
+
+  const gptSovitsDataDir = getGPTSoVITSDataDir();
+  fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+  process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+
   const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
   const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
   const runner = new SetupRunner();
@@ -1734,9 +1787,13 @@ function startGPTSoVITSServer() {
   }
 
   try {
-    const gptsovitsDir = path.join(serverBasePath, 'gpt-sovits');
-    const pythonExe = path.join(gptsovitsDir, 'python', 'python.exe');
-    const apiScript = path.join(gptsovitsDir, 'api.py');
+    ensureRuntimeServerScripts();
+
+    const gptsovitsDataDir = getGPTSoVITSDataDir();
+    fs.mkdirSync(gptsovitsDataDir, { recursive: true });
+
+    const pythonExe = path.join(gptsovitsDataDir, 'python', 'python.exe');
+    const apiScript = path.join(gptsovitsDataDir, 'api.py');
 
     // Check if embedded Python exists
     if (!fs.existsSync(pythonExe)) {
@@ -1750,11 +1807,13 @@ function startGPTSoVITSServer() {
     console.log('[GPT-SoVITS] Script:', apiScript);
 
     gptsovitsProcess = spawn(pythonExe, [apiScript], {
-      cwd: gptsovitsDir,
+      cwd: gptsovitsDataDir,
       env: {
         ...process.env,
         GPTSOVITS_PORT: '9880',
-        PYTHONUNBUFFERED: '1'
+        PYTHONUNBUFFERED: '1',
+        GPTSOVITS_DATA_DIR: gptsovitsDataDir,
+        WHISPER_MODEL_DIR: path.join(getRuntimeServerBasePath(), 'models', 'whisper')
       }
     });
 
@@ -1800,9 +1859,15 @@ function startWhisperServer() {
   }
 
   try {
-    const gptsovitsDir = path.join(serverBasePath, 'gpt-sovits');
-    const whisperDir = path.join(serverBasePath, 'whisper-stt');
-    const pythonExe = path.join(gptsovitsDir, 'python', 'python.exe'); 
+    ensureRuntimeServerScripts();
+
+    const gptsovitsDataDir = getGPTSoVITSDataDir();
+    const whisperModelsDir = path.join(getRuntimeServerBasePath(), 'models', 'whisper');
+    fs.mkdirSync(gptsovitsDataDir, { recursive: true });
+    fs.mkdirSync(whisperModelsDir, { recursive: true });
+
+    const whisperDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
+    const pythonExe = path.join(gptsovitsDataDir, 'python', 'python.exe'); 
     const serverScript = path.join(whisperDir, 'server.py');
 
     if (!fs.existsSync(pythonExe)) {
@@ -1823,7 +1888,8 @@ function startWhisperServer() {
       cwd: whisperDir,
       env: {
         ...process.env,
-        PYTHONUNBUFFERED: '1'
+        PYTHONUNBUFFERED: '1',
+        WHISPER_MODEL_DIR: whisperModelsDir
       }
     });
 
