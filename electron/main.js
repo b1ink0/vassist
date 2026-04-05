@@ -94,8 +94,8 @@ async function createWindow() {
   // Get primary display dimensions
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
 
-  const initialWidth = 500;
-  const initialHeight = 600;
+  const initialWidth = 400;
+  const initialHeight = 525;
   
   mainWindow = new BrowserWindow({
     width: initialWidth,
@@ -221,9 +221,20 @@ function registerGlobalShortcuts(shortcuts) {
  * Create system tray icon
  */
 function createTray() {
-  // Use the extension icon for tray
-  const iconPath = path.join(__dirname, '..', 'extension', 'icons', 'icon-32.png');
-  tray = new Tray(iconPath);
+  const trayIconCandidates = [
+    path.join(__dirname, '..', 'electron', 'assets', 'icon-32.png'),
+    path.join(process.resourcesPath, 'app.asar', 'electron', 'assets', 'icon-32.png'),
+    path.join(process.resourcesPath, 'electron', 'assets', 'icon-32.png'),
+  ];
+
+  const resolvedIconPath = trayIconCandidates.find((candidate) => fs.existsSync(candidate));
+
+  try {
+    tray = new Tray(resolvedIconPath || process.execPath);
+  } catch (error) {
+    console.error('Failed to create tray icon:', error);
+    return;
+  }
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -437,8 +448,33 @@ app.whenReady().then(() => {
   // Register protocol handler that serves files with proper CORS headers
   protocol.handle('app', (request) => {
     const url = request.url.substring('app://'.length);
-    const filePath = path.normalize(path.join(__dirname, url.split('?')[0]));
-    
+    const rawPath = url.split('?')[0] || '';
+    const requestedPath = rawPath
+      .replace(/^\.\//, '')
+      .replace(/^\//, '');
+
+    const candidatePaths = [
+      path.normalize(path.join(__dirname, requestedPath)),
+    ];
+
+    if (requestedPath.startsWith('electron/res/')) {
+      candidatePaths.push(
+        path.normalize(path.join(__dirname, requestedPath.replace(/^electron\//, '')))
+      );
+    }
+
+    // Defensive remap if a prefixed dist-desktop path leaks into URL resolution.
+    if (requestedPath.startsWith('dist-desktop/electron/res/')) {
+      candidatePaths.push(
+        path.normalize(path.join(__dirname, requestedPath.replace(/^dist-desktop\/electron\//, '')))
+      );
+    }
+
+    const filePath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+    if (!filePath) {
+      return new Response(`Not Found: ${requestedPath}`, { status: 404 });
+    }
+
     const fileBuffer = fs.readFileSync(filePath);
     
     // Determine content type
@@ -656,15 +692,15 @@ ipcMain.handle('window:update-size-for-zoom', (event, modelWidth, modelHeight) =
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
   if (senderWindow) {
     const baseWidth = 400;
-    const baseHeight = 600;
-    const baseModelWidth = 400;
-    const baseModelHeight = 600;
+    const baseHeight = 525;
+    const baseModelWidth = 300;
+    const baseModelHeight = 500;
     
     const modelWidthDelta = modelWidth - baseModelWidth;
     const modelHeightDelta = modelHeight - baseModelHeight;
     
     const windowWidth = Math.max(baseWidth + (modelWidthDelta * windowScaleFactorWidth), 400);
-    const windowHeight = Math.max(baseHeight + (modelHeightDelta * windowScaleFactorHeight), 500);
+    const windowHeight = Math.max(baseHeight + (modelHeightDelta * windowScaleFactorHeight), 525);
     
     const currentBounds = senderWindow.getBounds();
     const newY = currentBounds.y - (windowHeight - currentBounds.height);
@@ -1076,23 +1112,43 @@ ipcMain.handle('gptsovits:setup:status', async () => {
 // ============================================
 
 function getModelsDir(customPath = null) {
-  if (customPath && fs.existsSync(customPath)) {
-    return customPath;
+  const ensureDirectory = (dirPath) => {
+    if (fs.existsSync(dirPath)) {
+      const stat = fs.statSync(dirPath);
+      if (!stat.isDirectory()) {
+        throw new Error(`Models path exists but is not a directory: ${dirPath}`);
+      }
+      return dirPath;
+    }
+
+    fs.mkdirSync(dirPath, { recursive: true });
+    return dirPath;
+  };
+
+  if (customPath && typeof customPath === 'string') {
+    const normalizedCustomPath = customPath.trim();
+    if (normalizedCustomPath) {
+      if (fs.existsSync(normalizedCustomPath)) {
+        const stat = fs.statSync(normalizedCustomPath);
+        if (stat.isDirectory()) {
+          return normalizedCustomPath;
+        }
+
+        // If a model file path was accidentally saved, use its parent directory.
+        const parentDir = path.dirname(normalizedCustomPath);
+        console.warn('[LLM] customModelsPath points to a file, using parent directory:', parentDir);
+        return ensureDirectory(parentDir);
+      }
+
+      return ensureDirectory(normalizedCustomPath);
+    }
   }
 
-  let modelsDir;
-  if (process.env.VITE_DEV_SERVER_URL) {
-    modelsDir = path.join(__dirname, '..', 'electron', 'server', 'models');
-  } else {
-    modelsDir = path.join(__dirname, 'server', 'models');
-  }
-  
-  // Ensure directory exists
-  if (!fs.existsSync(modelsDir)) {
-    fs.mkdirSync(modelsDir, { recursive: true });
-  }
-  
-  return modelsDir;
+  const defaultModelsDir = process.env.VITE_DEV_SERVER_URL
+    ? path.join(__dirname, '..', 'electron', 'server', 'models')
+    : path.join(app.getPath('userData'), 'models');
+
+  return ensureDirectory(defaultModelsDir);
 }
 
 // List models in models directory

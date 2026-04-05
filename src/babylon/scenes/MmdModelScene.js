@@ -1123,6 +1123,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     || preset === 'last-location' 
     || isPortraitMode 
     || isAndroid
+    || isDesktop
     || finalConfig.savedModelPosition !== null; // Skip intro if model already loaded in this session
   
   Logger.log('MmdModelScene', `Position preset: ${preset}, actual: ${actualPreset}, skipIntro: ${shouldSkipIntro}${isPortraitMode ? ' (Portrait Mode)' : ''}${finalConfig.savedModelPosition ? ' (has saved position)' : ''}`);

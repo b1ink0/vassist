@@ -14,7 +14,21 @@ import { modelStorageService } from '../services/ModelStorageService';
 import { stageStorageService } from '../services/StageStorageService';
 import ZoomControl from './ZoomControl';
 import { isAndroid, isDesktop } from '../utils/PlatformUtils';
-import { PositionPresets } from '../config/uiConfig';
+import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../config/uiConfig';
+
+function getPlatformPresetDefaults(preset) {
+  const basePreset = PositionPresets[preset] || PositionPresets['bottom-right'];
+
+  if (isAndroid) {
+    return { ...basePreset, ...AndroidPresetOverride };
+  }
+
+  if (isDesktop) {
+    return { ...basePreset, ...DesktopPresetOverride };
+  }
+
+  return basePreset;
+}
 
 /**
  * Draggable chat button component with automatic positioning.
@@ -735,7 +749,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     
     // Get preset default size from PositionPresets
     const currentPreset = uiConfig.position?.preset || 'bottom-right';
-    const presetConfig = PositionPresets[currentPreset];
+    const presetConfig = getPlatformPresetDefaults(currentPreset);
     const defaultHeight = presetConfig?.modelSize?.height || 500;
     const defaultWidth = presetConfig?.modelSize?.width || 300;
     
@@ -863,7 +877,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     if (!uiConfig.modelSizePx) return true;
     
     const currentPreset = uiConfig.position?.preset || 'bottom-right';
-    const presetConfig = PositionPresets[currentPreset];
+    const presetConfig = getPlatformPresetDefaults(currentPreset);
     const defaultHeight = presetConfig?.modelSize?.height || 500;
     
     const currentSize = positionManager.modelHeightPx || defaultHeight;

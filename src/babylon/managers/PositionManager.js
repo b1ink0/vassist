@@ -12,9 +12,9 @@
  * - No hardcoded magic numbers - everything calculated from actual dimensions
  */
 
-import { PositionPresets, AndroidPresetOverride } from '../../config/uiConfig.js';
+import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig.js';
 import Logger from '../../services/LoggerService';
-import { isAndroid } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 
 export class PositionManager {
   /**
@@ -189,10 +189,13 @@ export class PositionManager {
     }
     
     const baseConfig = PositionPresets[preset];
-    const config = isAndroid ? { ...baseConfig, ...AndroidPresetOverride } : baseConfig;
-    
-    if (isAndroid) {
-      Logger.log('PositionManager', 'Using Android preset override', AndroidPresetOverride);
+    const platformOverride = isAndroid
+      ? AndroidPresetOverride
+      : (isDesktop ? DesktopPresetOverride : null);
+    const config = platformOverride ? { ...baseConfig, ...platformOverride } : baseConfig;
+
+    if (platformOverride) {
+      Logger.log('PositionManager', `Using ${isAndroid ? 'Android' : 'Desktop'} preset override`, platformOverride);
     }
     
     // Use Portrait Mode model size if enabled, otherwise use standard size

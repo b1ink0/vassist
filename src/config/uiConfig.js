@@ -4,6 +4,8 @@
  * Settings for user interface behavior and appearance.
  */
 
+import { isAndroid, isDesktop } from '../utils/PlatformUtils';
+
 /**
  * Background Theme Modes
  */
@@ -153,6 +155,20 @@ export const AndroidPresetOverride = {
 };
 
 /**
+ * Desktop-specific preset configuration
+ */
+export const DesktopPresetOverride = {
+  modelSize: { width: 400, height: 600 },
+  portraitModelSize: { width: 400, height: 600 },
+  padding: 0,
+  offset: { x: 2.5, y: 7 },
+  portraitOffset: { x: 0, y: 6.2 },
+  customBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitCustomBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
+  portraitClipPlaneY: 12,
+};
+
+/**
  * FPS Limit Options for rendering
  */
 export const FPSLimitOptions = {
@@ -240,7 +256,7 @@ export const DefaultUIConfig = {
   enableDebugPanel: false,
   
   position: {
-    preset: 'bottom-right',
+    preset: (isDesktop || isAndroid) ? 'bottom-center' : 'bottom-right',
     lastLocation: null,
   },
   

@@ -62,18 +62,18 @@ const BabylonScene = ({
   const [canvasSize, setCanvasSize] = useState(() => {
     if (isDesktop && typeof window !== 'undefined') {
       if (uiConfig?.modelSizePx?.width && uiConfig?.modelSizePx?.height) {
-        const baseModelWidth = 400;
-        const baseModelHeight = 600;
+        const baseModelWidth = 300;
+        const baseModelHeight = 500;
         const scaleFactorWidth = 0.85;
         const scaleFactorHeight = 0.75;
         const baseWidth = 400;
-        const baseHeight = 600;
+        const baseHeight = 525;
         
         const modelWidthDelta = uiConfig.modelSizePx.width - baseModelWidth;
         const modelHeightDelta = uiConfig.modelSizePx.height - baseModelHeight;
         
         const width = Math.max(baseWidth + (modelWidthDelta * scaleFactorWidth), 400);
-        const height = Math.max(baseHeight + (modelHeightDelta * scaleFactorHeight), 500);
+        const height = Math.max(baseHeight + (modelHeightDelta * scaleFactorHeight), 525);
         Logger.log('BabylonScene', `Initializing canvas with saved size: ${width}x${height}`);
         return { width, height };
       }
@@ -82,7 +82,7 @@ const BabylonScene = ({
         height: window.innerHeight
       };
     }
-    return { width: 500, height: 500 };
+    return { width: 400, height: 525 };
   });
 
   useEffect(() => {

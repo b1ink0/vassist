@@ -23,10 +23,10 @@ const DesktopSTTConfig = ({
   return (
     <div className="space-y-3">
       {/* Info Banner */}
-      <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-2">
-          <Icon name="microphone" size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-green-300">
+          <Icon name="microphone" size={18} className="text-white/90 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-white/90">
             <span className="font-semibold">Desktop Local STT</span> - On-device speech recognition using Whisper via Electron!
           </p>
         </div>

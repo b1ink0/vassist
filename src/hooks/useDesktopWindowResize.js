@@ -11,6 +11,8 @@ export function useDesktopWindowResize(containerRef = null, options = {}) {
   const { isChatContainerVisible, positionManagerRef } = useApp();
   const { api } = useDesktop();
   const observerRef = useRef(null);
+  const DEFAULT_MAIN_WINDOW_WIDTH = 400;
+  const DEFAULT_MAIN_WINDOW_HEIGHT = 525;
   
   const {
     minWidth = 400,
@@ -25,13 +27,13 @@ export function useDesktopWindowResize(containerRef = null, options = {}) {
     if (!isDesktop || !api) return;
     
     if (!isInputWindow) {
-      const canvasWidth = positionManagerRef?.current?.canvasWidth || 500;
-      const canvasHeight = positionManagerRef?.current?.canvasHeight || 500;
+      const canvasWidth = positionManagerRef?.current?.canvasWidth || window.innerWidth || DEFAULT_MAIN_WINDOW_WIDTH;
+      const canvasHeight = positionManagerRef?.current?.canvasHeight || window.innerHeight || DEFAULT_MAIN_WINDOW_HEIGHT;
       
       const chatContainerWidth = isChatContainerVisible ? 400 : 0;
       
-      const width = canvasWidth + chatContainerWidth + windowPadding;
-      const height = canvasHeight + windowPadding;
+      const width = canvasWidth + chatContainerWidth + (isChatContainerVisible ? windowPadding : 0);
+      const height = canvasHeight + (isChatContainerVisible ? windowPadding : 0);
       
       api.window.setSize(width, height);
       return;

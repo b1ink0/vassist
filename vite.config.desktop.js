@@ -180,8 +180,6 @@ export default defineConfig(({ mode }) => {
       __DESKTOP_MODE__: JSON.stringify(true),
       __DEV_MODE__: JSON.stringify(!isProduction),
       __PROD_MODE__: JSON.stringify(isProduction),
-      // Prevent onnxruntime-web from trying to use require()
-      'typeof require': JSON.stringify('undefined'),
     },
     
     build: {

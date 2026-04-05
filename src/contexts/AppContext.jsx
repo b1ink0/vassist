@@ -33,6 +33,7 @@ export const useApp = () => {
 
 export const AppProvider = ({ children }) => {
   const { api } = useDesktop();
+  const hasNotifiedFrontendReadyRef = useRef(false);
   
   // ========================================
   // ASSISTANT STATE
@@ -197,21 +198,38 @@ export const AppProvider = ({ children }) => {
         setIsAssistantReady(true);
         setIsChatUIReady(true);
         Logger.log('AppContext', 'Running in chat-only mode (no 3D model)');
-        
-        if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
-          api.window.frontendReady()
-            .then(() => {
-              Logger.log('AppContext', 'Notified Electron that frontend is ready (chat-only)');
-            })
-            .catch(err => {
-              Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
-            });
-        }
       }, 800);
       
       return () => clearTimeout(timer);
     }
-  }, [enableModelLoading, api]);
+  }, [enableModelLoading]);
+
+    const notifyFrontendReady = useCallback((reason) => {
+    if (!__DESKTOP_MODE__ || isInputWindow || !api?.window?.frontendReady) {
+      return;
+    }
+
+    if (hasNotifiedFrontendReadyRef.current) {
+      return;
+    }
+
+    api.window.frontendReady()
+      .then(() => {
+        hasNotifiedFrontendReadyRef.current = true;
+        Logger.log('AppContext', `Notified Electron that frontend is ready (${reason})`);
+      })
+      .catch(err => {
+        Logger.error('AppContext', `Failed to notify Electron frontend ready (${reason}):`, err);
+      });
+  }, [api]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      notifyFrontendReady('startup');
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [notifyFrontendReady]);
 
   /**
    * Handle assistant ready callback
@@ -227,17 +245,8 @@ export const AppProvider = ({ children }) => {
     
     Logger.log('AppContext', 'Position manager ref set, ready for position tracking');
     
-    // Notify Electron main process that frontend is ready
-    if (__DESKTOP_MODE__ && api?.window?.frontendReady) {
-      api.window.frontendReady()
-        .then(() => {
-          Logger.log('AppContext', 'Notified Electron that frontend is ready');
-        })
-        .catch(err => {
-          Logger.error('AppContext', 'Failed to notify Electron frontend ready:', err);
-        });
-    }
-  }, [api]);
+    notifyFrontendReady('assistant-ready');
+  }, [notifyFrontendReady]);
 
   // ========================================
   // VOICE & TTS TRACKING
