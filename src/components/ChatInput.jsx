@@ -13,7 +13,7 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
 import Logger from '../services/LoggerService';
-import { isAndroid, isInputWindow } from '../utils/PlatformUtils';
+import { isAndroid, isDesktop, isExtension, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
 import MicrophoneService from '../services/MicrophoneService';
 import CameraService from '../services/CameraService';
@@ -168,6 +168,8 @@ const ChatInput = forwardRef(({
 
   useEffect(() => {
     if (!isInputWindow || !api?.ipc) return;
+
+    api.ipc.send('mic:requestState');
 
     const unsubscribePendingDrop = api.ipc.on('state:pendingDropData', (data) => {
       setLocalPendingDropData(data);
@@ -409,22 +411,27 @@ const ChatInput = forwardRef(({
 
   // Initialize microphone service and subscribe to device changes
   useEffect(() => {
+    if (isDesktop && isInputWindow) {
+      return;
+    }
+
     const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
       setMicDevices(devices);
       setSelectedMicId(selectedDeviceId);
-      
-      // Sync to input window on desktop
-      if (!isInputWindow && api?.ipc) {
-        api.ipc.send('state:micDevices', { devices, selectedDeviceId });
-      }
     });
 
-    // Initialize devices on mount
+    // Desktop main window needs full initialization to populate labeled device list.
+    // Other modes should avoid permission prompts at startup.
     const initDevices = async () => {
       try {
-        await MicrophoneService.initialize();
+        if (isDesktop) {
+          return;
+        } else {
+          Logger.log('ChatInput', 'Non-desktop: Refreshing microphone devices without permission prompt');
+          await MicrophoneService.refreshDevices();
+        }
       } catch {
-        Logger.log('ChatInput', 'Mic permission not granted yet');
+        Logger.log('ChatInput', 'Mic devices not available yet');
       }
     };
     initDevices();
@@ -438,23 +445,51 @@ const ChatInput = forwardRef(({
     
     if (isInputWindow) {
       Logger.log('ChatInput', 'Input window: Setting up IPC listeners for camera state');
+      let didReceiveIpcCameraState = false;
+
       // Listen for camera state from main window
       if (api?.ipc) {
         const unsubscribeCameraDevices = api.ipc.on('state:cameraDevices', (data) => {
+          didReceiveIpcCameraState = true;
           Logger.log('ChatInput', 'Input window: Received camera state via IPC:', data);
           setCameraDevices(data.devices);
           setSelectedCameraId(data.selectedDeviceId);
           setIsCameraActive(data.isActive);
         });
+
+        // Fallback: populate local camera list if IPC state is not available.
+        const fallbackTimer = setTimeout(async () => {
+          if (didReceiveIpcCameraState) return;
+          try {
+            Logger.log('ChatInput', 'Input window: No camera IPC state received, using local CameraService fallback');
+            if (isDesktop) {
+              await CameraService.initialize();
+            } else {
+              await CameraService.refreshDevices();
+            }
+            const localDevices = CameraService.getDevices() || [];
+            setCameraDevices(localDevices);
+            setSelectedCameraId(CameraService.getSelectedDeviceId());
+            setIsCameraActive(CameraService.isRunning());
+          } catch (error) {
+            Logger.error('ChatInput', 'Input window: Local camera fallback failed:', error);
+          }
+        }, 1500);
         
         return () => {
+          clearTimeout(fallbackTimer);
           unsubscribeCameraDevices();
         };
       }
       return;
     }
 
-    Logger.log('ChatInput', 'Web/Android/Extension: Setting up CameraService subscription');
+    if (isExtension) {
+      Logger.log('ChatInput', 'Extension: Skipping camera service initialization');
+      return;
+    }
+
+    Logger.log('ChatInput', 'Main window: Setting up CameraService subscription');
     const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
       Logger.log('ChatInput', 'CameraService state changed:', { devices: devices.length, selectedDeviceId, isActive });
       setCameraDevices(devices);
@@ -462,20 +497,24 @@ const ChatInput = forwardRef(({
       setIsCameraActive(isActive);
     });
 
+    // Desktop main window needs full initialization to populate labeled device list.
+    // Other modes should avoid permission prompts at startup.
     const initDevices = async () => {
       try {
-        Logger.log('ChatInput', 'Web/Android/Extension: Initializing CameraService...');
-        await CameraService.initialize();
-        Logger.log('ChatInput', 'Web/Android/Extension: CameraService initialized successfully');
+        if (isDesktop) {
+          return;
+        } else {
+          Logger.log('ChatInput', 'Web/Android: Refreshing camera devices without permission prompt...');
+          await CameraService.refreshDevices();
+        }
       } catch (error) {
-        Logger.error('ChatInput', 'Web/Android/Extension: Camera initialization failed:', error);
+        Logger.error('ChatInput', 'Main window: Camera device refresh failed:', error);
       }
     };
     initDevices();
 
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, isInputWindow]);
+  }, [api]);
 
   // Initialize screen share service
   useEffect(() => {
@@ -521,7 +560,7 @@ const ChatInput = forwardRef(({
     initScreenShare();
 
     return unsubscribe;
-  }, [api, isInputWindow]);
+  }, [api]);
 
   // Listen for camera control IPC messages
   useEffect(() => {
@@ -1419,60 +1458,62 @@ const ChatInput = forwardRef(({
                     {attachedImages.length > 0 && <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>{attachedImages.length}</span>}
                   </button>
 
-                  {/* Camera button with dropdown */}
-                  <div className="relative flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={handleCameraClick}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
-                        isCameraActive ? 'bg-green-500/20 text-green-400' : ''
-                      }`}
-                      title={isCameraActive ? 'Stop Camera' : 'Start Camera'}
-                    >
-                      <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={handleCameraSelectToggle}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-1 py-1.5 rounded-lg hover:bg-white/10 text-sm`}
-                      title="Select Camera"
-                    >
-                      <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                    </button>
-                    
-                    {showCameraSelect && (
-                      <select
-                        value={selectedCameraId || ''}
-                        onChange={(e) => handleCameraSelect(e.target.value)}
-                        onBlur={() => setShowCameraSelect(false)}
-                        autoFocus
-                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
-                          !isLightBackground 
-                            ? 'bg-white/90 text-black border-white/20' 
-                            : 'bg-black/90 text-white border-white/10'
-                        } border shadow-2xl`}
-                        style={{
-                          backdropFilter: 'blur(20px)',
-                          WebkitBackdropFilter: 'blur(20px)',
-                        }}
-                        size={Math.min(cameraDevices.length + 1, 5)}
+                  {/* Camera controls are disabled in extension mode */}
+                  {!isExtension && (
+                    <div className="relative flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleCameraClick}
+                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
+                          isCameraActive ? 'bg-green-500/20 text-green-400' : ''
+                        }`}
+                        title={isCameraActive ? 'Stop Camera' : 'Start Camera'}
                       >
-                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
-                          Default Camera
-                        </option>
-                        {cameraDevices.map((device, index) => (
-                          <option 
-                            key={device.deviceId || index} 
-                            value={device.deviceId || ''}
-                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
-                          >
-                            {device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`)}
+                        <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={handleCameraSelectToggle}
+                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-1 py-1.5 rounded-lg hover:bg-white/10 text-sm`}
+                        title="Select Camera"
+                      >
+                        <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                      </button>
+                      
+                      {showCameraSelect && (
+                        <select
+                          value={selectedCameraId || ''}
+                          onChange={(e) => handleCameraSelect(e.target.value)}
+                          onBlur={() => setShowCameraSelect(false)}
+                          autoFocus
+                          className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
+                            !isLightBackground 
+                              ? 'bg-white/90 text-black border-white/20' 
+                              : 'bg-black/90 text-white border-white/10'
+                          } border shadow-2xl`}
+                          style={{
+                            backdropFilter: 'blur(20px)',
+                            WebkitBackdropFilter: 'blur(20px)',
+                          }}
+                          size={Math.min(cameraDevices.length + 1, 5)}
+                        >
+                          <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
+                            Default Camera
                           </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
+                          {cameraDevices.map((device, index) => (
+                            <option 
+                              key={device.deviceId || index} 
+                              value={device.deviceId || ''}
+                              className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
+                            >
+                              {device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
                   
                   {/* Screen Share button (Chrome-based platforms) */}
                   {!isAndroid && (

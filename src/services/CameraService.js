@@ -77,8 +77,7 @@ class CameraService {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       this.devices = devices.filter(device => device.kind === 'videoinput');
-      
-      Logger.log('CameraService', `Found ${this.devices.length} cameras:`, this.devices);
+      Logger.log('CameraService', `Found ${this.devices.length} cameras`);
 
       if (this.selectedDeviceId && !this.devices.find(d => d.deviceId === this.selectedDeviceId)) {
         Logger.warn('CameraService', 'Selected camera no longer available, resetting to default');

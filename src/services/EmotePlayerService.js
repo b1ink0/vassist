@@ -49,13 +49,16 @@ class EmotePlayerService {
         throw new Error(`Emote ${emoteId} not found`);
       }
 
-      const audioUrl = URL.createObjectURL(emote.audioData);
-      const motionUrl = URL.createObjectURL(emote.motionData);
+      const audioBlob = this.toBlob(emote.audioData, emote.metadata?.audioMimeType || 'audio/mpeg');
+      const motionBlob = this.toBlob(emote.motionData, 'application/octet-stream');
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const motionUrl = URL.createObjectURL(motionBlob);
       
       // Create camera animation URL if camera data exists (optional)
       let cameraUrl = null;
       if (emote.cameraData) {
-        cameraUrl = URL.createObjectURL(emote.cameraData);
+        const cameraBlob = this.toBlob(emote.cameraData, 'application/octet-stream');
+        cameraUrl = URL.createObjectURL(cameraBlob);
         Logger.log('EmotePlayer', `Camera animation loaded for emote: ${emote.name}`);
       }
 
@@ -110,6 +113,38 @@ class EmotePlayerService {
       this.isPlaying = false;
       throw error;
     }
+  }
+
+  /**
+   * Normalize storage payloads into Blob instances.
+   * Extension mode may deserialize binary fields as arrays/typed arrays.
+   * @param {Blob|ArrayBuffer|Uint8Array|Array|Object} value
+   * @param {string} fallbackType
+   * @returns {Blob}
+   */
+  toBlob(value, fallbackType = 'application/octet-stream') {
+    if (value instanceof Blob) {
+      return value;
+    }
+
+    if (value instanceof ArrayBuffer) {
+      return new Blob([value], { type: fallbackType });
+    }
+
+    if (value instanceof Uint8Array) {
+      return new Blob([value], { type: fallbackType });
+    }
+
+    if (Array.isArray(value)) {
+      return new Blob([new Uint8Array(value)], { type: fallbackType });
+    }
+
+    if (value && Array.isArray(value.data)) {
+      const nestedType = value.type || value.mimeType || fallbackType;
+      return new Blob([new Uint8Array(value.data)], { type: nestedType });
+    }
+
+    throw new Error('Invalid emote media payload: expected Blob, ArrayBuffer, Uint8Array, or byte array');
   }
 
   /**

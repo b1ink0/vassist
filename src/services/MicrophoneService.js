@@ -42,8 +42,7 @@ class MicrophoneService {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       this.devices = devices.filter(device => device.kind === 'audioinput');
-      
-      Logger.log('MicrophoneService', `Found ${this.devices.length} microphones:`, this.devices);
+      Logger.log('MicrophoneService', `Found ${this.devices.length} microphones`);
 
       // If selected device is no longer available, reset to default
       if (this.selectedDeviceId && !this.devices.find(d => d.deviceId === this.selectedDeviceId)) {

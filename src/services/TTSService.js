@@ -15,6 +15,12 @@ class TTSService {
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
 
+    // Shared state needed in both extension and dev modes.
+    this.eventTarget = new EventTarget();
+    this.hasSessionStarted = false;
+    this.completedSessions = new Set();
+    this.lipSyncEnabled = true;
+
     // Initialize playback state for BOTH modes
     // In dev mode: used directly by this service
     // In extension mode: used by main world instance (content script)
@@ -38,13 +44,7 @@ class TTSService {
       this.activeRequests = 0;
       this.maxConcurrentRequests = 3;
 
-      this.lipSyncEnabled = true;
       // Worker handles VMD/BVMD in dev mode, no need for these services
-
-      // Event emitter for TTS lifecycle events
-      this.eventTarget = new EventTarget();
-      this.hasSessionStarted = false; // Track if current session has fired start callback
-      this.completedSessions = new Set(); // Track sessions where all chunks have been generated
 
       // Kokoro heartbeat to keep model in memory
       this.kokoroHeartbeatInterval = null;

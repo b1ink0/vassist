@@ -288,7 +288,7 @@ protocol.registerSchemesAsPrivileged([
  */
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
+    if (permission === 'media' || permission === 'microphone' || permission === 'camera' || permission === 'display-capture') {
       callback(true);
     } else {
       callback(false);
@@ -299,7 +299,7 @@ app.whenReady().then(() => {
   // Note: Electron requires either a custom picker UI or using desktopCapturer
   // We'll use the handler to provide all sources and let Chromium show the picker
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    if (permission === 'display-capture') {
+    if (permission === 'media' || permission === 'microphone' || permission === 'camera' || permission === 'display-capture') {
       return true;
     }
     return false;
@@ -752,6 +752,13 @@ ipcMain.on('state:pendingDropData', (event, data) => {
 ipcMain.on('state:micDevices', (event, data) => {
   if (inputWindow && inputWindow.webContents) {
     inputWindow.webContents.send('state:micDevices', data);
+  }
+});
+
+// Input window requests latest microphone state from main window renderer.
+ipcMain.on('mic:requestState', () => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('mic:requestState');
   }
 });
 

@@ -350,6 +350,20 @@ class StorageServiceProxy extends ServiceProxy {
           messageData.motionData = Array.from(new Uint8Array(buffer));
           messageData._motionBlobType = data.motionData.type || 'application/octet-stream';
         }
+
+        // Handle audioData (EmoteStorageService)
+        if (messageData.audioData instanceof Blob) {
+          const buffer = await messageData.audioData.arrayBuffer();
+          messageData.audioData = Array.from(new Uint8Array(buffer));
+          messageData._audioBlobType = data.audioData.type || 'audio/mpeg';
+        }
+
+        // Handle cameraData (EmoteStorageService)
+        if (messageData.cameraData instanceof Blob) {
+          const buffer = await messageData.cameraData.arrayBuffer();
+          messageData.cameraData = Array.from(new Uint8Array(buffer));
+          messageData._cameraBlobType = data.cameraData.type || 'application/octet-stream';
+        }
         
         // Handle modelData (ModelStorageService)
         if (messageData.modelData instanceof Blob) {
@@ -396,6 +410,24 @@ class StorageServiceProxy extends ServiceProxy {
           const blob = new Blob([uint8Array], { type: blobType });
           result.motionData = blob;
           delete result._motionBlobType;
+        }
+
+        // Handle audioData (EmoteStorageService)
+        if (Array.isArray(result.audioData)) {
+          const blobType = result._audioBlobType || 'audio/mpeg';
+          const uint8Array = new Uint8Array(result.audioData);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.audioData = blob;
+          delete result._audioBlobType;
+        }
+
+        // Handle cameraData (EmoteStorageService)
+        if (Array.isArray(result.cameraData)) {
+          const blobType = result._cameraBlobType || 'application/octet-stream';
+          const uint8Array = new Uint8Array(result.cameraData);
+          const blob = new Blob([uint8Array], { type: blobType });
+          result.cameraData = blob;
+          delete result._cameraBlobType;
         }
         
         // Handle modelData (ModelStorageService)
@@ -477,6 +509,22 @@ class StorageServiceProxy extends ServiceProxy {
               const uint8Array = new Uint8Array(fileData.motionData);
               fileData.motionData = new Blob([uint8Array], { type: blobType });
               delete fileData._motionBlobType;
+            }
+
+            // Handle audioData (EmoteStorageService)
+            if (Array.isArray(fileData.audioData)) {
+              const blobType = fileData._audioBlobType || 'audio/mpeg';
+              const uint8Array = new Uint8Array(fileData.audioData);
+              fileData.audioData = new Blob([uint8Array], { type: blobType });
+              delete fileData._audioBlobType;
+            }
+
+            // Handle cameraData (EmoteStorageService)
+            if (Array.isArray(fileData.cameraData)) {
+              const blobType = fileData._cameraBlobType || 'application/octet-stream';
+              const uint8Array = new Uint8Array(fileData.cameraData);
+              fileData.cameraData = new Blob([uint8Array], { type: blobType });
+              delete fileData._cameraBlobType;
             }
             
             // Handle modelData (ModelStorageService)

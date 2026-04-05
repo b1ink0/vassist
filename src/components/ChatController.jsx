@@ -20,6 +20,7 @@ import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
 import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
+import MicrophoneService from '../services/MicrophoneService';
 import CameraService from '../services/CameraService';
 import ScreenShareService from '../services/ScreenShareService';
 
@@ -472,6 +473,68 @@ const ChatController = ({
   }, [api, handleVoiceTranscription, handleVoiceModeChange]);
 
   /**
+   * Desktop Main Window: Initialize microphone service and share state with input window.
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow) {
+      return;
+    }
+
+    Logger.log('ChatController', 'Main window: Initializing microphone service...');
+
+    const broadcastMicState = ({ devices, selectedDeviceId }) => {
+      if (!api?.ipc) return;
+
+      const serializedDevices = devices.map(device => ({
+        deviceId: device.deviceId,
+        label: device.label,
+        kind: device.kind,
+        groupId: device.groupId
+      }));
+
+      api.ipc.send('state:micDevices', {
+        devices: serializedDevices,
+        selectedDeviceId,
+      });
+    };
+
+    const unsubscribe = MicrophoneService.subscribe(broadcastMicState);
+
+    const initMic = async () => {
+      try {
+        await MicrophoneService.initialize();
+        Logger.log('ChatController', 'Main window: Microphone initialized successfully');
+      } catch (error) {
+        Logger.error('ChatController', 'Main window: Microphone initialization failed:', error);
+      }
+    };
+    initMic();
+
+    if (api?.ipc) {
+      const unsubscribeRequestState = api.ipc.on('mic:requestState', () => {
+        broadcastMicState({
+          devices: MicrophoneService.getDevices(),
+          selectedDeviceId: MicrophoneService.getSelectedDeviceId(),
+        });
+      });
+
+      const unsubscribeSelectDevice = api.ipc.on('state:selectedMicId', (deviceId) => {
+        MicrophoneService.setSelectedDevice(deviceId || null);
+      });
+
+      return () => {
+        unsubscribe?.();
+        unsubscribeRequestState?.();
+        unsubscribeSelectDevice?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [api]);
+
+  /**
    * Desktop Main Window: Initialize camera and listen for IPC commands from input window
    */
   useEffect(() => {
@@ -500,12 +563,13 @@ const ChatController = ({
       }
     });
 
+    // Only enumerate camera devices on startup. Camera permission should be requested on explicit toggle.
     const initCamera = async () => {
       try {
-        await CameraService.initialize();
-        Logger.log('ChatController', 'Camera initialized successfully');
+        await CameraService.refreshDevices();
+        Logger.log('ChatController', 'Camera devices refreshed without permission prompt');
       } catch (error) {
-        Logger.error('ChatController', 'Camera initialization failed:', error);
+        Logger.error('ChatController', 'Camera device refresh failed:', error);
       }
     };
     initCamera();
