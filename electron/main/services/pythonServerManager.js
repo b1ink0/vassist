@@ -13,6 +13,19 @@ export function createPythonServerManager({
   let whisperProcess = null;
   let setupRunner = null;
 
+  function resolveEmbeddedPythonExecutable(gptsovitsDataDir) {
+    const candidates = process.platform === 'win32'
+      ? [
+          path.join(gptsovitsDataDir, 'python', 'python.exe'),
+        ]
+      : [
+          path.join(gptsovitsDataDir, 'python', 'bin', 'python3'),
+          path.join(gptsovitsDataDir, 'python', 'bin', 'python'),
+        ];
+
+    return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+  }
+
   function startGPTSoVITSServer() {
     if (gptsovitsProcess) {
       console.log('[GPT-SoVITS] Server already running');
@@ -25,12 +38,18 @@ export function createPythonServerManager({
       const gptsovitsDataDir = getGPTSoVITSDataDir();
       fs.mkdirSync(gptsovitsDataDir, { recursive: true });
 
-      const pythonExe = path.join(gptsovitsDataDir, 'python', 'python.exe');
+      const pythonExe = resolveEmbeddedPythonExecutable(gptsovitsDataDir);
       const apiScript = path.join(gptsovitsDataDir, 'api.py');
 
       if (!fs.existsSync(pythonExe)) {
         console.error('[GPT-SoVITS] Embedded Python not found. Run setup.py first.');
-        console.log('[GPT-SoVITS] Run: python electron/server/gpt-sovits/setup.py');
+        console.log('[GPT-SoVITS] Expected one of:');
+        if (process.platform === 'win32') {
+          console.log(`[GPT-SoVITS]   ${path.join(gptsovitsDataDir, 'python', 'python.exe')}`);
+        } else {
+          console.log(`[GPT-SoVITS]   ${path.join(gptsovitsDataDir, 'python', 'bin', 'python3')}`);
+          console.log(`[GPT-SoVITS]   ${path.join(gptsovitsDataDir, 'python', 'bin', 'python')}`);
+        }
         return;
       }
 
@@ -96,7 +115,7 @@ export function createPythonServerManager({
       fs.mkdirSync(whisperModelsDir, { recursive: true });
 
       const whisperDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
-      const pythonExe = path.join(gptsovitsDataDir, 'python', 'python.exe');
+      const pythonExe = resolveEmbeddedPythonExecutable(gptsovitsDataDir);
       const serverScript = path.join(whisperDir, 'server.py');
 
       if (!fs.existsSync(pythonExe)) {
