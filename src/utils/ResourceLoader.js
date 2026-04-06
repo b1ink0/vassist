@@ -9,13 +9,7 @@ import { isDesktop, isProduction } from './PlatformUtils';
 
 class ResourceLoader {
   constructor() {
-    // Check multiple ways to detect extension mode
-    // 1. Check if explicitly set via setMode()
-    // 2. Check chrome.runtime.id (may not be available in all contexts)
-    // 3. Check if running from chrome-extension:// URL
     this.isExtension = this._detectExtensionMode();
-    
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**
@@ -27,7 +21,6 @@ class ResourceLoader {
     // When running as extension, import.meta.url will be chrome-extension://...
     // In dev mode with Vite, it will be http://localhost:5173/...
     const isExtension = import.meta.url.startsWith('chrome-extension://');
-    // Note: Don't log here as this is called from constructor
     return isExtension;
   }
 

@@ -11,8 +11,6 @@ class ExtensionBridge {
     this.pending = new Map(); // Track pending requests
     this.messageListeners = new Set(); // Track message listeners
     this._setupMessageListener();
-    
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

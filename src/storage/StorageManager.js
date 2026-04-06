@@ -143,8 +143,6 @@ export class StorageManager {
 
     // Direct database adapter access for advanced usage
     this.db = this.adapter;
-
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

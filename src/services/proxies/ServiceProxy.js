@@ -7,7 +7,6 @@
 
 export class ServiceProxy {
   constructor(name) {
-    // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     this.name = name;
     this.isExtension = __EXTENSION_MODE__;
     this._bridge = null;

@@ -18,8 +18,6 @@ export class KokoroTTSCore {
     this.modelId = null;
     this.config = null;
     this.initPromise = null;
-    
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

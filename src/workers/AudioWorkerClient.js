@@ -22,8 +22,6 @@ export class AudioWorkerClient {
     this.pendingRequests = new Map();
     this.audioContext = null;
     this.isReady = false;
-    
-    // Note: Don't use Logger.log in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

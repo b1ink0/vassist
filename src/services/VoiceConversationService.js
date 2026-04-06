@@ -36,8 +36,6 @@ class VoiceConversationService {
     this.onTranscription = null; // (text, images?) => void 
     this.onResponse = null; // (text) => void
     this.onError = null; // (error) => void
-    
-    // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
   }
 
   /**

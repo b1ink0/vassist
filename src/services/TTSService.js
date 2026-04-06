@@ -34,7 +34,6 @@ class TTSService {
 
     if (this.isExtensionMode) {
       this.tabStates = new Map();
-      // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     } else {
       this.client = null;
       this.provider = null;
@@ -49,8 +48,6 @@ class TTSService {
       // Kokoro heartbeat to keep model in memory
       this.kokoroHeartbeatInterval = null;
       this.kokoroHeartbeatEnabled = false;
-
-      // Note: Don't use Logger in constructor to avoid circular dependency with singleton initialization
     }
   }
 
@@ -766,10 +763,7 @@ class TTSService {
     
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
-      // DON'T clear currentPlaybackSession here - it might be needed for session completion check
-      // It will be cleared when audioEnd event fires with session completion
       Logger.log('TTSService', 'Queue empty, playback stopped');
-      // Note: onAudioEndCallback is fired from audio.onended, not here
       return;
     }
 
@@ -966,9 +960,6 @@ class TTSService {
     
     // Dispatch stop event to notify animation manager
     this._dispatchEvent('stop');
-    
-    // Note: audioEnd event is NOT dispatched here - it should only fire from audio.onended
-    // This prevents duplicate events when stopping vs natural completion
   }
   
   /**

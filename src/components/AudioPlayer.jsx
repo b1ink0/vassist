@@ -79,13 +79,13 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
         >
           {/* Progress Fill */}
           <div
-            className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all"
+            className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-white to-white/50 transition-all"
             style={{ width: `${progress}%` }}
           />
           
           {/* Progress Thumb */}
           <div
-            className="absolute top-1/2 w-3 h-3 rounded-full bg-purple-400 shadow-lg transition-all pointer-events-none"
+            className="absolute top-1/2 w-3 h-3 rounded-full bg-gray-100 shadow-lg transition-all pointer-events-none"
             style={{ 
               left: `calc(${progress}% - 6px)`,
               transform: 'translateY(-50%)'
