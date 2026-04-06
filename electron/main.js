@@ -3,7 +3,7 @@
  * Creates a transparent window for the desktop app
  */
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session, desktopCapturer } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session, desktopCapturer, nativeImage } from 'electron';
 import { fileURLToPath } from 'url';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
@@ -63,6 +63,14 @@ let inputWindow;
 let tray = null;
 let gptsovitsProcess = null;
 let whisperProcess = null;
+const enableDebugDevTools = process.argv.includes('--debug') || app.commandLine.hasSwitch('debug');
+
+function maybeOpenDevTools(window) {
+  if (!enableDebugDevTools || !window || window.isDestroyed()) {
+    return;
+  }
+  window.webContents.openDevTools({ mode: 'detach' });
+}
 
 /**
  * Force dedicated GPU usage for better 3D rendering performance
@@ -108,11 +116,10 @@ function createInputWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     inputWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/electron/index.html?window=input');
-    inputWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     inputWindow.loadURL('app://./electron/index.html?window=input');
-    inputWindow.webContents.openDevTools({ mode: 'detach' });
   }
+  maybeOpenDevTools(inputWindow);
 
   inputWindow.once('ready-to-show', () => {
     inputWindow.show();
@@ -158,11 +165,10 @@ async function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     // Development mode - load from dev server with electron HTML
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/electron/index.html');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadURL('app://./electron/index.html');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+  maybeOpenDevTools(mainWindow);
 
 
   // Show window when ready
@@ -259,7 +265,13 @@ function registerGlobalShortcuts(shortcuts) {
  * Create system tray icon
  */
 function createTray() {
+  const isMac = process.platform === 'darwin';
   const trayIconCandidates = [
+    ...(isMac ? [
+      path.join(__dirname, '..', 'electron', 'assets', 'trayTemplate.png'),
+      path.join(process.resourcesPath, 'app.asar', 'electron', 'assets', 'trayTemplate.png'),
+      path.join(process.resourcesPath, 'electron', 'assets', 'trayTemplate.png'),
+    ] : []),
     path.join(__dirname, '..', 'electron', 'assets', 'icon-32.png'),
     path.join(process.resourcesPath, 'app.asar', 'electron', 'assets', 'icon-32.png'),
     path.join(process.resourcesPath, 'electron', 'assets', 'icon-32.png'),
@@ -268,7 +280,13 @@ function createTray() {
   const resolvedIconPath = trayIconCandidates.find((candidate) => fs.existsSync(candidate));
 
   try {
-    tray = new Tray(resolvedIconPath || process.execPath);
+    if (resolvedIconPath && isMac) {
+      const trayImage = nativeImage.createFromPath(resolvedIconPath);
+      trayImage.setTemplateImage(true);
+      tray = new Tray(trayImage);
+    } else {
+      tray = new Tray(resolvedIconPath || process.execPath);
+    }
   } catch (error) {
     console.error('Failed to create tray icon:', error);
     return;
@@ -394,8 +412,7 @@ app.whenReady().then(() => {
         }
       });
 
-      // Open dev tools
-      pickerWindow.webContents.openDevTools({ mode: 'detach' });
+      maybeOpenDevTools(pickerWindow);
 
       // Load React app with screenPicker mode
       if (process.env.VITE_DEV_SERVER_URL) {

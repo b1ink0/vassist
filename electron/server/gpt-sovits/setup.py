@@ -360,10 +360,19 @@ def install_dependencies():
 
     requirements = SCRIPT_DIR / "requirements.txt"
     requirements_no_pyopenjtalk = BASE_DIR / "requirements_temp.txt"
+    requirements_platform = BASE_DIR / "requirements_platform.txt"
     
     if IS_ARM_MAC:
-        # macOS: Simpler approach - install all dependencies directly
-        # No need to separate compilation packages on macOS
+        # macOS: Build a platform-safe requirements file.
+        # onnxruntime-gpu has no macOS wheels, so switch to CPU onnxruntime.
+        with open(requirements, 'r', encoding='utf-8') as src, open(requirements_platform, 'w', encoding='utf-8') as dst:
+            for line in src:
+                stripped = line.strip()
+                if stripped == 'onnxruntime-gpu':
+                    dst.write('onnxruntime\n')
+                    continue
+                dst.write(line)
+
         log("[INSTALL] Installing dependencies...")
         
         # Install PyTorch first
@@ -372,7 +381,7 @@ def install_dependencies():
         # Install all dependencies
         try:
             result = subprocess.run([
-                str(python_exe), "-m", "pip", "install", "-r", str(requirements),
+                str(python_exe), "-m", "pip", "install", "-r", str(requirements_platform),
                 "--no-warn-script-location"
             ], capture_output=True, text=True, check=True)
             log(result.stdout)
@@ -385,22 +394,13 @@ def install_dependencies():
             log(f"STDOUT: {e.stdout}")
             log(f"STDERR: {e.stderr}")
             raise
+        finally:
+            if requirements_platform.exists():
+                requirements_platform.unlink()
         return
     
-    # Windows: Original complex approach with system Python for compilation
+    # Windows: Install only with embedded Python runtime
     embedded_python_exe = PYTHON_DIR / "python.exe"
-    
-    # Try to find system Python (has dev headers for compilation)
-    system_python = shutil.which('python') or shutil.which('python3')
-    
-    # Find CMake
-    cmake_exe = shutil.which('cmake')
-    env = os.environ.copy()
-    if cmake_exe:
-        cmake_path = str(Path(cmake_exe).parent)
-        log(f"[CMAKE] ✓ Found at: {cmake_path}")
-        env['PATH'] = cmake_path + os.pathsep + env.get('PATH', '')
-        env['CMAKE_PROGRAM'] = cmake_exe
     
     # Packages that need compilation (pyopenjtalk removed - using pyopenjtalk-prebuilt instead)
     compile_packages = ['opencc', 'jieba_fast']
@@ -451,46 +451,9 @@ def install_dependencies():
         log(f"STDERR: {e.stderr}")
         raise
     
-    # Try to compile packages with system Python, then copy to embedded
-    if cmake_exe and system_python:
-        for package_name in compile_packages:
-            log(f"[COMPILE] {package_name} with system Python (has dev headers)...")
-            try:
-                # Get package spec with version if specified
-                package_spec = package_name
-                
-                # Install to system Python temporarily
-                subprocess.run([
-                    system_python, "-m", "pip", "install", package_spec,
-                    "--no-warn-script-location"
-                ], env=env, check=True, timeout=300)
-                
-                # Find where it installed (use package import name)
-                import_name = package_name.replace('-', '_')
-                result = subprocess.run([
-                    system_python, "-c", 
-                    f"import {import_name}, os; print(os.path.dirname({import_name}.__file__))"
-                ], capture_output=True, text=True, check=True)
-                
-                package_path = Path(result.stdout.strip())
-                target_path = PYTHON_DIR / "Lib" / "site-packages" / import_name
-                
-                # Copy compiled package to embedded Python
-                if package_path.exists():
-                    import shutil as sh
-                    sh.copytree(package_path, target_path, dirs_exist_ok=True)
-                    log(f"[COMPILE] ✓ {package_name} compiled and copied to embedded Python")
-                
-            except Exception as e:
-                log(f"[WARNING] {package_name} compilation failed: {e}")
-                log(f"[WARNING] {package_name} will not be available")
-    else:
-        if not cmake_exe:
-            log("[WARNING] CMake not found")
-        if not system_python:
-            log("[WARNING] System Python not found (needed for compiling C++ extensions)")
-        log("[WARNING] Compiled packages (opencc, jieba_fast) will not be available")
-        log("[INFO] Note: pyopenjtalk-prebuilt is already installed and doesn't need compilation")
+    log("[INSTALL] Skipping system Python compilation path")
+    log("[INSTALL] Runtime setup uses embedded CPython only")
+    log("[WARNING] opencc/jieba_fast native compile step is disabled in embedded-only mode")
     
     # Clean up temp file if it exists
     if requirements_no_pyopenjtalk.exists():

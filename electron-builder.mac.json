@@ -1,0 +1,46 @@
+{
+  "appId": "com.vassist.app",
+  "productName": "VAssist",
+  "directories": {
+    "output": "dist-desktop-release",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist-desktop/**/*",
+    "electron/server/build/Release/server.node",
+    "electron/assets/icon-32.png",
+    "electron/assets/icon-128.png",
+    "electron/assets/icon-256.png",
+    "electron/assets/icon-512.png",
+    "electron/assets/icon.icns",
+    "electron/assets/icon.iconset/**/*",
+    "electron/assets/trayTemplate.png",
+    "electron/assets/trayTemplate@2x.png",
+    "package.json",
+    "!**/*.map",
+    "!node_modules/@babylonjs/**",
+    "!node_modules/babylon-mmd/**",
+    "!node_modules/react/**",
+    "!node_modules/react-dom/**",
+    "!node_modules/react-icons/**",
+    "!node_modules/@heroicons/**",
+    "!node_modules/@tailwindcss/**",
+    "!node_modules/tailwindcss/**",
+    "!node_modules/dexie/**",
+    "!node_modules/jszip/**",
+    "!node_modules/@huggingface/**",
+    "!node_modules/@ricky0123/**",
+    "!node_modules/kokoro-js/**",
+    "!node_modules/onnxruntime-web/**",
+    "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
+    "!node_modules/onnxruntime-node/bin/napi-v3/win32/**",
+    "!node_modules/@node-llama-cpp/win-*/**"
+  ],
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "icon": "electron/assets/icon.icns"
+  }
+}
