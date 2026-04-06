@@ -110,6 +110,23 @@ contextBridge.exposeInMainWorld('electron', {
       return () => ipcRenderer.removeListener('gptsovits:setup:complete', subscription);
     },
   },
+
+  // Whisper STT Setup
+  whisperSetup: {
+    start: () => ipcRenderer.invoke('whisper:setup:start'),
+    cancel: () => ipcRenderer.invoke('whisper:setup:cancel'),
+    getStatus: () => ipcRenderer.invoke('whisper:setup:status'),
+    onLog: (callback) => {
+      const subscription = (event, log) => callback(log);
+      ipcRenderer.on('whisper:setup:log', subscription);
+      return () => ipcRenderer.removeListener('whisper:setup:log', subscription);
+    },
+    onComplete: (callback) => {
+      const subscription = (event, result) => callback(result);
+      ipcRenderer.on('whisper:setup:complete', subscription);
+      return () => ipcRenderer.removeListener('whisper:setup:complete', subscription);
+    },
+  },
 });
 
 console.log('Preload script completed, window.electron exposed!');

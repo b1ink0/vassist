@@ -27,6 +27,8 @@ export function createRuntimePaths({ app, path, fs, serverBasePath, isDevServer 
       { src: path.join(serverBasePath, 'gpt-sovits', 'api.py'), dest: path.join(runtimeGPTDir, 'api.py') },
       { src: path.join(serverBasePath, 'gpt-sovits', 'requirements.txt'), dest: path.join(runtimeGPTDir, 'requirements.txt') },
       { src: path.join(serverBasePath, 'whisper-stt', 'server.py'), dest: path.join(runtimeWhisperDir, 'server.py') },
+      { src: path.join(serverBasePath, 'whisper-stt', 'setup.py'), dest: path.join(runtimeWhisperDir, 'setup.py') },
+      { src: path.join(serverBasePath, 'whisper-stt', 'requirements.txt'), dest: path.join(runtimeWhisperDir, 'requirements.txt') },
     ];
 
     for (const { src, dest } of filesToCopy) {

@@ -85,7 +85,7 @@ const DesktopLLMConfig = ({
               className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
             />
             <p className="text-[10px] text-white/50 mt-1">
-              Unified local AI server endpoint (Electron manages routing internally)
+              Local AI server endpoint
             </p>
           </div>
 

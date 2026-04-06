@@ -12,6 +12,7 @@ export function createPythonServerManager({
   let gptsovitsProcess = null;
   let whisperProcess = null;
   let setupRunner = null;
+  let whisperSetupRunner = null;
 
   function resolveEmbeddedPythonExecutable(gptsovitsDataDir) {
     const candidates = process.platform === 'win32'
@@ -179,7 +180,10 @@ export function createPythonServerManager({
 
       const gptSovitsDataDir = getGPTSoVITSDataDir();
       fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+      const whisperSetupDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
+      fs.mkdirSync(whisperSetupDir, { recursive: true });
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+      process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
       const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
@@ -237,7 +241,10 @@ export function createPythonServerManager({
 
       const gptSovitsDataDir = getGPTSoVITSDataDir();
       fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+      const whisperSetupDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
+      fs.mkdirSync(whisperSetupDir, { recursive: true });
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+      process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
       const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
@@ -258,6 +265,96 @@ export function createPythonServerManager({
         };
       }
     });
+
+    ipcMain.handle('whisper:setup:start', async (event) => {
+      ensureRuntimeServerScripts();
+
+      const gptSovitsDataDir = getGPTSoVITSDataDir();
+      const whisperSetupDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
+      fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+      fs.mkdirSync(whisperSetupDir, { recursive: true });
+      process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+      process.env.WHISPER_SETUP_DIR = whisperSetupDir;
+
+      const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
+      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+
+      if (whisperSetupRunner) {
+        throw new Error('Whisper setup already running');
+      }
+
+      if (setupRunner) {
+        throw new Error('GPT-SoVITS setup is running. Please wait for it to finish first.');
+      }
+
+      console.log('[Whisper] Starting setup...');
+      whisperSetupRunner = new WhisperSetupRunner();
+
+      whisperSetupRunner.run((log) => {
+        event.sender.send('whisper:setup:log', log);
+      }).then(async () => {
+        console.log('[Whisper] Setup complete');
+        event.sender.send('whisper:setup:complete', { success: true });
+        whisperSetupRunner = null;
+
+        console.log('[Whisper] Restarting STT server...');
+        stopWhisperServer();
+
+        setTimeout(async () => {
+          startWhisperServer();
+          await localServerManager.restartIfRunning();
+        }, 1500);
+      }).catch((error) => {
+        console.error('[Whisper] Setup failed:', error);
+        event.sender.send('whisper:setup:complete', {
+          success: false,
+          error: error.message
+        });
+        whisperSetupRunner = null;
+      });
+
+      return { started: true };
+    });
+
+    ipcMain.handle('whisper:setup:cancel', async () => {
+      if (whisperSetupRunner) {
+        console.log('[Whisper] Cancelling setup...');
+        whisperSetupRunner.cancel();
+        whisperSetupRunner = null;
+        return { cancelled: true };
+      }
+      return { cancelled: false, message: 'No setup running' };
+    });
+
+    ipcMain.handle('whisper:setup:status', async () => {
+      ensureRuntimeServerScripts();
+
+      const gptSovitsDataDir = getGPTSoVITSDataDir();
+      const whisperSetupDir = path.join(getRuntimeServerBasePath(), 'whisper-stt');
+      fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+      fs.mkdirSync(whisperSetupDir, { recursive: true });
+      process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+      process.env.WHISPER_SETUP_DIR = whisperSetupDir;
+
+      const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
+      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+      const runner = new WhisperSetupRunner();
+
+      try {
+        const status = runner.getStatus();
+        console.log('[Whisper] Setup status:', status);
+        return status;
+      } catch (error) {
+        console.error('[Whisper] Status check error:', error);
+        return {
+          isSetup: false,
+          pythonExists: false,
+          dependenciesInstalled: false,
+          modelExists: false,
+          error: error.message
+        };
+      }
+    });
   }
 
   function cleanupBeforeQuit(localServerManager) {
@@ -269,6 +366,16 @@ export function createPythonServerManager({
         console.error('[GPT-SoVITS] Setup cancel error:', error);
       }
       setupRunner = null;
+    }
+
+    if (whisperSetupRunner) {
+      console.log('[Whisper] Cancelling setup on app quit...');
+      try {
+        whisperSetupRunner.cancel();
+      } catch (error) {
+        console.error('[Whisper] Setup cancel error:', error);
+      }
+      whisperSetupRunner = null;
     }
 
     stopGPTSoVITSServer();
