@@ -204,12 +204,45 @@ const ChatInput = forwardRef(({
       setAttachedImages([]);
     });
 
+    const unsubscribeSttTranscription = api.ipc.on('stt:transcriptionReceived', (text) => {
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        return;
+      }
+
+      setMessage((prev) => {
+        const trimmedPrev = (prev || '').trim();
+        if (!trimmedPrev) {
+          return text;
+        }
+        const separator = /\s$/.test(prev) ? '' : ' ';
+        return `${prev}${separator}${text}`;
+      });
+
+      setRecordingError('');
+      setIsProcessingRecording(false);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    });
+
+    const unsubscribeSttRecording = api.ipc.on('state:sttRecording', (payload = {}) => {
+      setIsRecording(Boolean(payload.isRecording));
+      setIsProcessingRecording(Boolean(payload.isProcessing));
+      if (payload.error) {
+        setRecordingError(payload.error);
+      } else {
+        setRecordingError('');
+      }
+    });
+
     return () => {
       unsubscribePendingDrop?.();
       unsubscribeMicDevices?.();
       unsubscribeSelectedMic?.();
       unsubscribeVoiceState?.();
       unsubscribeTranscription?.();
+      unsubscribeSttTranscription?.();
+      unsubscribeSttRecording?.();
     };
   }, [api, attachedImages]);
 
@@ -329,6 +362,7 @@ const ChatInput = forwardRef(({
       setMessage(text);
       setRecordingError('');
       setIsProcessingRecording(false);
+
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
@@ -1236,6 +1270,13 @@ const ChatInput = forwardRef(({
    * Handles microphone button click for voice recording.
    */
   const handleMicClick = async () => {
+    if (isInputWindow && api?.ipc) {
+      setRecordingError('');
+      setIsProcessingRecording(true);
+      api.ipc.send('chatInput:micToggle');
+      return;
+    }
+
     if (!STTServiceProxy.isConfigured()) {
       setRecordingError('STT not configured. Please configure in Control Panel.');
       setTimeout(() => setRecordingError(''), 3000);

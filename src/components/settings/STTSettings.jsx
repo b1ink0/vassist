@@ -57,6 +57,10 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
     if (isAndroid) {
       return STTProviders;
     }
+    if (isDesktop) {
+      const { ANDROID_LOCAL, CHROME_AI_MULTIMODAL, ...desktopProviders } = STTProviders;
+      return desktopProviders;
+    }
     const { ANDROID_LOCAL, ...otherProviders } = STTProviders;
     return otherProviders;
   }, []);

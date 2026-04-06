@@ -66,16 +66,55 @@ class WhisperSetupRunner {
       return false;
     }
 
-    const entries = fs.readdirSync(modelDir, { withFileTypes: true });
-    return entries.some((entry) => {
-      if (entry.isFile()) {
-        return entry.name.endsWith('.bin') || entry.name.endsWith('.json');
+    const queue = [modelDir];
+    const maxDepth = 5;
+
+    while (queue.length > 0) {
+      const currentPath = queue.shift();
+      const depth = currentPath
+        .replace(modelDir, '')
+        .split(path.sep)
+        .filter(Boolean)
+        .length;
+
+      let entries = [];
+      try {
+        entries = fs.readdirSync(currentPath, { withFileTypes: true });
+      } catch {
+        continue;
       }
-      if (entry.isDirectory()) {
-        return ['tiny.en', 'tiny'].includes(entry.name);
+
+      for (const entry of entries) {
+        const fullPath = path.join(currentPath, entry.name);
+
+        if (entry.isFile()) {
+          // Common faster-whisper artifacts.
+          if (
+            entry.name === 'model.bin' ||
+            entry.name === 'config.json' ||
+            entry.name === 'tokenizer.json' ||
+            entry.name.endsWith('.bin')
+          ) {
+            return true;
+          }
+          continue;
+        }
+
+        if (!entry.isDirectory()) {
+          continue;
+        }
+
+        if (entry.name === 'tiny.en' || entry.name === 'tiny' || entry.name.startsWith('models--')) {
+          return true;
+        }
+
+        if (depth < maxDepth) {
+          queue.push(fullPath);
+        }
       }
-      return false;
-    });
+    }
+
+    return false;
   }
 
   checkDependenciesInstalled() {

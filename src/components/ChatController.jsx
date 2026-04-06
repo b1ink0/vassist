@@ -9,7 +9,7 @@ import ChatContainer from './ChatContainer'
 import AIToolbar from './AIToolbar'
 import { InputWindowManager } from './InputWindowManager'
 import ChatService from '../services/ChatService'
-import { AIServiceProxy, TTSServiceProxy, StorageServiceProxy } from '../services/proxies'
+import { AIServiceProxy, TTSServiceProxy, STTServiceProxy, StorageServiceProxy } from '../services/proxies'
 import DocumentInteractionService from '../services/DocumentInteractionService'
 import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
 import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
@@ -41,6 +41,8 @@ const ChatController = ({
   const chatInputRef = useRef(null);
   const streamAbortControllerRef = useRef(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
+  const inputWindowSttRecordingRef = useRef(false);
+  const inputWindowSttProcessingRef = useRef(false);
   
   const {
     assistantRef,
@@ -1306,6 +1308,127 @@ const ChatController = ({
 
     api.ipc.send('state:pendingDropData', pendingDropData);
   }, [pendingDropData, api]);
+
+  /**
+   * Desktop main window: handle input-window STT mic toggle and state relay.
+   * ChatInput is not rendered in desktop main window, so this must live here.
+   */
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) {
+      return;
+    }
+
+    const sendSttState = (payload = {}) => {
+      api.ipc.send('state:sttRecording', payload);
+    };
+
+    const ensureSttCallbacks = () => {
+      STTServiceProxy.setTranscriptionCallback((text) => {
+        inputWindowSttProcessingRef.current = false;
+        api.ipc.send('stt:transcriptionReceived', text);
+      });
+
+      STTServiceProxy.setErrorCallback((error) => {
+        inputWindowSttRecordingRef.current = false;
+        inputWindowSttProcessingRef.current = false;
+        sendSttState({
+          isRecording: false,
+          isProcessing: false,
+          error: error?.message || 'Recording failed',
+        });
+      });
+
+      STTServiceProxy.setRecordingStartCallback(() => {
+        inputWindowSttRecordingRef.current = true;
+        inputWindowSttProcessingRef.current = false;
+        sendSttState({
+          isRecording: true,
+          isProcessing: false,
+          error: '',
+        });
+      });
+
+      STTServiceProxy.setRecordingStopCallback(() => {
+        inputWindowSttRecordingRef.current = false;
+        inputWindowSttProcessingRef.current = false;
+        sendSttState({
+          isRecording: false,
+          isProcessing: false,
+          error: '',
+        });
+      });
+    };
+
+    ensureSttCallbacks();
+
+    const unsubscribeMicToggle = api.ipc.on('chatInput:micToggle', async () => {
+      ensureSttCallbacks();
+
+      if (!STTServiceProxy.isConfigured()) {
+        sendSttState({
+          isRecording: false,
+          isProcessing: false,
+          error: 'STT not configured. Please configure in Control Panel.',
+        });
+        return;
+      }
+
+      if (_isVoiceMode) {
+        sendSttState({
+          isRecording: false,
+          isProcessing: false,
+          error: 'Voice call is active. Stop voice call first.',
+        });
+        return;
+      }
+
+      if (inputWindowSttProcessingRef.current) {
+        sendSttState({
+          isRecording: inputWindowSttRecordingRef.current,
+          isProcessing: true,
+          error: '',
+        });
+        return;
+      }
+
+      try {
+        if (inputWindowSttRecordingRef.current) {
+          inputWindowSttProcessingRef.current = true;
+          sendSttState({
+            isRecording: true,
+            isProcessing: true,
+            error: '',
+          });
+          STTServiceProxy.stopRecording();
+        } else {
+          inputWindowSttProcessingRef.current = true;
+          sendSttState({
+            isRecording: false,
+            isProcessing: true,
+            error: '',
+          });
+          TTSServiceProxy.stopPlayback();
+          await STTServiceProxy.startRecording();
+        }
+      } catch (error) {
+        inputWindowSttRecordingRef.current = false;
+        inputWindowSttProcessingRef.current = false;
+        sendSttState({
+          isRecording: false,
+          isProcessing: false,
+          error: error?.message || 'Microphone access denied',
+        });
+      }
+    });
+
+    return () => {
+      unsubscribeMicToggle?.();
+      STTServiceProxy.setTranscriptionCallback(null);
+      STTServiceProxy.setErrorCallback(null);
+      STTServiceProxy.setRecordingStartCallback(null);
+      STTServiceProxy.setRecordingStopCallback(null);
+    };
+  }, [api, _isVoiceMode]);
 
   /**
    * Handles drag-drop onto ChatContainer.

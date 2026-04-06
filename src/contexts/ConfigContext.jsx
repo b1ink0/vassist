@@ -280,16 +280,23 @@ export const ConfigProvider = ({ children }) => {
     
     sttSaveTimeoutRef.current = setTimeout(async () => {
       const validation = validateSTTConfig(sttConfig);
-      if (!validation.valid) return;
       
       try {
         await StorageServiceProxy.configSave('sttConfig', sttConfig);
         setSttConfigSaved(true);
-        STTServiceProxy.configure(sttConfig);
+        if (validation.valid) {
+          setSttConfigError('');
+          STTServiceProxy.configure(sttConfig);
+        }
         setTimeout(() => setSttConfigSaved(false), 2000);
         Logger.log('ConfigContext', 'STT config auto-saved');
       } catch (error) {
         Logger.error('ConfigContext', 'STT config auto-save failed:', error);
+        return;
+      }
+
+      if (!validation.valid) {
+        setSttConfigError(validation.errors.join(', '));
       }
     }, 500);
   }, [sttConfig]);

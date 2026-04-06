@@ -1,5 +1,6 @@
 export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, getModelsDir }) {
   let server = null;
+  let restartPromise = null;
 
   function registerIPCHandlers(ipcMain) {
     ipcMain.handle('server:start', async (event, config = {}) => {
@@ -122,6 +123,11 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
           server = new LocalAIServer();
         }
 
+        if (server.getStatus().running) {
+          console.log('[Server] Auto-start skipped: already running');
+          return;
+        }
+
         const serverConfig = {
           llm: {
             modelPath: null,
@@ -150,19 +156,39 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
   }
 
   async function restartIfRunning() {
+    if (restartPromise) {
+      return restartPromise;
+    }
+
     if (!server || !server.getStatus().running) {
       return;
     }
 
     console.log('[Server] Restarting HTTP server...');
-    try {
-      await server.stop();
-      setTimeout(() => {
-        server.start().catch((error) => console.error('[Server] Restart error:', error));
-      }, 1000);
-    } catch (err) {
-      console.error('[Server] Restart error:', err);
-    }
+
+    restartPromise = (async () => {
+      try {
+        await server.stop();
+
+        if (server.getStatus().running) {
+          console.log('[Server] Restart skipped: server already running after stop');
+          return;
+        }
+
+        await server.start();
+        console.log('[Server] Restart complete');
+      } catch (err) {
+        if (err?.code === 'EADDRINUSE') {
+          console.warn('[Server] Restart skipped: port 11438 already in use');
+          return;
+        }
+        console.error('[Server] Restart error:', err);
+      } finally {
+        restartPromise = null;
+      }
+    })();
+
+    return restartPromise;
   }
 
   function stopIfRunning() {

@@ -254,9 +254,21 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
+  ipcMain.on('stt:transcriptionReceived', (event, text) => {
+    if (state.inputWindow && state.inputWindow.webContents) {
+      state.inputWindow.webContents.send('stt:transcriptionReceived', text);
+    }
+  });
+
   ipcMain.on('chatInput:voiceMode', (event, isActive) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('chatInput:voiceMode', isActive);
+    }
+  });
+
+  ipcMain.on('chatInput:micToggle', () => {
+    if (state.mainWindow && state.mainWindow.webContents) {
+      state.mainWindow.webContents.send('chatInput:micToggle');
     }
   });
 
@@ -275,6 +287,12 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
   ipcMain.on('state:voiceState', (event, stateValue) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:voiceState', stateValue);
+    }
+  });
+
+  ipcMain.on('state:sttRecording', (event, payload) => {
+    if (state.inputWindow && state.inputWindow.webContents) {
+      state.inputWindow.webContents.send('state:sttRecording', payload);
     }
   });
 }
