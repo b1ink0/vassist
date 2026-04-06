@@ -296,7 +296,7 @@ const UISettings = ({ isLightBackground }) => {
           <h4 className="text-sm font-semibold text-white mb-3">Keyboard Shortcuts</h4>
           
           <ShortcutsConfig
-            shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '' }}
+            shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '', toggleVisibility: '' }}
             onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
             isLightBackground={isLightBackground}
           />

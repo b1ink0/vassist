@@ -161,33 +161,56 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
  * 
  * @component
  * @param {Object} props - Component props
- * @param {Object} props.shortcuts - Shortcuts configuration object with { enabled, openChat, toggleMode }
+ * @param {Object} props.shortcuts - Shortcuts configuration object with { enabled, openChat, toggleMode, toggleVisibility }
  * @param {Function} props.onShortcutsChange - Callback when shortcuts configuration changes
  * @param {boolean} [props.isLightBackground=false] - Whether background is light themed
  * @returns {JSX.Element} Shortcuts configuration panel
  */
 const ShortcutsConfig = ({ 
-  shortcuts = { enabled: false, openChat: '', toggleMode: '' }, 
+  shortcuts = { enabled: false, openChat: '', toggleMode: '', toggleVisibility: '' }, 
   onShortcutsChange,
   isLightBackground = false
 }) => {
-  const [localShortcuts, setLocalShortcuts] = useState(shortcuts);
+  const [localShortcuts, setLocalShortcuts] = useState({
+    enabled: false,
+    openChat: '',
+    toggleMode: '',
+    toggleVisibility: '',
+    ...shortcuts,
+  });
   const [conflict, setConflict] = useState(null);
   
   // Sync with external changes
   useEffect(() => {
-    setLocalShortcuts(shortcuts);
+    setLocalShortcuts({
+      enabled: false,
+      openChat: '',
+      toggleMode: '',
+      toggleVisibility: '',
+      ...shortcuts,
+    });
   }, [shortcuts]);
   
   // Check for conflicts
   useEffect(() => {
-    if (localShortcuts.openChat && localShortcuts.toggleMode && 
-        localShortcuts.openChat === localShortcuts.toggleMode) {
-      setConflict('Open Chat and Toggle Mode cannot use the same shortcut');
-    } else {
-      setConflict(null);
+    const shortcutEntries = [
+      ['Open Chat', localShortcuts.openChat],
+      ['Toggle Avatar', localShortcuts.toggleMode],
+      ['Toggle App Visibility', localShortcuts.toggleVisibility],
+    ].filter(([, value]) => Boolean(value));
+
+    const seen = new Map();
+    let nextConflict = null;
+    for (const [name, value] of shortcutEntries) {
+      if (seen.has(value)) {
+        nextConflict = `${seen.get(value)} and ${name} cannot use the same shortcut`;
+        break;
+      }
+      seen.set(value, name);
     }
-  }, [localShortcuts.openChat, localShortcuts.toggleMode]);
+
+    setConflict(nextConflict);
+  }, [localShortcuts.openChat, localShortcuts.toggleMode, localShortcuts.toggleVisibility]);
   
   const handleToggle = (enabled) => {
     const updated = { ...localShortcuts, enabled };
@@ -255,6 +278,24 @@ const ShortcutsConfig = ({
           <ShortcutInput
             value={localShortcuts.toggleMode}
             onChange={(value) => handleShortcutChange('toggleMode', value)}
+            placeholder="Click to set shortcut"
+            disabled={!localShortcuts.enabled}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+
+        {/* Toggle App Visibility Shortcut */}
+        <div className="space-y-2">
+          <label className="text-sm text-white/80 font-medium flex items-center gap-2">
+            <Icon name="eye-off" size={14} className="text-cyan-400" />
+            Toggle App Visibility
+          </label>
+          <p className="text-xs text-white/50 mb-2">
+            Fully hide/unhide the desktop app (same intent as tray Show/Hide)
+          </p>
+          <ShortcutInput
+            value={localShortcuts.toggleVisibility}
+            onChange={(value) => handleShortcutChange('toggleVisibility', value)}
             placeholder="Click to set shortcut"
             disabled={!localShortcuts.enabled}
             isLightBackground={isLightBackground}

@@ -25,6 +25,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
     enabled: false,
     openChat: '',
     toggleMode: '',
+    toggleVisibility: '',
   });
 
   // Load existing setup data on mount

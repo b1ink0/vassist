@@ -291,5 +291,6 @@ export const DefaultUIConfig = {
     enabled: false,
     openChat: '',
     toggleMode: '',
+    toggleVisibility: '',
   },
 };

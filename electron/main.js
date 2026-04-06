@@ -198,11 +198,57 @@ async function createWindow() {
  */
 function convertToElectronAccelerator(browserCombo) {
   if (!browserCombo) return null;
-  
-  // Replace Ctrl with CommandOrControl for cross-platform
-  let accelerator = browserCombo.replace(/Ctrl/g, 'CommandOrControl');
-  
-  return accelerator;
+
+  const normalizedParts = browserCombo
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const lowerPart = part.toLowerCase();
+
+      if (['ctrl', 'control', 'cmd', 'command', 'meta'].includes(lowerPart)) {
+        return 'CommandOrControl';
+      }
+      if (lowerPart === 'option') {
+        return 'Alt';
+      }
+      if (lowerPart === 'esc') {
+        return 'Escape';
+      }
+      if (part.length === 1) {
+        return part.toUpperCase();
+      }
+
+      return part;
+    });
+
+  // Preserve order while removing duplicate modifiers.
+  const dedupedParts = [];
+  for (const part of normalizedParts) {
+    if (!dedupedParts.includes(part)) {
+      dedupedParts.push(part);
+    }
+  }
+
+  return dedupedParts.join('+');
+}
+
+function toggleAppVisibility() {
+  if (!mainWindow) return;
+
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
+
+    // Ensure auxiliary input window is also hidden when app is fully hidden.
+    if (inputWindow && !inputWindow.isDestroyed()) {
+      inputWindow.setOpacity(0);
+      inputWindow.setIgnoreMouseEvents(true);
+    }
+    return;
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
 }
 
 /**
@@ -259,6 +305,26 @@ function registerGlobalShortcuts(shortcuts) {
       }
     }
   }
+
+  // Register App Visibility shortcut (fully hide/unhide app windows)
+  if (shortcuts.toggleVisibility) {
+    const accelerator = convertToElectronAccelerator(shortcuts.toggleVisibility);
+    if (accelerator) {
+      try {
+        const registered = globalShortcut.register(accelerator, () => {
+          toggleAppVisibility();
+        });
+
+        if (registered) {
+          console.log('Registered shortcut for App Visibility:', accelerator);
+        } else {
+          console.warn('Failed to register shortcut for App Visibility:', accelerator);
+        }
+      } catch (error) {
+        console.error('Error registering App Visibility shortcut:', error);
+      }
+    }
+  }
 }
 
 /**
@@ -297,15 +363,19 @@ function createTray() {
       label: 'Show VAssist',
       click: () => {
         if (mainWindow) {
-          mainWindow.show();
+            if (!mainWindow.isVisible()) {
+              toggleAppVisibility();
+            } else {
+              mainWindow.show();
+            }
         }
       }
     },
     {
       label: 'Hide VAssist',
       click: () => {
-        if (mainWindow) {
-          mainWindow.hide();
+          if (mainWindow && mainWindow.isVisible()) {
+            toggleAppVisibility();
         }
       }
     },
@@ -324,13 +394,7 @@ function createTray() {
 
   // Double click to show/hide
   tray.on('double-click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-      }
-    }
+    toggleAppVisibility();
   });
 }
 

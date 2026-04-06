@@ -117,6 +117,7 @@ const DEFAULT_SETUP_STATE = {
         enabled: false,
         openChat: '',
         toggleMode: '',
+        toggleVisibility: '',
       },
     },
   },
@@ -416,6 +417,7 @@ export function SetupProvider({ children }) {
           enabled: false,
           openChat: '',
           toggleMode: '',
+          toggleVisibility: '',
         },
       };
       Logger.log('SetupContext', 'Saving uiConfig:', uiConfig);

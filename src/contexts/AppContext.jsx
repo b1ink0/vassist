@@ -19,7 +19,7 @@ import VoiceConversationService, { ConversationStates } from '../services/VoiceC
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
-import { isInputWindow } from '../utils/PlatformUtils';
+import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
 
 const AppContext = createContext(null);
 
@@ -832,6 +832,8 @@ export const AppProvider = ({ children }) => {
    * Global keyboard shortcut listener
    */
   useEffect(() => {
+    if (isDesktop) return;
+
     if (!uiConfig?.shortcuts?.enabled) return;
     
     const handleKeyDown = (event) => {
@@ -883,8 +885,8 @@ export const AppProvider = ({ children }) => {
    * Register global shortcuts in Electron and listen for shortcut events
    */
   useEffect(() => {
-    // Only in desktop mode
-    if (!__DESKTOP_MODE__ || !api?.shortcuts) return;
+    // Only in desktop main window (not input window)
+    if (!isDesktop || !api?.shortcuts || isInputWindow) return;
     
     // Register shortcuts when config changes
     if (uiConfig?.shortcuts) {
