@@ -300,6 +300,7 @@ export const DefaultAIConfig = {
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'qwen3:0.6b', // Default model name
+    backend: 'auto',
     temperature: 0.7,
     maxTokens: 2048,
     contextSize: 4096,

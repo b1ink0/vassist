@@ -180,7 +180,22 @@ export const ConfigProvider = ({ children }) => {
         if (isDesktop && savedAiConfig?.provider === 'desktop-local') {
           const config = savedAiConfig['desktop-local'];
           if (config && api?.server) {
-            api.server.start(config)
+            let canStartServer = true;
+
+            if (api?.llm?.getBackendStatus && config.backend && config.backend !== 'auto') {
+              try {
+                const backendStatus = await api.llm.getBackendStatus(config.backend);
+                if (backendStatus?.success && !backendStatus.selectedInstalled) {
+                  canStartServer = false;
+                  Logger.warn('ConfigContext', `Desktop local server start deferred: backend ${config.backend} is not installed yet`);
+                }
+              } catch (error) {
+                Logger.warn('ConfigContext', 'Failed to verify backend status before desktop server start:', error);
+              }
+            }
+
+            if (canStartServer) {
+              api.server.start(config)
               .then(result => {
                 if (result.success) {
                   Logger.log('ConfigContext', 'Desktop server started:', result);
@@ -191,6 +206,7 @@ export const ConfigProvider = ({ children }) => {
               .catch(error => {
                 Logger.error('ConfigContext', 'Error starting desktop server:', error);
               });
+            }
           }
         }
       }

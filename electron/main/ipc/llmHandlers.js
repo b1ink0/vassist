@@ -40,7 +40,7 @@ export function createGetModelsDir({ app, fs, path, baseDir }) {
   };
 }
 
-export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir }) {
+export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, llmBackendManager }) {
   // List models in models directory
   ipcMain.handle('llm:list-models', async (event, customPath = null) => {
     try {
@@ -571,6 +571,35 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir }
       console.error('[LLM] Choose file error:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  ipcMain.handle('llm:backend-status', async (event, backend = 'auto') => {
+    try {
+      if (!llmBackendManager) {
+        return { success: false, error: 'LLM backend manager unavailable' };
+      }
+      return llmBackendManager.getStatus({ backend });
+    } catch (error) {
+      console.error('[LLM] Backend status error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('llm:backend-install', async (event, backend = 'auto') => {
+    try {
+      if (!llmBackendManager) {
+        return { success: false, error: 'LLM backend manager unavailable' };
+      }
+      return await llmBackendManager.installBackend({ event, backend });
+    } catch (error) {
+      console.error('[LLM] Backend install error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('llm:backend-cancel-install', async () => {
+    // node-llama-cpp setup is currently not cancellable mid-flight.
+    return { success: false, error: 'Cancel is not supported for backend installation yet' };
   });
 }
 

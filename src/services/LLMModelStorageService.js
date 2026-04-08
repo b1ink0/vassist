@@ -97,6 +97,22 @@ class LLMModelStorageBase {
   onDownloadProgress(callback) {
     throw new Error('onDownloadProgress() not implemented');
   }
+
+  async getBackendStatus(backend = 'auto') {
+    throw new Error('getBackendStatus() not implemented');
+  }
+
+  async installBackend(backend) {
+    throw new Error('installBackend() not implemented');
+  }
+
+  async cancelBackendInstall() {
+    throw new Error('cancelBackendInstall() not implemented');
+  }
+
+  onBackendInstallProgress(callback) {
+    throw new Error('onBackendInstallProgress() not implemented');
+  }
 }
 
 /**
@@ -150,6 +166,22 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
 
   onDownloadProgress(callback) {
     return this.api.onDownloadProgress(callback);
+  }
+
+  async getBackendStatus(backend = 'auto') {
+    return await this.api.getBackendStatus(backend);
+  }
+
+  async installBackend(backend) {
+    return await this.api.installBackend(backend);
+  }
+
+  async cancelBackendInstall() {
+    return await this.api.cancelBackendInstall();
+  }
+
+  onBackendInstallProgress(callback) {
+    return this.api.onBackendInstallProgress(callback);
   }
 }
 
@@ -356,6 +388,31 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     }
     
     return () => {}; // No-op if AndroidAI not available
+  }
+
+  async getBackendStatus(backend = 'auto') {
+    return {
+      success: false,
+      error: 'Backend management is not available on Android'
+    };
+  }
+
+  async installBackend(backend) {
+    return {
+      success: false,
+      error: 'Backend management is not available on Android'
+    };
+  }
+
+  async cancelBackendInstall() {
+    return {
+      success: false,
+      error: 'Backend management is not available on Android'
+    };
+  }
+
+  onBackendInstallProgress(callback) {
+    return () => {};
   }
 }
 

@@ -92,6 +92,14 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('llm:download-progress', subscription);
       return () => ipcRenderer.removeListener('llm:download-progress', subscription);
     },
+    getBackendStatus: (backend) => ipcRenderer.invoke('llm:backend-status', backend),
+    installBackend: (backend) => ipcRenderer.invoke('llm:backend-install', backend),
+    cancelBackendInstall: () => ipcRenderer.invoke('llm:backend-cancel-install'),
+    onBackendInstallProgress: (callback) => {
+      const subscription = (event, progress) => callback(progress);
+      ipcRenderer.on('llm:backend-install-progress', subscription);
+      return () => ipcRenderer.removeListener('llm:backend-install-progress', subscription);
+    },
   },
   
   // GPT-SoVITS Setup

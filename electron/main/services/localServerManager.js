@@ -1,4 +1,4 @@
-export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, getModelsDir }) {
+export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, getModelsDir, loadLlamaApi }) {
   let server = null;
   let restartPromise = null;
 
@@ -8,7 +8,7 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
 
       if (!server) {
         try {
-          server = new LocalAIServer();
+          server = new LocalAIServer({ loadLlamaApi });
         } catch (error) {
           console.error('[Server] Failed to create server:', error);
           return { success: false, error: error.message };
@@ -19,6 +19,7 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
         llm: {
           modelPath: null,
           defaultModelsDir: getModelsDir(),
+          backend: config.backend || 'auto',
           temperature: config.temperature || 0.7,
           maxTokens: config.maxTokens || 2048,
           contextSize: config.contextSize || 4096,
@@ -120,7 +121,7 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
     setTimeout(async () => {
       try {
         if (!server) {
-          server = new LocalAIServer();
+          server = new LocalAIServer({ loadLlamaApi });
         }
 
         if (server.getStatus().running) {

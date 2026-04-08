@@ -5,6 +5,9 @@
     "output": "dist-desktop-release",
     "buildResources": "build"
   },
+  "asarUnpack": [
+    "electron/assets/runtime/**"
+  ],
   "files": [
     "dist-desktop/**/*",
     "electron/server/build/Release/server.node",
@@ -12,6 +15,7 @@
     "electron/assets/icon-128.png",
     "electron/assets/icon-256.png",
     "electron/assets/icon-512.png",
+    "electron/assets/runtime/node-llama-core.tgz",
     "package.json",
     "!**/*.map",
     "!node_modules/@babylonjs/**",
@@ -31,7 +35,7 @@
     "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
     "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
     "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**",
-    "!node_modules/@node-llama-cpp/win-arm64/**"
+    "!node_modules/@node-llama-cpp/**"
   ],
   "win": {
     "target": [

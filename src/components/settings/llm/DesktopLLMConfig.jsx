@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '../../icons';
 import { useDesktop } from '../../../contexts/DesktopContext';
 import { isDesktop } from '../../../utils/PlatformUtils';
@@ -23,6 +24,10 @@ const DesktopLLMConfig = ({
   refreshTrigger
 }) => {
   const { api } = useDesktop();
+  const [backendStatus, setBackendStatus] = useState(null);
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendError, setBackendError] = useState('');
+  const [backendProgress, setBackendProgress] = useState(null);
 
   const handleChange = (key, value) => {
     onChange({ [key]: value });
@@ -37,13 +42,87 @@ const DesktopLLMConfig = ({
   };
 
   const storageService = isDesktop && api ? getLLMModelStorage(api) : null;
+  const selectedBackend = config.backend || 'auto';
+  const backendProgressBytes = useMemo(() => {
+    if (!backendProgress) return null;
+    const downloaded = Number.isFinite(backendProgress.downloadedBytes)
+      ? backendProgress.downloadedBytes
+      : null;
+    const total = Number.isFinite(backendProgress.totalBytes)
+      ? backendProgress.totalBytes
+      : null;
+    if (downloaded === null) return null;
+    return {
+      downloadedMB: (downloaded / 1024 / 1024).toFixed(1),
+      totalMB: total !== null ? (total / 1024 / 1024).toFixed(1) : null,
+    };
+  }, [backendProgress]);
+
+  const backendItems = useMemo(() => {
+    return backendStatus?.supportedBackends || [];
+  }, [backendStatus]);
+
+  const loadBackendStatus = useCallback(async () => {
+    if (!storageService) return;
+    try {
+      const status = await storageService.getBackendStatus(selectedBackend);
+      if (status?.success) {
+        setBackendStatus(status);
+      } else if (status?.error) {
+        setBackendError(status.error);
+      }
+    } catch (error) {
+      setBackendError(error.message || 'Failed to load backend status');
+    }
+  }, [selectedBackend, storageService]);
+
+  useEffect(() => {
+    if (!storageService) return;
+
+    loadBackendStatus();
+
+    const unsubscribe = storageService.onBackendInstallProgress((progress) => {
+      setBackendProgress(progress);
+      if (progress?.stage === 'done') {
+        setBackendLoading(false);
+        setBackendError('');
+        loadBackendStatus();
+      } else if (progress?.stage === 'error') {
+        setBackendLoading(false);
+        setBackendError(progress.status || 'Backend installation failed');
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [storageService, selectedBackend, loadBackendStatus]);
+
+  const installSelectedBackend = async () => {
+    if (!storageService) return;
+
+    setBackendLoading(true);
+    setBackendError('');
+    setBackendProgress({ percent: 0, stage: 'install', status: 'Starting backend setup...' });
+
+    try {
+      const result = await storageService.installBackend(selectedBackend);
+      if (!result?.success) {
+        setBackendLoading(false);
+        setBackendError(result?.error || 'Backend installation failed');
+      }
+    } catch (error) {
+      setBackendLoading(false);
+      setBackendError(error.message || 'Backend installation failed');
+    }
+  };
 
   return (
     <div className="space-y-3">
       {/* Info Banner */}
       <div className="p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-2">
-          <Icon name="cpu" size={18} className="text-white/90 flex-shrink-0 mt-0.5" />
+          <Icon name="cpu" size={18} className="text-white/90 shrink-0 mt-0.5" />
           <p className="text-xs text-white/90">
             <span className="font-semibold">Desktop Local AI</span> - On-device language model using llama.cpp. GPU-accelerated and runs entirely on your desktop!
           </p>
@@ -63,6 +142,92 @@ const DesktopLLMConfig = ({
           <p className="text-[10px] text-yellow-400 mt-1">
             ⚠ Select a model below to enable LLM features
           </p>
+        )}
+      </div>
+
+      {/* Backend Manager */}
+      <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-white/90">Runtime Backend</h3>
+            <p className="text-[11px] text-white/60">Choose and install llama.cpp compute backend</p>
+          </div>
+          <button
+            onClick={loadBackendStatus}
+            className="text-xs text-white/70 hover:text-white/90"
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <select
+          value={selectedBackend}
+          onChange={(e) => handleChange('backend', e.target.value)}
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
+        >
+          {backendItems.length > 0 ? (
+            backendItems.map((item) => (
+              <option
+                key={item.name}
+                value={item.name}
+                disabled={!item.supported}
+              >
+                {item.name.toUpperCase()} {!item.supported ? '(unsupported)' : ''}
+              </option>
+            ))
+          ) : (
+            <>
+              <option value="auto">AUTO</option>
+              <option value="cpu">CPU</option>
+              <option value="cuda">CUDA</option>
+              <option value="vulkan">VULKAN</option>
+              <option value="metal">METAL</option>
+              <option value="rocm">ROCM</option>
+            </>
+          )}
+        </select>
+
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-white/60">
+            {backendStatus?.selectedInstalled
+              ? `Selected backend (${selectedBackend}) is installed`
+              : `Selected backend (${selectedBackend}) is not installed`}
+          </p>
+          <button
+            onClick={installSelectedBackend}
+            disabled={backendLoading || selectedBackend === 'auto'}
+            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
+            type="button"
+          >
+            {backendLoading ? 'Installing...' : (backendStatus?.selectedInstalled ? 'Reinstall' : 'Install')}
+          </button>
+        </div>
+
+        {backendProgress && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-white/70">{backendProgress.status}</span>
+              <span className="text-white/70">{Math.round(backendProgress.percent || 0)}%</span>
+            </div>
+            {backendProgressBytes && (
+              <div className="text-xs text-white/70">
+                {backendProgressBytes.totalMB
+                  ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
+                  : `${backendProgressBytes.downloadedMB}MB downloaded`}
+              </div>
+            )}
+            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {backendError && (
+          <p className="text-[11px] text-red-300">{backendError}</p>
         )}
       </div>
 

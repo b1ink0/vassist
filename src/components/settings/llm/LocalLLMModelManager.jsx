@@ -338,7 +338,7 @@ const LocalLLMModelManager = ({
               </div>
               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-white/40 to-white/60 transition-all duration-300"
+                  className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
                   style={{ width: `${downloadProgress.percent}%` }}
                 />
               </div>

@@ -20,6 +20,7 @@ import { registerPrivilegedSchemes, setupDesktopPermissions, setupAppProtocolHan
 import { registerUIIPCHandlers } from './main/ipc/uiHandlers.js';
 import { createLocalServerManager } from './main/services/localServerManager.js';
 import { createPythonServerManager } from './main/services/pythonServerManager.js';
+import { createLLMBackendManager } from './main/services/llmBackendManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,12 +73,19 @@ const trayShortcutsManager = createTrayShortcutsManager({
   state,
 });
 
+const llmBackendManager = createLLMBackendManager({
+  app,
+  fs,
+  path,
+});
+
 const localServerManager = createLocalServerManager({
   LocalAIServer,
   path,
   fs,
   baseDir: __dirname,
   getModelsDir,
+  loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
 });
 
 const pythonServerManager = createPythonServerManager({
@@ -112,7 +120,7 @@ registerUIIPCHandlers({
 
 localServerManager.registerIPCHandlers(ipcMain);
 pythonServerManager.registerSetupIPCHandlers(ipcMain, localServerManager);
-registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir });
+registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, llmBackendManager });
 
 app.whenReady().then(() => {
   setupDesktopPermissions({
@@ -133,7 +141,6 @@ app.whenReady().then(() => {
 
   pythonServerManager.startGPTSoVITSServer();
   pythonServerManager.startWhisperServer();
-  localServerManager.autoStart();
 
   app.on('activate', () => {
     windowManager.showMainWindowFromActivate();

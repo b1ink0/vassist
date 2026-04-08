@@ -37,6 +37,7 @@ electron/server/gpt-sovits/temp/
 *.diff
 private_test
 *.zip
+*.tgz
 electron/server/gpt-sovits/python/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/

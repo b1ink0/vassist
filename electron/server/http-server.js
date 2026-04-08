@@ -9,7 +9,6 @@
  */
 
 import express from 'express';
-import { getLlama, LlamaChat } from 'node-llama-cpp';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -20,7 +19,7 @@ import multer from 'multer';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class LocalAIServer {
-  constructor() {
+  constructor({ loadLlamaApi } = {}) {
     this.app = express();
     this.server = null;
     this.port = 11438;
@@ -31,6 +30,7 @@ export class LocalAIServer {
     this.llamaContext = null;
     this.llamaChat = null;
     this.currentModelPath = null;
+    this.loadLlamaApi = loadLlamaApi || null;
     
     // On-demand loading state
     this.isLoadingModel = false;
@@ -44,6 +44,7 @@ export class LocalAIServer {
       llm: {
         modelPath: null,
         defaultModelsDir: null,
+        backend: 'auto',
         temperature: 0.7,
         maxTokens: 2048,
         contextSize: 4096,
@@ -486,10 +487,35 @@ export class LocalAIServer {
     try {
       console.log('[LLM] Loading model on-demand...');
       console.log('[LLM]   Model:', this.config.llm.modelPath);
+      console.log('[LLM]   Backend:', this.config.llm.backend || 'auto');
+
+      const backendToGpu = {
+        auto: 'auto',
+        cpu: false,
+        cuda: 'cuda',
+        vulkan: 'vulkan',
+        metal: 'metal',
+        rocm: false,
+      };
+      const selectedGpu = backendToGpu[this.config.llm.backend] ?? 'auto';
+
+      let getLlamaFn = null;
+      let LlamaChatClass = null;
+
+      if (!this.loadLlamaApi) {
+        throw new Error('Runtime llama API loader is not configured');
+      }
+
+      const runtimeApi = await this.loadLlamaApi();
+      getLlamaFn = runtimeApi.getLlama;
+      LlamaChatClass = runtimeApi.LlamaChat;
+
+      if (typeof getLlamaFn !== 'function' || typeof LlamaChatClass !== 'function') {
+        throw new Error('node-llama-cpp runtime API unavailable');
+      }
       
-      // Force CUDA detection
-      this.llama = await getLlama({
-        gpu: 'cuda'
+      this.llama = await getLlamaFn({
+        gpu: selectedGpu
       });
       const gpuType = this.llama.gpu || 'cpu';
       console.log('[LLM]   GPU:', gpuType);
@@ -504,7 +530,7 @@ export class LocalAIServer {
         contextSize: this.config.llm.contextSize
       });
       
-      this.llamaChat = new LlamaChat({
+      this.llamaChat = new LlamaChatClass({
         contextSequence: this.llamaContext.getSequence()
       });
       
