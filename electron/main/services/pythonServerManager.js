@@ -17,6 +17,7 @@ export function createPythonServerManager({
   function resolveEmbeddedPythonExecutable(gptsovitsDataDir) {
     const candidates = process.platform === 'win32'
       ? [
+          path.join(gptsovitsDataDir, 'python312', 'python.exe'),
           path.join(gptsovitsDataDir, 'python', 'python.exe'),
         ]
       : [
@@ -65,7 +66,9 @@ export function createPythonServerManager({
           GPTSOVITS_PORT: '9880',
           PYTHONUNBUFFERED: '1',
           GPTSOVITS_DATA_DIR: gptsovitsDataDir,
-          WHISPER_MODEL_DIR: path.join(getRuntimeServerBasePath(), 'models', 'whisper')
+          WHISPER_MODEL_DIR: path.join(getRuntimeServerBasePath(), 'models', 'whisper'),
+          // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
+          KMP_DUPLICATE_LIB_OK: 'TRUE',
         }
       });
 
@@ -138,7 +141,9 @@ export function createPythonServerManager({
         env: {
           ...processEnv,
           PYTHONUNBUFFERED: '1',
-          WHISPER_MODEL_DIR: whisperModelsDir
+          WHISPER_MODEL_DIR: whisperModelsDir,
+          // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
+          KMP_DUPLICATE_LIB_OK: 'TRUE',
         }
       });
 

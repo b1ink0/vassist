@@ -183,7 +183,6 @@ const DesktopLLMConfig = ({
               <option value="cuda">CUDA</option>
               <option value="vulkan">VULKAN</option>
               <option value="metal">METAL</option>
-              <option value="rocm">ROCM</option>
             </>
           )}
         </select>

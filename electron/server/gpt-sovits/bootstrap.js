@@ -14,14 +14,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || __dirname;
-const PYTHON_DIR = path.join(BASE_DIR, 'python');
 
 const IS_WINDOWS = process.platform === 'win32';
 const IS_MACOS = process.platform === 'darwin';
 
 class PythonBootstrap {
-  constructor(logCallback) {
+  constructor(logCallback, options = {}) {
     this.logCallback = logCallback || console.log;
+    this.backend = (options.backend || 'auto').toString().trim().toLowerCase();
+    this.pythonDir = (IS_WINDOWS && this.backend === 'rocm')
+      ? path.join(BASE_DIR, 'python312')
+      : path.join(BASE_DIR, 'python');
   }
 
   log(message) {
@@ -125,14 +128,14 @@ class PythonBootstrap {
     const zipPath = path.join(BASE_DIR, 'python.zip');
     
     await this.downloadFile(pythonUrl, zipPath);
-    await this.extractZip(zipPath, PYTHON_DIR);
+    await this.extractZip(zipPath, this.pythonDir);
     
     // Clean up zip
     fs.unlinkSync(zipPath);
     this.log('[SETUP] Python extracted');
     
     // Enable site-packages in embedded Python
-    const pthFile = path.join(PYTHON_DIR, 'python310._pth');
+    const pthFile = path.join(this.pythonDir, 'python310._pth');
     if (fs.existsSync(pthFile)) {
       let content = fs.readFileSync(pthFile, 'utf-8');
       // Uncomment site import line
@@ -145,17 +148,17 @@ class PythonBootstrap {
     
     // Download and install pip
     const getPipUrl = 'https://bootstrap.pypa.io/get-pip.py';
-    const getPipPath = path.join(PYTHON_DIR, 'get-pip.py');
+    const getPipPath = path.join(this.pythonDir, 'get-pip.py');
     
     await this.downloadFile(getPipUrl, getPipPath);
     
     // Run get-pip.py
     this.log('[SETUP] Installing pip...');
-    const pythonExe = path.join(PYTHON_DIR, 'python.exe');
+    const pythonExe = path.join(this.pythonDir, 'python.exe');
     
     await new Promise((resolve, reject) => {
       const proc = spawn(pythonExe, [getPipPath], {
-        cwd: PYTHON_DIR,
+        cwd: this.pythonDir,
         stdio: 'inherit'
       });
       
@@ -194,16 +197,16 @@ class PythonBootstrap {
     await this.downloadFile(pythonUrl, tarPath);
     
     // Create python directory if it doesn't exist
-    if (!fs.existsSync(PYTHON_DIR)) {
-      fs.mkdirSync(PYTHON_DIR, { recursive: true });
+    if (!fs.existsSync(this.pythonDir)) {
+      fs.mkdirSync(this.pythonDir, { recursive: true });
     }
     
-    // Extract using native tar command to PYTHON_DIR
+    // Extract using native tar command — strip top-level "python/" from the archive
     // The tarball contains python/bin, python/lib, etc.
     // --strip-components=1 removes the top 'python/' directory
     this.log('[SETUP] Extracting Python...');
     await new Promise((resolve, reject) => {
-      const proc = spawn('tar', ['-xzf', tarPath, '-C', PYTHON_DIR, '--strip-components=1'], {
+      const proc = spawn('tar', ['-xzf', tarPath, '-C', this.pythonDir, '--strip-components=1'], {
         stdio: 'inherit'
       });
       
@@ -226,7 +229,7 @@ class PythonBootstrap {
     
     // The standalone build already has pip, just verify it works
     this.log('[SETUP] Verifying pip...');
-    const pythonExe = path.join(PYTHON_DIR, 'bin', 'python3');
+    const pythonExe = path.join(this.pythonDir, 'bin', 'python3');
     
     await new Promise((resolve, reject) => {
       const proc = spawn(pythonExe, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
@@ -245,22 +248,76 @@ class PythonBootstrap {
   }
 
   /**
+   * Setup Python 3.12 embedded on Windows for ROCm backend.
+   * AMD's ROCm wheels require Python 3.12 (cp312).
+   */
+  async setupWindows312Python() {
+    this.log('\n' + '='.repeat(60));
+    this.log('[SETUP] Setting up Python 3.12 runtime for Windows (ROCm)...');
+    this.log('='.repeat(60));
+
+    // Python 3.12.7 embeddable
+    const pythonUrl = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip';
+    const zipPath = path.join(BASE_DIR, 'python312.zip');
+
+    this.log('[SETUP] Downloading Python 3.12 embedded (~11 MB)...');
+    await this.downloadFile(pythonUrl, zipPath);
+    await this.extractZip(zipPath, this.pythonDir);
+    fs.unlinkSync(zipPath);
+    this.log('[SETUP] Python 3.12 extracted');
+
+    // Enable site-packages in embedded Python
+    const pthFile = path.join(this.pythonDir, 'python312._pth');
+    if (fs.existsSync(pthFile)) {
+      let content = fs.readFileSync(pthFile, 'utf-8');
+      content = content.replace('#import site', 'import site');
+      content += '\nScripts\n';
+      fs.writeFileSync(pthFile, content);
+      this.log('[SETUP] Configured Python 3.12 paths');
+    }
+
+    // Download and install pip
+    const getPipUrl = 'https://bootstrap.pypa.io/get-pip.py';
+    const getPipPath = path.join(this.pythonDir, 'get-pip.py');
+
+    await this.downloadFile(getPipUrl, getPipPath);
+
+    this.log('[SETUP] Installing pip...');
+    const pythonExe = path.join(this.pythonDir, 'python.exe');
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn(pythonExe, [getPipPath], {
+        cwd: this.pythonDir,
+        stdio: 'inherit'
+      });
+      proc.on('close', (code) => {
+        if (code === 0) { this.log('[SETUP] Pip installed'); resolve(); }
+        else reject(new Error(`Pip installation failed with code ${code}`));
+      });
+    });
+  }
+
+  /**
    * Main bootstrap entry point
    */
   async run() {
     try {
       // Check if already set up
-      if (fs.existsSync(PYTHON_DIR)) {
+      if (fs.existsSync(this.pythonDir)) {
         this.log('[SETUP] Python runtime already exists');
         return;
       }
       
       // Create python directory
-      fs.mkdirSync(PYTHON_DIR, { recursive: true });
+      fs.mkdirSync(this.pythonDir, { recursive: true });
       
       // Platform-specific setup
       if (IS_WINDOWS) {
-        await this.setupWindowsPython();
+        if (this.backend === 'rocm') {
+          await this.setupWindows312Python();
+        } else {
+          await this.setupWindowsPython();
+        }
       } else if (IS_MACOS) {
         await this.setupMacOSPython();
       } else {

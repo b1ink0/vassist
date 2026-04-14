@@ -25,12 +25,19 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).parent
 BASE_DIR = Path(os.environ.get("GPTSOVITS_DATA_DIR", str(SCRIPT_DIR)))
 MODELS_DIR = BASE_DIR / "models"
-PYTHON_DIR = BASE_DIR / "python"
 
 # Platform detection
 IS_WINDOWS = platform.system() == 'Windows'
 IS_MACOS = platform.system() == 'Darwin'
 IS_ARM_MAC = IS_MACOS and platform.machine() == 'arm64'
+
+# ROCm on Windows requires Python 3.12.
+_requested_backend_early = os.environ.get('GPTSOVITS_TORCH_BACKEND', 'auto').strip().lower()
+IS_ROCM_WINDOWS = IS_WINDOWS and _requested_backend_early == 'rocm'
+PYTHON_DIR = BASE_DIR / ("python312" if IS_ROCM_WINDOWS else "python")
+
+# When True, skip-if-installed checks are bypassed (e.g. user clicked Reinstall).
+IS_FORCE_REINSTALL = os.environ.get('GPTSOVITS_FORCE_REINSTALL', '0') == '1'
 
 SUPPORTED_TORCH_BACKENDS = {'auto', 'cpu', 'cuda', 'rocm', 'sycl', 'metal'}
 TORCH_INDEX_URLS = {
@@ -39,6 +46,19 @@ TORCH_INDEX_URLS = {
     'rocm': 'https://download.pytorch.org/whl/rocm6.2.4',
     'sycl': 'https://download.pytorch.org/whl/xpu',
 }
+
+# AMD ROCm Windows direct wheel repository
+ROCM_WINDOWS_BASE_URL = "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1"
+ROCM_WINDOWS_SDK_WHEELS = [
+    f"{ROCM_WINDOWS_BASE_URL}/rocm_sdk_core-7.2.1-py3-none-win_amd64.whl",
+    f"{ROCM_WINDOWS_BASE_URL}/rocm_sdk_devel-7.2.1-py3-none-win_amd64.whl",
+    f"{ROCM_WINDOWS_BASE_URL}/rocm_sdk_libraries_custom-7.2.1-py3-none-win_amd64.whl",
+]
+ROCM_WINDOWS_TORCH_WHEELS = [
+    f"{ROCM_WINDOWS_BASE_URL}/torch-2.9.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl",
+    f"{ROCM_WINDOWS_BASE_URL}/torchaudio-2.9.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl",
+    f"{ROCM_WINDOWS_BASE_URL}/torchvision-0.24.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl",
+]
 
 def log(message):
     """Print with immediate flush for real-time streaming"""
@@ -169,11 +189,16 @@ def setup_python_runtime():
     PYTHON_DIR.mkdir(parents=True)
     
     if IS_WINDOWS:
-        # Windows: Download embedded Python package
-        python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
+        if IS_ROCM_WINDOWS:
+            python_url = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip"
+            pth_filename = "python312._pth"
+            log("[PYTHON] Setting up embedded Python 3.12 for Windows (ROCm)...")
+        else:
+            python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
+            pth_filename = "python310._pth"
+            log("[PYTHON] Setting up embedded Python 3.10 for Windows...")
+
         python_zip = PYTHON_DIR / "python.zip"
-        
-        log("[PYTHON] Setting up embedded Python for Windows...")
         download_file(python_url, python_zip)
         
         log("[PYTHON] Extracting runtime...")
@@ -184,7 +209,7 @@ def setup_python_runtime():
         log("[PYTHON] ✓ Runtime extracted")
         
         # Enable site-packages in embedded Python
-        pth_file = PYTHON_DIR / "python310._pth"
+        pth_file = PYTHON_DIR / pth_filename
         if pth_file.exists():
             content = pth_file.read_text()
             # Uncomment site import line
@@ -232,6 +257,171 @@ def setup_python_runtime():
         log("[ERROR] Supported: Windows x64, macOS Apple Silicon (M1/M2/M3)")
         sys.exit(1)
 
+def create_jieba_fast_stub(python_dir):
+    """Create a jieba_fast package stub that proxies to jieba.
+
+    jieba_fast is a C-extension speedup for jieba with an identical API.
+    It has no prebuilt Windows wheels for any Python version, so we install
+    jieba (pure Python) instead and place a stub package named jieba_fast in
+    site-packages that re-exports everything from jieba. GPT-SoVITS does
+    'import jieba_fast as jieba' — the stub satisfies the import transparently.
+    """
+    site_packages = python_dir / "Lib" / "site-packages"
+    stub_dir = site_packages / "jieba_fast"
+    stub_dir.mkdir(exist_ok=True)
+
+    stub_init = stub_dir / "__init__.py"
+    stub_init.write_text(
+        "# jieba_fast stub for Windows — proxies to jieba (identical API)\n"
+        "from jieba import *  # noqa: F401,F403\n"
+        "from jieba import (cut, lcut, cut_for_search, lcut_for_search,\n"
+        "                   load_userdict, add_word, del_word, suggest_freq,\n"
+        "                   initialize, set_dictionary, tokenize)\n"
+        "import jieba as _jieba\n"
+        "dt = _jieba.dt\n"
+        "re_han = _jieba.re_han_default\n",
+        encoding='utf-8'
+    )
+
+    # jieba_fast.posseg is used by GPT-SoVITS chinese.py: 'import jieba_fast.posseg as psg'
+    posseg_init = stub_dir / "posseg.py"
+    posseg_init.write_text(
+        "# jieba_fast.posseg stub — proxies to jieba.posseg (identical API)\n"
+        "from jieba.posseg import *  # noqa: F401,F403\n"
+        "from jieba.posseg import cut, lcut, POSTokenizer\n",
+        encoding='utf-8'
+    )
+    log("[INSTALL] \u2713 Created jieba_fast stub package (proxies to jieba)")
+
+
+def create_rocm_sdk_stub(python_dir):
+    """Create a rocm_sdk package stub that adds AMD DLL directories to the search
+    path and satisfies torch's 'import rocm_sdk; rocm_sdk.initialize_process()'
+    call on Windows.
+
+    The AMD SDK wheels install as _rocm_sdk_core and _rocm_sdk_libraries_custom
+    in site-packages. They ship the actual DLLs (amdhip64, hipblas, etc.) but do
+    not provide a top-level 'rocm_sdk' Python package, which torch._rocm_init
+    expects. This stub adds both bin/ directories to os.add_dll_directory() and
+    implements initialize_process() as a no-op after the DLL paths are registered.
+    """
+    site_packages = python_dir / "Lib" / "site-packages"
+    stub_dir = site_packages / "rocm_sdk"
+    stub_dir.mkdir(exist_ok=True)
+
+    stub_init = stub_dir / "__init__.py"
+    stub_init.write_text(
+        "# rocm_sdk stub for Windows — adds AMD DLL dirs and satisfies torch._rocm_init\n"
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "\n"
+        "_site_packages = Path(__file__).resolve().parent.parent\n"
+        "_dll_dirs = [\n"
+        "    _site_packages / '_rocm_sdk_core' / 'bin',\n"
+        "    _site_packages / '_rocm_sdk_libraries_custom' / 'bin',\n"
+        "    _site_packages / '_rocm_sdk_libraries_custom' / 'bin' / 'rocblas',\n"
+        "    _site_packages / '_rocm_sdk_libraries_custom' / 'bin' / 'hipblaslt',\n"
+        "]\n"
+        "\n"
+        "_registered_dirs = []\n"
+        "for _d in _dll_dirs:\n"
+        "    if _d.is_dir() and hasattr(os, 'add_dll_directory'):\n"
+        "        try:\n"
+        "            _registered_dirs.append(os.add_dll_directory(str(_d)))\n"
+        "        except OSError:\n"
+        "            pass\n"
+        "\n"
+        "\n"
+        "def initialize_process(preload_shortnames=None, check_version=None):\n"
+        "    \"\"\"Called by torch._rocm_init.initialize(). DLLs are already on the\n"
+        "    search path from module-level os.add_dll_directory() calls above.\"\"\"\n"
+        "    pass\n",
+        encoding='utf-8'
+    )
+    log("[INSTALL] \u2713 Created rocm_sdk stub package (adds AMD DLL dirs for torch ROCm)")
+
+
+def _build_rocm_metapackage_wheel():
+    """Create a minimal rocm-7.2.1-py3-none-any.whl and return its path.
+
+    AMD ships rocm-7.2.1.tar.gz (a source dist) to provide the rocm==7.2.1
+    Python package that torch depends on. Embedded Python cannot build source
+    distributions. A wheel is just a zip with dist-info metadata, so we create
+    one directly in Python — no compiler or build tools needed.
+    """
+    metadata = (
+        "Metadata-Version: 2.1\n"
+        "Name: rocm\n"
+        "Version: 7.2.1\n"
+        "Summary: ROCm metapackage\n"
+    )
+    wheel_info = (
+        "Wheel-Version: 1.0\n"
+        "Generator: vassist-setup\n"
+        "Root-Is-Purelib: true\n"
+        "Tag: py3-none-any\n"
+    )
+    record = (
+        "rocm-7.2.1.dist-info/METADATA,,\n"
+        "rocm-7.2.1.dist-info/WHEEL,,\n"
+        "rocm-7.2.1.dist-info/RECORD,,\n"
+    )
+    wheel_path = BASE_DIR / "rocm-7.2.1-py3-none-any.whl"
+    with zipfile.ZipFile(str(wheel_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("rocm-7.2.1.dist-info/METADATA", metadata)
+        zf.writestr("rocm-7.2.1.dist-info/WHEEL", wheel_info)
+        zf.writestr("rocm-7.2.1.dist-info/RECORD", record)
+    return wheel_path
+
+
+def install_pytorch_rocm_windows(python_exe):
+    """Install AMD ROCm 7.2.1 SDK + PyTorch for Windows (requires Python 3.12).
+
+    torch depends on rocm==7.2.1. AMD ships this as rocm-7.2.1.tar.gz (a source
+    dist), but embedded Python cannot build source distributions. Instead we
+    create an equivalent pre-built wheel in Python code (a wheel is just a zip
+    with dist-info metadata) and install that first so torch's dependency is
+    satisfied without any compilation.
+    """
+    log("[PYTORCH] Installing AMD ROCm SDK + PyTorch for Windows (ROCm 7.2.1)...")
+    log("[PYTORCH] NOTE: Large download (~3.5 GB). Please be patient.")
+
+    # Skip if torch is already installed and this is not a forced reinstall.
+    site_packages = PYTHON_DIR / "Lib" / "site-packages"
+    torch_installed = any(
+        d.name.startswith('torch-') and d.name.endswith('.dist-info')
+        for d in site_packages.iterdir()
+        if d.is_dir()
+    ) if site_packages.exists() else False
+
+    if torch_installed and not IS_FORCE_REINSTALL:
+        log("[PYTORCH] ✓ PyTorch already installed, skipping SDK + torch download")
+        return
+
+    log("[PYTORCH] Step 1/2: Installing AMD ROCm SDK (~1.4 GB)...")
+    rocm_wheel = _build_rocm_metapackage_wheel()
+    try:
+        subprocess.run([
+            str(python_exe), "-m", "pip", "install",
+            *ROCM_WINDOWS_SDK_WHEELS,
+            str(rocm_wheel),
+            "--no-cache-dir", "--no-warn-script-location"
+        ], check=True)
+    finally:
+        if rocm_wheel.exists():
+            rocm_wheel.unlink()
+    log("[PYTORCH] ✓ ROCm SDK installed")
+
+    log("[PYTORCH] Step 2/2: Installing PyTorch + ROCm 7.2.1 (~823 MB)...")
+    subprocess.run([
+        str(python_exe), "-m", "pip", "install",
+        *ROCM_WINDOWS_TORCH_WHEELS,
+        "--no-cache-dir", "--no-warn-script-location"
+    ], check=True)
+    log("[PYTORCH] ✓ AMD ROCm PyTorch installed")
+
+
 def install_pytorch(requested_backend='auto'):
     """Install PyTorch with platform-specific acceleration"""
     python_exe = get_python_exe()
@@ -278,7 +468,9 @@ def install_pytorch(requested_backend='auto'):
             requested_backend = 'cpu'
 
         if requested_backend == 'rocm':
-            log("[PYTORCH] ROCm selected on Windows - using configured ROCm index URL")
+            # AMD's Windows ROCm wheels are on their own repo, not download.pytorch.org
+            install_pytorch_rocm_windows(python_exe)
+            return
         if requested_backend == 'sycl':
             log("[PYTORCH] SYCL/XPU selected on Windows - using configured XPU index URL")
 
@@ -401,7 +593,85 @@ def install_dependencies():
     
     # Windows: Install only with embedded Python runtime
     embedded_python_exe = PYTHON_DIR / "python.exe"
-    
+
+    # ROCm on Windows: Python 3.12 embedded, AMD wheels, pyopenjtalk-plus prebuilt
+    if IS_ROCM_WINDOWS:
+        # pyopenjtalk-prebuilt has no cp312 wheel → pyopenjtalk-plus has a cp312 Windows wheel
+        # onnxruntime-gpu has no Windows ROCm build → fall back to CPU onnxruntime
+        # jieba_fast has no Windows wheels → install jieba + create stub package
+        # opencc has no cp312 Windows wheel → install opencc-python-reimplemented (pure Python)
+
+        # Check if dependencies are already installed (skip heavy pip download unless forced).
+        site_packages = PYTHON_DIR / "Lib" / "site-packages"
+        deps_installed = any(
+            d.name.startswith('fastapi-') and d.name.endswith('.dist-info')
+            for d in site_packages.iterdir()
+            if d.is_dir()
+        ) if site_packages.exists() else False
+
+        if deps_installed and not IS_FORCE_REINSTALL:
+            log("[INSTALL] ✓ Dependencies already installed, skipping pip download")
+            # Always re-create stubs (idempotent, fast, no network)
+            create_jieba_fast_stub(PYTHON_DIR)
+            create_rocm_sdk_stub(PYTHON_DIR)
+            install_pytorch(requested_backend)
+            return
+
+        with open(requirements, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        requirements_rocm_win = BASE_DIR / "requirements_rocm_win.txt"
+        with open(requirements_rocm_win, 'w', encoding='utf-8') as f:
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    continue
+                if stripped.startswith('--index-url') or stripped.startswith('--no-binary'):
+                    continue
+                if 'jieba_fast' in stripped:
+                    f.write('jieba\n')
+                    log("[INSTALL] Replacing jieba_fast with jieba (pure Python, no cp312 Windows wheel)")
+                    continue
+                if 'opencc' in stripped:
+                    f.write('opencc-python-reimplemented\n')
+                    log("[INSTALL] Replacing opencc with opencc-python-reimplemented (pure Python)")
+                    continue
+                if 'pyopenjtalk' in stripped:
+                    f.write('pyopenjtalk-plus\n')
+                    log("[INSTALL] Replacing pyopenjtalk with pyopenjtalk-plus (cp312 prebuilt wheel)")
+                    continue
+                if 'onnxruntime-gpu' in stripped:
+                    f.write('onnxruntime\n')
+                    log("[INSTALL] Replacing onnxruntime-gpu with onnxruntime (no ROCm build for Windows)")
+                    continue
+                f.write(line)
+
+        try:
+            install_pytorch(requested_backend)
+
+            log("[INSTALL] Installing dependencies for ROCm Windows...")
+            result = subprocess.run([
+                str(embedded_python_exe), "-m", "pip", "install", "-r", str(requirements_rocm_win),
+                "--no-warn-script-location"
+            ], capture_output=True, text=True, check=True)
+            log(result.stdout)
+            if result.stderr:
+                log(result.stderr)
+            log("[INSTALL] ✓ Dependencies installed for ROCm Windows")
+            create_jieba_fast_stub(PYTHON_DIR)
+            create_rocm_sdk_stub(PYTHON_DIR)
+
+        except subprocess.CalledProcessError as e:
+            log(f"[ERROR] Failed to install dependencies:")
+            log(f"Exit code: {e.returncode}")
+            log(f"STDOUT: {e.stdout}")
+            log(f"STDERR: {e.stderr}")
+            raise
+        finally:
+            if requirements_rocm_win.exists():
+                requirements_rocm_win.unlink()
+        return
+
     # Packages that need compilation (pyopenjtalk removed - using pyopenjtalk-prebuilt instead)
     compile_packages = ['opencc', 'jieba_fast']
     
@@ -719,6 +989,41 @@ if not os.path.exists(sv_path):
                 log("[PATCH] ✓ Patched inference_webui.py to use soundfile instead of torchaudio.load")
             else:
                 log("[PATCH] ✗ Could not find torchaudio.load code to patch (GPT-SoVITS may have been updated)")
+
+    # Patch 4: distrib.py — fix torch.distributed.ReduceOp.SUM used as a default
+    # argument. This evaluates at *module load time* (not call time), so it fails on
+    # ROCm / any build where torch.distributed is lazy-loaded and ReduceOp isn't yet
+    # populated. We replace the default with None and resolve it inside the function.
+    distrib_file = BASE_DIR / "GPT-SoVITS" / "GPT_SoVITS" / "module" / "distrib.py"
+    if not distrib_file.exists():
+        log("[PATCH] ✗ distrib.py not found, skipping ReduceOp patch")
+    else:
+        content = distrib_file.read_text(encoding='utf-8')
+        if '_VASSIST_REDUCOP_PATCHED' in content:
+            log("[PATCH] ✓ distrib.py ReduceOp already patched")
+        else:
+            old_reduce = (
+                "def all_reduce(tensor: torch.Tensor, op=torch.distributed.ReduceOp.SUM):\n"
+                "    if is_distributed():\n"
+                "        return torch.distributed.all_reduce(tensor, op)"
+            )
+            new_reduce = (
+                "# _VASSIST_REDUCOP_PATCHED\n"
+                "def all_reduce(tensor: torch.Tensor, op=None):\n"
+                "    if op is None:\n"
+                "        # Resolve lazily so ReduceOp isn't needed at module-load time\n"
+                "        # (required for ROCm where torch.distributed is lazy)\n"
+                "        op = torch.distributed.ReduceOp.SUM\n"
+                "    if is_distributed():\n"
+                "        return torch.distributed.all_reduce(tensor, op)"
+            )
+            if old_reduce in content:
+                content = content.replace(old_reduce, new_reduce)
+                distrib_file.write_text(content, encoding='utf-8')
+                log("[PATCH] ✓ Patched distrib.py: all_reduce ReduceOp.SUM resolved lazily")
+            else:
+                log("[PATCH] ✗ Could not find all_reduce signature in distrib.py (may have changed)")
+
 
 def download_nltk_data():
     """Download required NLTK data for English text processing"""

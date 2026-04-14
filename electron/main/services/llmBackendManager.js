@@ -3,7 +3,7 @@ import http from 'http';
 import { pathToFileURL } from 'url';
 import * as tar from 'tar';
 
-const SUPPORTED_BACKENDS = ['auto', 'cpu', 'cuda', 'rocm', 'vulkan', 'metal'];
+const SUPPORTED_BACKENDS = ['auto', 'cpu', 'cuda', 'vulkan', 'metal'];
 const NODE_LLAMA_CPP_VERSION = '3.18.1';
 const NODE_LLAMA_CORE_BUNDLE_FILENAME = 'node-llama-core.tgz';
 
@@ -35,7 +35,6 @@ function getBackendSupport(platform) {
     auto: true,
     cpu: true,
     cuda: platform === 'win32' || platform === 'linux',
-    rocm: platform === 'linux',
     vulkan: platform === 'win32' || platform === 'linux',
     metal: platform === 'darwin',
   };
@@ -49,7 +48,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/win-x64', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64/-/win-x64-${v}.tgz` },
         cuda: { packageName: '@node-llama-cpp/win-x64-cuda', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-cuda/-/win-x64-cuda-${v}.tgz` },
-        rocm: null,
         vulkan: { packageName: '@node-llama-cpp/win-x64-vulkan', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-vulkan/-/win-x64-vulkan-${v}.tgz` },
         metal: null,
       };
@@ -59,7 +57,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/win-arm64', url: `https://registry.npmjs.org/@node-llama-cpp/win-arm64/-/win-arm64-${v}.tgz` },
         cuda: null,
-        rocm: null,
         vulkan: null,
         metal: null,
       };
@@ -71,7 +68,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/linux-x64', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64/-/linux-x64-${v}.tgz` },
         cuda: { packageName: '@node-llama-cpp/linux-x64-cuda', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-cuda/-/linux-x64-cuda-${v}.tgz` },
-        rocm: null,
         vulkan: { packageName: '@node-llama-cpp/linux-x64-vulkan', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-vulkan/-/linux-x64-vulkan-${v}.tgz` },
         metal: null,
       };
@@ -81,7 +77,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/linux-arm64', url: `https://registry.npmjs.org/@node-llama-cpp/linux-arm64/-/linux-arm64-${v}.tgz` },
         cuda: null,
-        rocm: null,
         vulkan: null,
         metal: null,
       };
@@ -91,7 +86,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/linux-armv7l', url: `https://registry.npmjs.org/@node-llama-cpp/linux-armv7l/-/linux-armv7l-${v}.tgz` },
         cuda: null,
-        rocm: null,
         vulkan: null,
         metal: null,
       };
@@ -103,7 +97,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: null,
         cuda: null,
-        rocm: null,
         vulkan: null,
         metal: { packageName: '@node-llama-cpp/mac-arm64-metal', url: `https://registry.npmjs.org/@node-llama-cpp/mac-arm64-metal/-/mac-arm64-metal-${v}.tgz` },
       };
@@ -113,7 +106,6 @@ function getBackendPackageMap(version, platform, arch) {
       return {
         cpu: { packageName: '@node-llama-cpp/mac-x64', url: `https://registry.npmjs.org/@node-llama-cpp/mac-x64/-/mac-x64-${v}.tgz` },
         cuda: null,
-        rocm: null,
         vulkan: null,
         metal: null,
       };
@@ -123,7 +115,6 @@ function getBackendPackageMap(version, platform, arch) {
   return {
     cpu: null,
     cuda: null,
-    rocm: null,
     vulkan: null,
     metal: null,
   };
@@ -439,13 +430,6 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
       return {
         success: false,
         error: `Backend "${normalizedBackend}" is not supported on ${platform}`,
-      };
-    }
-
-    if (normalizedBackend === 'rocm') {
-      return {
-        success: false,
-        error: 'ROCm backend is not currently supported by node-llama-cpp in this app build. Use CUDA/Vulkan/CPU on Linux.',
       };
     }
 

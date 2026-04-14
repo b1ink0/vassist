@@ -14,14 +14,29 @@ const __dirname = dirname(__filename);
 
 const SCRIPT_DIR = __dirname;
 const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
-const PYTHON_DIR = path.join(BASE_DIR, 'python');
 const IS_WINDOWS = process.platform === 'win32';
+
+function resolvePythonDir(torchBackend) {
+  const backend = (torchBackend || 'auto').toString().trim().toLowerCase();
+  if (IS_WINDOWS && backend === 'rocm') {
+    return path.join(BASE_DIR, 'python312');
+  }
+  return path.join(BASE_DIR, 'python');
+}
 
 class SetupRunner {
   constructor() {
     this.process = null;
     this.logCallback = null;
     this.cancelled = false;
+    this.torchBackend = 'auto';
+  }
+
+  /**
+   * Get the Python runtime directory for the currently selected backend
+   */
+  getPythonDir() {
+    return resolvePythonDir(this.torchBackend);
   }
 
   /**
@@ -29,9 +44,9 @@ class SetupRunner {
    */
   getPythonExe() {
     if (IS_WINDOWS) {
-      return path.join(PYTHON_DIR, 'python.exe');
+      return path.join(this.getPythonDir(), 'python.exe');
     } else {
-      return path.join(PYTHON_DIR, 'bin', 'python3');
+      return path.join(this.getPythonDir(), 'bin', 'python3');
     }
   }
 
@@ -39,7 +54,10 @@ class SetupRunner {
    * Check if setup is already complete
    */
   getStatus() {
-    const pythonExists = fs.existsSync(PYTHON_DIR);
+    // Check both possible python dirs (standard 3.10 and ROCm 3.12)
+    const pythonDirDefault = path.join(BASE_DIR, 'python');
+    const pythonDir312 = path.join(BASE_DIR, 'python312');
+    const pythonExists = fs.existsSync(pythonDirDefault) || fs.existsSync(pythonDir312);
     const modelsDir = path.join(BASE_DIR, 'models');
     const modelsExist = fs.existsSync(modelsDir);
     const gptsovitsDir = path.join(BASE_DIR, 'GPT-SoVITS');
@@ -61,7 +79,7 @@ class SetupRunner {
     
     const bootstrap = new PythonBootstrap((message) => {
       this.log({ type: 'stdout', message: message + '\n' });
-    });
+    }, { backend: this.torchBackend });
     
     await bootstrap.run();
   }
@@ -84,6 +102,7 @@ class SetupRunner {
     }
     
     const selectedBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
+    const forceReinstall = options?.force ? '1' : '0';
 
     return new Promise((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
@@ -93,7 +112,8 @@ class SetupRunner {
           PYTHONUNBUFFERED: '1',  // Disable Python output buffering
           PYTHONIOENCODING: 'utf-8',  // Force UTF-8 encoding
           GPTSOVITS_TORCH_BACKEND: selectedBackend,
-          GPTSOVITS_DATA_DIR: BASE_DIR
+          GPTSOVITS_DATA_DIR: BASE_DIR,
+          GPTSOVITS_FORCE_REINSTALL: forceReinstall,
         }
       });
       
@@ -136,6 +156,8 @@ class SetupRunner {
   async run(logCallback, options = {}) {
     this.logCallback = logCallback;
     this.cancelled = false;
+    this.torchBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
+    this.forceReinstall = !!options?.force;
     
     try {
       this.log({ type: 'info', message: '='.repeat(60) + '\n' });
@@ -143,11 +165,11 @@ class SetupRunner {
       this.log({ type: 'info', message: '='.repeat(60) + '\n' });
       this.log({ type: 'info', message: 'This will download ~5GB of data (Python, PyTorch, models)\n' });
       this.log({ type: 'info', message: 'Estimated time: 10-30 minutes depending on internet speed\n' });
-      this.log({ type: 'info', message: `Selected PyTorch backend: ${(options?.torchBackend || 'auto').toString().trim().toLowerCase()}\n` });
+      this.log({ type: 'info', message: `Selected PyTorch backend: ${this.torchBackend}\n` });
       this.log({ type: 'info', message: '='.repeat(60) + '\n\n' });
       
       // Phase 1: Bootstrap Python (if needed)
-      if (!fs.existsSync(PYTHON_DIR)) {
+      if (!fs.existsSync(this.getPythonDir())) {
         await this.bootstrap();
       } else {
         this.log({ type: 'info', message: '[BOOTSTRAP] Python already installed, skipping\n' });
@@ -158,7 +180,7 @@ class SetupRunner {
       }
       
       // Phase 2: Run setup.py to install everything else
-      await this.runSetup(options);
+      await this.runSetup({ ...options, force: this.forceReinstall });
       
     } catch (error) {
       this.log({ type: 'error', message: `\n✗ Setup failed: ${error.message}\n` });

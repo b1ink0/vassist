@@ -38,7 +38,9 @@ electron/server/gpt-sovits/temp/
 private_test
 *.zip
 *.tgz
-electron/server/gpt-sovits/python/
+*.tar.gz
+*.whl
+electron/server/gpt-sovits/python*/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/
 electron/server/gpt-sovits/*.pyc

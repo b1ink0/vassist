@@ -118,6 +118,47 @@ webui_module = None
 
 models_loaded = False
 
+
+def _disable_transformers_torchvision_path():
+    """Avoid torchvision imports from transformers on ROCm Windows inference.
+
+    transformers.image_utils conditionally imports torchvision when it thinks the
+    package is available. That import chain can pull in torch distributed/FSDP
+    internals that are not fully available in this ROCm wheel layout. GPT-SoVITS
+    text/audio inference here does not require torchvision, so force-disable it.
+    """
+    try:
+        import transformers.utils.import_utils as hf_import_utils
+        hf_import_utils._torchvision_available = False
+    except Exception:
+        # If transformers internals change, continue without failing startup.
+        pass
+
+
+def _disable_transformers_fsdp_path():
+    """Disable transformers FSDP checks for local inference.
+
+    HuBERT forward calls transformers.integrations.fsdp.is_fsdp_managed_module(),
+    which imports torch.distributed.fsdp. On this ROCm Windows wheel layout,
+    distributed internals are incomplete and that import fails. GPT-SoVITS
+    inference here is single-process and does not use FSDP, so force the check
+    to always return False.
+    """
+    try:
+        import transformers.integrations.fsdp as hf_fsdp
+        hf_fsdp.is_fsdp_managed_module = lambda module: False
+    except Exception:
+        # If transformers internals change, continue without failing startup.
+        pass
+
+
+def _is_rocm_torch(torch_module):
+    """Return True when running on a ROCm/HIP build of torch."""
+    try:
+        return bool(getattr(torch_module.version, "hip", None))
+    except Exception:
+        return False
+
 def load_models():
     """Load GPT-SoVITS models using the same approach as reference api.py"""
     global models_loaded, vq_model, hps, t2s_model, config, hz, max_sec
@@ -153,8 +194,27 @@ def load_models():
         sys.path.insert(0, str(gpt_sovits_dir / "GPT_SoVITS"))
         
         logger.info("Importing GPT-SoVITS modules...")
+        _disable_transformers_torchvision_path()
+        _disable_transformers_fsdp_path()
         
         import torch
+
+        # Decide precision BEFORE importing inference_webui, because that module
+        # reads os.environ["is_half"] at import time and instantiates HuBERT/BERT.
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        is_rocm = device == "cuda" and _is_rocm_torch(torch)
+        is_half = torch.cuda.is_available() and not is_rocm
+        os.environ["is_half"] = "True" if is_half else "False"
+
+        if is_rocm:
+            # Keep ROCm stable by default; optional benchmark mode can be enabled
+            # explicitly for testing via GPTSOVITS_ROCM_BENCHMARK=1.
+            torch.backends.cudnn.benchmark = os.environ.get("GPTSOVITS_ROCM_BENCHMARK", "0") == "1"
+            torch.backends.cudnn.deterministic = False
+            # MIOpen fallback with zero workspace can heavily stall vocoder decode.
+            # Disable cudnn/MIOpen backend by default on ROCm and use native HIP kernels.
+            torch.backends.cudnn.enabled = os.environ.get("GPTSOVITS_ROCM_CUDNN", "0") == "1"
+
         import numpy as np
         from transformers import AutoModelForMaskedLM, AutoTokenizer
         from feature_extractor import cnhubert
@@ -170,11 +230,18 @@ def load_models():
         globals()['webui_module'] = webui_mod  # Store globally for get_tts_wav
         
         # Set global device - properly update global variables
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        is_half = torch.cuda.is_available()  # Use half precision on CUDA, full on CPU
         globals()['device'] = device
         globals()['is_half'] = is_half
-        logger.info(f"Using device: {device}, half precision: {is_half}")
+        webui_mod.device = device
+        webui_mod.is_half = is_half
+        logger.info(
+            "Using device: %s, half precision: %s, rocm: %s, cudnn.enabled: %s, cudnn.benchmark: %s",
+            device,
+            is_half,
+            is_rocm,
+            torch.backends.cudnn.enabled,
+            torch.backends.cudnn.benchmark,
+        )
         
         # Initialize BERT and HuBERT models
         cnhubert.cnhubert_base_path = str(hubert_path)
@@ -188,6 +255,15 @@ def load_models():
         else:
             bert_model = bert_model.to(device)
             ssl_model = ssl_model.to(device)
+
+        # Keep inference_webui globals in sync with the chosen precision/device.
+        try:
+            if hasattr(webui_mod, 'bert_model') and webui_mod.bert_model is not None:
+                webui_mod.bert_model = (webui_mod.bert_model.half() if is_half else webui_mod.bert_model.float()).to(device)
+            if hasattr(webui_mod, 'ssl_model') and webui_mod.ssl_model is not None:
+                webui_mod.ssl_model = (webui_mod.ssl_model.half() if is_half else webui_mod.ssl_model.float()).to(device)
+        except Exception as sync_err:
+            logger.warning(f"Precision sync warning: {sync_err}")
         
         # Load SoVITS first
         webui_mod.change_sovits_weights(str(s2G_model))
@@ -292,15 +368,28 @@ def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language)
     prompt_lang = lang_to_i18n.get(prompt_language, prompt_language)
     text_lang = lang_to_i18n.get(text_language, text_language)
     
+    # Timing diagnostics: measure where the request spends time.
+    started_at = time.perf_counter()
+    chunks_emitted = 0
+
     # Call the webui module's get_tts_wav function
     for sample_rate, audio_data in webui_module.get_tts_wav(
         ref_wav_path, prompt_text, prompt_lang, text, text_lang
     ):
+        chunks_emitted += 1
+
         # Convert numpy array to WAV bytes
         wav_buffer = io.BytesIO()
         sf.write(wav_buffer, audio_data, sample_rate, format='WAV')
         wav_buffer.seek(0)
         yield wav_buffer.read()
+
+    finished_at = time.perf_counter()
+    logger.info(
+        "TTS timing: completed in %.3fs (chunks=%d)",
+        finished_at - started_at,
+        chunks_emitted,
+    )
 
 # In-memory reference cache
 reference_cache = {}

@@ -110,7 +110,16 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
   
   const handleReinstall = async () => {
     if (window.confirm('This will delete existing files and reinstall GPT-SoVITS. Continue?')) {
-      handleStartSetup();
+      setIsSetupRunning(true);
+      setLogs([]);
+      setSetupComplete(false);
+      setSetupError(null);
+      try {
+        await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend, force: true });
+      } catch (error) {
+        setSetupError(error.message);
+        setIsSetupRunning(false);
+      }
     }
   };
   
