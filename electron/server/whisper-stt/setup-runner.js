@@ -2,7 +2,7 @@
  * @fileoverview Setup Runner - Orchestrates Whisper-only STT installation
  */
 
-import { spawn, spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import PythonBootstrap from '../gpt-sovits/bootstrap.js';
@@ -14,22 +14,76 @@ const __dirname = dirname(__filename);
 
 const SCRIPT_DIR = __dirname;
 const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
-const PYTHON_DIR = path.join(BASE_DIR, 'python');
 const IS_WINDOWS = process.platform === 'win32';
+
+function resolvePythonDir() {
+  const python312 = path.join(BASE_DIR, 'python312');
+  const python = path.join(BASE_DIR, 'python');
+  if (IS_WINDOWS && fs.existsSync(python312)) {
+    return python312;
+  }
+  return python;
+}
+
+function resolveSitePackagesDirs(pythonDir) {
+  const sitePackages = [];
+
+  if (IS_WINDOWS) {
+    const winSitePackages = path.join(pythonDir, 'Lib', 'site-packages');
+    if (fs.existsSync(winSitePackages)) {
+      sitePackages.push(winSitePackages);
+    }
+    return sitePackages;
+  }
+
+  const libDir = path.join(pythonDir, 'lib');
+  if (!fs.existsSync(libDir)) {
+    return sitePackages;
+  }
+
+  let pythonVersions = [];
+  try {
+    pythonVersions = fs.readdirSync(libDir, { withFileTypes: true });
+  } catch {
+    return sitePackages;
+  }
+
+  for (const entry of pythonVersions) {
+    if (!entry.isDirectory() || !entry.name.startsWith('python')) {
+      continue;
+    }
+    const candidate = path.join(libDir, entry.name, 'site-packages');
+    if (fs.existsSync(candidate)) {
+      sitePackages.push(candidate);
+    }
+  }
+
+  return sitePackages;
+}
+
+function moduleExists(sitePackagesDir, moduleName) {
+  const candidates = [
+    path.join(sitePackagesDir, moduleName),
+    path.join(sitePackagesDir, `${moduleName}.py`),
+  ];
+  return candidates.some((candidate) => fs.existsSync(candidate));
+}
 
 class WhisperSetupRunner {
   constructor() {
     this.process = null;
     this.logCallback = null;
     this.cancelled = false;
+    this.model = 'tiny';
   }
 
   getPythonExe() {
+    const pythonDir = resolvePythonDir();
     if (IS_WINDOWS) {
-      return path.join(PYTHON_DIR, 'python.exe');
+      return path.join(pythonDir, 'python.exe');
     }
-    const py3Path = path.join(PYTHON_DIR, 'bin', 'python3');
-    const pyPath = path.join(PYTHON_DIR, 'bin', 'python');
+    const py3Path = path.join(pythonDir, 'bin', 'python3');
+    const pyPath = path.join(pythonDir, 'bin', 'python');
     return fs.existsSync(py3Path) ? py3Path : pyPath;
   }
 
@@ -66,50 +120,61 @@ class WhisperSetupRunner {
       return false;
     }
 
-    const queue = [modelDir];
-    const maxDepth = 5;
+    // Keep status checks lightweight: inspect a small, predictable subset of paths.
+    let rootEntries = [];
+    try {
+      rootEntries = fs.readdirSync(modelDir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
 
-    while (queue.length > 0) {
-      const currentPath = queue.shift();
-      const depth = currentPath
-        .replace(modelDir, '')
-        .split(path.sep)
-        .filter(Boolean)
-        .length;
+    for (const entry of rootEntries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
 
-      let entries = [];
+      // Direct named model folders (some deployments use this layout).
+      if (['tiny', 'tiny.en', 'base', 'base.en'].includes(entry.name)) {
+        return true;
+      }
+
+      // Hugging Face cache layout: models--<org>--<repo>/snapshots/<hash>/model.bin
+      if (!entry.name.startsWith('models--')) {
+        continue;
+      }
+
+      const hfModelRoot = path.join(modelDir, entry.name);
+      const snapshotsDir = path.join(hfModelRoot, 'snapshots');
+      const refsDir = path.join(hfModelRoot, 'refs');
+
+      if (fs.existsSync(refsDir)) {
+        return true;
+      }
+
+      if (!fs.existsSync(snapshotsDir)) {
+        continue;
+      }
+
+      let snapshots = [];
       try {
-        entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        snapshots = fs.readdirSync(snapshotsDir, { withFileTypes: true });
       } catch {
         continue;
       }
 
-      for (const entry of entries) {
-        const fullPath = path.join(currentPath, entry.name);
-
-        if (entry.isFile()) {
-          // Common faster-whisper artifacts.
-          if (
-            entry.name === 'model.bin' ||
-            entry.name === 'config.json' ||
-            entry.name === 'tokenizer.json' ||
-            entry.name.endsWith('.bin')
-          ) {
-            return true;
-          }
+      for (const snapshot of snapshots) {
+        if (!snapshot.isDirectory()) {
           continue;
         }
 
-        if (!entry.isDirectory()) {
-          continue;
-        }
+        const snapshotDir = path.join(snapshotsDir, snapshot.name);
+        const hasCoreArtifact =
+          fs.existsSync(path.join(snapshotDir, 'model.bin')) ||
+          fs.existsSync(path.join(snapshotDir, 'config.json')) ||
+          fs.existsSync(path.join(snapshotDir, 'tokenizer.json'));
 
-        if (entry.name === 'tiny.en' || entry.name === 'tiny' || entry.name.startsWith('models--')) {
+        if (hasCoreArtifact) {
           return true;
-        }
-
-        if (depth < maxDepth) {
-          queue.push(fullPath);
         }
       }
     }
@@ -117,26 +182,29 @@ class WhisperSetupRunner {
     return false;
   }
 
-  checkDependenciesInstalled() {
-    const pythonExe = this.getPythonExe();
-    if (!fs.existsSync(pythonExe)) {
+  checkDependenciesInstalledFilesystem() {
+    const pythonDir = resolvePythonDir();
+    if (!fs.existsSync(pythonDir)) {
       return false;
     }
 
-    try {
-      const result = spawnSyncSafe(pythonExe, [
-        '-c',
-        'import fastapi, uvicorn, faster_whisper, ctranslate2, av, soundfile; print("ok")'
-      ]);
-      return result.success;
-    } catch {
+    const sitePackagesDirs = resolveSitePackagesDirs(pythonDir);
+    if (sitePackagesDirs.length === 0) {
       return false;
     }
+
+    const requiredModules = ['fastapi', 'uvicorn', 'faster_whisper', 'ctranslate2', 'av', 'soundfile'];
+
+    // Any valid site-packages layout that contains all required modules is accepted.
+    return sitePackagesDirs.some((sitePackagesDir) =>
+      requiredModules.every((moduleName) => moduleExists(sitePackagesDir, moduleName))
+    );
   }
 
   getStatus() {
-    const pythonExists = fs.existsSync(PYTHON_DIR) && fs.existsSync(this.getPythonExe());
-    const dependenciesInstalled = this.checkDependenciesInstalled();
+    const pythonDir = resolvePythonDir();
+    const pythonExists = fs.existsSync(pythonDir) && fs.existsSync(this.getPythonExe());
+    const dependenciesInstalled = this.checkDependenciesInstalledFilesystem();
     const modelExists = this.hasWhisperModelArtifacts();
 
     return {
@@ -181,6 +249,12 @@ class WhisperSetupRunner {
           PYTHONIOENCODING: 'utf-8',
           GPTSOVITS_DATA_DIR: BASE_DIR,
           WHISPER_SETUP_DIR: whisperSetupDir,
+          WHISPER_SETUP_MODEL: this.model,
+          // Work around mixed OpenMP runtimes on Windows (libiomp + libomp) during faster-whisper import.
+          KMP_DUPLICATE_LIB_OK: 'TRUE',
+          // Keep setup logs clean from known non-fatal Windows cache/symlink and Xet warnings.
+          HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
+          HF_HUB_DISABLE_XET: '1',
         },
       });
 
@@ -214,18 +288,19 @@ class WhisperSetupRunner {
     });
   }
 
-  async run(logCallback) {
+  async run(logCallback, options = {}) {
     this.logCallback = logCallback;
     this.cancelled = false;
+    this.model = (options?.model || 'tiny').toString().trim() || 'tiny';
 
     try {
       this.log({ type: 'info', message: '='.repeat(60) + '\n' });
       this.log({ type: 'info', message: 'Whisper STT Installation Starting\n' });
       this.log({ type: 'info', message: '='.repeat(60) + '\n' });
-      this.log({ type: 'info', message: 'This installs embedded Python, Whisper dependencies, and tiny.en model\n' });
+      this.log({ type: 'info', message: `This installs embedded Python, Whisper dependencies, and ${this.model} model\n` });
       this.log({ type: 'info', message: '='.repeat(60) + '\n\n' });
 
-      if (!fs.existsSync(PYTHON_DIR)) {
+      if (!fs.existsSync(resolvePythonDir())) {
         await this.bootstrap();
       } else {
         this.log({ type: 'info', message: '[BOOTSTRAP] Python already installed, skipping\n' });
@@ -257,16 +332,6 @@ class WhisperSetupRunner {
       this.logCallback(logData);
     }
   }
-}
-
-function spawnSyncSafe(command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8' });
-
-  return {
-    success: result.status === 0,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 export default WhisperSetupRunner;

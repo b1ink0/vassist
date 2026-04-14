@@ -18,10 +18,12 @@ import {
   WriterServiceProxy
 } from '../services/proxies';
 import { 
+  AIProviders,
   DefaultAIConfig, 
   DefaultTTSConfig, 
   DefaultSTTConfig, 
   TTSProviders,
+  STTProviders,
   validateAIConfig, 
   validateTTSConfig, 
   validateSTTConfig 
@@ -98,10 +100,68 @@ export const ConfigProvider = ({ children }) => {
     downloading: false,
   });
 
+  const syncDesktopServerForProviders = useCallback(async (nextAiConfig, nextTtsConfig, nextSttConfig) => {
+    if (!isDesktop || !api?.server) {
+      return;
+    }
+
+    const llmUsesDesktopLocal = nextAiConfig?.provider === AIProviders.DESKTOP_LOCAL;
+    const ttsUsesDesktopLocal = nextTtsConfig?.provider === TTSProviders.DESKTOP_LOCAL;
+    const sttUsesDesktopLocal = nextSttConfig?.provider === STTProviders.DESKTOP_LOCAL;
+    const needsDesktopProxy = llmUsesDesktopLocal || ttsUsesDesktopLocal || sttUsesDesktopLocal;
+
+    if (!needsDesktopProxy) {
+      try {
+        await api.server.stop();
+        Logger.log('ConfigContext', 'Desktop proxy server stopped (no desktop-local providers active)');
+      } catch (error) {
+        Logger.warn('ConfigContext', 'Desktop proxy stop skipped/failed:', error);
+      }
+      return;
+    }
+
+    // Reuse desktop-local config for shared proxy behavior even when LLM provider is not desktop-local.
+    const desktopLlmConfig = nextAiConfig?.['desktop-local'] || {};
+
+    let canStartServer = true;
+    if (llmUsesDesktopLocal && api?.llm?.getBackendStatus && desktopLlmConfig.backend && desktopLlmConfig.backend !== 'auto') {
+      try {
+        const backendStatus = await api.llm.getBackendStatus(desktopLlmConfig.backend);
+        if (backendStatus?.success && !backendStatus.selectedInstalled) {
+          canStartServer = false;
+          Logger.warn('ConfigContext', `Desktop proxy start deferred: backend ${desktopLlmConfig.backend} is not installed yet`);
+        }
+      } catch (error) {
+        Logger.warn('ConfigContext', 'Failed to verify backend status before desktop proxy start:', error);
+      }
+    }
+
+    if (!canStartServer) {
+      return;
+    }
+
+    try {
+      const result = await api.server.start(desktopLlmConfig);
+      if (result?.success) {
+        Logger.log('ConfigContext', 'Desktop proxy server started/updated:', {
+          llmUsesDesktopLocal,
+          ttsUsesDesktopLocal,
+          sttUsesDesktopLocal,
+        });
+      } else {
+        Logger.error('ConfigContext', 'Failed to start desktop proxy server:', result?.error || result);
+      }
+    } catch (error) {
+      Logger.error('ConfigContext', 'Error starting desktop proxy server:', error);
+    }
+  }, [api]);
+
   // Load all configs on mount
   useEffect(() => {
     const loadConfigs = async () => {
       let savedAiConfig;
+      let savedTtsConfig = DefaultTTSConfig;
+      let savedSttConfig = DefaultSTTConfig;
       try {
         // Load UI config and merge with defaults to ensure all fields exist
         const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', {});
@@ -146,7 +206,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load TTS config
-        const savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
         
         Logger.log('ConfigContext', 'TTS config loaded from storage');
         setTtsConfig(savedTtsConfig);
@@ -158,7 +218,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load STT config
-        const savedSttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
+        savedSttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
         setSttConfig(savedSttConfig);
         try {
           STTServiceProxy.configure(savedSttConfig);
@@ -175,45 +235,60 @@ export const ConfigProvider = ({ children }) => {
         setTimeout(() => {
           initialLoadRef.current = false;
         }, 100);
-        
-        // Start desktop server if in Electron and desktop-local provider is configured
-        if (isDesktop && savedAiConfig?.provider === 'desktop-local') {
-          const config = savedAiConfig['desktop-local'];
-          if (config && api?.server) {
-            let canStartServer = true;
 
-            if (api?.llm?.getBackendStatus && config.backend && config.backend !== 'auto') {
-              try {
-                const backendStatus = await api.llm.getBackendStatus(config.backend);
-                if (backendStatus?.success && !backendStatus.selectedInstalled) {
-                  canStartServer = false;
-                  Logger.warn('ConfigContext', `Desktop local server start deferred: backend ${config.backend} is not installed yet`);
-                }
-              } catch (error) {
-                Logger.warn('ConfigContext', 'Failed to verify backend status before desktop server start:', error);
-              }
-            }
-
-            if (canStartServer) {
-              api.server.start(config)
-              .then(result => {
-                if (result.success) {
-                  Logger.log('ConfigContext', 'Desktop server started:', result);
-                } else {
-                  Logger.error('ConfigContext', 'Failed to start desktop server:', result.error);
-                }
-              })
-              .catch(error => {
-                Logger.error('ConfigContext', 'Error starting desktop server:', error);
-              });
-            }
-          }
-        }
+        await syncDesktopServerForProviders(savedAiConfig, savedTtsConfig, savedSttConfig);
       }
     };
 
     loadConfigs();
-  }, []);
+  }, [syncDesktopServerForProviders]);
+
+  useEffect(() => {
+    if (initialLoadRef.current) {
+      return;
+    }
+
+    syncDesktopServerForProviders(aiConfig, ttsConfig, sttConfig);
+  }, [aiConfig, ttsConfig, sttConfig, syncDesktopServerForProviders]);
+
+  useEffect(() => {
+    const port = Number(aiConfig?.['desktop-local']?.serverPort || 11438);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return;
+    }
+
+    const sharedEndpoint = `http://127.0.0.1:${port}`;
+
+    if (aiConfig?.['desktop-local']?.endpoint !== sharedEndpoint) {
+      setAiConfig((prev) => ({
+        ...prev,
+        'desktop-local': {
+          ...(prev['desktop-local'] || {}),
+          endpoint: sharedEndpoint,
+        },
+      }));
+    }
+
+    if (ttsConfig?.['desktop-local']?.endpoint !== sharedEndpoint) {
+      setTtsConfig((prev) => ({
+        ...prev,
+        'desktop-local': {
+          ...(prev['desktop-local'] || {}),
+          endpoint: sharedEndpoint,
+        },
+      }));
+    }
+
+    if (sttConfig?.['desktop-local']?.endpoint !== sharedEndpoint) {
+      setSttConfig((prev) => ({
+        ...prev,
+        'desktop-local': {
+          ...(prev['desktop-local'] || {}),
+          endpoint: sharedEndpoint,
+        },
+      }));
+    }
+  }, [aiConfig, ttsConfig, sttConfig]);
 
   // Auto-save AI config when it changes (after initial load)
   useEffect(() => {

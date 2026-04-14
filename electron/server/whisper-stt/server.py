@@ -30,17 +30,58 @@ app.add_middleware(
 # Global model instance
 whisper_model = None
 model_name = None
+active_device = "cpu"
+active_compute_type = "int8"
 WHISPER_MODEL_DIR = Path(os.environ.get("WHISPER_MODEL_DIR", str(Path(__file__).parent / "models")))
 WHISPER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
+
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
+def whisper_log(message):
+    msg = str(message)
+    try:
+        print(msg, flush=True)
+        return
+    except Exception:
+        pass
+
+    try:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        sys.stdout.buffer.write((msg + "\n").encode(encoding, errors="replace"))
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
+def normalize_model_name(model_name_str):
+    raw = (model_name_str or "tiny").strip().lower().replace("_", "-")
+    mapping = {
+        "whisper-1": "tiny",
+        "whisper": "tiny",
+        "tiny": "tiny",
+        "tiny.en": "tiny.en",
+        "base": "base",
+        "base.en": "base.en",
+    }
+    return mapping.get(raw, "tiny")
+
 def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
     """Load faster-whisper model with GPU support"""
-    global whisper_model, model_name
+    global whisper_model, model_name, active_device, active_compute_type
+    model_name_str = normalize_model_name(model_name_str)
     
     try:
         from faster_whisper import WhisperModel
         
-        print(f"[Whisper] Loading model: {model_name_str} on {device} with {compute_type}")
+        whisper_log(f"[Whisper] Loading model: {model_name_str} on {device} with {compute_type}")
         
         # Try CUDA first, fall back to CPU
         try:
@@ -51,9 +92,11 @@ def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
                 download_root=str(WHISPER_MODEL_DIR)
             )
             model_name = model_name_str
-            print(f"[Whisper] Model loaded successfully on {device}")
+            active_device = device
+            active_compute_type = compute_type
+            whisper_log(f"[Whisper] Model loaded successfully on {device}")
         except Exception as e:
-            print(f"[Whisper] GPU failed, falling back to CPU: {e}")
+            whisper_log(f"[Whisper] GPU failed, falling back to CPU: {e}")
             whisper_model = WhisperModel(
                 model_name_str,
                 device="cpu",
@@ -61,13 +104,15 @@ def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
                 download_root=str(WHISPER_MODEL_DIR)
             )
             model_name = model_name_str
-            print(f"[Whisper] Model loaded on CPU")
+            active_device = "cpu"
+            active_compute_type = "int8"
+            whisper_log("[Whisper] Model loaded on CPU")
             
     except ImportError:
-        print("[Whisper] ERROR: faster-whisper not installed")
+        whisper_log("[Whisper] ERROR: faster-whisper not installed")
         raise
     except Exception as e:
-        print(f"[Whisper] ERROR loading model: {e}")
+        whisper_log(f"[Whisper] ERROR loading model: {e}")
         raise
 
 @app.on_event("startup")
@@ -80,18 +125,19 @@ async def startup():
     try:
         import torch
         if not torch.cuda.is_available():
-            print("[Whisper] CUDA not available, using CPU")
+            whisper_log("[Whisper] CUDA not available, using CPU")
             device = "cpu"
             compute_type = "int8"
         else:
-            print(f"[Whisper] CUDA available: {torch.cuda.get_device_name(0)}")
+            whisper_log(f"[Whisper] CUDA available: {torch.cuda.get_device_name(0)}")
     except:
-        print("[Whisper] PyTorch not available, using CPU")
+        whisper_log("[Whisper] PyTorch not available, using CPU")
         device = "cpu"
         compute_type = "int8"
     
-    # Load tiny.en model by default (fast, English-only)
-    load_model("tiny.en", device=device, compute_type=compute_type)
+    # Load configurable default model on startup (default: multilingual tiny)
+    default_model = normalize_model_name(os.environ.get("WHISPER_DEFAULT_MODEL", "tiny"))
+    load_model(default_model, device=device, compute_type=compute_type)
 
 @app.post("/v1/audio/transcriptions")
 async def transcribe(
@@ -110,10 +156,15 @@ async def transcribe(
         raise HTTPException(status_code=503, detail="Model not loaded")
     
     try:
+        requested_model = normalize_model_name(model)
+        if requested_model != model_name:
+            whisper_log(f"[Whisper] Switching model from {model_name} to {requested_model}")
+            load_model(requested_model, device=active_device, compute_type=active_compute_type)
+
         # Read audio data
         audio_bytes = await file.read()
         
-        print(f"[Whisper] Transcribing {len(audio_bytes)} bytes, language: {language}")
+        whisper_log(f"[Whisper] Transcribing {len(audio_bytes)} bytes, language: {language}")
         
         # Write to temporary file (faster-whisper requires file path)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
@@ -131,10 +182,17 @@ async def transcribe(
                 vad_parameters=dict(min_silence_duration_ms=500)
             )
             
-            # Collect all segments
-            text = " ".join([segment.text.strip() for segment in segments])
-            
-            print(f"[Whisper] Transcription: {text[:100]}...")
+            # Collect all segments without logging raw text (avoids console encoding failures).
+            segment_texts = []
+            segment_count = 0
+            for segment in segments:
+                segment_count += 1
+                cleaned = segment.text.strip()
+                if cleaned:
+                    segment_texts.append(cleaned)
+
+            text = " ".join(segment_texts)
+            whisper_log(f"[Whisper] Transcription complete: {len(text)} chars across {segment_count} segments")
             
             return JSONResponse({"text": text})
             
@@ -146,7 +204,7 @@ async def transcribe(
                 pass
                 
     except Exception as e:
-        print(f"[Whisper] Transcription error: {e}")
+        whisper_log(f"[Whisper] Transcription error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
@@ -159,9 +217,9 @@ async def health():
     }
 
 if __name__ == "__main__":
-    print("="*60)
-    print("Starting Faster Whisper STT Server")
-    print("="*60)
+    whisper_log("="*60)
+    whisper_log("Starting Faster Whisper STT Server")
+    whisper_log("="*60)
     
     uvicorn.run(
         app,

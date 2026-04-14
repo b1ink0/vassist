@@ -67,7 +67,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [selectedSTTProvider, setSelectedSTTProvider] = useState(defaultSTTProvider);
   const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState('http://127.0.0.1:8765');
   const [desktopSTTEndpoint, setDesktopSTTEndpoint] = useState('http://127.0.0.1:11438');
-  const [desktopSTTModel, setDesktopSTTModel] = useState('ggml-small.en.bin');
+  const [desktopSTTModel, setDesktopSTTModel] = useState('tiny');
+  const [desktopSTTLanguage, setDesktopSTTLanguage] = useState('auto');
   const [chromeAiSTTStatus, setChromeAiSTTStatus] = useState(null);
   const [sttConfig, setSTTConfig] = useState({
     openai: {
@@ -133,6 +134,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       if (sttConfigData['android-local']?.endpoint) setAndroidSTTEndpoint(sttConfigData['android-local'].endpoint);
       if (sttConfigData['desktop-local']?.endpoint) setDesktopSTTEndpoint(sttConfigData['desktop-local'].endpoint);
       if (sttConfigData['desktop-local']?.model) setDesktopSTTModel(sttConfigData['desktop-local'].model);
+      if (sttConfigData['desktop-local']?.language) setDesktopSTTLanguage(sttConfigData['desktop-local'].language);
     }
     
     // Mark initial load complete
@@ -197,7 +199,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       'desktop-local': {
         endpoint: desktopSTTEndpoint,
         model: desktopSTTModel,
-        language: 'en',
+        language: desktopSTTLanguage,
         threads: 4,
       },
     };
@@ -212,7 +214,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     openAIKey, openAIModel, openAIVoice,
     customEndpoint, customApiKey, customModel, customVoice,
     androidTTSEndpoint,
-    selectedSTTProvider, sttConfig, androidSTTEndpoint, desktopSTTEndpoint, desktopSTTModel,
+    selectedSTTProvider, sttConfig, androidSTTEndpoint, desktopSTTEndpoint, desktopSTTModel, desktopSTTLanguage,
     desktopTTSEndpoint, desktopReferenceAudio, desktopReferenceText, desktopReferenceLanguage, desktopSpeed, desktopTopK, desktopTopP, desktopTemperature, desktopPytorchBackend, desktopTrained,
     defaultSTTProvider,
     updateSetupData
@@ -965,11 +967,13 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
           <DesktopSTTConfig
             config={{
               endpoint: desktopSTTEndpoint,
-              model: desktopSTTModel
+              model: desktopSTTModel,
+              language: desktopSTTLanguage,
             }}
             onChange={(updates) => {
               if (updates.endpoint !== undefined) setDesktopSTTEndpoint(updates.endpoint);
               if (updates.model !== undefined) setDesktopSTTModel(updates.model);
+              if (updates.language !== undefined) setDesktopSTTLanguage(updates.language);
             }}
             isSetupMode={true}
             showTitle={false}

@@ -169,8 +169,8 @@ class STTService {
         });
 
         state.config = {
-          model: desktopConfig.model || 'whisper-base',
-          language: desktopConfig.language || 'en',
+          model: desktopConfig.model || 'tiny',
+          language: desktopConfig.language || 'auto',
         };
         state.provider = provider;
 

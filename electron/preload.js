@@ -121,7 +121,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Whisper STT Setup
   whisperSetup: {
-    start: () => ipcRenderer.invoke('whisper:setup:start'),
+    start: (options = {}) => ipcRenderer.invoke('whisper:setup:start', options),
     cancel: () => ipcRenderer.invoke('whisper:setup:cancel'),
     getStatus: () => ipcRenderer.invoke('whisper:setup:status'),
     onLog: (callback) => {

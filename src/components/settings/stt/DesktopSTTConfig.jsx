@@ -80,7 +80,8 @@ const DesktopSTTConfig = ({
     setLogs([]);
 
     try {
-      await desktopAPI.whisperSetup.start();
+      const selectedModel = (config.model || 'tiny').toString().trim();
+      await desktopAPI.whisperSetup.start({ model: selectedModel });
     } catch (error) {
       setIsSetupRunning(false);
       setSetupError(error.message || 'Failed to start setup');
@@ -96,6 +97,21 @@ const DesktopSTTConfig = ({
       setLogs((prev) => [...prev, '\n❌ Setup cancelled by user\n']);
     } catch (error) {
       console.error('[DesktopSTTConfig] Whisper setup cancel failed:', error);
+    }
+  };
+
+  const handleVerifySetup = async () => {
+    if (!desktopAPI?.whisperSetup) return;
+
+    try {
+      setSetupError(null);
+      const status = await desktopAPI.whisperSetup.getStatus();
+      setSetupStatus(status);
+      if (status?.isSetup) {
+        setSetupComplete(true);
+      }
+    } catch (error) {
+      setSetupError(error.message || 'Failed to verify setup status');
     }
   };
 
@@ -128,7 +144,7 @@ const DesktopSTTConfig = ({
           </span>
         </div>
         <p className="text-xs text-white/60">
-          Model: faster-whisper tiny.en • Local speech recognition
+          Model: faster-whisper {config.model || 'tiny'} • Local speech recognition
         </p>
       </div>
 
@@ -152,6 +168,16 @@ const DesktopSTTConfig = ({
                   {isInstalled ? 'Re-initialize Whisper' : isPartialInstall ? 'Complete Whisper Setup' : 'Initialize Whisper'}
                 </>
               )}
+            </button>
+
+            <button
+              onClick={handleVerifySetup}
+              disabled={isSetupRunning}
+              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              title="Verify Whisper setup status"
+            >
+              <Icon name="check-circle" size={14} />
+              Verify
             </button>
 
             {isSetupRunning && (
@@ -200,6 +226,50 @@ const DesktopSTTConfig = ({
         </div>
       )}
 
+      {/* Core model settings */}
+      <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
+        <div>
+          <label className="block text-xs font-medium text-white/90 mb-1">
+            Whisper Model
+          </label>
+          <select
+            value={config.model || 'tiny'}
+            onChange={(e) => handleChange('model', e.target.value)}
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
+          >
+            <option value="tiny" className="bg-gray-900">tiny (multilingual, ~75-80MB, fastest)</option>
+            <option value="base" className="bg-gray-900">base (multilingual, ~140-150MB, better accuracy)</option>
+            <option value="tiny.en" className="bg-gray-900">tiny.en (English-only, ~75MB)</option>
+            <option value="base.en" className="bg-gray-900">base.en (English-only, ~140MB)</option>
+          </select>
+          <p className="text-[10px] text-white/50 mt-1">
+            Pick multilingual tiny/base for multi-language STT, or *.en for English-only.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-white/90 mb-1">
+            Language
+          </label>
+          <select
+            value={config.language || 'auto'}
+            onChange={(e) => handleChange('language', e.target.value)}
+            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+          >
+            <option value="auto" className="bg-gray-900">Auto-detect</option>
+            <option value="en" className="bg-gray-900">English</option>
+            <option value="es" className="bg-gray-900">Spanish</option>
+            <option value="fr" className="bg-gray-900">French</option>
+            <option value="de" className="bg-gray-900">German</option>
+            <option value="it" className="bg-gray-900">Italian</option>
+            <option value="pt" className="bg-gray-900">Portuguese</option>
+            <option value="zh" className="bg-gray-900">Chinese</option>
+            <option value="ja" className="bg-gray-900">Japanese</option>
+            <option value="ko" className="bg-gray-900">Korean</option>
+          </select>
+        </div>
+      </div>
+
       {/* Advanced Config */}
       <details className="group" open={isSetupMode}>
         <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
@@ -222,63 +292,22 @@ const DesktopSTTConfig = ({
               Local AI server endpoint
             </p>
           </div>
-          
+
           <div>
             <label className="block text-xs font-medium text-white/90 mb-1">
-              Model File
+              Threads ({config.threads || 4})
             </label>
             <input
-              type="text"
-              value={config.model || 'ggml-small.en.bin'}
-              onChange={(e) => handleChange('model', e.target.value)}
-              placeholder="ggml-small.en.bin"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
+              type="number"
+              min="1"
+              max="16"
+              value={config.threads || 4}
+              onChange={(e) => handleChange('threads', parseInt(e.target.value))}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
             />
             <p className="text-[10px] text-white/50 mt-1">
-              Whisper model filename (place in models/ directory)
+              CPU threads for processing
             </p>
-          </div>
-
-          {/* Additional Parameters */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Language
-              </label>
-              <select
-                value={config.language || 'en'}
-                onChange={(e) => handleChange('language', e.target.value)}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              >
-                <option value="en" className="bg-gray-900">English</option>
-                <option value="es" className="bg-gray-900">Spanish</option>
-                <option value="fr" className="bg-gray-900">French</option>
-                <option value="de" className="bg-gray-900">German</option>
-                <option value="it" className="bg-gray-900">Italian</option>
-                <option value="pt" className="bg-gray-900">Portuguese</option>
-                <option value="zh" className="bg-gray-900">Chinese</option>
-                <option value="ja" className="bg-gray-900">Japanese</option>
-                <option value="ko" className="bg-gray-900">Korean</option>
-                <option value="auto" className="bg-gray-900">Auto-detect</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Threads ({config.threads || 4})
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="16"
-                value={config.threads || 4}
-                onChange={(e) => handleChange('threads', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              />
-              <p className="text-[10px] text-white/50 mt-1">
-                CPU threads for processing
-              </p>
-            </div>
           </div>
         </div>
       </details>

@@ -4,7 +4,7 @@
  * Handles provider selection and configuration for OpenAI, Ollama, and Chrome AI
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as React from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { AIProviders } from '../../config/aiConfig';
@@ -415,6 +415,38 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
   const { api: androidAPI } = useAndroid();
   const { api: desktopAPI } = useDesktop();
+  const [desktopServerStatus, setDesktopServerStatus] = useState(null);
+  const desktopServerPort = Number(aiConfig['desktop-local']?.serverPort || 11438);
+  const isDesktopServerPortValid = Number.isInteger(desktopServerPort) && desktopServerPort >= 1 && desktopServerPort <= 65535;
+
+  useEffect(() => {
+    if (!isDesktop || !desktopAPI?.server?.getStatus) {
+      return;
+    }
+
+    let active = true;
+
+    const refreshStatus = async () => {
+      try {
+        const status = await desktopAPI.server.getStatus();
+        if (active) {
+          setDesktopServerStatus(status);
+        }
+      } catch {
+        if (active) {
+          setDesktopServerStatus(null);
+        }
+      }
+    };
+
+    refreshStatus();
+    const interval = setInterval(refreshStatus, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [desktopAPI]);
 
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
@@ -428,6 +460,46 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
   return (
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-white mb-4">LLM Configuration</h3>
+
+      {isDesktop && (
+        <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="text-sm font-medium text-white/90">Shared Local API Server (LLM/TTS/STT)</div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-xs text-white/60 mt-1">
+                When enabled, binds to LAN so other devices can use your hosted server.
+              </p>
+            </div>
+            <Toggle
+              id="desktop-local-share-network"
+              checked={aiConfig['desktop-local']?.shareOnNetwork === true}
+              onChange={(checked) => updateAIConfig('desktop-local.shareOnNetwork', checked)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Shared Server Port</label>
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              step="1"
+              value={desktopServerPort}
+              onChange={(e) => {
+                const nextPort = Number.parseInt(e.target.value, 10);
+                if (Number.isInteger(nextPort)) {
+                  updateAIConfig('desktop-local.serverPort', nextPort);
+                }
+              }}
+              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+            />
+            {!isDesktopServerPortValid && (
+              <p className="text-xs text-red-300">Port must be between 1 and 65535.</p>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Provider Selection */}
       <div className="space-y-2">

@@ -151,11 +151,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
   return (
     <div className="space-y-4">
       {/* Status indicator */}
-      <div className={`p-2 md:p-4 rounded-lg ${
-        isInstalled
-          ? 'bg-green-500/10 border border-green-500/30' 
-          : 'bg-yellow-500/10 border border-yellow-500/30'
-      }`}>
+      <div className={`p-2 md:p-4 rounded-lg bg-white/10 border border-white/30`}>
         <div className="flex items-center gap-2">
           <Icon 
             name={isInstalled ? 'check-circle' : 'alert-circle'} 

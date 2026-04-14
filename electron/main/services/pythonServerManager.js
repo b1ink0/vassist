@@ -141,6 +141,7 @@ export function createPythonServerManager({
         env: {
           ...processEnv,
           PYTHONUNBUFFERED: '1',
+          PYTHONIOENCODING: 'utf-8',
           WHISPER_MODEL_DIR: whisperModelsDir,
           // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
           KMP_DUPLICATE_LIB_OK: 'TRUE',
@@ -271,7 +272,7 @@ export function createPythonServerManager({
       }
     });
 
-    ipcMain.handle('whisper:setup:start', async (event) => {
+    ipcMain.handle('whisper:setup:start', async (event, options = {}) => {
       ensureRuntimeServerScripts();
 
       const gptSovitsDataDir = getGPTSoVITSDataDir();
@@ -297,7 +298,7 @@ export function createPythonServerManager({
 
       whisperSetupRunner.run((log) => {
         event.sender.send('whisper:setup:log', log);
-      }).then(async () => {
+      }, options).then(async () => {
         console.log('[Whisper] Setup complete');
         event.sender.send('whisper:setup:complete', { success: true });
         whisperSetupRunner = null;

@@ -11,6 +11,7 @@
 import express from 'express';
 import axios from 'axios';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import FormData from 'form-data';
@@ -23,6 +24,7 @@ export class LocalAIServer {
     this.app = express();
     this.server = null;
     this.port = 11438;
+    this.host = '127.0.0.1';
     
     // AI instances
     this.llama = null;
@@ -55,6 +57,10 @@ export class LocalAIServer {
       },
       tts: {
         proxyUrl: 'http://127.0.0.1:9880'
+      },
+      server: {
+        shareOnNetwork: false,
+        host: '127.0.0.1'
       }
     };
 
@@ -407,6 +413,14 @@ export class LocalAIServer {
     Object.assign(this.config.llm, config.llm || {});
     Object.assign(this.config.stt, config.stt || {});
     Object.assign(this.config.tts, config.tts || {});
+    Object.assign(this.config.server, config.server || {});
+    const configuredPort = Number(this.config.server?.port);
+    if (Number.isInteger(configuredPort) && configuredPort >= 1 && configuredPort <= 65535) {
+      this.port = configuredPort;
+    } else {
+      this.port = 11438;
+    }
+    this.host = this.config.server?.shareOnNetwork ? '0.0.0.0' : (this.config.server?.host || '127.0.0.1');
     
     console.log('[Server] Final this.config:', JSON.stringify(this.config, null, 2));
     console.log('[Server] LLM will be loaded on first request');
@@ -614,11 +628,12 @@ export class LocalAIServer {
     }
 
     return new Promise((resolve, reject) => {
-      const listener = this.app.listen(this.port, '127.0.0.1');
+      const listener = this.app.listen(this.port, this.host);
 
       listener.once('listening', () => {
         this.server = listener;
-        console.log(`[Server] Started on http://127.0.0.1:${this.port}`);
+        const urls = this._getAccessibleUrls();
+        console.log(`[Server] Started on ${urls.join(', ')}`);
         resolve();
       });
 
@@ -669,6 +684,12 @@ export class LocalAIServer {
     
     return {
       running: this.server !== null,
+      server: {
+        host: this.host,
+        shareOnNetwork: this.host === '0.0.0.0',
+        port: this.port,
+        urls: this._getAccessibleUrls(),
+      },
       llm: {
         loaded: this.llamaModel !== null,
         loading: this.isLoadingModel,
@@ -684,5 +705,27 @@ export class LocalAIServer {
         proxyUrl: this.config.tts.proxyUrl
       }
     };
+  }
+
+  _getAccessibleUrls() {
+    const urls = [];
+    if (this.host === '0.0.0.0') {
+      urls.push(`http://127.0.0.1:${this.port}`);
+      const nets = os.networkInterfaces();
+      for (const ifName of Object.keys(nets)) {
+        for (const net of nets[ifName] || []) {
+          if (net && net.family === 'IPv4' && !net.internal) {
+            urls.push(`http://${net.address}:${this.port}`);
+          }
+        }
+      }
+      return Array.from(new Set(urls));
+    }
+
+    if (this.host === '127.0.0.1' || this.host === 'localhost') {
+      return [`http://127.0.0.1:${this.port}`];
+    }
+
+    return [`http://${this.host}:${this.port}`];
   }
 }

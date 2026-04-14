@@ -1,6 +1,7 @@
 export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, getModelsDir, loadLlamaApi }) {
   let server = null;
   let restartPromise = null;
+  let lastServerError = null;
 
   function registerIPCHandlers(ipcMain) {
     ipcMain.handle('server:start', async (event, config = {}) => {
@@ -14,6 +15,11 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
           return { success: false, error: error.message };
         }
       }
+
+      const shareOnNetwork = Boolean(config.shareOnNetwork);
+      const desiredHost = shareOnNetwork ? '0.0.0.0' : '127.0.0.1';
+      const parsedPort = Number(config.serverPort);
+      const desiredPort = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 11438;
 
       const serverConfig = {
         llm: {
@@ -31,6 +37,11 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
         },
         tts: {
           proxyUrl: 'http://127.0.0.1:9880'
+        },
+        server: {
+          shareOnNetwork,
+          host: desiredHost,
+          port: desiredPort,
         }
       };
 
@@ -52,9 +63,23 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
         Object.assign(server.config.llm, serverConfig.llm);
         Object.assign(server.config.stt, serverConfig.stt);
         Object.assign(server.config.tts, serverConfig.tts);
+        Object.assign(server.config.server, serverConfig.server);
+        const previousHost = server.host;
+        const previousPort = server.port;
+        const hostChanged = previousHost !== desiredHost;
+        const portChanged = previousPort !== desiredPort;
+        server.host = desiredHost;
+        server.port = desiredPort;
+
+        if (hostChanged || portChanged) {
+          console.log(`[Server] Binding changed from ${previousHost}:${previousPort} to ${desiredHost}:${desiredPort}, restarting listener...`);
+          await server.stop();
+          await server.start();
+        }
 
         console.log('[Server] Updated LLM model path:', server.config.llm.modelPath);
         console.log('[Server] Config updated successfully');
+        lastServerError = null;
         return { success: true, ...server.getStatus() };
       }
 
@@ -75,13 +100,17 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
         console.log('[Server] Final serverConfig:', JSON.stringify(serverConfig, null, 2));
 
         await server.initialize(serverConfig);
+        server.host = desiredHost;
+        server.port = desiredPort;
         await server.start();
 
         const status = server.getStatus();
         console.log('[Server] Started:', status);
+        lastServerError = null;
         return { success: true, ...status };
       } catch (error) {
         console.error('[Server] Start error:', error);
+        lastServerError = error.message;
         return { success: false, error: error.message };
       }
     });
@@ -96,22 +125,25 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
       try {
         await server.stop();
         console.log('[Server] Stopped');
+        lastServerError = null;
         return { success: true };
       } catch (error) {
         console.error('[Server] Stop error:', error);
+        lastServerError = error.message;
         return { success: false, error: error.message };
       }
     });
 
     ipcMain.handle('server:status', async () => {
       if (!server) {
-        return { running: false };
+        return { running: false, error: lastServerError };
       }
 
       try {
-        return server.getStatus();
+        return { ...server.getStatus(), error: lastServerError };
       } catch (error) {
         console.error('[Server] Status error:', error);
+        lastServerError = error.message;
         return { running: false, error: error.message };
       }
     });

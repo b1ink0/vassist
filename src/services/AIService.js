@@ -321,22 +321,76 @@ class AIService {
     return u8arr.buffer;
   }
 
+  _isDataUrl(value) {
+    return typeof value === 'string' && value.startsWith('data:');
+  }
+
+  _extractAttachmentString(value) {
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (value && typeof value === 'object') {
+      if (typeof value.dataUrl === 'string') return value.dataUrl;
+      if (typeof value.url === 'string') return value.url;
+      if (typeof value.src === 'string') return value.src;
+    }
+    return '';
+  }
+
+  async _toDataUrlIfPossible(value) {
+    const src = this._extractAttachmentString(value);
+    if (!src) {
+      return null;
+    }
+
+    if (this._isDataUrl(src)) {
+      return src;
+    }
+
+    if (/^https?:\/\//i.test(src) || /^blob:/i.test(src)) {
+      try {
+        const response = await fetch(src);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        return typeof dataUrl === 'string' && this._isDataUrl(dataUrl) ? dataUrl : null;
+      } catch (error) {
+        Logger.warn('AIService', 'Failed to convert image URL to data URL:', { src, error: error?.message || error });
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Format messages for multi-modal support
    * Converts ChatManager format to provider-specific format
    * @param {Array} messages - Messages from ChatManager
    * @param {string} provider - Provider name
-   * @returns {Array} Formatted messages
+    * @returns {Promise<Array>} Formatted messages
    */
-  _formatMultiModalMessages(messages, provider) {
-    return messages.map(msg => {
+  async _formatMultiModalMessages(messages, provider) {
+    const formatted = [];
+
+    for (const msg of messages) {
       // Check if multi-modal (has images or audios)
       const hasImages = msg.images && msg.images.length > 0;
       const hasAudios = msg.audios && msg.audios.length > 0;
       
       // If no attachments, return as-is
       if (!hasImages && !hasAudios) {
-        return { role: msg.role, content: msg.content };
+        formatted.push({ role: msg.role, content: msg.content });
+        continue;
       }
 
       // Multi-modal message with images and/or audios
@@ -348,7 +402,11 @@ class AIService {
         
         // Add images
         if (hasImages) {
-          for (const imageDataUrl of msg.images) {
+          for (const imageValue of msg.images) {
+            const imageDataUrl = await this._toDataUrlIfPossible(imageValue);
+            if (!imageDataUrl) {
+              continue;
+            }
             content.push({
               type: 'image',
               value: this._dataUrlToBlob(imageDataUrl)
@@ -358,34 +416,55 @@ class AIService {
         
         // Add audios
         if (hasAudios) {
-          for (const audioDataUrl of msg.audios) {
+          for (const audioValue of msg.audios) {
+            const audioDataUrl = this._extractAttachmentString(audioValue);
+            if (!this._isDataUrl(audioDataUrl)) {
+              continue;
+            }
             content.push({
               type: 'audio',
               value: this._dataUrlToArrayBuffer(audioDataUrl)
             });
           }
         }
-        
-        return { role: msg.role, content };
+
+        formatted.push({ role: msg.role, content });
       } else {
         // OpenAI/Ollama format: content is array of {type, text/image_url/input_audio}
         const content = [
-          { type: 'text', text: msg.content }
+          { type: 'text', text: msg.content || '' }
         ];
+        const unresolvedImageUrls = [];
         
         // Add images
         if (hasImages) {
-          for (const imageDataUrl of msg.images) {
+          for (const imageValue of msg.images) {
+            const imageDataUrl = await this._toDataUrlIfPossible(imageValue);
+            if (!imageDataUrl) {
+              const unresolved = this._extractAttachmentString(imageValue);
+              if (/^https?:\/\//i.test(unresolved)) {
+                unresolvedImageUrls.push(unresolved);
+              }
+              continue;
+            }
             content.push({
               type: 'image_url',
               image_url: { url: imageDataUrl }
             });
           }
         }
+
+        if (unresolvedImageUrls.length > 0) {
+          content[0].text = `${content[0].text}\n\n[Some image URLs could not be fetched/converted in-browser and were omitted from vision payload:]\n${unresolvedImageUrls.join('\n')}`;
+        }
         
         // Add audios (OpenAI format for audio input)
         if (hasAudios) {
-          for (const audioDataUrl of msg.audios) {
+          for (const audioValue of msg.audios) {
+            const audioDataUrl = this._extractAttachmentString(audioValue);
+            if (!this._isDataUrl(audioDataUrl)) {
+              continue;
+            }
             // Extract base64 data from data URL
             const base64Data = audioDataUrl.split(',')[1];
             content.push({
@@ -397,10 +476,12 @@ class AIService {
             });
           }
         }
-        
-        return { role: msg.role, content };
+
+        formatted.push({ role: msg.role, content });
       }
-    });
+    }
+
+    return formatted;
   }
 
   /**
@@ -428,10 +509,9 @@ class AIService {
   /**
    * Check if routing should be applied
    * @param {Object} config - Provider config
-   * @param {Array} messages - Messages array
    * @returns {boolean} True if routing should be applied
    */
-  _shouldApplyRouting(config, messages) {
+  _shouldApplyRouting(config) {
     // Check if routing is enabled
     if (!config.routing || !config.routing.enabled) {
       return false;
@@ -448,7 +528,7 @@ class AIService {
   _stripImagesFromMessages(messages) {
     return messages.map(msg => {
       if (msg.images) {
-        const { images, ...rest } = msg;
+        const { images: _images, ...rest } = msg;
         return rest;
       }
       return msg;
@@ -503,6 +583,7 @@ class AIService {
     Logger.log('other', `${logPrefix} - Starting multi-model routing`);
 
     const state = this._getState(tabId);
+    let captureContext = '';
     const userMessage = messages[messages.length - 1];
     const userText = typeof userMessage.content === 'string' ? userMessage.content : 
                      (Array.isArray(userMessage.content) ? userMessage.content.find(c => c.type === 'text')?.text || userMessage.content.find(c => c.type === 'text')?.value || '' : '');
@@ -595,7 +676,6 @@ class AIService {
 
       // Vision is needed - get images (manual or captured)
       let imageToUse = manualImages;
-      let captureContext = '';
 
       if (!imageToUse && FrameCaptureService.isEnabled()) {
         Logger.log('other', `${logPrefix} - No manual image, attempting frame capture...`);
@@ -816,7 +896,7 @@ class AIService {
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
 
     // Check if routing should be applied (only if not already in a routing sub-call and not explicitly disabled)
-    if (!options.modelOverride && !options.useUtilitySession && !options.disableRouting && this._shouldApplyRouting(state.config, messages)) {
+    if (!options.modelOverride && !options.useUtilitySession && !options.disableRouting && this._shouldApplyRouting(state.config)) {
       return await this._applyRouting(messages, onStream, tabId, state.config);
     }
     
@@ -836,7 +916,7 @@ class AIService {
 
     // Format messages for multi-modal if needed
     const formattedMessages = hasAttachments 
-      ? this._formatMultiModalMessages(messages, state.provider)
+      ? await this._formatMultiModalMessages(messages, state.provider)
       : messages;
 
     // Chrome AI implementation

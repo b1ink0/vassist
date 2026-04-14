@@ -300,6 +300,8 @@ export const DefaultAIConfig = {
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'qwen3:0.6b', // Default model name
+    shareOnNetwork: false,
+    serverPort: 11438,
     backend: 'auto',
     temperature: 0.7,
     maxTokens: 2048,
@@ -466,8 +468,8 @@ export const DefaultSTTConfig = {
   
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
-    model: 'ggml-small.en.bin', // Default whisper model
-    language: 'en',
+    model: 'tiny',
+    language: 'auto',
     threads: 4,
   },
   
@@ -533,6 +535,12 @@ export function validateAIConfig(config) {
   if (config.provider === AIProviders.DESKTOP_LOCAL) {
     if (config['desktop-local']?.endpoint && config['desktop-local'].endpoint.trim() === '') {
       errors.push('Desktop Local Endpoint cannot be empty');
+    }
+    if (config['desktop-local']?.serverPort !== undefined) {
+      const port = Number(config['desktop-local'].serverPort);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        errors.push('Desktop Local Shared Server Port must be between 1 and 65535');
+      }
     }
   }
   
