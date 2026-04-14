@@ -145,6 +145,30 @@ export class LocalAIServer {
     });
   }
 
+  getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      const firstForwardedIp = forwarded.split(',')[0]?.trim();
+      if (firstForwardedIp) {
+        return firstForwardedIp;
+      }
+    }
+    return req.ip || req.socket?.remoteAddress || '';
+  }
+
+  isLoopbackAddress(ipAddress) {
+    if (!ipAddress || typeof ipAddress !== 'string') {
+      return false;
+    }
+    const normalized = ipAddress.trim().toLowerCase();
+    return (
+      normalized === '127.0.0.1' ||
+      normalized === '::1' ||
+      normalized === '::ffff:127.0.0.1' ||
+      normalized === 'localhost'
+    );
+  }
+
   async handleChatCompletion(req, res) {
     const { messages, stream = false, temperature, max_tokens, model, customModelsPath } = req.body;
     
@@ -331,9 +355,33 @@ export class LocalAIServer {
         filename: 'audio.wav',
         contentType: req.file.mimetype || 'audio/wav'
       });
+
+      const requestModel = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
+      const requestLanguage = typeof req.body?.language === 'string' ? req.body.language.trim() : '';
+      const defaultModel = typeof this.config.stt?.model === 'string' ? this.config.stt.model.trim() : '';
+      const defaultLanguage = typeof this.config.stt?.language === 'string' ? this.config.stt.language.trim() : '';
+      const clientIp = this.getClientIp(req);
+      const isRemoteRequest = !this.isLoopbackAddress(clientIp);
+
+      const resolvedModel = isRemoteRequest
+        ? (defaultModel || requestModel)
+        : (requestModel || defaultModel);
+      const resolvedLanguage = isRemoteRequest
+        ? (defaultLanguage || requestLanguage)
+        : (requestLanguage || defaultLanguage);
+
+      if (resolvedModel) {
+        formData.append('model', resolvedModel);
+      }
+      if (resolvedLanguage) {
+        formData.append('language', resolvedLanguage);
+      }
       
       if (req.body) {
         for (const [key, value] of Object.entries(req.body)) {
+          if (key === 'model' || key === 'language') {
+            continue;
+          }
           formData.append(key, value);
         }
       }

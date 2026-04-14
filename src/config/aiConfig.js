@@ -456,7 +456,7 @@ export const DefaultSTTConfig = {
     endpoint: 'http://localhost:8000',
     apiKey: '',
     model: 'whisper',
-    language: 'en',
+    language: 'auto',
     temperature: 0,
   },
   

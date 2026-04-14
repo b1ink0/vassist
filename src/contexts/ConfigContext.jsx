@@ -122,6 +122,7 @@ export const ConfigProvider = ({ children }) => {
 
     // Reuse desktop-local config for shared proxy behavior even when LLM provider is not desktop-local.
     const desktopLlmConfig = nextAiConfig?.['desktop-local'] || {};
+    const desktopSttConfig = nextSttConfig?.['desktop-local'] || {};
 
     let canStartServer = true;
     if (llmUsesDesktopLocal && api?.llm?.getBackendStatus && desktopLlmConfig.backend && desktopLlmConfig.backend !== 'auto') {
@@ -141,7 +142,13 @@ export const ConfigProvider = ({ children }) => {
     }
 
     try {
-      const result = await api.server.start(desktopLlmConfig);
+      const result = await api.server.start({
+        ...desktopLlmConfig,
+        stt: {
+          model: desktopSttConfig.model,
+          language: desktopSttConfig.language,
+        },
+      });
       if (result?.success) {
         Logger.log('ConfigContext', 'Desktop proxy server started/updated:', {
           llmUsesDesktopLocal,

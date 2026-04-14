@@ -33,7 +33,9 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
         },
         stt: {
           modelPath: null,
-          language: 'en'
+          proxyUrl: 'http://127.0.0.1:9881',
+          model: config.stt?.model || 'tiny',
+          language: config.stt?.language || 'auto',
         },
         tts: {
           proxyUrl: 'http://127.0.0.1:9880'

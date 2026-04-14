@@ -64,6 +64,30 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
         </p>
       </div>
 
+      {/* Language */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">Language</label>
+        <select
+          value={config.language || 'auto'}
+          onChange={(e) => handleFieldChange('language', e.target.value)}
+          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+        >
+          <option value="auto" className="bg-gray-900">Auto-detect</option>
+          <option value="en" className="bg-gray-900">English</option>
+          <option value="es" className="bg-gray-900">Spanish</option>
+          <option value="fr" className="bg-gray-900">French</option>
+          <option value="de" className="bg-gray-900">German</option>
+          <option value="it" className="bg-gray-900">Italian</option>
+          <option value="pt" className="bg-gray-900">Portuguese</option>
+          <option value="zh" className="bg-gray-900">Chinese</option>
+          <option value="ja" className="bg-gray-900">Japanese</option>
+          <option value="ko" className="bg-gray-900">Korean</option>
+        </select>
+        <p className="text-xs text-white/50">
+          Default language hint for transcription requests. Use Auto-detect for mixed-language audio.
+        </p>
+      </div>
+
       {/* Info */}
       <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
         <p className="text-xs text-purple-300">
