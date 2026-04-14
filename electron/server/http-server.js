@@ -20,7 +20,7 @@ import multer from 'multer';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class LocalAIServer {
-  constructor({ loadLlamaApi } = {}) {
+  constructor({ loadLlamaApi, ensureTTSBackendRunning } = {}) {
     this.app = express();
     this.server = null;
     this.port = 11438;
@@ -33,6 +33,7 @@ export class LocalAIServer {
     this.llamaChat = null;
     this.currentModelPath = null;
     this.loadLlamaApi = loadLlamaApi || null;
+    this.ensureTTSBackendRunning = typeof ensureTTSBackendRunning === 'function' ? ensureTTSBackendRunning : null;
     
     // On-demand loading state
     this.isLoadingModel = false;
@@ -56,7 +57,8 @@ export class LocalAIServer {
         proxyUrl: 'http://127.0.0.1:9881'
       },
       tts: {
-        proxyUrl: 'http://127.0.0.1:9880'
+        proxyUrl: 'http://127.0.0.1:9880',
+        enabled: false,
       },
       server: {
         shareOnNetwork: false,
@@ -409,13 +411,24 @@ export class LocalAIServer {
   }
 
   async handleTextToSpeech(req, res) {
-    const { input, voice = 'default', reference_audio, reference_text, reference_language = 'en' } = req.body;
+    const { input, reference_audio, reference_text, reference_language = 'en' } = req.body;
 
     if (!input) {
       return res.status(400).json({ error: 'No text provided' });
     }
 
+    if (this.config.tts?.enabled !== true) {
+      return res.status(503).json({
+        error: 'TTS is disabled',
+        details: 'Desktop-local TTS is not active in settings.',
+      });
+    }
+
     try {
+      if (this.ensureTTSBackendRunning) {
+        await this.ensureTTSBackendRunning();
+      }
+
       const requestBody = {
         input: input,
         reference_audio: reference_audio || null,

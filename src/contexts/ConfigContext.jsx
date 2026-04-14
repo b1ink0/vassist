@@ -148,6 +148,9 @@ export const ConfigProvider = ({ children }) => {
           model: desktopSttConfig.model,
           language: desktopSttConfig.language,
         },
+        tts: {
+          enabled: Boolean(nextTtsConfig?.enabled && ttsUsesDesktopLocal),
+        },
       });
       if (result?.success) {
         Logger.log('ConfigContext', 'Desktop proxy server started/updated:', {

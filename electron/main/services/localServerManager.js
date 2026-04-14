@@ -1,4 +1,13 @@
-export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, getModelsDir, loadLlamaApi }) {
+export function createLocalServerManager({
+  LocalAIServer,
+  path,
+  fs,
+  baseDir,
+  getModelsDir,
+  loadLlamaApi,
+  ensureTTSBackendRunning,
+  stopTTSBackend,
+}) {
   let server = null;
   let restartPromise = null;
   let lastServerError = null;
@@ -9,10 +18,19 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
 
       if (!server) {
         try {
-          server = new LocalAIServer({ loadLlamaApi });
+          server = new LocalAIServer({ loadLlamaApi, ensureTTSBackendRunning });
         } catch (error) {
           console.error('[Server] Failed to create server:', error);
           return { success: false, error: error.message };
+        }
+      }
+
+      const desktopTtsEnabled = Boolean(config.tts?.enabled);
+      if (!desktopTtsEnabled && typeof stopTTSBackend === 'function') {
+        try {
+          stopTTSBackend();
+        } catch (error) {
+          console.warn('[Server] Failed to stop GPT-SoVITS backend while TTS is disabled:', error);
         }
       }
 
@@ -38,7 +56,8 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
           language: config.stt?.language || 'auto',
         },
         tts: {
-          proxyUrl: 'http://127.0.0.1:9880'
+          proxyUrl: 'http://127.0.0.1:9880',
+          enabled: desktopTtsEnabled,
         },
         server: {
           shareOnNetwork,
@@ -155,7 +174,7 @@ export function createLocalServerManager({ LocalAIServer, path, fs, baseDir, get
     setTimeout(async () => {
       try {
         if (!server) {
-          server = new LocalAIServer({ loadLlamaApi });
+          server = new LocalAIServer({ loadLlamaApi, ensureTTSBackendRunning });
         }
 
         if (server.getStatus().running) {

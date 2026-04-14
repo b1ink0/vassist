@@ -79,15 +79,6 @@ const llmBackendManager = createLLMBackendManager({
   path,
 });
 
-const localServerManager = createLocalServerManager({
-  LocalAIServer,
-  path,
-  fs,
-  baseDir: __dirname,
-  getModelsDir,
-  loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
-});
-
 const pythonServerManager = createPythonServerManager({
   fs,
   path,
@@ -98,6 +89,17 @@ const pythonServerManager = createPythonServerManager({
   ensureRuntimeServerScripts: runtimePaths.ensureRuntimeServerScripts,
   getRuntimeServerBasePath: runtimePaths.getRuntimeServerBasePath,
   getGPTSoVITSDataDir: runtimePaths.getGPTSoVITSDataDir,
+});
+
+const localServerManager = createLocalServerManager({
+  LocalAIServer,
+  path,
+  fs,
+  baseDir: __dirname,
+  getModelsDir,
+  loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
+  ensureTTSBackendRunning: pythonServerManager.startGPTSoVITSServer,
+  stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
 });
 
 app.commandLine.appendSwitch('force_high_performance_gpu');
@@ -139,7 +141,6 @@ app.whenReady().then(() => {
   trayShortcutsManager.createTray();
   windowManager.createMainWindow();
 
-  pythonServerManager.startGPTSoVITSServer();
   pythonServerManager.startWhisperServer();
 
   app.on('activate', () => {

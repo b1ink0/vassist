@@ -216,7 +216,6 @@ export function createPythonServerManager({
         stopWhisperServer();
 
         setTimeout(async () => {
-          startGPTSoVITSServer();
           startWhisperServer();
           await localServerManager.restartIfRunning();
         }, 2000);
