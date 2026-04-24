@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+import { cn } from '../utils/cn';
 import VirtualAssistant from './VirtualAssistant';
 import ControlPanel from './ControlPanel';
 import ChatController from './ChatController';
@@ -106,7 +107,7 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
             onStateChange={setCurrentState}
           />
 
-          <div className={`transition-opacity duration-700 ${isChatUIReady ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={cn('transition-opacity duration-700', isChatUIReady ? 'opacity-100' : 'opacity-0')}>
             <ChatController
               modelDisabled={!enableModelLoading}
               requireSetupOnChatClick={requireSetupOnChatClick}

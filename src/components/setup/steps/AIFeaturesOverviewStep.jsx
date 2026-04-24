@@ -9,6 +9,8 @@ import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 import ShortcutsConfig from '../../common/ShortcutsConfig';
 import Logger from '../../../services/LoggerService';
+import { Card } from '../../ui';
+import { cn } from '../../../utils/cn';
 import { isAndroid } from '../../../utils/PlatformUtils';
 
 const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
@@ -116,21 +118,21 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
       </div>
 
       {/* Info Banner */}
-      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+      <Card variant="elevated">
         <div className="flex items-start gap-2">
           <Icon name="info" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-white/70">
             All features are <span className="font-semibold">enabled by default</span>. You can customize these settings later in the Settings panel.
           </p>
         </div>
-      </div>
+      </Card>
 
       {/* Feature Toggles */}
       <div className="space-y-2">
         {featureList.map((feature) => (
-          <div
+          <Card
             key={feature.key}
-            className="rounded-lg p-3 border border-white/10 hover:border-white/20 transition-all"
+            className="hover:border-white/20 transition-all"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -149,12 +151,11 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
                 />
               </div>
             </div>
-          </div>
-        ))}
+          </Card>
       </div>
 
       {/* Summary */}
-      <div className="p-3 rounded-lg bg-white/10 border border-white/20 mt-4">
+      <Card variant="elevated" className="mt-4">
         <div className="flex items-start gap-2">
           <Icon name="check-circle" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-white/80">
@@ -164,7 +165,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Keyboard Shortcuts Section */}
       {!isAndroid ? (
@@ -178,19 +179,19 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
             </p>
           </div>
 
-          <div className="rounded-lg p-2 md:p-4 border border-white/10 bg-white/5">
+          <Card padding="none" className="p-2 md:p-4">
             <ShortcutsConfig
               shortcuts={shortcuts}
               onShortcutsChange={handleShortcutsChange}
               isLightBackground={isLightBackground}
             />
-          </div> 
+          </Card> 
         </div>
         ) : null 
       }
 
       {/* Documentation Link - Final Step */}
-      <div className="mt-8 p-2 md:p-4 rounded-lg bg-gradient-to-r from-white/10 to-white/10 border border-white/20">
+      <Card variant="elevated" padding="none" className="mt-8 p-2 md:p-4">
         <div className="flex items-start gap-3">
           <Icon name="book" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -209,7 +210,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
             </a>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

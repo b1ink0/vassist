@@ -16,6 +16,7 @@ import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
 import VitsModelDownloader from './tts/VitsModelDownloader';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
+import { Button, Input, Select, Card, SettingsRow } from '../ui';
 
 const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTrigger }) => {
   const [clearingCache, setClearingCache] = useState(false);
@@ -51,30 +52,26 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
       <h3 className="text-base font-semibold text-white mb-4">TTS Configuration</h3>
       
       {/* Enable TTS Toggle */}
-      <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-        <label htmlFor="enable-tts" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-          Enable Text-to-Speech
-        </label>
-        <Toggle
-          id="enable-tts"
-          checked={ttsConfig.enabled}
-          onChange={(checked) => updateTTSConfig('enabled', checked)}
-        />
-      </div>
+      <Card variant="default">
+        <SettingsRow label="Enable Text-to-Speech">
+          <Toggle
+            id="enable-tts"
+            checked={ttsConfig.enabled}
+            onChange={(checked) => updateTTSConfig('enabled', checked)}
+          />
+        </SettingsRow>
+      </Card>
 
       {/* Provider Selection */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Provider</label>
-        <select
+        <Select
           value={ttsConfig.provider}
           onChange={(e) => updateTTSConfig('provider', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
           disabled={!ttsConfig.enabled}
-        >
-          {Object.entries(availableProviders).map(([key, value]) => (
-            <option key={value} value={value} className="bg-gray-900">{key}</option>
-          ))}
-        </select>
+          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: key }))}
+        />
         {isAndroid && (
           <p className="text-xs text-white/50">
             Using native Android TTS via local VITS model
@@ -101,13 +98,14 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                   <p className="text-sm text-white/70">VCTK (Multi-speaker, 109 voices, English)</p>
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-white/60">Speaker ID (0-108):</label>
-                    <input
+                    <Input
                       type="number"
                       min="0"
                       max="108"
                       value={ttsConfig['android-local']?.speakerId || 0}
                       onChange={(e) => updateTTSConfig('android-local.speakerId', parseInt(e.target.value) || 0)}
-                      className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-20 text-sm`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      className="w-20 text-sm"
                     />
                   </div>
                 </div>
@@ -156,12 +154,12 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Server URL</label>
-                <input
+                <Input
                   type="text"
                   value={ttsConfig['gptsovits-remote']?.endpoint || ''}
                   onChange={(e) => updateTTSConfig('gptsovits-remote.endpoint', e.target.value)}
                   placeholder="http://localhost:11438"
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                  variant={isLightBackground ? 'dark' : 'default'}
                 />
                 <p className="text-xs text-white/50">
                   URL of your remote GPT-SoVITS server (will append /v1)
@@ -217,8 +215,7 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                 <div className="space-y-2 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
                   <h4 className="text-sm font-semibold text-white/90">Cache Management</h4>
                   <div className="flex gap-2">
-                    <button 
-                      onClick={async () => {
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" onClick={async () => {
                         try {
                           const size = await TTSServiceProxy.getKokoroCacheSize();
                           setCacheSize(size);
@@ -226,12 +223,11 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                           Logger.error('other', 'Failed to get cache size:', error);
                         }
                       }}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg flex items-center gap-1.5`}
                       title="Check cache size"
                     >
                       <Icon name="stats" size={14} /> Check Size
-                    </button>
-                    <button 
+                    </Button>
+                    <Button variant={isLightBackground ? 'dark' : 'default'} size="sm"
                       onClick={async () => {
                         try {
                           setClearingCache(true);
@@ -245,19 +241,14 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                         }
                       }}
                       disabled={clearingCache}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1 text-xs rounded-lg disabled:opacity-50 flex items-center gap-1.5`}
                       title="Clear model cache"
                     >
                       {clearingCache ? (
-                        <>
-                          <Icon name="loading" size={14} className="animate-spin" /> Clearing...
-                        </>
+                        <><Icon name="loading" size={14} className="animate-spin" /> Clearing...</>
                       ) : (
-                        <>
-                          <Icon name="delete" size={14} /> Clear Cache
-                        </>
+                        <><Icon name="delete" size={14} /> Clear Cache</>
                       )}
-                    </button>
+                    </Button>
                   </div>
                   {cacheSize !== null && cacheSize.usage !== undefined && (
                     <div className="text-xs text-white/60">
@@ -274,38 +265,37 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">API Key</label>
-                <input
+                <Input
                   type="password"
                   value={ttsConfig.openai.apiKey}
                   onChange={(e) => updateTTSConfig('openai.apiKey', e.target.value)}
                   placeholder="sk-..."
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                  variant={isLightBackground ? 'dark' : 'default'}
                 />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Model</label>
-                <select
+                <Select
                   value={ttsConfig.openai.model}
                   onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                >
-                  <option value="tts-1" className="bg-gray-900">tts-1 (Standard)</option>
-                  <option value="tts-1-hd" className="bg-gray-900">tts-1-hd (HD)</option>
-                </select>
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={[
+                    { value: 'tts-1', label: 'tts-1 (Standard)' },
+                    { value: 'tts-1-hd', label: 'tts-1-hd (HD)' },
+                  ]}
+                />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Voice</label>
-                <select
+                <Select
                   value={ttsConfig.openai.voice}
                   onChange={(e) => updateTTSConfig('openai.voice', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                >
-                  {Object.entries(OpenAIVoices).map(([key, value]) => (
-                    <option key={value} value={value} className="bg-gray-900">
-                      {key.charAt(0) + key.slice(1).toLowerCase()}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={Object.entries(OpenAIVoices).map(([key, value]) => ({ value, label: key.charAt(0) + key.slice(1).toLowerCase() }))}
+                />
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             </>
           )}
@@ -315,21 +305,11 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">API Key</label>
-                <input
-                  type="password"
-                  value={ttsConfig.elevenlabs?.apiKey || ''}
-                  onChange={(e) => updateTTSConfig('elevenlabs.apiKey', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="password" value={ttsConfig.elevenlabs?.apiKey || ''} onChange={(e) => updateTTSConfig('elevenlabs.apiKey', e.target.value)} variant={isLightBackground ? 'dark' : 'default'} />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Voice ID</label>
-                <input
-                  type="text"
-                  value={ttsConfig.elevenlabs?.voiceId || ''}
-                  onChange={(e) => updateTTSConfig('elevenlabs.voiceId', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="text" value={ttsConfig.elevenlabs?.voiceId || ''} onChange={(e) => updateTTSConfig('elevenlabs.voiceId', e.target.value)} variant={isLightBackground ? 'dark' : 'default'} />
               </div>
             </>
           )}
@@ -339,46 +319,22 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
-                <input
-                  type="text"
-                  value={ttsConfig['openai-compatible']?.endpoint ?? ''}
-                  onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)}
-                  placeholder="http://localhost:8000"
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="text" value={ttsConfig['openai-compatible']?.endpoint ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)} placeholder="http://localhost:8000" variant={isLightBackground ? 'dark' : 'default'} />
                 <p className="text-xs text-white/50">
                   Base URL (will append /v1/audio/speech)
                 </p>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
-                <input
-                  type="password"
-                  value={ttsConfig['openai-compatible']?.apiKey ?? ''}
-                  onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)}
-                  placeholder="Leave empty if not required"
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="password" value={ttsConfig['openai-compatible']?.apiKey ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.apiKey', e.target.value)} placeholder="Leave empty if not required" variant={isLightBackground ? 'dark' : 'default'} />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Model</label>
-                <input
-                  type="text"
-                  value={ttsConfig['openai-compatible']?.model ?? ''}
-                  onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)}
-                  placeholder="tts"
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="text" value={ttsConfig['openai-compatible']?.model ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)} placeholder="tts" variant={isLightBackground ? 'dark' : 'default'} />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Voice</label>
-                <input
-                  type="text"
-                  value={ttsConfig['openai-compatible']?.voice ?? ''}
-                  onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)}
-                  placeholder="default"
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                />
+                <Input type="text" value={ttsConfig['openai-compatible']?.voice ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.voice', e.target.value)} placeholder="default" variant={isLightBackground ? 'dark' : 'default'} />
               </div>
             </>
           )}
@@ -390,38 +346,33 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
         {/* Test Text Input */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-white/90">Test Text</label>
-          <input
-            type="text"
-            value={testText}
-            onChange={(e) => setTestText(e.target.value)}
-            placeholder="Enter text to test TTS..."
-            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-          />
+          <Input type="text" value={testText} onChange={(e) => setTestText(e.target.value)} placeholder="Enter text to test TTS..." variant={isLightBackground ? 'dark' : 'default'} />
         </div>
         
         {/* Test Language (only for GPT-SoVITS) */}
         {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && (
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Test Language</label>
-            <select
-              value={testLanguage}
-              onChange={(e) => setTestLanguage(e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value={GPTSoVITSLanguages.ENGLISH}>English</option>
-              <option value={GPTSoVITSLanguages.JAPANESE}>Japanese (日本語)</option>
-              <option value={GPTSoVITSLanguages.CHINESE}>Chinese (中文)</option>
-            </select>
+          <Select
+            value={testLanguage}
+            onChange={(e) => setTestLanguage(e.target.value)}
+            variant={isLightBackground ? 'dark' : 'default'}
+            options={[
+              { value: GPTSoVITSLanguages.ENGLISH, label: 'English' },
+              { value: GPTSoVITSLanguages.JAPANESE, label: 'Japanese (日本語)' },
+              { value: GPTSoVITSLanguages.CHINESE, label: 'Chinese (中文)' },
+            ]}
+          />
           </div>
         )}
         
-        <button 
+        <Button
+          variant={isLightBackground ? 'dark' : 'default'}
           onClick={() => testTTSConnection(testText)}
           disabled={!ttsConfig.enabled || ttsTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test TTS
-        </button>
+        </Button>
       </div>
     </div>
   );

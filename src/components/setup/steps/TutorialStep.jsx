@@ -57,7 +57,7 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
       </div>
 
       {/* Scrollable Tutorial Gallery */}
-      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 scrollbar-glass hover-scrollbar">
         {tutorials.map((tutorial, index) => (
           <div
             key={index}

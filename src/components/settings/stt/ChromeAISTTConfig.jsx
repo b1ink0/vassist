@@ -8,6 +8,7 @@ import { Icon } from '../../icons';
 import { ChromeAILanguages } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
+import { Button, Select } from '../../ui';
 
 const ChromeAISTTConfig = ({ 
   config, 
@@ -88,15 +89,14 @@ const ChromeAISTTConfig = ({
               
               {/* Download Button */}
               {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && onStartDownload && (
-                <button
+                <Button
                   onClick={onStartDownload}
-                  className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="mt-3 text-xs w-full flex items-center justify-center gap-2"
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <Icon name="download" size={14} />
-                    <span>Start Model Download</span>
-                  </div>
-                </button>
+                  <Icon name="download" size={14} />
+                  <span>Start Model Download</span>
+                </Button>
               )}
               
               {/* Refresh Status Button - always show when status exists */}
@@ -118,17 +118,12 @@ const ChromeAISTTConfig = ({
       {/* Output Language */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Output Language</label>
-        <select
+        <Select
           value={config.outputLanguage || config.language || ChromeAILanguages.ENGLISH}
           onChange={(e) => onChange({ ...config, outputLanguage: e.target.value, language: e.target.value })}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          {languageOptions.map((lang) => (
-            <option key={lang.code} value={lang.code} className="bg-gray-900">
-              {lang.name} ({lang.code})
-            </option>
-          ))}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={languageOptions.map((lang) => ({ value: lang.code, label: `${lang.name} (${lang.code})` }))}
+        />
         <p className="text-xs text-white/50">
           Language for transcription output. Chrome AI currently supports: English, Spanish, and Japanese.
         </p>

@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react';
+import { cn } from '../../../utils/cn';
+import { Card, SettingsRow } from '../../ui';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
@@ -85,26 +87,20 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
       </div>
 
       {/* Single Combined Panel */}
-      <div className="rounded-xl p-6 mb-6 border border-white/10">
+      <Card padding="none" className="rounded-xl p-6 mb-6">
         {/* Enable/Disable Toggle at Top */}
-        <div className="p-5 rounded-xl border-2 bg-white/5 border-white/10 mb-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <h4 className="text-base font-semibold text-white mb-1">
-                Enable Avatar
-              </h4>
-              <p className="text-xs text-white/60">
-                Display an animated avatar alongside your chat
-              </p>
-            </div>
-            
-            {/* Toggle Switch */}
+        <Card padding="none" className="p-5 rounded-xl border-2 border-white/10 mb-6">
+          <SettingsRow
+            label="Enable Avatar"
+            description="Display an animated avatar alongside your chat"
+            className="items-start mb-4"
+          >
             <Toggle
               checked={characterEnabled}
               onChange={handleCharacterToggle}
             />
-          </div>
-        </div>
+          </SettingsRow>
+        </Card>
 
         {characterEnabled ? (
           /* Character ENABLED - Show Display Mode + Position */
@@ -115,11 +111,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
               <div className="grid grid-cols-1 gap-4">
                 {/* Standard Mode */}
                 <div 
-                  className={`relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${
-                    displayMode === 'normal' 
-                      ? 'border-white/30 bg-white/10' 
-                      : 'border-white/10 bg-white/5 hover:border-white/20'
-                  }`}
+                  className={cn('relative rounded-xl border-2 transition-all duration-300 cursor-pointer', displayMode === 'normal' ? 'border-white/30 bg-white/10' : 'border-white/10 bg-white/5 hover:border-white/20')}
                   onClick={() => handleDisplayModeChange('normal')}
                 >
                   {displayMode === 'normal' && (
@@ -164,11 +156,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
 
                 {/* Portrait Mode */}
                 <div 
-                  className={`relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${
-                    displayMode === 'portrait' 
-                      ? 'border-white/30 bg-white/10' 
-                      : 'border-white/10 bg-white/5 hover:border-white/20'
-                  }`}
+                  className={cn('relative rounded-xl border-2 transition-all duration-300 cursor-pointer', displayMode === 'portrait' ? 'border-white/30 bg-white/10' : 'border-white/10 bg-white/5 hover:border-white/20')}
                   onClick={() => handleDisplayModeChange('portrait')}
                 >
                   {displayMode === 'portrait' && (
@@ -224,11 +212,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                       <button
                         key={position.key}
                         onClick={() => handlePositionChange(position.key)}
-                        className={`relative p-3 rounded-lg border-2 transition-all duration-300 text-left ${
-                          isSelected
-                            ? 'border-white/30 bg-white/10 shadow-lg shadow-white/20'
-                            : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
-                        }`}
+                        className={cn('relative p-3 rounded-lg border-2 transition-all duration-300 text-left', isSelected ? 'border-white/30 bg-white/10 shadow-lg shadow-white/20' : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10')}
                       >
                         {isSelected && (
                           <div className="absolute top-1 right-1">
@@ -238,9 +222,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
                           </div>
                         )}
 
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
-                          isSelected ? 'bg-white/20' : 'bg-white/10'
-                        }`}>
+                        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center mb-2', isSelected ? 'bg-white/20' : 'bg-white/10')}>
                           <Icon 
                             name={position.icon} 
                             size={20} 
@@ -334,10 +316,10 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Additional Info */}
-      <div className="bg-white/10 border border-white/20 rounded-xl p-2 md:p-4 mb-6">
+      <Card variant="elevated" padding="none" className="rounded-xl p-2 md:p-4 mb-6">
         <div className="flex items-start gap-3">
           <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
           <div>
@@ -348,7 +330,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
             </p>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

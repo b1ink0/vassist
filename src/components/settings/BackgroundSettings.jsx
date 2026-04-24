@@ -4,9 +4,11 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { cn } from '../../utils/cn';
 import Icon from '../icons/Icon';
 import Logger from '../../services/LoggerService';
 import { backgroundStorageService } from '../../services/BackgroundStorageService';
+import { Button } from '../ui';
 
 const BackgroundSettings = ({ isLightBackground }) => {
   const [backgrounds, setBackgrounds] = useState([]);
@@ -121,13 +123,14 @@ const BackgroundSettings = ({ isLightBackground }) => {
 
       {/* Clear Background Button */}
       {activeBackgroundId && (
-        <button
+        <Button
+          variant={isLightBackground ? 'dark' : 'default'}
           onClick={handleClear}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+          className="w-full flex items-center justify-center gap-2"
         >
           <Icon name="x" size={14} />
           Clear Background
-        </button>
+        </Button>
       )}
 
       {/* Background List */}
@@ -136,11 +139,7 @@ const BackgroundSettings = ({ isLightBackground }) => {
           {backgrounds.map((bg) => (
             <div
               key={bg.id}
-              className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
-                bg.isActive 
-                  ? 'border-white/50 ring-2 ring-white/20' 
-                  : 'border-transparent hover:border-white/30'
-              }`}
+              className={cn('relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all', bg.isActive ? 'border-white/50 ring-2 ring-white/20' : 'border-transparent hover:border-white/30')}
               onClick={() => handleSetActive(bg.id)}
             >
               <div className="aspect-video bg-white/5">

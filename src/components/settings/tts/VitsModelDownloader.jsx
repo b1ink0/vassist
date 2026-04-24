@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../icons';
+import { Button } from '../../ui';
 
 /**
  * VitsModelDownloader - Download manager for VITS-VCTK TTS model (Android only)
@@ -119,18 +120,22 @@ const VitsModelDownloader = ({ androidAPI, isLightBackground = false }) => {
       )}
 
       {status.downloaded ? (
-        <button
+        <Button
           onClick={handleDelete}
-          className={`w-full glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5`}
+          variant={isLightBackground ? 'dark' : 'default'}
+          size="sm"
+          className="w-full"
         >
           <Icon name="trash" size={12} />
           <span>Delete Model</span>
-        </button>
+        </Button>
       ) : (
-        <button
+        <Button
           onClick={handleDownload}
           disabled={downloading}
-          className={`w-full glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50`}
+          variant={isLightBackground ? 'dark' : 'default'}
+          size="sm"
+          className="w-full"
         >
           {downloading ? (
             <>
@@ -161,7 +166,7 @@ const VitsModelDownloader = ({ androidAPI, isLightBackground = false }) => {
               <span>Download Model (~145 MB)</span>
             </>
           )}
-        </button>
+        </Button>
       )}
 
       {success && (

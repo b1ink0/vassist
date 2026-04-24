@@ -8,6 +8,8 @@
 import { useSetup } from '../../contexts/SetupContext';
 import { Icon } from '../icons';
 import { useEffect, useRef } from 'react';
+import { cn } from '../../utils/cn';
+import { Button } from '../ui';
 
 // Import step components
 import WelcomeStep from './steps/WelcomeStep';
@@ -88,7 +90,7 @@ const SetupWizard = () => {
       {/* Main setup container */}
       <div ref={containerRef} className="relative w-full max-w-3xl h-[95vh] mx-2 sm:mx-4 flex flex-col z-10">
         {/* Compact Header */}
-        <div className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} rounded-t-xl p-3 sm:p-4 flex-shrink-0`}>
+        <div className={cn(isLightBackground ? 'glass-container-dark' : 'glass-container', 'rounded-t-xl p-3 sm:p-4 flex-shrink-0')}>
           {/* Step indicator */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -96,7 +98,7 @@ const SetupWizard = () => {
                 <Icon name="settings" size={16} className='text-white' />
               </div>
               <div>
-                <h1 className='text-sm sm:text-base font-bold ${isLightBackground text-white'>Setup</h1>
+                <h1 className="text-sm sm:text-base font-bold text-white">Setup</h1>
                 <p className='text-xs text-white/70'>
                   {currentStep}/{totalSteps}: {getStepTitle()}
                 </p>
@@ -116,44 +118,33 @@ const SetupWizard = () => {
         {/* Content area */}
         <div 
           ref={contentRef}
-          className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} flex-1 overflow-y-auto p-2 md:p-4 sm:p-6`}
-          style={{ 
-            scrollbarWidth: 'thin', 
-            scrollbarColor: isLightBackground 
-              ? 'rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.1)' 
-              : 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)'
-          }}
+          className={cn(isLightBackground ? 'glass-container-dark' : 'glass-container', 'flex-1 overflow-y-auto p-2 md:p-4 sm:p-6 scrollbar-glass hover-scrollbar')}
         >
           {getStepComponent()}
         </div>
 
         {/* Compact Navigation footer */}
-        <div className={`${isLightBackground ? 'glass-container-dark' : 'glass-container'} rounded-b-xl p-3 sm:p-4 flex-shrink-0`}>
+        <div className={cn(isLightBackground ? 'glass-container-dark' : 'glass-container', 'rounded-b-xl p-3 sm:p-4 flex-shrink-0')}>
           <div className="flex items-center justify-between gap-2">
             {/* Previous button */}
-            <button
+            <Button
               onClick={previousStep}
               disabled={!canGoBack}
-              className={`glass-button px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
-                canGoBack
-                  ? `hover:${isLightBackground ? 'bg-gray-800/20' : 'bg-white/20'} ${isLightBackground ? 'text-gray-800' : 'text-white'}`
-                  : `opacity-50 cursor-not-allowed ${isLightBackground ? 'text-gray-800/50' : 'text-white/50'}`
-              }`}
+              variant={canGoBack ? 'default' : 'ghost'}
+              className={cn('px-3 sm:px-4 py-2 text-sm font-medium flex items-center gap-1', canGoBack ? (isLightBackground ? 'text-gray-800' : 'text-white') : (isLightBackground ? 'text-gray-800/50' : 'text-white/50'))}
             >
               <Icon name="arrow-left" size={16} />
               <span className="hidden sm:inline">Previous</span>
-            </button>
+            </Button>
 
             {/* Next button */}
-            <button
+            <Button
               onClick={handleNextClick}
-              className={`glass-button px-3 sm:px-4 py-2 rounded-lg text-sm font-medium ${
-                isLightBackground ? 'bg-gray-800/10 hover:bg-gray-800/20 text-gray-800' : 'bg-white/10 hover:bg-white/20 text-white'
-              } transition-all flex items-center gap-1`}
+              className={cn('px-3 sm:px-4 py-2 text-sm font-medium', isLightBackground ? 'text-gray-800' : 'text-white', 'flex items-center gap-1')}
             >
               <span className="hidden sm:inline">{isLastStep ? 'Finish' : 'Next'}</span>
               <Icon name="arrow-right" size={16} className="hidden sm:block" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

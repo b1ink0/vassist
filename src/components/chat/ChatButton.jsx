@@ -7,6 +7,8 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useDesktop } from '../contexts/DesktopContext';
 import { Icon } from './icons';
+import { Button } from './ui';
+import { cn } from '../utils/cn';
 import Logger from '../services/LoggerService';
 import emoteStorageService from '../services/EmoteStorageService';
 import emotePlayerService from '../services/EmotePlayerService';
@@ -1090,25 +1092,18 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         {emotes.length === 0 ? (
           <div 
             style={{ scrollSnapAlign: 'center' }} 
-            className={`glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap ${
-              isLightBackground 
-                ? 'glass-button-dark' 
-                : ''
-            } backdrop-blur-[10px] text-white/50 cursor-default pointer-events-none`}
+            className={cn('glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap', isLightBackground && 'glass-button-dark', 'backdrop-blur-[10px] text-white/50 cursor-default pointer-events-none')}
           >
             <span className="truncate">No emotes</span>
           </div>
         ) : (
           <>
             {/* Auto-play button */}
-            <button
+            <Button
               onClick={handleAutoPlayToggle}
               style={{ scrollSnapAlign: 'center' }}
-              className={`glass-button flex items-center justify-center gap-2 px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
-                isLightBackground 
-                  ? 'glass-button-dark' 
-                  : ''
-              } backdrop-blur-[10px] ${isAutoPlayActive ? 'ring-2 ring-white/50' : ''}`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className={cn('flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', isAutoPlayActive && 'ring-2 ring-white/50')}
               title={isAutoPlayActive ? 'Stop auto-play' : 'Start auto-play'}
             >
               <svg 
@@ -1125,11 +1120,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                 <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
               </svg>
               <span className="truncate">Auto</span>
-            </button>
+            </Button>
             
             {/* Emote list */}
             {emotes.map((emote, index) => (
-              <button
+              <Button
                 key={emote.id}
                 onClick={async () => {
                   try {
@@ -1145,11 +1140,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                   }
                 }}
                 style={{ scrollSnapAlign: 'center' }}
-                className={`glass-button flex items-center justify-center gap-2 px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap ${
-                  isLightBackground 
-                    ? 'glass-button-dark' 
-                    : ''
-                } backdrop-blur-[10px] ${currentPlayingEmoteId === emote.id ? 'ring-2 ring-white/50' : ''}`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className={cn('flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', currentPlayingEmoteId === emote.id && 'ring-2 ring-white/50')}
                 title={emote.name}
               >
                 {currentPlayingEmoteId === emote.id && (
@@ -1168,7 +1160,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                   </svg>
                 )}
                 <span className="truncate">{emote.name}</span>
-              </button>
+              </Button>
             ))}
           </>
         )}
@@ -1201,79 +1193,67 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         {panelMode === 'avatar' ? (
           <>
             {/* Default Model */}
-            <button
+            <Button
               onClick={() => handleModelSelect(null)}
               style={{ scrollSnapAlign: 'center' }}
-              className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-                isLightBackground 
-                  ? 'glass-button-dark' 
-                  : ''
-              } backdrop-blur-[10px] ${selectedModelId === null ? 'ring-2 ring-white/50' : ''}`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className={cn('flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', selectedModelId === null && 'ring-2 ring-white/50')}
               title="VAssist Default"
             >
               {selectedModelId === null && (
                 <Icon name="check" size={14} className="flex-shrink-0" />
               )}
               <span className="truncate flex-1">VAssist Default</span>
-            </button>
+            </Button>
 
             {/* Custom Models */}
             {models.map((model) => (
-              <button
+              <Button
                 key={model.id}
                 onClick={() => handleModelSelect(model.id)}
                 style={{ scrollSnapAlign: 'center' }}
-                className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-                  isLightBackground 
-                    ? 'glass-button-dark' 
-                    : ''
-                } backdrop-blur-[10px] ${selectedModelId === model.id ? 'ring-2 ring-white/50' : ''}`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className={cn('flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', selectedModelId === model.id && 'ring-2 ring-white/50')}
                 title={model.name}
               >
                 {selectedModelId === model.id && (
                   <Icon name="check" size={14} className="flex-shrink-0" />
                 )}
                 <span className="truncate flex-1">{model.name}</span>
-              </button>
+              </Button>
             ))}
           </>
         ) : (
           <>
             {/* No Stage Option */}
-            <button
+            <Button
               onClick={() => handleStageSelect(null)}
               style={{ scrollSnapAlign: 'center' }}
-              className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-                isLightBackground 
-                  ? 'glass-button-dark' 
-                  : ''
-              } backdrop-blur-[10px] ${selectedStageId === null ? 'ring-2 ring-white/50' : ''}`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className={cn('flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', selectedStageId === null && 'ring-2 ring-white/50')}
               title="No Stage"
             >
               {selectedStageId === null && (
                 <Icon name="check" size={14} className="flex-shrink-0" />
               )}
               <span className="truncate flex-1">No Stage</span>
-            </button>
+            </Button>
 
             {/* Stage list */}
             {stages.map((stage) => (
-              <button
+              <Button
                 key={stage.id}
                 onClick={() => handleStageSelect(stage.id)}
                 style={{ scrollSnapAlign: 'center' }}
-                className={`glass-button flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap ${
-                  isLightBackground 
-                    ? 'glass-button-dark' 
-                    : ''
-                } backdrop-blur-[10px] ${selectedStageId === stage.id ? 'ring-2 ring-white/50' : ''}`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className={cn('flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', selectedStageId === stage.id && 'ring-2 ring-white/50')}
                 title={stage.name}
               >
                 {selectedStageId === stage.id && (
                   <Icon name="check" size={14} className="flex-shrink-0" />
                 )}
                 <span className="truncate flex-1">{stage.name}</span>
-              </button>
+              </Button>
             ))}
           </>
         )}
@@ -1293,52 +1273,48 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       >
         <div className="flex gap-1 justify-between">
           {/* 3D/2D Toggle Button */}
-          <button
+          <Button
             onClick={handle3DToggle}
-            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-              isLightBackground ? 'glass-button-dark' : ''
-            } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'ring-2 ring-white/50' : ''}`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]', sceneRef?.current?.metadata?.getCameraMode?.() === '3D' && 'ring-2 ring-white/50')}
             title={sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? 'Switch to 2D Mode' : 'Switch to 3D Mode'}
           >
             <span className="font-medium">{sceneRef?.current?.metadata?.getCameraMode?.() === '3D' ? '3D' : '2D'}</span>
-          </button>
+          </Button>
 
           {/* Reset Camera Button */}
-          <button
+          <Button
             onClick={handleCameraReset}
-            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-              isLightBackground ? 'glass-button-dark' : ''
-            } backdrop-blur-[10px]`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className="flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]"
             title="Reset Camera Position"
           >
             <Icon 
               name="refresh-cw" 
               size={16} 
             />
-          </button>
+          </Button>
 
           {/* Camera Lock Toggle Button */}
-          <button
+          <Button
             onClick={handleCameraLockToggle}
-            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-              isLightBackground ? 'glass-button-dark' : ''
-            } backdrop-blur-[10px] ${!sceneRef?.current?.metadata?.isCameraLocked?.() ? 'ring-2 ring-white/50' : ''}`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]', !sceneRef?.current?.metadata?.isCameraLocked?.() && 'ring-2 ring-white/50')}
             title={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'Unlock Camera' : 'Lock Camera'}
           >
             <Icon 
               name={sceneRef?.current?.metadata?.isCameraLocked?.() ? 'lock' : 'unlock'} 
               size={16} 
             />
-          </button>
+          </Button>
         </div>
 
         <div className="flex gap-1 justify-between">
           {/* Camera Save Toggle Button */}
-          <button
+          <Button
             onClick={handleCameraSaveToggle}
-            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-              isLightBackground ? 'glass-button-dark' : ''
-            } backdrop-blur-[10px] ${sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'ring-2 ring-white/50' : ''}`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]', sceneRef?.current?.metadata?.isCameraSaveEnabled?.() && 'ring-2 ring-white/50')}
             title={sceneRef?.current?.metadata?.isCameraSaveEnabled?.() ? 'Disable Position Saving' : 'Enable Position Saving'}
           >
             <div className="relative w-4 h-4">
@@ -1352,10 +1328,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                 </div>
               )}
             </div>
-          </button>
+          </Button>
 
           {/* Stage Button */}
-          <button
+          <Button
             onClick={() => {
               if (isEmotePanelOpen) setIsEmotePanelOpen(false);
               if (isAvatarPanelOpen && panelMode === 'stage') {
@@ -1367,16 +1343,15 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                 setIsAvatarPanelOpen(true);
               }
             }}
-            className={`glass-button flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] ${
-              isLightBackground ? 'glass-button-dark' : ''
-            } backdrop-blur-[10px]`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className="flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]"
             title={isAvatarPanelOpen && panelMode === 'stage' ? 'Switch to Avatar List' : (isAvatarPanelOpen && panelMode === 'avatar' ? 'Switch to Stage List' : 'Select Stage')}
           >
             <Icon 
               name={isAvatarPanelOpen && panelMode === 'avatar' ? 'box' : 'user'} 
               size={16} 
             />
-          </button>
+          </Button>
         </div>
       </div>
     )}
@@ -1392,55 +1367,52 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       {showUtilityButtons && (
       <>
       {/* Reload Button */}
-      <button
+      <Button
         onClick={() => window.location.reload()}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
-          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-        }`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-transform', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'))}
         title="Reload Page"
       >
         <Icon 
           name="refresh" 
           size={24} 
-          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
         />
-      </button>
+      </Button>
 
       {/* Emote Button */}
-      <button
+      <Button
         onClick={() => {
           if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
           setIsEmotePanelOpen(!isEmotePanelOpen);
         }}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
-          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-        }`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-transform', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'))}
         title="Emotes"
       >
         <Icon 
           name="music" 
           size={24} 
-          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg ${isEmotePlaying ? 'animate-[spin_2s_linear_infinite]' : ''}`}
+          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg', isEmotePlaying && 'animate-[spin_2s_linear_infinite]')}
         />
-      </button>
+      </Button>
 
       {/* Avatar Button */}
-      <button
+      <Button
         onClick={() => {
           if (isEmotePanelOpen) setIsEmotePanelOpen(false);
           setIsAvatarPanelOpen(!isAvatarPanelOpen);
         }}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
-          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-        } ${isAvatarPanelOpen && panelMode === 'avatar' ? 'ring-2 ring-white/50' : ''}`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-transform', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'), isAvatarPanelOpen && panelMode === 'avatar' && 'ring-2 ring-white/50')}
         title="Change Avatar"
       >
         <Icon 
           name="user" 
           size={24} 
-          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
         />
-      </button>
+      </Button>
 
       {/* Zoom Control */}
       <ZoomControl
@@ -1456,7 +1428,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       )}
 
       {/* Chat Button */}
-      <button
+      <Button
         ref={buttonRef}
         onClick={handleClick}
         onMouseDown={handleMouseDown}
@@ -1465,19 +1437,16 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           willChange: isDragging ? 'left, top' : 'auto',
           transition: isDragging ? 'none' : undefined,
         }}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center ${
-          modelDisabled ? '' : 'hover:scale-110 active:scale-95 transition-transform'
-        } ${isDragOverButton ? 'ring-2 ring-blue-400' : ''} ${
-          isAppearing ? 'animate-fade-in' : (!isVisible ? 'animate-fade-out' : '')
-        } ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'}`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className={cn('w-12 h-12 rounded-full', !modelDisabled && 'hover:scale-110 active:scale-95 transition-transform', isDragOverButton && 'ring-2 ring-blue-400', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'), isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30')}
         title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
       >
         <Icon 
           name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
           size={24} 
-          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
         />
-      </button>
+      </Button>
     </div>
     </>
   );

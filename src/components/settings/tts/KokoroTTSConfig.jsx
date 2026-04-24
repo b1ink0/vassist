@@ -9,6 +9,8 @@ import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 import { KokoroVoices, KokoroDevice } from '../../../config/aiConfig';
 import StatusMessage from '../../common/StatusMessage';
+import { cn } from '../../../utils/cn';
+import { Button, Select, Input } from '../../ui';
 
 /**
  * Helper function to format voice key into a readable label
@@ -149,21 +151,12 @@ const KokoroTTSConfig = ({
             Choose the voice that will speak to you. Each voice has a unique personality and accent.
           </p>
         )}
-        <select
+        <Select
           value={config.voice || KokoroVoices.AF_HEART}
           onChange={(e) => handleChange('voice', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          {voiceGroups.map((group) => (
-            <optgroup key={group.label} label={group.label} className="bg-gray-800">
-              {group.voices.map((voice) => (
-                <option key={voice.value} value={voice.value} className="bg-gray-900">
-                  {voice.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          groups={voiceGroups.map((g) => ({ label: g.label, options: g.voices }))}
+        />
       </div>
 
       {/* Speed Control */}
@@ -204,17 +197,12 @@ const KokoroTTSConfig = ({
             <strong>WASM</strong> is slower but smaller (~86MB) and works on any device.
           </p>
         )}
-        <select
+        <Select
           value={config.device || KokoroDevice.AUTO}
           onChange={(e) => handleChange('device', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          {deviceOptions.map((option) => (
-            <option key={option.value} value={option.value} className="bg-gray-900">
-              {option.label}
-            </option>
-          ))}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={deviceOptions}
+        />
         {isSetupMode && (
           <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
             <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
@@ -253,12 +241,12 @@ const KokoroTTSConfig = ({
           {!isSetupMode && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-white/90">Model ID</label>
-              <input
+              <Input
                 type="text"
                 value={config.modelId || ''}
                 onChange={(e) => handleChange('modelId', e.target.value)}
                 placeholder="onnx-community/Kokoro-82M-v1.0-ONNX"
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
               <p className="text-xs text-white/50">
                 HuggingFace model ID (Leave empty to use default: onnx-community/Kokoro-82M-v1.0-ONNX)
@@ -305,12 +293,11 @@ const KokoroTTSConfig = ({
           )}
           
           <div className="flex items-center justify-between gap-3">
-            <button 
+            <Button
+              variant={isLightBackground ? 'dark' : 'default'}
               onClick={onInitialize}
               disabled={kokoroStatus.downloading || kokoroStatus.initialized || kokoroStatus.checking}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                isSetupMode && !kokoroStatus.initialized ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-transparent animate-pulse' : ''
-              }`}
+              className={cn('flex items-center gap-2', isSetupMode && !kokoroStatus.initialized ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-transparent animate-pulse' : '')}
             >
               {kokoroStatus.checking ? (
                 <>
@@ -333,17 +320,18 @@ const KokoroTTSConfig = ({
                   <span>Initialize Model</span>
                 </>
               )}
-            </button>
+            </Button>
 
             {onCheckStatus && (
-              <button 
+              <Button
+                variant={isLightBackground ? 'dark' : 'default'}
+                size="icon"
                 onClick={onCheckStatus}
                 disabled={kokoroStatus.checking}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-2 text-sm rounded-lg disabled:opacity-50`}
                 title="Check model status"
               >
                 <Icon name="refresh" size={16} />
-              </button>
+              </Button>
             )}
           </div>
 
@@ -391,12 +379,11 @@ const KokoroTTSConfig = ({
             </div>
           )}
           
-          <button
+          <Button
+            variant={isLightBackground ? 'dark' : 'default'}
             onClick={onTestVoice}
             disabled={testingVoice}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full py-2 text-sm font-medium rounded-lg ${
-              isSetupMode ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent' : ''
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={cn('w-full', isSetupMode ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent' : '')}
           >
             <div className="flex items-center justify-center gap-2">
               {testingVoice ? (
@@ -411,17 +398,13 @@ const KokoroTTSConfig = ({
                 </>
               )}
             </div>
-          </button>
-
-          {/* Info message for gibberish audio */}
-          <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
-            <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
-              <Icon name="info" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
-              <span>
-                If you hear gibberish, switch to <strong>WASM backend</strong> or turn <strong>OFF</strong> hardware acceleration in Chrome settings.
-              </span>
-            </p>
-          </div>
+          </Button>
+          <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
+            <Icon name="info" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
+            <span>
+              If you hear gibberish, switch to <strong>WASM backend</strong> or turn <strong>OFF</strong> hardware acceleration in Chrome settings.
+            </span>
+          </p>
         </>
       )}
     </div>

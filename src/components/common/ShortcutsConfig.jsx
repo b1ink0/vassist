@@ -122,19 +122,9 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
         ref={inputRef}
         tabIndex={disabled ? -1 : 0}
         onClick={handleClick}
-        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} flex-1 cursor-pointer transition-all ${
-          isRecording 
-            ? 'ring-1 ring-white/20' 
-            : ''
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={cn('glass-input', isLightBackground && 'glass-input-dark', 'flex-1 cursor-pointer transition-all', isRecording && 'ring-1 ring-white/20', disabled && 'opacity-50 cursor-not-allowed')}
       >
-        <span className={`text-sm ${
-          isRecording 
-            ? 'text-white/90' 
-            : value 
-              ? 'text-white'
-              : 'text-white/40'
-        }`}>
+        <span className={cn('text-sm', isRecording ? 'text-white/90' : value ? 'text-white' : 'text-white/40')}>
           {isRecording ? 'Press keys...' : formatKeyCombo(value) || placeholder}
         </span>
       </div>
@@ -142,11 +132,7 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
       {value && !disabled && (
         <button
           onClick={handleClear}
-          className={`p-2 rounded-lg transition-colors ${
-            isLightBackground 
-              ? 'hover:bg-black/20 text-white/60 hover:text-white' 
-              : 'hover:bg-white/10 text-white/60 hover:text-white'
-          }`}
+          className={cn('p-2 rounded-lg transition-colors', isLightBackground ? 'hover:bg-black/20 text-white/60 hover:text-white' : 'hover:bg-white/10 text-white/60 hover:text-white')}
           title="Clear shortcut"
         >
           <Icon name="close" size={16} />

@@ -1,17 +1,5 @@
-/**
- * @fileoverview Custom toggle switch for settings.
- */
+import { cn } from '../../utils/cn';
 
-/**
- * Toggle switch component.
- * 
- * @component
- * @param {Object} props - Component props
- * @param {boolean} props.checked - Whether toggle is checked
- * @param {Function} props.onChange - Callback when toggle changes
- * @param {boolean} props.disabled - Whether toggle is disabled
- * @returns {JSX.Element} Toggle component
- */
 const Toggle = ({ checked, onChange, disabled = false }) => {
   return (
     <button
@@ -20,31 +8,19 @@ const Toggle = ({ checked, onChange, disabled = false }) => {
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`
-        relative inline-flex h-4 w-8 items-center rounded-full
-        transition-all duration-300 ease-in-out
-        border border-white/20
-        ${disabled ? 'opacity-30 cursor-not-allowed bg-white/5' : 'cursor-pointer'}
-        ${checked 
-          ? 'bg-white/10 backdrop-blur-xl' 
-          : 'bg-white/10 backdrop-blur-xl'
-        }
-        hover:${!disabled && 'bg-white/15'}
-      `}
-      style={{
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-      }}
+      className={cn(
+        'relative inline-flex h-4 w-8 items-center rounded-full',
+        'transition-all duration-300 ease-in-out border border-white/20',
+        'bg-white/10 backdrop-blur-xl',
+        disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:bg-white/15'
+      )}
     >
       <span
-        className={`
-          inline-block h-2.5 w-2.5 transform rounded-full
-          transition-all duration-300 ease-in-out
-          ${checked 
-            ? 'translate-x-[18px] bg-white/80' 
-            : 'translate-x-[2px] bg-white/40'
-          }
-        `}
+        className={cn(
+          'inline-block h-2.5 w-2.5 transform rounded-full',
+          'transition-all duration-300 ease-in-out',
+          checked ? 'translate-x-[18px] bg-white/80' : 'translate-x-[2px] bg-white/40'
+        )}
       />
     </button>
   );

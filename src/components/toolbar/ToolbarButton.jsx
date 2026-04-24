@@ -9,6 +9,7 @@
  */
 
 import { useRef } from 'react';
+import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 
 const ToolbarButton = ({
@@ -123,20 +124,20 @@ const ToolbarButton = ({
       disabled={disabled}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`
-        flex items-center justify-center gap-1.5
-        border-none text-base
-        transition-all duration-300 ease-in-out
-        min-w-8 px-2
-        h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100
-        ${getHoverBgClass()}
-        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-        ${isLightBackground ? 'text-white' : 'text-white'}
-        ${className}
-      `}
+      className={cn(
+        'flex items-center justify-center gap-1.5',
+        'border-none text-base',
+        'transition-all duration-300 ease-in-out',
+        'min-w-8 px-2',
+        'h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100',
+        getHoverBgClass(),
+        disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+        'text-white',
+        className
+      )}
       title={title}
     >
-      <span className={`inline-block transition-opacity duration-200 ${isLoading ? 'animate-spin' : ''}`}>
+      <span className={cn('inline-block transition-opacity duration-200', isLoading && 'animate-spin')}>
         <Icon name={isLoading ? loadingIcon : icon} size={16} context="toolbar" />
       </span>
       <span 

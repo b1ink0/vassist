@@ -4,6 +4,8 @@
  */
 
 import { useState } from 'react';
+import { cn } from '../../utils/cn';
+import { Button } from '../ui';
 
 /**
  * Unified dialog component for various modal interactions.
@@ -88,17 +90,15 @@ const Dialog = ({
   };
 
   // Determine confirm button styles
-  const confirmButtonClass = confirmStyle === 'error' 
-    ? 'glass-error px-2 md:px-4 py-2 rounded-lg text-sm font-medium'
-    : 'glass-button px-2 md:px-4 py-2 rounded-lg text-sm font-medium';
+  const isErrorConfirm = confirmStyle === 'error';
 
   return (
     <div 
-      className={`absolute inset-0 flex items-center justify-center z-50 p-6 bg-black/50 ${animationClass}`}
+      className={cn('absolute inset-0 flex items-center justify-center z-50 p-6 bg-black/50', animationClass)}
       onClick={handleBackdropClick}
     >
       <div 
-        className={`relative p-6 rounded-2xl w-full max-w-sm glass-container ${isLightBackground ? 'glass-container-dark' : ''}`}
+        className={cn('relative p-6 rounded-2xl w-full max-w-sm glass-container', isLightBackground && 'glass-container-dark')}
         onClick={handleDialogClick}
       >
         <h3 className="text-lg font-semibold mb-2 text-white">
@@ -140,20 +140,22 @@ const Dialog = ({
 
         {/* Action buttons */}
         <div className="flex gap-3 justify-end">
-          <button
+          <Button
             onClick={onCancel}
             disabled={isProcessing}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 rounded-lg text-sm disabled:opacity-50`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className="px-2 md:px-4 py-2 rounded-lg text-sm"
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleConfirm}
             disabled={isProcessing || ((type === 'edit' || type === 'input') && !inputValue.trim())}
-            className={`${confirmButtonClass} disabled:opacity-50`}
+            variant={isErrorConfirm ? 'error' : (isLightBackground ? 'dark' : 'default')}
+            className="px-2 md:px-4 py-2 rounded-lg text-sm font-medium"
           >
             {isProcessing ? 'Processing...' : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

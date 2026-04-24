@@ -3,6 +3,8 @@
  * Shared between Settings and Setup Wizard
  */
 
+import { Input, Select } from '../../ui';
+
 const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
   const handleFieldChange = (field, value) => {
     if (onChange.length === 2) {
@@ -22,12 +24,12 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
         <label className="block text-sm font-medium text-white/90">
           Endpoint URL <span className="text-red-400">*</span>
         </label>
-        <input
+        <Input
           type="text"
           value={config.endpoint || ''}
           onChange={(e) => handleFieldChange('endpoint', e.target.value)}
           placeholder="http://localhost:8000"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
         />
         <p className="text-xs text-white/50">
           Base URL (will append /v1/audio/transcriptions)
@@ -37,12 +39,12 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
       {/* API Key (Optional) */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
-        <input
+        <Input
           type="password"
           value={config.apiKey || ''}
           onChange={(e) => handleFieldChange('apiKey', e.target.value)}
           placeholder="Leave empty if not required"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
         />
         <p className="text-xs text-white/50">
           Required only if your endpoint requires authentication
@@ -52,12 +54,12 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
       {/* Model */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Model</label>
-        <input
+        <Input
           type="text"
           value={config.model || ''}
           onChange={(e) => handleFieldChange('model', e.target.value)}
           placeholder="whisper"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
         />
         <p className="text-xs text-white/50">
           Model name to use (e.g., whisper, faster-whisper)
@@ -67,22 +69,23 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
       {/* Language */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Language</label>
-        <select
+        <Select
           value={config.language || 'auto'}
           onChange={(e) => handleFieldChange('language', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          <option value="auto" className="bg-gray-900">Auto-detect</option>
-          <option value="en" className="bg-gray-900">English</option>
-          <option value="es" className="bg-gray-900">Spanish</option>
-          <option value="fr" className="bg-gray-900">French</option>
-          <option value="de" className="bg-gray-900">German</option>
-          <option value="it" className="bg-gray-900">Italian</option>
-          <option value="pt" className="bg-gray-900">Portuguese</option>
-          <option value="zh" className="bg-gray-900">Chinese</option>
-          <option value="ja" className="bg-gray-900">Japanese</option>
-          <option value="ko" className="bg-gray-900">Korean</option>
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={[
+            { value: 'auto', label: 'Auto-detect' },
+            { value: 'en', label: 'English' },
+            { value: 'es', label: 'Spanish' },
+            { value: 'fr', label: 'French' },
+            { value: 'de', label: 'German' },
+            { value: 'it', label: 'Italian' },
+            { value: 'pt', label: 'Portuguese' },
+            { value: 'zh', label: 'Chinese' },
+            { value: 'ja', label: 'Japanese' },
+            { value: 'ko', label: 'Korean' },
+          ]}
+        />
         <p className="text-xs text-white/50">
           Default language hint for transcription requests. Use Auto-detect for mixed-language audio.
         </p>

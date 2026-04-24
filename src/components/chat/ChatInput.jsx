@@ -12,12 +12,14 @@ import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { Icon } from './icons';
+import { Button } from './ui';
 import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop, isExtension, isInputWindow } from '../utils/PlatformUtils';
 import { useDesktop } from '../contexts/DesktopContext';
 import MicrophoneService from '../services/MicrophoneService';
 import CameraService from '../services/CameraService';
 import ScreenShareService from '../services/ScreenShareService';
+import { cn } from '../utils/cn';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.
@@ -1355,7 +1357,7 @@ const ChatInput = forwardRef(({
     >
       <div 
         ref={containerRef}
-        className={`relative md:p-4 p-2 w-full max-w-3xl pointer-events-auto ${isInputWindow ? 'flex flex-col justify-end' : ''}`}
+        className={cn('relative md:p-4 p-2 w-full max-w-3xl pointer-events-auto', isInputWindow && 'flex flex-col justify-end')}
         style={{
           touchAction: 'none',
           ...(isInputWindow ? { minHeight: '400px' } : {})
@@ -1375,19 +1377,17 @@ const ChatInput = forwardRef(({
             }}
           >
             <div 
-              className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+              className={cn('glass-container', isLightBackground && 'glass-container-dark', 'px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50')}
             >
-              <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
+              <p className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg font-medium flex items-center gap-2')}>
                 <Icon name="attachment" size={20} /> Drop
               </p>
             </div>
           </div>
         )}
         {hasAttachments && (
-          <div className={`w-full max-w-3xl mb-2 ${isInputWindow ? '' : 'mx-auto'}`}>
-            <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-2 rounded-lg ${
-              isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
-            }`}>
+          <div className={cn('w-full max-w-3xl mb-2', !isInputWindow && 'mx-auto')}>
+            <div className={cn('glass-input', isLightBackground && 'glass-input-dark', 'p-2 rounded-lg', isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in')}>
               <div className="flex items-center gap-2 flex-wrap">
                 {attachedImages.map((img, index) => (
                   <div key={`img-${index}`} className="relative group">
@@ -1396,15 +1396,17 @@ const ChatInput = forwardRef(({
                       alt={img.name}
                       className="w-16 h-16 object-cover rounded-lg border-2 border-white/30"
                     />
-                    <button
+                    <Button
                       type="button"
                       onClick={() => handleRemoveImage(index)}
-                      className={`absolute -top-2 -right-2 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity glass-button ${isLightBackground ? 'glass-button-dark' : ''} hover:bg-red-500/20`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      size="icon"
+                      className="absolute -top-2 -right-2 rounded-full w-6 h-6 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
                       title="Remove image"
                     >
                       <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                    </button>
-                    <div className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs mt-1 text-center truncate w-16`} title={img.name}>
+                    </Button>
+                    <div className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs mt-1 text-center truncate w-16')} title={img.name}>
                       {img.name.split('.')[0].substring(0, 8)}
                     </div>
                   </div>
@@ -1415,15 +1417,17 @@ const ChatInput = forwardRef(({
                     <div className="w-16 h-16 flex items-center justify-center bg-purple-500/20 rounded-lg border-2 border-purple-400/30">
                       <Icon name="music" size={24} />
                     </div>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => handleRemoveAudio(index)}
-                      className={`absolute -top-2 -right-2 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity glass-button ${isLightBackground ? 'glass-button-dark' : ''} hover:bg-red-500/20`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      size="icon"
+                      className="absolute -top-2 -right-2 rounded-full w-6 h-6 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
                       title="Remove audio"
                     >
                       <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                    </button>
-                    <div className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs mt-1 text-center truncate w-16`} title={audio.name}>
+                    </Button>
+                    <div className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs mt-1 text-center truncate w-16')} title={audio.name}>
                       {audio.name.split('.')[0].substring(0, 8)}
                     </div>
                   </div>
@@ -1434,13 +1438,11 @@ const ChatInput = forwardRef(({
         )}
 
         {recordingError && (
-          <div className={`glass-error max-w-3xl mx-auto mb-2 px-2 md:px-4 py-2 rounded-lg flex items-center justify-between gap-2 ${
-            isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
-          }`}>
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm`}>{recordingError}</span>
+          <div className={cn('glass-error max-w-3xl mx-auto mb-2 px-2 md:px-4 py-2 rounded-lg flex items-center justify-between gap-2', isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in')}>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-sm')}>{recordingError}</span>
             <button
               onClick={() => setRecordingError('')}
-              className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} hover:opacity-80 transition-opacity flex-shrink-0`}
+              className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'hover:opacity-80 transition-opacity flex-shrink-0')}
               title="Close"
             >
               <Icon name="close" size={16} />
@@ -1448,7 +1450,7 @@ const ChatInput = forwardRef(({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className={`max-w-3xl flex gap-2 items-end ${isInputWindow ? '' : 'mx-auto'}`}>
+        <form onSubmit={handleSubmit} className={cn('max-w-3xl flex gap-2 items-end', !isInputWindow && 'mx-auto')}>
           {/* Hidden file inputs - always rendered so refs work in both modes */}
           <input
             ref={imageInputRef}
@@ -1469,58 +1471,60 @@ const ChatInput = forwardRef(({
           
           {isVoiceMode ? (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 px-5 py-2 md:py-3 rounded-xl flex items-center justify-between ${
-                isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
-              }`}>
+              <div className={cn('glass-container', isLightBackground && 'glass-container-dark', 'flex-1 px-5 py-2 md:py-3 rounded-xl flex items-center justify-between', isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in')}>
                 <div className="flex items-center gap-3">
                   <Icon name={voiceStateDisplay.icon} size={24} className={voiceStateDisplay.class === 'listening' ? 'animate-pulse' : ''} />
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'}`}>{voiceStateDisplay.label}</span>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black')}>{voiceStateDisplay.label}</span>
                 </div>
                 
                 <div className="flex items-center gap-2">
                   {voiceStateDisplay.showInterrupt && (
-                    <button
+                    <Button
                       type="button"
                       onClick={handleInterrupt}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20 flex items-center gap-1.5`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      size="sm"
+                      className="hover:bg-red-500/20 flex items-center gap-1.5"
                     >
                       <Icon name="hand-stop" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
-                      attachedImages.length > 0 ? 'bg-blue-500/20 text-blue-400' : ''
-                    }`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    size="sm"
+                    className={cn('flex items-center gap-1', attachedImages.length > 0 && 'bg-blue-500/20 text-blue-400')}
                     title={attachedImages.length > 0 ? `${attachedImages.length} image(s)` : 'Attach image'}
                   >
                     <Icon name="image" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     {attachedImages.length > 0 && <span className={isLightBackground ? 'glass-text' : 'glass-text-black'}>{attachedImages.length}</span>}
-                  </button>
+                  </Button>
 
                   {/* Camera controls are disabled in extension mode */}
                   {!isExtension && (
                     <div className="relative flex items-center gap-1">
-                      <button
+                      <Button
                         type="button"
                         onClick={handleCameraClick}
-                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
-                          isCameraActive ? 'bg-green-500/20 text-green-400' : ''
-                        }`}
+                        variant={isLightBackground ? 'dark' : 'default'}
+                        size="sm"
+                        className={cn('flex items-center gap-1', isCameraActive && 'bg-green-500/20 text-green-400')}
                         title={isCameraActive ? 'Stop Camera' : 'Start Camera'}
                       >
                         <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
-                      </button>
+                      </Button>
                       
-                      <button
+                      <Button
                         type="button"
                         onClick={handleCameraSelectToggle}
-                        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-1 py-1.5 rounded-lg hover:bg-white/10 text-sm`}
+                        variant={isLightBackground ? 'dark' : 'default'}
+                        size="sm"
+                        className="px-1"
                         title="Select Camera"
                       >
                         <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                      </button>
+                      </Button>
                       
                       {showCameraSelect && (
                         <select
@@ -1528,11 +1532,7 @@ const ChatInput = forwardRef(({
                           onChange={(e) => handleCameraSelect(e.target.value)}
                           onBlur={() => setShowCameraSelect(false)}
                           autoFocus
-                          className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
-                            !isLightBackground 
-                              ? 'bg-white/90 text-black border-white/20' 
-                              : 'bg-black/90 text-white border-white/10'
-                          } border shadow-2xl`}
+                          className={cn('absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md', !isLightBackground ? 'bg-white/90 text-black border-white/20' : 'bg-black/90 text-white border-white/10', 'border shadow-2xl')}
                           style={{
                             backdropFilter: 'blur(20px)',
                             WebkitBackdropFilter: 'blur(20px)',
@@ -1558,43 +1558,43 @@ const ChatInput = forwardRef(({
                   
                   {/* Screen Share button (Chrome-based platforms) */}
                   {!isAndroid && (
-                    <button
+                    <Button
                       type="button"
                       onClick={handleScreenShareClick}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 py-1.5 rounded-lg hover:bg-white/10 text-sm flex items-center gap-1 ${
-                        isScreenShareActive ? 'bg-blue-500/20 text-blue-400' : ''
-                      }`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      size="sm"
+                      className={cn('flex items-center gap-1', isScreenShareActive && 'bg-blue-500/20 text-blue-400')}
                       title={isScreenShareActive ? 'Stop Screen Share' : 'Start Screen Share'}
                     >
                       <Icon name="maximize" size={16} className={isScreenShareActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
-                    </button>
+                    </Button>
                   )}
 
-                  <button
+                  <Button
                     type="button"
                     onClick={handleVoiceModeToggle}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg glass-error`}
+                    variant="error"
+                    size="sm"
                     title="Stop Voice Mode"
                   >
                     <Icon name="phone" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                  </button>
+                  </Button>
                   
-                  <button
+                  <Button
                     type="button"
                     onClick={wrappedOnClose}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded-lg hover:bg-white/10`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    size="sm"
                     title="Close (Esc)"
                   >
                     <Icon name="close" size={16} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>
           ) : (
             <>
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} flex-1 rounded-xl p-3 flex flex-col gap-2 ${
-                isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'
-              }`}>
+              <div className={cn('glass-container', isLightBackground && 'glass-container-dark', 'flex-1 rounded-xl p-3 flex flex-col gap-2', isClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in')}>
                 <textarea
                   ref={textareaRef}
                   value={message}
@@ -1620,9 +1620,7 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1 ${
-                        attachedImages.length > 0 ? 'text-blue-400' : isLightBackground ? 'glass-text' : 'glass-text-black'
-                      } ${isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1', attachedImages.length > 0 ? 'text-blue-400' : isLightBackground ? 'glass-text' : 'glass-text-black', (isRecording || isProcessingRecording) && 'opacity-50 cursor-not-allowed')}
                       title={attachedImages.length > 0 ? `${attachedImages.length} image(s)` : 'Attach Image'}
                     >
                       <Icon name="image" size={18} />
@@ -1633,9 +1631,7 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={() => audioInputRef.current?.click()}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1 ${
-                        attachedAudios.length > 0 ? 'text-purple-400' : isLightBackground ? 'glass-text' : 'glass-text-black'
-                      } ${isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1', attachedAudios.length > 0 ? 'text-purple-400' : isLightBackground ? 'glass-text' : 'glass-text-black', (isRecording || isProcessingRecording) && 'opacity-50 cursor-not-allowed')}
                       title={attachedAudios.length > 0 ? `${attachedAudios.length} audio(s)` : 'Attach Audio'}
                     >
                       <Icon name="music" size={18} />
@@ -1646,9 +1642,7 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={handleMicClick}
                       disabled={isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
-                        isProcessingRecording ? 'text-yellow-400' : isRecording ? 'text-red-400 animate-pulse' : isLightBackground ? 'glass-text' : 'glass-text-black'
-                      }`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm', isProcessingRecording ? 'text-yellow-400' : isRecording ? 'text-red-400 animate-pulse' : isLightBackground ? 'glass-text' : 'glass-text-black')}
                       title={isProcessingRecording ? 'Processing...' : isRecording ? 'Stop Recording' : 'Voice Input'}
                     >
                       <Icon name={isProcessingRecording ? 'hourglass' : isRecording ? 'record' : 'microphone'} size={18} />
@@ -1658,9 +1652,7 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={handleVoiceModeToggle}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
-                        isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black'
-                      }`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm', (isRecording || isProcessingRecording) ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black')}
                       title="Voice Mode"
                     >
                       <Icon name="phone" size={18} />
@@ -1671,9 +1663,7 @@ const ChatInput = forwardRef(({
                       type="button"
                       onClick={handleMicSelectToggle}
                       disabled={isRecording || isProcessingRecording}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm ${
-                        isRecording || isProcessingRecording ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black'
-                      }`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm', (isRecording || isProcessingRecording) ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black')}
                       title="Select Microphone"
                     >
                       <Icon name="chevron-down" size={18} />
@@ -1685,11 +1675,7 @@ const ChatInput = forwardRef(({
                         onChange={(e) => handleMicSelect(e.target.value)}
                         onBlur={() => setShowMicSelect(false)}
                         autoFocus
-                        className={`absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md ${
-                          !isLightBackground 
-                            ? 'bg-white/90 text-black border-white/20' 
-                            : 'bg-black/90 text-white border-white/10'
-                        } border shadow-2xl`}
+                        className={cn('absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md', !isLightBackground ? 'bg-white/90 text-black border-white/20' : 'bg-black/90 text-white border-white/10', 'border shadow-2xl')}
                         style={{
                           backdropFilter: 'blur(20px)',
                           WebkitBackdropFilter: 'blur(20px)',
@@ -1714,7 +1700,7 @@ const ChatInput = forwardRef(({
                     <button
                       type="button"
                       onClick={wrappedOnClose}
-                      className={`p-1.5 rounded-lg transition-all hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`}
+                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10', isLightBackground ? 'glass-text' : 'glass-text-black')}
                       title="Close"
                     >
                       <Icon name="close" size={18} />
@@ -1726,11 +1712,7 @@ const ChatInput = forwardRef(({
                       ref={submitButtonRef}
                       type="submit"
                       disabled={!message.trim() && !hasAttachments}
-                      className={`p-1.5 rounded-lg transition-all ${
-                        message.trim() || hasAttachments
-                          ? `hover:bg-white/10 ${isLightBackground ? 'glass-text' : 'glass-text-black'}`
-                          : 'opacity-30 cursor-not-allowed'
-                      }`}
+                      className={cn('p-1.5 rounded-lg transition-all', (message.trim() || hasAttachments) ? cn('hover:bg-white/10', isLightBackground ? 'glass-text' : 'glass-text-black') : 'opacity-30 cursor-not-allowed')}
                       title="Send message"
                     >
                       <Icon name="send" size={20} />

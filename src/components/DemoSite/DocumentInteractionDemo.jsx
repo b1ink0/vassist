@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import { useApp } from '../../contexts/AppContext';
 
@@ -54,10 +55,10 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
     <section className="relative py-12 sm:py-16 px-3 sm:px-6">
       <div className="max-w-7xl mx-auto px-2 md:px-4 sm:px-6">
         <div className="text-center mb-12">
-          <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 ${theme.gradient}`}>
+          <h2 className={cn('text-3xl sm:text-4xl lg:text-5xl font-bold mb-4', theme.gradient)}>
             Document Interaction Demo
           </h2>
-          <p className={`text-base sm:text-lg ${theme.textSecondary} max-w-3xl mx-auto`}>
+          <p className={cn('text-base sm:text-lg', theme.textSecondary, 'max-w-3xl mx-auto')}>
             This page contains hidden content (tables, links, forms, code). Click "Try" to see how VAssist can extract it!
           </p>
         </div>
@@ -65,7 +66,7 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
         <div className="mb-8 text-center flex flex-wrap justify-center gap-4">
           <button
             onClick={() => setShowHiddenContent(!showHiddenContent)}
-            className={`cursor-pointer px-6 py-2 md:py-3 rounded-lg font-semibold transition-all ${isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-200 hover:bg-slate-300'} ${theme.textPrimary} inline-flex items-center gap-2`}
+            className={cn('cursor-pointer px-6 py-2 md:py-3 rounded-lg font-semibold transition-all', isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-200 hover:bg-slate-300', theme.textPrimary, 'inline-flex items-center gap-2')}
           >
             <Icon name={showHiddenContent ? 'eye-off' : 'eye'} size={20} />
             {showHiddenContent ? 'Hide' : 'Show'} Hidden Content
@@ -74,19 +75,19 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           {demoActions.map((action, idx) => (
-            <div key={idx} className={`p-6 ${theme.card} rounded-xl border ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+            <div key={idx} className={cn('p-6', theme.card, 'rounded-xl border', isDark ? 'border-white/10' : 'border-slate-200')}>
               <div className="flex items-start gap-4 mb-4">
-                <div className={`p-3 rounded-lg ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                <div className={cn('p-3 rounded-lg', isDark ? 'bg-white/5' : 'bg-slate-100')}>
                   <Icon name={action.icon} size={24} className={action.color} />
                 </div>
                 <div className="flex-1">
-                  <h3 className={`text-lg font-bold ${theme.textPrimary} mb-1`}>{action.title}</h3>
-                  <p className={`text-sm ${theme.textSecondary}`}>{action.description}</p>
+                  <h3 className={cn('text-lg font-bold', theme.textPrimary, 'mb-1')}>{action.title}</h3>
+                  <p className={cn('text-sm', theme.textSecondary)}>{action.description}</p>
                 </div>
               </div>
               <button
                 onClick={() => handleTryAction(action.question)}
-                className={`cursor-pointer w-full px-2 md:px-4 py-2 rounded-lg font-semibold transition-all ${theme.ctaGradient} hover:scale-105 flex items-center justify-center gap-2`}
+                className={cn('cursor-pointer w-full px-2 md:px-4 py-2 rounded-lg font-semibold transition-all', theme.ctaGradient, 'hover:scale-105 flex items-center justify-center gap-2')}
               >
                 <Icon name="play" size={16} />
                 Try This
@@ -96,14 +97,14 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
         </div>
 
         <div className={showHiddenContent ? 'block' : 'hidden'}>
-          <div className={`p-6 sm:p-8 ${theme.card} rounded-2xl`}>
-            <h3 className={`text-2xl font-bold mb-6 ${theme.textPrimary}`}>
+          <div className={cn('p-6 sm:p-8', theme.card, 'rounded-2xl')}>
+            <h3 className={cn('text-2xl font-bold mb-6', theme.textPrimary)}>
               Hidden Content (VAssist sees this)
             </h3>
 
             <div className="mb-8">
-              <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Weather Forecast</h4>
-              <table className={`w-full ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              <h4 className={cn('text-xl font-semibold mb-4', theme.textPrimary)}>Weather Forecast</h4>
+              <table className={cn('w-full', isDark ? 'text-white' : 'text-slate-900')}>
                 <thead className={isDark ? 'bg-white/10' : 'bg-slate-100'}>
                   <tr>
                     <th className="px-2 md:px-4 py-2 md:py-3 text-left">Day</th>
@@ -132,26 +133,26 @@ const DocumentInteractionDemo = ({ theme, isDark }) => {
             </div>
 
             <div className="mb-8">
-              <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Links</h4>
+              <h4 className={cn('text-xl font-semibold mb-4', theme.textPrimary)}>Links</h4>
               <div className="space-y-2">
-                <a href="https://github.com" className={`block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>GitHub</a>
-                <a href="https://react.dev" className={`block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>React Docs</a>
-                <a href="https://developer.mozilla.org" className={`block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>MDN</a>
+                <a href="https://github.com" className={cn('block', isDark ? 'text-blue-400' : 'text-blue-600')}>GitHub</a>
+                <a href="https://react.dev" className={cn('block', isDark ? 'text-blue-400' : 'text-blue-600')}>React Docs</a>
+                <a href="https://developer.mozilla.org" className={cn('block', isDark ? 'text-blue-400' : 'text-blue-600')}>MDN</a>
               </div>
             </div>
 
             <div className="mb-8">
-              <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Contact Form</h4>
+              <h4 className={cn('text-xl font-semibold mb-4', theme.textPrimary)}>Contact Form</h4>
               <form className="space-y-3">
-                <input type="text" placeholder="Name" className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
-                <input type="email" placeholder="Email" className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
-                <textarea placeholder="Message" rows={3} className={`w-full px-2 md:px-4 py-2 rounded ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'} border`} />
+                <input type="text" placeholder="Name" className={cn('w-full px-2 md:px-4 py-2 rounded', isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200', 'border')} />
+                <input type="email" placeholder="Email" className={cn('w-full px-2 md:px-4 py-2 rounded', isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200', 'border')} />
+                <textarea placeholder="Message" rows={3} className={cn('w-full px-2 md:px-4 py-2 rounded', isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200', 'border')} />
               </form>
             </div>
 
             <div className="mb-8">
-              <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Code Example</h4>
-              <pre className={`p-2 md:p-4 rounded ${isDark ? 'bg-black/30' : 'bg-slate-900'} overflow-x-auto`}>
+              <h4 className={cn('text-xl font-semibold mb-4', theme.textPrimary)}>Code Example</h4>
+              <pre className={cn('p-2 md:p-4 rounded', isDark ? 'bg-black/30' : 'bg-slate-900', 'overflow-x-auto')}>
                 <code className="text-sm">
 {`// React Component with Custom Hook
 function useDebounce(value, delay) {
@@ -186,7 +187,7 @@ function SearchBar() {
             </div>
 
             <div>
-              <h4 className={`text-xl font-semibold mb-4 ${theme.textPrimary}`}>Article</h4>
+              <h4 className={cn('text-xl font-semibold mb-4', theme.textPrimary)}>Article</h4>
               <p className={theme.textSecondary}>
                 AI assistants are revolutionizing web browsing. They can extract data, summarize content, 
                 and help with complex tasks without manual copy-pasting.

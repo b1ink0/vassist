@@ -3,6 +3,8 @@
  * Shared between Settings and Setup Wizard
  */
 
+import { Input } from '../../ui';
+
 const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
   const handleFieldChange = (field, value) => {
     if (onChange.length === 2) {
@@ -22,12 +24,12 @@ const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
         <label className="block text-sm font-medium text-white/90">
           API Key <span className="text-red-400">*</span>
         </label>
-        <input
+        <Input
           type="password"
           value={config.apiKey || ''}
           onChange={(e) => handleFieldChange('apiKey', e.target.value)}
           placeholder="sk-..."
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
         />
         <p className="text-xs text-white/50">
           Your OpenAI API key from{' '}
@@ -45,12 +47,12 @@ const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
       {/* Model */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Model</label>
-        <input
+        <Input
           type="text"
           value={config.model || 'whisper-1'}
           onChange={(e) => handleFieldChange('model', e.target.value)}
           placeholder="whisper-1"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
         />
         <p className="text-xs text-white/50">
           OpenAI Whisper model to use (default: whisper-1)

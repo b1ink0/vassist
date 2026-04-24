@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneConfigAsync } from '../config/sceneConfig';
 import DragDropService from '../services/DragDropService';
+import { cn } from '../utils/cn';
 import { useApp } from '../contexts/AppContext';
 import { Icon } from './icons';
 import { useConfig } from '../contexts/ConfigContext';
@@ -666,7 +667,7 @@ const BabylonScene = ({
 
   if (isPreview) {
     return (
-      <div className={`relative ${previewClassName}`} style={{ width: previewWidth, height: previewHeight }}>
+      <div className={cn('relative', previewClassName)} style={{ width: previewWidth, height: previewHeight }}>
         {canvasContent}
         {!isReady && (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-white/10 to-white/10 rounded-2xl">

@@ -3,6 +3,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { cn } from '../utils/cn';
 import { Icon } from './icons';;
 import DebugOverlay from './DebugOverlay';
 import ResourceLoader from '../utils/ResourceLoader';
@@ -422,9 +423,7 @@ const ControlPanel = ({
           top: `${buttonPos.y}px`,
           zIndex: 9998,
         }}
-        className={`w-12 h-12 bg-black/90 text-white border border-white/20 rounded-lg cursor-move shadow-lg backdrop-blur-sm flex items-center justify-center text-xl hover:bg-black transition-colors ${
-          isDragging ? 'border-white/40' : ''
-        }`}
+        className={cn('w-12 h-12 bg-black/90 text-white border border-white/20 rounded-lg cursor-move shadow-lg backdrop-blur-sm flex items-center justify-center text-xl hover:bg-black transition-colors', isDragging && 'border-white/40')}
         title="Drag to reposition | Click to toggle panel"
       ><Icon name="tools" size={16} /></button>
 
@@ -480,71 +479,43 @@ const ControlPanel = ({
       <div className="flex border-b border-white/20 bg-black/50 overflow-x-auto">
         <button
           onClick={() => setActiveTab('actions')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'actions' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'actions' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           🎭 Actions
         </button>
         <button
           onClick={() => setActiveTab('positions')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'positions' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'positions' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           📍 Positions
         </button>
         <button
           onClick={() => setActiveTab('emotions')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'emotions' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'emotions' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           😊 Emotions
         </button>
         <button
           onClick={() => setActiveTab('queue')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'queue' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'queue' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           📋 Queue
         </button>
         <button
           onClick={() => setActiveTab('composite')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'composite' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'composite' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           🔀 Composite
         </button>
         <button
           onClick={() => setActiveTab('debug')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'debug' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'debug' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           🔧 Debug
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors ${
-            activeTab === 'logs' 
-              ? 'bg-white/10 text-white border-b-2 border-blue-500' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={cn('flex-1 px-3 py-2 text-xs border-none cursor-pointer transition-colors', activeTab === 'logs' ? 'bg-white/10 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-white/5')}
         >
           📝 Logs
         </button>
@@ -914,11 +885,7 @@ const ControlPanel = ({
                   setLoggerEnabled(newState);
                   await Logger.setEnabled(newState);
                 }}
-                className={`px-2 md:px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  loggerEnabled
-                    ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                }`}
+                className={cn('px-2 md:px-4 py-2 rounded-lg text-xs font-medium transition-colors', loggerEnabled ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-600 text-gray-300 hover:bg-gray-500')}
               >
                 {loggerEnabled ? '✓ Enabled' : '✗ Disabled'}
               </button>
@@ -986,11 +953,7 @@ const ControlPanel = ({
                           await Logger.setCategoryEnabled(category, !enabled);
                           setLogCategories(Logger.getCategories());
                         }}
-                        className={`px-3 py-1 rounded text-[10px] font-medium transition-colors flex-shrink-0 ml-2 ${
-                          enabled
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
-                            : 'bg-gray-600/20 text-gray-400 border border-gray-600/30 hover:bg-gray-600/30'
-                        }`}
+                        className={cn('px-3 py-1 rounded text-[10px] font-medium transition-colors flex-shrink-0 ml-2', enabled ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30' : 'bg-gray-600/20 text-gray-400 border border-gray-600/30 hover:bg-gray-600/30')}
                       >
                         {enabled ? 'ON' : 'OFF'}
                       </button>

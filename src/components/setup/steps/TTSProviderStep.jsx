@@ -13,6 +13,8 @@ import { TTSProviders, STTProviders, DefaultTTSConfig, GPTSoVITSLanguages } from
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
 import { Icon } from '../../icons';
+import { Button, Card, Input, Select } from '../../ui';
+import { cn } from '../../../utils/cn';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
 const TTSProviderStep = ({ isLightBackground = false }) => {
@@ -598,7 +600,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
       {/* Provider-specific Configuration */}
       {selectedProvider === 'disabled' && (
-        <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
+        <Card padding="none" className="p-3 sm:p-4">
           <div className="flex items-start gap-3">
             <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm text-white/90">
@@ -609,23 +611,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {selectedProvider === 'android-local' && (
         <div className="space-y-3">
           {/* Info Banner */}
-          <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+          <Card variant="elevated">
             <div className="flex items-start gap-2">
               <Icon name="speaker" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-white/70">
                 <span className="font-semibold">Android Local TTS</span> - On-device text-to-speech using VITS VCTK neural network with 109 different voices!
               </p>
             </div>
-          </div>
+          </Card>
 
           {/* Status */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <Card>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-white/70"></div>
               <span className="text-sm font-semibold text-white/90">Ready to use!</span>
@@ -633,7 +635,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             <p className="text-xs text-white/60">
               Model: VITS VCTK • 109 multi-speaker voices
             </p>
-          </div>
+          </Card>
 
           {/* Advanced Config */}
           <details className="group">
@@ -641,23 +643,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <span>Advanced Settings</span>
               <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
             </summary>
-            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+            <Card className="mt-2 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-white/90 mb-1">
                   Endpoint URL
                 </label>
-                <input
+                <Input
                   type="text"
                   value={androidTTSEndpoint}
                   onChange={(e) => setAndroidTTSEndpoint(e.target.value)}
                   placeholder="http://127.0.0.1:8765"
-                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                  className="w-full text-xs sm:text-sm"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
                   Local HTTP server for TTS on your Android device
                 </p>
               </div>
-            </div>
+            </Card>
           </details>
         </div>
       )}
@@ -712,19 +714,19 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       )}
 
       {selectedProvider === 'openai' && (
-        <div className="rounded-lg p-2 sm:p-3 border border-white/10">
+        <Card padding="none" className="p-2 sm:p-3">
           <h3 className="text-sm font-semibold text-white mb-2">OpenAI TTS Config</h3>
           <div className="space-y-2">
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 API Key <span className="text-red-400">*</span>
               </label>
-              <input
+              <Input
                 type="password"
                 value={openAIKey}
                 onChange={(e) => setOpenAIKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Same API key as LLM provider. Get it from{' '}
@@ -740,35 +742,37 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">Model</label>
-              <select
+              <Select
                 value={openAIModel}
                 onChange={(e) => setOpenAIModel(e.target.value)}
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-white/30"
-              >
-                <option value="tts-1" className="bg-gray-900">tts-1 (Standard)</option>
-                <option value="tts-1-hd" className="bg-gray-900">tts-1-hd (HD)</option>
-              </select>
+                className="w-full text-xs sm:text-sm"
+                options={[
+                  { value: 'tts-1', label: 'tts-1 (Standard)' },
+                  { value: 'tts-1-hd', label: 'tts-1-hd (HD)' },
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">Voice</label>
-              <select
+              <Select
                 value={openAIVoice}
                 onChange={(e) => setOpenAIVoice(e.target.value)}
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-white/30"
-              >
-                <option value="alloy" className="bg-gray-900">Alloy</option>
-                <option value="echo" className="bg-gray-900">Echo</option>
-                <option value="fable" className="bg-gray-900">Fable</option>
-                <option value="onyx" className="bg-gray-900">Onyx</option>
-                <option value="nova" className="bg-gray-900">Nova</option>
-                <option value="shimmer" className="bg-gray-900">Shimmer</option>
-              </select>
+                className="w-full text-xs sm:text-sm"
+                options={[
+                  { value: 'alloy', label: 'Alloy' },
+                  { value: 'echo', label: 'Echo' },
+                  { value: 'fable', label: 'Fable' },
+                  { value: 'onyx', label: 'Onyx' },
+                  { value: 'nova', label: 'Nova' },
+                  { value: 'shimmer', label: 'Shimmer' },
+                ]}
+              />
             </div>
             <div className="pt-1">
-              <button
+              <Button
                 onClick={testConnection}
                 disabled={!openAIKey || testing}
-                className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
               >
                 {testing ? (
                   <>
@@ -779,7 +783,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                     <Icon name="test" size={14} /> Test
                   </>
                 )}
-              </button>
+              </Button>
             </div>
             {testResult && (
               <StatusMessage 
@@ -789,23 +793,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               />
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {selectedProvider === 'openai-compatible' && (
-        <div className="rounded-lg p-2 sm:p-3 border border-white/10">
+        <Card padding="none" className="p-2 sm:p-3">
           <h3 className="text-sm font-semibold text-white mb-2">OpenAI-Compatible Config</h3>
           <div className="space-y-2">
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Endpoint URL <span className="text-red-400">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 value={customEndpoint}
                 onChange={(e) => setCustomEndpoint(e.target.value)}
                 placeholder="http://localhost:8000"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Base URL (will append /v1/audio/speech)
@@ -815,12 +819,12 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <label className="block text-xs font-medium text-white/90 mb-1">
                 API Key (Optional)
               </label>
-              <input
+              <Input
                 type="password"
                 value={customApiKey}
                 onChange={(e) => setCustomApiKey(e.target.value)}
                 placeholder="Leave empty if not required"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 API key for authentication
@@ -828,29 +832,29 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">Model</label>
-              <input
+              <Input
                 type="text"
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
                 placeholder="tts"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">Voice</label>
-              <input
+              <Input
                 type="text"
                 value={customVoice}
                 onChange={(e) => setCustomVoice(e.target.value)}
                 placeholder="default"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
             </div>
             <div className="pt-1">
-              <button
+              <Button
                 onClick={testConnection}
                 disabled={!customEndpoint || testing}
-                className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
               >
                 {testing ? (
                   <>
@@ -861,7 +865,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                     <Icon name="test" size={14} /> Test
                   </>
                 )}
-              </button>
+              </Button>
             </div>
             {testResult && (
               <StatusMessage 
@@ -871,7 +875,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               />
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* STT Section */}
@@ -899,7 +903,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
         {/* STT Provider-specific Configuration */}
         {selectedSTTProvider === 'disabled' && (
-          <div className="rounded-lg p-3 sm:p-4 border border-white/10 bg-white/5">
+          <Card padding="none" className="p-3 sm:p-4">
             <div className="flex items-start gap-3">
               <Icon name="info" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
               <div className="space-y-2 text-sm text-white/90">
@@ -910,23 +914,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 </p>
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {selectedSTTProvider === STTProviders.ANDROID_LOCAL && (
           <div className="space-y-3">
             {/* Info Banner */}
-            <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+            <Card variant="elevated">
               <div className="flex items-start gap-2">
                 <Icon name="microphone" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-white/70">
                   <span className="font-semibold">Android Local STT</span> - On-device speech recognition using Whisper. Runs entirely on your device!
                 </p>
               </div>
-            </div>
+            </Card>
 
             {/* Status */}
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <Card>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-white/70"></div>
                 <span className="text-sm font-semibold text-white/90">Ready to use!</span>
@@ -934,7 +938,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               <p className="text-xs text-white/60">
                 Model: Whisper Tiny • Accurate speech recognition
               </p>
-            </div>
+            </Card>
 
             {/* Advanced Config */}
             <details className="group">
@@ -942,22 +946,24 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
                 <span>Advanced Settings</span>
                 <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
               </summary>
-              <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-white/90 mb-1">
-                    Endpoint URL
-                  </label>
-                  <input
-                    type="text"
-                    value={androidSTTEndpoint}
-                    onChange={(e) => setAndroidSTTEndpoint(e.target.value)}
-                    placeholder="http://127.0.0.1:8765"
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
-                  />
-                  <p className="text-[10px] text-white/50 mt-1">
-                    Local HTTP server for STT on your Android device
-                  </p>
-                </div>
+              <div className="mt-2">
+                <Card className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-white/90 mb-1">
+                      Endpoint URL
+                    </label>
+                    <Input
+                      type="text"
+                      value={androidSTTEndpoint}
+                      onChange={(e) => setAndroidSTTEndpoint(e.target.value)}
+                      placeholder="http://127.0.0.1:8765"
+                      className="w-full text-xs sm:text-sm"
+                    />
+                    <p className="text-[10px] text-white/50 mt-1">
+                      Local HTTP server for STT on your Android device
+                    </p>
+                  </div>
+                </Card>
               </div>
             </details>
           </div>

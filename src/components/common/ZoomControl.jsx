@@ -4,6 +4,8 @@
 
 import { useState } from 'react';
 import { Icon } from './icons';
+import { Button } from './ui';
+import { cn } from '../utils/cn';
 
 /**
  * Zoom control with expand/collapse functionality
@@ -36,80 +38,78 @@ const ZoomControl = ({
   return (
     <div className="flex flex-col gap-2 items-center relative">
       {/* Main Zoom Button */}
-      <button
+      <Button
         onClick={handleToggle}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} ${
-          !isVisible ? 'animate-fade-out' : ''
-        }`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-transform', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', !isVisible && 'animate-fade-out')}
         title="Zoom Control"
       >
         <Icon 
           name="zoomIn" 
           size={24} 
-          className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
         />
-      </button>
+      </Button>
 
       {/* Expanded Controls - positioned beside zoom button */}
       {isExpanded && (
         <div 
-          className={`flex ${isLeftSide ? 'flex-row-reverse' : 'flex-row'} gap-2 absolute`}
+          className={cn('flex', isLeftSide ? 'flex-row-reverse' : 'flex-row', 'gap-2 absolute')}
           style={{ 
             top: 0,
             [isLeftSide ? 'right' : 'left']: '-171px'
           }}
         >
           {/* Zoom In */}
-          <button
+          <Button
             onClick={() => {
               onZoomIn();
             }}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} animate-fade-in`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-all', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', 'animate-fade-in')}
             title="Zoom In"
           >
             <Icon 
               name="plus" 
               size={24} 
-              className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+              className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
             />
-          </button>
+          </Button>
 
           {/* Reset */}
-          <button
+          <Button
             onClick={() => {
               onReset();
             }}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'} animate-fade-in`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-all', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30', 'animate-fade-in')}
             title="Reset Zoom"
             style={{ animationDelay: '50ms' }}
           >
             <Icon 
               name="refresh" 
               size={24} 
-              className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+              className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
             />
-          </button>
+          </Button>
 
           {/* Zoom Out */}
-          <button
+          <Button
             onClick={() => {
               if (!isZoomOutDisabled) onZoomOut();
             }}
             disabled={isZoomOutDisabled}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-12 h-12 rounded-full flex items-center justify-center transition-all animate-fade-in ${
-              isZoomOutDisabled 
-                ? 'opacity-40 cursor-not-allowed' 
-                : `hover:scale-110 active:scale-95 ${isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'}`
-            }`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={cn('w-12 h-12 rounded-full transition-all animate-fade-in', isZoomOutDisabled ? 'opacity-40 cursor-not-allowed' : cn('hover:scale-110 active:scale-95', isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30'))}
             title={isZoomOutDisabled ? "At minimum size" : "Zoom Out"}
             style={{ animationDelay: '100ms' }}
           >
             <Icon 
               name="minus" 
               size={24} 
-              className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} drop-shadow-lg`}
+              className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
             />
-          </button>
+          </Button>
         </div>
       )}
     </div>

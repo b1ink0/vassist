@@ -11,6 +11,7 @@
  */
 
 import { Icon } from '../icons';
+import { cn } from '../../utils/cn';
 
 /**
  * Status message component with prefix parsing.
@@ -82,15 +83,15 @@ const StatusMessage = ({ message, className = '', isLightBackground = false }) =
   const parsed = parseMessage(message);
 
   return (
-    <div className={`p-3 rounded-lg ${parsed.bgColor} border ${parsed.borderColor} flex items-start gap-2 ${className}`}>
+    <div className={cn('p-3 rounded-lg', parsed.bgColor, 'border', parsed.borderColor, 'flex items-start gap-2', className)}>
       {parsed.icon && (
         <Icon 
           name={parsed.icon} 
           size={16} 
-          className={`${parsed.iconColor} flex-shrink-0 mt-0.5`}
+          className={cn(parsed.iconColor, 'flex-shrink-0 mt-0.5')}
         />
       )}
-      <p className={`text-xs ${parsed.textColor} flex-1`}>
+      <p className={cn('text-xs', parsed.textColor, 'flex-1')}>
         {parsed.text}
       </p>
     </div>

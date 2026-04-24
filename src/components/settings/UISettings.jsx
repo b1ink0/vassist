@@ -15,6 +15,7 @@ import Icon from '../icons/Icon';
 import Logger from '../../services/LoggerService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import BackgroundSettings from './BackgroundSettings';
+import { Button, Select, Input, Card, SettingsRow } from '../ui';
 
 const UISettings = ({ isLightBackground }) => {
   const {
@@ -55,8 +56,10 @@ const UISettings = ({ isLightBackground }) => {
       </div>
       
       {/* Start Setup Again Button */}
-      <div className="space-y-2 p-3 rounded-lg bg-white/10 border border-white/20">
-        <button
+      <Card variant="elevated">
+        <Button
+          variant="default"
+          className="w-full font-semibold"
           onClick={async () => {
             if (isResetting) return;
             
@@ -74,70 +77,53 @@ const UISettings = ({ isLightBackground }) => {
             }
           }}
           disabled={isResetting}
-          className="glass-button w-full px-2 md:px-4 py-2 text-sm font-semibold rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
           <Icon name="refresh" size={16} />
           {isResetting ? 'Resetting...' : 'Start Setup Wizard Again'}
-        </button>
+        </Button>
         <p className="text-xs">
           Re-run the initial setup wizard to reconfigure your assistant
         </p>
-      </div>
+      </Card>
       
       {/* Auto-load on All Pages Toggle - Extension mode only */}
       {isExtensionMode && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex-1">
-              <label className="text-sm text-white font-medium">Auto-load on Every Page</label>
-              <p className="text-xs text-white/50 mt-0.5">
-                {uiConfig.autoLoadOnAllPages !== false
-                  ? 'Extension loads automatically on all pages' 
-                  : 'Click extension icon to manually load on each page'}
-              </p>
-            </div>
-            <Toggle
-              checked={uiConfig.autoLoadOnAllPages !== false}
-              onChange={(checked) => updateUIConfig('autoLoadOnAllPages', checked)}
-            />
-          </div>
-        </div>
+        <SettingsRow
+          label="Auto-load on Every Page"
+          description={uiConfig.autoLoadOnAllPages !== false
+            ? 'Extension loads automatically on all pages'
+            : 'Click extension icon to manually load on each page'}
+        >
+          <Toggle
+            checked={uiConfig.autoLoadOnAllPages !== false}
+            onChange={(checked) => updateUIConfig('autoLoadOnAllPages', checked)}
+          />
+        </SettingsRow>
       )}
       
       {/* Colored Icons Toggle */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <label className="text-sm text-white font-medium">Use Colored Icons</label>
-            <p className="text-xs text-white/50 mt-0.5">
-              {uiConfig.enableColoredIcons 
-                ? 'Icons are displayed in color' 
-                : 'Icons are displayed in monochrome gray'}
-            </p>
-          </div>
+        <SettingsRow
+          label="Use Colored Icons"
+          description={uiConfig.enableColoredIcons ? 'Icons are displayed in color' : 'Icons are displayed in monochrome gray'}
+        >
           <Toggle
             checked={uiConfig.enableColoredIcons || false}
             onChange={(checked) => updateUIConfig('enableColoredIcons', checked)}
           />
-        </div>
-        
-        {/* Toolbar Only Sub-option */}
+        </SettingsRow>
+
         {uiConfig.enableColoredIcons && (
           <div className="ml-4 mt-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="text-xs text-white font-medium">Toolbar Only</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  {uiConfig.enableColoredIconsToolbarOnly 
-                    ? 'Colored icons only in AI toolbar' 
-                    : 'Colored icons everywhere'}
-                </p>
-              </div>
+            <SettingsRow
+              label="Toolbar Only"
+              description={uiConfig.enableColoredIconsToolbarOnly ? 'Colored icons only in AI toolbar' : 'Colored icons everywhere'}
+            >
               <Toggle
                 checked={uiConfig.enableColoredIconsToolbarOnly || false}
                 onChange={(checked) => updateUIConfig('enableColoredIconsToolbarOnly', checked)}
               />
-            </div>
+            </SettingsRow>
           </div>
         )}
       </div>
@@ -147,23 +133,15 @@ const UISettings = ({ isLightBackground }) => {
         <div className="space-y-2 border-t border-white/10 pt-4">
           <h4 className="text-sm font-semibold text-white mb-3">Chat Position</h4>
           <label className="block text-sm font-medium text-white/90">Chat Window Position</label>
-          <select
+          <Select
             value={uiConfig.position?.preset || 'bottom-right'}
             onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-          >
-            <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-            {Object.entries(PositionPresets).map(([key, preset]) => (
-              <option key={key} value={key} className="bg-gray-900">
-                {preset.name}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-white/50">
-            {uiConfig.position?.preset === 'last-location'
-              ? 'Will load at the last dragged position. Drag to save new position.'
-              : 'Changes will apply on next page load or reload'}
-          </p>
+            variant={isLightBackground ? 'dark' : 'default'}
+            options={[
+              { value: 'last-location', label: 'Last Location (Remember Position)' },
+              ...Object.entries(PositionPresets).map(([key, preset]) => ({ value: key, label: preset.name })),
+            ]}
+          />
         </div>
       )}
 
@@ -191,17 +169,12 @@ const UISettings = ({ isLightBackground }) => {
         {/* Theme Mode */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-white/90">Application Theme</label>
-          <select
+          <Select
             value={uiConfig.backgroundDetection?.mode || BackgroundThemeModes.ADAPTIVE}
             onChange={(e) => updateUIConfig('backgroundDetection.mode', e.target.value)}
-            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-          >
-            {Object.entries(BackgroundThemeModes).map(([key, value]) => (
-              <option key={value} value={value} className="bg-gray-900">
-                {key.charAt(0) + key.slice(1).toLowerCase()}
-              </option>
-            ))}
-          </select>
+            variant={isLightBackground ? 'dark' : 'default'}
+            options={Object.entries(BackgroundThemeModes).map(([key, value]) => ({ value, label: key.charAt(0) + key.slice(1).toLowerCase() }))}
+          />
           <p className="text-xs text-white/50">
             Choose the color theme for the assistant UI (chat, input, buttons)
           </p>
@@ -218,13 +191,13 @@ const UISettings = ({ isLightBackground }) => {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-white/90">Detection Accuracy</label>
-              <input
+              <Input
                 type="number"
                 min="3"
                 max="10"
                 value={uiConfig.backgroundDetection?.sampleGridSize || 5}
                 onChange={(e) => updateUIConfig('backgroundDetection.sampleGridSize', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
               <p className="text-xs text-white/50">
                 Sample grid size for background detection (3-10). Higher = more accurate. Default: 5
@@ -243,49 +216,39 @@ const UISettings = ({ isLightBackground }) => {
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">AI Toolbar</h4>
         
-        {/* Enable AI Toolbar */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <label className="text-sm text-white font-medium">Enable AI Toolbar</label>
-            <p className="text-xs text-white/50 mt-0.5">
-              Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions
-            </p>
-          </div>
+        <SettingsRow
+          label="Enable AI Toolbar"
+          description="Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions"
+        >
           <Toggle
             checked={uiConfig.enableAIToolbar !== false}
             onChange={(checked) => updateUIConfig('enableAIToolbar', checked)}
           />
-        </div>
+        </SettingsRow>
 
-        {/* Show on Input Focus */}
         {uiConfig.enableAIToolbar !== false && (
           <>
-            <div className="flex items-center justify-between gap-3 mt-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Show on Input Focus</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  Automatically show toolbar with dictation when clicking on any text input field or editable area
-                </p>
-              </div>
+            <SettingsRow
+              className="mt-3"
+              label="Show on Input Focus"
+              description="Automatically show toolbar with dictation when clicking on any text input field or editable area"
+            >
               <Toggle
                 checked={uiConfig.aiToolbar?.showOnInputFocus !== false}
                 onChange={(checked) => updateUIConfig('aiToolbar.showOnInputFocus', checked)}
               />
-            </div>
+            </SettingsRow>
 
-            {/* Show on Image Hover */}
-            <div className="flex items-center justify-between gap-3 mt-3">
-              <div className="flex-1">
-                <label className="text-sm text-white font-medium">Show on Image Hover</label>
-                <p className="text-xs text-white/50 mt-0.5">
-                  Automatically show toolbar with image analysis actions when hovering over any image
-                </p>
-              </div>
+            <SettingsRow
+              className="mt-3"
+              label="Show on Image Hover"
+              description="Automatically show toolbar with image analysis actions when hovering over any image"
+            >
               <Toggle
                 checked={uiConfig.aiToolbar?.showOnImageHover !== false}
                 onChange={(checked) => updateUIConfig('aiToolbar.showOnImageHover', checked)}
               />
-            </div>
+            </SettingsRow>
           </>
         )}
       </div>
@@ -308,18 +271,12 @@ const UISettings = ({ isLightBackground }) => {
       <div className="space-y-2 border-t border-white/10 pt-4">
         <h4 className="text-sm font-semibold text-white mb-3">Developer Options</h4>
         
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <label className="text-sm text-white font-medium">Enable Developer Tools</label>
-            <p className="text-xs text-white/50 mt-0.5">
-              Show draggable debug panel for testing animations and positions
-            </p>
-          </div>
+        <SettingsRow label="Enable Developer Tools" description="Show draggable debug panel for testing animations and positions">
           <Toggle
             checked={uiConfig.enableDebugPanel || false}
             onChange={(checked) => updateUIConfig('enableDebugPanel', checked)}
           />
-        </div>
+        </SettingsRow>
       </div>
     </div>
   );

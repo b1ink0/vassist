@@ -4,6 +4,8 @@
  */
 
 import { useMemo, useState } from 'react';
+import { Button } from '../ui';
+import { cn } from '../../utils/cn';
 
 /**
  * Code block component with copy button
@@ -24,9 +26,10 @@ const CodeBlock = ({ code, language }) => {
   return (
     <div className="relative group my-2">
       <div className="absolute right-2 top-2 z-10">
-        <button
+        <Button
           onClick={handleCopy}
-          className="glass-button px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          variant="default"
+          className="px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200"
           title="Copy code"
         >
           {copied ? (
@@ -34,7 +37,7 @@ const CodeBlock = ({ code, language }) => {
           ) : (
             <span className="text-white/90">Copy</span>
           )}
-        </button>
+        </Button>
       </div>
       <pre className="bg-white/5 backdrop-blur-sm rounded-lg p-3 overflow-x-auto max-w-full border border-white/10" data-lang={language || 'text'}>
         <code className="text-sm font-mono text-white/90 whitespace-pre">
@@ -263,7 +266,7 @@ const MarkdownText = ({ text = '', className = '' }) => {
   const elements = useMemo(() => parseMarkdown(text), [text]);
 
   return (
-    <div className={`markdown-content max-w-full overflow-hidden ${className}`}>
+    <div className={cn('markdown-content max-w-full overflow-hidden', className)}>
       {elements}
     </div>
   );

@@ -7,10 +7,20 @@ import { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
 import { GPTSoVITSLanguages } from '../../../config/aiConfig';
+
+const GPTSOVITS_LANG_OPTIONS = [
+  { value: GPTSoVITSLanguages.ENGLISH, label: 'English' },
+  { value: GPTSoVITSLanguages.CHINESE, label: 'Chinese' },
+  { value: GPTSoVITSLanguages.JAPANESE, label: 'Japanese' },
+  { value: GPTSoVITSLanguages.KOREAN, label: 'Korean' },
+  { value: GPTSoVITSLanguages.CANTONESE, label: 'Cantonese' },
+];
 import voiceStorageService from '../../../services/VoiceStorageService';
 import Logger from '../../../services/LoggerService';
 import GPTSoVITSSetup from './GPTSoVITSSetup';
 import { isDesktop } from '../../../utils/PlatformUtils';
+import { cn } from '../../../utils/cn';
+import { Button, Input, Select } from '../../ui';
 
 const getAudioDuration = (file) => {
   return new Promise((resolve, reject) => {
@@ -216,12 +226,12 @@ const GPTSoVITSConfig = ({
 
         <div>
           <label className="block text-sm font-medium text-white/90 mb-2">Voice Name</label>
-          <input
+          <Input
             type="text"
             value={newVoiceName}
             onChange={(e) => setNewVoiceName(e.target.value)}
             placeholder="My Voice"
-            className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+            variant={isLightBackground ? 'dark' : 'default'}
           />
         </div>
 
@@ -232,24 +242,19 @@ const GPTSoVITSConfig = ({
             onChange={(e) => setNewReferenceText(e.target.value)}
             placeholder="Type the exact text spoken in the audio..."
             rows={3}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm resize-none`}
+          className={cn('glass-input w-full text-sm resize-none', isLightBackground && 'glass-input-dark')}
         />
         <p className="text-xs text-white/50 mt-1">Must match the audio exactly</p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-white/90 mb-2">Language</label>
-        <select
+        <Select
           value={newLanguage}
           onChange={(e) => setNewLanguage(e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-        >
-          <option value={GPTSoVITSLanguages.ENGLISH} className="bg-gray-900">English</option>
-          <option value={GPTSoVITSLanguages.CHINESE} className="bg-gray-900">Chinese</option>
-          <option value={GPTSoVITSLanguages.JAPANESE} className="bg-gray-900">Japanese</option>
-          <option value={GPTSoVITSLanguages.KOREAN} className="bg-gray-900">Korean</option>
-          <option value={GPTSoVITSLanguages.CANTONESE} className="bg-gray-900">Cantonese</option>
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={GPTSOVITS_LANG_OPTIONS}
+        />
       </div>
 
       <div className="space-y-3">
@@ -276,10 +281,11 @@ const GPTSoVITSConfig = ({
         </button>
 
         {newAudioFile && (
-          <button
+            <Button
+            variant={isLightBackground ? 'dark' : 'default'}
             onClick={handleSaveNewVoice}
             disabled={uploadingVoice || !newVoiceName || !newReferenceText}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+            className="w-full flex items-center justify-center gap-2"
           >
             {uploadingVoice ? (
               <>
@@ -292,18 +298,12 @@ const GPTSoVITSConfig = ({
                 Save Voice
               </>
             )}
-          </button>
+          </Button>
         )}
 
         {/* Error/Status Message */}
         {errorMessage && (
-          <div className={`p-3 rounded-lg text-sm ${
-            errorMessage.includes('✅') 
-              ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
-              : errorMessage.startsWith('error-status:') || errorMessage.startsWith('hourglass:')
-              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-              : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-          }`}>
+          <div className={cn('p-3 rounded-lg text-sm', errorMessage.includes('✅') ? 'bg-green-500/20 text-green-300 border border-green-500/30' : (errorMessage.startsWith('error-status:') || errorMessage.startsWith('hourglass:')) ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30')}>
             {errorMessage.replace(/^(error-status:|hourglass:)/, '')}
           </div>
         )}
@@ -341,19 +341,14 @@ const GPTSoVITSConfig = ({
                         onChange={(e) => setEditReferenceText(e.target.value)}
                         placeholder="Reference text"
                         rows={2}
-                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs resize-none`}
+                        className={cn('glass-input w-full text-xs resize-none', isLightBackground && 'glass-input-dark')}
                       />
-                      <select
+                      <Select
                         value={editLanguage}
                         onChange={(e) => setEditLanguage(e.target.value)}
-                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-                      >
-                        <option value={GPTSoVITSLanguages.ENGLISH} className="bg-gray-900">English</option>
-                        <option value={GPTSoVITSLanguages.CHINESE} className="bg-gray-900">Chinese</option>
-                        <option value={GPTSoVITSLanguages.JAPANESE} className="bg-gray-900">Japanese</option>
-                        <option value={GPTSoVITSLanguages.KOREAN} className="bg-gray-900">Korean</option>
-                        <option value={GPTSoVITSLanguages.CANTONESE} className="bg-gray-900">Cantonese</option>
-                      </select>
+                        variant={isLightBackground ? 'dark' : 'default'}
+                        options={GPTSOVITS_LANG_OPTIONS}
+                      />
                     </div>
                   ) : (
                     <>

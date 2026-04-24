@@ -18,6 +18,8 @@ import { getLLMModelStorage } from '../../services/LLMModelStorageService';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
 import { Icon } from '../icons';
+import { cn } from '../../utils/cn';
+import { Button, Input, Select, Card, SettingsRow } from '../ui';
 
 const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }) => {
   const examples = providerKey === 'openai' ? {
@@ -60,16 +62,17 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
               </div>
             </div>
             {routing?.visionModel?.useSameAsMain === false && (
-              <input
-                type="text"
-                value={routing?.visionModel?.modelName || ''}
-                onChange={(e) => onChange('routing', { 
-                  ...routing, 
-                  visionModel: { ...routing?.visionModel, modelName: e.target.value }
-                })}
-                placeholder={`e.g., ${examples.vision}`}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              />
+                <Input
+                  type="text"
+                  value={routing?.visionModel?.modelName || ''}
+                  onChange={(e) => onChange('routing', { 
+                    ...routing, 
+                    visionModel: { ...routing?.visionModel, modelName: e.target.value }
+                  })}
+                  placeholder={`e.g., ${examples.vision}`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  size="xs"
+                />
             )}
           </div>
 
@@ -89,16 +92,17 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
               </div>
             </div>
             {routing?.routerModel?.useSameAsMain === false && (
-              <input
-                type="text"
-                value={routing?.routerModel?.modelName || ''}
-                onChange={(e) => onChange('routing', { 
-                  ...routing, 
-                  routerModel: { ...routing?.routerModel, modelName: e.target.value }
-                })}
-                placeholder={`e.g., ${examples.router}`}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-              />
+                <Input
+                  type="text"
+                  value={routing?.routerModel?.modelName || ''}
+                  onChange={(e) => onChange('routing', { 
+                    ...routing, 
+                    routerModel: { ...routing?.routerModel, modelName: e.target.value }
+                  })}
+                  placeholder={`e.g., ${examples.router}`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  size="xs"
+                />
             )}
           </div>
         </>
@@ -348,7 +352,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
       {/* System Prompt Personality */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">System Prompt Personality</label>
-        <select
+        <Select
           value={currentType}
           onChange={(e) => {
             const newType = e.target.value;
@@ -357,12 +361,9 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
               updateAIConfig(`${providerKey}.systemPrompt`, '');
             }
           }}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          {Object.entries(PromptConfig.systemPrompts).map(([key, value]) => (
-            <option key={key} value={key} className="bg-gray-900">{value.name}</option>
-          ))}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={Object.entries(PromptConfig.systemPrompts).map(([key, value]) => ({ value: key, label: value.name }))}
+        />
         <p className="text-xs text-white/50">
           Choose a personality for the AI assistant
         </p>
@@ -391,7 +392,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
           }}
           placeholder="Enter custom system prompt..."
           rows="4"
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full resize-y`}
+          className={cn('glass-input w-full resize-y', isLightBackground && 'glass-input-dark')}
         />
         <p className="text-xs text-white/50">
           Instructions that define the AI's behavior and personality. Editing a preset will switch to "Custom" mode.
@@ -415,7 +416,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
   const { api: androidAPI } = useAndroid();
   const { api: desktopAPI } = useDesktop();
-  const [desktopServerStatus, setDesktopServerStatus] = useState(null);
+  const [_desktopServerStatus, setDesktopServerStatus] = useState(null);
   const desktopServerPort = Number(aiConfig['desktop-local']?.serverPort || 11438);
   const isDesktopServerPortValid = Number.isInteger(desktopServerPort) && desktopServerPort >= 1 && desktopServerPort <= 65535;
 
@@ -462,57 +463,52 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
       <h3 className="text-base font-semibold text-white mb-4">LLM Configuration</h3>
 
       {isDesktop && (
-        <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <div className="text-sm font-medium text-white/90">Shared Local API Server (LLM/TTS/STT)</div>
+          <Card variant="default">
+            <div className="text-sm font-medium text-white/90">Shared Local API Server (LLM/TTS/STT)</div>
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex-1">
-              <p className="text-xs text-white/60 mt-1">
-                When enabled, binds to LAN so other devices can use your hosted server.
-              </p>
+            <SettingsRow
+              className="mt-2"
+              description="When enabled, binds to LAN so other devices can use your hosted server."
+            >
+              <Toggle
+                id="desktop-local-share-network"
+                checked={aiConfig['desktop-local']?.shareOnNetwork === true}
+                onChange={(checked) => updateAIConfig('desktop-local.shareOnNetwork', checked)}
+              />
+            </SettingsRow>
+
+            <div className="space-y-2 mt-2">
+              <label className="block text-sm font-medium text-white/90">Shared Server Port</label>
+              <Input
+                type="number"
+                min="1"
+                max="65535"
+                step="1"
+                value={desktopServerPort}
+                onChange={(e) => {
+                  const nextPort = Number.parseInt(e.target.value, 10);
+                  if (Number.isInteger(nextPort)) {
+                    updateAIConfig('desktop-local.serverPort', nextPort);
+                  }
+                }}
+                variant={isLightBackground ? 'dark' : 'default'}
+              />
+              {!isDesktopServerPortValid && (
+                <p className="text-xs text-red-300">Port must be between 1 and 65535.</p>
+              )}
             </div>
-            <Toggle
-              id="desktop-local-share-network"
-              checked={aiConfig['desktop-local']?.shareOnNetwork === true}
-              onChange={(checked) => updateAIConfig('desktop-local.shareOnNetwork', checked)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Shared Server Port</label>
-            <input
-              type="number"
-              min="1"
-              max="65535"
-              step="1"
-              value={desktopServerPort}
-              onChange={(e) => {
-                const nextPort = Number.parseInt(e.target.value, 10);
-                if (Number.isInteger(nextPort)) {
-                  updateAIConfig('desktop-local.serverPort', nextPort);
-                }
-              }}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            />
-            {!isDesktopServerPortValid && (
-              <p className="text-xs text-red-300">Port must be between 1 and 65535.</p>
-            )}
-          </div>
-        </div>
+          </Card>
       )}
       
       {/* Provider Selection */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Provider</label>
-        <select
+        <Select
           value={aiConfig.provider}
           onChange={(e) => updateAIConfig('provider', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-        >
-          {Object.entries(availableProviders).map(([key, value]) => (
-            <option key={value} value={value} className="bg-gray-900">{key}</option>
-          ))}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: key }))}
+        />
       </div>
 
       {aiConfig.provider === 'chrome-ai' && !hasChromeAI && (
@@ -528,22 +524,24 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
         <>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">API Key</label>
-            <input
+            <Input
               type="password"
               value={aiConfig.openai.apiKey}
               onChange={(e) => updateAIConfig('openai.apiKey', e.target.value)}
               placeholder="sk-..."
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full"
             />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Model</label>
-            <input
+            <Input
               type="text"
               value={aiConfig.openai.model}
               onChange={(e) => updateAIConfig('openai.model', e.target.value)}
               placeholder="gpt-4o"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full"
             />
           </div>
 
@@ -569,12 +567,13 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
         <>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
-            <input
+            <Input
               type="text"
               value={aiConfig.ollama?.endpoint ?? ''}
               onChange={(e) => updateAIConfig('ollama.endpoint', e.target.value)}
               placeholder="http://localhost:11434"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full"
             />
             <p className="text-xs text-white/50">
               URL of your local Ollama server
@@ -582,12 +581,13 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Model</label>
-            <input
+            <Input
               type="text"
               value={aiConfig.ollama?.model ?? ''}
               onChange={(e) => updateAIConfig('ollama.model', e.target.value)}
               placeholder="llama2"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full"
             />
             <p className="text-xs text-white/50">
               Model name (e.g., llama2, mistral, codellama)
@@ -623,12 +623,13 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
-            <input
+            <Input
               type="text"
               value={aiConfig['android-local']?.endpoint ?? 'http://127.0.0.1:8765'}
               onChange={(e) => updateAIConfig('android-local.endpoint', e.target.value)}
               placeholder="http://127.0.0.1:8765"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full"
             />
             <p className="text-xs text-white/50">
               Local HTTP server on Android device
@@ -781,12 +782,14 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
                   
                   {/* Download Button */}
                   {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
-                    <button
+                    <Button
                       onClick={startChromeAIDownload}
-                      className={`mt-3 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      size="sm"
+                      className="mt-3 w-full"
                     >
                       Start Model Download
-                    </button>
+                    </Button>
                   )}
                   
                   {/* Refresh Status Button */}
@@ -798,12 +801,14 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
                   </button>
                 </>
               ) : (
-                <button
+                <Button
                   onClick={checkChromeAIAvailability}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  size="sm"
+                  className="w-full"
                 >
                   Check Status
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -849,15 +854,16 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
           {/* Output Language */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Output Language</label>
-            <select
+            <Select
               value={aiConfig.chromeAi?.outputLanguage || 'en'}
               onChange={(e) => updateAIConfig('chromeAi.outputLanguage', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value="en" className="bg-gray-900">English (en)</option>
-              <option value="es" className="bg-gray-900">Spanish (es)</option>
-              <option value="ja" className="bg-gray-900">Japanese (ja)</option>
-            </select>
+              variant={isLightBackground ? 'dark' : 'default'}
+              options={[
+                { value: 'en', label: 'English (en)' },
+                { value: 'es', label: 'Spanish (es)' },
+                { value: 'ja', label: 'Japanese (ja)' },
+              ]}
+            />
             <p className="text-xs text-white/50">
               Specifies the output language for optimal quality and safety
             </p>
@@ -932,13 +938,13 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4">
-        <button 
+        <Button
           onClick={testAIConnection}
           disabled={aiTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+          variant={isLightBackground ? 'dark' : 'default'}
         >
           Test Connection
-        </button>
+        </Button>
       </div>
     </div>
   );

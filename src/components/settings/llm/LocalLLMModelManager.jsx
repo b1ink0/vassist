@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
+import { Button, Input } from '../../ui';
+import { cn } from '../../../utils/cn';
 
 /**
  * LocalLLMModelManager - Shared UI component for local LLM model management
@@ -215,21 +217,23 @@ const LocalLLMModelManager = ({
           </h3>
           
           <div className="space-y-2">
-            <input
+            <Input
               type="text"
               value={customModelsPath || 'Default'}
               readOnly
               placeholder="Default models folder"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="w-full text-xs"
             />
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={handleChooseFolder}
-                className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${customModelsPath ? 'flex-1' : 'w-full'}`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className={customModelsPath ? 'flex-1' : 'w-full'}
               >
                 <Icon name="folder" size={14} />
                 <span>Choose</span>
-              </button>
+              </Button>
               {customModelsPath && (
                 <button
                   onClick={handleClearCustomFolder}
@@ -276,38 +280,33 @@ const LocalLLMModelManager = ({
             
         {/* Download method selector */}
         <div className="flex gap-2 mb-3">
-          <button
+          <Button
             onClick={() => setDownloadMethod('ollama')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              downloadMethod === 'ollama'
-                ? `glass-button ${isLightBackground ? 'glass-button-dark' : ''}`
-                : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
-            }`}
+            variant={downloadMethod === 'ollama' ? (isLightBackground ? 'dark' : 'default') : 'ghost'}
+            className={cn('flex-1', downloadMethod !== 'ollama' && 'bg-white/5 text-white/60 border border-white/10')}
           >
             Ollama
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setDownloadMethod('huggingface')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              downloadMethod === 'huggingface'
-                ? `glass-button ${isLightBackground ? 'glass-button-dark' : ''}`
-                : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
-            }`}
+            variant={downloadMethod === 'huggingface' ? (isLightBackground ? 'dark' : 'default') : 'ghost'}
+            className={cn('flex-1', downloadMethod !== 'huggingface' && 'bg-white/5 text-white/60 border border-white/10')}
           >
             Hugging Face
-          </button>
+          </Button>
         </div>
         
         <div className="space-y-3">
           {downloadMethod === 'ollama' ? (
             <div>
-              <input
+              <Input
                 type="text"
                 value={ollamaModel}
                 onChange={(e) => setOllamaModel(e.target.value)}
                 placeholder="llama3.2:3b or qwen2.5:3b"
                 disabled={loading}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className="w-full"
               />
               <p className="text-[10px] text-white/50 mt-1.5">
                 Enter Ollama model name (e.g., llama3.2:3b, qwen2.5:3b, mistral:7b)
@@ -315,13 +314,14 @@ const LocalLLMModelManager = ({
             </div>
           ) : (
             <div>
-              <input
+              <Input
                 type="text"
                 value={downloadUrl}
                 onChange={(e) => setDownloadUrl(e.target.value)}
                 placeholder="https://huggingface.co/.../model-name"
                 disabled={loading}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+                variant={isLightBackground ? 'dark' : 'default'}
+                className="w-full"
               />
               <p className="text-[10px] text-white/50 mt-1.5">
                 Paste direct Hugging Face file URL
@@ -345,10 +345,11 @@ const LocalLLMModelManager = ({
             </div>
           )}
 
-          <button
+          <Button
             onClick={handleDownload}
             disabled={loading || (downloadMethod === 'huggingface' ? !downloadUrl.trim() : !ollamaModel.trim())}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            className="w-full"
           >
             {loading ? (
               <>
@@ -379,7 +380,7 @@ const LocalLLMModelManager = ({
                 <span>{downloadMethod === 'ollama' ? 'Pull Model' : 'Download Model'}</span>
               </>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* Quick links */}

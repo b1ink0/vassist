@@ -10,6 +10,8 @@ import Toggle from '../common/Toggle';
 import StreamingContainer from './StreamingContainer';
 import StreamingText from './StreamingText';
 import { TranslationLanguages } from '../../config/aiConfig';
+import { cn } from '../../utils/cn';
+import { Button, Card, SettingsRow } from '../ui';
 
 /**
  * Displays test results with streaming animation.
@@ -28,7 +30,7 @@ const TestResult = ({ status, message }) => {
 
   return (
     <StreamingContainer speed="fast" active={!!message}>
-      <div className={`mt-2 rounded-lg p-2 text-sm ${bgClass}`}>
+      <div className={cn('mt-2 rounded-lg p-2 text-sm', bgClass)}>
         <span className={textClass} style={{whiteSpace: 'pre-wrap'}}>
           {status === 'loading' ? (
             <StreamingText text={message} speed={5} showCursor={true} />
@@ -249,16 +251,15 @@ const AIFeaturesConfig = ({
 
       {/* Translator */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <label htmlFor="translator-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-            Translator
-          </label>
-          <Toggle
-            id="translator-enabled"
-            checked={features.translator?.enabled !== false}
-            onChange={(checked) => onFeatureChange?.('translator', checked)}
-          />
-        </div>
+        <Card variant="default">
+          <SettingsRow label="Translator">
+            <Toggle
+              id="translator-enabled"
+              checked={features.translator?.enabled !== false}
+              onChange={(checked) => onFeatureChange?.('translator', checked)}
+            />
+          </SettingsRow>
+        </Card>
         {features.translator?.enabled !== false && (
           <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
@@ -290,18 +291,16 @@ const AIFeaturesConfig = ({
             {showTesting && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={runTranslatorTest}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     {translatorTest.status === 'loading' ? 'Testing...' : 'Test'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={() => setTranslatorTest({ status: 'idle', message: '' })}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
 
                 <TestResult status={translatorTest.status} message={translatorTest.message} />
@@ -313,16 +312,15 @@ const AIFeaturesConfig = ({
 
       {/* Language Detector */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <label htmlFor="language-detector-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-            Language Detector
-          </label>
-          <Toggle
-            id="language-detector-enabled"
-            checked={features.languageDetector?.enabled !== false}
-            onChange={(checked) => onFeatureChange?.('languageDetector', checked)}
-          />
-        </div>
+        <Card variant="default">
+          <SettingsRow label="Language Detector">
+            <Toggle
+              id="language-detector-enabled"
+              checked={features.languageDetector?.enabled !== false}
+              onChange={(checked) => onFeatureChange?.('languageDetector', checked)}
+            />
+          </SettingsRow>
+        </Card>
         {features.languageDetector?.enabled !== false && (
           <div className="ml-7 space-y-2">
             <p className="text-xs text-white/50">
@@ -346,18 +344,16 @@ const AIFeaturesConfig = ({
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={runLanguageDetectorTest}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     {languageDetectorTest.status === 'loading' ? 'Detecting...' : 'Test'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={() => setLanguageDetectorTest({ status: 'idle', message: '' })}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
 
                 <TestResult status={languageDetectorTest.status} message={languageDetectorTest.message} />
@@ -369,16 +365,15 @@ const AIFeaturesConfig = ({
 
       {/* Summarizer */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <label htmlFor="summarizer-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-            Summarizer
-          </label>
-          <Toggle
-            id="summarizer-enabled"
-            checked={features.summarizer?.enabled !== false}
-            onChange={(checked) => onFeatureChange?.('summarizer', checked)}
-          />
-        </div>
+        <Card variant="default">
+          <SettingsRow label="Summarizer">
+            <Toggle
+              id="summarizer-enabled"
+              checked={features.summarizer?.enabled !== false}
+              onChange={(checked) => onFeatureChange?.('summarizer', checked)}
+            />
+          </SettingsRow>
+        </Card>
         {features.summarizer?.enabled !== false && (
           <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
@@ -388,18 +383,16 @@ const AIFeaturesConfig = ({
             {showTesting && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={runSummarizerTest}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     {summarizerTest.status === 'loading' ? 'Testing...' : 'Test'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={() => setSummarizerTest({ status: 'idle', message: '' })}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
 
                 <TestResult status={summarizerTest.status} message={summarizerTest.message} />
@@ -411,16 +404,15 @@ const AIFeaturesConfig = ({
 
       {/* Rewriter */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <label htmlFor="rewriter-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-            Text Rewriter
-          </label>
-          <Toggle
-            id="rewriter-enabled"
-            checked={features.rewriter?.enabled !== false}
-            onChange={(checked) => onFeatureChange?.('rewriter', checked)}
-          />
-        </div>
+        <Card variant="default">
+          <SettingsRow label="Text Rewriter">
+            <Toggle
+              id="rewriter-enabled"
+              checked={features.rewriter?.enabled !== false}
+              onChange={(checked) => onFeatureChange?.('rewriter', checked)}
+            />
+          </SettingsRow>
+        </Card>
         {features.rewriter?.enabled !== false && (
           <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
@@ -430,18 +422,16 @@ const AIFeaturesConfig = ({
             {showTesting && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={runRewriterTest}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     {rewriterTest.status === 'loading' ? 'Testing...' : 'Test'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={() => setRewriterTest({ status: 'idle', message: '' })}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
 
                 <TestResult status={rewriterTest.status} message={rewriterTest.message} />
@@ -453,16 +443,15 @@ const AIFeaturesConfig = ({
 
       {/* Writer */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-          <label htmlFor="writer-enabled" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-            Content Writer
-          </label>
-          <Toggle
-            id="writer-enabled"
-            checked={features.writer?.enabled !== false}
-            onChange={(checked) => onFeatureChange?.('writer', checked)}
-          />
-        </div>
+        <Card variant="default">
+          <SettingsRow label="Content Writer">
+            <Toggle
+              id="writer-enabled"
+              checked={features.writer?.enabled !== false}
+              onChange={(checked) => onFeatureChange?.('writer', checked)}
+            />
+          </SettingsRow>
+        </Card>
         {features.writer?.enabled !== false && (
           <div className="ml-7 space-y-3">
             <p className="text-xs text-white/50">
@@ -472,18 +461,16 @@ const AIFeaturesConfig = ({
             {showTesting && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={runWriterTest}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     {writerTest.status === 'loading' ? 'Testing...' : 'Test'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" className="w-full"
                     onClick={() => setWriterTest({ status: 'idle', message: '' })}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 text-xs font-medium rounded-lg w-full`}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
 
                 <TestResult status={writerTest.status} message={writerTest.message} />

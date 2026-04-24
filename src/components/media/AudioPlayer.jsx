@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { cn } from '../utils/cn';
 import { Icon } from './icons';
+import { Button } from './ui';
 
 const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -58,17 +60,18 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} p-3 rounded-lg flex items-center gap-3 w-full`}>
+    <div className={cn('glass-input', isLightBackground && 'glass-input-dark', 'p-3 rounded-lg flex items-center gap-3 w-full')}>
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
       
       {/* Play/Pause Button */}
-      <button
+      <Button
         onClick={togglePlayPause}
-        className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-10 h-10 rounded-full flex items-center justify-center hover:bg-purple-500/20 transition-all flex-shrink-0`}
+        variant={isLightBackground ? 'dark' : 'default'}
+        className="w-10 h-10 rounded-full hover:bg-purple-500/20 flex-shrink-0"
         title={isPlaying ? 'Pause' : 'Play'}
       >
         <Icon name={isPlaying ? 'pause' : 'play'} size={20} />
-      </button>
+      </Button>
 
       {/* Progress Bar Container */}
       <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -94,7 +97,7 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
         </div>
 
         {/* Time Display */}
-        <div className={`flex justify-between text-xs ${isLightBackground ? 'glass-text' : 'glass-text-black'} px-1`}>
+        <div className={cn('flex justify-between text-xs', isLightBackground ? 'glass-text' : 'glass-text-black', 'px-1')}>
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '../../icons';
 import { useDesktop } from '../../../contexts/DesktopContext';
 import { isDesktop } from '../../../utils/PlatformUtils';
+import { Button, Select, Input } from '../../ui';
 import LocalLLMModelManager from './LocalLLMModelManager';
 import { getLLMModelStorage } from '../../../services/LLMModelStorageService';
 
@@ -161,31 +162,26 @@ const DesktopLLMConfig = ({
           </button>
         </div>
 
-        <select
+        <Select
           value={selectedBackend}
           onChange={(e) => handleChange('backend', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
-        >
-          {backendItems.length > 0 ? (
-            backendItems.map((item) => (
-              <option
-                key={item.name}
-                value={item.name}
-                disabled={!item.supported}
-              >
-                {item.name.toUpperCase()} {!item.supported ? '(unsupported)' : ''}
-              </option>
-            ))
-          ) : (
-            <>
-              <option value="auto">AUTO</option>
-              <option value="cpu">CPU</option>
-              <option value="cuda">CUDA</option>
-              <option value="vulkan">VULKAN</option>
-              <option value="metal">METAL</option>
-            </>
-          )}
-        </select>
+          variant={isLightBackground ? 'dark' : 'default'}
+          options={
+            backendItems.length > 0
+              ? backendItems.map((item) => ({
+                  value: item.name,
+                  label: `${item.name.toUpperCase()}${!item.supported ? ' (unsupported)' : ''}`,
+                  disabled: !item.supported,
+                }))
+              : [
+                  { value: 'auto', label: 'AUTO' },
+                  { value: 'cpu', label: 'CPU' },
+                  { value: 'cuda', label: 'CUDA' },
+                  { value: 'vulkan', label: 'VULKAN' },
+                  { value: 'metal', label: 'METAL' },
+                ]
+          }
+        />
 
         <div className="flex items-center justify-between">
           <p className="text-[11px] text-white/60">
@@ -193,14 +189,15 @@ const DesktopLLMConfig = ({
               ? `Selected backend (${selectedBackend}) is installed`
               : `Selected backend (${selectedBackend}) is not installed`}
           </p>
-          <button
+          <Button
             onClick={installSelectedBackend}
             disabled={backendLoading || selectedBackend === 'auto'}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-3 py-1.5 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
+            variant={isLightBackground ? 'dark' : 'default'}
+            size="sm"
             type="button"
           >
             {backendLoading ? 'Installing...' : (backendStatus?.selectedInstalled ? 'Reinstall' : 'Install')}
-          </button>
+          </Button>
         </div>
 
         {backendProgress && (
@@ -241,12 +238,12 @@ const DesktopLLMConfig = ({
             <label className="block text-xs font-medium text-white/90 mb-1">
               Endpoint URL
             </label>
-            <input
+            <Input
               type="text"
               value={config.endpoint || 'http://127.0.0.1:11438'}
               onChange={(e) => handleChange('endpoint', e.target.value)}
               placeholder="http://127.0.0.1:11438"
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs sm:text-sm`}
+              variant={isLightBackground ? 'dark' : 'default'}
             />
             <p className="text-[10px] text-white/50 mt-1">
               Local AI server endpoint
@@ -274,14 +271,14 @@ const DesktopLLMConfig = ({
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Max Tokens ({config.maxTokens || 2048})
               </label>
-              <input
+              <Input
                 type="number"
                 min="256"
                 max="8192"
                 step="256"
                 value={config.maxTokens || 2048}
                 onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
             </div>
             
@@ -289,14 +286,14 @@ const DesktopLLMConfig = ({
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Context Size ({config.contextSize || 4096})
               </label>
-              <input
+              <Input
                 type="number"
                 min="512"
                 max="32768"
                 step="512"
                 value={config.contextSize || 4096}
                 onChange={(e) => handleChange('contextSize', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
             </div>
             
@@ -304,13 +301,13 @@ const DesktopLLMConfig = ({
               <label className="block text-xs font-medium text-white/90 mb-1">
                 GPU Layers ({config.gpuLayers !== undefined ? config.gpuLayers : 33})
               </label>
-              <input
+              <Input
                 type="number"
                 min="0"
                 max="100"
                 value={config.gpuLayers !== undefined ? config.gpuLayers : 33}
                 onChange={(e) => handleChange('gpuLayers', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
               <p className="text-[10px] text-white/50 mt-1">
                 Offload layers to GPU (0 = CPU only)
@@ -321,13 +318,13 @@ const DesktopLLMConfig = ({
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Threads ({config.threads || 4})
               </label>
-              <input
+              <Input
                 type="number"
                 min="1"
                 max="32"
                 value={config.threads || 4}
                 onChange={(e) => handleChange('threads', parseInt(e.target.value))}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
             </div>
           </div>

@@ -3,39 +3,12 @@
  * Quick Start introduction
  */
 
-import { useState } from 'react';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import logo from '../../../assets/VA.svg';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
-
-// Copy button component for Chrome flags
-const FlagCopyButton = ({ flagUrl, flagValue }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(flagUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex items-center gap-2 p-2 bg-white/5 rounded border border-white/10">
-      <Icon name="flag" size={14} className="text-white/80 flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <code className="text-[11px] text-white/70 break-all block">{flagUrl}</code>
-        <p className="text-[10px] text-white/60 mt-1">Set to: <span className="text-white/80">{flagValue}</span></p>
-      </div>
-      <button
-        onClick={handleCopy}
-        className="flex-shrink-0 px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
-        title="Copy flag URL"
-      >
-        <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-white" : "text-white/80"} />
-      </button>
-    </div>
-  );
-};
+import FlagCopyButton from '../../common/FlagCopyButton';
+import { Button } from '../../ui';
 
 const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { nextStep } = useSetup();
@@ -64,12 +37,12 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
       </div>
 
       {/* Start Button */}
-      <button
+      <Button
         onClick={nextStep}
-        className="glass-button rounded-lg px-8 py-2 md:py-3 sm:px-10 sm:py-4 text-base sm:text-lg font-semibold mt-2 md:mt-4 sm:mt-8"
+        className="px-8 sm:px-10 py-2 md:py-3 sm:py-4 text-base sm:text-lg font-semibold mt-2 md:mt-4 sm:mt-8"
       >
         Get Started →
-      </button>
+      </Button>
 
       {/* Documentation Link */}
       <div className="mt-2 md:mt-4 text-sm text-white/80">

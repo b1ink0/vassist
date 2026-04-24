@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { cn } from '../../utils/cn';
 
 /**
  * Container with streaming expand/collapse animation.
@@ -119,7 +120,7 @@ const StreamingContainer = ({
   return (
     <div
       ref={containerRef}
-      className={`${getContainerClass()} ${isActive ? 'streaming-active' : ''} ${className}`}
+      className={cn(getContainerClass(), isActive && 'streaming-active', className)}
       style={style}
       onTransitionEnd={handleTransitionEnd}
     >

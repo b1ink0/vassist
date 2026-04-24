@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from './ui';
 import { useDesktop } from '../contexts/DesktopContext';
 
 const DesktopScreenShareDialog = () => {
@@ -54,9 +55,7 @@ const DesktopScreenShareDialog = () => {
             {screens.map(source => (
               <div
                 key={source.id}
-                className={`glass-container rounded-lg p-3 cursor-pointer transition-all hover:scale-[1.02] hover:border-blue-400/50 flex flex-col gap-2.5 ${
-                  selectedId === source.id ? 'border-blue-400 bg-blue-900/30' : ''
-                }`}
+                className={cn('glass-container rounded-lg p-3 cursor-pointer transition-all hover:scale-[1.02] hover:border-blue-400/50 flex flex-col gap-2.5', selectedId === source.id && 'border-blue-400 bg-blue-900/30')}
                 onClick={() => setSelectedId(source.id)}
               >
                 <img 
@@ -83,9 +82,7 @@ const DesktopScreenShareDialog = () => {
             {windows.map(source => (
               <div
                 key={source.id}
-                className={`glass-container rounded-lg p-3 cursor-pointer transition-all hover:scale-[1.02] hover:border-blue-400/50 flex flex-col gap-2.5 ${
-                  selectedId === source.id ? 'border-blue-400 bg-blue-900/30' : ''
-                }`}
+                className={cn('glass-container rounded-lg p-3 cursor-pointer transition-all hover:scale-[1.02] hover:border-blue-400/50 flex flex-col gap-2.5', selectedId === source.id && 'border-blue-400 bg-blue-900/30')}
                 onClick={() => setSelectedId(source.id)}
               >
                 <img 
@@ -112,19 +109,21 @@ const DesktopScreenShareDialog = () => {
       )}
 
       <div className="flex justify-end gap-3 pt-2.5 border-t border-white/10 sticky bottom-0 bg-[#1a1a1a] pb-5">
-        <button 
-          className="glass-button px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20"
+        <Button 
+          variant="default"
+          className="px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20"
           onClick={handleCancel}
         >
           Cancel
-        </button>
-        <button 
-          className="glass-button px-6 py-2.5 rounded-lg text-sm font-medium bg-blue-500/30 hover:bg-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+        </Button>
+        <Button 
+          variant="default"
+          className="px-6 py-2.5 rounded-lg text-sm font-medium bg-blue-500/30 hover:bg-blue-500/40"
           onClick={handleSelect}
           disabled={!selectedId}
         >
           Share
-        </button>
+        </Button>
       </div>
     </div>
   );

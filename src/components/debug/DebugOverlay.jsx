@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { cn } from '../utils/cn';
 import { Icon } from './icons';
 import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../contexts/ConfigContext';
@@ -296,21 +297,13 @@ const DebugOverlay = ({ scene, positionManager }) => {
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setActiveTab('debug')}
-          className={`flex-1 px-3 py-2 rounded text-sm transition-all ${
-            activeTab === 'debug' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          className={cn('flex-1 px-3 py-2 rounded text-sm transition-all', activeTab === 'debug' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600')}
         >
           Debug
         </button>
         <button
           onClick={() => setActiveTab('config')}
-          className={`flex-1 px-3 py-2 rounded text-sm transition-all ${
-            activeTab === 'config' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          className={cn('flex-1 px-3 py-2 rounded text-sm transition-all', activeTab === 'config' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600')}
         >
           Preset Config
         </button>

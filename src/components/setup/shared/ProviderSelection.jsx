@@ -11,6 +11,8 @@
  * @param {boolean} props.showProsCons - Show pros/cons (default: false)
  */
 import { Icon } from '../../icons';
+import { Badge } from '../../ui';
+import { cn } from '../../../utils/cn';
 
 const ProviderSelection = ({ 
   providers, 
@@ -33,21 +35,21 @@ const ProviderSelection = ({
           <div
             key={provider.id}
             onClick={() => available && onProviderSelect(provider.id)}
-            className={`
-              rounded-lg transition-all duration-300
-              ${compact ? 'p-2 sm:p-3' : 'p-6'}
-              ${available ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}
-              ${selectedProvider === provider.id ? 'border-2 border-white/30 shadow-lg shadow-white/20' : 'border-2 border-white/10'}
-              ${available ? 'hover:border-white/30' : ''}
-            `}
+            className={cn(
+              'rounded-lg transition-all duration-300 border-2',
+              compact ? 'p-2 sm:p-3' : 'p-6',
+              available ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed',
+              selectedProvider === provider.id ? 'border-white/30 shadow-lg shadow-white/20' : 'border-white/10',
+              available && 'hover:border-white/30'
+            )}
           >
-            <div className={`flex items-start ${compact ? 'gap-2' : 'gap-4'}`}>
+            <div className={cn('flex items-start', compact ? 'gap-2' : 'gap-4')}>
               {/* Icon */}
-              <div className={`flex-shrink-0`}>
+              <div className="flex-shrink-0">
                 {provider.iconName ? (
                   <Icon name={provider.iconName} size={compact ? 20 : 40} className={mutedColor} />
                 ) : (
-                  <span className={`${compact ? 'text-xl sm:text-2xl' : 'text-4xl'}`}>{provider.icon}</span>
+                  <span className={cn(compact ? 'text-xl sm:text-2xl' : 'text-4xl')}>{provider.icon}</span>
                 )}
               </div>
 
@@ -55,46 +57,46 @@ const ProviderSelection = ({
               <div className="flex-1 min-w-0">
                 {/* Header with badges */}
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h3 className={`${compact ? 'text-sm sm:text-base' : 'text-xl'} font-semibold ${textColor}`}>
+                  <h3 className={cn(compact ? 'text-sm sm:text-base' : 'text-xl', 'font-semibold', textColor)}>
                     {provider.name}
                   </h3>
                   {provider.recommended && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/80 rounded-full`}>
+                    <Badge variant="recommended" className={compact ? 'text-[10px] px-1.5 py-0.5' : undefined}>
                       Recommended
-                    </span>
+                    </Badge>
                   )}
                   {selectedProvider === provider.id && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/70 rounded-full`}>
+                    <Badge variant="selected" className={compact ? 'text-[10px] px-1.5 py-0.5' : undefined}>
                       Selected
-                    </span>
+                    </Badge>
                   )}
                   {!available && (
-                    <span className={`${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} bg-white/10 text-white/70 rounded-full`}>
+                    <Badge variant="unavailable" className={compact ? 'text-[10px] px-1.5 py-0.5' : undefined}>
                       Unavailable
-                    </span>
+                    </Badge>
                   )}
                 </div>
 
                 {/* Description */}
-                <p className={`${compact ? 'text-xs hidden sm:block' : 'text-base'} ${mutedColor} ${compact ? 'mb-1' : 'mb-3'}`}>
+                <p className={cn(compact ? 'text-xs hidden sm:block' : 'text-base', mutedColor, compact ? 'mb-1' : 'mb-3')}>
                   {provider.description}
                 </p>
 
                 {/* Requirements */}
                 {provider.requirements && (
-                  <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} ${subtleColor} ${compact ? 'mb-1' : 'mb-3'}`}>
+                  <p className={cn(compact ? 'text-[10px] sm:text-xs' : 'text-sm', subtleColor, compact ? 'mb-1' : 'mb-3')}>
                     <strong>Requirements:</strong> {provider.requirements}
                   </p>
                 )}
 
                 {/* Pros and Cons (only if showProsCons is true) */}
                 {showProsCons && (
-                  <div className={`grid grid-cols-1 md:grid-cols-2 ${compact ? 'gap-2' : 'gap-4'}`}>
+                  <div className={cn('grid grid-cols-1 md:grid-cols-2', compact ? 'gap-2' : 'gap-4')}>
                     {/* Pros */}
                     {provider.pros && provider.pros.length > 0 && (
                       <div>
-                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-white/80 mb-1`}>Pros:</p>
-                        <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
+                        <p className={cn(compact ? 'text-[10px] sm:text-xs' : 'text-sm', 'font-semibold text-white/80 mb-1')}>Pros:</p>
+                        <ul className={cn(compact ? 'text-[10px]' : 'text-xs', subtleColor, 'space-y-1')}>
                           {provider.pros.map((pro, idx) => (
                             <li key={idx} className="flex items-start gap-1.5">
                               <Icon name="check" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />
@@ -108,8 +110,8 @@ const ProviderSelection = ({
                     {/* Cons */}
                     {provider.cons && provider.cons.length > 0 && (
                       <div>
-                        <p className={`${compact ? 'text-[10px] sm:text-xs' : 'text-sm'} font-semibold text-white/80 mb-1`}>Cons:</p>
-                        <ul className={`${compact ? 'text-[10px]' : 'text-xs'} ${subtleColor} space-y-1`}>
+                        <p className={cn(compact ? 'text-[10px] sm:text-xs' : 'text-sm', 'font-semibold text-white/80 mb-1')}>Cons:</p>
+                        <ul className={cn(compact ? 'text-[10px]' : 'text-xs', subtleColor, 'space-y-1')}>
                           {provider.cons.map((con, idx) => (
                             <li key={idx} className="flex items-start gap-1.5">
                               <Icon name="warning" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />

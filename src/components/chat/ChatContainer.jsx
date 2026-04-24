@@ -4,7 +4,9 @@
  */
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { Icon } from './icons';;
+import { Icon } from './icons';
+import { Button } from './ui';
+import { cn } from '../utils/cn';
 import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
 import { DefaultTTSConfig } from '../config/aiConfig';
 import BackgroundDetector from '../utils/BackgroundDetector';
@@ -1197,13 +1199,13 @@ const ChatContainer = ({
         }}
       >
         <div 
-          className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50`}
+          className={cn('glass-container', isLightBackground && 'glass-container-dark', 'px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50')}
           style={{
             transform: isDragOver ? 'scale(1)' : 'scale(0.95)',
             transition: 'transform 200ms ease-in-out'
           }}
         >
-          <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg font-medium flex items-center gap-2`}>
+          <p className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg font-medium flex items-center gap-2')}>
             <Icon name="attachment" size={20} /> Drop
           </p>
         </div>
@@ -1213,83 +1215,91 @@ const ChatContainer = ({
       <div className="relative flex items-center justify-between gap-2 pb-1">
         {/* LEFT: Settings + History */}
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
             title="Settings"
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-base leading-none flex items-center justify-center`}><Icon name="settings" size={16} /></span>
-          </button>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-base leading-none flex items-center justify-center')}><Icon name="settings" size={16} /></span>
+          </Button>
           
-          <button
+          <Button
             onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
             title="Chat history"
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg leading-none flex items-center justify-center')}>
               <Icon name="history" size={16} />
             </span>
-          </button>
+          </Button>
         </div>
         
         {/* CENTER: Stop + Add Chat + Close (grouped) */}
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={handleStopGeneration}
             disabled={!isGenerating && !isSpeaking && loadingMessageIndex === null}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${
-              isGenerating || isSpeaking || loadingMessageIndex !== null
-                ? 'glass-error' 
-                : 'opacity-50 cursor-not-allowed'
-            } ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isGenerating || isSpeaking || loadingMessageIndex !== null ? 'error' : (isLightBackground ? 'dark' : 'default')}
+            className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
             title={isGenerating ? 'Stop generation' : (isSpeaking || loadingMessageIndex !== null) ? 'Stop TTS' : 'Nothing to stop'}
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center ${
-              isGenerating || isSpeaking || loadingMessageIndex !== null ? '' : 'opacity-50'
-            }`}><Icon name="stop" size={16} /></span>
-          </button>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg leading-none flex items-center justify-center')}><Icon name="stop" size={16} /></span>
+          </Button>
           
-          <button
+          <Button
             onClick={clearChat}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
             title="Start new chat"
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg leading-none flex items-center justify-center')}>
               <Icon name="add" size={18} />
             </span>
-          </button>
+          </Button>
           
           {!modelDisabled && (
-            <button
+            <Button
               onClick={handleClose}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+              size="icon"
+              variant={isLightBackground ? 'dark' : 'default'}
+              className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
               title="Close chat"
             >
-              <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm leading-none flex items-center justify-center`}><Icon name="close" size={16} /></span>
-            </button>
+              <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-sm leading-none flex items-center justify-center')}><Icon name="close" size={16} /></span>
+            </Button>
           )}
         </div>
         
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={() => updateUIConfig('enableModelLoading', !uiConfig.enableModelLoading)}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            className={isClosing ? 'animate-fade-out' : 'animate-fade-in'}
             title={uiConfig.enableModelLoading ? 'Hide character' : 'Show character'}
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg leading-none flex items-center justify-center')}>
               <Icon name={uiConfig.enableModelLoading ? 'eye-off' : 'eye'} size={18} />
             </span>
-            </button>
+            </Button>
           
-          <button
+          <Button
             onClick={() => setIsTempChat(!isTempChat)}
-            className={`glass-button ${isTempChat ? (isLightBackground ? 'bg-yellow-300/40 border border-yellow-400/60' : 'bg-yellow-500/40 border border-yellow-500/60') : (isLightBackground ? 'glass-button-dark' : '')} h-8 w-8 rounded-lg flex items-center justify-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            size="icon"
+            variant={isTempChat ? 'default' : (isLightBackground ? 'dark' : 'default')}
+            className={cn(isTempChat && (isLightBackground ? 'bg-yellow-300/40 border-yellow-400/60' : 'bg-yellow-500/40 border-yellow-500/60'), isClosing ? 'animate-fade-out' : 'animate-fade-in')}
             title={isTempChat ? 'Disable temp mode - chat will be saved' : 'Enable temp mode - chat won\'t be saved'}
           >
-            <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-lg leading-none flex items-center justify-center`}>
+            <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-lg leading-none flex items-center justify-center')}>
               <Icon name={isTempChat ? 'star' : 'pin'} size={18} />
             </span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1304,13 +1314,13 @@ const ChatContainer = ({
       >
         {!(isDesktop || isAndroid) && (
           <div 
-            className={`absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            className={cn('absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message', isLightBackground && 'glass-message-dark', isClosing ? 'animate-fade-out' : 'animate-fade-in')}
           />
         )}
         
         {!(isDesktop || isAndroid) && (
           <div 
-            className={`absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message ${isLightBackground ? 'glass-message-dark' : ''} ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            className={cn('absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message', isLightBackground && 'glass-message-dark', isClosing ? 'animate-fade-out' : 'animate-fade-in')}
           />
         )}
         
@@ -1321,9 +1331,9 @@ const ChatContainer = ({
         >
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-6">
-              <div className={`glass-container ${isLightBackground ? 'glass-container-dark' : ''} px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
+              <div className={cn('glass-container', isLightBackground && 'glass-container-dark', 'px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center', isClosing ? 'animate-fade-out' : 'animate-fade-in')}>
                 <div className="w-full flex justify-center items-center text-6xl mb-4"><Icon name="chat" size={18} /></div>
-                <p className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-sm opacity-70`}>
+                <p className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-sm opacity-70')}>
                   Type a message below to begin chatting with your AI assistant
                 </p>
               </div>
@@ -1383,7 +1393,7 @@ const ChatContainer = ({
                         <div className="flex flex-col items-start">
                           <div className="flex items-start gap-2 max-w-[80%]">
                             <div className="flex flex-col gap-1.5">
-                              <div className={`glass-message ${isLightBackground ? 'glass-message-dark' : ''} px-2 md:px-4 py-2 md:py-3 rounded-[20px] rounded-tl-md flex items-center justify-center`}>
+                              <div className={cn('glass-message', isLightBackground && 'glass-message-dark', 'px-2 md:px-4 py-2 md:py-3 rounded-[20px] rounded-tl-md flex items-center justify-center')}>
                                 <div className="loading-dots">
                                   <span className="loading-dot"></span>
                                   <span className="loading-dot"></span>

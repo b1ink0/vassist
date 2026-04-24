@@ -10,6 +10,7 @@ import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
 import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions, RenderQualityOptions, DefaultCustomQualitySettings } from '../../config/uiConfig';
 import { AnimationCategory, getDefaultAnimationsByCategory } from '../../config/animationConfig';
+import { cn } from '../../utils/cn';
 import Toggle from '../common/Toggle';
 import Dialog from '../common/Dialog';
 import Icon from '../icons/Icon';
@@ -21,6 +22,7 @@ import { motionStorageService } from '../../services/MotionStorageService';
 import emoteStorageService from '../../services/EmoteStorageService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import JSZip from 'jszip';
+import { Button, Input, Select, TabBar } from '../ui';
 
 const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }) => {
   const {
@@ -1253,7 +1255,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   return (
     <div className="flex flex-col h-full">
       {/* Sub-tabs */}
-      <div className="flex border-b border-white/20 relative">
+      <div className="relative">
         <div 
           className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
           style={{
@@ -1261,62 +1263,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             width: `${subTabIndicatorStyle.width}px`,
           }}
         />
-        
-        <button
-          ref={(el) => (subTabsRef.display = el)}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
-            activeSubTab === 'display' 
-              ? 'text-white' 
-              : 'text-white/60 hover:text-white/90'
-          }`}
-          onClick={() => setActiveSubTab('display')}
-        >
-          Display
-        </button>
-        <button
-          ref={(el) => (subTabsRef.performance = el)}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
-            activeSubTab === 'performance' 
-              ? 'text-white' 
-              : 'text-white/60 hover:text-white/90'
-          }`}
-          onClick={() => setActiveSubTab('performance')}
-        >
-          Performance
-        </button>
-        <button
-          ref={(el) => (subTabsRef.models = el)}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
-            activeSubTab === 'models' 
-              ? 'text-white' 
-              : 'text-white/60 hover:text-white/90'
-          }`}
-          onClick={() => setActiveSubTab('models')}
-        >
-          Models
-        </button>
-        <button
-          ref={(el) => (subTabsRef.animations = el)}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
-            activeSubTab === 'animations' 
-              ? 'text-white' 
-              : 'text-white/60 hover:text-white/90'
-          }`}
-          onClick={() => setActiveSubTab('animations')}
-        >
-          Animations
-        </button>
-        <button
-          ref={(el) => (subTabsRef.emotes = el)}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out ${
-            activeSubTab === 'emotes' 
-              ? 'text-white' 
-              : 'text-white/60 hover:text-white/90'
-          }`}
-          onClick={() => setActiveSubTab('emotes')}
-        >
-          Emotes
-        </button>
+        <TabBar
+          tabs={[
+            { id: 'display', label: 'Display' },
+            { id: 'performance', label: 'Performance' },
+            { id: 'models', label: 'Models' },
+            { id: 'animations', label: 'Animations' },
+            { id: 'emotes', label: 'Emotes' },
+          ]}
+          activeTab={activeSubTab}
+          onTabChange={setActiveSubTab}
+          tabsRef={subTabsRef}
+        />
       </div>
 
       {/* Sub-tab content with sliding animation */}
@@ -1329,7 +1287,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           }}
         >
           {/* Display Tab */}
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
       {/* Enable Avatar Toggle */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
@@ -1351,13 +1309,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       {/* Reload Scene Button */}
       {uiConfig.enableModelLoading && (
         <div className="space-y-2">
-          <button
+          <Button
+            variant={isLightBackground ? 'dark' : 'default'}
             onClick={reloadScene}
-            className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+            className="w-full flex items-center justify-center gap-2"
           >
             <Icon name="refresh" size={16} />
             Reload Avatar
-          </button>
+          </Button>
           <p className="text-xs text-white/50 text-center">
             Refresh the avatar after changing model or settings
           </p>
@@ -1413,18 +1372,15 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {allowPositionSelection && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-white/90">Character Position</label>
-              <select
+              <Select
                 value={uiConfig.position?.preset || 'bottom-right'}
                 onChange={(e) => updateUIConfig('position.preset', e.target.value)}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-              >
-                <option value="last-location" className="bg-gray-900">Last Location (Remember Position)</option>
-                {Object.entries(PositionPresets).map(([key, preset]) => (
-                  <option key={key} value={key} className="bg-gray-900">
-                    {preset.name}
-                  </option>
-                ))}
-              </select>
+                variant={isLightBackground ? 'dark' : 'default'}
+                options={[
+                  { value: 'last-location', label: 'Last Location (Remember Position)' },
+                  ...Object.entries(PositionPresets).map(([key, preset]) => ({ value: key, label: preset.name })),
+                ]}
+              />
               <p className="text-xs text-white/50">
                 {uiConfig.position?.preset === 'last-location'
                   ? 'Will load at the last dragged position. Drag to save new position.'
@@ -1437,7 +1393,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Performance Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
           {/* Physics Simulation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -1459,14 +1415,15 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             {uiConfig.enablePhysics !== false && (typeof __EXTENSION_MODE__ === 'undefined' || !__EXTENSION_MODE__) && (
               <div className="mt-3 pt-3 border-t border-white/10">
                 <label className="block text-xs text-white/70 font-medium mb-2">Physics Engine</label>
-                <select
+                <Select
                   value={uiConfig.physicsEngine || PhysicsEngineOptions.BULLET}
                   onChange={(e) => updateUIConfig('physicsEngine', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-                >
-                  <option value={PhysicsEngineOptions.BULLET} className="bg-gray-900">Bullet Physics (Recommended)</option>
-                  <option value={PhysicsEngineOptions.HAVOK} className="bg-gray-900">Havok Physics</option>
-                </select>
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={[
+                    { value: PhysicsEngineOptions.BULLET, label: 'Bullet Physics (Recommended)' },
+                    { value: PhysicsEngineOptions.HAVOK, label: 'Havok Physics' },
+                  ]}
+                />
                 <p className="text-xs text-white/40 mt-1.5">
                   {uiConfig.physicsEngine === PhysicsEngineOptions.BULLET
                     ? 'WASM-based physics with better MMD compatibility'
@@ -1479,21 +1436,22 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* FPS Limit */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Frame Rate Limit</label>
-            <select
+            <Select
               value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
               onChange={(e) => {
                 const value = e.target.value === 'native' ? 'native' : parseInt(e.target.value);
                 updateUIConfig('fpsLimit', value);
               }}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value={FPSLimitOptions.FPS_15} className="bg-gray-900">15 FPS (Ultra Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_24} className="bg-gray-900">24 FPS (Cinematic)</option>
-              <option value={FPSLimitOptions.FPS_30} className="bg-gray-900">30 FPS (Battery Saver)</option>
-              <option value={FPSLimitOptions.FPS_60} className="bg-gray-900">60 FPS (Recommended)</option>
-              <option value={FPSLimitOptions.FPS_90} className="bg-gray-900">90 FPS (High Refresh)</option>
-              <option value={FPSLimitOptions.NATIVE} className="bg-gray-900">Native (Monitor Rate)</option>
-            </select>
+              variant={isLightBackground ? 'dark' : 'default'}
+              options={[
+                { value: FPSLimitOptions.FPS_15, label: '15 FPS (Ultra Battery Saver)' },
+                { value: FPSLimitOptions.FPS_24, label: '24 FPS (Cinematic)' },
+                { value: FPSLimitOptions.FPS_30, label: '30 FPS (Battery Saver)' },
+                { value: FPSLimitOptions.FPS_60, label: '60 FPS (Recommended)' },
+                { value: FPSLimitOptions.FPS_90, label: '90 FPS (High Refresh)' },
+                { value: FPSLimitOptions.NATIVE, label: 'Native (Monitor Rate)' },
+              ]}
+            />
             {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native' ? (
               <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
                 <Icon name="alert-triangle" size={14} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
@@ -1511,17 +1469,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* Render Quality */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Render Quality</label>
-            <select
+            <Select
               value={uiConfig.renderQuality || RenderQualityOptions.MEDIUM}
               onChange={(e) => updateUIConfig('renderQuality', e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-            >
-              <option value={RenderQualityOptions.LOW} className="bg-gray-900">Low (Best Performance)</option>
-              <option value={RenderQualityOptions.MEDIUM} className="bg-gray-900">Medium (Balanced)</option>
-              <option value={RenderQualityOptions.HIGH} className="bg-gray-900">High (Better Quality)</option>
-              <option value={RenderQualityOptions.ULTRA} className="bg-gray-900">Ultra (Maximum Quality)</option>
-              <option value={RenderQualityOptions.CUSTOM} className="bg-gray-900">Custom (Advanced)</option>
-            </select>
+              variant={isLightBackground ? 'dark' : 'default'}
+              options={[
+                { value: RenderQualityOptions.LOW, label: 'Low (Best Performance)' },
+                { value: RenderQualityOptions.MEDIUM, label: 'Medium (Balanced)' },
+                { value: RenderQualityOptions.HIGH, label: 'High (Better Quality)' },
+                { value: RenderQualityOptions.ULTRA, label: 'Ultra (Maximum Quality)' },
+                { value: RenderQualityOptions.CUSTOM, label: 'Custom (Advanced)' },
+              ]}
+            />
             <p className="text-xs text-white/50">
               {uiConfig.renderQuality === RenderQualityOptions.LOW && 'Minimal effects, sharp image for low-end devices'}
               {(uiConfig.renderQuality === RenderQualityOptions.MEDIUM || !uiConfig.renderQuality) && 'Subtle bloom highlights'}
@@ -1540,16 +1499,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                     <label className="text-xs text-white/70">Anti-Aliasing (MSAA)</label>
                     <span className="text-xs text-white/50">{uiConfig.customQuality?.samples || DefaultCustomQualitySettings.samples}x</span>
                   </div>
-                  <select
+                  <Select
                     value={uiConfig.customQuality?.samples || DefaultCustomQualitySettings.samples}
                     onChange={(e) => handleCustomQualityChange('samples', parseInt(e.target.value))}
-                    className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-                  >
-                    <option value={1} className="bg-gray-900">1x (Off)</option>
-                    <option value={2} className="bg-gray-900">2x</option>
-                    <option value={4} className="bg-gray-900">4x</option>
-                    <option value={8} className="bg-gray-900">8x (High GPU)</option>
-                  </select>
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    options={[
+                      { value: 1, label: '1x (Off)' },
+                      { value: 2, label: '2x' },
+                      { value: 4, label: '4x' },
+                      { value: 8, label: '8x (High GPU)' },
+                    ]}
+                  />
                 </div>
                 
                 <div className="flex items-center justify-between">
@@ -1634,16 +1594,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                         <label className="text-xs text-white/60">Bloom Kernel Size</label>
                         <span className="text-xs text-white/40">{uiConfig.customQuality?.bloomKernel || DefaultCustomQualitySettings.bloomKernel}</span>
                       </div>
-                      <select
+                      <Select
                         value={uiConfig.customQuality?.bloomKernel || DefaultCustomQualitySettings.bloomKernel}
                         onChange={(e) => handleCustomQualityChange('bloomKernel', parseInt(e.target.value))}
-                        className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-xs`}
-                      >
-                        <option value={16} className="bg-gray-900">16 (Tight)</option>
-                        <option value={32} className="bg-gray-900">32 (Normal)</option>
-                        <option value={48} className="bg-gray-900">48 (Wide)</option>
-                        <option value={64} className="bg-gray-900">64 (Very Wide)</option>
-                      </select>
+                        variant={isLightBackground ? 'dark' : 'default'}
+                        options={[
+                          { value: 16, label: '16 (Tight)' },
+                          { value: 32, label: '32 (Normal)' },
+                          { value: 48, label: '48 (Wide)' },
+                          { value: 64, label: '64 (Very Wide)' },
+                        ]}
+                      />
                     </div>
                   </div>
                 )}
@@ -1697,7 +1658,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                   <p className="text-[10px] text-white/30">0 = neutral, positive = more vibrant</p>
                 </div>
                 
-                <button
+                <Button
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="w-full"
                   onClick={() => {
                     updateUIConfig('customQuality', { ...DefaultCustomQualitySettings });
                     const scene = sceneRef?.current;
@@ -1720,17 +1683,16 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                       }
                     }
                   }}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-3 py-1.5 rounded text-xs font-medium`}
                 >
                   Reset to Defaults
-                </button>
+                </Button>
               </div>
             )}
           </div>
         </div>
 
       {/* Models Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
           {/* Model Management Section */}
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-white mb-3">Custom Models</h4>
@@ -1799,7 +1761,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 
                 {/* Expandable Settings for Default Model */}
                 {expandedModelSettings === 'default' && (
-                  <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+                  <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto scrollbar-glass">
                     {/* Textures Section - Grouped by Type */}
                     {builtinModelMetadata.textures && builtinModelMetadata.textures.length > 0 ? (() => {
                       const groupedTextures = groupTexturesByType(builtinModelMetadata.textures);
@@ -1818,14 +1780,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                   <button
                                     key={texture.id}
                                     onClick={() => handleToggleTexture('default', texture.id)}
-                                    className={`
-                                      relative p-2 rounded-lg text-left transition-all duration-200
-                                      backdrop-blur-sm
-                                      ${texture.isActive 
-                                        ? 'bg-white/10 hover:bg-white/15 shadow-sm' 
-                                        : 'bg-white/5 hover:bg-white/10 opacity-40'
-                                      }
-                                    `}
+                                    className={cn('relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm', texture.isActive ? 'bg-white/10 hover:bg-white/15 shadow-sm' : 'bg-white/5 hover:bg-white/10 opacity-40')}
                                     title={texture.name}
                                   >
                                     <span className="text-xs text-white/90 truncate block">
@@ -1864,14 +1819,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                   <button
                                     key={meshPart.id}
                                     onClick={() => handleToggleMeshPart('default', meshPart.id)}
-                                    className={`
-                                      relative p-2 rounded-lg text-left transition-all duration-200
-                                      backdrop-blur-sm
-                                      ${meshPart.isVisible 
-                                        ? 'bg-white/10 hover:bg-white/15 shadow-sm' 
-                                        : 'bg-white/5 hover:bg-white/10 opacity-40'
-                                      }
-                                    `}
+                                    className={cn('relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm', meshPart.isVisible ? 'bg-white/10 hover:bg-white/15 shadow-sm' : 'bg-white/5 hover:bg-white/10 opacity-40')}
                                     title={meshPart.name}
                                   >
                                     <span className="text-xs text-white/90 truncate block">
@@ -1993,7 +1941,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                   
                   {/* Expandable Texture & Mesh Settings */}
                   {expandedModelSettings === model.id && (
-                    <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+                    <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto scrollbar-glass">
                       {/* Textures Section - Grouped by Type */}
                       {model.metadata?.textures && model.metadata.textures.length > 0 && (() => {
                         const groupedTextures = groupTexturesByType(model.metadata.textures);
@@ -2012,14 +1960,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                     <button
                                       key={texture.id}
                                       onClick={() => handleToggleTexture(model.id, texture.id)}
-                                      className={`
-                                        relative p-2 rounded-lg text-left transition-all duration-200
-                                        backdrop-blur-sm
-                                        ${texture.isActive 
-                                          ? 'bg-white/10 hover:bg-white/15 shadow-sm' 
-                                          : 'bg-white/5 hover:bg-white/10 opacity-40'
-                                        }
-                                      `}
+                                      className={cn('relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm', texture.isActive ? 'bg-white/10 hover:bg-white/15 shadow-sm' : 'bg-white/5 hover:bg-white/10 opacity-40')}
                                       title={texture.name}
                                     >
                                       <span className="text-xs text-white/90 truncate block">
@@ -2059,14 +2000,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                     <button
                                       key={meshPart.id}
                                       onClick={() => handleToggleMeshPart(model.id, meshPart.id)}
-                                      className={`
-                                        relative p-2 rounded-lg text-left transition-all duration-200
-                                        backdrop-blur-sm
-                                        ${meshPart.isVisible 
-                                          ? 'bg-white/10 hover:bg-white/15 shadow-sm' 
-                                          : 'bg-white/5 hover:bg-white/10 opacity-40'
-                                        }
-                                      `}
+                                      className={cn('relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm', meshPart.isVisible ? 'bg-white/10 hover:bg-white/15 shadow-sm' : 'bg-white/5 hover:bg-white/10 opacity-40')}
                                       title={meshPart.name}
                                     >
                                       <span className="text-xs text-white/90 truncate block">
@@ -2245,7 +2179,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         </div>
 
       {/* Animations Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
           {/* Motion Management */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Custom Animations</h4>
@@ -2284,7 +2218,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* Motion List */}
           {motions.length > 0 && (
             <div className="space-y-2">
-              <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+              <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar scrollbar-glass">
                 {motions.map((motion) => {
                   return (
                     <div
@@ -2414,7 +2348,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Emotes Tab */}
-      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
           {/* Emote Upload */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">Emote Management</h4>
@@ -2424,13 +2358,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             {/* Emote Name Input */}
             <div className="space-y-1">
               <label className="text-xs text-white/70">Emote Name</label>
-              <input
+              <Input
                 type="text"
                 value={emoteName}
                 onChange={(e) => setEmoteName(e.target.value)}
                 placeholder="Enter emote name"
                 disabled={emoteUploadState.uploading}
-                className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
+                variant={isLightBackground ? 'dark' : 'default'}
               />
             </div>
 
@@ -2529,13 +2463,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             </button>
 
             {/* Upload Button */}
-            <button
+            <Button
+              variant={isLightBackground ? 'dark' : 'default'}
               onClick={handleEmoteUpload}
               disabled={emoteUploadState.uploading || !emoteName.trim()}
-              className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-full px-2 md:px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+              className="w-full"
             >
               {emoteUploadState.uploading ? emoteUploadState.progress : 'Upload Emote'}
-            </button>
+            </Button>
 
             {emoteUploadState.progress && !emoteUploadState.uploading && !emoteUploadState.error && (
               <div className="p-3 rounded-lg bg-green-500/10 border border-green-400/20">
@@ -2553,7 +2488,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* Emote List */}
           {emotes.length > 0 && (
             <div className="space-y-2">
-              <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+              <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar scrollbar-glass">
                 {emotes.map((emote) => {
                   const isEditing = editingEmoteId === emote.id;
                   return (
@@ -2703,7 +2638,7 @@ const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnim
           {defaultAnimations.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-white/70 mb-2">Default Animations</p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar scrollbar-glass">
                 {defaultAnimations.map((anim) => {
                   const isEnabled = !disabledDefaultAnimations[anim.id];
                   const isLastEnabled = isEnabled && totalEnabledCount === 1;
@@ -2734,7 +2669,7 @@ const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnim
           {customMotionsInCategory.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-white/70 mb-2">Custom Animations</p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1)' }}>
+              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar scrollbar-glass">
                 {customMotionsInCategory.map((motion) => {
                   const isEnabled = motion.enabledByCategory && motion.enabledByCategory[category] === true;
                   const isLastEnabled = isEnabled && totalEnabledCount === 1;

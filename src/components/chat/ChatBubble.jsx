@@ -3,7 +3,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { cn } from '../utils/cn';
 import { Icon } from './icons';
+import { Button } from './ui';
 import Logger from '../services/LoggerService';
 
 /**
@@ -159,7 +161,7 @@ const ChatBubble = ({
         maxWidth: '350px',
         minWidth: '200px',
       }}
-      className={`${bubbleClasses} glass-accelerated rounded-2xl p-2 md:p-4 shadow-2xl`}
+      className={cn(bubbleClasses, 'glass-accelerated rounded-2xl p-2 md:p-4 shadow-2xl')}
     >
       <div className="glass-text text-sm leading-relaxed">
         {displayText}
@@ -182,13 +184,14 @@ const ChatBubble = ({
       />
 
       {type === 'assistant' && (
-        <button
+        <Button
           onClick={onHide}
-          className="glass-button absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors"
+          variant="default"
+          className="absolute top-2 right-2 w-6 h-6 rounded-full"
           title="Close"
         >
           <Icon name="close" size={12} className="glass-text" />
-        </button>
+        </Button>
       )}
     </div>
   );

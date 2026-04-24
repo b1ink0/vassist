@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { cn } from '../utils/cn';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import BackgroundDetector from '../utils/BackgroundDetector';
@@ -2579,12 +2580,12 @@ const AIToolbar = () => {
       {shouldRender && (
         <div
           ref={toolbarRef}
-          className={`
-            fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px] 
-            border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform
-            glass-container ${isLightBackgroundToolbar ? 'glass-container-dark' : ''}
-            ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}
-          `}
+          className={cn(
+            'fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px]',
+            'border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform',
+            'glass-container', isLightBackgroundToolbar && 'glass-container-dark',
+            isClosing ? 'animate-fade-out' : 'animate-fade-in'
+          )}
           style={{
             transform: `translate(${position.x}px, ${position.y}px)`,
             zIndex: 999999,
@@ -3007,9 +3008,9 @@ const AIToolbar = () => {
         showWriterInput && (action === 'write-input' || action === 'rewrite-custom') ? (
           <div
             ref={resultPanelRef}
-            className={`
-              ${isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'}
-            `}
+            className={cn(
+              isResultPanelClosing ? 'animate-fade-out' : 'animate-fade-in'
+            )}
             style={{
               position: 'fixed',
               top: shouldShowPanelAbove ? `${position.y - 60}px` : `${position.y + 50}px`,
@@ -3044,9 +3045,10 @@ const AIToolbar = () => {
                 }
               }}
               placeholder={action === 'rewrite-custom' ? "How should I rewrite the selected text?" : "What would you like to write?"}
-              className={`
-                glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}
-              `}
+              className={cn(
+                'glass-container',
+                isLightBackgroundPanel && 'glass-container-dark'
+              )}
               style={{
                 minWidth: '320px',
                 maxWidth: '480px',
@@ -3081,7 +3083,7 @@ const AIToolbar = () => {
                   }
                 }}
                 disabled={!writerPrompt.trim()}
-                className={`glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}`}
+                className={cn('glass-container', isLightBackgroundPanel && 'glass-container-dark')}
                 title="Generate (Enter)"
                 style={{
                   width: '44px',
@@ -3120,7 +3122,7 @@ const AIToolbar = () => {
                   setShowWriterInput(false);
                   setWriterPrompt('');
                 }}
-                className={`glass-container ${isLightBackgroundPanel ? 'glass-container-dark' : ''}`}
+                className={cn('glass-container', isLightBackgroundPanel && 'glass-container-dark')}
                 title="Cancel (Esc)"
                 style={{
                   width: '44px',

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Icon } from '../../icons';
+import { Button } from '../../ui';
 
 /**
  * STTTTSModelManager - UI for managing on-device STT/TTS models (Android only)
@@ -223,10 +224,11 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
               <span>Delete</span>
             </button>
           ) : (
-            <button
+            <Button
               onClick={() => handleDownload('whisper')}
               disabled={loading || downloadProgress.whisper}
-              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="flex-1"
             >
               {downloadProgress.whisper ? (
                 <>
@@ -257,7 +259,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
                   <span>Download (~99 MB)</span>
                 </>
               )}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -327,10 +329,11 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
               <span>Delete</span>
             </button>
           ) : (
-            <button
+            <Button
               onClick={() => handleDownload('vits')}
               disabled={loading || downloadProgress.vits}
-              className={`flex-1 glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              variant={isLightBackground ? 'dark' : 'default'}
+              className="flex-1"
             >
               {downloadProgress.vits ? (
                 <>
@@ -361,7 +364,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
                   <span>Download (~145 MB)</span>
                 </>
               )}
-            </button>
+            </Button>
           )}
         </div>
       </div>

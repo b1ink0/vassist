@@ -109,3 +109,12 @@ a,
 [role="button"] {
   cursor: pointer;
 }
+
+/* Replaces repeated inline style={{ scrollbarWidth, scrollbarColor }} in panels */
+@layer utilities {
+  .scrollbar-glass {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+  }
+}
+}

@@ -3,7 +3,9 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { cn } from '../utils/cn';
 import { Icon } from './icons';;
+import { Button } from './ui';
 import { TTSServiceProxy } from '../services/proxies';
 import AudioPlayer from './AudioPlayer';
 import StreamingText from './common/StreamingText';
@@ -189,31 +191,20 @@ const ChatMessage = ({
   }, [isEditing, adjustEditTextareaHeight]);
 
   return (
-    <div className={`flex flex-col gap-3 ${animationClass}`}>
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-        <div className={`flex items-start gap-2 ${
-          isEditing 
-            ? 'w-full' 
-            : hasAudio 
-            ? 'w-[80%]' 
-            : 'max-w-[80%]'
-        }`}>
+    <div className={cn('flex flex-col gap-3', animationClass)}>
+      <div className={cn('flex flex-col', isUser ? 'items-end' : 'items-start')}>
+        <div className={cn('flex items-start gap-2', isEditing ? 'w-full' : hasAudio ? 'w-[80%]' : 'max-w-[80%]')}>
           {/* Message bubble */}
           <div className="flex flex-col gap-1.5" style={{ width: (!isUser || isEditing) ? '100%' : 'auto' }}>
             <div
-              className={`${
-                isError
-                  ? 'glass-error'
-                  : isUser
-                  ? `glass-message-user ${isLightBackground ? 'glass-message-user-dark' : ''}`
-                  : `glass-message ${isLightBackground ? 'glass-message-dark' : ''}`
-              } px-2 md:px-4 py-2 md:py-3 ${
-                isError
-                  ? 'rounded-3xl'
-                  : isUser
-                  ? 'rounded-[20px] rounded-tr-md'
-                  : 'rounded-[20px] rounded-tl-md'
-              } ${hasAudio || isEditing ? 'w-full' : ''} break-words`}
+              className={cn(
+                isError ? 'glass-error' : isUser ? 'glass-message-user' : 'glass-message',
+                !isError && isLightBackground && (isUser ? 'glass-message-user-dark' : 'glass-message-dark'),
+                'px-2 md:px-4 py-2 md:py-3',
+                isError ? 'rounded-3xl' : isUser ? 'rounded-[20px] rounded-tr-md' : 'rounded-[20px] rounded-tl-md',
+                (hasAudio || isEditing) && 'w-full',
+                'break-words'
+              )}
               style={{
                 minHeight: !isUser && !isError ? 'calc(1.5em + 1.5rem)' : undefined,
               }}
@@ -257,13 +248,14 @@ const ChatMessage = ({
                             alt={`Edit ${imgIndex + 1}`}
                             className="w-full rounded-lg max-h-[150px] object-cover"
                           />
-                          <button
+                          <Button
                             onClick={() => handleRemoveEditingImage(imgIndex)}
-                            className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            variant="default"
+                            className="absolute top-1 right-1 w-5 h-5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Remove image"
                           >
                             <span className="text-[11px]"><Icon name="xmark" size={16} /></span>
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -277,13 +269,14 @@ const ChatMessage = ({
                             audioUrl={audioUrl} 
                             isLightBackground={isLightBackground}
                           />
-                          <button
+                          <Button
                             onClick={() => handleRemoveEditingAudio(audioIndex)}
-                            className="absolute top-1 right-1 glass-button w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            variant="default"
+                            className="absolute top-1 right-1 w-5 h-5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Remove audio"
                           >
                             <span className="text-[11px]"><Icon name="xmark" size={16} /></span>
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -293,11 +286,7 @@ const ChatMessage = ({
                     ref={editTextareaRef}
                     value={editingContent}
                     onChange={handleEditContentChange}
-                    className={`w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar bg-transparent border-none min-h-[24px] ${
-                      isLightBackground
-                        ? 'text-black placeholder-black/40'
-                        : 'text-white placeholder-white/40'
-                    } focus:outline-none`}
+                    className={cn('w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar bg-transparent border-none min-h-[24px]', isLightBackground ? 'text-black placeholder-black/40' : 'text-white placeholder-white/40', 'focus:outline-none')}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && e.ctrlKey) {
                         handleSaveEdit();
@@ -307,21 +296,23 @@ const ChatMessage = ({
                     }}
                   />
                   <div className="flex gap-1 justify-end mt-1">
-                    <button
+                    <Button
                       onClick={handleCancelEdit}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Cancel (Esc)"
                     >
-                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}><Icon name="xmark" size={16} /></span>
-                    </button>
-                    <button
+                      <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[11px]')}><Icon name="xmark" size={16} /></span>
+                    </Button>
+                    <Button
                       onClick={handleSaveEdit}
                       disabled={!editingContent.trim() && editingImages.length === 0 && editingAudios.length === 0}
-                      className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 disabled:opacity-30`}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Save (Ctrl+Enter)"
                     >
-                      <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[11px]`}><Icon name="check" size={16} /></span>
-                    </button>
+                      <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[11px]')}><Icon name="check" size={16} /></span>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -365,33 +356,35 @@ const ChatMessage = ({
               )}
             </div>
             
-            <div className={`flex items-center gap-1 ${isUser ? 'justify-end' : 'justify-start'} mt-1`}>
+            <div className={cn('flex items-center gap-1', isUser ? 'justify-end' : 'justify-start', 'mt-1')}>
               {!isUser && message.branchInfo && message.branchInfo.totalBranches > 1 && !isEditing && (
                 <>
-                  <button
+                  <Button
                     onClick={() => onPreviousBranch(message)}
                     disabled={!message.branchInfo.canGoBack}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                     title="Previous variant"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
-                  </button>
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}>◀</span>
+                  </Button>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px] opacity-70')}>
                     {message.branchInfo.currentIndex}/{message.branchInfo.totalBranches}
                   </span>
-                  <button
+                  <Button
                     onClick={() => onNextBranch(message)}
                     disabled={!message.branchInfo.canGoForward}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                     title="Next variant"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}><Icon name="play" size={16} /></span>
-                  </button>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}><Icon name="play" size={16} /></span>
+                  </Button>
                 </>
               )}
               
               {!isUser && !isError && ttsEnabled && (
-                <button
+                <Button
                   onClick={() => {
                     if (isLoading) {
                       TTSServiceProxy.stopPlayback();
@@ -407,73 +400,79 @@ const ChatMessage = ({
                       onPlayTTS(messageIndex, message.content);
                     }
                   }}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title={isLoading ? 'Cancel TTS generation' : isPlaying ? 'Stop audio' : 'Play audio'}
                 >
                   {isLoading ? (
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] animate-spin`}><Icon name="hourglass" size={16} /></span>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px] animate-spin')}><Icon name="hourglass" size={16} /></span>
                   ) : isPlaying ? (
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}><Icon name="pause" size={16} /></span>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px]')}><Icon name="pause" size={16} /></span>
                   ) : (
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}><Icon name="speaker" size={16} /></span>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px]')}><Icon name="speaker" size={16} /></span>
                   )}
-                </button>
+                </Button>
               )}
               
               {!isEditing && (
-                <button
+                <Button
                   onClick={() => onCopyMessage(messageIndex, message.content)}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Copy message"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px]')}>
                     <Icon name={copiedMessageIndex === messageIndex ? 'check' : 'clipboard'} size={12} />
                   </span>
-                </button>
+                </Button>
               )}
               
               {isUser && !isError && !isEditing && (
-                <button
+                <Button
                   onClick={handleStartEdit}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Edit message"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}><Icon name="edit" size={16} /></span>
-                </button>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px]')}><Icon name="edit" size={16} /></span>
+                </Button>
               )}
               
               {isUser && message.branchInfo && message.branchInfo.totalBranches > 1 && !isEditing && (
                 <>
-                  <button
+                  <Button
                     onClick={() => onPreviousBranch(message)}
                     disabled={!message.branchInfo.canGoBack}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                     title="Previous variant"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}>◀</span>
-                  </button>
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px] opacity-70`}>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}>◀</span>
+                  </Button>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px] opacity-70')}>
                     {message.branchInfo.currentIndex}/{message.branchInfo.totalBranches}
                   </span>
-                  <button
+                  <Button
                     onClick={() => onNextBranch(message)}
                     disabled={!message.branchInfo.canGoForward}
-                    className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20`}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                     title="Next variant"
                   >
-                    <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[9px]`}><Icon name="play" size={16} /></span>
-                  </button>
+                    <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}><Icon name="play" size={16} /></span>
+                  </Button>
                 </>
               )}
               
               {!isUser && !isError && !isEditing && (
-                <button
+                <Button
                   onClick={() => onRewriteMessage(message)}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Regenerate response"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-[10px]`}><Icon name="regenerate" size={16} /></span>
-                </button>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px]')}><Icon name="regenerate" size={16} /></span>
+                </Button>
               )}
             </div>
           </div>

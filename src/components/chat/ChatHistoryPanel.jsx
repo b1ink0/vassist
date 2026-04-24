@@ -3,7 +3,9 @@
  */
 
 import { useState, useEffect, useRef, memo } from 'react'
-import { Icon } from './icons';;
+import { Icon } from './icons';
+import { Button } from './ui';;
+import { cn } from '../utils/cn';
 import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
 
@@ -314,10 +316,10 @@ const ChatHistoryPanel = ({
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col h-full rounded-3xl overflow-hidden glass-container ${isLightBackground ? 'glass-container-dark' : ''} ${animationClass}`}
+      className={cn('flex flex-col h-full rounded-3xl overflow-hidden glass-container', isLightBackground && 'glass-container-dark', animationClass)}
     >
       {/* Header */}
-      <div className={`px-6 py-2 md:py-4 border-b ${isLightBackground ? 'border-white/30' : 'border-white/20'}`}>
+      <div className={cn('px-6 py-2 md:py-4 border-b', isLightBackground ? 'border-white/30' : 'border-white/20')}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">
             Chat History
@@ -415,33 +417,33 @@ const ChatHistoryPanel = ({
               {/* Action buttons */}
               <div className="flex-shrink-0 flex gap-1">
                 {/* Edit button */}
-                <button
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleEditTitle(chat);
                   }}
-                  className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-6 w-6 rounded-md flex items-center justify-center transition-opacity`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className="h-6 w-6 rounded-md"
                   title="Edit title"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs leading-none`}><Icon name="pencil" size={16} /></span>
-                </button>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs leading-none')}><Icon name="pencil" size={16} /></span>
+                </Button>
 
                 {/* Delete button */}
-                <button
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDeleteClick(chat.chatId);
                   }}
                   disabled={deletingChatId === chat.chatId}
-                  className={`flex-shrink-0 glass-button ${isLightBackground ? 'glass-button-dark' : ''} h-6 w-6 rounded-md flex items-center justify-center transition-opacity ${
-                    deletingChatId === chat.chatId ? 'opacity-50 cursor-not-allowed' : 'hover:glass-error'
-                  }`}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  className={cn('flex-shrink-0 h-6 w-6 rounded-md', deletingChatId === chat.chatId ? 'opacity-50 cursor-not-allowed' : 'hover:glass-error')}
                   title="Delete chat"
                 >
-                  <span className={`${isLightBackground ? 'glass-text' : 'glass-text-black'} text-xs leading-none`}>
+                  <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs leading-none')}>
                     <Icon name={deletingChatId === chat.chatId ? 'hourglass' : 'delete'} size={14} />
                   </span>
-                </button>
+                </Button>
               </div>
             </div>
           </div>

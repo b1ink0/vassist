@@ -9,6 +9,7 @@
  */
 
 import { forwardRef, useRef, useEffect, useState } from 'react'
+import { cn } from '../../utils/cn';
 import { Icon } from '../icons';;
 import { TranslationLanguages } from '../../config/aiConfig';
 import StreamingText from '../common/StreamingText';
@@ -91,13 +92,13 @@ const ToolbarResultPanel = forwardRef(({
     <div
       ref={ref}
       data-ai-toolbar-result="true"
-      className={`
-        fixed top-0 left-0 w-[380px] p-3 rounded-xl 
-        border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl 
-        will-change-transform transition-all duration-300 ease-in-out
-        glass-container ${isLightBackground ? 'glass-container-dark' : ''}
-        ${animationClass}
-      `}
+      className={cn(
+        'fixed top-0 left-0 w-[380px] p-3 rounded-xl',
+        'border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl',
+        'will-change-transform transition-all duration-300 ease-in-out',
+        'glass-container', isLightBackground && 'glass-container-dark',
+        animationClass
+      )}
       style={{
         transform: showAbove 
           ? `translate(${position.x}px, ${position.y - 310}px)` 
@@ -109,7 +110,7 @@ const ToolbarResultPanel = forwardRef(({
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-2 flex-1">
           {/* Action title with icon */}
-          <div className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase opacity-70 ${isLightBackground ? 'text-white' : 'text-white'}`}>
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase opacity-70 text-white">
             <Icon name={actionInfo.icon} size={14} />
             <span>{actionInfo.label}</span>
           </div>
@@ -145,12 +146,7 @@ const ToolbarResultPanel = forwardRef(({
             <button
               onClick={onRegenerateClick}
               disabled={isRegenerating}
-              className={`
-                w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
-                ${isLightBackground ? 'text-white' : 'text-white'}
-              `}
+              className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white"
               title="Regenerate"
             >
               <Icon name={isRegenerating ? 'hourglass' : 'refresh'} size={16} />
@@ -161,12 +157,7 @@ const ToolbarResultPanel = forwardRef(({
           {!isLoading && !error && result && onCopyClick && (
             <button
               onClick={onCopyClick}
-              className={`
-                w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                hover:bg-white/10 hover:opacity-100
-                ${isLightBackground ? 'text-white' : 'text-white'}
-              `}
+              className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
               title="Copy to clipboard"
             >
               <Icon name={copySuccess ? 'check' : 'clipboard'} size={16} />
@@ -178,12 +169,7 @@ const ToolbarResultPanel = forwardRef(({
             <button
               onClick={onSpeakerClick}
               disabled={false}
-              className={`
-                w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none 
-                bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-                hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed
-                ${isLightBackground ? 'text-white' : 'text-white'}
-              `}
+              className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white"
               title={isTTSGenerating ? 'Cancel TTS generation' : isSpeaking ? 'Stop speaking' : 'Speak text'}
             >
               <Icon name={isTTSGenerating ? 'hourglass' : isSpeaking ? 'pause' : 'speaker'} size={16} />
@@ -194,18 +180,13 @@ const ToolbarResultPanel = forwardRef(({
         {/* Close button */}
         <button
           onClick={onClose}
-          className={`
-            w-5 h-5 flex items-center justify-center text-xs rounded-xl border-none 
-            bg-transparent opacity-60 cursor-pointer transition-all duration-200 
-            hover:bg-white/10 hover:opacity-100
-            ${isLightBackground ? 'text-white' : 'text-white'}
-          `}
+          className="w-5 h-5 flex items-center justify-center text-xs rounded-xl border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
         ><Icon name="close" size={16} /></button>
       </div>
       
       {/* Error display */}
       {error && !isLoading && (
-        <div className={`text-[13px] leading-6 text-[#ff6b6b]`}>
+        <div className="text-[13px] leading-6 text-[#ff6b6b]">
           {error}
         </div>
       )}
@@ -214,7 +195,7 @@ const ToolbarResultPanel = forwardRef(({
       {isLoading && !result && !error && (
         <div className="flex items-center gap-2 py-3">
           <span className="animate-pulse text-white/70 text-xs">●</span>
-          <span className={`text-[13px] opacity-70 animate-pulse ${isLightBackground ? 'text-white' : 'text-white'}`}>
+          <span className="text-[13px] opacity-70 animate-pulse text-white">
             Generating...
           </span>
         </div>
@@ -233,11 +214,11 @@ const ToolbarResultPanel = forwardRef(({
           <StreamingContainer autoActivate speed="fast">
             <div>
               {hasCompletedStreaming ? (
-                <div className={`text-[13px] leading-6 opacity-90 max-w-full overflow-hidden ${isLightBackground ? 'text-white' : 'text-white'}`}>
+                <div className="text-[13px] leading-6 opacity-90 max-w-full overflow-hidden text-white">
                   <MarkdownText text={result} />
                 </div>
               ) : (
-                <div className={`text-[13px] leading-6 whitespace-pre-wrap opacity-90 max-w-full overflow-hidden ${isLightBackground ? 'text-white' : 'text-white'}`}>
+                <div className="text-[13px] leading-6 whitespace-pre-wrap opacity-90 max-w-full overflow-hidden text-white">
                   <StreamingText 
                     text={result}
                     wordsPerSecond={40}

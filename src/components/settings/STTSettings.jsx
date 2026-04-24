@@ -15,6 +15,7 @@ import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
 import DesktopSTTConfig from './stt/DesktopSTTConfig';
 import WhisperModelDownloader from './stt/WhisperModelDownloader';
 import Toggle from '../common/Toggle';
+import { Button, Select, Card, SettingsRow } from '../ui';
 
 const STTSettings = ({ isLightBackground, hasChromeAI }) => {
   const [devices, setDevices] = useState([]);
@@ -70,30 +71,26 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
       <h3 className="text-base font-semibold text-white mb-4">STT Configuration</h3>
       
       {/* Enable STT Toggle */}
-      <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
-        <label htmlFor="enable-stt" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
-          Enable Speech-to-Text
-        </label>
-        <Toggle
-          id="enable-stt"
-          checked={sttConfig.enabled}
-          onChange={(checked) => updateSTTConfig('enabled', checked)}
-        />
-      </div>
+      <Card variant="default">
+        <SettingsRow label="Enable Speech-to-Text">
+          <Toggle
+            id="enable-stt"
+            checked={sttConfig.enabled}
+            onChange={(checked) => updateSTTConfig('enabled', checked)}
+          />
+        </SettingsRow>
+      </Card>
 
       {/* Provider Selection */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Provider</label>
-        <select
+        <Select
           value={sttConfig.provider}
           onChange={(e) => updateSTTConfig('provider', e.target.value)}
-          className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
+          variant={isLightBackground ? 'dark' : 'default'}
           disabled={!sttConfig.enabled}
-        >
-          {Object.entries(availableProviders).map(([key, value]) => (
-            <option key={value} value={value} className="bg-gray-900">{key}</option>
-          ))}
-        </select>
+          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: key }))}
+        />
         {isAndroid && (
           <p className="text-xs text-white/50">
             Using native Android STT via local Whisper model
@@ -124,18 +121,19 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
               <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Language</label>
-                <select
+                <Select
                   value={sttConfig['android-local']?.language || 'en'}
                   onChange={(e) => updateSTTConfig('android-local.language', e.target.value)}
-                  className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full`}
-                >
-                  <option value="en" className="bg-gray-900">English</option>
-                  <option value="es" className="bg-gray-900">Spanish</option>
-                  <option value="ja" className="bg-gray-900">Japanese</option>
-                  <option value="zh" className="bg-gray-900">Chinese</option>
-                  <option value="de" className="bg-gray-900">German</option>
-                  <option value="fr" className="bg-gray-900">French</option>
-                </select>
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={[
+                    { value: 'en', label: 'English' },
+                    { value: 'es', label: 'Spanish' },
+                    { value: 'ja', label: 'Japanese' },
+                    { value: 'zh', label: 'Chinese' },
+                    { value: 'de', label: 'German' },
+                    { value: 'fr', label: 'French' },
+                  ]}
+                />
               </div>
               <p className="text-xs text-white/50">
                 Powered by Whisper running locally on your device
@@ -199,27 +197,22 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
         {isDesktop && sttConfig.provider === STTProviders.DESKTOP_LOCAL && devices.length > 0 && (
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Microphone</label>
-            <select
+            <Select
               value={selectedDeviceId}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
-              className={`glass-input ${isLightBackground ? 'glass-input-dark' : ''} w-full text-sm`}
-            >
-              {devices.map(device => (
-                <option key={device.deviceId} value={device.deviceId} className="bg-gray-900">
-                  {device.label || `Microphone ${device.deviceId.substring(0, 8)}`}
-                </option>
-              ))}
-            </select>
+              variant={isLightBackground ? 'dark' : 'default'}
+              options={devices.map(d => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.substring(0, 8)}` }))}
+            />
           </div>
         )}
         
-        <button 
+        <Button
+          variant={isLightBackground ? 'dark' : 'default'}
           onClick={() => testSTTRecording(selectedDeviceId)}
           disabled={!sttConfig.enabled || sttTesting}
-          className={`glass-button ${isLightBackground ? 'glass-button-dark' : ''} px-2 md:px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Test Recording (3s)
-        </button>
+        </Button>
       </div>
     </div>
   );

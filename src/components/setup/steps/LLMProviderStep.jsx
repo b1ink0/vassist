@@ -7,33 +7,8 @@ import Icon from '../../icons/Icon';
 import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
-
-// Copy button component for Chrome flags
-const FlagCopyButton = ({ flagUrl, flagValue }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(flagUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex items-start gap-2 p-2 bg-white/5 rounded border border-white/10">
-      <Icon name="flag" size={14} className="text-white/80 mt-1 flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <code className="text-xs text-white/70 break-all block">{flagUrl}</code>
-        <p className="text-[10px] text-white/60 mt-1">Set to: <span className="text-white/80">{flagValue}</span></p>
-      </div>
-      <button
-        onClick={handleCopy}
-        className="flex-shrink-0 px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
-      >
-        <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-white" : "text-white/80"} />
-      </button>
-    </div>
-  );
-};
+import FlagCopyButton from '../../common/FlagCopyButton';
+import { Button, Input } from '../../ui';
 
 const LLMProviderStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
@@ -419,12 +394,12 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 <label className="block text-xs font-medium text-white/90 mb-1">
                   Endpoint URL
                 </label>
-                <input
+                <Input
                   type="text"
                   value={androidEndpoint}
                   onChange={(e) => setAndroidEndpoint(e.target.value)}
                   placeholder="http://127.0.0.1:8765"
-                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                  className="w-full text-xs sm:text-sm"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
                   Local HTTP server running on your Android device
@@ -458,12 +433,12 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
               <label className="block text-xs font-medium text-white/90 mb-1">
                 API Key <span className="text-red-400">*</span>
               </label>
-              <input
+              <Input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 Get from{' '}
@@ -489,24 +464,24 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Endpoint <span className="text-red-400">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 value={ollamaEndpoint}
                 onChange={(e) => setOllamaEndpoint(e.target.value)}
                 placeholder="http://localhost:11434"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Model <span className="text-red-400">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 value={ollamaModel}
                 onChange={(e) => setOllamaModel(e.target.value)}
                 placeholder="llama2"
-                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/50 focus:outline-none focus:border-white/30"
+                className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
                 <a
@@ -549,11 +524,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
               ) : (
                 <>
                   <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      chromeAIStatus.ready ? 'bg-green-400' :
-                      chromeAIStatus.downloading ? 'bg-yellow-400 animate-pulse' :
-                      'bg-red-400'
-                    }`}></div>
+                    <div className={cn('w-2 h-2 rounded-full', chromeAIStatus.ready ? 'bg-green-400' : chromeAIStatus.downloading ? 'bg-yellow-400 animate-pulse' : 'bg-red-400')}></div>
                     <span className="text-sm font-semibold text-white/90">{chromeAIStatus.message}</span>
                   </div>
                   
@@ -608,13 +579,13 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                   {/* Download Button */}
                   {chromeAIStatus.needsDownload && !chromeAIStatus.needsFlags && !chromeAIStatus.downloading && (
                     <>
-                      <button
+                      <Button
                         onClick={handleDownloadModel}
-                        className="mt-3 glass-button px-2 md:px-4 py-2 text-xs font-medium rounded-lg w-full flex items-center justify-center gap-2"
+                        className="mt-3 w-full text-xs flex items-center justify-center gap-2"
                       >
                         <Icon name="download" size={14} />
                         <span>Start Model Download</span>
-                      </button>
+                      </Button>
                       
                       {/* Show message after 3 attempts */}
                       {chromeAIStatus.downloadAttempts >= 3 && (
@@ -629,14 +600,15 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                   )}
                   
                   {/* Refresh Status Button */}
-                  <button
+                  <Button
                     onClick={checkChromeAIStatus}
                     disabled={chromeAIStatus.checking}
-                    className="mt-2 text-xs text-white/80 hover:text-white/70 flex items-center gap-1 disabled:opacity-50"
+                    variant="ghost"
+                    className="mt-2 text-xs flex items-center gap-1"
                   >
                     <Icon name="refresh" size={12} className={chromeAIStatus.checking ? 'animate-spin' : ''} />
                     <span>{chromeAIStatus.checking ? 'Checking...' : 'Refresh Status'}</span>
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -673,10 +645,10 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       {(selectedProvider === 'android-local' || 
         (selectedProvider !== 'chrome-ai' && (selectedProvider === 'openai' ? apiKey.length > 0 : (ollamaEndpoint && ollamaModel)))) && (
         <div>
-          <button
+          <Button
             onClick={testConnection}
             disabled={testing}
-            className="glass-button rounded-lg px-2 md:px-4 py-2 text-xs sm:text-sm w-full font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
           >
             {testing ? (
               <>
@@ -689,7 +661,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
                 <span>Test Connection</span>
               </>
             )}
-          </button>
+          </Button>
 
           {testResult && (
             <StatusMessage 
