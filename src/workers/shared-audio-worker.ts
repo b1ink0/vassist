@@ -6,10 +6,10 @@
  * Main thread must decode audio and send PCM data
  */
 
-import { MessageTypes } from '../../extension/shared/MessageTypes.js';
-import { VMDGenerationCore } from './shared/VMDGenerationCore.js';
-import { BVMDConversionCore } from './shared/BVMDConversionCore.js';
-import KokoroTTSCore from './shared/KokoroTTSCore.js';
+import { MessageTypes } from '../../extension/shared/MessageTypes';
+import { VMDGenerationCore } from './shared/VMDGenerationCore';
+import { BVMDConversionCore } from './shared/BVMDConversionCore';
+import KokoroTTSCore from './shared/KokoroTTSCore';
 import Logger from '../services/LoggerService';
 
 class SharedAudioWorker {
@@ -400,7 +400,7 @@ class SharedAudioWorker {
             
             // Compute spectrogram if requested
             const frameRate = 30; // VMD uses 30 fps
-            const { AudioProcessingCore } = await import('./shared/AudioProcessingCore.js');
+            const { AudioProcessingCore } = await import('./shared/AudioProcessingCore');
             const spectrogram = await AudioProcessingCore.computeSpectrogram(pcmData, sampleRate, frameRate);
             
             return {

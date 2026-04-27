@@ -12,7 +12,7 @@
  * - No hardcoded magic numbers - everything calculated from actual dimensions
  */
 
-import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig.js';
+import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig';
 import Logger from '../../services/LoggerService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 

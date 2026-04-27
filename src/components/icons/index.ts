@@ -1,6 +1,6 @@
 // Icon System - Easy Export
 export { default as Icon } from './Icon';
-export { iconMap } from './iconMap.jsx';
+export { iconMap } from './iconMap';
 
 // Export icon names for autocomplete/type safety
 export const iconNames = [

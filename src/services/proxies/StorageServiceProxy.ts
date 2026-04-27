@@ -6,8 +6,8 @@
  * Extension mode: Message bridge to background worker
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 
 // In dev mode, we need StorageManager, so use a lazy-loaded module reference
 // In extension mode, this will never be used
@@ -22,7 +22,7 @@ const initDevStorageManager = async () => {
     return null;
   }
   
-  devStorageManagerPromise = import('../../storage/StorageManager.js')
+  devStorageManagerPromise = import('../../storage/StorageManager')
     .then(module => module.storageManager)
     .catch(err => {
       return null;

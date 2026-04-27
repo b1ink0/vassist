@@ -14,7 +14,7 @@
  * - storageManager.db.*       : Direct database adapter access for advanced usage
  */
 
-import { storageAdapter } from './StorageAdapter.js';
+import { storageAdapter } from './StorageAdapter';
 
 /**
  * Config Schema Validators

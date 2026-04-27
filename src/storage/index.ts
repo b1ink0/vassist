@@ -5,10 +5,10 @@
  * In extension mode: Does NOT export storageManager (use StorageServiceProxy instead)
  */
 
-export { db } from './DatabaseSchema.js';
-export { storageAdapter } from './StorageAdapter.js';
-export { storageManager } from './StorageManager.js';
+export { db } from './DatabaseSchema';
+export { storageAdapter } from './StorageAdapter';
+export { storageManager } from './StorageManager';
 
 // Default export for convenience (dev mode only)
-import { storageManager } from './StorageManager.js';
+import { storageManager } from './StorageManager';
 export default storageManager;

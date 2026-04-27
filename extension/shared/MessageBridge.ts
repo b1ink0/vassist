@@ -3,7 +3,7 @@
  * Shared functionality for content, background, and offscreen bridges
  */
 
-import { generateRequestId } from './MessageTypes.js';
+import { generateRequestId } from './MessageTypes';
 
 export class MessageBridge {
   constructor(name) {

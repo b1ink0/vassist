@@ -13,9 +13,9 @@
  * - Paginated retrieval for infinite scroll
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy.js';
-import AIServiceProxy from './proxies/AIServiceProxy.js';
-import ChatService from './ChatService.js';
+import storageServiceProxy from './proxies/StorageServiceProxy';
+import AIServiceProxy from './proxies/AIServiceProxy';
+import ChatService from './ChatService';
 import Logger from './LoggerService';
 
 class ChatHistoryService {

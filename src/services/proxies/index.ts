@@ -3,14 +3,14 @@
  * Export all service proxies for easy importing
  */
 
-export { default as AIServiceProxy } from './AIServiceProxy.js';
-export { default as TTSServiceProxy } from './TTSServiceProxy.js';
-export { default as STTServiceProxy } from './STTServiceProxy.js';
-export { default as StorageServiceProxy } from './StorageServiceProxy.js';
-export { default as TranslatorServiceProxy } from './TranslatorServiceProxy.js';
-export { default as LanguageDetectorServiceProxy } from './LanguageDetectorServiceProxy.js';
-export { default as SummarizerServiceProxy } from './SummarizerServiceProxy.js';
-export { default as RewriterServiceProxy } from './RewriterServiceProxy.js';
-export { default as WriterServiceProxy } from './WriterServiceProxy.js';
-export { ServiceProxy } from './ServiceProxy.js';
+export { default as AIServiceProxy } from './AIServiceProxy';
+export { default as TTSServiceProxy } from './TTSServiceProxy';
+export { default as STTServiceProxy } from './STTServiceProxy';
+export { default as StorageServiceProxy } from './StorageServiceProxy';
+export { default as TranslatorServiceProxy } from './TranslatorServiceProxy';
+export { default as LanguageDetectorServiceProxy } from './LanguageDetectorServiceProxy';
+export { default as SummarizerServiceProxy } from './SummarizerServiceProxy';
+export { default as RewriterServiceProxy } from './RewriterServiceProxy';
+export { default as WriterServiceProxy } from './WriterServiceProxy';
+export { ServiceProxy } from './ServiceProxy';
 

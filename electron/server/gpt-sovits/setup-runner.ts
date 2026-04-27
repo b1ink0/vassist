@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import PythonBootstrap from './bootstrap.js';
+import PythonBootstrap from './bootstrap';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 

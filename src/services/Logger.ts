@@ -36,7 +36,7 @@ class LoggerService {
         const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
         
         if (isServiceWorker) {
-          const { default: storageManager } = await import('../storage/StorageManager.js');
+          const { default: storageManager } = await import('../storage/StorageManager');
           
           this.enabled = await storageManager.config.load('loggerEnabled', false);
           const savedCategories = await storageManager.config.load('loggerCategories', {});
@@ -53,7 +53,7 @@ class LoggerService {
         } else {
           // Main world or dev mode - use StorageServiceProxy (dynamic import to avoid circular dependency)
           try {
-            const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+            const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
             this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
             const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
             
@@ -162,10 +162,10 @@ class LoggerService {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager.js');
+        const { default: storageManager } = await import('../storage/StorageManager');
         await storageManager.config.save('loggerEnabled', enabled);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
         await StorageServiceProxy.configSave('loggerEnabled', enabled);
       }
     } catch (error) {
@@ -204,10 +204,10 @@ class LoggerService {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager.js');
+        const { default: storageManager } = await import('../storage/StorageManager');
         await storageManager.config.save('loggerCategories', categoriesObj);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
         await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
       }
     } catch (error) {

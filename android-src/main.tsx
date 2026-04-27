@@ -5,7 +5,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../src/index.css'
-import App from '../src/App.jsx'
+import App from '../src/App'
 
 const urlParams = new URLSearchParams(window.location.search);
 const isWallpaperMode = urlParams.get('mode') === 'wallpaper';

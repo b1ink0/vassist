@@ -5,12 +5,12 @@
  * Extension mode: Background handles translation
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import TranslatorService from '../TranslatorService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import TranslatorService from '../TranslatorService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 import Logger from '../LoggerService';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultAIConfig } from '../../config/aiConfig.js';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultAIConfig } from '../../config/aiConfig';
 
 class TranslatorServiceProxy extends ServiceProxy {
   constructor() {

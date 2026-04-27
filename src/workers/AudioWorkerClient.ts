@@ -9,7 +9,7 @@
 
 /* global chrome */
 
-import { MessageTypes, generateRequestId } from '../../extension/shared/MessageTypes.js';
+import { MessageTypes, generateRequestId } from '../../extension/shared/MessageTypes';
 import Logger from '../services/LoggerService';
 import { isAndroid } from '../utils/PlatformUtils';
 

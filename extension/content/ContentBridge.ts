@@ -6,7 +6,7 @@
 
 /* global chrome */
 
-import { MessageBridge } from '../shared/MessageBridge.js';
+import { MessageBridge } from '../shared/MessageBridge';
 
 export class ContentBridge extends MessageBridge {
   constructor() {

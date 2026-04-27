@@ -1096,7 +1096,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     
     // If no custom value, try preset
     if (clipPlaneY === 12) {
-      const { PositionPresets } = await import('../../config/uiConfig.js');
+      const { PositionPresets } = await import('../../config/uiConfig');
       const presetData = PositionPresets[actualPreset];
       clipPlaneY = presetData?.portraitClipPlaneY ?? 12;
     }
@@ -1174,7 +1174,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     positionManager.isPortraitMode = isPortraitMode;
     
     // Get preset data for dimensions and offset
-    const { PositionPresets } = await import('../../config/uiConfig.js');
+    const { PositionPresets } = await import('../../config/uiConfig');
     const presetToUse = savedPreset || actualPreset;
     const presetData = PositionPresets[presetToUse];
     
@@ -1205,7 +1205,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     if (modelSizePx && modelSizePx.width && modelSizePx.height) {
       Logger.log('MmdModelScene', 'Applying saved zoom:', modelSizePx);
       
-      const { PositionPresets } = await import('../../config/uiConfig.js');
+      const { PositionPresets } = await import('../../config/uiConfig');
       const presetConfig = PositionPresets[actualPreset];
       const padding = presetConfig.padding || 0;
       
@@ -1284,7 +1284,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     quality = finalConfig.customQuality;
     Logger.log('MmdModelScene', 'Using custom render quality settings:', JSON.stringify(quality));
   } else {
-    const { getRenderQualityPresets } = await import('../../config/sceneConfig.js');
+    const { getRenderQualityPresets } = await import('../../config/sceneConfig');
     const qualityPresets = getRenderQualityPresets(isAndroid);
     quality = qualityPresets[renderQuality] || qualityPresets.medium;
     Logger.log('MmdModelScene', `Using preset quality: ${renderQuality}`, JSON.stringify(quality));

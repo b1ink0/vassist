@@ -5,12 +5,12 @@
  * Extension mode: Background handles rewriting
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import RewriterService from '../RewriterService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import RewriterService from '../RewriterService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 import Logger from '../LoggerService';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultAIConfig } from '../../config/aiConfig.js';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultAIConfig } from '../../config/aiConfig';
 
 class RewriterServiceProxy extends ServiceProxy {
   constructor() {

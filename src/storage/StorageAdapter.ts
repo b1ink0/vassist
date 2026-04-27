@@ -6,7 +6,7 @@
  * Handles automatic timestamp management and basic validation.
  */
 
-import { db } from './DatabaseSchema.js';
+import { db } from './DatabaseSchema';
 
 export class StorageAdapter {
   /**

@@ -11,8 +11,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { wrapContentScriptPlugin, copyAssetsPlugin } from './tools/vite-plugins/extension-plugins.js';
-import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
+import { wrapContentScriptPlugin, copyAssetsPlugin } from './tools/vite-plugins/extension-plugins';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => {
           content: resolve(__dirname, 'extension/content/index.js'),
           
           // Content script React app (main entry point)
-          'content-app': resolve(__dirname, 'extension/content/main.jsx'),
+          'content-app': resolve(__dirname, 'extension/content/main.tsx'),
           
           // Content script styles (for shadow DOM)
           'content-styles': resolve(__dirname, 'extension/content/styles.css'),

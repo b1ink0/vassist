@@ -7,7 +7,7 @@
 
 import OpenAI from 'openai';
 import { TTSProviders } from '../config/aiConfig';
-import { audioWorkerClient } from '../workers/AudioWorkerClient.js';
+import { audioWorkerClient } from '../workers/AudioWorkerClient';
 import Logger from './LoggerService';
 import voiceStorageService from './VoiceStorageService';
 

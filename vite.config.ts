@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin';
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
       },
       warmup: {
         clientFiles: [
-          './src/main.jsx',
+          './src/main.tsx',
           './src/App.jsx',
           './src/components/**/*.jsx',
           './src/services/**/*.js',

@@ -1,6 +1,6 @@
 import React from 'react';
-import { iconMap } from './iconMap.jsx';
-import { getIconColor } from './iconColors.js';
+import { iconMap } from './iconMap';
+import { getIconColor } from './iconColors';
 import { useApp } from '../../contexts/AppContext';
 import Logger from '../../services/LoggerService';
 

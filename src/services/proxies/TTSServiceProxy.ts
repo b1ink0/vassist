@@ -5,12 +5,12 @@
  * Extension mode: Background generates audio, offscreen plays
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import TTSService from '../TTSService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import TTSService from '../TTSService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 import Logger from '../LoggerService';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultTTSConfig } from '../../config/aiConfig.js';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultTTSConfig } from '../../config/aiConfig';
 
 class TTSServiceProxy extends ServiceProxy {
   constructor() {
@@ -477,8 +477,8 @@ class TTSServiceProxy extends ServiceProxy {
         kokoroConfig = this.lastConfigured.kokoro;
       } else {
         Logger.log('TTSServiceProxy', 'Loading config from storage for initialization');
-        const { default: StorageServiceProxy } = await import('./StorageServiceProxy.js');
-        const { DefaultTTSConfig } = await import('../../config/aiConfig.js');
+        const { default: StorageServiceProxy } = await import('./StorageServiceProxy');
+        const { DefaultTTSConfig } = await import('../../config/aiConfig');
         const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
         kokoroConfig = config.kokoro || {};
       }

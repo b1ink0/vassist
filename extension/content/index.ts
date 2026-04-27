@@ -6,8 +6,8 @@
 
 /* global chrome */
 
-import { ContentBridge } from './ContentBridge.js';
-import { MessageTypes } from '../shared/MessageTypes.js';
+import { ContentBridge } from './ContentBridge';
+import { MessageTypes } from '../shared/MessageTypes';
 import Logger from '../../src/services/LoggerService';
 
 class VirtualAssistantInjector {

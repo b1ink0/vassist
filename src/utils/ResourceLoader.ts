@@ -48,7 +48,7 @@ class ResourceLoader {
     // Extension mode - request URL from content script via ExtensionBridge
     // Content script has access to chrome.runtime.getURL, we don't
     // Import here to avoid circular dependency
-    import('./ExtensionBridge.js').then(({ extensionBridge }) => {
+    import('./ExtensionBridge').then(({ extensionBridge }) => {
       return extensionBridge.getResourceURL(path);
     });
     
@@ -79,7 +79,7 @@ class ResourceLoader {
     }
 
     // Extension mode - request URL from content script via ExtensionBridge
-    const { extensionBridge } = await import('./ExtensionBridge.js');
+    const { extensionBridge } = await import('./ExtensionBridge');
     return extensionBridge.getResourceURL(path);
   }
 

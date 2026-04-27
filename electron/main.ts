@@ -10,17 +10,17 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 
-import { LocalAIServer } from './server/http-server.js';
-import { createGetModelsDir, registerLLMHandlers } from './main/ipc/llmHandlers.js';
-import { createRuntimePaths } from './main/runtime/runtimePaths.js';
-import { createDevToolsManager } from './main/system/devTools.js';
-import { createWindowManager } from './main/windows/windowManager.js';
-import { createTrayShortcutsManager } from './main/windows/trayShortcutsManager.js';
-import { registerPrivilegedSchemes, setupDesktopPermissions, setupAppProtocolHandler } from './main/system/permissionsProtocol.js';
-import { registerUIIPCHandlers } from './main/ipc/uiHandlers.js';
-import { createLocalServerManager } from './main/services/localServerManager.js';
-import { createPythonServerManager } from './main/services/pythonServerManager.js';
-import { createLLMBackendManager } from './main/services/llmBackendManager.js';
+import { LocalAIServer } from './server/http-server';
+import { createGetModelsDir, registerLLMHandlers } from './main/ipc/llmHandlers';
+import { createRuntimePaths } from './main/runtime/runtimePaths';
+import { createDevToolsManager } from './main/system/devTools';
+import { createWindowManager } from './main/windows/windowManager';
+import { createTrayShortcutsManager } from './main/windows/trayShortcutsManager';
+import { registerPrivilegedSchemes, setupDesktopPermissions, setupAppProtocolHandler } from './main/system/permissionsProtocol';
+import { registerUIIPCHandlers } from './main/ipc/uiHandlers';
+import { createLocalServerManager } from './main/services/localServerManager';
+import { createPythonServerManager } from './main/services/pythonServerManager';
+import { createLLMBackendManager } from './main/services/llmBackendManager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -6,24 +6,24 @@
 
 /* global chrome */
 
-import { backgroundBridge } from './BackgroundBridge.js';
-import { tabManager } from './TabManager.js';
-import { offscreenManager } from './OffscreenManager.js';
-import { MessageTypes } from '../shared/MessageTypes.js';
+import { backgroundBridge } from './BackgroundBridge';
+import { tabManager } from './TabManager';
+import { offscreenManager } from './OffscreenManager';
+import { MessageTypes } from '../shared/MessageTypes';
 
 // Import services directly from src (unified implementation)
-import storageManager from '../../src/storage/StorageManager.js';
-import aiService from '../../src/services/AIService.js';
-import ttsService from '../../src/services/TTSService.js';
-import sttService from '../../src/services/STTService.js';
-import translatorService from '../../src/services/TranslatorService.js';
-import languageDetectorService from '../../src/services/LanguageDetectorService.js';
-import summarizerService from '../../src/services/SummarizerService.js';
-import ChromeAIValidator from '../../src/services/ChromeAIValidator.js';
-import rewriterService from '../../src/services/RewriterService.js';
-import writerService from '../../src/services/WriterService.js';
+import storageManager from '../../src/storage/StorageManager';
+import aiService from '../../src/services/AIService';
+import ttsService from '../../src/services/TTSService';
+import sttService from '../../src/services/STTService';
+import translatorService from '../../src/services/TranslatorService';
+import languageDetectorService from '../../src/services/LanguageDetectorService';
+import summarizerService from '../../src/services/SummarizerService';
+import ChromeAIValidator from '../../src/services/ChromeAIValidator';
+import rewriterService from '../../src/services/RewriterService';
+import writerService from '../../src/services/WriterService';
 import Logger from '../../src/services/LoggerService';
-import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig } from '../../src/config/aiConfig.js';
+import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig } from '../../src/config/aiConfig';
 
 console.log('Background: Service worker starting...');
 
@@ -724,7 +724,7 @@ async function registerHandlers() {
       Logger.log('Background', 'KOKORO_INIT result from offscreen:', result);
       
       // Load TTS config to get the configured voice for warmup
-      const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
+      const { DefaultTTSConfig } = await import('../../src/config/aiConfig');
       const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
       
       // Warm up the model with a test generation (ensures it's fully ready)
@@ -815,7 +815,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_PING, async (message) => {
-    const { DefaultTTSConfig } = await import('../../src/config/aiConfig.js');
+    const { DefaultTTSConfig } = await import('../../src/config/aiConfig');
     const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
     
     // Add voice and speed to the message data

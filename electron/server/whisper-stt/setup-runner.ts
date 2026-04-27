@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import PythonBootstrap from '../gpt-sovits/bootstrap.js';
+import PythonBootstrap from '../gpt-sovits/bootstrap';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 

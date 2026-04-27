@@ -4,8 +4,8 @@
  * Used by both offscreen worker and SharedWorker
  */
 
-import { VMDFile } from '../../services/VMDHandler.js';
-import { AudioProcessingCore } from './AudioProcessingCore.js';
+import { VMDFile } from '../../services/VMDHandler';
+import { AudioProcessingCore } from './AudioProcessingCore';
 import Logger from '../../services/LoggerService';
 
 export class VMDGenerationCore {

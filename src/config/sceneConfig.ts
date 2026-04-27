@@ -7,7 +7,7 @@
  * Follows the same pattern as animationConfig.js with getter functions.
  */
 
-import { resourceLoader } from '../utils/ResourceLoader.js';
+import { resourceLoader } from '../utils/ResourceLoader';
 import Logger from '../services/LoggerService';
 import { isDesktop, isProduction } from '../utils/PlatformUtils';
 
@@ -159,7 +159,7 @@ export async function getSceneConfigAsync() {
   const config = getSceneConfig();
   
   try {
-    const { modelStorageService } = await import('../services/ModelStorageService.js');
+    const { modelStorageService } = await import('../services/ModelStorageService');
     const customDefaultModel = await modelStorageService.getDefaultModel();
     
     

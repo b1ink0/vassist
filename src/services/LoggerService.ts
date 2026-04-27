@@ -57,7 +57,7 @@ class LoggerService {
           // Main world - use StorageServiceProxy
           try {
             if (!StorageServiceProxy) {
-              const module = await import('./proxies/StorageServiceProxy.js');
+              const module = await import('./proxies/StorageServiceProxy');
               StorageServiceProxy = module.default;
             }
             
@@ -169,10 +169,10 @@ class LoggerService {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager.js');
+        const { default: storageManager } = await import('../storage/StorageManager');
         await storageManager.config.save('loggerEnabled', enabled);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
         await StorageServiceProxy.configSave('loggerEnabled', enabled);
       }
     } catch (error) {
@@ -211,10 +211,10 @@ class LoggerService {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
       
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager.js');
+        const { default: storageManager } = await import('../storage/StorageManager');
         await storageManager.config.save('loggerCategories', categoriesObj);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy.js');
+        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
         await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
       }
     } catch (error) {

@@ -12,8 +12,8 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
-import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin.js';
-import { androidModelsPlugin } from './tools/vite-plugins/android-models-plugin.js';
+import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin';
+import { androidModelsPlugin } from './tools/vite-plugins/android-models-plugin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

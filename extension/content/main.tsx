@@ -6,8 +6,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 // Import ExtensionBridge first to ensure it's initialized before any services
-import { extensionBridge } from '../../src/utils/ExtensionBridge.js';
-import App from '../../src/App.jsx';
+import { extensionBridge } from '../../src/utils/ExtensionBridge';
+import App from '../../src/App';
 import Logger from '../../src/services/LoggerService';
 
 // Make bridge globally accessible

@@ -5,9 +5,9 @@
  */
 
 import { MicVAD } from '@ricky0123/vad-web';
-import { isDesktop } from '../utils/PlatformUtils.js';
-import MicrophoneService from './MicrophoneService.js';
-import Logger from './LoggerService.js';
+import { isDesktop } from '../utils/PlatformUtils';
+import MicrophoneService from './MicrophoneService';
+import Logger from './LoggerService';
 
 class VADService {
   constructor() {

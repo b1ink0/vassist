@@ -5,11 +5,11 @@
  * Extension mode: Background handles detection
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import LanguageDetectorService from '../LanguageDetectorService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultAIConfig } from '../../config/aiConfig.js';
+import { ServiceProxy } from './ServiceProxy';
+import LanguageDetectorService from '../LanguageDetectorService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultAIConfig } from '../../config/aiConfig';
 
 class LanguageDetectorServiceProxy extends ServiceProxy {
   constructor() {

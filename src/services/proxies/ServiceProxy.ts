@@ -15,7 +15,7 @@ export class ServiceProxy {
     if (this.isExtension && typeof window !== 'undefined') {
       try {
         // Import ExtensionBridge synchronously (it's already loaded in main.js)
-        import('../../utils/ExtensionBridge.js').then(module => {
+        import('../../utils/ExtensionBridge').then(module => {
           this._bridge = module.extensionBridge;
         }).catch(() => {
           // Silently fail - will retry via waitForBridge

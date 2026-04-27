@@ -5,13 +5,13 @@
  * Extension mode: Content captures audio, offscreen processes, background transcribes
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import STTService from '../STTService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import STTService from '../STTService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 import Logger from '../LoggerService';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultSTTConfig } from '../../config/aiConfig.js';
-import MicrophoneService from '../MicrophoneService.js';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultSTTConfig } from '../../config/aiConfig';
+import MicrophoneService from '../MicrophoneService';
 
 class STTServiceProxy extends ServiceProxy {
   constructor() {

@@ -6,9 +6,9 @@
 
 /* global chrome */
 
-import { MessageTypes } from '../shared/MessageTypes.js';
-import { VMDGenerationCore } from '../../src/workers/shared/VMDGenerationCore.js';
-import { BVMDConversionCore } from '../../src/workers/shared/BVMDConversionCore.js';
+import { MessageTypes } from '../shared/MessageTypes';
+import { VMDGenerationCore } from '../../src/workers/shared/VMDGenerationCore';
+import { BVMDConversionCore } from '../../src/workers/shared/BVMDConversionCore';
 import { Scene } from '@babylonjs/core/scene';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 
@@ -18,7 +18,7 @@ env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('assets/');
 Logger.log('Offscreen', 'Configured transformers.js to use WASM files from:', chrome.runtime.getURL('assets/'));
 
 // Now import KokoroTTSCore (it will use the configured paths)
-import KokoroTTSCore from '../../src/workers/shared/KokoroTTSCore.js';
+import KokoroTTSCore from '../../src/workers/shared/KokoroTTSCore';
 import Logger from '../../src/services/LoggerService';
 
 class OffscreenWorker {
@@ -370,7 +370,7 @@ class OffscreenWorker {
       
       // Compute spectrogram using shared core
       const frameRate = 30; // VMD uses 30 fps
-      const { AudioProcessingCore } = await import('../../src/workers/shared/AudioProcessingCore.js');
+      const { AudioProcessingCore } = await import('../../src/workers/shared/AudioProcessingCore');
       const spectrogram = await AudioProcessingCore.computeSpectrogram(audioData, sampleRate, frameRate);
       
       return {

@@ -5,12 +5,12 @@
  * Extension mode: Background handles summarization
  */
 
-import { ServiceProxy } from './ServiceProxy.js';
-import SummarizerService from '../SummarizerService.js';
-import { MessageTypes } from '../../../extension/shared/MessageTypes.js';
+import { ServiceProxy } from './ServiceProxy';
+import SummarizerService from '../SummarizerService';
+import { MessageTypes } from '../../../extension/shared/MessageTypes';
 import Logger from '../LoggerService';
-import StorageServiceProxy from './StorageServiceProxy.js';
-import { DefaultAIConfig } from '../../config/aiConfig.js';
+import StorageServiceProxy from './StorageServiceProxy';
+import { DefaultAIConfig } from '../../config/aiConfig';
 
 class SummarizerServiceProxy extends ServiceProxy {
   constructor() {
