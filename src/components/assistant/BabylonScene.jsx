@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { getSceneConfigAsync } from '../config/sceneConfig';
-import DragDropService from '../services/DragDropService';
-import { cn } from '../utils/cn';
-import { useApp } from '../contexts/AppContext';
-import { Icon } from './icons';
-import { useConfig } from '../contexts/ConfigContext';
-import { useDesktop } from '../contexts/DesktopContext';
-import { FPSLimitOptions } from '../config/uiConfig';
-import Logger from '../services/LoggerService';
-import { isAndroid, isDesktop } from '../utils/PlatformUtils';
+import { getSceneConfigAsync } from '../../config/sceneConfig';
+import DragDropService from '../../services/DragDropService';
+import { cn } from '../../utils/cn';
+import { useApp } from '../../contexts/AppContext';
+import { Icon } from '../icons';
+import { useConfig } from '../../contexts/ConfigContext';
+import { useDesktop } from '../../contexts/DesktopContext';
+import { FPSLimitOptions } from '../../config/uiConfig';
+import Logger from '../../services/LoggerService';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 
 /**
  * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.

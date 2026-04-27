@@ -4,16 +4,16 @@
 
 import { forwardRef, useImperativeHandle, useState, useCallback, useRef, useEffect } from 'react';
 import BabylonScene from './BabylonScene';
-import LoadingIndicator from './LoadingIndicator';
-import { buildMmdModelScene } from '../babylon/scenes/MmdModelScene';
-import { AssistantState, getAnimationForEmotion } from '../config/animationConfig';
-import { TTSServiceProxy } from '../services/proxies';
-import { useConfig } from '../contexts/ConfigContext';
-import { useApp } from '../contexts/AppContext';
-import { useDesktop } from '../contexts/DesktopContext';
-import { useAnimation } from '../contexts/AnimationContext';
-import Logger from '../services/LoggerService';
-import emotePlayerService from '../services/EmotePlayerService';
+import LoadingIndicator from '../common/LoadingIndicator';
+import { buildMmdModelScene } from '../../babylon/scenes/MmdModelScene';
+import { AssistantState, getAnimationForEmotion } from '../../config/animationConfig';
+import { TTSServiceProxy } from '../../services/proxies';
+import { useConfig } from '../../contexts/ConfigContext';
+import { useApp } from '../../contexts/AppContext';
+import { useDesktop } from '../../contexts/DesktopContext';
+import { useAnimation } from '../../contexts/AnimationContext';
+import Logger from '../../services/LoggerService';
+import emotePlayerService from '../../services/EmotePlayerService';
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.

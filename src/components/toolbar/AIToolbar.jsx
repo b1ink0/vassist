@@ -3,21 +3,21 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { cn } from '../utils/cn';
-import { useApp } from '../contexts/AppContext';
-import { useConfig } from '../contexts/ConfigContext';
-import BackgroundDetector from '../utils/BackgroundDetector';
-import MediaExtractionService from '../services/MediaExtractionService';
-import UtilService from '../services/UtilService';
-import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy, RewriterServiceProxy, WriterServiceProxy } from '../services/proxies';
-import VoiceRecordingService from '../services/VoiceRecordingService';
-import { TranslationLanguages } from '../config/aiConfig';
-import { PromptConfig } from '../config/promptConfig';
-import ToolbarButton from './toolbar/ToolbarButton';
-import ToolbarSection from './toolbar/ToolbarSection';
-import ToolbarResultPanel from './toolbar/ToolbarResultPanel';
-import { Icon } from './icons';
-import Logger from '../services/LoggerService';
+import { cn } from '../../utils/cn';
+import { useApp } from '../../contexts/AppContext';
+import { useConfig } from '../../contexts/ConfigContext';
+import BackgroundDetector from '../../utils/BackgroundDetector';
+import MediaExtractionService from '../../services/MediaExtractionService';
+import UtilService from '../../services/UtilService';
+import { SummarizerServiceProxy, TranslatorServiceProxy, TTSServiceProxy, AIServiceProxy, RewriterServiceProxy, WriterServiceProxy } from '../../services/proxies';
+import VoiceRecordingService from '../../services/VoiceRecordingService';
+import { TranslationLanguages } from '../../config/aiConfig';
+import { PromptConfig } from '../../config/promptConfig';
+import ToolbarButton from './ToolbarButton';
+import ToolbarSection from './ToolbarSection';
+import ToolbarResultPanel from './ToolbarResultPanel';
+import { Icon } from '../icons';
+import Logger from '../../services/LoggerService';
 
 const AIToolbar = () => {
   const { uiConfig, aiConfig, handleAddToChat } = useApp();
@@ -1344,7 +1344,7 @@ const AIToolbar = () => {
     }
     
     try {
-      const { LanguageDetectorServiceProxy } = await import('../services/proxies');
+      const { LanguageDetectorServiceProxy } = await import('../../services/proxies');
       const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
       
       if (detectionResults && detectionResults.length > 0) {
@@ -1410,7 +1410,7 @@ const AIToolbar = () => {
       let sourceLang = null;
       if (useAutoDetect) {
         try {
-          const { LanguageDetectorServiceProxy } = await import('../services/proxies');
+          const { LanguageDetectorServiceProxy } = await import('../../services/proxies');
           const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
           if (detectionResults && detectionResults.length > 0) {
             sourceLang = detectionResults[0].detectedLanguage;

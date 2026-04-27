@@ -3,13 +3,13 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { cn } from '../utils/cn';
-import { Icon } from './icons';;
+import { cn } from '../../utils/cn';
+import { Icon } from '../icons';
 import DebugOverlay from './DebugOverlay';
-import ResourceLoader from '../utils/ResourceLoader';
-import { StorageServiceProxy } from '../services/proxies';
-import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/LoggerService';
+import ResourceLoader from '../../utils/ResourceLoader';
+import { StorageServiceProxy } from '../../services/proxies';
+import { useConfig } from '../../contexts/ConfigContext';
+import Logger from '../../services/LoggerService';
 
 /**
  * Developer control panel component with debug tools and performance metrics.

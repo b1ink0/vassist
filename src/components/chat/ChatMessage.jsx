@@ -3,15 +3,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { cn } from '../utils/cn';
-import { Icon } from './icons';;
-import { Button } from './ui';
-import { TTSServiceProxy } from '../services/proxies';
-import AudioPlayer from './AudioPlayer';
-import StreamingText from './common/StreamingText';
-import MarkdownText from './common/MarkdownText';
-import StreamingContainer from './common/StreamingContainer';
-import Logger from '../services/LoggerService';
+import { cn } from '../../utils/cn';
+import { Icon } from '../icons';
+import { Button } from '../ui';
+import { TTSServiceProxy } from '../../services/proxies';
+import AudioPlayer from '../media/AudioPlayer';
+import StreamingText from '../common/StreamingText';
+import MarkdownText from '../common/MarkdownText';
+import StreamingContainer from '../common/StreamingContainer';
+import Logger from '../../services/LoggerService';
 
 /**
  * Chat message component with editing, streaming, and multimedia features.

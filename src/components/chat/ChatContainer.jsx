@@ -4,28 +4,28 @@
  */
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { Icon } from './icons';
-import { Button } from './ui';
-import { cn } from '../utils/cn';
-import { TTSServiceProxy, StorageServiceProxy } from '../services/proxies';
-import { DefaultTTSConfig } from '../config/aiConfig';
-import BackgroundDetector from '../utils/BackgroundDetector';
-import DragDropService from '../services/DragDropService';
-import UtilService from '../services/UtilService';
-import SettingsPanel from './SettingsPanel';
+import { Icon } from '../icons';
+import { Button } from '../ui';
+import { cn } from '../../utils/cn';
+import { TTSServiceProxy, StorageServiceProxy } from '../../services/proxies';
+import { DefaultTTSConfig } from '../../config/aiConfig';
+import BackgroundDetector from '../../utils/BackgroundDetector';
+import DragDropService from '../../services/DragDropService';
+import UtilService from '../../services/UtilService';
+import SettingsPanel from '../SettingsPanel';
 import ChatHistoryPanel from './ChatHistoryPanel';
-import Dialog from './common/Dialog';
+import Dialog from '../common/Dialog';
 import ChatMessage from './ChatMessage';
-import chatHistoryService from '../services/ChatHistoryService';
-import { modelStorageService } from '../services/ModelStorageService';
-import { motionStorageService } from '../services/MotionStorageService';
-import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
-import { useDesktop } from '../contexts/DesktopContext';
-import { useAndroid } from '../contexts/AndroidContext';
-import { useApp } from '../contexts/AppContext';
-import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/LoggerService';
-import { isDesktop, isAndroid } from '../utils/PlatformUtils';
+import chatHistoryService from '../../services/ChatHistoryService';
+import { modelStorageService } from '../../services/ModelStorageService';
+import { motionStorageService } from '../../services/MotionStorageService';
+import { useDesktopWindowResize } from '../../hooks/useDesktopWindowResize';
+import { useDesktop } from '../../contexts/DesktopContext';
+import { useAndroid } from '../../contexts/AndroidContext';
+import { useApp } from '../../contexts/AppContext';
+import { useConfig } from '../../contexts/ConfigContext';
+import Logger from '../../services/LoggerService';
+import { isDesktop, isAndroid } from '../../utils/PlatformUtils';
 
 const ANDROID_CHAT_TOP_OFFSET = 32;
 
@@ -614,7 +614,7 @@ const ChatContainer = ({
 
   const handleDeleteVoiceConfirm = useCallback(async (voiceId) => {
     try {
-      const { default: voiceStorageService } = await import('../services/VoiceStorageService');
+      const { default: voiceStorageService } = await import('../../services/VoiceStorageService');
       await voiceStorageService.deleteVoice(voiceId);
       Logger.log('ChatContainer', 'Deleted voice:', voiceId);
       
@@ -1327,7 +1327,7 @@ const ChatContainer = ({
         {/* Scrollable messages */}
         <div 
           ref={scrollRef}
-          className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto hover-scrollbar scroll-smooth"
+          className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth"
         >
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-6">

@@ -6,23 +6,23 @@ import { useEffect, useRef, useCallback } from 'react'
 import ChatButton from './ChatButton'
 import ChatInput from './ChatInput'
 import ChatContainer from './ChatContainer'
-import AIToolbar from './AIToolbar'
-import { InputWindowManager } from './InputWindowManager'
-import ChatService from '../services/ChatService'
-import { AIServiceProxy, TTSServiceProxy, STTServiceProxy, StorageServiceProxy } from '../services/proxies'
-import DocumentInteractionService from '../services/DocumentInteractionService'
-import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService'
-import { DefaultAIConfig, DefaultTTSConfig } from '../config/aiConfig'
-import { PromptConfig } from '../config/promptConfig'
-import chatHistoryService from '../services/ChatHistoryService'
-import { useApp } from '../contexts/AppContext'
-import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize'
-import Logger from '../services/LoggerService';
-import { isAndroid, isDesktop, isInputWindow } from '../utils/PlatformUtils';
-import { useDesktop } from '../contexts/DesktopContext';
-import MicrophoneService from '../services/MicrophoneService';
-import CameraService from '../services/CameraService';
-import ScreenShareService from '../services/ScreenShareService';
+import AIToolbar from '../toolbar/AIToolbar'
+import { InputWindowManager } from '../desktop/InputWindowManager'
+import ChatService from '../../services/ChatService'
+import { AIServiceProxy, TTSServiceProxy, STTServiceProxy, StorageServiceProxy } from '../../services/proxies'
+import DocumentInteractionService from '../../services/DocumentInteractionService'
+import VoiceConversationService, { ConversationStates } from '../../services/VoiceConversationService'
+import { DefaultAIConfig, DefaultTTSConfig } from '../../config/aiConfig'
+import { PromptConfig } from '../../config/promptConfig'
+import chatHistoryService from '../../services/ChatHistoryService'
+import { useApp } from '../../contexts/AppContext'
+import { useDesktopWindowResize } from '../../hooks/useDesktopWindowResize'
+import Logger from '../../services/LoggerService';
+import { isAndroid, isDesktop, isInputWindow } from '../../utils/PlatformUtils';
+import { useDesktop } from '../../contexts/DesktopContext';
+import MicrophoneService from '../../services/MicrophoneService';
+import CameraService from '../../services/CameraService';
+import ScreenShareService from '../../services/ScreenShareService';
 
 /**
  * Main chat controller component.

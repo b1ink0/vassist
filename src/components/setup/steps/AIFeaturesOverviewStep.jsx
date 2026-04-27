@@ -152,6 +152,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
               </div>
             </div>
           </Card>
+        ))}
       </div>
 
       {/* Summary */}

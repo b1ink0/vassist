@@ -139,7 +139,9 @@ const UISettings = ({ isLightBackground }) => {
             variant={isLightBackground ? 'dark' : 'default'}
             options={[
               { value: 'last-location', label: 'Last Location (Remember Position)' },
-              ...Object.entries(PositionPresets).map(([key, preset]) => ({ value: key, label: preset.name })),
+              ...Object.entries(PositionPresets)
+                .filter(([key]) => key !== 'last-location')
+                .map(([key, preset]) => ({ value: key, label: preset.name })),
             ]}
           />
         </div>

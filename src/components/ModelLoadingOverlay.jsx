@@ -3,7 +3,7 @@
  */
 
 import { useApp } from '../contexts/AppContext';
-import LoadingIndicator from './LoadingIndicator';
+import LoadingIndicator from './common/LoadingIndicator';
 
 /**
  * Loading overlay displayed over model position during loading states.

@@ -89,7 +89,6 @@ const Dialog = ({
     e.stopPropagation();
   };
 
-  // Determine confirm button styles
   const isErrorConfirm = confirmStyle === 'error';
 
   return (

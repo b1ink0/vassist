@@ -5,6 +5,8 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Icon } from '../icons';
+import { cn } from '../../utils/cn';
+import { Button, SettingsRow, Card } from '../ui';
 import Toggle from './Toggle';
 
 /**
@@ -130,13 +132,14 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
       </div>
       
       {value && !disabled && (
-        <button
+        <Button
           onClick={handleClear}
-          className={cn('p-2 rounded-lg transition-colors', isLightBackground ? 'hover:bg-black/20 text-white/60 hover:text-white' : 'hover:bg-white/10 text-white/60 hover:text-white')}
+          variant="default"
+          className={cn('p-2 transition-colors', isLightBackground ? 'hover:bg-black/20 text-white/60 hover:text-white' : 'hover:bg-white/10 text-white/60 hover:text-white')}
           title="Clear shortcut"
         >
           <Icon name="close" size={16} />
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -213,22 +216,15 @@ const ShortcutsConfig = ({
   return (
     <div className="space-y-6">
       {/* Enable/Disable Toggle */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <label className="text-sm font-medium text-white">Enable Keyboard Shortcuts</label>
-            <p className="text-xs text-white/50 mt-0.5">
-              {localShortcuts.enabled 
-                ? 'Shortcuts are active and will trigger actions' 
-                : 'Shortcuts are disabled'}
-            </p>
-          </div>
-          <Toggle
-            checked={localShortcuts.enabled}
-            onChange={handleToggle}
-          />
-        </div>
-      </div>
+      <SettingsRow
+        label="Enable Keyboard Shortcuts"
+        description={localShortcuts.enabled ? 'Shortcuts are active and will trigger actions' : 'Shortcuts are disabled'}
+      >
+        <Toggle
+          checked={localShortcuts.enabled}
+          onChange={handleToggle}
+        />
+      </SettingsRow>
       
       {/* Shortcut Inputs */}
       <div className="space-y-4 border-t border-white/10 pt-4">
@@ -291,17 +287,17 @@ const ShortcutsConfig = ({
       
       {/* Conflict Warning */}
       {conflict && (
-        <div className="rounded-lg border border-red-500/30 bg-red-900/10 p-3 flex items-start gap-2">
+        <Card variant="elevated" padding="none" className="p-3 border-red-500/30 bg-red-900/10 flex items-start gap-2">
           <Icon name="alert" size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-red-100 font-medium">Shortcut Conflict</p>
             <p className="text-xs text-red-200/80 mt-1">{conflict}</p>
           </div>
-        </div>
+        </Card>
       )}
       
       {/* Info Box */}
-      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+      <Card variant="elevated" padding="none" className="p-3 border-blue-500/20 bg-blue-500/10">
         <div className="flex items-start gap-2">
           <Icon name="idea" size={14} className="text-blue-300 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-blue-200/90">
@@ -314,7 +310,7 @@ const ShortcutsConfig = ({
             </ul>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

@@ -293,9 +293,6 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                   variant={isLightBackground ? 'dark' : 'default'}
                   options={Object.entries(OpenAIVoices).map(([key, value]) => ({ value, label: key.charAt(0) + key.slice(1).toLowerCase() }))}
                 />
-                    </option>
-                  ))}
-                </Select>
               </div>
             </>
           )}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Button } from './ui';
-import { useDesktop } from '../contexts/DesktopContext';
+import { Button } from '../ui';
+import { cn } from '../../utils/cn';
+import { useDesktop } from '../../contexts/DesktopContext';
 
 const DesktopScreenShareDialog = () => {
   const { api } = useDesktop();

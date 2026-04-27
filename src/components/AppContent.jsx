@@ -4,10 +4,10 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { cn } from '../utils/cn';
-import VirtualAssistant from './VirtualAssistant';
-import ControlPanel from './ControlPanel';
-import ChatController from './ChatController';
-import LoadingIndicator from './LoadingIndicator';
+import VirtualAssistant from './assistant/VirtualAssistant';
+import ControlPanel from './debug/ControlPanel';
+import ChatController from './chat/ChatController';
+import LoadingIndicator from './common/LoadingIndicator';
 import ModelLoadingOverlay from './ModelLoadingOverlay';
 import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';

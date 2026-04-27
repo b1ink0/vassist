@@ -3,10 +3,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { cn } from '../utils/cn';
-import { Icon } from './icons';
-import { Button } from './ui';
-import Logger from '../services/LoggerService';
+import { cn } from '../../utils/cn';
+import { Icon } from '../icons';
+import { Button } from '../ui';
+import Logger from '../../services/LoggerService';
 
 /**
  * Chat bubble component for displaying messages near the virtual assistant.

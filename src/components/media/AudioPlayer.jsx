@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { cn } from '../utils/cn';
-import { Icon } from './icons';
-import { Button } from './ui';
+import { cn } from '../../utils/cn';
+import { Icon } from '../icons';
+import { Button } from '../ui';
 
 const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
   const [isPlaying, setIsPlaying] = useState(false);

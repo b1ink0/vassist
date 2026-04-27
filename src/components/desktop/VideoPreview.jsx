@@ -4,9 +4,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Logger from '../services/LoggerService';
-import { Icon } from './icons';
-import { isAndroid } from '../utils/PlatformUtils';
+import Logger from '../../services/LoggerService';
+import { Icon } from '../icons';
+import { cn } from '../../utils/cn';
+import { isAndroid } from '../../utils/PlatformUtils';
 
 /**
  * Draggable video preview component

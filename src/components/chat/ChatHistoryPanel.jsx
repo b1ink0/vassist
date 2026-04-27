@@ -3,11 +3,11 @@
  */
 
 import { useState, useEffect, useRef, memo } from 'react'
-import { Icon } from './icons';
-import { Button } from './ui';;
-import { cn } from '../utils/cn';
-import chatHistoryService from '../services/ChatHistoryService';
-import Logger from '../services/LoggerService';
+import { Icon } from '../icons';
+import { Button, Input } from '../ui';
+import { cn } from '../../utils/cn';
+import chatHistoryService from '../../services/ChatHistoryService';
+import Logger from '../../services/LoggerService';
 
 /**
  * Chat history panel component with infinite scroll and search.
@@ -325,32 +325,34 @@ const ChatHistoryPanel = ({
             Chat History
           </h2>
           {onClose && (
-            <button
+            <Button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors shrink-0"
+              variant="default"
+              className="w-8 h-8 flex items-center justify-center"
               aria-label="Close history"
-            ><Icon name="close" size={16} /></button>
+            ><Icon name="close" size={16} /></Button>
           )}
         </div>
 
         {/* Search Input */}
         <div className="relative">
-          <input
+          <Input
             ref={searchInputRef}
             type="text"
             placeholder="Search chats..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm transition-all bg-white/10 text-white placeholder-white/50 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+            className="w-full pr-8"
           />
           {searchQuery && (
-            <button
+            <Button
               onClick={() => {
                 setSearchQuery('');
                 searchInputRef.current?.focus();
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/70"
-            ><Icon name="close" size={16} /></button>
+              variant="default"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 h-auto"
+            ><Icon name="close" size={16} /></Button>
           )}
         </div>
       </div>

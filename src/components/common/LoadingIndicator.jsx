@@ -11,7 +11,7 @@
  * @param {boolean} props.centered - Whether to center in container
  * @returns {JSX.Element|null}
  */
-import { cn } from '../utils/cn';
+import { cn } from '../../utils/cn';
 
 const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }) => {
   if (!isVisible) return null;
@@ -19,10 +19,6 @@ const LoadingIndicator = ({ isVisible = false, progress = null, centered = false
   return (
     <div
       className={cn(!centered && 'fixed bottom-5 right-5', 'z-[10000] pointer-events-auto flex items-center justify-center px-2 py-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl')}
-      style={{
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-      }}
     >
       <div className="relative w-8 h-8 flex items-center justify-center">
         <svg 

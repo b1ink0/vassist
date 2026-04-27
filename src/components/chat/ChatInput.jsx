@@ -3,23 +3,23 @@
  */
 
 import { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
-import { STTServiceProxy } from '../services/proxies';
-import { TTSServiceProxy } from '../services/proxies';
-import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
-import BackgroundDetector from '../utils/BackgroundDetector';
-import DragDropService from '../services/DragDropService';
-import { useDesktopWindowResize } from '../hooks/useDesktopWindowResize';
-import { useApp } from '../contexts/AppContext';
-import { useConfig } from '../contexts/ConfigContext';
-import { Icon } from './icons';
-import { Button } from './ui';
-import Logger from '../services/LoggerService';
-import { isAndroid, isDesktop, isExtension, isInputWindow } from '../utils/PlatformUtils';
-import { useDesktop } from '../contexts/DesktopContext';
-import MicrophoneService from '../services/MicrophoneService';
-import CameraService from '../services/CameraService';
-import ScreenShareService from '../services/ScreenShareService';
-import { cn } from '../utils/cn';
+import { STTServiceProxy } from '../../services/proxies';
+import { TTSServiceProxy } from '../../services/proxies';
+import VoiceConversationService, { ConversationStates } from '../../services/VoiceConversationService';
+import BackgroundDetector from '../../utils/BackgroundDetector';
+import DragDropService from '../../services/DragDropService';
+import { useDesktopWindowResize } from '../../hooks/useDesktopWindowResize';
+import { useApp } from '../../contexts/AppContext';
+import { useConfig } from '../../contexts/ConfigContext';
+import { Icon } from '../icons';
+import { Button } from '../ui';
+import Logger from '../../services/LoggerService';
+import { isAndroid, isDesktop, isExtension, isInputWindow } from '../../utils/PlatformUtils';
+import { useDesktop } from '../../contexts/DesktopContext';
+import MicrophoneService from '../../services/MicrophoneService';
+import CameraService from '../../services/CameraService';
+import ScreenShareService from '../../services/ScreenShareService';
+import { cn } from '../../utils/cn';
 
 /**
  * Chat input component with text, voice, and attachment capabilities.

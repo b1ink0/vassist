@@ -2,7 +2,7 @@
  * @fileoverview Settings panel component with tabbed interface for UI, LLM, TTS, STT, and AI features configuration.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Icon } from './icons';
 import { cn } from '../utils/cn';
 import TabBar from './ui/TabBar';
@@ -44,14 +44,14 @@ const SettingsPanel = ({
   const [activeTab, setActiveTab] = useState('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
-  const tabsRef = useState({
+  const tabsRef = useRef({
     ui: null,
     '3d': null,
     llm: null,
     tts: null,
     stt: null,
     'ai-plus': null,
-  })[0];
+  });
   
   const {
     uiConfigSaved,
@@ -81,12 +81,12 @@ const SettingsPanel = ({
   }, []);
 
   useEffect(() => {
-    const activeTabElement = tabsRef[activeTab];
+    const activeTabElement = tabsRef.current[activeTab];
     if (activeTabElement) {
       const { offsetLeft, offsetWidth } = activeTabElement;
       setTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
     }
-  }, [activeTab, tabsRef]);
+  }, [activeTab]);
 
   const getActiveStatus = () => {
     if (activeTab === 'ui') {

@@ -3,11 +3,11 @@
  */
 
 import { useState, useEffect } from 'react'
-import { cn } from '../utils/cn';
-import { Icon } from './icons';
+import { cn } from '../../utils/cn';
+import { Icon } from '../icons';
 import * as BABYLON from '@babylonjs/core';
-import { useConfig } from '../contexts/ConfigContext';
-import Logger from '../services/LoggerService';
+import { useConfig } from '../../contexts/ConfigContext';
+import Logger from '../../services/LoggerService';
 
 /**
  * Debug overlay component providing camera controls and visualization tools.

@@ -1,11 +1,12 @@
 /**
  * @fileoverview Desktop window controls component for Electron app.
  * Provides minimize, maximize, and close buttons for frameless window.
+ * TODO: Replace SVG icons with @heroicons/react/24/outline (MinusIcon, XMarkIcon, Square2StackIcon)
  */
 
 import { MinusIcon, XMarkIcon, Square2StackIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
-import { useDesktop } from '../contexts/DesktopContext';
+import { useDesktop } from '../../contexts/DesktopContext';
 
 /**
  * Window controls for Electron desktop app

@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useCallback } from 'react';
-import VirtualAssistant from '../src/components/VirtualAssistant';
+import VirtualAssistant from "../src/components/assistant/VirtualAssistant";
 import { useApp } from '../src/contexts/AppContext';
 import Logger from '../src/services/LoggerService';
 

@@ -3,10 +3,10 @@
  */
 
 import { useEffect } from 'react';
-import { useApp } from '../contexts/AppContext';
-import { useDesktop } from '../contexts/DesktopContext';
-import { isDesktop } from '../utils/PlatformUtils';
-import Logger from '../services/LoggerService';
+import { useApp } from '../../contexts/AppContext';
+import { useDesktop } from '../../contexts/DesktopContext';
+import { isDesktop } from '../../utils/PlatformUtils';
+import Logger from '../../services/LoggerService';
 
 export function InputWindowManager() {
   const { isChatInputVisible } = useApp();

@@ -4,7 +4,7 @@ import { Card, SettingsRow } from '../../ui';
 import { useSetup } from '../../../contexts/SetupContext';
 import { Icon } from '../../icons';
 import Toggle from '../../common/Toggle';
-import VirtualAssistant from '../../VirtualAssistant';
+import VirtualAssistant from '../../assistant/VirtualAssistant';
 import { PositionPresets } from '../../../config/uiConfig';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 

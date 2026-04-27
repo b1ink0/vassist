@@ -4,8 +4,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { backgroundStorageService } from '../services/BackgroundStorageService';
-import Logger from '../services/LoggerService';
+import { backgroundStorageService } from '../../services/BackgroundStorageService';
+import Logger from '../../services/LoggerService';
 
 function AndroidBackground() {
   const [backgroundUrl, setBackgroundUrl] = useState(null);

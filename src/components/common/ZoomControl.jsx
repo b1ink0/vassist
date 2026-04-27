@@ -3,9 +3,9 @@
  */
 
 import { useState } from 'react';
-import { Icon } from './icons';
-import { Button } from './ui';
-import { cn } from '../utils/cn';
+import { Icon } from '../icons';
+import { Button } from '../ui';
+import { cn } from '../../utils/cn';
 
 /**
  * Zoom control with expand/collapse functionality

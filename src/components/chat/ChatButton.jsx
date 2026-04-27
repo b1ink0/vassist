@@ -3,20 +3,20 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useApp } from '../contexts/AppContext';
-import { useConfig } from '../contexts/ConfigContext';
-import { useDesktop } from '../contexts/DesktopContext';
-import { Icon } from './icons';
-import { Button } from './ui';
-import { cn } from '../utils/cn';
-import Logger from '../services/LoggerService';
-import emoteStorageService from '../services/EmoteStorageService';
-import emotePlayerService from '../services/EmotePlayerService';
-import { modelStorageService } from '../services/ModelStorageService';
-import { stageStorageService } from '../services/StageStorageService';
-import ZoomControl from './ZoomControl';
-import { isAndroid, isDesktop } from '../utils/PlatformUtils';
-import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../config/uiConfig';
+import { useApp } from '../../contexts/AppContext';
+import { useConfig } from '../../contexts/ConfigContext';
+import { useDesktop } from '../../contexts/DesktopContext';
+import { Icon } from '../icons';
+import { Button, Card } from '../ui';
+import { cn } from '../../utils/cn';
+import Logger from '../../services/LoggerService';
+import emoteStorageService from '../../services/EmoteStorageService';
+import emotePlayerService from '../../services/EmotePlayerService';
+import { modelStorageService } from '../../services/ModelStorageService';
+import { stageStorageService } from '../../services/StageStorageService';
+import ZoomControl from '../common/ZoomControl';
+import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig';
 
 function getPlatformPresetDefaults(preset) {
   const basePreset = PositionPresets[preset] || PositionPresets['bottom-right'];
@@ -701,7 +701,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       
       Logger.log('ChatButton', 'Setting up drag-drop service');
       
-      import('../services/DragDropService').then(({ default: DragDropService }) => {
+      import('../../services/DragDropService').then(({ default: DragDropService }) => {
         if (!attached) {
           Logger.log('ChatButton', 'Cleanup called during async import');
           return;
@@ -1071,7 +1071,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     <>
     {/* Emote List */}
     {isEmotePanelOpen && !isChatOpen && !modelDisabled && (
-      <div
+      <Card
+        padding="none"
         style={{
           left: `${emotePanelLeft}px`,
           top: `${emotePanelTop}px`,
@@ -1164,12 +1165,13 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             ))}
           </>
         )}
-      </div>
+      </Card>
     )}
 
     {/* Avatar/Stage List - Unified Panel */}
     {isAvatarPanelOpen && !isChatOpen && !modelDisabled && (
-      <div
+      <Card
+        padding="none"
         style={{
           left: `${avatarPanelLeft}px`,
           top: `${avatarPanelTop}px`,
@@ -1257,19 +1259,20 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             ))}
           </>
         )}
-      </div>
+      </Card>
     )}
 
     {/* Camera Controls - Positioned below Avatar List */}
     {isAvatarPanelOpen && !isChatOpen && !modelDisabled && (
-      <div
+      <Card
+        padding="none"
         style={{
           left: `${avatarPanelLeft}px`,
           // Position just below the avatar panel
           top: `${avatarPanelTop + Math.min((models.length + 1) * 43, 300) + 8}px`,
           zIndex: isAndroid ? 201 : 10001,
         }}
-        className="fixed w-[125px] flex flex-col gap-1"
+        className="fixed w-[125px] flex flex-col gap-1 p-1"
       >
         <div className="flex gap-1 justify-between">
           {/* 3D/2D Toggle Button */}
@@ -1353,7 +1356,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
             />
           </Button>
         </div>
-      </div>
+      </Card>
     )}
 
     <div

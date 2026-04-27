@@ -44,13 +44,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
   const [activeSubTab, setActiveSubTab] = useState('display');
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({ left: 0, width: 0 });
-  const subTabsRef = useState({
+  const subTabsRef = useRef({
     display: null,
     performance: null,
     models: null,
     animations: null,
     emotes: null,
-  })[0];
+  });
 
   // Model upload state
   const [models, setModels] = useState([]);
@@ -142,12 +142,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
   // Update sub-tab indicator position
   useEffect(() => {
-    const activeTabElement = subTabsRef[activeSubTab];
+    const activeTabElement = subTabsRef.current[activeSubTab];
     if (activeTabElement) {
       const { offsetLeft, offsetWidth } = activeTabElement;
       setSubTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
     }
-  }, [activeSubTab, subTabsRef]);
+  }, [activeSubTab]);
 
   const loadModels = async () => {
     try {
@@ -1271,6 +1271,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             { id: 'animations', label: 'Animations' },
             { id: 'emotes', label: 'Emotes' },
           ]}
+          size="compact"
           activeTab={activeSubTab}
           onTabChange={setActiveSubTab}
           tabsRef={subTabsRef}
@@ -1378,7 +1379,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 variant={isLightBackground ? 'dark' : 'default'}
                 options={[
                   { value: 'last-location', label: 'Last Location (Remember Position)' },
-                  ...Object.entries(PositionPresets).map(([key, preset]) => ({ value: key, label: preset.name })),
+                  ...Object.entries(PositionPresets)
+                    .filter(([key]) => key !== 'last-location')
+                    .map(([key, preset]) => ({ value: key, label: preset.name })),
                 ]}
               />
               <p className="text-xs text-white/50">

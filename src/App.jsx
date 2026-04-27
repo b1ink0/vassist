@@ -5,7 +5,7 @@
 import CameraService from './services/CameraService'
 import ScreenShareService from './services/ScreenShareService'
 import DemoSite from './components/DemoSite'
-import LoadingIndicator from './components/LoadingIndicator'
+import LoadingIndicator from './components/common/LoadingIndicator'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { AppProvider } from './contexts/AppContext'
 import { SetupProvider, useSetup } from './contexts/SetupContext'
@@ -17,12 +17,12 @@ import { lazy, Suspense, useState } from 'react'
 
 const LazyAppContent = lazy(() => import('./components/AppContent'))
 const LazySetupWizard = lazy(() => import('./components/setup/SetupWizard'))
-const LazyChatInput = lazy(() => import('./components/ChatInput'))
-const LazyVideoPreview = lazy(() => import('./components/VideoPreview'))
-const LazyDesktopWindowControls = lazy(() => import('./components/DesktopWindowControls'))
-const LazyDesktopScreenShareDialog = lazy(() => import('./components/DesktopScreenShareDialog'))
+const LazyChatInput = lazy(() => import('./components/chat/ChatInput'))
+const LazyVideoPreview = lazy(() => import('./components/desktop/VideoPreview'))
+const LazyDesktopWindowControls = lazy(() => import('./components/desktop/DesktopWindowControls'))
+const LazyDesktopScreenShareDialog = lazy(() => import('./components/desktop/DesktopScreenShareDialog'))
 const LazyAndroidContent = lazy(() => import('../android-src/AndroidContent'))
-const LazyAndroidBackground = lazy(() => import('./components/AndroidBackground'))
+const LazyAndroidBackground = lazy(() => import('./components/android/AndroidBackground'))
 
 /**
  * Application wrapper component that handles setup flow.
