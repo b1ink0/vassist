@@ -15,6 +15,7 @@ import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { Scene } from "@babylonjs/core/scene";
@@ -54,6 +55,7 @@ import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import type {
   AnimationLoaderLike,
   CameraMode,
+  MmdModelLike,
   PositionPixels,
   PositionPresetLike,
   RenderQualitySettingsLike,
@@ -65,6 +67,72 @@ import type {
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   return String(error);
+};
+
+type MaterialWithState = {
+  diffuseTexture?: unknown;
+  sphereTexture?: unknown;
+  toonTexture?: unknown;
+  alpha?: number;
+  renderOutline?: boolean;
+  outlineWidth?: number;
+  outlineColor?: { set: (r: number, g: number, b: number) => void };
+  outlineAlpha?: number;
+  _originalAlpha?: number;
+  _isHidden?: boolean;
+  [key: string]: unknown;
+};
+
+type MeshMetadataState = {
+  meshes?: Mesh[];
+  materials?: MaterialWithState[];
+};
+
+type TextureState = {
+  materialIndex: number;
+  type: 'diffuse' | 'sphere' | 'toon' | string;
+  isActive: boolean;
+};
+
+type MeshPartState = {
+  meshIndex: number;
+  type?: 'submesh' | string;
+  subMeshIndex?: number;
+  isVisible: boolean;
+};
+
+const toTextureStates = (value: unknown): TextureState[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => ({
+      materialIndex: typeof item.materialIndex === 'number' ? item.materialIndex : -1,
+      type: typeof item.type === 'string' ? item.type : 'diffuse',
+      isActive: item.isActive !== false,
+    }))
+    .filter((item) => item.materialIndex >= 0);
+};
+
+const toMeshPartStates = (value: unknown): MeshPartState[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => {
+      const normalized: MeshPartState = {
+        meshIndex: typeof item.meshIndex === 'number' ? item.meshIndex : -1,
+        isVisible: item.isVisible !== false,
+      };
+
+      if (typeof item.type === 'string') {
+        normalized.type = item.type;
+      }
+      if (typeof item.subMeshIndex === 'number') {
+        normalized.subMeshIndex = item.subMeshIndex;
+      }
+
+      return normalized;
+    })
+    .filter((item) => item.meshIndex >= 0);
 };
 
 /**
@@ -751,8 +819,8 @@ export const buildMmdModelScene = async (
   
   Logger.log('MmdModelScene', 'Loading model from:', finalConfig.modelUrl);
   
-  let modelMesh: any = null;
-  let mmdModel: any = null;
+  let modelMesh: Mesh | null = null;
+  let mmdModel: MmdModelLike | null = null;
   
   try {
     // Load model with progress tracking (no built-in loading UI)
@@ -789,7 +857,7 @@ export const buildMmdModelScene = async (
     
     // Add model to scene
     result.addAllToScene();
-    modelMesh = result.meshes[0];
+    modelMesh = result.meshes[0] as Mesh | undefined ?? null;
     if (!modelMesh) {
       throw new Error('Model loaded but no root mesh was returned');
     }
@@ -849,7 +917,7 @@ export const buildMmdModelScene = async (
   // STAGE LOADING
   // ========================================
   
-  let stageMesh: any = null;
+  let stageMesh: Mesh | null = null;
   
   try {
     // Get default stage from storage
@@ -891,14 +959,16 @@ export const buildMmdModelScene = async (
       
       // Add stage to scene
       stageResult.addAllToScene();
-      stageMesh = stageResult.meshes[0];
+      stageMesh = stageResult.meshes[0] as Mesh | undefined ?? null;
       if (!stageMesh) {
         throw new Error('Stage loaded but no root mesh was returned');
       }
       
       // Setup stage shadows
       if (finalConfig.enableShadows && shadowGenerator) {
-        for (const mesh of stageMesh.metadata.meshes) {
+        const stageMetadata = stageMesh.metadata as MeshMetadataState | undefined;
+        const stageMeshes = Array.isArray(stageMetadata?.meshes) ? stageMetadata.meshes : [stageMesh];
+        for (const mesh of stageMeshes) {
           mesh.receiveShadows = true;
           shadowGenerator.addShadowCaster(mesh, false);
         }
@@ -961,7 +1031,9 @@ export const buildMmdModelScene = async (
   
   // Setup model shadows
   if (finalConfig.enableShadows && shadowGenerator) {
-    for (const mesh of modelMesh.metadata.meshes) {
+    const modelMetadata = modelMesh.metadata as MeshMetadataState | undefined;
+    const modelMeshes = Array.isArray(modelMetadata?.meshes) ? modelMetadata.meshes : [modelMesh];
+    for (const mesh of modelMeshes) {
       mesh.receiveShadows = true;
       shadowGenerator.addShadowCaster(mesh, false);
     }
@@ -972,15 +1044,19 @@ export const buildMmdModelScene = async (
   // Create MMD model
   mmdModel = mmdRuntime.createMmdModel(modelMesh, {
     buildPhysics: mmdPhysics !== null && mmdPhysics !== undefined,
-  });
+  }) as unknown as MmdModelLike;
   
   // Enable and configure outline rendering on all materials
-  for (const mesh of modelMesh.metadata.meshes) {
-    const material = mesh.material;
+  const modelMetadata = modelMesh.metadata as MeshMetadataState | undefined;
+  const modelMeshes = Array.isArray(modelMetadata?.meshes) ? modelMetadata.meshes : [modelMesh];
+  for (const mesh of modelMeshes) {
+    const material = mesh.material as MaterialWithState | null | undefined;
     if (material) {
       material.renderOutline = true;
       material.outlineWidth = 0.5; // Increase thickness (default is 0.01)
-      material.outlineColor.set(0, 0, 0); // Black outline
+      if (material.outlineColor) {
+        material.outlineColor.set(0, 0, 0); // Black outline
+      }
       material.outlineAlpha = 1.0; // Full opacity
     }
   }
@@ -1000,20 +1076,22 @@ export const buildMmdModelScene = async (
       
       if (currentModel?.metadata?.textures || currentModel?.metadata?.meshParts) {
         // Collect all materials using the same logic as extraction
-        const materials: any[] = [];
+        const materials: MaterialWithState[] = [];
+        const runtimeModelMetadata = modelMesh.metadata as MeshMetadataState | undefined;
         
-        if (modelMesh.metadata && modelMesh.metadata.materials) {
-          materials.push(...modelMesh.metadata.materials);
+        if (Array.isArray(runtimeModelMetadata?.materials)) {
+          materials.push(...runtimeModelMetadata.materials);
         }
         
-        if (modelMesh.material && !materials.includes(modelMesh.material)) {
-          materials.push(modelMesh.material);
+        const rootMaterial = modelMesh.material as MaterialWithState | null | undefined;
+        if (rootMaterial && !materials.includes(rootMaterial)) {
+          materials.push(rootMaterial);
         }
         
         if (modelMesh.subMeshes) {
-          modelMesh.subMeshes.forEach((subMesh: any) => {
+          modelMesh.subMeshes.forEach((subMesh) => {
             if (subMesh.getMaterial && subMesh.getMaterial()) {
-              const subMaterial = subMesh.getMaterial();
+              const subMaterial = subMesh.getMaterial() as MaterialWithState | null;
               if (subMaterial && !materials.includes(subMaterial)) {
                 materials.push(subMaterial);
               }
@@ -1024,9 +1102,10 @@ export const buildMmdModelScene = async (
         Logger.log('MmdModelScene', `Found ${materials.length} materials for texture application`);
         
         // Apply texture states - store original textures and toggle disabled ones to null
-        if (currentModel.metadata.textures) {
+        const textureStates = toTextureStates(currentModel.metadata.textures);
+        if (textureStates.length > 0) {
           let appliedCount = 0;
-          for (const textureData of currentModel.metadata.textures) {
+          for (const textureData of textureStates) {
             if (textureData.materialIndex >= materials.length) {
               Logger.warn('MmdModelScene', `Texture material index ${textureData.materialIndex} out of bounds`);
               continue;
@@ -1069,17 +1148,19 @@ export const buildMmdModelScene = async (
         }
         
         // Apply mesh visibility states
-        if (currentModel.metadata.meshParts && modelMesh.metadata.meshes) {
+        const meshPartStates = toMeshPartStates(currentModel.metadata.meshParts);
+        const meshStateMetadata = modelMesh.metadata as MeshMetadataState | undefined;
+        if (meshPartStates.length > 0 && Array.isArray(meshStateMetadata?.meshes)) {
           let appliedCount = 0;
-          for (const meshPart of currentModel.metadata.meshParts) {
+          for (const meshPart of meshPartStates) {
             if (!meshPart.isVisible) {
-              const mesh = modelMesh.metadata.meshes[meshPart.meshIndex];
+              const mesh = meshStateMetadata.meshes[meshPart.meshIndex];
               if (mesh) {
                 if (meshPart.type === 'submesh' && meshPart.subMeshIndex !== undefined) {
                   // For submeshes, toggle via material alpha
                   if (mesh.subMeshes && mesh.subMeshes[meshPart.subMeshIndex]) {
                     const subMesh = mesh.subMeshes[meshPart.subMeshIndex];
-                    const material = subMesh.getMaterial ? subMesh.getMaterial() : mesh.material;
+                    const material = (subMesh?.getMaterial ? subMesh.getMaterial() : mesh.material) as MaterialWithState | null | undefined;
                     if (material) {
                       if (!material._originalAlpha) {
                         material._originalAlpha = material.alpha !== undefined ? material.alpha : 1;
@@ -1121,8 +1202,8 @@ export const buildMmdModelScene = async (
     mmdModel,
     bvmdLoader as unknown as AnimationLoaderLike,
     vmdLoader as unknown as AnimationLoaderLike,
-    finalConfig.getRandomAnimation as any,
-    finalConfig.getEnabledAnimations as any
+    finalConfig.getRandomAnimation,
+    finalConfig.getEnabledAnimations
   );
   
   // Initialize scene metadata if null

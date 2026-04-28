@@ -43,6 +43,9 @@ interface ChatContainerProps {
   onDragDrop?: (data: { text?: string; images?: string[]; audios?: string[]; errors?: string[] }) => void;
 }
 
+type ChatHistorySelection = { chatId: string };
+type ChatDragDropData = { text?: string; images?: string[]; audios?: string[]; errors?: string[] };
+
 interface ButtonPosition {
   x: number;
   y: number;
@@ -66,7 +69,7 @@ interface ChatMessageLike {
 interface ChatHistoryPanelPropsLike {
   isLightBackground: boolean;
   onClose: () => void;
-  onSelectChat: (chat: unknown) => void;
+  onSelectChat: (chat: ChatHistorySelection) => void;
   onRequestEditDialog: (chatId: string, title: string) => void;
   onRequestDeleteDialog: (chatId: string) => void;
   refreshTrigger: number;
@@ -92,10 +95,10 @@ interface DialogPropsLike {
 interface DragDropServiceLike {
   attach: (element: HTMLElement, callbacks: {
     onSetDragOver?: (isDragging: boolean) => void;
-    onShowError?: (error: unknown) => void;
+    onShowError?: (error: Error | string) => void;
     checkVoiceMode?: (() => boolean) | null;
     getCurrentCounts?: () => { images: number; audios: number };
-    onProcessData?: (data: unknown) => void;
+    onProcessData?: (data: ChatDragDropData) => void;
   }) => void;
   detach: () => void;
 }
@@ -126,6 +129,34 @@ interface DebugMarker {
   alpha: number;
   element: string;
 }
+
+type RawDebugMarker = {
+  x?: number;
+  y?: number;
+  color?: string;
+  brightness?: number;
+  alpha?: number | string;
+  element?: string;
+};
+
+const isHTMLElement = (value: unknown): value is HTMLElement => value instanceof HTMLElement;
+
+const toDebugMarkers = (markers: RawDebugMarker[] | null | undefined): DebugMarker[] => {
+  if (!Array.isArray(markers)) {
+    return [];
+  }
+
+  return markers
+    .filter((marker): marker is RawDebugMarker => !!marker && typeof marker === 'object')
+    .map((marker) => ({
+      x: typeof marker.x === 'number' ? marker.x : 0,
+      y: typeof marker.y === 'number' ? marker.y : 0,
+      color: typeof marker.color === 'string' ? marker.color : '#ffffff',
+      brightness: typeof marker.brightness === 'number' ? marker.brightness : 0,
+      alpha: typeof marker.alpha === 'number' ? marker.alpha : Number.parseFloat(String(marker.alpha ?? '1')) || 1,
+      element: typeof marker.element === 'string' ? marker.element : 'unknown',
+    }));
+};
 
 type TTSConfigLike = typeof DefaultTTSConfig & {
   gptsovits?: {
@@ -168,7 +199,7 @@ interface AppContextForChatContainer {
   setIsSettingsPanelOpen: Dispatch<SetStateAction<boolean>>;
   setIsHistoryPanelOpen: Dispatch<SetStateAction<boolean>>;
   setIsTempChat: Dispatch<SetStateAction<boolean>>;
-  loadChatFromHistory: (chat: unknown) => void;
+  loadChatFromHistory: (chat: ChatHistorySelection) => Promise<void>;
   clearChat: () => void;
   stopGeneration: () => void;
   closeChat: () => void;
@@ -182,11 +213,11 @@ interface AppContextForChatContainer {
   nextBranch: (messageId: string) => void;
 }
 
-const storageService = StorageServiceProxy as unknown as StorageServiceLike;
+const storageService = StorageServiceProxy as StorageServiceLike;
 const ttsService = TTSServiceProxy as unknown as TTSServiceLike;
 const dragDropCtor = DragDropService as unknown as new (options: { maxImages: number; maxAudios: number }) => DragDropServiceLike;
-const TypedChatHistoryPanel = ChatHistoryPanel as unknown as ComponentType<ChatHistoryPanelPropsLike>;
-const TypedDialog = Dialog as unknown as ComponentType<DialogPropsLike>;
+const TypedChatHistoryPanel = ChatHistoryPanel as ComponentType<ChatHistoryPanelPropsLike>;
+const TypedDialog = Dialog as ComponentType<DialogPropsLike>;
 
 const ANDROID_CHAT_TOP_OFFSET = 32;
 
@@ -598,12 +629,12 @@ const ChatContainer = ({
 
       dragDropServiceRef.current.attach(messagesContainerRef.current, {
         onSetDragOver: (isDragging: boolean) => setIsDragOver(isDragging),
-        onShowError: (error: unknown) => Logger.error('ChatContainer', 'Drag-drop error:', error),
+        onShowError: (error: Error | string) => Logger.error('ChatContainer', 'Drag-drop error:', error),
         checkVoiceMode: null,
         getCurrentCounts: () => ({ images: 0, audios: 0 }),
-        onProcessData: (data: unknown) => {
-          if (onDragDrop && data && typeof data === 'object') {
-            onDragDrop(data as { text?: string; images?: string[]; audios?: string[]; errors?: string[] });
+        onProcessData: (data: ChatDragDropData) => {
+          if (onDragDrop) {
+            onDragDrop(data);
           }
         }
       });
@@ -643,7 +674,7 @@ const ChatContainer = ({
     }, 200);
   }, [setIsHistoryPanelOpen]);
 
-  const handleSelectChat = useCallback((chat: unknown) => {
+  const handleSelectChat = useCallback((chat: ChatHistorySelection) => {
     streamedMessageIdsRef.current.clear();
     Logger.log('ChatContainer', 'Cleared streamed message tracking for history load');
     
@@ -946,7 +977,8 @@ const ChatContainer = ({
       const canvas = document.getElementById('vassist-babylon-canvas');
       const container = containerRef.current;
       
-      const elementsToDisable = [canvas, container].filter(Boolean);
+      const elementsToDisable = [canvas, container].filter(isHTMLElement);
+      const elementsToIgnore = [canvas, container].filter(isHTMLElement);
       
       const result = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
         return BackgroundDetector.detectBrightness({
@@ -959,14 +991,13 @@ const ChatContainer = ({
             padding: 60,
           },
           elementsToIgnore: [
-            canvas,
-            container,
+            ...elementsToIgnore,
           ],
           logPrefix: '[ChatContainer]',
         });
       });
       
-      setDebugMarkers(result.debugMarkers || []);
+      setDebugMarkers(toDebugMarkers(result.debugMarkers));
       
       setIsLightBackground(prevState => {
         if (prevState !== result.isLight) {

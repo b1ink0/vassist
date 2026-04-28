@@ -1107,13 +1107,16 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
           
           // Check current status
           const status = await TTSServiceProxy.checkKokoroStatus();
+          const kokoroStatus = (status && typeof status === 'object')
+            ? (status as { initialized?: boolean; initializing?: boolean })
+            : {};
           
-          if (!status.initialized && !status.initializing) {
+          if (!kokoroStatus.initialized && !kokoroStatus.initializing) {
             // Model needs initialization - do it now
             Logger.log('ConfigContext', 'Initializing Kokoro model...');
             await initializeKokoro();
             Logger.log('ConfigContext', 'Kokoro initialization complete with warmup');
-          } else if (status.initialized) {
+          } else if (kokoroStatus.initialized) {
             // Model already initialized - just do a warmup ping to ensure it's fully ready
             Logger.log('ConfigContext', 'Kokoro already initialized, doing warmup ping...');
             try {

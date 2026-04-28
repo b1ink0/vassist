@@ -2,11 +2,25 @@ import { StorageServiceProxy } from '../services/proxies';
 import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
 
+type GridSampleArea = { type: 'grid'; x: number; y: number; width: number; height: number; padding: number };
+type HorizontalSampleArea = { type: 'horizontal'; centerX: number; centerY: number; width: number; padding: number };
+type SampleArea = GridSampleArea | HorizontalSampleArea;
+type SamplePoint = { x: number; y: number };
+type DetectionOptions = {
+  sampleArea?: SampleArea;
+  elementsToIgnore?: Array<HTMLElement | string>;
+  logPrefix?: string;
+  enableDebug?: boolean;
+};
+
 /**
  * Singleton utility for detecting background brightness
  * Used by ChatContainer and ChatInput for adaptive theming
  */
 class BackgroundDetector {
+  private static instance: BackgroundDetector | null = null;
+  private cachedUIConfig: typeof DefaultUIConfig = DefaultUIConfig;
+
   constructor() {
     if (BackgroundDetector.instance) {
       return BackgroundDetector.instance;
@@ -19,10 +33,10 @@ class BackgroundDetector {
   /**
    * Load and cache UI config from storage
    */
-  async _loadConfig() {
+  async _loadConfig(): Promise<void> {
     try {
       const config = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
-      this.cachedUIConfig = config;
+        this.cachedUIConfig = (config as typeof DefaultUIConfig) || DefaultUIConfig;
     } catch (error) {
       Logger.error('BackgroundDetector', 'Failed to load UI config:', error);
       this.cachedUIConfig = DefaultUIConfig;
@@ -38,9 +52,9 @@ class BackgroundDetector {
    * @param {boolean} options.enableDebug - Enable debug markers (overrides config if set)
    * @returns {Object} { isLight: boolean, brightness: number, debugMarkers: Array }
    */
-  detectBrightness(options = {}) {
+  detectBrightness(options: DetectionOptions = {}) {
     const {
-      sampleArea = { type: 'grid', x: 0, y: 0, width: 400, height: 500, padding: 60 },
+      sampleArea = { type: 'grid', x: 0, y: 0, width: 400, height: 500, padding: 60 } as SampleArea,
       elementsToIgnore = [],
       logPrefix = '[BackgroundDetector]',
       enableDebug, // No default - will be undefined if not passed
@@ -67,8 +81,8 @@ class BackgroundDetector {
       const samplePoints = this._generateSamplePoints(sampleArea, gridSize);
       
       // Collect brightness values
-      const allBrightness = [];
-      const markers = [];
+      const allBrightness: number[] = [];
+      const markers: Array<Record<string, unknown>> = [];
       
       for (const point of samplePoints) {
         const result = this._samplePointBrightness(point, elementsToIgnore);
@@ -99,8 +113,8 @@ class BackgroundDetector {
       const sortedBrightness = [...allBrightness].sort((a, b) => a - b);
       const medianIndex = Math.floor(sortedBrightness.length / 2);
       const medianBrightness = sortedBrightness.length % 2 === 0
-        ? (sortedBrightness[medianIndex - 1] + sortedBrightness[medianIndex]) / 2
-        : sortedBrightness[medianIndex];
+        ? ((sortedBrightness[medianIndex - 1] ?? 0) + (sortedBrightness[medianIndex] ?? 0)) / 2
+        : (sortedBrightness[medianIndex] ?? 0);
       
       // Use dark theme if median brightness is above threshold (light background)
       const brightnessThreshold = 127.5;
@@ -122,8 +136,8 @@ class BackgroundDetector {
    * Generate sample points based on area configuration
    * @private
    */
-  _generateSamplePoints(sampleArea, gridSize) {
-    const points = [];
+  _generateSamplePoints(sampleArea: SampleArea, gridSize: number): SamplePoint[] {
+    const points: SamplePoint[] = [];
     
     if (sampleArea.type === 'grid') {
       // Grid sampling (for ChatContainer)
@@ -155,10 +169,10 @@ class BackgroundDetector {
    * Sample brightness at a specific point
    * @private
    */
-  _samplePointBrightness(point, elementsToIgnore = []) {
+  _samplePointBrightness(point: SamplePoint, elementsToIgnore: Array<HTMLElement | string> = []) {
     let elementBehind = document.elementFromPoint(point.x, point.y);
     if (!elementBehind) {
-      return { brightness: null };
+      return { brightness: 255, alpha: 1, element: 'default', type: 'default' };
     }
     
     // Traverse up DOM tree to find first element with non-transparent background
@@ -169,15 +183,15 @@ class BackgroundDetector {
     
     while (elementBehind && attempts < maxAttempts) {
       // Check if this element should be ignored
-      const shouldIgnore = elementsToIgnore.some(el => {
+      const shouldIgnore = elementsToIgnore.some((el) => {
         if (el instanceof HTMLElement) {
           return elementBehind === el;
         } else if (typeof el === 'string') {
           // Selector or ID
           if (el.startsWith('.')) {
-            return elementBehind.closest(el);
+            return !!elementBehind?.closest(el);
           } else if (el.startsWith('#')) {
-            return elementBehind.id === el.substring(1);
+            return (elementBehind as HTMLElement).id === el.substring(1);
           }
         }
         return false;
@@ -213,9 +227,9 @@ class BackgroundDetector {
         const a = rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1;
         // If we found a non-transparent color, use it
         if (a > 0.1) {
-          const r = parseInt(rgbMatch[1]);
-          const g = parseInt(rgbMatch[2]);
-          const b = parseInt(rgbMatch[3]);
+            const r = parseInt(rgbMatch[1] || '0', 10);
+            const g = parseInt(rgbMatch[2] || '0', 10);
+            const b = parseInt(rgbMatch[3] || '0', 10);
           
           // Calculate perceived brightness using luminance formula
           const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
@@ -248,7 +262,7 @@ class BackgroundDetector {
    * Calculate brightness from a CSS gradient at a specific point
    * @private
    */
-  _calculateGradientBrightness(gradientString) {
+  _calculateGradientBrightness(gradientString: string): number | null {
     try {
       // Extract colors from gradient string
       // Supports: linear-gradient, radial-gradient, conic-gradient
@@ -284,14 +298,14 @@ class BackgroundDetector {
    * Parse a CSS color string to RGB values
    * @private
    */
-  _parseColor(colorString) {
+  _parseColor(colorString: string): { r: number; g: number; b: number; a: number } | null {
     // Handle rgb/rgba
     const rgbMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
     if (rgbMatch) {
       return {
-        r: parseInt(rgbMatch[1]),
-        g: parseInt(rgbMatch[2]),
-        b: parseInt(rgbMatch[3]),
+          r: parseInt(rgbMatch[1] || '0', 10),
+          g: parseInt(rgbMatch[2] || '0', 10),
+          b: parseInt(rgbMatch[3] || '0', 10),
         a: rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1,
       };
     }
@@ -299,14 +313,20 @@ class BackgroundDetector {
     // Handle hex colors
     const hexMatch = colorString.match(/^#([0-9a-fA-F]{3,8})$/);
     if (hexMatch) {
-      const hex = hexMatch[1];
-      let r, g, b, a = 1;
+        const hex = hexMatch[1] || '';
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let a = 1;
       
       if (hex.length === 3) {
         // #RGB
-        r = parseInt(hex[0] + hex[0], 16);
-        g = parseInt(hex[1] + hex[1], 16);
-        b = parseInt(hex[2] + hex[2], 16);
+          const h0 = hex.charAt(0);
+          const h1 = hex.charAt(1);
+          const h2 = hex.charAt(2);
+          r = parseInt(h0 + h0, 16);
+          g = parseInt(h1 + h1, 16);
+          b = parseInt(h2 + h2, 16);
       } else if (hex.length === 6) {
         // #RRGGBB
         r = parseInt(hex.substr(0, 2), 16);
@@ -326,19 +346,19 @@ class BackgroundDetector {
     // Handle hsl/hsla (convert to RGB)
     const hslMatch = colorString.match(/hsla?\((\d+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/);
     if (hslMatch) {
-      const h = parseInt(hslMatch[1]) / 360;
-      const s = parseFloat(hslMatch[2]) / 100;
-      const l = parseFloat(hslMatch[3]) / 100;
+      const h = parseInt(hslMatch[1] || '0', 10) / 360;
+      const s = parseFloat(hslMatch[2] || '0') / 100;
+      const l = parseFloat(hslMatch[3] || '0') / 100;
       const a = hslMatch[4] !== undefined ? parseFloat(hslMatch[4]) : 1;
       
       // HSL to RGB conversion
-      const hslToRgb = (h, s, l) => {
-        let r, g, b;
+      const hslToRgb = (h: number, s: number, l: number) => {
+        let r: number, g: number, b: number;
         
         if (s === 0) {
           r = g = b = l;
         } else {
-          const hue2rgb = (p, q, t) => {
+          const hue2rgb = (p: number, q: number, t: number) => {
             if (t < 0) t += 1;
             if (t > 1) t -= 1;
             if (t < 1/6) return p + (q - p) * 6 * t;
@@ -371,11 +391,11 @@ class BackgroundDetector {
   /**
    * Helper to temporarily disable pointer events on elements during sampling
    */
-  withDisabledPointerEvents(elements, callback) {
-    const originalStyles = new Map();
+  withDisabledPointerEvents<T>(elements: HTMLElement[], callback: () => T): T {
+    const originalStyles = new Map<HTMLElement, string>();
     
     // Disable pointer events
-    elements.forEach(el => {
+    elements.forEach((el) => {
       if (el && el.style) {
         originalStyles.set(el, el.style.pointerEvents);
         el.style.pointerEvents = 'none';
@@ -386,7 +406,7 @@ class BackgroundDetector {
     const result = callback();
     
     // Restore pointer events
-    elements.forEach(el => {
+    elements.forEach((el) => {
       if (el && el.style) {
         el.style.pointerEvents = originalStyles.get(el) || '';
       }

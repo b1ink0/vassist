@@ -44,33 +44,13 @@ import type {
   MmdRuntimeLike,
   MorphTrackLike,
   PositionManagerLike,
+  SceneAnimationConfigLike,
   SceneWithMetadata,
 } from '../types';
 
 type AssistantStateValue = (typeof AssistantState)[keyof typeof AssistantState];
 
-interface AnimationConfigLike {
-  id: string;
-  name: string;
-  filePath?: string;
-  cameraFilePath?: string;
-  isCustom?: boolean;
-  customMotionId?: string;
-  preserveRootBone?: boolean;
-  transitionFrames?: number;
-  loop?: boolean;
-  loopTransition?: boolean;
-  disableBlinking?: boolean;
-  [key: string]: unknown;
-}
-
-interface StateBehaviorLike {
-  allowedAnimations: string[];
-  randomSelection?: boolean;
-  loop?: boolean;
-  autoSwitch?: boolean;
-  autoSwitchInterval?: number;
-}
+type StateBehaviorLike = (typeof StateBehavior)[keyof typeof StateBehavior];
 
 interface CompositePlayOptions {
   primaryWeight?: number;
@@ -84,8 +64,8 @@ interface BlobAnimationSource {
 
 interface CompositeFillSegment {
   animation: LoadedAnimationLike;
-  config: AnimationConfigLike;
-  previousConfig: AnimationConfigLike | null;
+  config: SceneAnimationConfigLike;
+  previousConfig: SceneAnimationConfigLike | null;
   startFrame: number;
   duration: number;
   actualDuration: number;
@@ -106,7 +86,7 @@ interface CameraStateSnapshot {
 
 interface QueueSimpleEntry {
   type: 'simple';
-  animationConfig: AnimationConfigLike;
+  animationConfig: SceneAnimationConfigLike;
 }
 
 interface QueueCompositeEntry {
@@ -150,8 +130,8 @@ export class AnimationManager {
   private readonly mmdModel: MmdModelLike;
   private readonly bvmdLoader: AnimationLoaderLike;
   private readonly vmdLoader: AnimationLoaderLike;
-  private readonly getRandomAnimation: (category: string) => AnimationConfigLike | null;
-  private readonly getEnabledAnimations: (category: string) => AnimationConfigLike[];
+  private readonly getRandomAnimation: (category: string) => SceneAnimationConfigLike | null;
+  private readonly getEnabledAnimations: (category: string) => SceneAnimationConfigLike[];
 
   private readonly loadedAnimations: Map<string, LoadedAnimationLike>;
   private readonly loadingPromises: Map<string, Promise<LoadedAnimationLike>>;
@@ -169,7 +149,7 @@ export class AnimationManager {
   private oldSpansToRemove: MmdAnimationSpan[] | null;
   private oldSpansRemovalFrame: number | null;
 
-  private currentAnimationConfig: AnimationConfigLike | null;
+  private currentAnimationConfig: SceneAnimationConfigLike | null;
   private currentLoadedAnimation: LoadedAnimationLike | null;
   private currentAnimationDuration: number;
   private isFirstAnimationEver: boolean;
@@ -252,8 +232,8 @@ export class AnimationManager {
     mmdModel: MmdModelLike,
     bvmdLoader: AnimationLoaderLike,
     vmdLoader: AnimationLoaderLike,
-    getRandomAnimation?: (category: string) => AnimationConfigLike | null,
-    getEnabledAnimations?: (category: string) => AnimationConfigLike[]
+    getRandomAnimation?: (category: string) => SceneAnimationConfigLike | null,
+    getEnabledAnimations?: (category: string) => SceneAnimationConfigLike[]
   ) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -268,13 +248,13 @@ export class AnimationManager {
     
     // Animation context functions
     this.getRandomAnimation = getRandomAnimation ?? ((category: string) => {
-      const animations = getAnimationsByCategory(category) as AnimationConfigLike[];
+      const animations = getAnimationsByCategory(category) as SceneAnimationConfigLike[];
       if (animations.length === 0) return null;
       const randomIndex = Math.floor(Math.random() * animations.length);
       return animations[randomIndex] ?? null;
     });
     this.getEnabledAnimations = getEnabledAnimations ?? ((category: string) => {
-      return getAnimationsByCategory(category) as AnimationConfigLike[];
+      return getAnimationsByCategory(category) as SceneAnimationConfigLike[];
     });
 
     // Animation loading cache
@@ -633,7 +613,7 @@ export class AnimationManager {
    * @param {Object} animationConfig - Animation config from AnimationRegistry or AnimationContext
    * @returns {Promise<Animation>} Loaded animation
    */
-  async loadAnimation(animationConfig: AnimationConfigLike): Promise<LoadedAnimationLike | null> {
+  async loadAnimation(animationConfig: SceneAnimationConfigLike): Promise<LoadedAnimationLike | null> {
     if (this.disposed) return null;
     
     const { filePath, id, name, isCustom, customMotionId, preserveRootBone } = animationConfig;
@@ -948,6 +928,11 @@ export class AnimationManager {
       Logger.log('AnimationManager', `Selected blink animation: ${blinkAnimConfig.name}`);
       
       // Resolve URL for extension mode
+      if (!blinkAnimConfig.filePath) {
+        Logger.warn('AnimationManager', `Blink animation "${blinkAnimConfig.name}" has no filePath - blinking disabled`);
+        this.blinkEnabled = false;
+        return;
+      }
       const resolvedPath = await resourceLoader.getURLAsync(blinkAnimConfig.filePath);
       
       // Load the blink animation
@@ -1261,7 +1246,7 @@ export class AnimationManager {
   async transitionToState(
     newState: AssistantStateValue,
     customBehavior: StateBehaviorLike | null = null,
-    customAnimation: AnimationConfigLike | null = null
+    customAnimation: SceneAnimationConfigLike | null = null
   ): Promise<void> {
     if (this.disposed) return;
     
@@ -1337,8 +1322,12 @@ export class AnimationManager {
       } else {
         // Use first animation from first allowed category
         const firstCategory = behavior.allowedAnimations[0];
-        const animations = getAnimationsByCategory(firstCategory);
-        animationConfig = animations.length > 0 ? animations[0] : null;
+        if (!firstCategory) {
+          Logger.warn('AnimationManager', '[TRANSITION] No allowed categories found for state behavior');
+          return;
+        }
+        const animations = getAnimationsByCategory(firstCategory) as SceneAnimationConfigLike[];
+        animationConfig = animations[0] ?? null;
       }
     }
 
@@ -1360,7 +1349,7 @@ export class AnimationManager {
    * @param {Object} animationConfig - Animation config from registry
    * @param {Object} stateBehavior - State behavior config (optional, uses current state if not provided)
    */
-  async playAnimation(animationConfig: AnimationConfigLike, stateBehavior: StateBehaviorLike | null = null): Promise<void> {
+  async playAnimation(animationConfig: SceneAnimationConfigLike, stateBehavior: StateBehaviorLike | null = null): Promise<void> {
     if (this.disposed) return;
     
     const behavior = stateBehavior || StateBehavior[this.currentState];
@@ -2259,7 +2248,7 @@ export class AnimationManager {
    * @returns {Object} Current animation config and loaded animation
    */
   getCurrentAnimation(): {
-    config: AnimationConfigLike | null;
+    config: SceneAnimationConfigLike | null;
     loaded: LoadedAnimationLike | null;
     duration: number;
   } {
@@ -2341,9 +2330,11 @@ export class AnimationManager {
     // Determine if primary is a blob URL or animation name
     let primaryLoaded;
     let primaryAnimConfig;
-    const isBlobInput = typeof primaryAnimNameOrBlob === 'object' && primaryAnimNameOrBlob.blobUrl;
+    const isBlobAnimationSource = (value: string | BlobAnimationSource): value is BlobAnimationSource => {
+      return typeof value === 'object' && typeof value.blobUrl === 'string' && typeof value.id === 'string';
+    };
     
-    if (isBlobInput) {
+    if (isBlobAnimationSource(primaryAnimNameOrBlob)) {
       // Load from blob URL
       const { blobUrl, id } = primaryAnimNameOrBlob;
       Logger.log('AnimationManager', `Loading primary animation from blob URL: ${id}`);
@@ -2465,7 +2456,7 @@ export class AnimationManager {
    * 
    * CRITICAL: Plays FULL animations, only truncates the LAST one if it exceeds target duration
    */
-  async _buildStitchedTimeline(fillAnimations: AnimationConfigLike[], targetDuration: number): Promise<CompositeFillSegment[]> {
+  async _buildStitchedTimeline(fillAnimations: SceneAnimationConfigLike[], targetDuration: number): Promise<CompositeFillSegment[]> {
     const segments = [];
     let currentFrame = 0;
     let previousConfig = null; // Track previous animation for smart transitions
@@ -2811,7 +2802,7 @@ export class AnimationManager {
    * @param {Object|string} animationConfigOrName - Animation config or name from registry
    * @param {boolean} force - Force interrupt current animation
    */
-  queueSimpleAnimation(animationConfigOrName: AnimationConfigLike | string, force = false): void {
+  queueSimpleAnimation(animationConfigOrName: SceneAnimationConfigLike | string, force = false): void {
     let animationConfig;
 
     if (typeof animationConfigOrName === 'string') {

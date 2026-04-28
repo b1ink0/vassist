@@ -8,6 +8,8 @@ import Logger from '../services/LoggerService';
 import { isDesktop, isProduction } from './PlatformUtils';
 
 class ResourceLoader {
+  private isExtension: boolean;
+
   constructor() {
     this.isExtension = this._detectExtensionMode();
   }
@@ -16,7 +18,7 @@ class ResourceLoader {
    * Detect if running in extension context
    * @returns {boolean} True if extension mode
    */
-  _detectExtensionMode() {
+  _detectExtensionMode(): boolean {
     // Check if the current script was loaded from a chrome-extension:// URL
     // When running as extension, import.meta.url will be chrome-extension://...
     // In dev mode with Vite, it will be http://localhost:5173/...
@@ -28,7 +30,7 @@ class ResourceLoader {
    * Explicitly set extension mode
    * @param {boolean} isExtension - True for extension mode, false for dev mode
    */
-  setMode(isExtension) {
+  setMode(isExtension: boolean): void {
     this.isExtension = isExtension;
     Logger.log('ResourceLoader', `Mode set to: ${this.isExtension ? 'Extension' : 'Development'}`);
   }
@@ -38,7 +40,7 @@ class ResourceLoader {
    * @param {string} path - Relative path to resource (e.g., 'res/models/model.pmx')
    * @returns {string|Promise<string>} - Full URL to resource
    */
-  getURL(path) {
+  getURL(path: string): string {
     if (!this.isExtension) {
       // In dev mode, use relative path from public folder
       // Vite serves public folder at root
@@ -48,7 +50,7 @@ class ResourceLoader {
     // Extension mode - request URL from content script via ExtensionBridge
     // Content script has access to chrome.runtime.getURL, we don't
     // Import here to avoid circular dependency
-    import('./ExtensionBridge').then(({ extensionBridge }) => {
+    void import('./ExtensionBridge').then(({ extensionBridge }) => {
       return extensionBridge.getResourceURL(path);
     });
     
@@ -63,7 +65,7 @@ class ResourceLoader {
    * @param {string} path - Relative path to resource
    * @returns {Promise<string>} - Full URL to resource
    */
-  async getURLAsync(path) {
+  async getURLAsync(path: string): Promise<string> {
     if (!this.isExtension) {
       if (path.startsWith('blob:') || path.includes('://')) {
         return path;
@@ -88,7 +90,7 @@ class ResourceLoader {
    * @param {string} filename - Model filename
    * @returns {string} - Full URL to model
    */
-  getModelURL(filename) {
+  getModelURL(filename: string): string {
     return this.getURL(`res/models/${filename}`);
   }
 
@@ -97,7 +99,7 @@ class ResourceLoader {
    * @param {string} filename - Animation filename
    * @returns {string} - Full URL to animation
    */
-  getAnimationURL(filename) {
+  getAnimationURL(filename: string): string {
     return this.getURL(`res/animations/${filename}`);
   }
 
@@ -106,7 +108,7 @@ class ResourceLoader {
    * @param {string} filename - Texture filename
    * @returns {string} - Full URL to texture
    */
-  getTextureURL(filename) {
+  getTextureURL(filename: string): string {
     return this.getURL(`res/textures/${filename}`);
   }
 
@@ -116,7 +118,7 @@ class ResourceLoader {
    * @param {string} filename - Filename
    * @returns {string} - Full URL to resource
    */
-  getPrivateTestURL(type, filename) {
+  getPrivateTestURL(type: string, filename: string): string {
     return this.getURL(`res/private_test/${type}/${filename}`);
   }
 
@@ -124,7 +126,7 @@ class ResourceLoader {
    * Check if running in extension mode
    * @returns {boolean} - True if extension mode
    */
-  isExtensionMode() {
+  isExtensionMode(): boolean {
     return this.isExtension;
   }
 
@@ -133,7 +135,7 @@ class ResourceLoader {
    * @param {string} path - Path to JSON file
    * @returns {Promise<Object>} - Parsed JSON data
    */
-  async loadJSON(path) {
+  async loadJSON<T = Record<string, unknown>>(path: string): Promise<T> {
     const url = this.getURL(path);
     const response = await fetch(url);
     
@@ -141,7 +143,7 @@ class ResourceLoader {
       throw new Error(`Failed to load JSON from ${url}: ${response.statusText}`);
     }
     
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /**
@@ -149,7 +151,7 @@ class ResourceLoader {
    * @param {string} path - Path to text file
    * @returns {Promise<string>} - File contents
    */
-  async loadText(path) {
+  async loadText(path: string): Promise<string> {
     const url = this.getURL(path);
     const response = await fetch(url);
     
@@ -165,7 +167,7 @@ class ResourceLoader {
    * @param {string} path - Path to binary file
    * @returns {Promise<ArrayBuffer>} - File contents as ArrayBuffer
    */
-  async loadBinary(path) {
+  async loadBinary(path: string): Promise<ArrayBuffer> {
     const url = this.getURL(path);
     const response = await fetch(url);
     
@@ -181,8 +183,8 @@ class ResourceLoader {
    * @param {Array<string>} paths - Array of resource paths
    * @returns {Promise<Array>} - Array of loaded resources
    */
-  async preloadResources(paths) {
-    const promises = paths.map(path => this.loadBinary(path));
+  async preloadResources(paths: string[]): Promise<ArrayBuffer[]> {
+    const promises = paths.map((path: string) => this.loadBinary(path));
     return Promise.all(promises);
   }
 }

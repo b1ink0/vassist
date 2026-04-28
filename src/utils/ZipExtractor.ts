@@ -14,7 +14,7 @@ class ZipExtractor {
    * @param {File|Blob|ArrayBuffer} zipFile - ZIP file to extract
    * @returns {Promise<Map<string, ArrayBuffer>>} Map of filename -> ArrayBuffer
    */
-  async extract(zipFile) {
+  async extract(zipFile: File | Blob | ArrayBuffer): Promise<Map<string, ArrayBuffer>> {
     try {
       Logger.log('ZipExtractor', 'Extracting ZIP archive...');
       
@@ -22,14 +22,14 @@ class ZipExtractor {
       const loadedZip = await zip.loadAsync(zipFile);
       
       const files = new Map();
-      const filePromises = [];
+      const filePromises: Array<Promise<void>> = [];
       
       loadedZip.forEach((relativePath, zipEntry) => {
         if (zipEntry.dir || relativePath.startsWith('__MACOSX/') || relativePath.startsWith('.')) {
           return;
         }
         
-        const promise = zipEntry.async('arraybuffer').then(data => {
+        const promise = zipEntry.async('arraybuffer').then((data: ArrayBuffer) => {
           files.set(relativePath, data);
         });
         
@@ -42,8 +42,9 @@ class ZipExtractor {
       return files;
       
     } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
       Logger.error('ZipExtractor', 'Failed to extract ZIP:', error);
-      throw new Error(`ZIP extraction failed: ${error.message}`);
+      throw new Error(`ZIP extraction failed: ${normalized.message}`);
     }
   }
 
@@ -52,18 +53,19 @@ class ZipExtractor {
    * @param {File|Blob|ArrayBuffer} zipFile - ZIP file
    * @returns {Promise<{fileCount: number, fileList: string[], totalSize: number}>}
    */
-  async getInfo(zipFile) {
+  async getInfo(zipFile: File | Blob | ArrayBuffer): Promise<{fileCount: number, fileList: string[], totalSize: number}> {
     try {
       const zip = new JSZip();
       const loadedZip = await zip.loadAsync(zipFile);
       
-      const fileList = [];
+      const fileList: string[] = [];
       let totalSize = 0;
       
       loadedZip.forEach((relativePath, zipEntry) => {
         if (!zipEntry.dir && !relativePath.startsWith('__MACOSX/') && !relativePath.startsWith('.')) {
           fileList.push(relativePath);
-          totalSize += zipEntry._data?.uncompressedSize || 0;
+          const zipEntryWithData = zipEntry as JSZip.JSZipObject & { _data?: { uncompressedSize?: number } };
+          totalSize += zipEntryWithData._data?.uncompressedSize || 0;
         }
       });
       
@@ -74,8 +76,9 @@ class ZipExtractor {
       };
       
     } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
       Logger.error('ZipExtractor', 'Failed to get ZIP info:', error);
-      throw new Error(`Failed to read ZIP: ${error.message}`);
+      throw new Error(`Failed to read ZIP: ${normalized.message}`);
     }
   }
 
@@ -84,7 +87,7 @@ class ZipExtractor {
    * @param {File|Blob|ArrayBuffer} zipFile - ZIP file
    * @returns {Promise<boolean>} True if valid ZIP
    */
-  async isValid(zipFile) {
+  async isValid(zipFile: File | Blob | ArrayBuffer): Promise<boolean> {
     try {
       const zip = new JSZip();
       await zip.loadAsync(zipFile);
@@ -100,7 +103,7 @@ class ZipExtractor {
    * @param {ArrayBuffer} data - File data
    * @returns {boolean} True if file appears to be a ZIP
    */
-  isZipFile(data) {
+  isZipFile(data: ArrayBuffer): boolean {
     if (!data || data.byteLength < 4) {
       return false;
     }

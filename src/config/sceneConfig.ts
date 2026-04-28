@@ -199,7 +199,8 @@ export async function getSceneConfigAsync(): Promise<SceneConfigData> {
       config.modelUrl = customModelUrl;
       config.modelId = customDefaultModel.id;
       config.modelFileName = customDefaultModel.name || 'model.bpmx';
-      config.portraitClipping = customDefaultModel.metadata?.portraitClipping ?? 12;
+        const portraitClippingValue = customDefaultModel.metadata?.portraitClipping;
+        config.portraitClipping = typeof portraitClippingValue === 'number' ? portraitClippingValue : 12;
       config._customModelBlobUrl = customModelUrl;
     } else {
       config.modelId = 'builtin_default_model';

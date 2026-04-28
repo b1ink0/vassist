@@ -197,7 +197,7 @@ export function SetupProvider({ children }: SetupProviderProps) {
           }
         }
         
-        setSetupState(savedState);
+        setSetupState(savedState as SetupState);
       } catch (error) {
         Logger.error('SetupContext', 'Unexpected error in loadSetupState:', error);
         // If loading fails, assume setup is complete (safer than forcing re-setup)

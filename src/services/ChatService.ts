@@ -4,9 +4,10 @@
 
 import Logger from './LoggerService';
 
-type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatAttachment = string | Blob | File;
 
-interface ChatNode {
+export interface ChatNode {
   id: string;
   parentId: string | null;
   content: string | null;
@@ -14,8 +15,8 @@ interface ChatNode {
   branches: ChatNode[];
   currentBranchIndex: number;
   timestamp: number;
-  images?: unknown[];
-  audios?: unknown[];
+  images?: ChatAttachment[];
+  audios?: ChatAttachment[];
   imageFileIds?: string[];
   audioFileIds?: string[];
   isEdit?: boolean;
@@ -30,12 +31,12 @@ interface BranchInfo {
   canGoForward: boolean;
 }
 
-interface FlatChatMessage {
+export interface FlatChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-  images: unknown[];
-  audios: unknown[];
+  images: ChatAttachment[];
+  audios: ChatAttachment[];
   imageFileIds: string[];
   audioFileIds: string[];
   timestamp: number;
@@ -43,11 +44,25 @@ interface FlatChatMessage {
   branchInfo: BranchInfo | null;
 }
 
-interface ExportedChatTree {
+export interface ExportedChatTree {
   tree: ChatNode;
   activePath: string[];
   version: number;
 }
+
+export type ChatMessageInput = {
+  role: ChatRole;
+  content: string;
+  images?: ChatAttachment[];
+  audios?: ChatAttachment[];
+};
+
+type ImportTreeData = {
+  tree?: ChatNode | object;
+  activePath?: string[];
+  version?: number;
+  [key: string]: unknown;
+};
 
 class ChatService {
   private tree: ChatNode;
@@ -116,7 +131,7 @@ class ChatService {
    * @param {Array} audios - Optional audio attachments
    * @returns {string} New message ID
    */
-  addMessage(role: ChatRole, content: string, images: unknown[] | null = null, audios: unknown[] | null = null): string {
+  addMessage(role: ChatRole, content: string, images: ChatAttachment[] | null = null, audios: ChatAttachment[] | null = null): string {
     const parentId = this.activePath[this.activePath.length - 1] ?? 'root';
     const parent = this._findNode(parentId);
 
@@ -207,7 +222,7 @@ class ChatService {
    * Set messages from flat array (for loading from history)
    * @param {Array} messages - Flat array of messages
    */
-  setMessages(messages: Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }>): void {
+  setMessages(messages: ChatMessageInput[]): void {
     this.clear();
     
     for (const msg of messages) {
@@ -242,8 +257,8 @@ class ChatService {
    * @param {string} systemPrompt - System prompt to inject
    * @returns {Array}
    */
-  getFormattedMessages(systemPrompt?: string): Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }> {
-    const formatted: Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }> = [];
+  getFormattedMessages(systemPrompt?: string): Array<{ role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] }> {
+    const formatted: Array<{ role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] }> = [];
 
     // Add system prompt if provided
     if (systemPrompt) {
@@ -256,7 +271,7 @@ class ChatService {
     // Add active conversation messages
     const messages = this.getMessages();
     formatted.push(...messages.map((m) => {
-      const payload: { role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] } = {
+      const payload: { role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] } = {
         role: m.role,
         content: m.content,
       };
@@ -342,7 +357,7 @@ class ChatService {
    * @param {Array} newAudios - Optional new audios array
    * @returns {string} New message ID
    */
-  editMessage(messageId: string, newContent: string, newImages: unknown[] | null = null, newAudios: unknown[] | null = null): string {
+  editMessage(messageId: string, newContent: string, newImages: ChatAttachment[] | null = null, newAudios: ChatAttachment[] | null = null): string {
     const node = this._findNode(messageId);
     if (!node || node.role !== 'user') {
       throw new Error('Can only edit user messages');
@@ -533,13 +548,17 @@ class ChatService {
    * Import tree from persistence
    * @param {Object} data
    */
-  importTree(data: unknown): void {
-    const typed = data as Partial<ExportedChatTree> | null;
+  importTree(data: Partial<ExportedChatTree> | ImportTreeData | null | undefined): void {
+    const typed = data;
     if (!typed || !typed.tree || !typed.activePath) {
       throw new Error('Invalid tree data');
     }
 
-    this.tree = typed.tree;
+    if (!Array.isArray(typed.activePath)) {
+      throw new Error('Invalid activePath data');
+    }
+
+    this.tree = typed.tree as ChatNode;
     this.activePath = typed.activePath;
     Logger.log('ChatService', 'Imported tree with', this.activePath.length - 1, 'messages');
   }

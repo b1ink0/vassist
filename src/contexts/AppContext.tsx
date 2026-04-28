@@ -6,6 +6,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type * as React from 'react';
 import ChatService from '../services/ChatService';
+import type { ChatNode, FlatChatMessage, ChatMessageInput, ChatRole, ExportedChatTree } from '../services/ChatService';
 import { 
   AIServiceProxy, 
   TTSServiceProxy, 
@@ -21,6 +22,7 @@ import chatHistoryService from '../services/ChatHistoryService';
 import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
+import type { PositionManagerLike, SavedModelPositionLike, SceneWithMetadata } from '../babylon/types';
 
 interface ChatMessageItem {
   id: string;
@@ -28,7 +30,7 @@ interface ChatMessageItem {
   content: string;
   images?: string[];
   audios?: string[];
-  [key: string]: unknown;
+  [key: string]: string | number | boolean | null | undefined | object;
 }
 
 interface AssistantHandle {
@@ -36,13 +38,12 @@ interface AssistantHandle {
   idle?: () => void | Promise<void>;
 }
 
-interface PositionManagerState {
-  canvasWidth?: number;
-  canvasHeight?: number;
+interface AppPositionManager extends PositionManagerLike {
+  applyPreset: (preset: string, options?: { modelSizePx?: { width: number; height: number } }) => void;
 }
 
 interface UIConfigState {
-  [key: string]: unknown;
+  [key: string]: string | number | boolean | null | undefined | object;
   enableModelLoading?: boolean;
   shortcuts?: {
     enabled?: boolean;
@@ -53,7 +54,7 @@ interface UIConfigState {
 }
 
 interface AIConfigState {
-  [key: string]: unknown;
+  [key: string]: string | number | boolean | null | undefined | object;
   provider?: string;
   aiFeatures?: {
     translator?: { enabled?: boolean; defaultTargetLanguage?: string };
@@ -64,14 +65,143 @@ interface AIConfigState {
   };
 }
 
+type HistoryMessage = {
+  role?: string;
+  content?: string;
+  images?: Array<string | Blob | File>;
+  audios?: Array<string | Blob | File>;
+};
+
+type PendingDropValue = string | number | boolean | Blob | File | null | undefined | Array<string | number | boolean | Blob | File | null>;
+type PendingDropData = Record<string, PendingDropValue>;
+type ChatHistorySelection = { chatId: string };
+
+type HistoryTreePrimitive = string | number | boolean | null | Blob | File;
+type HistoryTreeValue =
+  | HistoryTreePrimitive
+  | HistoryTreePrimitive[]
+  | HistoryTreeNode
+  | HistoryTreeNode[]
+  | { [key: string]: HistoryTreeValue };
+
+type HistoryTreeNode = {
+  branches?: HistoryTreeNode[];
+  images?: Array<string | Blob>;
+  audios?: Array<string | Blob>;
+  [key: string]: HistoryTreeValue;
+};
+
+type HistoryTreeData = {
+  tree?: HistoryTreeNode;
+  [key: string]: HistoryTreeValue;
+};
+
+const normalizeHistoryTreeNode = (node: ChatNode): HistoryTreeNode => {
+  const normalized: HistoryTreeNode = {};
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'images' || key === 'audios' || key === 'branches' || value === undefined) {
+      continue;
+    }
+    normalized[key] = value;
+  }
+
+  if (Array.isArray(node.images)) {
+    const images = node.images.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob);
+    if (images.length > 0) {
+      normalized.images = images;
+    } else {
+      delete normalized.images;
+    }
+  }
+
+  if (Array.isArray(node.audios)) {
+    const audios = node.audios.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob);
+    if (audios.length > 0) {
+      normalized.audios = audios;
+    } else {
+      delete normalized.audios;
+    }
+  }
+
+  if (Array.isArray(node.branches)) {
+    normalized.branches = node.branches
+      .map((branch) => normalizeHistoryTreeNode(branch));
+  }
+
+  return normalized;
+};
+
+const toChatMessageItems = (messages: FlatChatMessage[]): ChatMessageItem[] => {
+  return messages.map((message, index) => {
+    const images = Array.isArray(message.images)
+      ? message.images.filter((value): value is string => typeof value === 'string')
+      : undefined;
+    const audios = Array.isArray(message.audios)
+      ? message.audios.filter((value): value is string => typeof value === 'string')
+      : undefined;
+
+    const base: ChatMessageItem = {
+      id: message.id || `msg_${index}`,
+      role: message.role || 'user',
+      content: message.content || '',
+      timestamp: message.timestamp,
+      parentId: message.parentId,
+      branchInfo: message.branchInfo,
+      imageFileIds: message.imageFileIds,
+      audioFileIds: message.audioFileIds,
+    };
+
+    if (images && images.length > 0) {
+      base.images = images;
+    }
+    if (audios && audios.length > 0) {
+      base.audios = audios;
+    }
+
+    return base;
+  });
+};
+
+const toAIConversation = (messages: ChatMessageItem[]) => {
+  return messages.map((message) => ({
+    role: message.role as ChatRole,
+    content: message.content,
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
+    ...(message.audios && message.audios.length > 0 ? { audios: message.audios } : {}),
+  }));
+};
+
+const toChatMessageInputs = (messages: FlatChatMessage[]): ChatMessageInput[] => {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    images: message.images,
+    audios: message.audios,
+  }));
+};
+
+const toChatMessageInputsFromHistory = (messages: HistoryMessage[]): ChatMessageInput[] => {
+  return messages.map((message) => {
+    const roleValue = message.role;
+    const role: ChatRole = roleValue === 'assistant' || roleValue === 'system' ? roleValue : 'user';
+    return {
+      role,
+      content: message.content || '',
+      ...(Array.isArray(message.images) ? { images: message.images } : {}),
+      ...(Array.isArray(message.audios) ? { audios: message.audios } : {}),
+    };
+  });
+};
+
 interface AppContextValue {
   isAssistantReady: boolean;
   isChatUIReady: boolean;
   enableModelLoading: boolean | null;
-  assistantRef: React.MutableRefObject<unknown>;
-  sceneRef: React.MutableRefObject<unknown>;
-  positionManagerRef: React.MutableRefObject<PositionManagerState | null>;
-  handleAssistantReady: (payload: { animationManager: unknown; positionManager: PositionManagerState; scene: unknown }) => void;
+  assistantRef: React.MutableRefObject<AssistantHandle | null>;
+  sceneRef: React.MutableRefObject<SceneWithMetadata | null>;
+  positionManagerRef: React.MutableRefObject<AppPositionManager | null>;
+  handleAssistantReady: (payload: { animationManager: object | null; positionManager: AppPositionManager | null; scene: SceneWithMetadata }) => void;
   setIsAssistantReady: React.Dispatch<React.SetStateAction<boolean>>;
   setIsChatUIReady: React.Dispatch<React.SetStateAction<boolean>>;
 
@@ -81,7 +211,7 @@ interface AppContextValue {
   isProcessing: boolean;
   currentChatId: string | null;
   isTempChat: boolean;
-  pendingDropData: unknown;
+  pendingDropData: PendingDropData | null;
 
   setIsChatInputVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setIsChatContainerVisible: React.Dispatch<React.SetStateAction<boolean>>;
@@ -89,7 +219,7 @@ interface AppContextValue {
   setIsProcessing: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentChatId: React.Dispatch<React.SetStateAction<string | null>>;
   setIsTempChat: React.Dispatch<React.SetStateAction<boolean>>;
-  setPendingDropData: React.Dispatch<React.SetStateAction<unknown>>;
+  setPendingDropData: React.Dispatch<React.SetStateAction<PendingDropData | null>>;
 
   isVoiceMode: boolean;
   isSpeaking: boolean;
@@ -121,18 +251,18 @@ interface AppContextValue {
   showModelLoadingOverlay: boolean;
   setShowModelLoadingOverlay: React.Dispatch<React.SetStateAction<boolean>>;
 
-  savedModelPosition: unknown;
-  setSavedModelPosition: React.Dispatch<React.SetStateAction<unknown>>;
+  savedModelPosition: SavedModelPositionLike | null;
+  setSavedModelPosition: React.Dispatch<React.SetStateAction<SavedModelPositionLike | null>>;
 
   toggleChat: () => void;
   openChat: () => void;
   closeChat: () => void;
   clearChat: () => Promise<void>;
   stopGeneration: () => void;
-  loadChatFromHistory: (chatData: { chatId: string }) => Promise<void>;
+  loadChatFromHistory: (chatData: ChatHistorySelection) => Promise<void>;
   updateChatMessages: (messages: ChatMessageItem[]) => void;
 
-  editUserMessage: (messageId: string, newContent: string, newImages?: string[] | null, newAudios?: string[] | null) => Promise<string>;
+  editUserMessage: (messageId: string, newContent: string, newImages?: string[] | null, newAudios?: string[] | null) => Promise<void>;
   regenerateAIMessage: (messageId: string) => Promise<void>;
   switchToBranch: (parentId: string, branchIndex: number) => void;
   previousBranch: (messageId: string) => void;
@@ -144,20 +274,20 @@ interface AppContextValue {
   endButtonDrag: () => void;
   startModelDrag: () => void;
   endModelDrag: () => void;
-  updateButtonPosition: (pos: { x: number; y: number }) => void;
+  updateButtonPosition: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
 
   toggleSettingsPanel: () => void;
   toggleHistoryPanel: () => void;
 
-  handleSummarize: (text: string) => Promise<unknown>;
-  handleTranslate: (text: string, sourceLanguage: string, targetLanguageOverride?: string) => Promise<unknown>;
-  handleAddToChat: (data: unknown, autoSend?: boolean) => void;
+  handleSummarize: (text: string) => Promise<string>;
+  handleTranslate: (text: string, sourceLanguage: string, targetLanguageOverride?: string) => Promise<string>;
+  handleAddToChat: (data: PendingDropData | null, autoSend?: boolean) => void;
 
   sceneKey: number;
   reloadScene: () => void;
 
-  uiConfig: unknown;
-  aiConfig: unknown;
+  uiConfig: UIConfigState | null;
+  aiConfig: AIConfigState | null;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -181,8 +311,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [isChatUIReady, setIsChatUIReady] = useState(false);
   const [enableModelLoading, setEnableModelLoading] = useState<boolean | null>(null);
   const assistantRef = useRef<AssistantHandle | null>(null);
-  const sceneRef = useRef<unknown | null>(null);
-  const positionManagerRef = useRef<PositionManagerState | null>(null);
+  const sceneRef = useRef<SceneWithMetadata | null>(null);
+  const positionManagerRef = useRef<AppPositionManager | null>(null);
 
   // ========================================
   // CONFIG STATE
@@ -199,7 +329,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isTempChat, setIsTempChat] = useState(false);
-  const [pendingDropData, setPendingDropData] = useState<unknown>(null);
+  const [pendingDropData, setPendingDropData] = useState<PendingDropData | null>(null);
 
   // ========================================
   // VOICE & TTS STATE
@@ -240,7 +370,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // ========================================
   // SAVED MODEL POSITION (for tab visibility unmount/remount)
   // ========================================
-  const [savedModelPosition, setSavedModelPosition] = useState<unknown>(null);
+  const [savedModelPosition, setSavedModelPosition] = useState<SavedModelPositionLike | null>(null);
 
   // ========================================
   // SCENE RELOAD STATE
@@ -320,7 +450,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
         return;
       }
-      const detail = event.detail as { type?: string; config?: unknown };
+      const detail = event.detail as { type?: string; config?: UIConfigState | AIConfigState };
       if (detail.type === 'aiConfig') {
         const updatedConfig = detail.config as AIConfigState;
         Logger.log('AppContext', 'AI Config updated from settings:', updatedConfig);
@@ -384,7 +514,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Handle assistant ready callback
    */
   // eslint-disable-next-line no-unused-vars
-  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: { animationManager: unknown; positionManager: PositionManagerState; scene: unknown }) => {
+  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: { animationManager: object | null; positionManager: AppPositionManager | null; scene: SceneWithMetadata }) => {
     Logger.log('AppContext', 'VirtualAssistant ready!');
     setIsAssistantReady(true);
     setIsChatUIReady(true);
@@ -476,8 +606,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     if (!sourceLang) {
       try {
         const detectionResults = await LanguageDetectorServiceProxy.detect(text);
-        if (detectionResults && detectionResults.length > 0) {
-          sourceLang = detectionResults[0].detectedLanguage;
+          const firstResult = detectionResults?.[0];
+          if (firstResult?.detectedLanguage) {
+            sourceLang = firstResult.detectedLanguage;
         }
       } catch (err) {
         Logger.warn('AppContext', 'Language detection failed:', err);
@@ -498,7 +629,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * @param {Object} data - The data to add to chat
    * @param {boolean} autoSend - Whether to automatically send the message (default: false)
    */
-  const handleAddToChat = useCallback((data: unknown, autoSend = false) => {
+  const handleAddToChat = useCallback((data: PendingDropData | null, autoSend = false) => {
     Logger.log('AppContext', 'Add to chat:', data, 'autoSend:', autoSend);
     
     // Open chat if closed
@@ -522,8 +653,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } else {
       // Dispatch event for ChatInput to handle
-      const safeDetail = (data && typeof data === 'object')
-        ? { ...(data as Record<string, unknown>), autoSend }
+      const safeDetail = data
+        ? { ...data, autoSend }
         : { autoSend };
       const event = new CustomEvent('chatDragDrop', {
         detail: safeDetail,
@@ -663,8 +794,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Load chat from history
    */
-  const loadChatFromHistory = useCallback(async (chatData: { chatId: string }) => {
-    Logger.log('AppContext', 'Loading chat from history:', chatData.chatId);
+  const loadChatFromHistory = useCallback(async (chatData: ChatHistorySelection) => {
+    const { chatId } = chatData;
+    Logger.log('AppContext', 'Loading chat from history:', chatId);
     
     try {
       // Stop ongoing operations
@@ -672,18 +804,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       TTSServiceProxy.stopPlayback();
       
       // Load full chat
-      const fullChat = await chatHistoryService.loadChat(chatData.chatId);
+      const fullChat = await chatHistoryService.loadChat(chatId);
       
       // Load tree if available, otherwise set flat messages
       if (fullChat.chatServiceData) {
         ChatService.importTree(fullChat.chatServiceData);
-        const messages = ChatService.getMessages();
+        const messages = toChatMessageItems(ChatService.getMessages());
         setChatMessages(messages);
         Logger.log('AppContext', 'Loaded chat with tree structure');
       } else if (fullChat.messages) {
         // Backward compatibility: set flat messages
-        ChatService.setMessages(fullChat.messages);
-        setChatMessages(fullChat.messages);
+        const historyMessages = fullChat.messages as HistoryMessage[];
+        ChatService.setMessages(toChatMessageInputsFromHistory(historyMessages));
+        const normalizedMessages = toChatMessageItems(ChatService.getMessages());
+        setChatMessages(normalizedMessages);
         Logger.log('AppContext', 'Loaded flat messages');
       }
       
@@ -742,7 +876,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       );
       
       // Update UI with new active path (without AI response yet)
-      const updatedMessages = ChatService.getMessages();
+      const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
       
       // Use streaming regeneration if available
@@ -752,15 +886,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         Logger.warn('AppContext', 'Streaming handler not available, using fallback');
         // Fallback to non-streaming
         const conversationContext = updatedMessages.slice(0, updatedMessages.findIndex(m => m.id === newMessageId) + 1);
-        const aiResponse = await AIServiceProxy.sendMessage(conversationContext);
+          const aiResponse = await AIServiceProxy.sendMessage(toAIConversation(conversationContext));
         
         if (aiResponse?.success && aiResponse?.response) {
           ChatService.addMessage('assistant', aiResponse.response, null, null);
-          setChatMessages(ChatService.getMessages());
+            setChatMessages(toChatMessageItems(ChatService.getMessages()));
         }
       }
       
-      return newMessageId;
+      return;
     } catch (error) {
       Logger.error('AppContext', 'Failed to edit message:', error);
       setIsProcessing(false);
@@ -779,7 +913,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ChatService.createRegenerationBranch(messageId);
       
       // Update UI (show conversation up to parent)
-      const updatedMessages = ChatService.getMessages();
+      const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
       
       // Use streaming regeneration if available
@@ -789,11 +923,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         Logger.warn('AppContext', 'Streaming handler not available, using fallback');
         // Fallback to non-streaming
         setIsProcessing(true);
-        const aiResponse = await AIServiceProxy.sendMessage(updatedMessages);
+          const aiResponse = await AIServiceProxy.sendMessage(toAIConversation(updatedMessages));
         
         if (aiResponse?.success && aiResponse?.response) {
           ChatService.addMessage('assistant', aiResponse.response, null, null);
-          setChatMessages(ChatService.getMessages());
+            setChatMessages(toChatMessageItems(ChatService.getMessages()));
         }
         setIsProcessing(false);
       }
@@ -814,7 +948,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ChatService.switchBranch(parentId, branchIndex);
       
       // Update UI
-      const updatedMessages = ChatService.getMessages();
+      const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
       
       Logger.log('AppContext', 'Branch switched successfully');
@@ -834,7 +968,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ChatService.previousBranch(messageId);
       
       // Update UI
-      const updatedMessages = ChatService.getMessages();
+      const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
     } catch (error) {
       Logger.error('AppContext', 'Failed to navigate to previous branch:', error);
@@ -851,7 +985,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ChatService.nextBranch(messageId);
       
       // Update UI
-      const updatedMessages = ChatService.getMessages();
+      const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
     } catch (error) {
       Logger.error('AppContext', 'Failed to navigate to next branch:', error);
@@ -893,7 +1027,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Update button position
    */
-  const updateButtonPosition = useCallback((pos: { x: number; y: number }) => {
+  const updateButtonPosition = useCallback((pos: React.SetStateAction<{ x: number; y: number }>) => {
     setButtonPosition(pos);
   }, []);
 
@@ -940,9 +1074,29 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         const sourceUrl = window.location.href;
 
+        const chatServiceAdapter = {
+          exportTree: () => {
+            const exportedTree: ExportedChatTree = ChatService.exportTree();
+            const rawTree = exportedTree.tree;
+            const normalizedTree = rawTree && typeof rawTree === 'object'
+              ? normalizeHistoryTreeNode(rawTree)
+              : undefined;
+            return {
+              ...exportedTree,
+              ...(normalizedTree ? { tree: normalizedTree } : {}),
+            } as HistoryTreeData;
+          },
+          getMessages: () => ChatService.getMessages().map((message) => ({
+            role: message.role,
+            content: message.content,
+            images: message.images.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob),
+            audios: message.audios.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob),
+          })),
+        };
+
         await chatHistoryService.saveChat({
           chatId,
-          chatService: ChatService, // NEW: Save tree
+          chatService: chatServiceAdapter, // NEW: Save tree
           messages: chatMessages, // DEPRECATED: Backward compatibility
           isTemp: false,
           metadata: {
