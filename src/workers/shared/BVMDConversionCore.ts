@@ -6,6 +6,8 @@
  */
 
 import Logger from '../../services/LoggerService';
+import type { Scene } from '@babylonjs/core/scene';
+
 export class BVMDConversionCore {
     /**
      * Convert VMD ArrayBuffer to BVMD ArrayBuffer
@@ -14,7 +16,7 @@ export class BVMDConversionCore {
      * @param {string} filename - Optional filename for debugging
      * @returns {Promise<ArrayBuffer>} BVMD data
      */
-    static async convertVMDToBVMD(vmdData, scene, filename = 'lipsync.vmd') {
+    static async convertVMDToBVMD(vmdData: ArrayBuffer, scene: Scene, filename = 'lipsync.vmd'): Promise<ArrayBuffer> {
         try {
             // Dynamically import babylon-mmd modules
             // This allows the code to work in both main thread and worker contexts
@@ -43,9 +45,10 @@ export class BVMDConversionCore {
             
             return bvmdArrayBuffer;
             
-        } catch (error) {
+        } catch (error: unknown) {
             Logger.error('BVMDCore', 'Conversion failed:', error);
-            throw new Error(`Failed to convert VMD to BVMD: ${error.message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to convert VMD to BVMD: ${message}`);
         }
     }
 
@@ -53,7 +56,7 @@ export class BVMDConversionCore {
      * Create a minimal Babylon scene for BVMD conversion in worker context
      * Returns null if Babylon is not available or fails to initialize
      */
-    static async createWorkerScene() {
+    static async createWorkerScene(): Promise<Scene | null> {
         try {
             const { Scene } = await import('@babylonjs/core/scene');
             const { NullEngine } = await import('@babylonjs/core/Engines/nullEngine');
@@ -64,7 +67,7 @@ export class BVMDConversionCore {
             
             Logger.log('BVMDCore', 'Worker scene created successfully');
             return scene;
-        } catch (error) {
+        } catch (error: unknown) {
             Logger.error('BVMDCore', 'Failed to create worker scene:', error);
             return null;
         }

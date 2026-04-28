@@ -5,15 +5,58 @@
  * Auto-saves configuration changes with debouncing
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { getDefaultAnimationsByCategory } from '../config/animationConfig';
 import { motionStorageService } from '../services/MotionStorageService';
 import { StorageServiceProxy } from '../services/proxies';
 import Logger from '../services/LoggerService';
 
-const AnimationContext = createContext(null);
+interface MotionItem {
+  id: string;
+  name: string;
+  animationCategories?: string[];
+  enabledByCategory?: Record<string, boolean>;
+  metadata?: {
+    fileSize?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
 
-export const useAnimation = () => {
+interface EnabledAnimation {
+  id: string;
+  name: string;
+  filePath: string | null;
+  isCustom: boolean;
+  customMotionId?: string;
+  loop?: boolean;
+  loopTransition?: boolean;
+  transitionFrames?: number;
+  weight?: number;
+  metadata?: Record<string, unknown>;
+}
+
+interface AnimationContextValue {
+  isLoading: boolean;
+  configSaved: boolean;
+  disabledDefaultAnimations: Record<string, boolean>;
+  customAnimations: MotionItem[];
+  getEnabledAnimations: (category: string) => EnabledAnimation[];
+  getRandomAnimation: (category: string) => EnabledAnimation | null;
+  toggleDefaultAnimation: (animationId: string, isEnabled: boolean) => void;
+  toggleCustomAnimation: (motionId: string, category: string, isEnabled: boolean) => Promise<void>;
+  reloadCustomAnimations: () => Promise<void>;
+  hasEnabledAnimation: (category: string) => boolean;
+  getEnabledCounts: (category: string) => { defaultCount: number; customCount: number; totalCount: number };
+}
+
+interface AnimationProviderProps {
+  children: ReactNode;
+}
+
+const AnimationContext = createContext<AnimationContextValue | null>(null);
+
+export const useAnimation = (): AnimationContextValue => {
   const context = useContext(AnimationContext);
   if (!context) {
     throw new Error('useAnimation must be used within AnimationProvider');
@@ -21,24 +64,22 @@ export const useAnimation = () => {
   return context;
 };
 
-export const AnimationProvider = ({ children }) => {
+export const AnimationProvider = ({ children }: AnimationProviderProps) => {
   const initialLoadRef = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
   
-  const saveTimeoutRef = useRef(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [disabledDefaultAnimations, setDisabledDefaultAnimations] = useState({});
-  const [customAnimations, setCustomAnimations] = useState([]);
+  const [disabledDefaultAnimations, setDisabledDefaultAnimations] = useState<Record<string, boolean>>({});
+  const [customAnimations, setCustomAnimations] = useState<MotionItem[]>([]);
   const [configSaved, setConfigSaved] = useState(false);
 
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const config = await StorageServiceProxy.configLoad('animationConfig', {
-          disabledDefaultAnimations: {}
-        });
-        setDisabledDefaultAnimations(config.disabledDefaultAnimations || {});
-        Logger.log('AnimationContext', 'Disabled animations config loaded:', config.disabledDefaultAnimations);
+        const config = (await StorageServiceProxy.configLoad('animationConfig')) as { disabledDefaultAnimations?: Record<string, boolean> } | null;
+        setDisabledDefaultAnimations(config?.disabledDefaultAnimations || {});
+        Logger.log('AnimationContext', 'Disabled animations config loaded:', config?.disabledDefaultAnimations);
 
         const customs = await motionStorageService.getMotionsList();
         setCustomAnimations(customs);
@@ -89,18 +130,39 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} category - Animation category
    * @returns {Array} Array of enabled animation configs
    */
-  const getEnabledAnimations = useCallback((category) => {
+  const getEnabledAnimations = useCallback((category: string): EnabledAnimation[] => {
     const defaultAnims = getDefaultAnimationsByCategory(category);
-    const enabledDefaults = defaultAnims.filter(anim => !disabledDefaultAnimations[anim.id]);
+    const enabledDefaults: EnabledAnimation[] = defaultAnims
+      .filter((anim: { id: string }) => !disabledDefaultAnimations[anim.id])
+      .map((anim: {
+        id: string;
+        name: string;
+        filePath: string;
+        loop?: boolean;
+        loopTransition?: boolean;
+        transitionFrames?: number;
+        weight?: number;
+        metadata?: Record<string, unknown>;
+      }) => ({
+        id: anim.id,
+        name: anim.name,
+        filePath: anim.filePath,
+        isCustom: false,
+        loop: anim.loop ?? false,
+        loopTransition: anim.loopTransition ?? false,
+        transitionFrames: anim.transitionFrames ?? 30,
+        weight: anim.weight ?? 1.0,
+        metadata: anim.metadata ?? {},
+      }));
 
     const enabledCustom = customAnimations
-      .filter(m => 
+      .filter((m) => 
         m.animationCategories && 
         m.animationCategories.includes(category) && 
         m.enabledByCategory && 
         m.enabledByCategory[category] === true
       )
-      .map(m => ({
+      .map((m) => ({
         id: m.id,
         name: m.name,
         filePath: null,
@@ -112,7 +174,7 @@ export const AnimationProvider = ({ children }) => {
         weight: 1.0,
         metadata: {
           ...m.metadata,
-          description: `Custom - ${(m.metadata?.fileSize / 1024).toFixed(1)} KB`,
+          description: `Custom - ${(((m.metadata?.fileSize as number | undefined) ?? 0) / 1024).toFixed(1)} KB`,
           tags: ['custom', category],
         }
       }));
@@ -125,11 +187,11 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} category - Animation category
    * @returns {Object|null} Random animation config or null
    */
-  const getRandomAnimation = useCallback((category) => {
+  const getRandomAnimation = useCallback((category: string): EnabledAnimation | null => {
     const animations = getEnabledAnimations(category);
     if (animations.length === 0) return null;
     const randomIndex = Math.floor(Math.random() * animations.length);
-    return animations[randomIndex];
+    return animations[randomIndex] ?? null;
   }, [getEnabledAnimations]);
 
   /**
@@ -137,7 +199,7 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} animationId - Animation ID
    * @param {boolean} isEnabled - New enabled state
    */
-  const toggleDefaultAnimation = useCallback((animationId, isEnabled) => {
+  const toggleDefaultAnimation = useCallback((animationId: string, isEnabled: boolean) => {
     setDisabledDefaultAnimations(prev => {
       const updated = { ...prev };
       if (isEnabled) {
@@ -155,7 +217,7 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} category - Category to toggle
    * @param {boolean} isEnabled - New enabled state for this category
    */
-  const toggleCustomAnimation = useCallback(async (motionId, category, isEnabled) => {
+  const toggleCustomAnimation = useCallback(async (motionId: string, category: string, isEnabled: boolean) => {
     try {
       const motion = customAnimations.find(m => m.id === motionId);
       if (!motion) {
@@ -203,7 +265,7 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} category - Animation category
    * @returns {boolean} True if at least one animation is enabled
    */
-  const hasEnabledAnimation = useCallback((category) => {
+  const hasEnabledAnimation = useCallback((category: string) => {
     const enabled = getEnabledAnimations(category);
     return enabled.length > 0;
   }, [getEnabledAnimations]);
@@ -213,9 +275,9 @@ export const AnimationProvider = ({ children }) => {
    * @param {string} category - Animation category
    * @returns {Object} { defaultCount, customCount, totalCount }
    */
-  const getEnabledCounts = useCallback((category) => {
+  const getEnabledCounts = useCallback((category: string) => {
     const defaultAnims = getDefaultAnimationsByCategory(category);
-    const defaultCount = defaultAnims.filter(anim => !disabledDefaultAnimations[anim.id]).length;
+    const defaultCount = defaultAnims.filter((anim: { id: string }) => !disabledDefaultAnimations[anim.id]).length;
     const customCount = customAnimations.filter(m => 
       m.animationCategories && 
       m.animationCategories.includes(category) && 

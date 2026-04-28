@@ -8,10 +8,10 @@ import Logger from '../services/LoggerService';
 
 const UNMOUNT_DELAY_MS = 15000; // 15 seconds
 
-export const useVisibilityUnmount = (enabled = true) => {
+export const useVisibilityUnmount = (enabled = true): boolean => {
   const [shouldMount, setShouldMount] = useState(true);
-  const unmountTimeoutRef = useRef(null);
-  const hiddenTimeRef = useRef(null);
+  const unmountTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hiddenTimeRef = useRef<number | null>(null);
   
   useEffect(() => {
     if (!enabled) {

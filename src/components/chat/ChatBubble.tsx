@@ -8,6 +8,25 @@ import { Icon } from '../icons';
 import { Button } from '../ui';
 import Logger from '../../services/LoggerService';
 
+interface ModelPixelPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface PositionManagerLike {
+  getPositionPixels: () => ModelPixelPosition;
+}
+
+interface ChatBubbleProps {
+  positionManagerRef: { current: PositionManagerLike | null } | null;
+  message: string;
+  type?: 'user' | 'assistant';
+  isVisible?: boolean;
+  onHide?: () => void;
+}
+
 /**
  * Chat bubble component for displaying messages near the virtual assistant.
  * 
@@ -25,13 +44,13 @@ const ChatBubble = ({
   type = 'assistant',
   isVisible = false,
   onHide 
-}) => {
+}: ChatBubbleProps) => {
   const [bubblePos, setBubblePos] = useState({ x: 0, y: 0 });
   const [isOnLeft, setIsOnLeft] = useState(false);
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const hideTimeoutRef = useRef(null);
-  const typingIntervalRef = useRef(null);
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const updatePosition = () => {
@@ -104,7 +123,9 @@ const ChatBubble = ({
         currentIndex++;
       } else {
         setIsTyping(false);
-        clearInterval(typingIntervalRef.current);
+        if (typingIntervalRef.current) {
+          clearInterval(typingIntervalRef.current);
+        }
       }
     }, 20);
 

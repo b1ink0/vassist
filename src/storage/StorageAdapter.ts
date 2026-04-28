@@ -1,64 +1,65 @@
 /**
  * Storage Adapter
- * 
+ *
  * Core abstraction layer for all storage operations.
  * Works with Dexie IndexedDB and provides a clean API.
  * Handles automatic timestamp management and basic validation.
  */
 
-import { db } from './DatabaseSchema';
+import { db, type StorageStats } from './DatabaseSchema';
+
+export type StorageTableName = 'config' | 'settings' | 'cache' | 'chat' | 'files' | 'sessions' | 'data';
+
+type JsonRecord = Record<string, unknown>;
+
+type StorageMetadata = JsonRecord;
+
+interface CacheRecord extends JsonRecord {
+  key: string;
+  value: unknown;
+  expiresAt?: string;
+}
 
 export class StorageAdapter {
   /**
    * Get a value from storage
-   * @param {string} table - Table name (config, settings, cache, chat, files, sessions, data)
-   * @param {string} key - Primary key
-   * @returns {Promise<*>} Stored value or undefined
    */
-  async get(table, key) {
-    const record = await db.table(table).get(key);
-    
+  async get<T = unknown>(table: StorageTableName, key: string): Promise<T | JsonRecord | undefined> {
+    const record = await db.table(table).get(key) as JsonRecord | undefined;
+
     // Chat table stores the full chat object, not wrapped in 'value'
     if (table === 'chat') {
-      return record;  // Return the whole chat record
+      return record;
     }
-    
+
     // Files table stores data in 'value' field
     if (table === 'files') {
-      return record?.value;
+      return record?.value as T | undefined;
     }
-    
+
     // Other tables also use 'value' field
-    return record?.value;
+    return record?.value as T | undefined;
   }
 
   /**
    * Get full record with metadata
-   * @param {string} table - Table name
-   * @param {string} key - Primary key
-   * @returns {Promise<Object|undefined>} Full record with metadata
    */
-  async getRecord(table, key) {
-    return await db.table(table).get(key);
+  async getRecord(table: StorageTableName, key: string): Promise<JsonRecord | undefined> {
+    return await db.table(table).get(key) as JsonRecord | undefined;
   }
 
   /**
    * Set a value in storage
-   * @param {string} table - Table name
-   * @param {string} key - Primary key
-   * @param {*} value - Value to store (will be stored in 'value' field)
-   * @param {Object} metadata - Optional metadata (category, tags, etc.)
-   * @returns {Promise<boolean>} Success status
    */
-  async set(table, key, value, metadata = {}) {
-    let record;
-    
+  async set<T>(table: StorageTableName, key: string, value: T, metadata: StorageMetadata = {}): Promise<boolean> {
+    let record: JsonRecord;
+
     // Different tables have different primary key field names
     if (table === 'chat') {
       // Chat table stores the full chat object directly, no 'value' wrapper
       record = {
-        ...value,  // Chat data should have chatId, title, messages, etc.
-        chatId: key,  // Ensure chatId is set as primary key
+        ...(value as JsonRecord), // Chat data should have chatId, title, messages, etc.
+        chatId: key, // Ensure chatId is set as primary key
         updatedAt: new Date().toISOString(),
       };
     } else if (table === 'files') {
@@ -66,7 +67,7 @@ export class StorageAdapter {
       record = {
         fileId: key,
         value,
-        createdAt: metadata.createdAt || new Date().toISOString(),
+        createdAt: typeof metadata.createdAt === 'string' ? metadata.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...metadata,
       };
@@ -75,7 +76,7 @@ export class StorageAdapter {
       record = {
         key,
         value,
-        createdAt: metadata.createdAt || new Date().toISOString(),
+        createdAt: typeof metadata.createdAt === 'string' ? metadata.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...metadata,
       };
@@ -87,60 +88,49 @@ export class StorageAdapter {
 
   /**
    * Remove a value from storage
-   * @param {string} table - Table name
-   * @param {string} key - Primary key
-   * @returns {Promise<boolean>} Success status
    */
-  async remove(table, key) {
+  async remove(table: StorageTableName, key: string): Promise<boolean> {
     await db.table(table).delete(key);
     return true;
   }
 
   /**
    * Check if a key exists
-   * @param {string} table - Table name
-   * @param {string} key - Primary key
-   * @returns {Promise<boolean>} True if exists
    */
-  async exists(table, key) {
-    // Different tables have different primary key field names
-    let query = db.table(table);
-    
+  async exists(table: StorageTableName, key: string): Promise<boolean> {
     if (table === 'chat') {
-      query = query.where('chatId');
-    } else if (table === 'files') {
-      query = query.where('fileId');
-    } else {
-      query = query.where('key');
+      const record = await db.table(table).where('chatId').equals(key).first();
+      return !!record;
     }
-    
-    const record = await query.equals(key).first();
+
+    if (table === 'files') {
+      const record = await db.table(table).where('fileId').equals(key).first();
+      return !!record;
+    }
+
+    const record = await db.table(table).where('key').equals(key).first();
     return !!record;
   }
 
   /**
    * Get multiple values
-   * @param {string} table - Table name
-   * @param {string[]} keys - Array of keys
-   * @returns {Promise<Object>} Object with key-value pairs
    */
-  async getMultiple(table, keys) {
-    const records = await db.table(table).bulkGet(keys);
-    const result = {};
+  async getMultiple<T = unknown>(table: StorageTableName, keys: string[]): Promise<Record<string, T | undefined>> {
+    const records = await db.table(table).bulkGet(keys) as Array<JsonRecord | undefined>;
+    const result: Record<string, T | undefined> = {};
     records.forEach((record, index) => {
-      result[keys[index]] = record?.value;
+      const resultKey = keys[index];
+      if (resultKey !== undefined) {
+        result[resultKey] = record?.value as T | undefined;
+      }
     });
     return result;
   }
 
   /**
    * Set multiple values at once
-   * @param {string} table - Table name
-   * @param {Object} items - Object with key-value pairs
-   * @param {Object} metadata - Optional metadata to apply to all items
-   * @returns {Promise<boolean>} Success status
    */
-  async setMultiple(table, items) {
+  async setMultiple<T>(table: StorageTableName, items: Record<string, T>): Promise<boolean> {
     const now = new Date().toISOString();
     const records = Object.entries(items).map(([key, value]) => ({
       key,
@@ -148,40 +138,35 @@ export class StorageAdapter {
       createdAt: now,
       updatedAt: now,
     }));
-    
+
     await db.table(table).bulkPut(records);
     return true;
   }
 
   /**
    * Clear all records in a table
-   * @param {string} table - Table name
-   * @returns {Promise<boolean>} Success status
    */
-  async clear(table) {
+  async clear(table: StorageTableName): Promise<boolean> {
     await db.table(table).clear();
     return true;
   }
 
   /**
    * Query records by filter
-   * @param {string} table - Table name
-   * @param {Object} filter - Filter object (e.g., { category: 'chat' })
-   * @returns {Promise<Array>} Matching records
    */
-  async query(table, filter) {
-    let query = db.table(table);
-    
+  async query(table: StorageTableName, filter: JsonRecord): Promise<JsonRecord[]> {
+    const query = db.table(table);
+
     // Build query based on filter
-    if (filter.key) {
-      return [await this.getRecord(table, filter.key)].filter(Boolean);
+    if (typeof filter.key === 'string') {
+      const record = await this.getRecord(table, filter.key);
+      return record ? [record] : [];
     }
 
     // For other filters, we need to scan the table
-    const allRecords = await query.toArray();
-    return allRecords.filter(record => {
+    const allRecords = await query.toArray() as JsonRecord[];
+    return allRecords.filter((record) => {
       return Object.entries(filter).every(([key, value]) => {
-        if (key === 'key') return record.key === value;
         return record[key] === value;
       });
     });
@@ -189,53 +174,46 @@ export class StorageAdapter {
 
   /**
    * Get all records from a table
-   * @param {string} table - Table name
-   * @returns {Promise<Array>} All records
    */
-  async getAll(table) {
-    return await db.table(table).toArray();
+  async getAll(table: StorageTableName): Promise<JsonRecord[]> {
+    return await db.table(table).toArray() as JsonRecord[];
   }
 
   /**
    * Get record count
-   * @param {string} table - Table name
-   * @returns {Promise<number>} Record count
    */
-  async count(table) {
+  async count(table: StorageTableName): Promise<number> {
     return await db.table(table).count();
   }
 
   /**
    * Cleanup expired cache entries
-   * @returns {Promise<number>} Number of records deleted
    */
-  async cleanupExpiredCache() {
+  async cleanupExpiredCache(): Promise<number> {
     const now = new Date().toISOString();
     const expired = await db.table('cache')
       .where('expiresAt')
       .below(now)
-      .toArray();
-    
+      .toArray() as CacheRecord[];
+
     const count = expired.length;
     if (count > 0) {
-      await db.table('cache').bulkDelete(expired.map(r => r.key));
+      await db.table('cache').bulkDelete(expired.map((r) => r.key));
     }
     return count;
   }
 
   /**
    * Get storage statistics
-   * @returns {Promise<Object>} Storage stats per table
    */
-  async getStats() {
+  async getStats(): Promise<StorageStats> {
     return await db.getStats();
   }
 
   /**
    * Database exists check (for initialization)
-   * @returns {Promise<boolean>} True if database is accessible
    */
-  async isDatabaseReady() {
+  async isDatabaseReady(): Promise<boolean> {
     try {
       await db.table('config').count();
       return true;

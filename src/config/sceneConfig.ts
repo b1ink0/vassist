@@ -10,8 +10,38 @@
 import { resourceLoader } from '../utils/ResourceLoader';
 import Logger from '../services/LoggerService';
 import { isDesktop, isProduction } from '../utils/PlatformUtils';
+import type { PositionManagerOptionsLike, RenderQualitySettingsLike } from '../babylon/types';
 
-const RenderQualityPresets = {
+interface SceneConfigData {
+  enableModelLoading: boolean;
+  modelUrl: string;
+  cameraAnimationUrl: string;
+  enableCameraAnimation: boolean;
+  orthoHeight: number;
+  cameraDistance: number;
+  positionConfig: PositionManagerOptionsLike;
+  transparentBackground: boolean;
+  enablePhysics: boolean;
+  enableShadows: boolean;
+  onLoadProgress: ((progress: number) => void) | null;
+  onModelLoaded: ((modelMesh: unknown) => void) | null;
+  onSceneReady: ((scene: unknown) => void) | null;
+  modelId?: string;
+  modelFileName?: string;
+  portraitClipping?: number;
+  _customModelBlobUrl?: string;
+}
+
+interface RenderQualityPreset extends RenderQualitySettingsLike {
+  bloomThreshold: number;
+  contrast: number;
+  exposure: number;
+  saturation: number;
+}
+
+type RenderQualityPresetMap = Record<'low' | 'medium' | 'high' | 'ultra', RenderQualityPreset>;
+
+const RenderQualityPresets: RenderQualityPresetMap = {
   low: {
     samples: 1,
     bloomEnabled: false,
@@ -66,21 +96,21 @@ const RenderQualityPresets = {
   },
 };
 
-const RenderQualityPresetsAndroid = {
+const RenderQualityPresetsAndroid: RenderQualityPresetMap = {
   low: RenderQualityPresets.low,
   medium: RenderQualityPresets.medium,
   high: { ...RenderQualityPresets.high, samples: 2, bloomKernel: 32 },
   ultra: { ...RenderQualityPresets.ultra, samples: 4 },
 };
 
-export function getRenderQualityPresets(isAndroid = false) {
+export function getRenderQualityPresets(isAndroid = false): RenderQualityPresetMap {
   return isAndroid ? RenderQualityPresetsAndroid : RenderQualityPresets;
 }
 
 /**
  * Default scene configuration
  */
-const SceneConfig = {
+const SceneConfig: SceneConfigData = {
   enableModelLoading: true,
   
   modelUrl: isDesktop ? "/res/assets/model/vassist_default.bpmx" : "res/assets/model/vassist_default.bpmx",
@@ -111,7 +141,7 @@ const SceneConfig = {
  * @param {Object} config - Configuration object
  * @returns {Promise<Object>} Configuration with resolved URLs
  */
-export async function resolveResourceURLs(config) {
+export async function resolveResourceURLs(config: SceneConfigData): Promise<SceneConfigData> {
   Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
   
   const needsResolution = resourceLoader.isExtensionMode() || (isDesktop && isProduction);
@@ -143,7 +173,7 @@ export async function resolveResourceURLs(config) {
  * 
  * @returns {Object} Scene configuration
  */
-export function getSceneConfig() {
+export function getSceneConfig(): SceneConfigData {
   return { ...SceneConfig };
 }
 
@@ -155,7 +185,7 @@ export function getSceneConfig() {
  * 
  * @returns {Promise<Object>} Scene configuration with resolved URLs
  */
-export async function getSceneConfigAsync() {
+export async function getSceneConfigAsync(): Promise<SceneConfigData> {
   const config = getSceneConfig();
   
   try {
@@ -190,7 +220,7 @@ export async function getSceneConfigAsync() {
  * Get default model URL
  * @returns {string} Default model path
  */
-export function getDefaultModelUrl() {
+export function getDefaultModelUrl(): string {
   return SceneConfig.modelUrl;
 }
 
@@ -198,7 +228,7 @@ export function getDefaultModelUrl() {
  * Get default camera animation URL
  * @returns {string} Default camera animation path
  */
-export function getDefaultCameraAnimationUrl() {
+export function getDefaultCameraAnimationUrl(): string {
   return SceneConfig.cameraAnimationUrl;
 }
 
@@ -206,7 +236,7 @@ export function getDefaultCameraAnimationUrl() {
  * Get camera settings
  * @returns {Object} Camera configuration
  */
-export function getCameraSettings() {
+export function getCameraSettings(): { orthoHeight: number; cameraDistance: number } {
   return {
     orthoHeight: SceneConfig.orthoHeight,
     cameraDistance: SceneConfig.cameraDistance,
@@ -217,7 +247,7 @@ export function getCameraSettings() {
  * Get position manager configuration
  * @returns {Object} Position config
  */
-export function getPositionConfig() {
+export function getPositionConfig(): PositionManagerOptionsLike {
   return { ...SceneConfig.positionConfig };
 }
 
@@ -226,7 +256,7 @@ export function getPositionConfig() {
  * @param {string} feature - Feature name: 'physics', 'shadows', 'cameraAnimation', 'transparentBackground'
  * @returns {boolean} True if enabled
  */
-export function isFeatureEnabled(feature) {
+export function isFeatureEnabled(feature: 'physics' | 'shadows' | 'cameraAnimation' | 'transparentBackground'): boolean {
   switch (feature) {
     case 'physics':
       return SceneConfig.enablePhysics;
@@ -247,7 +277,7 @@ export function isFeatureEnabled(feature) {
  * @param {Object} customConfig - Custom configuration to merge
  * @returns {Object} Merged configuration
  */
-export function createSceneConfig(customConfig = {}) {
+export function createSceneConfig(customConfig: Partial<SceneConfigData> = {}): SceneConfigData {
   return {
     ...SceneConfig,
     ...customConfig,
@@ -263,7 +293,7 @@ export function createSceneConfig(customConfig = {}) {
  * @param {Object} config - Configuration to validate
  * @returns {Object} Validation result { valid: boolean, errors: string[] }
  */
-export function validateSceneConfig(config) {
+export function validateSceneConfig(config: Partial<SceneConfigData>): { valid: boolean; errors: string[] } {
   const errors = [];
   
   if (!config.modelUrl) {

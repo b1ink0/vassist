@@ -5,7 +5,7 @@
  * Auto-saves all config changes after a short delay
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { 
   AIServiceProxy, 
   TTSServiceProxy, 
@@ -33,9 +33,165 @@ import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop } from '../utils/PlatformUtils';
 
-const ConfigContext = createContext(null);
+type UIConfig = typeof DefaultUIConfig;
+type AIConfig = typeof DefaultAIConfig;
+type TTSConfig = typeof DefaultTTSConfig;
+type STTConfig = typeof DefaultSTTConfig;
 
-export const useConfig = () => {
+interface ChromeAiStatus {
+  checking: boolean;
+  available: boolean;
+  state: string | null;
+  message: string;
+  details: string;
+  progress: number;
+  downloading: boolean;
+  requiresFlags?: boolean;
+  flags?: unknown;
+}
+
+interface KokoroStatus {
+  checking: boolean;
+  initialized: boolean;
+  preInitializing: boolean;
+  state: 'notInitialized' | 'downloading' | 'ready' | 'error';
+  message: string;
+  details: string;
+  progress: number;
+  downloading: boolean;
+}
+
+interface DesktopBackendStatus {
+  success?: boolean;
+  selectedInstalled?: boolean;
+}
+
+interface DesktopServerStartResult {
+  success?: boolean;
+  error?: string;
+}
+
+interface KokoroServiceStatus {
+  initialized?: boolean;
+  initializing?: boolean;
+  message?: string;
+  details?: string;
+  config?: {
+    device?: string;
+  };
+}
+
+interface KokoroDownloadProgress {
+  percent?: number;
+  file?: string;
+}
+
+interface ChromeAvailabilityStatus {
+  available: boolean;
+  state: string;
+  message: string;
+  details: string;
+  progress?: number;
+  requiresFlags?: boolean;
+  flags?: unknown;
+}
+
+interface ChromeDownloadProgress {
+  progress?: number;
+  details?: string;
+}
+
+interface ChromeDownloadResult {
+  success?: boolean;
+  message?: string;
+  details?: string;
+}
+
+interface ConfigContextValue {
+  isConfigLoading: boolean;
+  uiConfig: UIConfig;
+  uiConfigSaved: boolean;
+  uiConfigError: string;
+  updateUIConfig: (path: string, value: unknown) => void;
+  saveUIConfig: () => Promise<void>;
+  aiConfig: AIConfig;
+  aiConfigSaved: boolean;
+  aiConfigError: string;
+  aiTesting: boolean;
+  updateAIConfig: (path: string, value: unknown) => void;
+  saveAIConfig: () => Promise<void>;
+  testAIConnection: () => Promise<void>;
+  clearAIConfigError: () => void;
+  testTranslator: (text: string, sourceLanguage: string, targetLanguage: string) => Promise<unknown>;
+  testLanguageDetector: (text: string) => Promise<unknown>;
+  testSummarizer: (text: string, options?: Record<string, unknown>) => Promise<unknown>;
+  testRewriter: (text: string) => Promise<unknown>;
+  testWriter: (prompt: string, options?: Record<string, unknown>) => Promise<unknown>;
+  ttsConfig: TTSConfig;
+  ttsConfigSaved: boolean;
+  ttsConfigError: string;
+  ttsTesting: boolean;
+  updateTTSConfig: (path: string, value: unknown) => void;
+  saveTTSConfig: () => Promise<void>;
+  testTTSConnection: (customText?: string | null) => Promise<void>;
+  setTtsConfigError: (message: string) => void;
+  clearTTSConfigError: () => void;
+  sttConfig: STTConfig;
+  sttConfigSaved: boolean;
+  sttConfigError: string;
+  sttTesting: boolean;
+  updateSTTConfig: (path: string, value: unknown) => void;
+  saveSTTConfig: () => Promise<void>;
+  testSTTRecording: (deviceId?: string | null) => Promise<void>;
+  clearSTTConfigError: () => void;
+  chromeAiStatus: ChromeAiStatus;
+  checkChromeAIAvailability: () => Promise<unknown>;
+  startChromeAIDownload: () => Promise<void>;
+  kokoroStatus: KokoroStatus;
+  checkKokoroStatus: (desiredDeviceOverride?: string | null) => Promise<unknown>;
+  initializeKokoro: () => Promise<unknown>;
+}
+
+interface ConfigProviderProps {
+  children: ReactNode;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const setConfigValueAtPath = <T extends object>(config: T, path: string, value: unknown): T => {
+  const updated = { ...(config as Record<string, unknown>) };
+  const parts = path.split('.');
+  let current: Record<string, unknown> = updated;
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (!key) {
+      continue;
+    }
+    const nextValue = current[key];
+    if (nextValue && typeof nextValue === 'object' && !Array.isArray(nextValue)) {
+      current[key] = { ...(nextValue as Record<string, unknown>) };
+    } else {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+
+  const lastKey = parts[parts.length - 1];
+  if (lastKey) {
+    current[lastKey] = value;
+  }
+  return updated as T;
+};
+
+const ConfigContext = createContext<ConfigContextValue | null>(null);
+
+export const useConfig = (): ConfigContextValue => {
   const context = useContext(ConfigContext);
   if (!context) {
     throw new Error('useConfig must be used within ConfigProvider');
@@ -43,42 +199,42 @@ export const useConfig = () => {
   return context;
 };
 
-export const ConfigProvider = ({ children }) => {
+export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   const { api } = useDesktop();
   const initialLoadRef = useRef(true);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
 
   // Auto-save timeout refs for debouncing
-  const aiSaveTimeoutRef = useRef(null);
-  const ttsSaveTimeoutRef = useRef(null);
-  const sttSaveTimeoutRef = useRef(null);
-  const uiSaveTimeoutRef = useRef(null);
+  const aiSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sttSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // UI Config
-  const [uiConfig, setUiConfig] = useState(DefaultUIConfig);
+  const [uiConfig, setUiConfig] = useState<UIConfig>(DefaultUIConfig);
   const [uiConfigSaved, setUiConfigSaved] = useState(false);
   const [uiConfigError, setUiConfigError] = useState('');
 
   // AI (LLM) Config
-  const [aiConfig, setAiConfig] = useState(DefaultAIConfig);
+  const [aiConfig, setAiConfig] = useState<AIConfig>(DefaultAIConfig);
   const [aiConfigSaved, setAiConfigSaved] = useState(false);
   const [aiConfigError, setAiConfigError] = useState('');
   const [aiTesting, setAiTesting] = useState(false);
 
   // TTS Config
-  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
+  const [ttsConfig, setTtsConfig] = useState<TTSConfig>(DefaultTTSConfig);
   const [ttsConfigSaved, setTtsConfigSaved] = useState(false);
   const [ttsConfigError, setTtsConfigError] = useState('');
   const [ttsTesting, setTtsTesting] = useState(false);
 
   // STT Config
-  const [sttConfig, setSttConfig] = useState(DefaultSTTConfig);
+  const [sttConfig, setSttConfig] = useState<STTConfig>(DefaultSTTConfig);
   const [sttConfigSaved, setSttConfigSaved] = useState(false);
   const [sttConfigError, setSttConfigError] = useState('');
   const [sttTesting, setSttTesting] = useState(false);
 
   // Chrome AI Status
-  const [chromeAiStatus, setChromeAiStatus] = useState({
+  const [chromeAiStatus, setChromeAiStatus] = useState<ChromeAiStatus>({
     checking: false,
     available: false,
     state: null,
@@ -89,7 +245,7 @@ export const ConfigProvider = ({ children }) => {
   });
 
   // Kokoro TTS Status
-  const [kokoroStatus, setKokoroStatus] = useState({
+  const [kokoroStatus, setKokoroStatus] = useState<KokoroStatus>({
     checking: false,
     initialized: false,
     preInitializing: false, // Pre-initialization before scene loads
@@ -100,7 +256,7 @@ export const ConfigProvider = ({ children }) => {
     downloading: false,
   });
 
-  const syncDesktopServerForProviders = useCallback(async (nextAiConfig, nextTtsConfig, nextSttConfig) => {
+  const syncDesktopServerForProviders = useCallback(async (nextAiConfig: AIConfig, nextTtsConfig: TTSConfig, nextSttConfig: STTConfig) => {
     if (!isDesktop || !api?.server) {
       return;
     }
@@ -127,7 +283,7 @@ export const ConfigProvider = ({ children }) => {
     let canStartServer = true;
     if (llmUsesDesktopLocal && api?.llm?.getBackendStatus && desktopLlmConfig.backend && desktopLlmConfig.backend !== 'auto') {
       try {
-        const backendStatus = await api.llm.getBackendStatus(desktopLlmConfig.backend);
+        const backendStatus = await api.llm.getBackendStatus(desktopLlmConfig.backend) as DesktopBackendStatus;
         if (backendStatus?.success && !backendStatus.selectedInstalled) {
           canStartServer = false;
           Logger.warn('ConfigContext', `Desktop proxy start deferred: backend ${desktopLlmConfig.backend} is not installed yet`);
@@ -151,7 +307,7 @@ export const ConfigProvider = ({ children }) => {
         tts: {
           enabled: Boolean(nextTtsConfig?.enabled && ttsUsesDesktopLocal),
         },
-      });
+      }) as DesktopServerStartResult;
       if (result?.success) {
         Logger.log('ConfigContext', 'Desktop proxy server started/updated:', {
           llmUsesDesktopLocal,
@@ -169,18 +325,18 @@ export const ConfigProvider = ({ children }) => {
   // Load all configs on mount
   useEffect(() => {
     const loadConfigs = async () => {
-      let savedAiConfig;
-      let savedTtsConfig = DefaultTTSConfig;
-      let savedSttConfig = DefaultSTTConfig;
+      let savedAiConfig: AIConfig = DefaultAIConfig;
+      let savedTtsConfig: TTSConfig = DefaultTTSConfig;
+      let savedSttConfig: STTConfig = DefaultSTTConfig;
       try {
         // Load UI config and merge with defaults to ensure all fields exist
-        const savedUiConfig = await StorageServiceProxy.configLoad('uiConfig', {});
-        const mergedUiConfig = { ...DefaultUIConfig, ...savedUiConfig };
+        const savedUiConfig = (await StorageServiceProxy.configLoad('uiConfig')) as Partial<UIConfig> | null;
+        const mergedUiConfig = { ...DefaultUIConfig, ...(savedUiConfig ?? {}) };
         setUiConfig(mergedUiConfig);
         Logger.log('ConfigContext', 'UI config loaded:', mergedUiConfig);
 
         // Load AI config
-        savedAiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+        savedAiConfig = ((await StorageServiceProxy.configLoad('aiConfig')) as AIConfig | null) ?? DefaultAIConfig;
         setAiConfig(savedAiConfig);
         try {
           if (savedAiConfig.provider) {
@@ -216,7 +372,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load TTS config
-        savedTtsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        savedTtsConfig = ((await StorageServiceProxy.configLoad('ttsConfig')) as TTSConfig | null) ?? DefaultTTSConfig;
         
         Logger.log('ConfigContext', 'TTS config loaded from storage');
         setTtsConfig(savedTtsConfig);
@@ -228,7 +384,7 @@ export const ConfigProvider = ({ children }) => {
         }
 
         // Load STT config
-        savedSttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
+        savedSttConfig = ((await StorageServiceProxy.configLoad('sttConfig')) as STTConfig | null) ?? DefaultSTTConfig;
         setSttConfig(savedSttConfig);
         try {
           STTServiceProxy.configure(savedSttConfig);
@@ -438,20 +594,8 @@ export const ConfigProvider = ({ children }) => {
   }, []);
 
   // UI Config handlers
-  const updateUIConfig = useCallback((path, value) => {
-    setUiConfig(prev => {
-      const updated = { ...prev };
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      return updated;
-    });
+  const updateUIConfig = useCallback((path: string, value: unknown) => {
+    setUiConfig((prev) => setConfigValueAtPath(prev, path, value));
   }, []);
 
   const saveUIConfig = useCallback(async () => {
@@ -466,26 +610,14 @@ export const ConfigProvider = ({ children }) => {
       Logger.log('ConfigContext', 'UI config saved successfully');
       setTimeout(() => setUiConfigSaved(false), 2000);
     } catch (error) {
-      setUiConfigError('Failed to save configuration: ' + error.message);
+      setUiConfigError('Failed to save configuration: ' + getErrorMessage(error));
       Logger.error('ConfigContext', 'UI config save error:', error);
     }
   }, [uiConfig]);
 
   // AI Config handlers
-  const updateAIConfig = useCallback((path, value) => {
-    setAiConfig(prev => {
-      const updated = { ...prev };
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      return updated;
-    });
+  const updateAIConfig = useCallback((path: string, value: unknown) => {
+    setAiConfig((prev) => setConfigValueAtPath(prev, path, value));
   }, []);
 
   const saveAIConfig = useCallback(async () => {
@@ -529,11 +661,11 @@ export const ConfigProvider = ({ children }) => {
         
         setTimeout(() => setAiConfigSaved(false), 2000);
       } catch (error) {
-        setAiConfigError('Failed to configure AI service: ' + error.message);
+        setAiConfigError('Failed to configure AI service: ' + getErrorMessage(error));
         Logger.error('ConfigContext', 'AI configuration failed:', error);
       }
     } catch (error) {
-      setAiConfigError('Failed to save configuration: ' + error.message);
+      setAiConfigError('Failed to save configuration: ' + getErrorMessage(error));
       Logger.error('ConfigContext', 'AI config save error:', error);
     }
   }, [aiConfig]);
@@ -549,32 +681,15 @@ export const ConfigProvider = ({ children }) => {
       setAiConfigError('success:Connection successful!');
       setTimeout(() => setAiConfigError(''), 3000);
     } catch (error) {
-      setAiConfigError('error-status:Connection failed:' + error.message);
+      setAiConfigError('error-status:Connection failed:' + getErrorMessage(error));
     } finally {
       setAiTesting(false);
     }
   }, [aiConfig]);
 
   // TTS Config handlers
-  const updateTTSConfig = useCallback((path, value) => {
-    setTtsConfig(prev => {
-      const updated = { ...prev };
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        const existing = current[parts[i]];
-        if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
-          current[parts[i]] = { ...existing };
-        } else {
-          current[parts[i]] = {};
-        }
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      return updated;
-    });
+  const updateTTSConfig = useCallback((path: string, value: unknown) => {
+    setTtsConfig((prev) => setConfigValueAtPath(prev, path, value));
   }, []);
 
   const saveTTSConfig = useCallback(async () => {
@@ -595,27 +710,28 @@ export const ConfigProvider = ({ children }) => {
         Logger.log('ConfigContext', 'TTS Service configured successfully');
         setTimeout(() => setTtsConfigSaved(false), 2000);
       } catch (error) {
-        setTtsConfigError('Failed to configure TTS service: ' + error.message);
+        setTtsConfigError('Failed to configure TTS service: ' + getErrorMessage(error));
         Logger.error('ConfigContext', 'TTS configuration failed:', error);
       }
     } catch (error) {
-      setTtsConfigError('Failed to save configuration: ' + error.message);
+      setTtsConfigError('Failed to save configuration: ' + getErrorMessage(error));
       Logger.error('ConfigContext', 'TTS config save error:', error);
     }
   }, [ttsConfig]);
 
   // Kokoro TTS Status handlers - Define BEFORE testTTSConnection since it depends on this
-  const checkKokoroStatus = useCallback(async (desiredDeviceOverride = null) => {
+  const checkKokoroStatus = useCallback(async (desiredDeviceOverride: string | null = null) => {
     setKokoroStatus(prev => ({ ...prev, checking: true }));
     
     try {
-      const status = await TTSServiceProxy.checkKokoroStatus();
+      const status = await TTSServiceProxy.checkKokoroStatus() as KokoroServiceStatus;
 
       const desiredDevice = desiredDeviceOverride || ttsConfig.kokoro?.device || 'auto';
       const actualDevice = status.config?.device || null;
-      const isInitializedWithCorrectDevice = status.initialized && actualDevice === desiredDevice;
+      const isInitializedWithCorrectDevice = Boolean(status.initialized) && actualDevice === desiredDevice;
       
-      setKokoroStatus({
+      setKokoroStatus((prev) => ({
+        ...prev,
         checking: false,
         initialized: isInitializedWithCorrectDevice,
         state: isInitializedWithCorrectDevice ? 'ready' : 'notInitialized',
@@ -623,22 +739,23 @@ export const ConfigProvider = ({ children }) => {
         details: status.details || '',
         progress: 0,
         downloading: false,
-      });
+      }));
       
       Logger.log('ConfigContext', 'Kokoro status:', status);
       
       return { ...status, initialized: isInitializedWithCorrectDevice };
     } catch (error) {
       Logger.log('ConfigContext', 'Kokoro status check failed:', error);
-      setKokoroStatus({
+      setKokoroStatus((prev) => ({
+        ...prev,
         checking: false,
         initialized: false,
         state: 'error',
         message: 'Failed to check status',
-        details: error.message,
+        details: getErrorMessage(error),
         progress: 0,
         downloading: false,
-      });
+      }));
       throw error;
     }
   }, [ttsConfig.kokoro?.device]);
@@ -655,7 +772,8 @@ export const ConfigProvider = ({ children }) => {
       let lastUpdateTime = 0;
       const progressDebounceMs = 100; // Update UI max every 100ms
       
-      const initialized = await TTSServiceProxy.initializeKokoro((progress) => {
+      const initializeKokoroWithProgress = TTSServiceProxy.initializeKokoro as unknown as (onProgress: (progress: KokoroDownloadProgress) => void) => Promise<unknown>;
+      const initialized = await initializeKokoroWithProgress((progress) => {
         // Handle progress updates with defensive checks for undefined values
         const percent = typeof progress.percent === 'number' ? progress.percent : 0;
         const file = progress.file || 'Downloading model...';
@@ -691,13 +809,13 @@ export const ConfigProvider = ({ children }) => {
         downloading: false,
         state: 'error',
         message: 'Initialization failed',
-        details: error.message,
+        details: getErrorMessage(error),
       }));
       throw error;
     }
   }, [checkKokoroStatus, ttsConfig]);
 
-  const testTTSConnection = useCallback(async (customText = null) => {
+  const testTTSConnection = useCallback(async (customText: string | null = null) => {
     setTtsConfigError('');
     setTtsTesting(true);
     
@@ -711,7 +829,7 @@ export const ConfigProvider = ({ children }) => {
         setTtsConfigError('hourglass:Checking Kokoro status...');
         
         // Check current status
-        const status = await TTSServiceProxy.checkKokoroStatus();
+        const status = await TTSServiceProxy.checkKokoroStatus() as KokoroServiceStatus;
         
         if (!status.initialized) {
           // Auto-initialize if not initialized
@@ -721,14 +839,14 @@ export const ConfigProvider = ({ children }) => {
           try {
             await initializeKokoro();
             // Check status again after initialization
-            const newStatus = await TTSServiceProxy.checkKokoroStatus();
+            const newStatus = await TTSServiceProxy.checkKokoroStatus() as KokoroServiceStatus;
             if (!newStatus.initialized) {
               setTtsConfigError('error-status:Failed to initialize Kokoro model');
               setTtsTesting(false);
               return;
             }
           } catch (initError) {
-            setTtsConfigError('error-status:Kokoro initialization failed:' + initError.message);
+            setTtsConfigError('error-status:Kokoro initialization failed:' + getErrorMessage(initError));
             setTtsTesting(false);
             return;
           }
@@ -752,27 +870,15 @@ export const ConfigProvider = ({ children }) => {
       
       setTimeout(() => setTtsConfigError(''), 5000);
     } catch (error) {
-      setTtsConfigError('error-status:TTS test failed:' + error.message);
+      setTtsConfigError('error-status:TTS test failed:' + getErrorMessage(error));
     } finally {
       setTtsTesting(false);
     }
   }, [ttsConfig, initializeKokoro]);
 
   // STT Config handlers
-  const updateSTTConfig = useCallback((path, value) => {
-    setSttConfig(prev => {
-      const updated = { ...prev };
-      const parts = path.split('.');
-      let current = updated;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        current[parts[i]] = { ...current[parts[i]] };
-        current = current[parts[i]];
-      }
-      
-      current[parts[parts.length - 1]] = value;
-      return updated;
-    });
+  const updateSTTConfig = useCallback((path: string, value: unknown) => {
+    setSttConfig((prev) => setConfigValueAtPath(prev, path, value));
   }, []);
 
   const saveSTTConfig = useCallback(async () => {
@@ -793,16 +899,16 @@ export const ConfigProvider = ({ children }) => {
         Logger.log('ConfigContext', 'STT Service configured successfully');
         setTimeout(() => setSttConfigSaved(false), 2000);
       } catch (error) {
-        setSttConfigError('Failed to configure STT service: ' + error.message);
+        setSttConfigError('Failed to configure STT service: ' + getErrorMessage(error));
         Logger.error('ConfigContext', 'STT configuration failed:', error);
       }
     } catch (error) {
-      setSttConfigError('Failed to save configuration: ' + error.message);
+      setSttConfigError('Failed to save configuration: ' + getErrorMessage(error));
       Logger.error('ConfigContext', 'STT config save error:', error);
     }
   }, [sttConfig]);
 
-  const testSTTRecording = useCallback(async (deviceId = null) => {
+  const testSTTRecording = useCallback(async (deviceId: string | null = null) => {
     setSttConfigError('');
     setSttTesting(true);
     
@@ -810,12 +916,13 @@ export const ConfigProvider = ({ children }) => {
       STTServiceProxy.configure(sttConfig);
       setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
       
-      const transcription = await STTServiceProxy.testRecording(3, deviceId);
+      const testRecordingWithDevice = STTServiceProxy.testRecording as unknown as (durationSeconds: number, selectedDeviceId?: string | null) => Promise<string>;
+      const transcription = await testRecordingWithDevice(3, deviceId);
       
       setSttConfigError(`✅ Transcription: "${transcription}"`);
       setTimeout(() => setSttConfigError(''), 5000);
     } catch (error) {
-      setSttConfigError('error-status:STT test failed: ' + error.message);
+      setSttConfigError('error-status:STT test failed: ' + getErrorMessage(error));
     } finally {
       setSttTesting(false);
     }
@@ -826,9 +933,9 @@ export const ConfigProvider = ({ children }) => {
     setChromeAiStatus(prev => ({ ...prev, checking: true }));
     
     try {
-      const status = await AIServiceProxy.checkChromeAIAvailability();
+      const status = await AIServiceProxy.checkChromeAIAvailability() as ChromeAvailabilityStatus;
       
-      setChromeAiStatus({
+      const nextStatus: ChromeAiStatus = {
         checking: false,
         available: status.available,
         state: status.state,
@@ -836,9 +943,17 @@ export const ConfigProvider = ({ children }) => {
         details: status.details,
         progress: status.progress || 0,
         downloading: status.state === 'downloading',
-        requiresFlags: status.requiresFlags,
-        flags: status.flags,
-      });
+      };
+
+      if (typeof status.requiresFlags === 'boolean') {
+        nextStatus.requiresFlags = status.requiresFlags;
+      }
+
+      if (status.flags !== undefined) {
+        nextStatus.flags = status.flags;
+      }
+
+      setChromeAiStatus(nextStatus);
       
       Logger.log('ConfigContext', 'Chrome AI status:', status);
       
@@ -850,7 +965,7 @@ export const ConfigProvider = ({ children }) => {
         available: false,
         state: 'unavailable',
         message: 'Failed to check availability',
-        details: error.message,
+        details: getErrorMessage(error),
         progress: 0,
         downloading: false,
       });
@@ -861,7 +976,7 @@ export const ConfigProvider = ({ children }) => {
   const startChromeAIDownload = useCallback(async () => {
     try {
       // First check availability to ensure we're in downloadable state
-      const status = await checkChromeAIAvailability();
+      const status = await checkChromeAIAvailability() as ChromeAvailabilityStatus;
       
       if (status.state !== 'downloadable' && status.state !== 'after-download') {
         Logger.log('ConfigContext', 'Model not in downloadable state:', status.state);
@@ -882,11 +997,12 @@ export const ConfigProvider = ({ children }) => {
         details: 'Please wait while the model is being downloaded',
       }));
       
-      const result = await AIServiceProxy.downloadChromeAIModel((progress) => {
+      const downloadChromeAIModelWithProgress = AIServiceProxy.downloadChromeAIModel as unknown as (onProgress: (progress: ChromeDownloadProgress) => void) => Promise<ChromeDownloadResult>;
+      const result = await downloadChromeAIModelWithProgress((progress) => {
         Logger.log('ConfigContext', `Chrome AI download progress: ${progress.progress?.toFixed(1)}%`);
         setChromeAiStatus(prev => ({ 
           ...prev, 
-          progress: progress.progress,
+          progress: progress.progress ?? 0,
           details: progress.details || `${(progress.progress || 0).toFixed(1)}%`
         }));
       });
@@ -931,14 +1047,14 @@ export const ConfigProvider = ({ children }) => {
         ...prev, 
         downloading: false,
         message: 'Download failed',
-        details: error.message || 'Failed to start download. Please try manually at chrome://components',
+        details: getErrorMessage(error) || 'Failed to start download. Please try manually at chrome://components',
       }));
       throw error;
     }
   }, [checkChromeAIAvailability]);
 
   // AI Features Test Functions
-  const testTranslator = useCallback(async (text, sourceLanguage, targetLanguage) => {
+  const testTranslator = useCallback(async (text: string, sourceLanguage: string, targetLanguage: string) => {
     if (!aiConfig.aiFeatures?.translator?.enabled) {
       throw new Error('Translator is disabled in settings');
     }
@@ -946,7 +1062,7 @@ export const ConfigProvider = ({ children }) => {
     return result;
   }, [aiConfig]);
 
-  const testLanguageDetector = useCallback(async (text) => {
+  const testLanguageDetector = useCallback(async (text: string) => {
     if (!aiConfig.aiFeatures?.languageDetector?.enabled) {
       throw new Error('Language Detector is disabled in settings');
     }
@@ -954,7 +1070,7 @@ export const ConfigProvider = ({ children }) => {
     return results;
   }, [aiConfig]);
 
-  const testSummarizer = useCallback(async (text, options = {}) => {
+  const testSummarizer = useCallback(async (text: string, options: Record<string, unknown> = {}) => {
     if (!aiConfig.aiFeatures?.summarizer?.enabled) {
       throw new Error('Summarizer is disabled in settings');
     }
@@ -962,13 +1078,21 @@ export const ConfigProvider = ({ children }) => {
     return summary;
   }, [aiConfig]);
 
-  const testRewriter = useCallback(async (text) => {
+  const testRewriter = useCallback(async (text: string) => {
     if (!aiConfig.aiFeatures?.rewriter?.enabled) {
       throw new Error('Rewriter is disabled in settings');
     }
     // TODO: Implement RewriterServiceProxy
     // For now, return a placeholder message
     return `Rewriter feature coming soon! Input text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`;
+  }, [aiConfig]);
+
+  const testWriter = useCallback(async (prompt: string, options: Record<string, unknown> = {}) => {
+    if (!aiConfig.aiFeatures?.writer?.enabled) {
+      throw new Error('Writer is disabled in settings');
+    }
+    const content = await WriterServiceProxy.write(prompt, options);
+    return content;
   }, [aiConfig]);
 
   // Auto-check Kokoro status on mount and auto-initialize if model is already downloaded
@@ -1011,7 +1135,9 @@ export const ConfigProvider = ({ children }) => {
     
     checkAndAutoInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ttsConfig.enabled, ttsConfig.provider, ttsConfig.kokoro?.keepModelLoaded]);  const value = useMemo(() => ({
+  }, [ttsConfig.enabled, ttsConfig.provider, ttsConfig.kokoro?.keepModelLoaded]);
+
+  const value = useMemo(() => ({
     // Config loading state
     isConfigLoading,
     
@@ -1037,6 +1163,7 @@ export const ConfigProvider = ({ children }) => {
     testLanguageDetector,
     testSummarizer,
     testRewriter,
+    testWriter,
     
     // TTS Config
     ttsConfig,
@@ -1068,7 +1195,7 @@ export const ConfigProvider = ({ children }) => {
     kokoroStatus,
     checkKokoroStatus,
     initializeKokoro,
-  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, testRewriter, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
+  }), [isConfigLoading, uiConfig, uiConfigSaved, uiConfigError, updateUIConfig, saveUIConfig, aiConfig, aiConfigSaved, aiConfigError, aiTesting, updateAIConfig, saveAIConfig, testAIConnection, testTranslator, testLanguageDetector, testSummarizer, testRewriter, testWriter, ttsConfig, ttsConfigSaved, ttsConfigError, ttsTesting, updateTTSConfig, saveTTSConfig, testTTSConnection, sttConfig, sttConfigSaved, sttConfigError, sttTesting, updateSTTConfig, saveSTTConfig, testSTTRecording, chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload, kokoroStatus, checkKokoroStatus, initializeKokoro]);
 
   return (
     <ConfigContext.Provider value={value}>

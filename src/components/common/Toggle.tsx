@@ -1,12 +1,22 @@
 import { cn } from '../../utils/cn';
+import type { ButtonHTMLAttributes } from 'react';
 
-const Toggle = ({ checked, onChange, disabled = false }) => {
+interface ToggleProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  size?: 'sm' | 'default' | 'lg' | string;
+  isLightBackground?: boolean;
+}
+
+const Toggle = ({ checked, onChange, disabled = false, size: _size, isLightBackground: _isLightBackground, ...props }: ToggleProps) => {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       disabled={disabled}
+      {...props}
       onClick={() => !disabled && onChange(!checked)}
       className={cn(
         'relative inline-flex h-4 w-8 items-center rounded-full',

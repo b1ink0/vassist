@@ -2,12 +2,37 @@
  * @fileoverview Chat history panel with infinite scroll, search, and chat management.
  */
 
-import { useState, useEffect, useRef, memo } from 'react'
+import { useState, useEffect, useRef, memo, type ChangeEvent, type UIEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { Icon } from '../icons';
 import { Button, Input } from '../ui';
 import { cn } from '../../utils/cn';
 import chatHistoryService from '../../services/ChatHistoryService';
 import Logger from '../../services/LoggerService';
+
+interface ChatHistoryMessage {
+  role: string;
+  content?: string;
+}
+
+interface ChatHistoryItem {
+  chatId: string;
+  title?: string;
+  messages?: ChatHistoryMessage[];
+  messageCount?: number;
+  updatedAt?: string;
+  createdAt?: string;
+  metadata?: { sourceUrl?: string };
+}
+
+interface ChatHistoryPanelProps {
+  isLightBackground?: boolean;
+  onSelectChat?: ((chat: ChatHistoryItem) => void) | null;
+  onClose?: (() => void) | null;
+  animationClass?: string;
+  onRequestEditDialog?: ((chatId: string, title: string) => void) | null;
+  onRequestDeleteDialog?: ((chatId: string) => void) | null;
+  refreshTrigger?: number;
+}
 
 /**
  * Chat history panel component with infinite scroll and search.
@@ -31,21 +56,21 @@ const ChatHistoryPanel = ({
   onRequestEditDialog = null,
   onRequestDeleteDialog = null,
   refreshTrigger = 0,
-}) => {
-  const [displayedChats, setDisplayedChats] = useState([]);
-  const [filteredChats, setFilteredChats] = useState([]);
+}: ChatHistoryPanelProps) => {
+  const [displayedChats, setDisplayedChats] = useState<ChatHistoryItem[]>([]);
+  const [filteredChats, setFilteredChats] = useState<ChatHistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [topOffset, setTopOffset] = useState(0);
   const [hasMoreAbove, setHasMoreAbove] = useState(false);
   const [hasMoreBelow, setHasMoreBelow] = useState(true);
-  const [deletingChatId, setDeletingChatId] = useState(null);
+  const [deletingChatId] = useState<string | null>(null);
   
-  const containerRef = useRef(null);
-  const scrollRef = useRef(null);
-  const searchInputRef = useRef(null);
-  const scrollTimeoutRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevScrollHeightRef = useRef(0);
   const WINDOW_SIZE = 30;
   const LOAD_SIZE = 5;
@@ -213,7 +238,7 @@ const ChatHistoryPanel = ({
    * 
    * @param {Event} e - Scroll event
    */
-  const handleScroll = async (e) => {
+  const handleScroll = async (e: UIEvent<HTMLDivElement>) => {
     if (searchQuery.trim() !== '') return;
 
     if (scrollTimeoutRef.current) return;
@@ -243,7 +268,7 @@ const ChatHistoryPanel = ({
    * 
    * @param {string} chatId - ID of chat to delete
    */
-  const handleDeleteClick = (chatId) => {
+  const handleDeleteClick = (chatId: string) => {
     if (onRequestDeleteDialog) {
       onRequestDeleteDialog(chatId);
     }
@@ -254,7 +279,7 @@ const ChatHistoryPanel = ({
    * 
    * @param {Object} chat - Chat object
    */
-  const handleEditTitle = (chat) => {
+  const handleEditTitle = (chat: ChatHistoryItem) => {
     if (onRequestEditDialog) {
       onRequestEditDialog(chat.chatId, chat.title || 'Untitled Chat');
     }
@@ -266,7 +291,7 @@ const ChatHistoryPanel = ({
    * @param {string} url - URL to format
    * @returns {string} Formatted URL
    */
-  const formatUrl = (url) => {
+  const formatUrl = (url: string) => {
     try {
       const urlObj = new URL(url);
       return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname.substring(0, 30) : '');
@@ -281,7 +306,7 @@ const ChatHistoryPanel = ({
    * @param {string} isoString - ISO date string
    * @returns {string} Formatted date
    */
-  const formatDate = (isoString) => {
+  const formatDate = (isoString?: string) => {
     if (!isoString) return '';
     const date = new Date(isoString);
     const today = new Date();
@@ -303,10 +328,10 @@ const ChatHistoryPanel = ({
    * @param {Object} chat - Chat object
    * @returns {string} Preview text
    */
-  const getChatPreview = (chat) => {
+  const getChatPreview = (chat: ChatHistoryItem) => {
     if (!chat.messages || chat.messages.length === 0) return 'No messages';
     
-    const firstMsg = chat.messages.find(m => m.role === 'user');
+    const firstMsg = chat.messages.find((m) => m.role === 'user');
     if (firstMsg && firstMsg.content) {
       return firstMsg.content.substring(0, 60) + (firstMsg.content.length > 60 ? '...' : '');
     }
@@ -341,7 +366,7 @@ const ChatHistoryPanel = ({
             type="text"
             placeholder="Search chats..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
             className="w-full pr-8"
           />
           {searchQuery && (
@@ -420,7 +445,7 @@ const ChatHistoryPanel = ({
               <div className="flex-shrink-0 flex gap-1">
                 {/* Edit button */}
                 <Button
-                  onClick={(e) => {
+                  onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
                     e.stopPropagation();
                     handleEditTitle(chat);
                   }}
@@ -433,7 +458,7 @@ const ChatHistoryPanel = ({
 
                 {/* Delete button */}
                 <Button
-                  onClick={(e) => {
+                  onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
                     e.stopPropagation();
                     handleDeleteClick(chat.chatId);
                   }}

@@ -408,6 +408,13 @@ export const AnimationRegistry = {
   ],
 };
 
+type AnimationCategoryName = keyof typeof AnimationRegistry;
+type AssistantStateValue = typeof AssistantState[keyof typeof AssistantState];
+
+function hasOwnKey<T extends object>(obj: T, key: PropertyKey): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 /**
  * Get all animations (flattened from all categories)
  * @returns {Array} Array of all animation configs
@@ -422,14 +429,17 @@ export function getAllAnimations() {
  * @param {string} category - Animation type ('idle', 'thinking', 'walking', 'celebrating', 'talking', etc.)
  * @returns {Array} Array of default animation configs
  */
-export function getAnimationsByCategory(category) {
-  return AnimationRegistry[category] || [];
+export function getAnimationsByCategory(category: string) {
+  if (!hasOwnKey(AnimationRegistry, category)) {
+    return [];
+  }
+  return AnimationRegistry[category];
 }
 
 /**
  * Alias for getAnimationsByCategory (for clarity)
  */
-export function getDefaultAnimationsByCategory(category) {
+export function getDefaultAnimationsByCategory(category: string) {
   return getAnimationsByCategory(category);
 }
 
@@ -438,7 +448,7 @@ export function getDefaultAnimationsByCategory(category) {
  * @param {string} id - Animation ID
  * @returns {Object|null} Animation config or null if not found
  */
-export function getAnimationById(id) {
+export function getAnimationById(id: string) {
   return getAllAnimations().find(anim => anim.id === id) || null;
 }
 
@@ -448,7 +458,7 @@ export function getAnimationById(id) {
  * @param {string} category - Category name ('idle', 'thinking', 'walking', etc.)
  * @returns {Object|null} Random animation config or null if category empty
  */
-export function getRandomAnimation(category) {
+export function getRandomAnimation(category: string) {
   const animations = getAnimationsByCategory(category);
   if (animations.length === 0) return null;
   const randomIndex = Math.floor(Math.random() * animations.length);
@@ -468,11 +478,12 @@ export function getAnimationTypes() {
  * @param {Object} config - Animation config to validate
  * @returns {boolean} True if valid
  */
-export function validateAnimationConfig(config) {
+export function validateAnimationConfig(config: { id?: unknown; filePath?: unknown; category?: unknown } | null | undefined) {
   if (!config) return false;
   if (!config.id || typeof config.id !== 'string') return false;
   if (!config.filePath || typeof config.filePath !== 'string') return false;
-  if (!config.category || !Object.values(AnimationCategory).includes(config.category)) return false;
+  if (!config.category || typeof config.category !== 'string') return false;
+  if (!hasOwnKey(AnimationRegistry, config.category)) return false;
   return true;
 }
 
@@ -681,7 +692,7 @@ export const EmotionMapping = {
  * @param {string} emotion - Emotion string (e.g., 'happy', 'thinking', 'neutral')
  * @returns {Object|null} Animation config for the emotion, or default idle if not found
  */
-export function getAnimationForEmotion(emotion) {
+export function getAnimationForEmotion(emotion: string | null | undefined) {
   if (!emotion) {
     Logger.warn('AnimationConfig', 'No emotion provided, using default (neutral)');
     return getAnimationById(EmotionMapping.default);
@@ -689,13 +700,13 @@ export function getAnimationForEmotion(emotion) {
   
   const normalizedEmotion = emotion.toLowerCase().trim();
   
-  const animationId = EmotionMapping[normalizedEmotion];
-  
-  if (!animationId) {
+  if (!hasOwnKey(EmotionMapping, normalizedEmotion)) {
     Logger.warn('AnimationConfig', `Unknown emotion: "${emotion}", using default (neutral)`);
     Logger.warn('AnimationConfig', `Available emotions: ${Object.keys(EmotionMapping).join(', ')}`);
     return getAnimationById(EmotionMapping.default);
   }
+
+  const animationId = EmotionMapping[normalizedEmotion];
   
   const animation = getAnimationById(animationId);
   
@@ -723,22 +734,22 @@ export function getAvailableEmotions() {
  * @param {string} emotion - Emotion string to validate
  * @returns {boolean} True if emotion is valid
  */
-export function isValidEmotion(emotion) {
+export function isValidEmotion(emotion: unknown) {
   if (!emotion || typeof emotion !== 'string') {
     return false;
   }
   const normalized = emotion.toLowerCase().trim();
-  return normalized in EmotionMapping;
+  return hasOwnKey(EmotionMapping, normalized);
 }
 
 /**
  * Validate and sanitize emotion from LLM output
  * Returns the emotion if valid, otherwise returns 'default'
  * 
- * @param {any} emotion - Emotion from LLM (might be invalid/malformed)
+ * @param {unknown} emotion - Emotion from LLM (might be invalid/malformed)
  * @returns {string} Valid emotion string
  */
-export function sanitizeEmotion(emotion) {
+export function sanitizeEmotion(emotion: unknown): string {
   if (!emotion) {
     Logger.warn('AnimationConfig', 'Emotion is null/undefined, using default');
     return 'default';
@@ -765,9 +776,11 @@ export function sanitizeEmotion(emotion) {
  * @param {string} toState - Target state
  * @returns {boolean} True if transition is allowed
  */
-export function isValidTransition(fromState, toState) {
-  if (!StateTransitions[fromState]) return false;
-  return StateTransitions[fromState].includes(toState);
+export function isValidTransition(fromState: AssistantStateValue, toState: AssistantStateValue) {
+  if (!hasOwnKey(StateTransitions, fromState)) return false;
+  const transitions = StateTransitions[fromState];
+  if (!transitions) return false;
+  return transitions.includes(toState);
 }
 
 /**
@@ -775,7 +788,7 @@ export function isValidTransition(fromState, toState) {
  * @param {string} name - Animation name
  * @returns {Object|null} Animation config or null if not found
  */
-export function getAnimationsByName(name) {
+export function getAnimationsByName(name: string) {
   const allAnimations = getAllAnimations();
   return allAnimations.find(anim => anim.name === name) || null;
 }

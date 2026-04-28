@@ -1,4 +1,5 @@
-import { cva } from 'class-variance-authority';
+import { cva, type VariantProps } from 'class-variance-authority';
+import type { SelectHTMLAttributes } from 'react';
 import { cn } from '../../utils/cn';
 
 const selectVariants = cva('glass-input w-full', {
@@ -11,17 +12,24 @@ const selectVariants = cva('glass-input w-full', {
   defaultVariants: { variant: 'default' },
 });
 
-/**
- * Select component.
- *
- * Pass options via the `options` prop as an array of `{ value, label, disabled? }`.
- * For grouped options, use the `groups` prop: `[{ label, options: [{value, label}] }]`.
- * Do NOT pass <option> children — define data in the parent and pass it down.
- *
- * @param {Array<{value: string|number, label: string, disabled?: boolean}>} [options]
- * @param {Array<{label: string, options: Array<{value: string|number, label: string, disabled?: boolean}>}>} [groups]
- */
-const Select = ({ variant, className, options, groups, ...props }) => (
+interface SelectOption {
+  value: string | number;
+  label: string;
+  disabled?: boolean;
+}
+
+interface SelectGroup {
+  label: string;
+  options: SelectOption[];
+}
+
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement>, VariantProps<typeof selectVariants> {
+  className?: string;
+  options?: SelectOption[];
+  groups?: SelectGroup[];
+}
+
+const Select = ({ variant, className, options, groups, ...props }: SelectProps) => (
   <select className={cn(selectVariants({ variant }), className)} {...props}>
     {groups
       ? groups.map((group) => (

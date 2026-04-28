@@ -2,7 +2,7 @@
  * @fileoverview Chat input component with voice recording, multimodal attachments, and drag-and-drop support.
  */
 
-import { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
+import { useState, useEffect, useRef, forwardRef, useCallback, type RefObject, type FormEvent, type ChangeEvent, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { STTServiceProxy } from '../../services/proxies';
 import { TTSServiceProxy } from '../../services/proxies';
 import VoiceConversationService, { ConversationStates } from '../../services/VoiceConversationService';
@@ -21,6 +21,79 @@ import CameraService from '../../services/CameraService';
 import ScreenShareService from '../../services/ScreenShareService';
 import { cn } from '../../utils/cn';
 
+interface AttachmentItem {
+  dataUrl: string;
+  name: string;
+  size: number;
+  type: 'image' | 'audio';
+}
+
+interface DropData {
+  text?: string;
+  images?: AttachmentItem[];
+  audios?: AttachmentItem[];
+  errors?: string[];
+  autoSend?: boolean;
+}
+
+interface ChatInputProps {
+  onSend?: (message: string, images: string[], audios: string[]) => void;
+  onClose?: () => void;
+  onVoiceTranscription?: (text: string, images: string[] | null) => void;
+  onVoiceMode?: (enabled: boolean) => void;
+}
+
+interface AppContextForChatInput {
+  isChatInputVisible: boolean;
+  pendingDropData: DropData | null;
+  setPendingDropData: (data: DropData | null) => void;
+  isSettingsPanelOpen: boolean;
+  isHistoryPanelOpen: boolean;
+}
+
+interface DesktopIpcLike {
+  send: (channel: string, payload?: unknown) => void;
+  on: <T = unknown>(channel: string, callback: (payload: T) => void) => (() => void) | undefined;
+}
+
+interface DesktopApiLike {
+  ipc?: DesktopIpcLike;
+}
+
+interface DesktopContextForChatInput {
+  api: DesktopApiLike | null;
+}
+
+interface MicStateLike {
+  devices: MediaDeviceInfo[];
+  selectedDeviceId: string | null;
+}
+
+interface CameraStateLike extends MicStateLike {
+  isActive: boolean;
+}
+
+interface ScreenShareStateLike {
+  isActive: boolean;
+}
+
+interface DragDropServiceLike {
+  attach: (element: HTMLElement, callbacks: {
+    onSetDragOver?: (isDragging: boolean) => void;
+    onShowError?: (error: string) => void;
+    checkVoiceMode?: () => boolean;
+    getCurrentCounts?: () => { images: number; audios: number };
+    onProcessData?: (data: DropData) => void;
+  }) => void;
+  detach: () => void;
+}
+
+const dragDropCtor = DragDropService as unknown as new (options: { maxImages: number; maxAudios: number }) => DragDropServiceLike;
+const useDesktopWindowResizeTyped = useDesktopWindowResize as unknown as (
+  containerRef?: RefObject<HTMLElement> | null,
+  options?: { minWidth?: number; minHeight?: number; maxWidth?: number; maxHeight?: number; padding?: number }
+) => void;
+
 /**
  * Chat input component with text, voice, and attachment capabilities.
  * 
@@ -33,7 +106,7 @@ import { cn } from '../../utils/cn';
  * @param {Object} ref - Forwarded ref
  * @returns {JSX.Element} Chat input component
  */
-const ChatInput = forwardRef(({ 
+const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({ 
   onSend, 
   onClose, 
   onVoiceTranscription, 
@@ -45,23 +118,23 @@ const ChatInput = forwardRef(({
     setPendingDropData,
     isSettingsPanelOpen,
     isHistoryPanelOpen,
-  } = useApp();
+  }: AppContextForChatInput = useApp();
   
   const { uiConfig } = useConfig();
-  const { api } = useDesktop();
+  const { api } = useDesktop() as DesktopContextForChatInput;
   
   // Local state for input window (synced from main window)
-  const [localPendingDropData, setLocalPendingDropData] = useState(null);
+  const [localPendingDropData, setLocalPendingDropData] = useState<DropData | null>(null);
   const [localIsVisible, _setLocalIsVisible] = useState(true); // Input window is always visible when open
   
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
   const [recordingError, setRecordingError] = useState('');
-  const textareaRef = useRef(null);
-  const submitButtonRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const submitButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(isInputWindow ? true : isVisible);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -79,8 +152,14 @@ const ChatInput = forwardRef(({
   useEffect(() => {
     if (!isAndroid) return;
     
-    const handleKeyboardHeight = (event) => {
-      const { height } = event.detail;
+    const handleKeyboardHeight = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+        return;
+      }
+      const { height } = event.detail as { height?: number };
+      if (typeof height !== 'number') {
+        return;
+      }
       Logger.log('ChatInput', `Native keyboard height: ${height}px`);
       setKeyboardOffset(height);
     };
@@ -95,22 +174,22 @@ const ChatInput = forwardRef(({
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
   
-  const [attachedImages, setAttachedImages] = useState([]);
-  const [attachedAudios, setAttachedAudios] = useState([]);
-  const imageInputRef = useRef(null);
-  const audioInputRef = useRef(null);
+  const [attachedImages, setAttachedImages] = useState<AttachmentItem[]>([]);
+  const [attachedAudios, setAttachedAudios] = useState<AttachmentItem[]>([]);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   
   const [isDragOver, setIsDragOver] = useState(false);
-  const dragDropServiceRef = useRef(null);
+  const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
 
   // Microphone selection state
-  const [micDevices, setMicDevices] = useState([]);
-  const [selectedMicId, setSelectedMicId] = useState(null);
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [showMicSelect, setShowMicSelect] = useState(false);
 
   // Camera selection state
-  const [cameraDevices, setCameraDevices] = useState([]);
-  const [selectedCameraId, setSelectedCameraId] = useState(null);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [showCameraSelect, setShowCameraSelect] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   
@@ -118,25 +197,25 @@ const ChatInput = forwardRef(({
   const [isScreenShareActive, setIsScreenShareActive] = useState(false);
 
   // IPC wrapper functions for input window
-  const wrappedOnSend = useCallback((message, images, audios) => {
+  const wrappedOnSend = useCallback((messageText: string, images: string[], audios: string[]) => {
     if (isInputWindow) {
-      api?.ipc.send('chatInput:send', { message, images, audios });
+      api?.ipc?.send('chatInput:send', { message: messageText, images, audios });
     } else {
-      onSend(message, images, audios);
+      onSend?.(messageText, images, audios);
     }
   }, [onSend, api]);
 
-  const wrappedOnVoiceTranscription = useCallback((text, images) => {
+  const wrappedOnVoiceTranscription = useCallback((text: string, images: string[] | null) => {
     if (isInputWindow) {
-      api?.ipc.send('chatInput:voiceTranscription', { text, images });
+      api?.ipc?.send('chatInput:voiceTranscription', { text, images });
     } else {
-      onVoiceTranscription(text, images);
+      onVoiceTranscription?.(text, images);
     }
   }, [onVoiceTranscription, api]);
 
-  const wrappedSetPendingDropData = useCallback((data) => {
+  const wrappedSetPendingDropData = useCallback((data: DropData | null) => {
     if (isInputWindow) {
-      api?.ipc.send('chatInput:setPendingDropData', data);
+      api?.ipc?.send('chatInput:setPendingDropData', data);
     } else {
       setPendingDropData(data);
     }
@@ -144,9 +223,9 @@ const ChatInput = forwardRef(({
 
   const wrappedOnClose = useCallback(() => {
     if (isInputWindow) {
-      api?.ipc.send('chatInput:close');
+      api?.ipc?.send('chatInput:close');
     } else {
-      onClose();
+      onClose?.();
     }
   }, [onClose, api]);
 
@@ -173,26 +252,26 @@ const ChatInput = forwardRef(({
 
     api.ipc.send('mic:requestState');
 
-    const unsubscribePendingDrop = api.ipc.on('state:pendingDropData', (data) => {
+    const unsubscribePendingDrop = api.ipc.on<DropData | null>('state:pendingDropData', (data) => {
       setLocalPendingDropData(data);
     });
 
-    const unsubscribeMicDevices = api.ipc.on('state:micDevices', (data) => {
+    const unsubscribeMicDevices = api.ipc.on<MicStateLike>('state:micDevices', (data) => {
       setMicDevices(data.devices);
       setSelectedMicId(data.selectedDeviceId);
     });
 
-    const unsubscribeSelectedMic = api.ipc.on('state:selectedMicId', (deviceId) => {
+    const unsubscribeSelectedMic = api.ipc.on<string | null>('state:selectedMicId', (deviceId) => {
       MicrophoneService.setSelectedDevice(deviceId);
     });
 
     // Listen for voice state changes from main window
-    const unsubscribeVoiceState = api.ipc.on('state:voiceState', (state) => {
+    const unsubscribeVoiceState = api.ipc.on<string>('state:voiceState', (state) => {
       Logger.log('ChatInput', 'Voice state received from main window:', state);
       setVoiceState(state);
     });
 
-    const unsubscribeTranscription = api.ipc.on('voice:transcriptionReceived', (text) => {
+    const unsubscribeTranscription = api.ipc.on<string>('voice:transcriptionReceived', (text) => {
       Logger.log('ChatInput', 'Transcription received from main window:', text);
       
       const images = attachedImages.length > 0 
@@ -201,12 +280,12 @@ const ChatInput = forwardRef(({
       
       Logger.log('ChatInput', 'Sending back to main window with images:', images.length);
       
-      api.ipc.send('chatInput:voiceTranscription', { text, images });
+      api.ipc?.send('chatInput:voiceTranscription', { text, images });
       
       setAttachedImages([]);
     });
 
-    const unsubscribeSttTranscription = api.ipc.on('stt:transcriptionReceived', (text) => {
+    const unsubscribeSttTranscription = api.ipc.on<string>('stt:transcriptionReceived', (text) => {
       if (typeof text !== 'string' || text.trim().length === 0) {
         return;
       }
@@ -227,7 +306,7 @@ const ChatInput = forwardRef(({
       }
     });
 
-    const unsubscribeSttRecording = api.ipc.on('state:sttRecording', (payload = {}) => {
+    const unsubscribeSttRecording = api.ipc.on<{ isRecording?: boolean; isProcessing?: boolean; error?: string }>('state:sttRecording', (payload = {}) => {
       setIsRecording(Boolean(payload.isRecording));
       setIsProcessingRecording(Boolean(payload.isProcessing));
       if (payload.error) {
@@ -263,9 +342,9 @@ const ChatInput = forwardRef(({
   useEffect(() => {
     if (!effectiveIsVisible) return;
     
-    let detectionTimeout = null;
-    let scrollTimeout = null;
-    let intervalId = null;
+    let detectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     
     const detectBackgroundBrightness = () => {
       const mode = uiConfig?.backgroundDetection?.mode || 'adaptive';
@@ -319,7 +398,9 @@ const ChatInput = forwardRef(({
     
     // Debounced scroll handler - longer delay to avoid performance issues
     const handleScroll = () => {
-      clearTimeout(scrollTimeout);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       scrollTimeout = setTimeout(detectBackgroundBrightness, 500);
     };
     
@@ -327,14 +408,20 @@ const ChatInput = forwardRef(({
     intervalId = setInterval(detectBackgroundBrightness, 4000);
 
     return () => {
-      clearTimeout(detectionTimeout);
-      clearTimeout(scrollTimeout);
+      if (detectionTimeout) {
+        clearTimeout(detectionTimeout);
+      }
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       window.removeEventListener('scroll', handleScroll, true);
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, [effectiveIsVisible, uiConfig?.backgroundDetection?.mode]);
 
-  useDesktopWindowResize(isInputWindow ? containerRef : null, {
+  useDesktopWindowResizeTyped(isInputWindow ? (containerRef as unknown as RefObject<HTMLElement>) : null, {
     minWidth: 400,
     minHeight: 100,
     maxWidth: 800,
@@ -359,7 +446,7 @@ const ChatInput = forwardRef(({
   }, [message]);
 
   useEffect(() => {
-    STTServiceProxy.setTranscriptionCallback((text) => {
+    STTServiceProxy.setTranscriptionCallback((text: string) => {
       Logger.log('ChatInput', 'Transcription received:', text);
       setMessage(text);
       setRecordingError('');
@@ -370,9 +457,10 @@ const ChatInput = forwardRef(({
       }
     });
 
-    STTServiceProxy.setErrorCallback((error) => {
+    STTServiceProxy.setErrorCallback((error: { message?: string } | string) => {
       Logger.error('ChatInput', 'STT error:', error);
-      setRecordingError(error.message || 'Recording failed');
+      const errorMessage = typeof error === 'string' ? error : (error?.message || 'Recording failed');
+      setRecordingError(errorMessage);
       setIsRecording(false);
       setIsProcessingRecording(false);
     });
@@ -399,7 +487,7 @@ const ChatInput = forwardRef(({
   }, []);
 
   useEffect(() => {
-    const handleStateChange = (state) => {
+    const handleStateChange = (state: string) => {
       Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
       
@@ -407,7 +495,7 @@ const ChatInput = forwardRef(({
       // Input window receives state via IPC (state:voiceState)
     };
 
-    const handleTranscription = (text) => {
+    const handleTranscription = (text: string) => {
       Logger.log('ChatInput', 'Voice transcription:', text, 'with images:', attachedImages.length);
       Logger.log('ChatInput', 'Attached images details:', attachedImages);
       
@@ -422,9 +510,10 @@ const ChatInput = forwardRef(({
       setAttachedImages([]);
     };
 
-    const handleError = (error) => {
+    const handleError = (error: { message?: string } | string) => {
       Logger.error('ChatInput', 'Voice error:', error);
-      setRecordingError(error.message || 'Voice conversation error');
+      const errorMessage = typeof error === 'string' ? error : (error?.message || 'Voice conversation error');
+      setRecordingError(errorMessage);
     };
 
     // Input window: Gets state via IPC (line 146-173), doesn't register callbacks
@@ -451,7 +540,7 @@ const ChatInput = forwardRef(({
       return;
     }
 
-    const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }) => {
+    const unsubscribe = MicrophoneService.subscribe(({ devices, selectedDeviceId }: MicStateLike) => {
       setMicDevices(devices);
       setSelectedMicId(selectedDeviceId);
     });
@@ -485,7 +574,7 @@ const ChatInput = forwardRef(({
 
       // Listen for camera state from main window
       if (api?.ipc) {
-        const unsubscribeCameraDevices = api.ipc.on('state:cameraDevices', (data) => {
+        const unsubscribeCameraDevices = api.ipc.on<CameraStateLike>('state:cameraDevices', (data) => {
           didReceiveIpcCameraState = true;
           Logger.log('ChatInput', 'Input window: Received camera state via IPC:', data);
           setCameraDevices(data.devices);
@@ -507,14 +596,14 @@ const ChatInput = forwardRef(({
             setCameraDevices(localDevices);
             setSelectedCameraId(CameraService.getSelectedDeviceId());
             setIsCameraActive(CameraService.isRunning());
-          } catch (error) {
+          } catch (error: unknown) {
             Logger.error('ChatInput', 'Input window: Local camera fallback failed:', error);
           }
         }, 1500);
         
         return () => {
           clearTimeout(fallbackTimer);
-          unsubscribeCameraDevices();
+          unsubscribeCameraDevices?.();
         };
       }
       return;
@@ -526,7 +615,7 @@ const ChatInput = forwardRef(({
     }
 
     Logger.log('ChatInput', 'Main window: Setting up CameraService subscription');
-    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }) => {
+    const unsubscribe = CameraService.subscribe(({ devices, selectedDeviceId, isActive }: CameraStateLike) => {
       Logger.log('ChatInput', 'CameraService state changed:', { devices: devices.length, selectedDeviceId, isActive });
       setCameraDevices(devices);
       setSelectedCameraId(selectedDeviceId);
@@ -543,7 +632,7 @@ const ChatInput = forwardRef(({
           Logger.log('ChatInput', 'Web/Android: Refreshing camera devices without permission prompt...');
           await CameraService.refreshDevices();
         }
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('ChatInput', 'Main window: Camera device refresh failed:', error);
       }
     };
@@ -560,13 +649,13 @@ const ChatInput = forwardRef(({
     if (isInputWindow) {
       Logger.log('ChatInput', 'Input window: Setting up IPC listener for screen share state');
       if (api?.ipc) {
-        const unsubscribeScreenShare = api.ipc.on('state:screenShare', (data) => {
+        const unsubscribeScreenShare = api.ipc.on<ScreenShareStateLike>('state:screenShare', (data) => {
           Logger.log('ChatInput', 'Input window: Received screen share state via IPC:', data);
           setIsScreenShareActive(data.isActive);
         });
         
         return () => {
-          unsubscribeScreenShare();
+          unsubscribeScreenShare?.();
         };
       }
       return;
@@ -579,7 +668,7 @@ const ChatInput = forwardRef(({
     }
 
     Logger.log('ChatInput', 'Web/Desktop/Extension: Setting up ScreenShareService subscription');
-    const unsubscribe = ScreenShareService.subscribe(({ isActive }) => {
+    const unsubscribe = ScreenShareService.subscribe(({ isActive }: ScreenShareStateLike) => {
       Logger.log('ChatInput', 'ScreenShareService state changed:', { isActive });
       setIsScreenShareActive(isActive);
     });
@@ -589,7 +678,7 @@ const ChatInput = forwardRef(({
         Logger.log('ChatInput', 'Web/Desktop/Extension: Initializing ScreenShareService...');
         await ScreenShareService.initialize();
         Logger.log('ChatInput', 'Web/Desktop/Extension: ScreenShareService initialized successfully');
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('ChatInput', 'Web/Desktop/Extension: Screen share initialization failed:', error);
       }
     };
@@ -606,7 +695,7 @@ const ChatInput = forwardRef(({
 
     Logger.log('ChatInput', 'Main window: Setting up camera IPC listeners');
     
-    const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId) => {
+    const unsubscribeSelectDevice = api.ipc.on<string | null>('camera:selectDevice', async (deviceId) => {
       Logger.log('ChatInput', 'Main window: Received IPC camera:selectDevice:', deviceId);
       await CameraService.setSelectedDevice(deviceId);
     });
@@ -623,8 +712,8 @@ const ChatInput = forwardRef(({
 
     return () => {
       Logger.log('ChatInput', 'Main window: Cleaning up camera IPC listeners');
-      unsubscribeSelectDevice();
-      unsubscribeToggle();
+      unsubscribeSelectDevice?.();
+      unsubscribeToggle?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, isInputWindow, isCameraActive]);
@@ -653,13 +742,14 @@ const ChatInput = forwardRef(({
             api.ipc.send('chatInput:voiceMode', true);
           } else {
             await VoiceConversationService.start();
-            if (onVoiceMode) onVoiceMode(true);
+            onVoiceMode?.(true);
           }
           
           setIsVoiceMode(true);
-        } catch (error) {
+        } catch (error: unknown) {
           Logger.error('ChatInput', 'Voice mode start error:', error);
-          setRecordingError(error.message || 'Failed to start voice mode');
+          const errorMessage = error instanceof Error ? error.message : 'Failed to start voice mode';
+          setRecordingError(errorMessage);
           setTimeout(() => setRecordingError(''), 3000);
           setIsVoiceMode(false);
         }
@@ -677,7 +767,7 @@ const ChatInput = forwardRef(({
    * 
    * @param {Object} dropData - Drop data containing text, images, audios, and errors
    */
-  const processDropData = useCallback((dropData) => {
+  const processDropData = useCallback((dropData: DropData | null) => {
     if (!dropData) return;
 
     const { text, images, audios, errors } = dropData;
@@ -690,7 +780,7 @@ const ChatInput = forwardRef(({
     });
 
     if (errors && errors.length > 0) {
-      setRecordingError(errors[0]);
+      setRecordingError(errors[0] || 'Attachment processing failed');
       setTimeout(() => setRecordingError(''), 3000);
     }
 
@@ -737,7 +827,7 @@ const ChatInput = forwardRef(({
    * 
    * @param {Event} e - Submit event
    */
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback((e?: Event | FormEvent<HTMLFormElement>) => {
     if (e) e.preventDefault();
     
     const trimmedMessage = message.trim();
@@ -772,9 +862,12 @@ const ChatInput = forwardRef(({
   }, [message, attachedImages, attachedAudios, wrappedOnSend]);
 
   useEffect(() => {
-    const handleChatDragDrop = (e) => {
+    const handleChatDragDrop = (e: Event) => {
+      if (!(e instanceof CustomEvent)) {
+        return;
+      }
       if (!effectiveIsVisible || isVoiceMode) return;
-      processDropData(e.detail);
+      processDropData((e.detail as DropData) || null);
       
       // Handle auto-send if requested
       if (e.detail?.autoSend) {
@@ -840,8 +933,8 @@ const ChatInput = forwardRef(({
    * 
    * @param {Event} e - Change event
    */
-  const handleImageSelect = (e) => {
-    const files = Array.from(e.target.files);
+  const handleImageSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
     const MAX_IMAGES = 5;
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     
@@ -852,7 +945,7 @@ const ChatInput = forwardRef(({
       return;
     }
     
-    files.forEach(file => {
+    files.forEach((file: File) => {
       if (!file.type.startsWith('image/')) {
         setRecordingError('Please select only image files');
         setTimeout(() => setRecordingError(''), 3000);
@@ -866,11 +959,15 @@ const ChatInput = forwardRef(({
       }
       
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = (event: ProgressEvent<FileReader>) => {
+        const result = event.target?.result;
+        if (typeof result !== 'string') {
+          return;
+        }
         setAttachedImages(prev => {
           if (prev.length >= MAX_IMAGES) return prev;
           return [...prev, {
-            dataUrl: event.target.result,
+            dataUrl: result,
             name: file.name,
             size: file.size,
             type: 'image'
@@ -892,8 +989,8 @@ const ChatInput = forwardRef(({
    * 
    * @param {Event} e - Change event
    */
-  const handleAudioSelect = (e) => {
-    const files = Array.from(e.target.files);
+  const handleAudioSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
     const MAX_AUDIOS = 3;
     const MAX_FILE_SIZE = 25 * 1024 * 1024;
     
@@ -904,7 +1001,7 @@ const ChatInput = forwardRef(({
       return;
     }
     
-    files.forEach(file => {
+    files.forEach((file: File) => {
       if (!file.type.startsWith('audio/')) {
         setRecordingError('Please select only audio files');
         setTimeout(() => setRecordingError(''), 3000);
@@ -918,11 +1015,15 @@ const ChatInput = forwardRef(({
       }
       
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = (event: ProgressEvent<FileReader>) => {
+        const result = event.target?.result;
+        if (typeof result !== 'string') {
+          return;
+        }
         setAttachedAudios(prev => {
           if (prev.length >= MAX_AUDIOS) return prev;
           return [...prev, {
-            dataUrl: event.target.result,
+            dataUrl: result,
             name: file.name,
             size: file.size,
             type: 'audio'
@@ -944,7 +1045,7 @@ const ChatInput = forwardRef(({
    * 
    * @param {number} index - Index of image to remove
    */
-  const handleRemoveImage = (index) => {
+  const handleRemoveImage = (index: number) => {
     setAttachedImages(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -953,7 +1054,7 @@ const ChatInput = forwardRef(({
    * 
    * @param {number} index - Index of audio to remove
    */
-  const handleRemoveAudio = (index) => {
+  const handleRemoveAudio = (index: number) => {
     setAttachedAudios(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -962,7 +1063,7 @@ const ChatInput = forwardRef(({
    * 
    * @param {KeyboardEvent} e - Keyboard event
    */
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape') {
       Logger.log('ChatInput', 'Escape pressed - closing');
       wrappedOnClose();
@@ -972,7 +1073,7 @@ const ChatInput = forwardRef(({
     }
   };
 
-  const handlePaste = (e) => {
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData.items);
     const imageItems = items.filter(item => item.type.startsWith('image/'));
     
@@ -989,7 +1090,7 @@ const ChatInput = forwardRef(({
       return;
     }
     
-    imageItems.forEach(item => {
+    imageItems.forEach((item: DataTransferItem) => {
       const file = item.getAsFile();
       if (!file) return;
       
@@ -1000,11 +1101,15 @@ const ChatInput = forwardRef(({
       }
       
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = (event: ProgressEvent<FileReader>) => {
+        const result = event.target?.result;
+        if (typeof result !== 'string') {
+          return;
+        }
         setAttachedImages(prev => {
           if (prev.length >= MAX_IMAGES) return prev;
           return [...prev, {
-            dataUrl: event.target.result,
+            dataUrl: result,
             name: `pasted-${Date.now()}.png`,
             size: file.size,
             type: 'image'
@@ -1041,14 +1146,14 @@ const ChatInput = forwardRef(({
 
       Logger.log('ChatInput', 'Setting up drag-drop service');
 
-      dragDropServiceRef.current = new DragDropService({
+      dragDropServiceRef.current = new dragDropCtor({
         maxImages: 3,
         maxAudios: 1
       });
 
       dragDropServiceRef.current.attach(containerRef.current, {
-        onSetDragOver: (isDragging) => setIsDragOver(isDragging),
-        onShowError: (error) => {
+        onSetDragOver: (isDragging: boolean) => setIsDragOver(isDragging),
+        onShowError: (error: string) => {
           setRecordingError(error);
           setTimeout(() => setRecordingError(''), 3000);
         },
@@ -1057,7 +1162,7 @@ const ChatInput = forwardRef(({
           images: attachedImages.length,
           audios: attachedAudios.length
         }),
-        onProcessData: (data) => {
+        onProcessData: (data: DropData) => {
           const { text, images, audios } = data;
           
           if (text && text.trim()) {
@@ -1154,9 +1259,10 @@ const ChatInput = forwardRef(({
         
         setIsVoiceMode(true);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('ChatInput', 'Voice mode toggle error:', error);
-      setRecordingError(error.message || 'Failed to start voice mode');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start voice mode';
+      setRecordingError(errorMessage);
       setTimeout(() => setRecordingError(''), 3000);
       setIsVoiceMode(false);
     }
@@ -1180,7 +1286,7 @@ const ChatInput = forwardRef(({
   /**
    * Handles microphone device selection
    */
-  const handleMicSelect = (deviceId) => {
+  const handleMicSelect = (deviceId: string | null) => {
     Logger.log('ChatInput', 'Microphone selected:', deviceId);
     MicrophoneService.setSelectedDevice(deviceId || null);
     setShowMicSelect(false);
@@ -1201,7 +1307,7 @@ const ChatInput = forwardRef(({
   /**
    * Handles camera device selection
    */
-  const handleCameraSelect = async (deviceId) => {
+  const handleCameraSelect = async (deviceId: string | null) => {
     Logger.log('ChatInput', 'Camera selected:', deviceId);
     
     if (isInputWindow && api?.ipc) {
@@ -1238,7 +1344,7 @@ const ChatInput = forwardRef(({
           await CameraService.start();
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('ChatInput', 'Camera toggle error:', error);
     }
   };
@@ -1263,7 +1369,7 @@ const ChatInput = forwardRef(({
       } else {
         await ScreenShareService.start();
       }
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('ChatInput', 'Screen share toggle error:', error);
     }
   };
@@ -1309,9 +1415,10 @@ const ChatInput = forwardRef(({
         setRecordingError('');
         await STTServiceProxy.startRecording();
       }
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('ChatInput', 'Microphone error:', error);
-      setRecordingError(error.message || 'Microphone access denied');
+      const errorMessage = error instanceof Error ? error.message : 'Microphone access denied';
+      setRecordingError(errorMessage);
       setTimeout(() => setRecordingError(''), 3000);
       setIsRecording(false);
       setIsProcessingRecording(false);
@@ -1407,7 +1514,7 @@ const ChatInput = forwardRef(({
                       <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     </Button>
                     <div className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs mt-1 text-center truncate w-16')} title={img.name}>
-                      {img.name.split('.')[0].substring(0, 8)}
+                      {(img.name.split('.')[0] || '').substring(0, 8)}
                     </div>
                   </div>
                 ))}
@@ -1428,7 +1535,7 @@ const ChatInput = forwardRef(({
                       <Icon name="close" size={10} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
                     </Button>
                     <div className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-xs mt-1 text-center truncate w-16')} title={audio.name}>
-                      {audio.name.split('.')[0].substring(0, 8)}
+                      {(audio.name.split('.')[0] || '').substring(0, 8)}
                     </div>
                   </div>
                 ))}

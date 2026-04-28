@@ -2,15 +2,36 @@
  * @fileoverview Hook to resize desktop window based on container size
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useDesktop } from '../contexts/DesktopContext';
 import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
 
-export function useDesktopWindowResize(containerRef = null, options = {}) {
-  const { isChatContainerVisible, positionManagerRef } = useApp();
+interface DesktopResizeOptions {
+  minWidth?: number;
+  minHeight?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  padding?: number;
+  windowPadding?: number;
+}
+
+interface PositionManagerRefValue {
+  canvasWidth?: number;
+  canvasHeight?: number;
+}
+
+export function useDesktopWindowResize(
+  containerRef: RefObject<HTMLElement | null> | null = null,
+  options: DesktopResizeOptions = {}
+): void {
+  const appContext = useApp();
+  const isChatContainerVisible = typeof appContext?.isChatContainerVisible === 'boolean'
+    ? appContext.isChatContainerVisible
+    : false;
+  const positionManagerRef = appContext?.positionManagerRef;
   const { api } = useDesktop();
-  const observerRef = useRef(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
   const DEFAULT_MAIN_WINDOW_WIDTH = 400;
   const DEFAULT_MAIN_WINDOW_HEIGHT = 525;
   
@@ -35,7 +56,7 @@ export function useDesktopWindowResize(containerRef = null, options = {}) {
       const width = canvasWidth + chatContainerWidth + (isChatContainerVisible ? windowPadding : 0);
       const height = canvasHeight + (isChatContainerVisible ? windowPadding : 0);
       
-      api.window.setSize(width, height);
+      void api.window.setSize(width, height);
       return;
     }
     
@@ -51,7 +72,7 @@ export function useDesktopWindowResize(containerRef = null, options = {}) {
       width = Math.max(minWidth, Math.min(maxWidth, width));
       height = Math.max(minHeight, Math.min(maxHeight, height));
 
-      api.window.setSize(width, height);
+      void api.window.setSize(width, height);
     };
     
     resizeWindow();

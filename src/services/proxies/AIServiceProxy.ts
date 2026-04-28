@@ -12,10 +12,51 @@ import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultAIConfig } from '../../config/aiConfig';
 
+interface AIServiceLike {
+  configure(config: unknown): Promise<unknown> | unknown;
+  isConfigured(): boolean;
+  getCurrentProvider(): string | null;
+  sendMessage(messages: AIMessage[], onStream?: ((chunk: string) => void) | null, signal?: AbortSignal | null, options?: Record<string, unknown>): Promise<AIServiceResponse>;
+  sendMessageSync(messages: AIMessage[]): Promise<string>;
+  abortRequest(): boolean;
+  isGenerating(): boolean;
+  testConnection(): Promise<boolean>;
+  [method: string]: unknown;
+}
+
+interface AIProxyConfig {
+  provider?: string;
+  [key: string]: unknown;
+}
+
+interface AIMessage {
+  role: string;
+  content: unknown;
+  [key: string]: unknown;
+}
+
+interface AIServiceResponse {
+  success: boolean;
+  response: string | null;
+  cancelled: boolean;
+  error: unknown;
+}
+
+interface BridgeAIResponse {
+  success?: boolean;
+  response?: string;
+  text?: string;
+  message?: string;
+  supported?: boolean;
+}
+
 class AIServiceProxy extends ServiceProxy {
+  private directService: AIServiceLike;
+  private _configuring: boolean;
+
   constructor() {
     super('AIService');
-    this.directService = AIService;
+    this.directService = AIService as unknown as AIServiceLike;
     this._configuring = false;
   }
 
@@ -31,7 +72,7 @@ class AIServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const aiConfig = ((await StorageServiceProxy.configLoad('aiConfig')) as AIProxyConfig | null) ?? (DefaultAIConfig as AIProxyConfig);
       
       if (aiConfig && aiConfig.provider) {
         Logger.log('AIServiceProxy', 'Auto-configuring from storage...');
@@ -46,7 +87,7 @@ class AIServiceProxy extends ServiceProxy {
    * Configure AI client with provider settings
    * @param {Object} config - AI configuration
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
@@ -60,13 +101,13 @@ class AIServiceProxy extends ServiceProxy {
    * Check if service is configured and ready
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.AI_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.AI_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -95,7 +136,7 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Object} options - Additional options { useUtilitySession: boolean }
    * @returns {Promise<string>} Full response text
    */
-  async sendMessage(messages, onStream = null, options = {}) {
+  async sendMessage(messages: AIMessage[], onStream: ((chunk: string) => void) | null = null, options: Record<string, unknown> = {}): Promise<AIServiceResponse> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -114,7 +155,7 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Object} options - Additional options { useUtilitySession: boolean }
    * @returns {Promise<{success: boolean, response: string, cancelled: boolean, error: Error|null}>} Result object
    */
-  async sendMessageViabridge(messages, onStream, options = {}) {
+  async sendMessageViabridge(messages: AIMessage[], onStream: ((chunk: string) => void) | null, options: Record<string, unknown> = {}): Promise<AIServiceResponse> {
     const bridge = await this.waitForBridge();
     if (!bridge) {
       throw new Error('AIServiceProxy: Bridge not available');
@@ -124,11 +165,14 @@ class AIServiceProxy extends ServiceProxy {
       if (onStream) {
         // Streaming mode - use AI_SEND_MESSAGE (background handler supports streaming)
         let fullResponse = '';
+        if (!bridge.sendStreamingMessage) {
+          throw new Error('AIServiceProxy: Streaming bridge is not available');
+        }
         
         await bridge.sendStreamingMessage(
           MessageTypes.AI_SEND_MESSAGE,
           { messages, options: { ...options, streaming: true } }, // Mark as streaming request
-          (chunk) => {
+          (chunk: string) => {
             fullResponse += chunk;
             onStream(chunk);
           },
@@ -143,16 +187,21 @@ class AIServiceProxy extends ServiceProxy {
           MessageTypes.AI_SEND_MESSAGE,
           { messages, options: { ...options, streaming: false } }, // Mark as non-streaming request
           { timeout: 60000 } // 1 minute timeout
-        );
+        ) as BridgeAIResponse;
         
         // Return in same format as AIService.sendMessage()
         if (response?.success === false) {
-          return response; // Already in correct format from background
+          return {
+            success: false,
+            response: response.response ?? null,
+            cancelled: false,
+            error: response.message ? new Error(response.message) : null
+          };
         }
         
         return { success: true, response: response?.response || '', cancelled: false, error: null };
       }
-    } catch (error) {
+    } catch (error: unknown) {
       // Return error in same format as AIService
       return { success: false, response: null, cancelled: false, error };
     }
@@ -163,7 +212,7 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Array} messages - Array of message objects
    * @returns {Promise<string>} Full response text
    */
-  async sendMessageSync(messages) {
+  async sendMessageSync(messages: AIMessage[]): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -173,7 +222,7 @@ class AIServiceProxy extends ServiceProxy {
         MessageTypes.AI_SEND_MESSAGE,
         { messages },
         { timeout: 60000 }
-      );
+      ) as BridgeAIResponse;
       return response.text || '';
     } else {
       return await this.directService.sendMessageSync(messages);
@@ -183,13 +232,13 @@ class AIServiceProxy extends ServiceProxy {
   /**
    * Abort the current ongoing request
    */
-  async abortRequest() {
+  async abortRequest(): Promise<boolean> {
     if (this.isExtension) {
       // Send abort message to background
       const bridge = await this.waitForBridge();
       if (bridge) {
         bridge.sendMessage(MessageTypes.AI_ABORT, {})
-          .catch(error => {
+          .catch((error: unknown) => {
             Logger.warn('AIServiceProxy', 'Abort failed:', error);
           });
       }
@@ -217,7 +266,7 @@ class AIServiceProxy extends ServiceProxy {
    * Test connection to configured provider
    * @returns {Promise<boolean>} True if connection successful
    */
-  async testConnection() {
+  async testConnection(): Promise<boolean> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -227,8 +276,8 @@ class AIServiceProxy extends ServiceProxy {
         MessageTypes.AI_TEST_CONNECTION,
         {},
         { timeout: 30000 }
-      );
-      return response.success || false;
+      ) as BridgeAIResponse;
+      return response.success === true;
     } else {
       return await this.directService.testConnection();
     }
@@ -238,7 +287,7 @@ class AIServiceProxy extends ServiceProxy {
    * Check Chrome AI availability
    * @returns {Promise<Object>} Availability result object
    */
-  async checkChromeAIAvailability() {
+  async checkChromeAIAvailability(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
@@ -259,7 +308,7 @@ class AIServiceProxy extends ServiceProxy {
    * Check if Chrome AI is supported
    * @returns {Promise<boolean>} True if supported
    */
-  async isChromeAISupported() {
+  async isChromeAISupported(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
@@ -267,8 +316,8 @@ class AIServiceProxy extends ServiceProxy {
         MessageTypes.CHROME_AI_IS_SUPPORTED,
         {},
         { timeout: 5000 }
-      );
-      return response.supported || false;
+      ) as BridgeAIResponse;
+      return response.supported === true;
     } else {
       const ChromeAIValidator = (await import('../ChromeAIValidator')).default;
       return ChromeAIValidator.isSupported();
@@ -280,7 +329,7 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Function} onProgress - Progress callback
    * @returns {Promise<Object>} Download result
    */
-  async startChromeAIDownload(onProgress) {
+  async startChromeAIDownload(onProgress?: (progress: unknown) => void): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('AIServiceProxy: Bridge not available');
@@ -288,12 +337,13 @@ class AIServiceProxy extends ServiceProxy {
       // Set up message listener for progress updates via bridge
       let progressListener = null;
       if (onProgress) {
-        progressListener = (message) => {
-          if (message.type === MessageTypes.CHROME_AI_DOWNLOAD_PROGRESS && message.data) {
-            onProgress(message.data);
+        progressListener = (message: unknown) => {
+          const typedMessage = message as { type?: string; data?: unknown };
+          if (typedMessage.type === MessageTypes.CHROME_AI_DOWNLOAD_PROGRESS && typedMessage.data) {
+            onProgress(typedMessage.data);
           }
         };
-        bridge.addMessageListener(progressListener);
+        bridge.addMessageListener?.(progressListener);
       }
       
       try {
@@ -302,7 +352,7 @@ class AIServiceProxy extends ServiceProxy {
           MessageTypes.CHROME_AI_START_DOWNLOAD,
           {},
           { timeout: 300000 } // 5 minutes for download
-        );
+        ) as BridgeAIResponse;
 
         if (!response.success) {
           throw new Error(response.message || 'Failed to start download');
@@ -310,7 +360,7 @@ class AIServiceProxy extends ServiceProxy {
         return response;
       } finally {
         if (progressListener) {
-          bridge.removeMessageListener(progressListener);
+          bridge.removeMessageListener?.(progressListener);
         }
       }
     } else {
@@ -324,16 +374,16 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Function} onProgress - Progress callback
    * @returns {Promise<Object>} Download result
    */
-  async downloadChromeAIModel(onProgress) {
+  async downloadChromeAIModel(onProgress?: (progress: unknown) => void): Promise<unknown> {
     return await this.startChromeAIDownload(onProgress);
   }
 
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
     // Map method names to message types
-    const methodMap = {
+    const methodMap: Record<'configure' | 'sendMessage' | 'sendMessageSync' | 'abortRequest' | 'testConnection', string> = {
       configure: MessageTypes.AI_CONFIGURE,
       sendMessage: MessageTypes.AI_SEND_MESSAGE,
       sendMessageSync: MessageTypes.AI_SEND_MESSAGE,
@@ -341,7 +391,7 @@ class AIServiceProxy extends ServiceProxy {
       testConnection: MessageTypes.AI_TEST_CONNECTION
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -355,12 +405,13 @@ class AIServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on AIService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 

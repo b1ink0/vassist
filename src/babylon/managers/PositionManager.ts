@@ -15,8 +15,66 @@
 import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig';
 import Logger from '../../services/LoggerService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import type {
+  AnimationManagerOffsetLike,
+  CameraOffset,
+  CustomBoundaryInsets,
+  PositionManagerLike,
+  PositionManagerOptionsLike,
+  PositionPixels,
+  PositionPresetLike,
+  PositionValidationResult,
+  SceneWithMetadata,
+} from '../types';
 
-export class PositionManager {
+interface PositionPresetApplyOptions {
+  modelSizePx?: { width?: number; height?: number };
+  padding?: number;
+  offset?: CameraOffset;
+}
+
+interface PositionBoundaryConfig {
+  uniformPadding: number;
+  customBoundaries: CustomBoundaryInsets | null;
+  allowPartialOffscreen: boolean;
+  partialOffscreenAmount: number;
+}
+
+export class PositionManager implements PositionManagerLike {
+  private readonly scene: SceneWithMetadata;
+  private readonly camera: {
+    orthoTop: number | null;
+    orthoBottom: number | null;
+    orthoLeft: number | null;
+    orthoRight: number | null;
+  };
+  private readonly canvas: HTMLCanvasElement;
+
+  private readonly boundaryPadding: number;
+  private readonly allowPartialOffscreen: boolean;
+  private readonly partialOffscreenAmount: number;
+  private customBoundaries: CustomBoundaryInsets | null;
+
+  public canvasWidth: number;
+  public canvasHeight: number;
+  public modelWidthPx: number;
+  public modelHeightPx: number;
+  public effectiveHeightPx: number;
+  public positionX: number;
+  public positionY: number;
+  public offset: CameraOffset;
+
+  public isPortraitMode: boolean;
+  private effectiveHeightRatio: number;
+
+  private resizeHandler: (() => void) | null;
+  private resizeTimeout: ReturnType<typeof setTimeout> | null;
+
+  private eventThrottleRAF: number | null;
+  private pendingPositionUpdate: PositionPixels | null;
+
+  private readonly RESIZE_DEBOUNCE_MS: number;
+
   /**
    * Create PositionManager instance
    * @param {Scene} scene - Babylon.js scene
@@ -27,7 +85,12 @@ export class PositionManager {
    * @param {boolean} options.allowPartialOffscreen - Allow model to go partially offscreen (default: false)
    * @param {number} options.partialOffscreenAmount - How much can go offscreen (0-1, default: 0)
    */
-  constructor(scene, camera, canvas, options = {}) {
+  constructor(
+    scene: SceneWithMetadata,
+    camera: { orthoTop: number | null; orthoBottom: number | null; orthoLeft: number | null; orthoRight: number | null },
+    canvas: HTMLCanvasElement,
+    options: PositionManagerOptionsLike = {}
+  ) {
     this.scene = scene;
     this.camera = camera;
     this.canvas = canvas;
@@ -82,7 +145,7 @@ export class PositionManager {
    * Call this after model is fully loaded
    * @param {string} savedPreset - Optional saved preset from settings (default: 'bottom-right')
    */
-  initialize(savedPreset = 'bottom-right') {
+  initialize(savedPreset = 'bottom-right'): void {
     Logger.log('PositionManager', 'Initializing...');
     
     this.updateCanvasDimensions();
@@ -115,7 +178,7 @@ export class PositionManager {
     // ONLY apply intro offset if the preset actually plays intro (not center positions, last-location, or Portrait Mode)
     const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
     const shouldSkipIntro = savedPreset.includes('center') || savedPreset === 'last-location' || isPortraitMode;
-    const animationManager = this.scene.metadata?.animationManager;
+    const animationManager = this.scene.metadata?.animationManager as AnimationManagerOffsetLike | undefined;
     
     if (!shouldSkipIntro && animationManager && animationManager._introLocomotionOffset) {
       Logger.log('PositionManager', 'Applying intro locomotion offset stored by AnimationManager');
@@ -153,8 +216,8 @@ export class PositionManager {
           animationManager._cameraPreShiftedOffset = preShiftedOffset;
           Logger.log('PositionManager', 'Recorded original and pre-shift offsets on AnimationManager');
         }
-      } catch (e) {
-        Logger.warn('PositionManager', 'Failed to record camera offsets on AnimationManager', e);
+      } catch (error) {
+        Logger.warn('PositionManager', 'Failed to record camera offsets on AnimationManager', error);
       }
     } else if (shouldSkipIntro) {
       Logger.log('PositionManager', 'Skipping intro locomotion offset (center position, last-location, or Portrait Mode)');
@@ -165,7 +228,7 @@ export class PositionManager {
    * Update canvas dimensions from actual DOM
    * Uses clientWidth/clientHeight for actual pixel dimensions
    */
-  updateCanvasDimensions() {
+  updateCanvasDimensions(): void {
     this.canvasWidth = this.canvas.clientWidth;
     this.canvasHeight = this.canvas.clientHeight;
     
@@ -180,19 +243,26 @@ export class PositionManager {
    * @param {string} preset - Preset name ('bottom-right', 'bottom-left', 'top-center', 'center', etc.)
    * @param {object} options - Optional overrides { modelSizePx: {width, height}, padding, offset: {x, y} }
    */
-  applyPreset(preset, options = {}) {
-    const presetConfig = PositionPresets[preset];
+  applyPreset(preset: string, options: PositionPresetApplyOptions = {}): void {
+    const presetMap = PositionPresets as Record<string, PositionPresetLike>;
+    const presetConfig = presetMap[preset];
     
     if (!presetConfig) {
       Logger.warn('PositionManager', `Unknown preset: ${preset}, using center`);
       preset = 'center';
     }
-    
-    const baseConfig = PositionPresets[preset];
+
+    const centerConfig = presetMap.center;
+    if (!centerConfig) {
+      Logger.error('PositionManager', 'Center position preset is missing; cannot apply preset');
+      return;
+    }
+
+    const baseConfig = presetMap[preset] ?? centerConfig;
     const platformOverride = isAndroid
       ? AndroidPresetOverride
       : (isDesktop ? DesktopPresetOverride : null);
-    const config = platformOverride ? { ...baseConfig, ...platformOverride } : baseConfig;
+    const config: PositionPresetLike = platformOverride ? { ...baseConfig, ...platformOverride } : baseConfig;
 
     if (platformOverride) {
       Logger.log('PositionManager', `Using ${isAndroid ? 'Android' : 'Desktop'} preset override`, platformOverride);
@@ -202,7 +272,7 @@ export class PositionManager {
     const isPortraitMode = this.scene.metadata?.isPortraitMode || false;
     this.isPortraitMode = isPortraitMode; // Store for later use
     
-    const modelSize = isPortraitMode && config.portraitModelSize 
+    const modelSize = isPortraitMode && config.portraitModelSize
       ? config.portraitModelSize 
       : config.modelSize;
     
@@ -238,7 +308,7 @@ export class PositionManager {
     const padding = options.padding !== undefined ? options.padding : config.padding;
     
     // Use portraitOffset in Portrait Mode, otherwise use regular offset
-    let offset;
+    let offset: CameraOffset;
     if (isPortraitMode && config.portraitOffset) {
       offset = options.offset || config.portraitOffset;
     } else {
@@ -259,7 +329,8 @@ export class PositionManager {
       this.customBoundaries = null;
     }
     
-    let pixelX, pixelY;
+    let pixelX = 0;
+    let pixelY = 0;
     
     // Calculate pixel position based on preset
     // Use effectiveHeight for positioning (accounts for clipping in Portrait Mode)
@@ -305,7 +376,7 @@ export class PositionManager {
         pixelY = (this.canvasHeight - effectiveHeight) / 2;
     }
     
-    Logger.log('PositionManager', 'Applying preset: ${preset}', {
+    Logger.log('PositionManager', `Applying preset: ${preset}`, {
       isPortraitMode: isPortraitMode,
       pixelPosition: { x: pixelX, y: pixelY },
       modelSize: { width: modelWidth, height: modelHeight },
@@ -328,10 +399,17 @@ export class PositionManager {
    * @param {number} effectiveHeight - Height used for positioning/boundaries (can be same as cameraHeight)
    * @param {object} offset - Camera offset in world units { x, y }
    */
-  setPositionPixels(x, y, width, cameraHeight, effectiveHeight = null, offset = { x: 0, y: 0 }) {
+  setPositionPixels(
+    x: number,
+    y: number,
+    width: number,
+    cameraHeight: number,
+    effectiveHeight: number | CameraOffset | null = null,
+    offset: CameraOffset = { x: 0, y: 0 }
+  ): void {
     // If effectiveHeight not provided, use cameraHeight for both
     if (effectiveHeight === null || typeof effectiveHeight === 'object') {
-      offset = effectiveHeight || offset;
+      offset = (effectiveHeight as CameraOffset | null) || offset;
       effectiveHeight = cameraHeight;
     }
     
@@ -371,7 +449,7 @@ export class PositionManager {
    * Emit position change event with RAF throttling
    * Batches multiple rapid updates into one event per frame
    */
-  emitPositionChangeThrottled(detail) {
+  emitPositionChangeThrottled(detail: PositionPixels): void {
     // Store the latest position data
     this.pendingPositionUpdate = detail;
     
@@ -397,7 +475,7 @@ export class PositionManager {
    * Convert pixel-based position to camera frustum settings
    * THIS IS THE CORE CONVERSION LOGIC - pixels → camera view
    */
-  updateCameraFrustum() {
+  updateCameraFrustum(): void {
     // Step 1: Calculate orthoHeight for desired model pixel size
     const baseOrthoHeight = 12; // Original working value
     const baseModelHeightPx = this.canvasHeight; // Assume original fills canvas height
@@ -440,7 +518,7 @@ export class PositionManager {
    * Prevents updating 60 times per second during resize (would crash browser)
    * Only updates after user stops resizing for RESIZE_DEBOUNCE_MS
    */
-  setupResizeHandler() {
+  setupResizeHandler(): void {
     this.resizeHandler = () => {
       // Clear existing timeout
       if (this.resizeTimeout) {
@@ -479,7 +557,7 @@ export class PositionManager {
    * Returns where the VISIBLE area appears on screen, accounting for zoom
    * @returns {object} - { x, y, width, height } all in pixels
    */
-  getPositionPixels() {
+  getPositionPixels(): PositionPixels {
     const result = {
       x: this.positionX,
       y: this.positionY,
@@ -499,7 +577,12 @@ export class PositionManager {
    * @param {number} height - Model height (pixels)
    * @returns {object} - { valid: boolean, adjustedX, adjustedY }
    */
-  validatePosition(x, y, width = this.modelWidthPx, height = this.effectiveHeightPx) {
+  validatePosition(
+    x: number,
+    y: number,
+    width = this.modelWidthPx,
+    height = this.effectiveHeightPx
+  ): PositionValidationResult {
     let adjustedX = x;
     let adjustedY = y;
     let valid = true;
@@ -512,7 +595,10 @@ export class PositionManager {
     const allowedOffscreenY = this.allowPartialOffscreen ? effectiveHeight * this.partialOffscreenAmount : 0;
     
     // Calculate effective boundaries
-    let leftPadding, rightPadding, topPadding, bottomPadding;
+    let leftPadding: number;
+    let rightPadding: number;
+    let topPadding: number;
+    let bottomPadding: number;
     
     if (this.customBoundaries) {
       leftPadding = this.customBoundaries.left ?? this.boundaryPadding;
@@ -580,7 +666,7 @@ export class PositionManager {
    * Useful for runtime adjustments or testing different boundary values.
    * @param {object} boundaries - Custom boundary insets { left, right, top, bottom } in pixels
    */
-  setCustomBoundaries(boundaries) {
+  setCustomBoundaries(boundaries: CustomBoundaryInsets): void {
     this.customBoundaries = boundaries;
     Logger.log('PositionManager', 'Custom boundaries manually set (overriding preset):', boundaries);
     
@@ -598,7 +684,7 @@ export class PositionManager {
    * Clear custom boundaries and use uniform padding
    * Will revert to preset boundaries on next preset change
    */
-  clearCustomBoundaries() {
+  clearCustomBoundaries(): void {
     this.customBoundaries = null;
     Logger.log('PositionManager', 'Custom boundaries cleared, using uniform padding');
   }
@@ -607,7 +693,7 @@ export class PositionManager {
    * Get current boundary configuration
    * @returns {object} - Current boundary settings
    */
-  getBoundaryConfig() {
+  getBoundaryConfig(): PositionBoundaryConfig {
     return {
       uniformPadding: this.boundaryPadding,
       customBoundaries: this.customBoundaries,
@@ -620,22 +706,22 @@ export class PositionManager {
    * Get available position presets
    * @returns {object} - PositionPresets object
    */
-  static getPresets() {
-    return PositionPresets;
+  static getPresets(): Record<string, PositionPresetLike> {
+    return PositionPresets as Record<string, PositionPresetLike>;
   }
   
   /**
    * Get list of preset names
    * @returns {string[]} - Array of preset names
    */
-  static getPresetNames() {
+  static getPresetNames(): string[] {
     return Object.keys(PositionPresets);
   }
   
   /**
    * Cleanup - remove event listeners
    */
-  dispose() {
+  dispose(): void {
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;

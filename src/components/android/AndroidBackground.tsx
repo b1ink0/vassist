@@ -8,7 +8,7 @@ import { backgroundStorageService } from '../../services/BackgroundStorageServic
 import Logger from '../../services/LoggerService';
 
 function AndroidBackground() {
-  const [backgroundUrl, setBackgroundUrl] = useState(null);
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const loadBackground = async () => {

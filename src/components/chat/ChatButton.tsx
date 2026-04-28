@@ -2,7 +2,17 @@
  * @fileoverview Draggable chat button component with positioning logic.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type Dispatch,
+  type MutableRefObject,
+  type RefObject,
+  type SetStateAction,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useDesktop } from '../../contexts/DesktopContext';
@@ -17,9 +27,122 @@ import { stageStorageService } from '../../services/StageStorageService';
 import ZoomControl from '../common/ZoomControl';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import { PositionPresets, AndroidPresetOverride, DesktopPresetOverride } from '../../config/uiConfig';
+import type { PositionManagerLike, PositionPixels, PositionPresetLike, SceneWithMetadata } from '../../babylon/types';
 
-function getPlatformPresetDefaults(preset) {
-  const basePreset = PositionPresets[preset] || PositionPresets['bottom-right'];
+interface ButtonPosition {
+  x: number;
+  y: number;
+}
+
+interface ChatButtonProps {
+  onClick?: (event?: ReactMouseEvent<HTMLElement>) => void;
+  isVisible?: boolean;
+  modelDisabled?: boolean;
+  isChatOpen?: boolean;
+  chatInputRef?: RefObject<HTMLElement | null>;
+}
+
+interface EmoteListItem {
+  id: string;
+  name: string;
+  isVisible: boolean;
+  metadata: unknown;
+}
+
+interface StoredModelItem {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  metadata: unknown;
+}
+
+interface StoredStageItem {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  metadata: unknown;
+}
+
+interface PositionManagerForButton extends PositionManagerLike {
+  applyPreset: (preset: string, options?: { modelSizePx?: { width: number; height: number } }) => void;
+}
+
+interface SceneMetadataCameraControls {
+  toggleCameraMode?: () => void;
+  getCameraMode?: () => '2D' | '3D';
+  toggleCameraLock?: () => void;
+  isCameraLocked?: () => boolean;
+  resetCameraPosition?: () => void;
+  toggleCameraSave?: () => void;
+  isCameraSaveEnabled?: () => boolean;
+}
+
+type SceneWithCameraControls = SceneWithMetadata & {
+  metadata?: SceneWithMetadata['metadata'] & SceneMetadataCameraControls;
+};
+
+interface AppContextForChatButton {
+  positionManagerRef: MutableRefObject<PositionManagerForButton | null>;
+  buttonPosition: ButtonPosition;
+  updateButtonPosition: Dispatch<SetStateAction<ButtonPosition>>;
+  startButtonDrag: () => void;
+  endButtonDrag: () => void;
+  setPendingDropData: (data: unknown) => void;
+  sceneRef: MutableRefObject<SceneWithCameraControls | null>;
+}
+
+interface DesktopApiForChatButton {
+  window?: {
+    getSize?: () => Promise<{ width: number; height: number }>;
+    updateWindowSizeForZoom?: (width: number, height: number) => Promise<void>;
+  };
+}
+
+interface DragDropServiceLike {
+  attach: (element: HTMLElement, callbacks: {
+    onSetDragOver?: (flag: boolean) => void;
+    onShowError?: (error: unknown) => void;
+    checkVoiceMode?: (() => boolean) | null;
+    getCurrentCounts?: () => { images: number; audios: number };
+    onProcessData?: (data: unknown) => void;
+  }) => void;
+  detach: () => void;
+}
+
+type DragDropServiceCtor = new (options: { maxImages: number; maxAudios: number }) => DragDropServiceLike;
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const isPositionPixels = (value: unknown): value is PositionPixels => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<PositionPixels>;
+  return (
+    typeof candidate.x === 'number' &&
+    typeof candidate.y === 'number' &&
+    typeof candidate.width === 'number' &&
+    typeof candidate.height === 'number'
+  );
+};
+
+function getPlatformPresetDefaults(preset: string): PositionPresetLike {
+  const presetMap = PositionPresets as Record<string, PositionPresetLike>;
+  const basePreset = presetMap[preset] ?? presetMap['bottom-right'];
+
+  if (!basePreset) {
+    return {
+      name: 'Bottom Right',
+      modelSize: { width: 300, height: 500 },
+      padding: 0,
+    };
+  }
 
   if (isAndroid) {
     return { ...basePreset, ...AndroidPresetOverride };
@@ -43,7 +166,7 @@ function getPlatformPresetDefaults(preset) {
  * @param {Object} props.chatInputRef - Reference to chat input
  * @returns {JSX.Element|null}
  */
-const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }) => {
+const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOpen = false, chatInputRef }: ChatButtonProps) => {
   const {
     positionManagerRef,
     buttonPosition: buttonPos,
@@ -52,33 +175,34 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     endButtonDrag,
     setPendingDropData,
     sceneRef,
-  } = useApp();
+  }: AppContextForChatButton = useApp();
   
   const { uiConfig, updateUIConfig } = useConfig();
-  const { api: desktopAPI } = useDesktop();
+  const { api: desktopAPI } = useDesktop() as { api: DesktopApiForChatButton | null };
 
   const isLeftSide = buttonPos.x < window.innerWidth / 2;
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
-  const dragStartPos = useRef({ x: 0, y: 0 });
-  const dragStartButtonPos = useRef({ x: 0, y: 0 });
-  const buttonPosRef = useRef({ x: -100, y: -100 });
-  const lastSetPosition = useRef({ x: -100, y: -100 });
+  const dragStartPos = useRef<ButtonPosition>({ x: 0, y: 0 });
+  const dragStartButtonPos = useRef<ButtonPosition>({ x: 0, y: 0 });
+  const buttonPosRef = useRef<ButtonPosition>({ x: -100, y: -100 });
+  const lastSetPosition = useRef<ButtonPosition>({ x: -100, y: -100 });
   const [isDragOverButton, setIsDragOverButton] = useState(false);
   const [isEmotePanelOpen, setIsEmotePanelOpen] = useState(false);
-  const [emotes, setEmotes] = useState([]);
+  const [emotes, setEmotes] = useState<EmoteListItem[]>([]);
   const [isAutoPlayActive, setIsAutoPlayActive] = useState(false);
   const [isEmotePlaying, setIsEmotePlaying] = useState(false);
-  const [currentPlayingEmoteId, setCurrentPlayingEmoteId] = useState(null);
+  const [currentPlayingEmoteId, setCurrentPlayingEmoteId] = useState<string | null>(null);
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
-  const [models, setModels] = useState([]);
-  const [selectedModelId, setSelectedModelId] = useState(null);
+  const [models, setModels] = useState<StoredModelItem[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState('avatar'); // 'avatar' or 'stage'
-  const [stages, setStages] = useState([]);
-  const [selectedStageId, setSelectedStageId] = useState(null);
-  const dragDropServiceRef = useRef(null);
-  const buttonRef = useRef(null);
+  const [stages, setStages] = useState<StoredStageItem[]>([]);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
+  const buttonRef = useRef<HTMLDivElement | null>(null);
+  const buttonDragEventTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Delayed render state for fade animation
   const [shouldRender, setShouldRender] = useState(isVisible);
@@ -172,8 +296,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   useEffect(() => {
     if (!shouldRender || isDragging) return;
     
-    let detectionTimeout = null;
-    let scrollTimeout = null;
+    let detectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
     
     const detectBackgroundColor = () => {
       if (!buttonRef.current) {
@@ -238,9 +362,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       Logger.log('ChatButton', 'Initial bgColor:', bgColor);
       
       // If transparent, check parent elements
-      let currentElement = elementBelow;
+      let currentElement: HTMLElement | null = elementBelow instanceof HTMLElement ? elementBelow : null;
       let depth = 0;
       while ((bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') && depth < 10) {
+        if (!currentElement) {
+          break;
+        }
         currentElement = currentElement.parentElement;
         if (!currentElement) {
           // Check HTML element and document
@@ -261,7 +388,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       }
       
       // Special handling for canvas elements - sample pixel color
-      if (elementBelow.tagName === 'CANVAS') {
+      if (elementBelow instanceof HTMLCanvasElement) {
         try {
           const canvas = elementBelow;
           const rect = canvas.getBoundingClientRect();
@@ -271,7 +398,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           if (ctx) {
             const imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
-            const [r, g, b, a] = imageData.data;
+            const [r = 0, g = 0, b = 0, a = 0] = imageData.data;
             
             // Only use canvas pixel if it's not fully transparent
             if (a > 0) {
@@ -279,17 +406,17 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
               Logger.log('ChatButton', 'Sampled canvas pixel:', bgColor);
             }
           }
-        } catch (err) {
-          Logger.log('ChatButton', 'Canvas sampling failed (CORS or context):', err.message);
+        } catch (err: unknown) {
+          Logger.log('ChatButton', 'Canvas sampling failed (CORS or context):', getErrorMessage(err));
         }
       }
       
       // Parse RGB values
       const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
       if (rgbMatch) {
-        const r = parseInt(rgbMatch[1]);
-        const g = parseInt(rgbMatch[2]);
-        const b = parseInt(rgbMatch[3]);
+        const r = Number(rgbMatch[1] ?? 0);
+        const g = Number(rgbMatch[2] ?? 0);
+        const b = Number(rgbMatch[3] ?? 0);
         
         // Calculate perceived brightness (0-255)
         const brightness = (r * 299 + g * 587 + b * 114) / 1000;
@@ -313,7 +440,9 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     // Re-detect on scroll or position change (debounced)
     const handleUpdate = () => {
       if (isDragging) return;
-      clearTimeout(scrollTimeout);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       scrollTimeout = setTimeout(() => {
         detectBackgroundColor();
       }, 500);
@@ -324,7 +453,9 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     
     return () => {
       clearTimeout(detectionTimeout);
-      clearTimeout(scrollTimeout);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       window.removeEventListener('scroll', handleUpdate, true);
       window.removeEventListener('modelPositionChange', handleUpdate);
     };
@@ -355,7 +486,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   /**
    * Convert preset name to button pixel position
    */
-  const getButtonPositionFromPreset = useCallback((preset) => {
+  const getButtonPositionFromPreset = useCallback((preset: string): ButtonPosition => {
     const buttonSize = 48;
     const padding = 20;
     const width = window.innerWidth;
@@ -485,9 +616,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   // When model is enabled, follow the model position (throttled events come from PositionManager)
   useEffect(() => {
     if (modelDisabled) return;
-    const updateFromModel = async (ev) => {
-      let modelPos = null;
-      if (ev && ev.detail) modelPos = ev.detail;
+    const updateFromModel = async (ev?: Event): Promise<void> => {
+      let modelPos: PositionPixels | null = null;
+      if (ev instanceof CustomEvent && isPositionPixels(ev.detail)) {
+        modelPos = ev.detail;
+      }
       else if (positionManagerRef?.current) {
         try {
           modelPos = positionManagerRef.current.getPositionPixels();
@@ -511,7 +644,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         if (isDesktop) {
           buttonX = modelPos.x + modelPos.width + offsetX;
           
-          if (desktopAPI && desktopAPI.window) {
+          if (desktopAPI?.window?.getSize) {
             try {
               const electronWindow = await desktopAPI.window.getSize();
               const electronWindowWidth = electronWindow.width;
@@ -568,7 +701,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     };
   }, [modelDisabled, positionManagerRef, setButtonPos, desktopAPI]);
 
-  const handleMouseDown = useCallback((e) => {
+  const handleMouseDown = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     if (!modelDisabled) return;
     e.preventDefault();
     e.stopPropagation();
@@ -584,7 +717,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     startButtonDrag();
   }, [modelDisabled, buttonPos, startButtonDrag]);
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!modelDisabled || !isDragging) return;
     
     const deltaX = e.clientX - dragStartPos.current.x;
@@ -605,16 +738,11 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     const newPos = { x: boundedX, y: boundedY };
     buttonPosRef.current = newPos;
     
-    if (buttonRef.current) {
-      buttonRef.current.style.left = `${boundedX}px`;
-      buttonRef.current.style.top = `${boundedY}px`;
-    }
-
-    if (isChatOpen && !window.buttonDragEventTimeout) {
-      window.buttonDragEventTimeout = setTimeout(() => {
+    if (isChatOpen && !buttonDragEventTimeoutRef.current) {
+      buttonDragEventTimeoutRef.current = setTimeout(() => {
         const event = new CustomEvent('chatButtonMoved', { detail: newPos });
         window.dispatchEvent(event);
-        window.buttonDragEventTimeout = null;
+        buttonDragEventTimeoutRef.current = null;
       }, 16); // ~60fps
     }
   }, [modelDisabled, isDragging, isChatOpen]);
@@ -622,9 +750,9 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const handleMouseUp = useCallback(() => {
     if (!modelDisabled || !isDragging) return;
 
-    if (window.buttonDragEventTimeout) {
-      clearTimeout(window.buttonDragEventTimeout);
-      window.buttonDragEventTimeout = null;
+    if (buttonDragEventTimeoutRef.current) {
+      clearTimeout(buttonDragEventTimeoutRef.current);
+      buttonDragEventTimeoutRef.current = null;
     }
     
     setIsDragging(false);
@@ -664,10 +792,10 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     };
   }, [modelDisabled, handleMouseMove, handleMouseUp]);
 
-  const handleClick = useCallback((e) => {
+  const handleClick = useCallback((e?: ReactMouseEvent<HTMLElement>) => {
     if (modelDisabled && hasDragged) {
-      e.preventDefault();
-      e.stopPropagation();
+      e?.preventDefault();
+      e?.stopPropagation();
       return;
     }
     if (typeof onClick === 'function') onClick(e);
@@ -702,6 +830,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       Logger.log('ChatButton', 'Setting up drag-drop service');
       
       import('../../services/DragDropService').then(({ default: DragDropService }) => {
+        const DragDropServiceClass = DragDropService as unknown as DragDropServiceCtor;
         if (!attached) {
           Logger.log('ChatButton', 'Cleanup called during async import');
           return;
@@ -712,7 +841,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           return;
         }
         
-        dragDropServiceRef.current = new DragDropService({ maxImages: 3, maxAudios: 1 });
+        dragDropServiceRef.current = new DragDropServiceClass({ maxImages: 3, maxAudios: 1 });
         dragDropServiceRef.current.attach(el, {
           onSetDragOver: (flag) => setIsDragOverButton(flag),
           onShowError: (err) => Logger.error('ChatButton', 'DragDrop error', err),
@@ -742,7 +871,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
    * Unified zoom handler
    * @param {'in' | 'out' | 'reset'} zoomType - Type of zoom operation
    */
-  const handleZoom = useCallback((zoomType) => {
+  const handleZoom = useCallback((zoomType: 'in' | 'out' | 'reset') => {
     const positionManager = positionManagerRef.current;
     if (!positionManager) return;
     
@@ -787,10 +916,13 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       height: newSize
     });
     
-    if (isDesktop && desktopAPI && desktopAPI.window) {
+    const updateWindowSizeForZoom = desktopAPI?.window?.updateWindowSizeForZoom;
+    const getWindowSize = desktopAPI?.window?.getSize;
+
+    if (isDesktop && updateWindowSizeForZoom && getWindowSize) {
       Logger.log('ChatButton', `Requesting Electron window resize for model size: ${newWidth}x${newSize}`);
-      desktopAPI.window.updateWindowSizeForZoom(newWidth, newSize).then(() => {
-        return desktopAPI.window.getSize();
+      updateWindowSizeForZoom(newWidth, newSize).then(() => {
+        return getWindowSize();
       }).then(windowSize => {
         Logger.log('ChatButton', `Window resized to: ${windowSize.width}x${windowSize.height}`);
         
@@ -908,7 +1040,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, [isAutoPlayActive, emotes]);
 
-  const handleModelSelect = useCallback(async (modelId) => {
+  const handleModelSelect = useCallback(async (modelId: string | null) => {
     try {
       if (modelId === null) {
         await modelStorageService.clearAllDefaults();
@@ -924,7 +1056,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, []);
 
-  const handleStageSelect = useCallback(async (stageId) => {
+  const handleStageSelect = useCallback(async (stageId: string | null) => {
     try {
       if (stageId === null) {
         await stageStorageService.clearAllDefaults();
@@ -1431,25 +1563,26 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       )}
 
       {/* Chat Button */}
-      <Button
-        ref={buttonRef}
-        onClick={handleClick}
-        onMouseDown={handleMouseDown}
-        style={{
-          cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
-          willChange: isDragging ? 'left, top' : 'auto',
-          transition: isDragging ? 'none' : undefined,
-        }}
-        variant={isLightBackground ? 'dark' : 'default'}
-        className={cn('w-12 h-12 rounded-full', !modelDisabled && 'hover:scale-110 active:scale-95 transition-transform', isDragOverButton && 'ring-2 ring-blue-400', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'), isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30')}
-        title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
-      >
-        <Icon 
-          name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
-          size={24} 
-          className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
-        />
-      </Button>
+      <div ref={buttonRef}>
+        <Button
+          onClick={handleClick}
+          onMouseDown={handleMouseDown}
+          style={{
+            cursor: modelDisabled ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+            willChange: isDragging ? 'left, top' : 'auto',
+            transition: isDragging ? 'none' : undefined,
+          }}
+          variant={isLightBackground ? 'dark' : 'default'}
+          className={cn('w-12 h-12 rounded-full', !modelDisabled && 'hover:scale-110 active:scale-95 transition-transform', isDragOverButton && 'ring-2 ring-blue-400', isAppearing ? 'animate-fade-in' : (!isVisible && 'animate-fade-out'), isLightBackground ? 'hover:bg-black/30' : 'hover:bg-white/30')}
+          title={modelDisabled ? (isChatOpen ? 'Click to close chat' : 'Drag to reposition or click to chat') : (isChatOpen ? 'Click to close chat' : 'Chat with assistant')}
+        >
+          <Icon 
+            name={isDragOverButton ? 'attachment' : (isChatOpen ? 'close' : 'ai')} 
+            size={24} 
+            className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'drop-shadow-lg')}
+          />
+        </Button>
+      </div>
     </div>
     </>
   );

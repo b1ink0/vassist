@@ -16,6 +16,19 @@ import AIFeaturesSettings from './settings/AIFeaturesSettings';
 import { useConfig } from '../contexts/ConfigContext';
 import Logger from '../services/LoggerService';
 
+type SettingsTabId = 'ui' | '3d' | 'llm' | 'tts' | 'stt' | 'ai-plus';
+
+interface SettingsPanelProps {
+  onClose: () => void;
+  isLightBackground: boolean;
+  animationClass?: string;
+  onRequestDeleteModelDialog?: (modelId: string) => void;
+  onRequestDeleteMotionDialog?: (motionId: string) => void;
+  onRequestDeleteVoiceDialog?: (voiceId: string) => void;
+  onRequestDeleteLLMModel?: (modelName: string) => void;
+  refreshTrigger: number;
+}
+
 /**
  * Settings panel with configuration options for UI, LLM, TTS, STT, and AI features.
  * 
@@ -40,11 +53,11 @@ const SettingsPanel = ({
   onRequestDeleteVoiceDialog,
   onRequestDeleteLLMModel,
   refreshTrigger
-}) => {
-  const [activeTab, setActiveTab] = useState('ui');
+}: SettingsPanelProps) => {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('ui');
   const [hasChromeAI, setHasChromeAI] = useState(false);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
-  const tabsRef = useRef({
+  const tabsRef = useRef<Record<SettingsTabId, HTMLButtonElement | null>>({
     ui: null,
     '3d': null,
     llm: null,
@@ -122,13 +135,13 @@ const SettingsPanel = ({
    * @param {string} msg - Status message to parse
    * @returns {Object} Parsed status with type and text
    */
-  const parseStatusMessage = (msg) => {
+  const parseStatusMessage = (msg: string) => {
     const prefixMatch = msg.match(/^(success|warning|error|hourglass|error-status):\s*(.+)$/i);
     if (!prefixMatch) {
       return { type: 'info', text: msg };
     }
     const [, prefix, text] = prefixMatch;
-    const lowerPrefix = prefix.toLowerCase();
+    const lowerPrefix = (prefix || '').toLowerCase();
     
     if (lowerPrefix === 'success') return { type: 'success', text };
     if (lowerPrefix === 'warning') return { type: 'warning', text };
@@ -209,7 +222,7 @@ const SettingsPanel = ({
             { id: 'ai-plus', label: 'AI+' },
           ]}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={(tabId) => setActiveTab(tabId as SettingsTabId)}
           tabsRef={tabsRef}
         />
       </div>

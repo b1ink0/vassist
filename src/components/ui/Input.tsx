@@ -1,4 +1,5 @@
-import { cva } from 'class-variance-authority';
+import { cva, type VariantProps } from 'class-variance-authority';
+import type { InputHTMLAttributes } from 'react';
 import { cn } from '../../utils/cn';
 
 const inputVariants = cva(
@@ -18,8 +19,17 @@ const inputVariants = cva(
   }
 );
 
-const Input = ({ variant, size, className, ...props }) => (
-  <input className={cn(inputVariants({ variant, size }), className)} {...props} />
+type NativeInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>;
+
+interface InputProps extends NativeInputProps {
+  variant?: VariantProps<typeof inputVariants>['variant'];
+  size?: VariantProps<typeof inputVariants>['size'];
+  htmlSize?: number;
+  className?: string;
+}
+
+const Input = ({ variant, size, htmlSize, className, ...props }: InputProps) => (
+  <input size={htmlSize} className={cn(inputVariants({ variant, size }), className)} {...props} />
 );
 
 export default Input;

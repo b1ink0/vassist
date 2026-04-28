@@ -2,6 +2,8 @@
  * @fileoverview Type definitions for Electron API exposed via preload script 
  */
 
+import type { AndroidAPI } from './android';
+
 export interface ElectronWindow {
   minimize: () => Promise<void>;
   maximize: () => Promise<void>;
@@ -13,6 +15,22 @@ export interface ElectronWindow {
   getPosition: () => Promise<{ x: number; y: number }>;
   setSize: (width: number, height: number) => Promise<void>;
   getSize: () => Promise<{ width: number; height: number }>;
+  updateWindowSizeForZoom?: (width: number, height: number) => Promise<void>;
+}
+
+export interface ElectronServerAPI {
+  start: (config?: Record<string, unknown>) => Promise<{ success?: boolean; error?: string } | unknown>;
+  stop: () => Promise<void>;
+  getStatus?: () => Promise<unknown>;
+}
+
+export interface ElectronLLMAPI {
+  getBackendStatus?: (backend: string) => Promise<{ success?: boolean; selectedInstalled?: boolean } | unknown>;
+  [method: string]: ((...args: unknown[]) => Promise<unknown>) | undefined;
+}
+
+export interface ElectronSetupAPI {
+  [method: string]: ((...args: unknown[]) => unknown) | undefined;
 }
 
 export interface ElectronInputWindow {
@@ -51,11 +69,16 @@ export interface ElectronAPI {
     isDesktop: boolean;
     isDev: boolean;
   };
+  server?: ElectronServerAPI;
+  llm?: ElectronLLMAPI;
+  whisperSetup?: ElectronSetupAPI;
+  gptSovitsSetup?: ElectronSetupAPI;
 }
 
 declare global {
   interface Window {
     electron?: ElectronAPI;
+    AndroidAI?: AndroidAPI;
   }
 }
 

@@ -40,7 +40,7 @@ export const PromptConfig = {
   },
 
   dictionary: {
-    define: (word) => `Provide a concise dictionary definition for the word: "${word}"
+    define: (word: string) => `Provide a concise dictionary definition for the word: "${word}"
 
 Include:
 1. Part of speech (noun, verb, adjective, etc.)
@@ -55,7 +55,7 @@ ${word} (part of speech)
 2. Definition two
 3. Definition three (if applicable)`,
 
-    synonyms: (word) => `List 8-10 synonyms for the word: "${word}"
+    synonyms: (word: string) => `List 8-10 synonyms for the word: "${word}"
 
 Requirements:
 - Organize by common usage (most relevant first)
@@ -70,7 +70,7 @@ Synonyms for "${word}":
 • synonym3
 ...`,
 
-    antonyms: (word) => `List antonyms (opposite words) for: "${word}"
+    antonyms: (word: string) => `List antonyms (opposite words) for: "${word}"
 
 Requirements:
 - Provide 5-8 relevant antonyms
@@ -85,7 +85,7 @@ Antonyms for "${word}":
 • antonym3
 ...`,
 
-    pronunciation: (word) => `Provide pronunciation guide for the word: "${word}"
+    pronunciation: (word: string) => `Provide pronunciation guide for the word: "${word}"
 
 Include:
 1. IPA (International Phonetic Alphabet) notation
@@ -106,7 +106,7 @@ IPA: /prəˌnʌnsiˈeɪʃən/
 Phonetic: (pruh-nun-see-AY-shun)
 Syllables: pro-nun-ci-a-tion`,
 
-    examples: (word) => `Provide 4-5 example sentences using the word: "${word}"
+    examples: (word: string) => `Provide 4-5 example sentences using the word: "${word}"
 
 Requirements:
 - Show diverse contexts and common usage patterns
@@ -131,108 +131,108 @@ Usage Examples for "${word}":
   // Supports length: 'as-is', 'shorter', 'longer'
   rewriter: {
     // More formal tone
-    moreFormal: (text) => `Rewrite the following text in a more formal, professional tone. Return ONLY the rewritten text with no explanations:
+    moreFormal: (text: string) => `Rewrite the following text in a more formal, professional tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // More casual tone
-    moreCasual: (text) => `Rewrite the following text in a more casual, conversational tone. Return ONLY the rewritten text with no explanations:
+    moreCasual: (text: string) => `Rewrite the following text in a more casual, conversational tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Make shorter
-    shorter: (text) => `Rewrite the following text to be shorter while preserving key information. Return ONLY the rewritten text with no explanations:
+    shorter: (text: string) => `Rewrite the following text to be shorter while preserving key information. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Make longer
-    longer: (text) => `Rewrite the following text to be longer with more detail and elaboration. Return ONLY the rewritten text with no explanations:
+    longer: (text: string) => `Rewrite the following text to be longer with more detail and elaboration. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Plain text format
-    plainText: (text) => `Rewrite the following text using plain text only, no markdown. Return ONLY the rewritten text with no explanations:
+    plainText: (text: string) => `Rewrite the following text using plain text only, no markdown. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Markdown format
-    markdown: (text) => `Rewrite the following text using markdown formatting. Return ONLY the rewritten text with no explanations:
+    markdown: (text: string) => `Rewrite the following text using markdown formatting. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Fix grammar (useful rewrite action)
-    grammar: (text) => `Rewrite the following text to fix grammar errors. Return ONLY the corrected text with no explanations:
+    grammar: (text: string) => `Rewrite the following text to fix grammar errors. Return ONLY the corrected text with no explanations:
 
 ${text}`,
 
     // Fix spelling (useful rewrite action)
-    spelling: (text) => `Rewrite the following text to fix spelling errors. Return ONLY the corrected text with no explanations:
+    spelling: (text: string) => `Rewrite the following text to fix spelling errors. Return ONLY the corrected text with no explanations:
 
 ${text}`,
 
     // Improve clarity
-    clarity: (text) => `Rewrite the following text to improve clarity. Return ONLY the improved text with no explanations:
+    clarity: (text: string) => `Rewrite the following text to improve clarity. Return ONLY the improved text with no explanations:
 
 ${text}`,
 
     // Professional tone
-    professional: (text) => `Rewrite the following text in a professional, business-appropriate tone. Return ONLY the rewritten text with no explanations:
+    professional: (text: string) => `Rewrite the following text in a professional, business-appropriate tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Formal style
-    formal: (text) => `Rewrite the following text in a formal, academic style. Return ONLY the rewritten text with no explanations:
+    formal: (text: string) => `Rewrite the following text in a formal, academic style. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Simplify
-    simplify: (text) => `Rewrite the following text to be simpler and easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
+    simplify: (text: string) => `Rewrite the following text to be simpler and easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
 
 ${text}`,
 
     // Expand
-    expand: (text) => `Rewrite the following text to be more detailed and comprehensive. Return ONLY the expanded text with no explanations:
+    expand: (text: string) => `Rewrite the following text to be more detailed and comprehensive. Return ONLY the expanded text with no explanations:
 
 ${text}`,
 
     // Make concise
-    concise: (text) => `Rewrite the following text to be more concise while preserving meaning. Return ONLY the concise version with no explanations:
+    concise: (text: string) => `Rewrite the following text to be more concise while preserving meaning. Return ONLY the concise version with no explanations:
 
 ${text}`,
   },
 
   writer: {
-    write: (prompt) => `${prompt}`,
+    write: (prompt: string) => `${prompt}`,
 
-    formal: (prompt) => `Write in a formal, professional tone:\n\n${prompt}`,
+    formal: (prompt: string) => `Write in a formal, professional tone:\n\n${prompt}`,
 
-    neutral: (prompt) => `Write in a neutral, balanced tone:\n\n${prompt}`,
+    neutral: (prompt: string) => `Write in a neutral, balanced tone:\n\n${prompt}`,
 
-    casual: (prompt) => `Write in a casual, conversational tone:\n\n${prompt}`,
+    casual: (prompt: string) => `Write in a casual, conversational tone:\n\n${prompt}`,
 
-    short: (prompt) => `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
+    short: (prompt: string) => `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
 
-    medium: (prompt) => `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
+    medium: (prompt: string) => `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
 
-    long: (prompt) => `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
+    long: (prompt: string) => `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
 
-    plainText: (prompt) => `Write using plain text only, no markdown:\n\n${prompt}`,
+    plainText: (prompt: string) => `Write using plain text only, no markdown:\n\n${prompt}`,
 
-    markdown: (prompt) => `Write using markdown formatting:\n\n${prompt}`,
+    markdown: (prompt: string) => `Write using markdown formatting:\n\n${prompt}`,
   },
 
   image: {
-    describe: (imageCount) => 
+    describe: (imageCount: number) => 
       imageCount === 1
         ? 'Describe this image in detail.'
         : `Describe these ${imageCount} images in detail.`,
 
-    extractText: (imageCount) =>
+    extractText: (imageCount: number) =>
       imageCount === 1
         ? 'Extract and return all text visible in this image. Format it clearly and preserve the structure.'
         : `Extract and return all text visible in these ${imageCount} images. Format it clearly and preserve the structure for each image.`,
 
-    identifyObjects: (imageCount) =>
+    identifyObjects: (imageCount: number) =>
       imageCount === 1
         ? 'Identify and list all objects visible in this image.'
         : `Identify and list all objects visible in these ${imageCount} images.`,
@@ -243,7 +243,7 @@ ${text}`,
     
     summarize: 'Listen to this audio and provide a concise summary of its content.',
     
-    translate: (targetLanguage) => 
+    translate: (targetLanguage: string) => 
       `Transcribe this audio and translate it to ${targetLanguage}. Provide both the original transcription and the translation.`,
   },
 
@@ -322,7 +322,7 @@ User: "Tell me about yourself"
 
 Remember: Output ONLY the JSON object.`,
 
-    analyzeQuery: (userQuery) => `Analyze this user query and determine what webpage context is needed. Respond with ONLY valid JSON (no markdown, no explanation):
+    analyzeQuery: (userQuery: string) => `Analyze this user query and determine what webpage context is needed. Respond with ONLY valid JSON (no markdown, no explanation):
 
 Query: "${userQuery}"
 
@@ -429,7 +429,7 @@ Remember: Output ONLY the JSON object. Be smart about when vision is truly neede
 
 /no_think`,
 
-    generateVisionPrompt: (userQuery) => `Analyze this user query and decide if vision is needed. Respond with ONLY valid JSON (no markdown, no explanation):
+    generateVisionPrompt: (userQuery: string) => `Analyze this user query and decide if vision is needed. Respond with ONLY valid JSON (no markdown, no explanation):
 
 User query: "${userQuery}"
 
@@ -437,7 +437,7 @@ JSON:
 
 /no_think`,
 
-    visionAnalysisPrompt: (specificPrompt) => `${specificPrompt}
+    visionAnalysisPrompt: (specificPrompt: string) => `${specificPrompt}
 
 CRITICAL RULES:
 1. Describe ONLY what you ACTUALLY SEE - nothing else

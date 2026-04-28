@@ -1,4 +1,5 @@
-import { cva } from 'class-variance-authority';
+import { cva, type VariantProps } from 'class-variance-authority';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '../../utils/cn';
 
 const buttonVariants = cva(
@@ -22,7 +23,12 @@ const buttonVariants = cva(
   }
 );
 
-const Button = ({ variant, size, className, children, ...props }) => (
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+  className?: string;
+  children?: ReactNode;
+}
+
+const Button = ({ variant, size, className, children, ...props }: ButtonProps) => (
   <button className={cn(buttonVariants({ variant, size }), className)} {...props}>
     {children}
   </button>

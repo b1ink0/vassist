@@ -7,6 +7,8 @@
 
 import Dexie from 'dexie';
 
+export type StorageStats = Record<string, number>;
+
 class VassistDatabase extends Dexie {
   constructor() {
     super('VassistDB');
@@ -55,14 +57,14 @@ class VassistDatabase extends Dexie {
    * Clear all tables (for development/testing only)
    */
   async clearAll() {
-    await this.tables.forEach(table => table.clear());
+    await this.tables.forEach((table) => table.clear());
   }
 
   /**
    * Get database statistics
    */
   async getStats() {
-    const stats = {};
+    const stats: StorageStats = {};
     for (const table of this.tables) {
       stats[table.name] = await table.count();
     }

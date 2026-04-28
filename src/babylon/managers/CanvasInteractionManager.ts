@@ -1,10 +1,38 @@
-import { Vector3, Matrix } from '@babylonjs/core';
 import Logger from '../../services/LoggerService';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { Node } from '@babylonjs/core/node';
+import type { SceneWithMetadata, DesktopApiLike } from '../types';
+
+type DragStartCallback = (x: number, y: number) => void;
+type DragMoveCallback = (deltaX: number, deltaY: number) => void;
+type DragEndCallback = (x: number, y: number) => void;
 
 /**
  * CanvasInteractionManager - Click-through canvas with selective model interaction
  */
 export class CanvasInteractionManager {
+  private readonly scene: SceneWithMetadata;
+  private readonly canvas: HTMLCanvasElement;
+  private readonly modelMesh: Mesh | AbstractMesh | null;
+  private readonly isDesktop: boolean;
+  private readonly desktopAPI: DesktopApiLike | null;
+
+  private isDragging: boolean;
+  private dragStartX: number;
+  private dragStartY: number;
+  private lastX: number;
+  private lastY: number;
+
+  private windowX: number;
+  private windowY: number;
+
+  private isOverModel: boolean;
+
+  private onDragStartCallback: DragStartCallback | null;
+  private onDragCallback: DragMoveCallback | null;
+  private onDragEndCallback: DragEndCallback | null;
+
   /**
    * @param {Scene} scene - Babylon.js scene
    * @param {HTMLCanvasElement} canvas - Canvas element
@@ -12,7 +40,13 @@ export class CanvasInteractionManager {
    * @param {boolean} isDesktop - Whether running in Electron desktop mode
    * @param {Object} desktopAPI - Electron API from DesktopContext (desktop mode only)
    */
-  constructor(scene, canvas, modelMesh, isDesktop = false, desktopAPI = null) {
+  constructor(
+    scene: SceneWithMetadata,
+    canvas: HTMLCanvasElement,
+    modelMesh: Mesh | AbstractMesh | null,
+    isDesktop = false,
+    desktopAPI: DesktopApiLike | null = null
+  ) {
     this.scene = scene;
     this.canvas = canvas;
     this.modelMesh = modelMesh;
@@ -50,7 +84,7 @@ export class CanvasInteractionManager {
   /**
    * Initialize the interaction manager
    */
-  initialize() {
+  initialize(): void {
     // Start with canvas as click-through (pointer-events: none)
     this.canvas.style.pointerEvents = 'none';
     
@@ -70,7 +104,7 @@ export class CanvasInteractionManager {
   /**
    * Handle document mouse move - detect if over model
    */
-  handleDocumentMouseMove(event) {
+  handleDocumentMouseMove(event: MouseEvent): void {
     // Skip if currently dragging (canvas already has pointer-events:auto)
     if (this.isDragging) return;
     
@@ -96,7 +130,7 @@ export class CanvasInteractionManager {
     const pickResult = this.scene.pick(x, y);
     
     // Check if over model
-    const overModel = pickResult.hit && this.isModelMesh(pickResult.pickedMesh);
+    const overModel = Boolean(pickResult?.hit) && this.isModelMesh((pickResult?.pickedMesh as AbstractMesh | null) ?? null);
     
     if (overModel) {
       // Over model - keep pointer-events:auto and show grab cursor
@@ -116,7 +150,7 @@ export class CanvasInteractionManager {
   /**
    * Handle canvas pointer down - start drag
    */
-  async handleCanvasPointerDown(event) {
+  async handleCanvasPointerDown(event: PointerEvent): Promise<void> {
     // Only left button
     if (event.button !== 0) return;
     
@@ -126,7 +160,7 @@ export class CanvasInteractionManager {
     
     // Check if clicking on model
     const pickResult = this.scene.pick(x, y);
-    const clickedOnModel = pickResult.hit && this.isModelMesh(pickResult.pickedMesh);
+    const clickedOnModel = Boolean(pickResult?.hit) && this.isModelMesh((pickResult?.pickedMesh as AbstractMesh | null) ?? null);
     
     if (clickedOnModel) {
       // Get initial window position for desktop mode
@@ -165,7 +199,7 @@ export class CanvasInteractionManager {
   /**
    * Handle canvas pointer move - handle drag movement
    */
-  handleCanvasPointerMove(event) {
+  handleCanvasPointerMove(event: PointerEvent): void {
     if (!this.isDragging) return;
     
     const currentX = this.isDesktop ? event.screenX : event.clientX;
@@ -196,7 +230,7 @@ export class CanvasInteractionManager {
   /**
    * Handle canvas pointer up - end drag
    */
-  handleCanvasPointerUp(event) {
+  handleCanvasPointerUp(event: PointerEvent): void {
     if (!this.isDragging) return;
     
     this.isDragging = false;
@@ -218,7 +252,7 @@ export class CanvasInteractionManager {
    * Check if a mesh belongs to the model or is the picking box
    * In Portrait Mode, ONLY the picking box should be draggable (not the invisible clipped body)
    */
-  isModelMesh(mesh) {
+  isModelMesh(mesh: AbstractMesh | null): boolean {
     if (!mesh) return false;
     
     // Check if it's the picking box
@@ -234,7 +268,7 @@ export class CanvasInteractionManager {
     if (mesh === this.modelMesh) return true;
     
     // Check if it's a child of the model
-    let parent = mesh.parent;
+    let parent: Node | null = mesh.parent;
     while (parent) {
       if (parent === this.modelMesh) return true;
       parent = parent.parent;
@@ -249,7 +283,7 @@ export class CanvasInteractionManager {
    * @param {Function} onDrag - Called during drag (deltaX, deltaY)
    * @param {Function} onEnd - Called when drag ends (x, y)
    */
-  setDragCallbacks(onStart, onDrag, onEnd) {
+  setDragCallbacks(onStart: DragStartCallback, onDrag: DragMoveCallback, onEnd: DragEndCallback): void {
     this.onDragStartCallback = onStart;
     this.onDragCallback = onDrag;
     this.onDragEndCallback = onEnd;
@@ -258,7 +292,7 @@ export class CanvasInteractionManager {
   /**
    * Enable/disable interaction
    */
-  setEnabled(enabled) {
+  setEnabled(enabled: boolean): void {
     if (this.isDesktop) {
       // Desktop mode: canvas always has pointer-events:auto
       return;
@@ -275,7 +309,7 @@ export class CanvasInteractionManager {
   /**
    * Clean up
    */
-  dispose() {
+  dispose(): void {
     // Remove event listeners
     document.removeEventListener('mousemove', this.handleDocumentMouseMove);
     this.canvas.removeEventListener('pointerdown', this.handleCanvasPointerDown);

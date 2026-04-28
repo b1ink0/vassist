@@ -3,11 +3,47 @@
  * Handles keyboard shortcut recording and management.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
 import { Button, SettingsRow, Card } from '../ui';
 import Toggle from './Toggle';
+
+type ShortcutKey = 'openChat' | 'toggleMode' | 'toggleVisibility';
+
+interface KeyboardShortcuts {
+  enabled: boolean;
+  openChat: string;
+  toggleMode: string;
+  toggleVisibility: string;
+}
+
+interface ShortcutInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled: boolean;
+  isLightBackground: boolean;
+}
+
+interface ShortcutsConfigProps {
+  shortcuts?: Partial<KeyboardShortcuts>;
+  onShortcutsChange: (nextShortcuts: KeyboardShortcuts) => void;
+  isLightBackground?: boolean;
+}
+
+const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
+  enabled: false,
+  openChat: '',
+  toggleMode: '',
+  toggleVisibility: '',
+};
 
 /**
  * Formats key combination for display.
@@ -15,14 +51,14 @@ import Toggle from './Toggle';
  * @param {string} combo - Key combination string (e.g., 'Ctrl+Shift+C')
  * @returns {string} Formatted key combination
  */
-const formatKeyCombo = (combo) => {
+const formatKeyCombo = (combo: string): string => {
   if (!combo) return 'Not set';
   
   // Standardize separator
-  const keys = combo.split('+').map(k => k.trim());
+  const keys = combo.split('+').map((k) => k.trim());
   
   // Map to display names
-  const displayKeys = keys.map(key => {
+  const displayKeys = keys.map((key) => {
     const lowerKey = key.toLowerCase();
     if (lowerKey === 'ctrl' || lowerKey === 'control') return 'Ctrl';
     if (lowerKey === 'alt') return 'Alt';
@@ -40,7 +76,7 @@ const formatKeyCombo = (combo) => {
  * @param {KeyboardEvent} event - Keyboard event
  * @returns {string|null} Key combination string or null if invalid
  */
-const parseKeyEvent = (event) => {
+const parseKeyEvent = (event: KeyboardEvent): string | null => {
   const modifiers = [];
   let mainKey = event.key;
   
@@ -80,11 +116,11 @@ const parseKeyEvent = (event) => {
  * @param {boolean} props.isLightBackground - Whether background is light
  * @returns {JSX.Element} Shortcut input component
  */
-const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackground }) => {
+const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackground }: ShortcutInputProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLDivElement | null>(null);
   
-  const handleKeyDown = useCallback((event) => {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!isRecording) return;
     
     event.preventDefault();
@@ -112,7 +148,7 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
     }
   };
   
-  const handleClear = (e) => {
+  const handleClear = (e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     onChange('');
     setIsRecording(false);
@@ -156,40 +192,39 @@ const ShortcutInput = ({ value, onChange, placeholder, disabled, isLightBackgrou
  * @returns {JSX.Element} Shortcuts configuration panel
  */
 const ShortcutsConfig = ({ 
-  shortcuts = { enabled: false, openChat: '', toggleMode: '', toggleVisibility: '' }, 
+  shortcuts = DEFAULT_SHORTCUTS,
   onShortcutsChange,
   isLightBackground = false
-}) => {
-  const [localShortcuts, setLocalShortcuts] = useState({
-    enabled: false,
-    openChat: '',
-    toggleMode: '',
-    toggleVisibility: '',
+}: ShortcutsConfigProps) => {
+  const [localShortcuts, setLocalShortcuts] = useState<KeyboardShortcuts>({
+    ...DEFAULT_SHORTCUTS,
     ...shortcuts,
   });
-  const [conflict, setConflict] = useState(null);
+  const [conflict, setConflict] = useState<string | null>(null);
   
   // Sync with external changes
   useEffect(() => {
     setLocalShortcuts({
-      enabled: false,
-      openChat: '',
-      toggleMode: '',
-      toggleVisibility: '',
+      ...DEFAULT_SHORTCUTS,
       ...shortcuts,
     });
   }, [shortcuts]);
   
   // Check for conflicts
   useEffect(() => {
-    const shortcutEntries = [
-      ['Open Chat', localShortcuts.openChat],
-      ['Toggle Avatar', localShortcuts.toggleMode],
-      ['Toggle App Visibility', localShortcuts.toggleVisibility],
-    ].filter(([, value]) => Boolean(value));
+    const shortcutEntries: Array<[string, string]> = [];
+    if (localShortcuts.openChat) {
+      shortcutEntries.push(['Open Chat', localShortcuts.openChat]);
+    }
+    if (localShortcuts.toggleMode) {
+      shortcutEntries.push(['Toggle Avatar', localShortcuts.toggleMode]);
+    }
+    if (localShortcuts.toggleVisibility) {
+      shortcutEntries.push(['Toggle App Visibility', localShortcuts.toggleVisibility]);
+    }
 
-    const seen = new Map();
-    let nextConflict = null;
+    const seen = new Map<string, string>();
+    let nextConflict: string | null = null;
     for (const [name, value] of shortcutEntries) {
       if (seen.has(value)) {
         nextConflict = `${seen.get(value)} and ${name} cannot use the same shortcut`;
@@ -201,13 +236,13 @@ const ShortcutsConfig = ({
     setConflict(nextConflict);
   }, [localShortcuts.openChat, localShortcuts.toggleMode, localShortcuts.toggleVisibility]);
   
-  const handleToggle = (enabled) => {
+  const handleToggle = (enabled: boolean) => {
     const updated = { ...localShortcuts, enabled };
     setLocalShortcuts(updated);
     onShortcutsChange(updated);
   };
   
-  const handleShortcutChange = (key, value) => {
+  const handleShortcutChange = (key: ShortcutKey, value: string) => {
     const updated = { ...localShortcuts, [key]: value };
     setLocalShortcuts(updated);
     onShortcutsChange(updated);

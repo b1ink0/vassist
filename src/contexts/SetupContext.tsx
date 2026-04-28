@@ -5,18 +5,38 @@
  * Setup state persists in storage so users can resume after page refresh.
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import StorageServiceProxy from '../services/proxies/StorageServiceProxy';
 import Logger from '../services/LoggerService';
 import { isAndroid, isDesktop } from '../utils/PlatformUtils';
-
-const SetupContext = createContext(null);
 
 const DEFAULT_LLM_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
 const DEFAULT_TTS_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'kokoro');
 const DEFAULT_STT_PROVIDER = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai-multimodal');
 
-export const useSetup = () => {
+interface SetupContextValue {
+  isLoading: boolean;
+  setupCompleted: boolean;
+  currentStep: number;
+  completedSteps: number[];
+  setupData: SetupData;
+  totalSteps: number;
+  goToStep: (step: number) => void;
+  nextStep: () => void;
+  previousStep: () => void;
+  markStepComplete: () => void;
+  updateSetupData: (pathOrData: string | Record<string, unknown>, value?: unknown) => Promise<void>;
+  completeSetup: () => Promise<void>;
+  resetSetup: () => Promise<void>;
+}
+
+interface SetupProviderProps {
+  children: ReactNode;
+}
+
+const SetupContext = createContext<SetupContextValue | null>(null);
+
+export const useSetup = (): SetupContextValue => {
   const context = useContext(SetupContext);
   if (!context) {
     throw new Error('useSetup must be used within a SetupProvider');
@@ -35,7 +55,7 @@ const TOTAL_STEPS = 5; // Reduced from 6 - Tutorial step disabled (no GIFs yet)
 const DEFAULT_SETUP_STATE = {
   setupCompleted: false,
   currentStep: 1,
-  completedSteps: [],
+  completedSteps: [] as number[],
   setupData: {
     llm: {
       provider: DEFAULT_LLM_PROVIDER,
@@ -123,9 +143,12 @@ const DEFAULT_SETUP_STATE = {
   },
 };
 
-export function SetupProvider({ children }) {
+type SetupData = typeof DEFAULT_SETUP_STATE.setupData;
+type SetupState = typeof DEFAULT_SETUP_STATE;
+
+export function SetupProvider({ children }: SetupProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [setupState, setSetupState] = useState({
+  const [setupState, setSetupState] = useState<SetupState>({
     ...DEFAULT_SETUP_STATE,
     setupCompleted: true, // Default to true - will be overridden by actual loaded state
   });
@@ -141,7 +164,10 @@ export function SetupProvider({ children }) {
         
         while (retries < maxRetries) {
           try {
-            savedState = await StorageServiceProxy.configLoad('setupState', DEFAULT_SETUP_STATE);
+            savedState = await StorageServiceProxy.configLoad('setupState');
+            if (!savedState) {
+              savedState = DEFAULT_SETUP_STATE;
+            }
             
             // Validate loaded state - if it looks corrupted, reject it
             if (savedState && typeof savedState === 'object') {
@@ -159,7 +185,8 @@ export function SetupProvider({ children }) {
           } catch (error) {
             retries++;
             if (retries < maxRetries) {
-              Logger.warn('SetupContext', `Failed to load setup state (attempt ${retries}/${maxRetries}), retrying...`, error.message);
+              const message = error instanceof Error ? error.message : String(error);
+              Logger.warn('SetupContext', `Failed to load setup state (attempt ${retries}/${maxRetries}), retrying...`, message);
               // Wait before retrying (exponential backoff)
               await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retries - 1)));
             } else {
@@ -203,7 +230,7 @@ export function SetupProvider({ children }) {
   /**
    * Navigate to a specific step
    */
-  const goToStep = useCallback((step) => {
+  const goToStep = useCallback((step: number) => {
     if (step >= 1 && step <= TOTAL_STEPS) {
       setSetupState(prev => ({
         ...prev,
@@ -265,7 +292,7 @@ export function SetupProvider({ children }) {
   /**
    * Update setup data and save to storage
    */
-  const updateSetupData = useCallback(async (pathOrData, value) => {
+  const updateSetupData = useCallback(async (pathOrData: string | Record<string, unknown>, value?: unknown) => {
     setSetupState(prev => {
       const updated = { ...prev };
       
@@ -275,15 +302,22 @@ export function SetupProvider({ children }) {
           ...pathOrData
         };
       } else {
-        const parts = pathOrData.split('.');
-        let current = updated.setupData;
+        const parts = (pathOrData as string).split('.');
+        let current: Record<string, unknown> = updated.setupData as unknown as Record<string, unknown>;
         
         for (let i = 0; i < parts.length - 1; i++) {
-          current[parts[i]] = { ...current[parts[i]] };
-          current = current[parts[i]];
+          const key = parts[i] || '';
+          const nextValue = current[key];
+          current[key] = typeof nextValue === 'object' && nextValue !== null
+            ? { ...(nextValue as Record<string, unknown>) }
+            : {};
+          current = current[key] as Record<string, unknown>;
         }
-        
-        current[parts[parts.length - 1]] = value;
+
+        const lastPart = parts[parts.length - 1];
+        if (lastPart) {
+          current[lastPart] = value;
+        }
       }
       
       StorageServiceProxy.configSave('setupState', updated).catch(err => {

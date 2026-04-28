@@ -19,6 +19,9 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Camera } from "@babylonjs/core/Cameras/camera";
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { Observer } from '@babylonjs/core/Misc/observable';
+import type { Scene } from '@babylonjs/core/scene';
 import { MmdAnimationSpan, MmdCompositeAnimation } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 // Import camera animation runtime to enable camera animation evaluation
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
@@ -33,12 +36,105 @@ import {
 import TTSService from "../../services/TTSService";
 import { resourceLoader } from "../../utils/ResourceLoader";
 import Logger from '../../services/LoggerService';
+import type {
+  AnimationLoaderLike,
+  LoadedAnimationLike,
+  MmdCameraLike,
+  MmdModelLike,
+  MmdRuntimeLike,
+  MorphTrackLike,
+  PositionManagerLike,
+  SceneWithMetadata,
+} from '../types';
+
+type AssistantStateValue = (typeof AssistantState)[keyof typeof AssistantState];
+
+interface AnimationConfigLike {
+  id: string;
+  name: string;
+  filePath?: string;
+  cameraFilePath?: string;
+  isCustom?: boolean;
+  customMotionId?: string;
+  preserveRootBone?: boolean;
+  transitionFrames?: number;
+  loop?: boolean;
+  loopTransition?: boolean;
+  disableBlinking?: boolean;
+  [key: string]: unknown;
+}
+
+interface StateBehaviorLike {
+  allowedAnimations: string[];
+  randomSelection?: boolean;
+  loop?: boolean;
+  autoSwitch?: boolean;
+  autoSwitchInterval?: number;
+}
+
+interface CompositePlayOptions {
+  primaryWeight?: number;
+  fillWeight?: number;
+}
+
+interface BlobAnimationSource {
+  blobUrl: string;
+  id: string;
+}
+
+interface CompositeFillSegment {
+  animation: LoadedAnimationLike;
+  config: AnimationConfigLike;
+  previousConfig: AnimationConfigLike | null;
+  startFrame: number;
+  duration: number;
+  actualDuration: number;
+  isTruncated: boolean;
+}
+
+interface CameraStateSnapshot {
+  position: Vector3;
+  rotation: Vector3;
+  distance: number;
+  fov: number;
+  mode: number;
+  orthoTop: number;
+  orthoBottom: number;
+  orthoLeft: number;
+  orthoRight: number;
+}
+
+interface QueueSimpleEntry {
+  type: 'simple';
+  animationConfig: AnimationConfigLike;
+}
+
+interface QueueCompositeEntry {
+  type: 'composite';
+  compositeConfig: {
+    primary: string | BlobAnimationSource;
+    fillCategory: string;
+    options: CompositePlayOptions;
+  };
+}
+
+interface QueueSpeakEntry {
+  type: 'speak';
+  compositeConfig: {
+    text: string;
+    mouthBlobUrl: string;
+    emotionCategory: string;
+    speakOptions: CompositePlayOptions;
+  };
+}
+
+type AnimationQueueEntry = QueueSimpleEntry | QueueCompositeEntry | QueueSpeakEntry;
 
 /**
  * Helper function to get timestamp for logging
  * @returns {string} Formatted timestamp (HH:MM:SS.mmm)
  */
-function getTimestamp() {
+function getTimestamp(): string {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
@@ -48,6 +144,98 @@ function getTimestamp() {
 }
 
 export class AnimationManager {
+  private readonly instanceId: string;
+  private readonly scene: SceneWithMetadata;
+  private readonly mmdRuntime: MmdRuntimeLike;
+  private readonly mmdModel: MmdModelLike;
+  private readonly bvmdLoader: AnimationLoaderLike;
+  private readonly vmdLoader: AnimationLoaderLike;
+  private readonly getRandomAnimation: (category: string) => AnimationConfigLike | null;
+  private readonly getEnabledAnimations: (category: string) => AnimationConfigLike[];
+
+  private readonly loadedAnimations: Map<string, LoadedAnimationLike>;
+  private readonly loadingPromises: Map<string, Promise<LoadedAnimationLike>>;
+
+  private currentState: AssistantStateValue;
+  private previousState: AssistantStateValue | null;
+
+  private compositeAnimation: MmdCompositeAnimation;
+  private currentCycle: number;
+  private lastAddedCycle: number;
+  private firstActiveCycle: number;
+  private readonly maxCachedCycles: number;
+  private readonly spanMap: Map<number, MmdAnimationSpan[]>;
+  private animationStartFrame: number;
+  private oldSpansToRemove: MmdAnimationSpan[] | null;
+  private oldSpansRemovalFrame: number | null;
+
+  private currentAnimationConfig: AnimationConfigLike | null;
+  private currentLoadedAnimation: LoadedAnimationLike | null;
+  private currentAnimationDuration: number;
+  private isFirstAnimationEver: boolean;
+
+  private compositeMode: boolean;
+  private compositeConfig: CompositePlayOptions | null;
+
+  private _isTransitioning: boolean;
+  private idleSwitchTimer: number;
+  private idleSwitchInterval: number;
+  private lastSwitchFrame: number | null;
+
+  private renderObserver: Observer<Scene> | null;
+  private afterRenderObserver: Observer<Scene> | null;
+  private isInitialized: boolean;
+
+  private blinkAnimation: LoadedAnimationLike | null;
+  private blinkDuration: number;
+  private blinkDelayBetween: number;
+  private blinkEnabled: boolean;
+  private blinkSpeedMultiplier: number;
+  private _blinkMorphsApplied: boolean;
+  private blinkCompatibleMorphs: string[];
+
+  private visibilityChangeHandler: (() => void) | null;
+
+  private _pendingLocomotionOffset: { x: number; y: number; z: number } | null;
+  private _introLocomotionOffset: { x: number; y: number; z: number } | null;
+  private _introCompleted: boolean;
+  private _currentIntroAnimation: LoadedAnimationLike | null;
+  private _shouldFlipAnimations: boolean;
+
+  private _cameraOriginalOffset: { x: number; y: number } | null;
+  private _cameraPreShiftedOffset: { x: number; y: number } | null;
+  private _cameraResetActive: boolean;
+  private _cameraResetElapsed: number;
+  private _cameraResetFrames: number;
+  private _cameraResetFrom: { x: number; y: number } | null;
+  private _cameraResetTo: { x: number; y: number } | null;
+
+  private animationQueue: AnimationQueueEntry[];
+  private isProcessingQueue: boolean;
+  private justStartedFromQueue: boolean;
+
+  private currentCameraAnimation: LoadedAnimationLike | null;
+  private currentCameraUrl: string | null;
+  private cameraAnimationEnabled: boolean;
+  private originalCameraState: CameraStateSnapshot | null;
+  private currentCameraRuntimeHandle: number | null;
+
+  private runtimeAnimationHandle: number | null;
+
+  private positionManager: PositionManagerLike | null;
+  private _needsPickingBox: boolean;
+  private pickingBox: Mesh | null;
+
+  private compositePrimaryLoaded: LoadedAnimationLike | null;
+  private compositePrimaryWeight: number;
+  private compositeStitchedFillSpans: CompositeFillSegment[];
+  private compositeFillWeight: number;
+  private compositeTargetDuration: number;
+
+  private _isPaused: boolean;
+  private _pausedTimeScale: number | null;
+  private disposed: boolean;
+
   /**
    * Create AnimationManager instance
    * @param {Scene} scene - Babylon.js scene
@@ -58,7 +246,15 @@ export class AnimationManager {
    * @param {Function} getRandomAnimation - Function to get random animation from category (from AnimationContext)
    * @param {Function} getEnabledAnimations - Function to get enabled animations for category (from AnimationContext)
    */
-  constructor(scene, mmdRuntime, mmdModel, bvmdLoader, vmdLoader, getRandomAnimation, getEnabledAnimations) {
+  constructor(
+    scene: SceneWithMetadata,
+    mmdRuntime: MmdRuntimeLike,
+    mmdModel: MmdModelLike,
+    bvmdLoader: AnimationLoaderLike,
+    vmdLoader: AnimationLoaderLike,
+    getRandomAnimation?: (category: string) => AnimationConfigLike | null,
+    getEnabledAnimations?: (category: string) => AnimationConfigLike[]
+  ) {
     // Generate unique instance ID for tracking
     this.instanceId = `AM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     Logger.log('AnimationManager ${this.instanceId}', '🆕 Creating new instance');
@@ -71,8 +267,15 @@ export class AnimationManager {
     this.vmdLoader = vmdLoader;
     
     // Animation context functions
-    this.getRandomAnimation = getRandomAnimation;
-    this.getEnabledAnimations = getEnabledAnimations;
+    this.getRandomAnimation = getRandomAnimation ?? ((category: string) => {
+      const animations = getAnimationsByCategory(category) as AnimationConfigLike[];
+      if (animations.length === 0) return null;
+      const randomIndex = Math.floor(Math.random() * animations.length);
+      return animations[randomIndex] ?? null;
+    });
+    this.getEnabledAnimations = getEnabledAnimations ?? ((category: string) => {
+      return getAnimationsByCategory(category) as AnimationConfigLike[];
+    });
 
     // Animation loading cache
     this.loadedAnimations = new Map(); // filePath -> loaded animation
@@ -83,7 +286,7 @@ export class AnimationManager {
     this.previousState = null;
 
     // Composite animation
-    this.compositeAnimation = null;
+    this.compositeAnimation = new MmdCompositeAnimation('assistantComposite_bootstrap');
     
     // Dynamic span management (like experimental code)
     this.currentCycle = 0;
@@ -115,6 +318,7 @@ export class AnimationManager {
 
     // Observable handle for cleanup
     this.renderObserver = null;
+    this.afterRenderObserver = null;
 
     // Initialization flag
     this.isInitialized = false;
@@ -178,6 +382,20 @@ export class AnimationManager {
     this.currentCameraUrl = null;
     this.cameraAnimationEnabled = false;
     this.originalCameraState = null;
+    this.currentCameraRuntimeHandle = null;
+    this.runtimeAnimationHandle = null;
+    this.positionManager = null;
+    this._needsPickingBox = false;
+    this.pickingBox = null;
+    this.compositePrimaryLoaded = null;
+    this.compositePrimaryWeight = 1;
+    this.compositeStitchedFillSpans = [];
+    this.compositeFillWeight = 1;
+    this.compositeTargetDuration = 0;
+    this._isPaused = false;
+    this._pausedTimeScale = null;
+    this.disposed = false;
+    this.blinkCompatibleMorphs = [];
 
     Logger.log('AnimationManager', 'Created');
   }
@@ -187,7 +405,7 @@ export class AnimationManager {
    * This box moves with the locomotion offset so picking works correctly
    * @param {PositionManager} positionManager - To get model dimensions and conversion
    */
-  _createPickingBoundingBox(positionManager) {
+  _createPickingBoundingBox(positionManager: PositionManagerLike): void {
     if (!this._introLocomotionOffset) {
       Logger.warn('AnimationManager', 'Cannot create picking box - no locomotion offset');
       return;
@@ -298,7 +516,7 @@ export class AnimationManager {
    * Called by MmdModelScene after PositionManager is created
    * @param {PositionManager} positionManager
    */
-  setPositionManager(positionManager) {
+  setPositionManager(positionManager: PositionManagerLike): void {
     this.positionManager = positionManager;
     
     // This allows canvas interaction during intro animation, not just after
@@ -321,7 +539,7 @@ export class AnimationManager {
    * @param {boolean} playIntro - Whether to play intro animation (default: true)
    * @param {string} positionPreset - Position preset to determine if animations should be flipped
    */
-  async initialize(playIntro = true, positionPreset = 'bottom-right') {
+  async initialize(playIntro = true, positionPreset = 'bottom-right'): Promise<void> {
     if (this.isInitialized) {
       Logger.warn('AnimationManager', 'Already initialized');
       return;
@@ -358,17 +576,25 @@ export class AnimationManager {
         // Load intro animation FIRST to read its locomotion
         Logger.log('AnimationManager', 'Loading intro animation to read locomotion...');
         const loadedIntroAnim = await this.loadAnimation(introAnim);
+        if (!loadedIntroAnim) {
+          Logger.warn('AnimationManager', 'Intro animation failed to load, transitioning directly to IDLE');
+          await this.transitionToState(AssistantState.IDLE);
+          return;
+        }
         
         // Read intro's final locomotion offset
         if (loadedIntroAnim.movableBoneTracks && loadedIntroAnim.movableBoneTracks.length > 0) {
           const movableTrack = loadedIntroAnim.movableBoneTracks[0];
+          if (!movableTrack) {
+            Logger.warn('AnimationManager', 'Intro movable track missing at index 0');
+          } else {
           const frameCount = movableTrack.frameNumbers.length;
           
           if (frameCount > 0) {
             const lastFrameIndex = frameCount - 1;
-            const finalX = movableTrack.positions[lastFrameIndex * 3 + 0];
-            const finalY = movableTrack.positions[lastFrameIndex * 3 + 1];
-            const finalZ = movableTrack.positions[lastFrameIndex * 3 + 2] || 0; // Add Z coordinate
+            const finalX = movableTrack.positions[lastFrameIndex * 3 + 0] ?? 0;
+            const finalY = movableTrack.positions[lastFrameIndex * 3 + 1] ?? 0;
+            const finalZ = movableTrack.positions[lastFrameIndex * 3 + 2] ?? 0; // Add Z coordinate
             
             Logger.log('AnimationManager', 'Intro locomotion:', { x: finalX, y: finalY, z: finalZ, frames: frameCount });
             
@@ -376,6 +602,7 @@ export class AnimationManager {
             this._introLocomotionOffset = { x: finalX, y: finalY, z: finalZ };
             
             Logger.log('AnimationManager', 'Stored intro locomotion offset - will apply when PositionManager initializes');
+          }
           }
         }
         
@@ -406,7 +633,7 @@ export class AnimationManager {
    * @param {Object} animationConfig - Animation config from AnimationRegistry or AnimationContext
    * @returns {Promise<Animation>} Loaded animation
    */
-  async loadAnimation(animationConfig) {
+  async loadAnimation(animationConfig: AnimationConfigLike): Promise<LoadedAnimationLike | null> {
     if (this.disposed) return null;
     
     const { filePath, id, name, isCustom, customMotionId, preserveRootBone } = animationConfig;
@@ -418,13 +645,15 @@ export class AnimationManager {
       // 1. Already loaded? Return cached
       if (this.loadedAnimations.has(cacheKey)) {
         Logger.log('AnimationManager', `Using cached custom animation: ${name} (${customMotionId})`);
-        return this.loadedAnimations.get(cacheKey);
+        const cached = this.loadedAnimations.get(cacheKey);
+        return cached ?? null;
       }
 
       // 2. Currently loading? Wait for existing promise
       if (this.loadingPromises.has(cacheKey)) {
         Logger.log('AnimationManager', `Waiting for in-flight custom load: ${name} (${customMotionId})`);
-        return await this.loadingPromises.get(cacheKey);
+        const existingPromise = this.loadingPromises.get(cacheKey);
+        return existingPromise ? await existingPromise : null;
       }
 
       // 3. Load custom animation from storage
@@ -493,13 +722,15 @@ export class AnimationManager {
     // 1. Already loaded? Return cached
     if (this.loadedAnimations.has(filePath)) {
       Logger.log('AnimationManager', `Using cached animation: ${name} (${filePath})`);
-      return this.loadedAnimations.get(filePath);
+      const cached = this.loadedAnimations.get(filePath);
+      return cached ?? null;
     }
 
     // 2. Currently loading? Wait for existing promise
     if (this.loadingPromises.has(filePath)) {
       Logger.log('AnimationManager', `Waiting for in-flight load: ${name} (${filePath})`);
-      return await this.loadingPromises.get(filePath);
+      const existingPromise = this.loadingPromises.get(filePath);
+      return existingPromise ? await existingPromise : null;
     }
 
     // 3. Load for first time
@@ -560,25 +791,24 @@ export class AnimationManager {
    * Mirrors positions, rotations, and swaps left/right bones
    * @param {Animation} animation - Animation to mirror
    */
-  _flipAnimationXAxis(animation) {
+  _flipAnimationXAxis(animation: LoadedAnimationLike): void {
     Logger.log('AnimationManager', `Mirroring animation "${animation.name}"...`);
     
     // 1. Mirror movable bone tracks (positions)
     if (animation.movableBoneTracks) {
-      for (let i = 0; i < animation.movableBoneTracks.length; i++) {
-        const track = animation.movableBoneTracks[i];
+      for (const track of animation.movableBoneTracks) {
         const positions = track.positions;
         // Negate X coordinate for all position keyframes
         for (let j = 0; j < positions.length; j += 3) {
-          positions[j] = -positions[j];
+          const x = positions[j] ?? 0;
+          positions[j] = -x;
         }
       }
     }
 
     // 2. Mirror bone tracks (rotations)
     if (animation.boneTracks) {
-      for (let i = 0; i < animation.boneTracks.length; i++) {
-        const track = animation.boneTracks[i];
+      for (const track of animation.boneTracks) {
         
         // Mirror the rotations (quaternions)
         // To mirror around YZ plane (X-axis flip), negate Y and Z components of quaternion
@@ -586,8 +816,10 @@ export class AnimationManager {
           for (let j = 0; j < track.rotations.length; j += 4) {
             // Quaternion format: [x, y, z, w]
             // Mirror by negating y and z components
-            track.rotations[j + 1] = -track.rotations[j + 1]; // negate Y
-            track.rotations[j + 2] = -track.rotations[j + 2]; // negate Z
+            const y = track.rotations[j + 1] ?? 0;
+            const z = track.rotations[j + 2] ?? 0;
+            track.rotations[j + 1] = -y; // negate Y
+            track.rotations[j + 2] = -z; // negate Z
           }
         }
         
@@ -605,7 +837,7 @@ export class AnimationManager {
    * @param {string} boneName - Original bone name
    * @returns {string} Mirrored bone name
    */
-  _getMirroredBoneName(boneName) {
+  _getMirroredBoneName(boneName: string): string {
     // Japanese bone names
     if (boneName.includes('左')) {
       return boneName.replace('左', '右'); // 左 (left) → 右 (right)
@@ -638,7 +870,7 @@ export class AnimationManager {
    * Apply intro locomotion offset to an animation's movable bone tracks
    * @param {Animation} animation - Animation to modify
    */
-  _applyLocomotionOffset(animation) {
+  _applyLocomotionOffset(animation: LoadedAnimationLike): void {
     if (!this._introLocomotionOffset || !animation.movableBoneTracks) {
       return;
     }
@@ -653,14 +885,15 @@ export class AnimationManager {
     const offsetZ = this._introLocomotionOffset.z || 0; // Default to 0 if z is missing
 
     // Find the center bone track
-    for (let i = 0; i < animation.movableBoneTracks.length; i++) {
-      const track = animation.movableBoneTracks[i];
+    for (const track of animation.movableBoneTracks) {
       if (track.name === 'センター' || track.name === 'center') {
         // Add intro offset to ALL position keyframes in this track
         const positions = track.positions;
         for (let j = 0; j < positions.length; j += 3) {
-          positions[j] += offsetX;     // x - horizontal offset
-          positions[j + 2] += offsetZ; // z - depth offset
+          const x = positions[j] ?? 0;
+          const z = positions[j + 2] ?? 0;
+          positions[j] = x + offsetX;     // x - horizontal offset
+          positions[j + 2] = z + offsetZ; // z - depth offset
         }
         Logger.log('AnimationManager', `Applied intro offset (X,Z only) to animation "${animation.name}": x=${offsetX.toFixed(2)}, z=${offsetZ.toFixed(2)}`);
         break;
@@ -673,14 +906,13 @@ export class AnimationManager {
    * Resets all root bone position keyframes to 0 (like intro offset but sets to fixed value)
    * @param {Animation} animation - Animation to modify
    */
-  _fixRootBoneForPortraitMode(animation) {
+  _fixRootBoneForPortraitMode(animation: LoadedAnimationLike): void {
     if (!animation.movableBoneTracks) {
       return;
     }
 
     // Find the center/root bone track
-    for (let i = 0; i < animation.movableBoneTracks.length; i++) {
-      const track = animation.movableBoneTracks[i];
+    for (const track of animation.movableBoneTracks) {
       if (track.name === 'センター' || track.name === 'center' || track.name === 'root' || track.name === 'Root') {
         // Reset ALL position keyframes to 0 (keep root bone fixed)
         const positions = track.positions;
@@ -700,7 +932,7 @@ export class AnimationManager {
    * This is called once during initialization
    * Uses the animation registry system to get blink animation
    */
-  async _loadBlinkAnimation() {
+  async _loadBlinkAnimation(): Promise<void> {
     try {
       Logger.log('AnimationManager', 'Loading blink animation...');
       
@@ -756,7 +988,7 @@ export class AnimationManager {
    * Set delay between blink animations (in frames)
    * @param {number} delayFrames - Delay in frames (0 = no delay, continuous blinking)
    */
-  setBlinkDelay(delayFrames) {
+  setBlinkDelay(delayFrames: number): void {
     this.blinkDelayBetween = Math.max(0, delayFrames);
     Logger.log('AnimationManager', `Blink delay set to ${this.blinkDelayBetween} frames`);
   }
@@ -765,7 +997,7 @@ export class AnimationManager {
    * Set blink speed multiplier
    * @param {number} multiplier - Speed multiplier (1.0 = normal, 1.5 = 50% faster, 2.0 = 2x faster)
    */
-  setBlinkSpeed(multiplier) {
+  setBlinkSpeed(multiplier: number): void {
     this.blinkSpeedMultiplier = Math.max(0.1, multiplier);
     Logger.log('AnimationManager', `Blink speed set to ${this.blinkSpeedMultiplier}x`);
   }
@@ -774,7 +1006,7 @@ export class AnimationManager {
    * Enable or disable the blinking system
    * @param {boolean} enabled - True to enable, false to disable
    */
-  setBlinkEnabled(enabled) {
+  setBlinkEnabled(enabled: boolean): void {
     this.blinkEnabled = enabled;
     Logger.log('AnimationManager', `Blinking ${enabled ? 'enabled' : 'disabled'}`);
   }
@@ -783,7 +1015,13 @@ export class AnimationManager {
    * Get blinking system status
    * @returns {Object} Blink status information
    */
-  getBlinkStatus() {
+  getBlinkStatus(): {
+    enabled: boolean;
+    loaded: boolean;
+    duration: number;
+    delayBetween: number;
+    speedMultiplier: number;
+  } {
     return {
       enabled: this.blinkEnabled,
       loaded: this.blinkAnimation !== null,
@@ -797,7 +1035,7 @@ export class AnimationManager {
    * Get the current intro locomotion offset (for drag/interaction adjustments)
    * @returns {{x: number, z: number}} The locomotion offset or {x:0, z:0} if not set
    */
-  getIntroLocomotionOffset() {
+  getIntroLocomotionOffset(): { x: number; z: number } {
     if (!this._introLocomotionOffset) {
       return { x: 0, z: 0 };
     }
@@ -813,17 +1051,23 @@ export class AnimationManager {
    * @param {string} animationId - Unique ID for this animation (for caching)
    * @returns {Promise<Animation>} Loaded animation
    */
-  async loadAnimationFromBlob(blobUrl, animationId = `blob_${Date.now()}`) {
+  async loadAnimationFromBlob(blobUrl: string, animationId = `blob_${Date.now()}`): Promise<LoadedAnimationLike> {
     // Check cache first
     if (this.loadedAnimations.has(blobUrl)) {
       Logger.log('AnimationManager', `Using cached blob animation: ${animationId}`);
-      return this.loadedAnimations.get(blobUrl);
+      const cached = this.loadedAnimations.get(blobUrl);
+      if (cached) {
+        return cached;
+      }
     }
 
     // Currently loading?
     if (this.loadingPromises.has(blobUrl)) {
       Logger.log('AnimationManager', `Waiting for in-flight blob load: ${animationId}`);
-      return await this.loadingPromises.get(blobUrl);
+      const existingPromise = this.loadingPromises.get(blobUrl);
+      if (existingPromise) {
+        return await existingPromise;
+      }
     }
 
     // Load from blob URL
@@ -872,7 +1116,7 @@ export class AnimationManager {
    * @param {string} cameraFilePath - Blob URL to camera VMD/BVMD file
    * @returns {Promise<void>}
    */
-  async loadCameraAnimation(cameraFilePath) {
+  async loadCameraAnimation(cameraFilePath: string): Promise<void> {
     if (!cameraFilePath) {
       Logger.warn('AnimationManager', 'No camera file path provided - skipping camera animation');
       return;
@@ -926,8 +1170,10 @@ export class AnimationManager {
         const positionTrack = cameraAnimation.cameraTrack.positions;
         if (positionTrack) {
           for (let i = 0; i < positionTrack.length; i += 3) {
-            positionTrack[i] += offsetX;     // x
-            positionTrack[i + 2] += offsetZ; // z (y is i+1, don't offset vertical)
+            const x = positionTrack[i] ?? 0;
+            const z = positionTrack[i + 2] ?? 0;
+            positionTrack[i] = x + offsetX;     // x
+            positionTrack[i + 2] = z + offsetZ; // z (y is i+1, don't offset vertical)
           }
         }
       }
@@ -961,7 +1207,7 @@ export class AnimationManager {
   /**
    * Clean up and dispose of camera animation resources
    */
-  cleanupCameraAnimation() {
+  cleanupCameraAnimation(): void {
     if (!this.currentCameraAnimation) return;
     
     const mmdCamera = this.scene.metadata?.mmdCamera;
@@ -1012,7 +1258,11 @@ export class AnimationManager {
    * Validates transition, selects appropriate animation, and starts playback
    * @param {string} newState - Target state from AssistantState
    */
-  async transitionToState(newState, customBehavior = null, customAnimation = null) {
+  async transitionToState(
+    newState: AssistantStateValue,
+    customBehavior: StateBehaviorLike | null = null,
+    customAnimation: AnimationConfigLike | null = null
+  ): Promise<void> {
     if (this.disposed) return;
     
     Logger.log('AnimationManager', `[TRANSITION START] ${this.currentState} -> ${newState}`);
@@ -1075,7 +1325,13 @@ export class AnimationManager {
       if (behavior.randomSelection) {
         // Randomly pick from allowed animations
         const allowedCategories = behavior.allowedAnimations;
-        const randomCategory = allowedCategories[Math.floor(Math.random() * allowedCategories.length)];
+        const randomCategory =
+          allowedCategories[Math.floor(Math.random() * allowedCategories.length)] ??
+          allowedCategories[0];
+        if (!randomCategory) {
+          Logger.warn('AnimationManager', '[TRANSITION] No allowed categories found for random selection');
+          return;
+        }
         animationConfig = this.getRandomAnimation(randomCategory);
         Logger.log('AnimationManager', `[TRANSITION] Random selection from ${randomCategory}: ${animationConfig?.name}`);
       } else {
@@ -1104,7 +1360,7 @@ export class AnimationManager {
    * @param {Object} animationConfig - Animation config from registry
    * @param {Object} stateBehavior - State behavior config (optional, uses current state if not provided)
    */
-  async playAnimation(animationConfig, stateBehavior = null) {
+  async playAnimation(animationConfig: AnimationConfigLike, stateBehavior: StateBehaviorLike | null = null): Promise<void> {
     if (this.disposed) return;
     
     const behavior = stateBehavior || StateBehavior[this.currentState];
@@ -1113,6 +1369,10 @@ export class AnimationManager {
     
     // Load animation
     const loadedAnimation = await this.loadAnimation(animationConfig);
+    if (!loadedAnimation) {
+      Logger.error('AnimationManager', `Failed to load animation: ${animationConfig.name}`);
+      return;
+    }
     
     // Store animation info
     this.currentAnimationConfig = animationConfig;
@@ -1241,7 +1501,7 @@ export class AnimationManager {
     // Reset idle switch timer
     this.idleSwitchTimer = 0;
     this.lastSwitchFrame = this.mmdRuntime.currentFrameTime; // Track when we last switched
-    if (behavior.autoSwitchInterval) {
+    if (behavior?.autoSwitchInterval) {
       this.idleSwitchInterval = behavior.autoSwitchInterval;
     }
 
@@ -1259,7 +1519,7 @@ export class AnimationManager {
    * For single looping animations, just add the next loop at the end
    * With loopTransition: true, creates smooth overlap between cycles
    */
-  addNextCycle() {
+  addNextCycle(): void {
     if (this.disposed) return;
     
     if (!this.currentLoadedAnimation || !this.currentAnimationConfig) {
@@ -1283,7 +1543,7 @@ export class AnimationManager {
 
     Logger.log('AnimationManager', `Adding cycle ${cycle} at frame ${cycleStartTime}, duration: ${duration} frames`);
 
-    const spans = [];
+    const spans: MmdAnimationSpan[] = [];
     
     // Check if we're in COMPOSITE state - create combined animation with body bones + mouth morphs
     if (this.currentState === AssistantState.COMPOSITE && this.compositePrimaryLoaded) {
@@ -1291,11 +1551,19 @@ export class AnimationManager {
       
       // First, add all stitched fill segments as separate spans (body animations)
       // ALSO: Extend the last segment to provide transition buffer for smooth ease-out
-      const fillSpans = [];
+      const fillSpans: MmdAnimationSpan[] = [];
       let actualOffset = cycleStartTime; // Track actual position in timeline
+
+      if (this.compositeStitchedFillSpans.length === 0) {
+        Logger.warn('AnimationManager', 'Composite fill timeline is empty; cannot add composite cycle');
+        return;
+      }
       
       for (let i = 0; i < this.compositeStitchedFillSpans.length; i++) {
         const segment = this.compositeStitchedFillSpans[i];
+        if (!segment) {
+          continue;
+        }
         const prevSegment = i > 0 ? this.compositeStitchedFillSpans[i - 1] : null;
         const isLastSegment = i === this.compositeStitchedFillSpans.length - 1;
         
@@ -1350,9 +1618,10 @@ export class AnimationManager {
           );
           
           // CRITICAL: Also apply ease-out to previous segment for smooth blend
-          if (prevSegment && fillSpans[i - 1]) {
-            fillSpans[i - 1].easeOutFrameTime = transitionFrames;
-            fillSpans[i - 1].easingFunction = new BezierCurveEase(
+          const previousFillSpan = fillSpans[i - 1];
+          if (prevSegment && previousFillSpan) {
+            previousFillSpan.easeOutFrameTime = transitionFrames;
+            previousFillSpan.easingFunction = new BezierCurveEase(
               TransitionSettings.DEFAULT_EASING_CURVE.x1,
               TransitionSettings.DEFAULT_EASING_CURVE.y1,
               TransitionSettings.DEFAULT_EASING_CURVE.x2,
@@ -1373,6 +1642,9 @@ export class AnimationManager {
         // Otherwise, they're sequential
         if (i < this.compositeStitchedFillSpans.length - 1) {
           const nextSegment = this.compositeStitchedFillSpans[i + 1];
+          if (!nextSegment) {
+            continue;
+          }
           const nextIsSame = segment.config.id === nextSegment.config.id;
           const nextHasLoopTransition = nextSegment.config.loopTransition !== false;
           // CRITICAL: Truncated segments ALWAYS need easing to prevent jumps
@@ -1395,7 +1667,12 @@ export class AnimationManager {
       const transitionBuffer = transitionFrames; // Extra frames for transition overlap
       
       // Create merged animation: clone first fill segment and inject mouth morphs
-      const baseAnim = this.compositeStitchedFillSpans[0].animation;
+      const firstFillSegment = this.compositeStitchedFillSpans[0];
+      if (!firstFillSegment) {
+        Logger.warn('AnimationManager', 'Missing first fill segment for composite morph overlay');
+        return;
+      }
+      const baseAnim = firstFillSegment.animation;
       const mergedWithMorphs = this._createMorphOnlyAnimation(baseAnim, mouthAnim);
       
       // CRITICAL: Extend the morph animation's endFrame to provide transition buffer
@@ -1460,15 +1737,17 @@ export class AnimationManager {
         const previousCycle = cycle - 1;
         if (this.spanMap.has(previousCycle)) {
           const previousSpans = this.spanMap.get(previousCycle);
-          Logger.log('AnimationManager', `Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
-          for (const prevSpan of previousSpans) {
-            prevSpan.easeOutFrameTime = transitionFrames;
-            prevSpan.easingFunction = new BezierCurveEase(
-              TransitionSettings.DEFAULT_EASING_CURVE.x1,
-              TransitionSettings.DEFAULT_EASING_CURVE.y1,
-              TransitionSettings.DEFAULT_EASING_CURVE.x2,
-              TransitionSettings.DEFAULT_EASING_CURVE.y2
-            );
+          if (previousSpans) {
+            Logger.log('AnimationManager', `Applying ease-out to ${previousSpans.length} spans from cycle ${previousCycle}`);
+            for (const prevSpan of previousSpans) {
+              prevSpan.easeOutFrameTime = transitionFrames;
+              prevSpan.easingFunction = new BezierCurveEase(
+                TransitionSettings.DEFAULT_EASING_CURVE.x1,
+                TransitionSettings.DEFAULT_EASING_CURVE.y1,
+                TransitionSettings.DEFAULT_EASING_CURVE.x2,
+                TransitionSettings.DEFAULT_EASING_CURVE.y2
+              );
+            }
           }
         }
       }
@@ -1498,9 +1777,12 @@ export class AnimationManager {
    * Clean up old cycles to prevent memory buildup
    * Now called from onBeforeRender with proper cycle calculation
    */
-  cleanupOldCycles(cycleToRemove) {
+  cleanupOldCycles(cycleToRemove: number): void {
     if (cycleToRemove >= this.firstActiveCycle && this.spanMap.has(cycleToRemove)) {
       const spansToRemove = this.spanMap.get(cycleToRemove);
+      if (!spansToRemove) {
+        return;
+      }
 
       for (const span of spansToRemove) {
         this.compositeAnimation.removeSpan(span);
@@ -1516,7 +1798,7 @@ export class AnimationManager {
   /**
    * Clear all spans (used when switching animations)
    */
-  clearAllSpans() {
+  clearAllSpans(): void {
     Logger.log('AnimationManager', 'Clearing all spans');
 
     // Remove all spans
@@ -1537,7 +1819,7 @@ export class AnimationManager {
    * Register onBeforeRenderObservable for dynamic span management
    * This is the core runtime loop
    */
-  registerRenderObserver() {
+  registerRenderObserver(): void {
     this.renderObserver = this.scene.onBeforeRenderObservable.add(() => {
       this.onBeforeRender();
     });
@@ -1553,7 +1835,7 @@ export class AnimationManager {
   /**
    * Called every frame - handles dynamic span management
    */
-  onBeforeRender() {
+  onBeforeRender(): void {
     // Don't process if disposed
     if (this.disposed) {
       return;
@@ -1587,7 +1869,11 @@ export class AnimationManager {
     const absoluteFrame = this.mmdRuntime.currentFrameTime;
     
     // Check if we need to remove old spans from previous animation after transition
-    if (this.oldSpansToRemove && absoluteFrame >= this.oldSpansRemovalFrame) {
+    if (
+      this.oldSpansToRemove &&
+      this.oldSpansRemovalFrame !== null &&
+      absoluteFrame >= this.oldSpansRemovalFrame
+    ) {
       Logger.log('AnimationManager', `Removing ${this.oldSpansToRemove.length} old spans after transition complete`);
       for (const span of this.oldSpansToRemove) {
         this.compositeAnimation.removeSpan(span);
@@ -1761,6 +2047,9 @@ export class AnimationManager {
     const cycleToRemove = this.currentCycle - this.maxCachedCycles;
     if (shouldLoop && cycleToRemove >= this.firstActiveCycle && this.spanMap.has(cycleToRemove)) {
       const spansToRemove = this.spanMap.get(cycleToRemove);
+      if (!spansToRemove) {
+        return;
+      }
       for (const span of spansToRemove) {
         this.compositeAnimation.removeSpan(span);
       }
@@ -1778,13 +2067,18 @@ export class AnimationManager {
    * This runs AFTER babylon-mmd applies all animation morphs
    * Simple approach: Calculate blink timing based on absolute time, apply directly
    */
-  onAfterRender() {
-    const shouldDisableBlink = this.disposed || !this.blinkEnabled || !this.blinkAnimation || this.currentAnimationConfig?.disableBlinking;
+  onAfterRender(): void {
+    const blinkAnimation = this.blinkAnimation;
+    const shouldDisableBlink =
+      this.disposed ||
+      !this.blinkEnabled ||
+      !blinkAnimation ||
+      this.currentAnimationConfig?.disableBlinking;
     
     if (shouldDisableBlink) {
-      if (this._blinkMorphsApplied) {
+      if (this._blinkMorphsApplied && blinkAnimation?.morphTracks) {
         const morphController = this.mmdModel.morph;
-        for (const morphTrack of this.blinkAnimation.morphTracks) {
+        for (const morphTrack of blinkAnimation.morphTracks) {
           morphController.setMorphWeight(morphTrack.name, 0);
         }
         this._blinkMorphsApplied = false;
@@ -1812,7 +2106,7 @@ export class AnimationManager {
       const originalAnimFrame = (blinkCycleFrame / adjustedBlinkDuration) * this.blinkDuration;
       
       // Read morph weights from blink animation at mapped frame
-      for (const morphTrack of this.blinkAnimation.morphTracks) {
+      for (const morphTrack of blinkAnimation?.morphTracks ?? []) {
         const weight = this._getMorphWeightAtFrame(morphTrack, originalAnimFrame);
         // OVERRIDE morph weight (this runs AFTER animations, so we replace their values)
         morphController.setMorphWeight(morphTrack.name, weight);
@@ -1827,22 +2121,24 @@ export class AnimationManager {
    * @param {number} frameTime - Frame time to sample
    * @returns {number} Interpolated weight value
    */
-  _getMorphWeightAtFrame(morphTrack, frameTime) {
+  _getMorphWeightAtFrame(morphTrack: MorphTrackLike, frameTime: number): number {
     const frameNumbers = morphTrack.frameNumbers;
     const weights = morphTrack.weights;
     
     if (frameNumbers.length === 0) return 0;
-    if (frameTime <= frameNumbers[0]) return weights[0];
-    if (frameTime >= frameNumbers[frameNumbers.length - 1]) return weights[weights.length - 1];
+    if (frameTime <= (frameNumbers[0] ?? 0)) return weights[0] ?? 0;
+    if (frameTime >= (frameNumbers[frameNumbers.length - 1] ?? 0)) {
+      return weights[weights.length - 1] ?? 0;
+    }
     
     // Find the two keyframes to interpolate between
     for (let i = 0; i < frameNumbers.length - 1; i++) {
-      const frameA = frameNumbers[i];
-      const frameB = frameNumbers[i + 1];
+      const frameA = frameNumbers[i] ?? 0;
+      const frameB = frameNumbers[i + 1] ?? frameA;
       
       if (frameTime >= frameA && frameTime <= frameB) {
-        const weightA = weights[i];
-        const weightB = weights[i + 1];
+        const weightA = weights[i] ?? 0;
+        const weightB = weights[i + 1] ?? weightA;
         
         // Linear interpolation
         const t = (frameTime - frameA) / (frameB - frameA);
@@ -1856,11 +2152,11 @@ export class AnimationManager {
   /**
    * Handle automatic idle animation switching for variety
    */
-  handleIdleAutoSwitch() {
+  handleIdleAutoSwitch(): void {
     const behavior = StateBehavior[this.currentState];
     
     // Only auto-switch when in IDLE state
-    if (this.currentState === AssistantState.IDLE && behavior.autoSwitch) {
+    if (this.currentState === AssistantState.IDLE && behavior?.autoSwitch) {
       // Don't switch if we just switched on this frame (prevent infinite loop)
       const currentFrame = this.mmdRuntime.currentFrameTime;
       if (this.lastSwitchFrame && currentFrame === this.lastSwitchFrame) {
@@ -1929,7 +2225,7 @@ export class AnimationManager {
    * Register visibility change handler to pause/resume animation on tab switch
    * Prevents time jumps when user switches tabs and browser throttles the tab
    */
-  registerVisibilityHandler() {
+  registerVisibilityHandler(): void {
     this.visibilityChangeHandler = () => {
       if (document.hidden) {
         // Tab is hidden - pause by setting playAnimation to false
@@ -1954,7 +2250,7 @@ export class AnimationManager {
    * Get current state
    * @returns {string} Current assistant state
    */
-  getCurrentState() {
+  getCurrentState(): AssistantStateValue {
     return this.currentState;
   }
 
@@ -1962,7 +2258,11 @@ export class AnimationManager {
    * Get current animation info
    * @returns {Object} Current animation config and loaded animation
    */
-  getCurrentAnimation() {
+  getCurrentAnimation(): {
+    config: AnimationConfigLike | null;
+    loaded: LoadedAnimationLike | null;
+    duration: number;
+  } {
     return {
       config: this.currentAnimationConfig,
       loaded: this.currentLoadedAnimation,
@@ -1974,7 +2274,7 @@ export class AnimationManager {
    * Check if animation is currently playing
    * @returns {boolean} True if animation is active
    */
-  isPlaying() {
+  isPlaying(): boolean {
     return this.mmdRuntime.isAnimationPlaying;
   }
 
@@ -1982,7 +2282,7 @@ export class AnimationManager {
    * Get current playback time in frames
    * @returns {number} Current frame
    */
-  getCurrentFrame() {
+  getCurrentFrame(): number {
     return this.mmdRuntime.currentFrameTime;
   }
 
@@ -1990,7 +2290,7 @@ export class AnimationManager {
    * Trigger specific action (for external control)
    * @param {string} action - Action name: 'think', 'walk', 'celebrate', 'speak'
    */
-  async triggerAction(action) {
+  async triggerAction(action: string): Promise<void> {
     Logger.log('AnimationManager', `Triggering action: ${action}`);
 
     switch (action) {
@@ -2024,7 +2324,11 @@ export class AnimationManager {
    * @param {string} fillCategory - Category of animations to stitch for body movement ('talking', 'idle', etc.)
    * @param {Object} options - { primaryWeight: 1.0, fillWeight: 0.5 }
    */
-  async playComposite(primaryAnimNameOrBlob, fillCategory = 'talking', options = {}) {
+  async playComposite(
+    primaryAnimNameOrBlob: string | BlobAnimationSource,
+    fillCategory = 'talking',
+    options: CompositePlayOptions = {}
+  ): Promise<void> {
     const primaryWeight = options.primaryWeight ?? 1.0;
     const fillWeight = options.fillWeight ?? 0.5;
 
@@ -2076,6 +2380,12 @@ export class AnimationManager {
 
     Logger.log('AnimationManager', `Found ${fillAnimations.length} fill animations in category "${fillCategory}"`);
 
+    if (!primaryLoaded) {
+      Logger.error('AnimationManager', 'Primary animation failed to load for composite playback');
+      this.currentState = this.previousState || AssistantState.IDLE;
+      return;
+    }
+
     const targetDuration = primaryLoaded.endFrame;
     Logger.log('AnimationManager', `Primary animation duration: ${targetDuration} frames`);
 
@@ -2116,7 +2426,12 @@ export class AnimationManager {
    * @param {string} emotionCategory - Animation category for body motion ('talking', 'idle', 'thinking', etc.)
    * @param {Object} options - Optional settings { primaryWeight: 0.0, fillWeight: 1.0 }
    */
-  async speak(text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) {
+  async speak(
+    text: string,
+    mouthAnimationBlobUrl: string,
+    emotionCategory = 'talking',
+    options: CompositePlayOptions = {}
+  ): Promise<void> {
     if (this.disposed) return;
     
     Logger.log('AnimationManager', `speak: text="${text}", emotionCategory="${emotionCategory}"`);
@@ -2150,7 +2465,7 @@ export class AnimationManager {
    * 
    * CRITICAL: Plays FULL animations, only truncates the LAST one if it exceeds target duration
    */
-  async _buildStitchedTimeline(fillAnimations, targetDuration) {
+  async _buildStitchedTimeline(fillAnimations: AnimationConfigLike[], targetDuration: number): Promise<CompositeFillSegment[]> {
     const segments = [];
     let currentFrame = 0;
     let previousConfig = null; // Track previous animation for smart transitions
@@ -2160,10 +2475,20 @@ export class AnimationManager {
 
     while (currentFrame < targetDuration) {
       // RANDOMLY pick fill animation from the pool
-      const fillAnim = fillAnimations[Math.floor(Math.random() * fillAnimations.length)];
+      const fillAnim =
+        fillAnimations[Math.floor(Math.random() * fillAnimations.length)] ??
+        fillAnimations[0];
+      if (!fillAnim) {
+        Logger.warn('AnimationManager', 'No fill animation available during stitched timeline build');
+        break;
+      }
       
       // Load it
       const loaded = await this.loadAnimation(fillAnim);
+      if (!loaded) {
+        Logger.warn('AnimationManager', `Skipping fill animation that failed to load: ${fillAnim.name}`);
+        continue;
+      }
       
       // Get full animation duration
       const animDuration = loaded.endFrame;
@@ -2265,7 +2590,7 @@ export class AnimationManager {
    * @param {Animation} morphAnimation - Animation with morphTracks to inject
    * @returns {Animation} Animation with morphs only (no bone tracks)
    */
-  _createMorphOnlyAnimation(baseAnimation, morphAnimation) {
+  _createMorphOnlyAnimation(baseAnimation: LoadedAnimationLike, morphAnimation: LoadedAnimationLike): LoadedAnimationLike {
     // Clone the base animation to preserve babylon-mmd internal structure
     const morphOnly = Object.assign(Object.create(Object.getPrototypeOf(baseAnimation)), baseAnimation);
     
@@ -2300,7 +2625,7 @@ export class AnimationManager {
   /**
    * Return to idle state
    */
-  async returnToIdle() {
+  async returnToIdle(): Promise<void> {
     Logger.log('AnimationManager', 'Returning to idle');
     await this.transitionToState(AssistantState.IDLE);
   }
@@ -2317,7 +2642,7 @@ export class AnimationManager {
    * @param {Object} queueEntry.compositeConfig - For composite { primary, fillCategory, options }
    * @param {boolean} force - If true, interrupt current animation and play immediately
    */
-  queueAnimation(queueEntry, force = false) {
+  queueAnimation(queueEntry: AnimationQueueEntry, force = false): void {
     Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Adding to queue (force=${force}):`, queueEntry.type);
     
     if (force) {
@@ -2348,7 +2673,7 @@ export class AnimationManager {
    * Process next animation in queue
    * Called automatically by onBeforeRender when current animation ends
    */
-  async processQueue() {
+  async processQueue(): Promise<void> {
     // Prevent re-entry
     if (this.isProcessingQueue) {
       Logger.log('${getTimestamp()}', '[AnimationManager] [QUEUE] Already processing, skipping');
@@ -2365,6 +2690,9 @@ export class AnimationManager {
 
     try {
       const queueEntry = this.animationQueue.shift(); // Remove first item
+      if (!queueEntry) {
+        return;
+      }
       Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Processing queue entry (type: ${queueEntry.type}). Remaining: ${this.animationQueue.length}`);
 
       // Set flag to prevent immediate queue re-check
@@ -2409,9 +2737,6 @@ export class AnimationManager {
           await this.speak(text, mouthBlobUrl, emotionCategory, speakOptions);
           break;
         }
-
-        default:
-          Logger.error('${getTimestamp()}', `[AnimationManager] [QUEUE] Unknown queue type: ${queueEntry.type}`);
       }
     } catch (error) {
       Logger.error('${getTimestamp()}', '[AnimationManager] [QUEUE] Error processing queue:', error);
@@ -2423,7 +2748,7 @@ export class AnimationManager {
   /**
    * Clear all queued animations
    */
-  clearQueue() {
+  clearQueue(): void {
     Logger.log('${getTimestamp()}', `[AnimationManager] [QUEUE] Clearing queue (${this.animationQueue.length} items)`);
     this.animationQueue = [];
   }
@@ -2432,13 +2757,24 @@ export class AnimationManager {
    * Get queue status
    * @returns {Object} Queue information
    */
-  getQueueStatus() {
+  getQueueStatus(): {
+    length: number;
+    isEmpty: boolean;
+    items: Array<{ type: AnimationQueueEntry['type']; name: string }>;
+  } {
     return {
       length: this.animationQueue.length,
       isEmpty: this.animationQueue.length === 0,
       items: this.animationQueue.map(entry => ({
         type: entry.type,
-        name: entry.animationConfig?.name || entry.compositeConfig?.primary || 'unknown'
+        name:
+          entry.type === 'simple'
+            ? entry.animationConfig.name
+            : entry.type === 'composite'
+              ? (typeof entry.compositeConfig.primary === 'string'
+                  ? entry.compositeConfig.primary
+                  : entry.compositeConfig.primary.id)
+              : entry.compositeConfig.text
       }))
     };
   }
@@ -2447,7 +2783,7 @@ export class AnimationManager {
    * Check if queue should be processed
    * Called from onBeforeRender when animation is near end
    */
-  shouldProcessQueue() {
+  shouldProcessQueue(): boolean {
     // Has items in queue
     if (this.animationQueue.length === 0) {
       return false;
@@ -2475,7 +2811,7 @@ export class AnimationManager {
    * @param {Object|string} animationConfigOrName - Animation config or name from registry
    * @param {boolean} force - Force interrupt current animation
    */
-  queueSimpleAnimation(animationConfigOrName, force = false) {
+  queueSimpleAnimation(animationConfigOrName: AnimationConfigLike | string, force = false): void {
     let animationConfig;
 
     if (typeof animationConfigOrName === 'string') {
@@ -2502,7 +2838,12 @@ export class AnimationManager {
    * @param {Object} options - Composite options
    * @param {boolean} force - Force interrupt current animation
    */
-  queueCompositeAnimation(primaryAnimNameOrBlob, fillCategory = 'talking', options = {}, force = false) {
+  queueCompositeAnimation(
+    primaryAnimNameOrBlob: string | BlobAnimationSource,
+    fillCategory = 'talking',
+    options: CompositePlayOptions = {},
+    force = false
+  ): void {
     this.queueAnimation({
       type: 'composite',
       compositeConfig: {
@@ -2521,7 +2862,13 @@ export class AnimationManager {
    * @param {Object} options - Speak options
    * @param {boolean} force - Force interrupt current animation
    */
-  queueSpeak(text, mouthBlobUrl, emotionCategory = 'talking', options = {}, force = false) {
+  queueSpeak(
+    text: string,
+    mouthBlobUrl: string,
+    emotionCategory = 'talking',
+    options: CompositePlayOptions = {},
+    force = false
+  ): void {
     this.queueAnimation({
       type: 'speak',
       compositeConfig: {
@@ -2536,7 +2883,7 @@ export class AnimationManager {
   /**
    * Pause animation playback (for Android wallpaper when not visible)
    */
-  pause() {
+  pause(): void {
     if (this._isPaused) return;
     this._isPaused = true;
     
@@ -2552,7 +2899,7 @@ export class AnimationManager {
   /**
    * Resume animation playback (for Android wallpaper when visible again)
    */
-  resume() {
+  resume(): void {
     if (!this._isPaused) return;
     this._isPaused = false;
     
@@ -2567,7 +2914,7 @@ export class AnimationManager {
   /**
    * Dispose and cleanup
    */
-  dispose() {
+  dispose(): void {
     Logger.log('AnimationManager ${this.instanceId}', '⚠️ DISPOSE CALLED - Shutting down AnimationManager');
 
     // Set disposed flag to prevent further operations

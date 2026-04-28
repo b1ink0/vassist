@@ -4,6 +4,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import type * as React from 'react';
 import ChatService from '../services/ChatService';
 import { 
   AIServiceProxy, 
@@ -21,9 +22,147 @@ import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
 
-const AppContext = createContext(null);
+interface ChatMessageItem {
+  id: string;
+  role: string;
+  content: string;
+  images?: string[];
+  audios?: string[];
+  [key: string]: unknown;
+}
 
-export const useApp = () => {
+interface AssistantHandle {
+  isReady?: () => boolean;
+  idle?: () => void | Promise<void>;
+}
+
+interface PositionManagerState {
+  canvasWidth?: number;
+  canvasHeight?: number;
+}
+
+interface UIConfigState {
+  [key: string]: unknown;
+  enableModelLoading?: boolean;
+  shortcuts?: {
+    enabled?: boolean;
+    openChat?: string;
+    toggleMode?: string;
+    toggleVisibility?: string;
+  };
+}
+
+interface AIConfigState {
+  [key: string]: unknown;
+  provider?: string;
+  aiFeatures?: {
+    translator?: { enabled?: boolean; defaultTargetLanguage?: string };
+    languageDetector?: { enabled?: boolean };
+    summarizer?: { enabled?: boolean; defaultType?: string; defaultFormat?: string; defaultLength?: string };
+    rewriter?: { enabled?: boolean };
+    writer?: { enabled?: boolean };
+  };
+}
+
+interface AppContextValue {
+  isAssistantReady: boolean;
+  isChatUIReady: boolean;
+  enableModelLoading: boolean | null;
+  assistantRef: React.MutableRefObject<unknown>;
+  sceneRef: React.MutableRefObject<unknown>;
+  positionManagerRef: React.MutableRefObject<PositionManagerState | null>;
+  handleAssistantReady: (payload: { animationManager: unknown; positionManager: PositionManagerState; scene: unknown }) => void;
+  setIsAssistantReady: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsChatUIReady: React.Dispatch<React.SetStateAction<boolean>>;
+
+  isChatInputVisible: boolean;
+  isChatContainerVisible: boolean;
+  chatMessages: ChatMessageItem[];
+  isProcessing: boolean;
+  currentChatId: string | null;
+  isTempChat: boolean;
+  pendingDropData: unknown;
+
+  setIsChatInputVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsChatContainerVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  setChatMessages: React.Dispatch<React.SetStateAction<ChatMessageItem[]>>;
+  setIsProcessing: React.Dispatch<React.SetStateAction<boolean>>;
+  setCurrentChatId: React.Dispatch<React.SetStateAction<string | null>>;
+  setIsTempChat: React.Dispatch<React.SetStateAction<boolean>>;
+  setPendingDropData: React.Dispatch<React.SetStateAction<unknown>>;
+
+  isVoiceMode: boolean;
+  isSpeaking: boolean;
+  setIsVoiceMode: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsSpeaking: React.Dispatch<React.SetStateAction<boolean>>;
+
+  isSettingsPanelOpen: boolean;
+  isHistoryPanelOpen: boolean;
+  setIsSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsHistoryPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+
+  playingMessageIndex: number | null;
+  loadingMessageIndex: number | null;
+  setPlayingMessageIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  setLoadingMessageIndex: React.Dispatch<React.SetStateAction<number | null>>;
+
+  isDraggingButton: boolean;
+  isDraggingModel: boolean;
+  isDragOverChat: boolean;
+  setIsDraggingButton: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsDraggingModel: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsDragOverChat: React.Dispatch<React.SetStateAction<boolean>>;
+
+  buttonPosition: { x: number; y: number };
+  setButtonPosition: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+
+  modelOverlayPos: { x: number; y: number; width: number; height: number };
+  setModelOverlayPos: React.Dispatch<React.SetStateAction<{ x: number; y: number; width: number; height: number }>>;
+  showModelLoadingOverlay: boolean;
+  setShowModelLoadingOverlay: React.Dispatch<React.SetStateAction<boolean>>;
+
+  savedModelPosition: unknown;
+  setSavedModelPosition: React.Dispatch<React.SetStateAction<unknown>>;
+
+  toggleChat: () => void;
+  openChat: () => void;
+  closeChat: () => void;
+  clearChat: () => Promise<void>;
+  stopGeneration: () => void;
+  loadChatFromHistory: (chatData: { chatId: string }) => Promise<void>;
+  updateChatMessages: (messages: ChatMessageItem[]) => void;
+
+  editUserMessage: (messageId: string, newContent: string, newImages?: string[] | null, newAudios?: string[] | null) => Promise<string>;
+  regenerateAIMessage: (messageId: string) => Promise<void>;
+  switchToBranch: (parentId: string, branchIndex: number) => void;
+  previousBranch: (messageId: string) => void;
+  nextBranch: (messageId: string) => void;
+  regenerateWithStreamingRef: React.MutableRefObject<(() => Promise<void>) | null>;
+  editWithStreamingRef: React.MutableRefObject<((messageId: string) => Promise<void>) | null>;
+
+  startButtonDrag: () => void;
+  endButtonDrag: () => void;
+  startModelDrag: () => void;
+  endModelDrag: () => void;
+  updateButtonPosition: (pos: { x: number; y: number }) => void;
+
+  toggleSettingsPanel: () => void;
+  toggleHistoryPanel: () => void;
+
+  handleSummarize: (text: string) => Promise<unknown>;
+  handleTranslate: (text: string, sourceLanguage: string, targetLanguageOverride?: string) => Promise<unknown>;
+  handleAddToChat: (data: unknown, autoSend?: boolean) => void;
+
+  sceneKey: number;
+  reloadScene: () => void;
+
+  uiConfig: unknown;
+  aiConfig: unknown;
+}
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export const useApp = (): AppContextValue => {
   const context = useContext(AppContext);
   if (!context) {
     throw new Error('useApp must be used within AppProvider');
@@ -31,7 +170,7 @@ export const useApp = () => {
   return context;
 };
 
-export const AppProvider = ({ children }) => {
+export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const { api } = useDesktop();
   const hasNotifiedFrontendReadyRef = useRef(false);
   
@@ -40,27 +179,27 @@ export const AppProvider = ({ children }) => {
   // ========================================
   const [isAssistantReady, setIsAssistantReady] = useState(false);
   const [isChatUIReady, setIsChatUIReady] = useState(false);
-  const [enableModelLoading, setEnableModelLoading] = useState(null);
-  const assistantRef = useRef(null);
-  const sceneRef = useRef(null);
-  const positionManagerRef = useRef(null);
+  const [enableModelLoading, setEnableModelLoading] = useState<boolean | null>(null);
+  const assistantRef = useRef<AssistantHandle | null>(null);
+  const sceneRef = useRef<unknown | null>(null);
+  const positionManagerRef = useRef<PositionManagerState | null>(null);
 
   // ========================================
   // CONFIG STATE
   // ========================================
-  const [uiConfig, setUIConfig] = useState(null);
-  const [aiConfig, setAIConfig] = useState(null);
+  const [uiConfig, setUIConfig] = useState<UIConfigState | null>(null);
+  const [aiConfig, setAIConfig] = useState<AIConfigState | null>(null);
 
   // ========================================
   // CHAT UI STATE
   // ========================================
   const [isChatInputVisible, setIsChatInputVisible] = useState(false);
   const [isChatContainerVisible, setIsChatContainerVisible] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState(null);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isTempChat, setIsTempChat] = useState(false);
-  const [pendingDropData, setPendingDropData] = useState(null);
+  const [pendingDropData, setPendingDropData] = useState<unknown>(null);
 
   // ========================================
   // VOICE & TTS STATE
@@ -77,8 +216,8 @@ export const AppProvider = ({ children }) => {
   // ========================================
   // MESSAGE PLAYBACK STATE
   // ========================================
-  const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState(null);
+  const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState<number | null>(null);
 
   // ========================================
   // DRAG STATE
@@ -101,7 +240,7 @@ export const AppProvider = ({ children }) => {
   // ========================================
   // SAVED MODEL POSITION (for tab visibility unmount/remount)
   // ========================================
-  const [savedModelPosition, setSavedModelPosition] = useState(null);
+  const [savedModelPosition, setSavedModelPosition] = useState<unknown>(null);
 
   // ========================================
   // SCENE RELOAD STATE
@@ -117,13 +256,19 @@ export const AppProvider = ({ children }) => {
     const loadConfigs = async () => {
       try {
         // Load UI config
-        const loadedUIConfig = await StorageServiceProxy.configLoad('uiConfig', { enableModelLoading: true, enableAIToolbar: true });
+        const loadedUIConfigRaw = await StorageServiceProxy.configLoad('uiConfig');
+        const loadedUIConfig = (loadedUIConfigRaw && typeof loadedUIConfigRaw === 'object')
+          ? (loadedUIConfigRaw as UIConfigState)
+          : { enableModelLoading: true };
         Logger.log('AppContext', 'UI Config loaded:', loadedUIConfig);
         setUIConfig(loadedUIConfig);
-        setEnableModelLoading(loadedUIConfig.enableModelLoading);
+        setEnableModelLoading(loadedUIConfig.enableModelLoading ?? true);
         
         // Load AI config
-        const loadedAIConfig = await StorageServiceProxy.configLoad('aiConfig', {});
+        const loadedAIConfigRaw = await StorageServiceProxy.configLoad('aiConfig');
+        const loadedAIConfig = (loadedAIConfigRaw && typeof loadedAIConfigRaw === 'object')
+          ? (loadedAIConfigRaw as AIConfigState)
+          : {};
         Logger.log('AppContext', 'AI Config loaded:', loadedAIConfig);
         setAIConfig(loadedAIConfig);
         
@@ -171,16 +316,20 @@ export const AppProvider = ({ children }) => {
     loadConfigs();
     
     // Listen for config changes (when saved in ConfigContext)
-    const handleConfigChange = async (event) => {
-      if (event.detail?.type === 'aiConfig') {
-        const updatedConfig = event.detail.config;
+    const handleConfigChange = async (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+        return;
+      }
+      const detail = event.detail as { type?: string; config?: unknown };
+      if (detail.type === 'aiConfig') {
+        const updatedConfig = detail.config as AIConfigState;
         Logger.log('AppContext', 'AI Config updated from settings:', updatedConfig);
         setAIConfig(updatedConfig);
-      } else if (event.detail?.type === 'uiConfig') {
-        const updatedConfig = event.detail.config;
+      } else if (detail.type === 'uiConfig') {
+        const updatedConfig = detail.config as UIConfigState;
         Logger.log('AppContext', 'UI Config updated from settings:', updatedConfig);
         setUIConfig(updatedConfig);
-        setEnableModelLoading(updatedConfig.enableModelLoading);
+        setEnableModelLoading(updatedConfig.enableModelLoading ?? true);
       }
     };
     
@@ -204,7 +353,7 @@ export const AppProvider = ({ children }) => {
     }
   }, [enableModelLoading]);
 
-    const notifyFrontendReady = useCallback((reason) => {
+    const notifyFrontendReady = useCallback((reason: string) => {
     if (!__DESKTOP_MODE__ || isInputWindow || !api?.window?.frontendReady) {
       return;
     }
@@ -235,7 +384,7 @@ export const AppProvider = ({ children }) => {
    * Handle assistant ready callback
    */
   // eslint-disable-next-line no-unused-vars
-  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
+  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: { animationManager: unknown; positionManager: PositionManagerState; scene: unknown }) => {
     Logger.log('AppContext', 'VirtualAssistant ready!');
     setIsAssistantReady(true);
     setIsChatUIReady(true);
@@ -257,7 +406,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (isInputWindow) return;
     
-    const handleStateChange = (state) => {
+    const handleStateChange = (state: string) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
     };
 
@@ -296,7 +445,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Summarize text using configured AI service
    */
-  const handleSummarize = useCallback(async (text) => {
+  const handleSummarize = useCallback(async (text: string) => {
     // Check if explicitly disabled (undefined/null means enabled by default)
     if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
       throw new Error('Summarizer is disabled in settings');
@@ -314,7 +463,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Translate text using configured AI service
    */
-  const handleTranslate = useCallback(async (text, sourceLanguage, targetLanguageOverride) => {
+  const handleTranslate = useCallback(async (text: string, sourceLanguage: string, targetLanguageOverride?: string) => {
     // Check if explicitly disabled (undefined/null means enabled by default)
     if (aiConfig?.aiFeatures?.translator?.enabled === false) {
       throw new Error('Translator is disabled in settings');
@@ -349,7 +498,7 @@ export const AppProvider = ({ children }) => {
    * @param {Object} data - The data to add to chat
    * @param {boolean} autoSend - Whether to automatically send the message (default: false)
    */
-  const handleAddToChat = useCallback((data, autoSend = false) => {
+  const handleAddToChat = useCallback((data: unknown, autoSend = false) => {
     Logger.log('AppContext', 'Add to chat:', data, 'autoSend:', autoSend);
     
     // Open chat if closed
@@ -373,8 +522,11 @@ export const AppProvider = ({ children }) => {
       }
     } else {
       // Dispatch event for ChatInput to handle
-      const event = new CustomEvent('chatDragDrop', { 
-        detail: { ...data, autoSend },
+      const safeDetail = (data && typeof data === 'object')
+        ? { ...(data as Record<string, unknown>), autoSend }
+        : { autoSend };
+      const event = new CustomEvent('chatDragDrop', {
+        detail: safeDetail,
         bubbles: true,
         composed: true,
       });
@@ -466,8 +618,10 @@ export const AppProvider = ({ children }) => {
     window.dispatchEvent(event);
     
     // Return assistant to idle
-    if (assistantRef.current?.isReady()) {
-      assistantRef.current.idle();
+    const isReady = assistantRef.current?.isReady;
+    const idle = assistantRef.current?.idle;
+    if (isReady && isReady() && idle) {
+      idle();
     }
     
     // Clear messages and tree
@@ -497,8 +651,10 @@ export const AppProvider = ({ children }) => {
       VoiceConversationService.interrupt();
     }
     
-    if (assistantRef.current?.isReady()) {
-      assistantRef.current.idle();
+    const isReady = assistantRef.current?.isReady;
+    const idle = assistantRef.current?.idle;
+    if (isReady && isReady() && idle) {
+      idle();
     }
     
     setIsProcessing(false);
@@ -507,7 +663,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Load chat from history
    */
-  const loadChatFromHistory = useCallback(async (chatData) => {
+  const loadChatFromHistory = useCallback(async (chatData: { chatId: string }) => {
     Logger.log('AppContext', 'Loading chat from history:', chatData.chatId);
     
     try {
@@ -562,23 +718,28 @@ export const AppProvider = ({ children }) => {
   /**
    * Update chat messages (typically called by ChatController)
    */
-  const updateChatMessages = useCallback((messages) => {
+  const updateChatMessages = useCallback((messages: ChatMessageItem[]) => {
     setChatMessages(messages);
   }, []);
 
   // Callback refs for streaming regeneration (populated by ChatController)
-  const regenerateWithStreamingRef = useRef(null);
-  const editWithStreamingRef = useRef(null);
+  const regenerateWithStreamingRef = useRef<(() => Promise<void>) | null>(null);
+  const editWithStreamingRef = useRef<((messageId: string) => Promise<void>) | null>(null);
 
   /**
    * Edit a user message (creates new branch, regenerates AI response with streaming)
    */
-  const editUserMessage = useCallback(async (messageId, newContent, newImages = null, newAudios = null) => {
+  const editUserMessage = useCallback(async (messageId: string, newContent: string, newImages: string[] | null = null, newAudios: string[] | null = null) => {
     Logger.log('AppContext', 'Editing user message:', messageId);
     
     try {
       // Edit in tree (creates new branch)
-      const newMessageId = ChatService.editMessage(messageId, newContent, newImages, newAudios);
+      const newMessageId = ChatService.editMessage(
+        messageId,
+        newContent,
+        null,
+        null
+      );
       
       // Update UI with new active path (without AI response yet)
       const updatedMessages = ChatService.getMessages();
@@ -610,7 +771,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Regenerate AI response
    */
-  const regenerateAIMessage = useCallback(async (messageId) => {
+  const regenerateAIMessage = useCallback(async (messageId: string) => {
     Logger.log('AppContext', 'Regenerating AI message:', messageId);
     
     try {
@@ -646,7 +807,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Switch to a different branch
    */
-  const switchToBranch = useCallback((parentId, branchIndex) => {
+  const switchToBranch = useCallback((parentId: string, branchIndex: number) => {
     Logger.log('AppContext', 'Switching to branch:', branchIndex, 'at parent:', parentId);
     
     try {
@@ -666,7 +827,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Navigate to previous branch
    */
-  const previousBranch = useCallback((messageId) => {
+  const previousBranch = useCallback((messageId: string) => {
     Logger.log('AppContext', 'Navigating to previous branch');
     
     try {
@@ -683,7 +844,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Navigate to next branch
    */
-  const nextBranch = useCallback((messageId) => {
+  const nextBranch = useCallback((messageId: string) => {
     Logger.log('AppContext', 'Navigating to next branch');
     
     try {
@@ -732,7 +893,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Update button position
    */
-  const updateButtonPosition = useCallback((pos) => {
+  const updateButtonPosition = useCallback((pos: { x: number; y: number }) => {
     setButtonPosition(pos);
   }, []);
 
@@ -770,7 +931,7 @@ export const AppProvider = ({ children }) => {
           return;
         }
 
-        let chatId = currentChatId;
+        let chatId: string | null = currentChatId;
         if (!chatId) {
           chatId = chatHistoryService.generateChatId();
           setCurrentChatId(chatId);
@@ -805,7 +966,7 @@ export const AppProvider = ({ children }) => {
   /**
    * Parse keyboard event into key combination string
    */
-  const parseKeyEvent = useCallback((event) => {
+  const parseKeyEvent = useCallback((event: KeyboardEvent): string | null => {
     const modifiers = [];
     let mainKey = event.key;
     
@@ -836,11 +997,14 @@ export const AppProvider = ({ children }) => {
 
     if (!uiConfig?.shortcuts?.enabled) return;
     
-    const handleKeyDown = (event) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       const combo = parseKeyEvent(event);
       if (!combo) return;
       
-      const shortcuts = uiConfig.shortcuts;
+      const shortcuts = uiConfig?.shortcuts;
+      if (!shortcuts) {
+        return;
+      }
       
       // Check for Open Chat shortcut
       if (shortcuts.openChat && combo === shortcuts.openChat) {
@@ -908,7 +1072,7 @@ export const AppProvider = ({ children }) => {
     const cleanupToggleModel = api.shortcuts.onToggleModel(() => {
       Logger.log('AppContext', 'Toggle Model shortcut triggered from Electron');
       
-      const newValue = !uiConfig.enableModelLoading;
+      const newValue = !(uiConfig?.enableModelLoading ?? true);
       
       setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
       setEnableModelLoading(newValue);

@@ -478,12 +478,20 @@ export const DefaultSTTConfig = {
   audioDeviceSwitchDelay: 300,
 };
 
+export type AIProvider = typeof AIProviders[keyof typeof AIProviders];
+export type TTSProvider = typeof TTSProviders[keyof typeof TTSProviders];
+export type STTProvider = typeof STTProviders[keyof typeof STTProviders];
+
+export type AIConfig = typeof DefaultAIConfig;
+export type TTSConfig = typeof DefaultTTSConfig;
+export type STTConfig = typeof DefaultSTTConfig;
+
 /**
  * Validate AI configuration
  * @param {Object} config - Configuration to validate
  * @returns {Object} { valid: boolean, errors: string[] }
  */
-export function validateAIConfig(config) {
+export function validateAIConfig(config: Partial<AIConfig> & { provider?: AIProvider | string }) {
   const errors = [];
   
   if (!config.provider) {
@@ -575,7 +583,7 @@ export function validateAIConfig(config) {
  * @param {Object} config - TTS configuration to validate
  * @returns {Object} { valid: boolean, errors: string[] }
  */
-export function validateTTSConfig(config) {
+export function validateTTSConfig(config: Partial<TTSConfig> & { provider?: TTSProvider | string }) {
   const errors = [];
   
   if (!config.enabled) {
@@ -647,7 +655,7 @@ export function validateTTSConfig(config) {
  * @param {Object} config - STT configuration to validate
  * @returns {Object} { valid: boolean, errors: string[] }
  */
-export function validateSTTConfig(config) {
+export function validateSTTConfig(config: Partial<STTConfig> & { provider?: STTProvider | string }) {
   const errors = [];
   
   if (!config.enabled) {
@@ -712,7 +720,7 @@ export function validateSTTConfig(config) {
   return { valid: errors.length === 0, errors };
 }
 
-export function getProviderDisplayName(provider) {
+export function getProviderDisplayName(provider: string): string {
   switch (provider) {
     case AIProviders.ANDROID_LOCAL:
       return 'Android Local LLM';

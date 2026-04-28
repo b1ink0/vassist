@@ -8,6 +8,7 @@ import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 
 import { Camera } from "@babylonjs/core/Cameras/camera";
+import type { Engine } from "@babylonjs/core/Engines/engine";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
@@ -50,6 +51,21 @@ import { pmxConverterService } from '../../services/PMXConverterService';
 import { modelStorageService } from '../../services/ModelStorageService';
 import { stageStorageService } from '../../services/StageStorageService';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import type {
+  AnimationLoaderLike,
+  CameraMode,
+  PositionPixels,
+  PositionPresetLike,
+  RenderQualitySettingsLike,
+  SavedModelPositionLike,
+  SceneBuildConfig,
+  SceneWithMetadata,
+} from '../types';
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return String(error);
+};
 
 /**
  * Build MMD Model Scene with async model loading support
@@ -62,15 +78,19 @@ import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
  * @param {Object} config - Complete scene configuration (already merged with defaults)
  * @returns {Promise<Scene>} Configured Babylon.js scene
  */
-export const buildMmdModelScene = async (canvas, engine, config) => {
-  const finalConfig = config;
+export const buildMmdModelScene = async (
+  canvas: HTMLCanvasElement,
+  engine: Engine,
+  config: SceneBuildConfig
+): Promise<SceneWithMetadata> => {
+  const finalConfig: SceneBuildConfig = config;
   
   // Check if Portrait Mode is enabled (used in multiple places)
   const isPortraitMode = finalConfig.uiConfig?.enablePortraitMode || false;
   
   SdefInjector.OverrideEngineCreateEffect(engine);
 
-  const scene = new Scene(engine);
+  const scene = new Scene(engine) as SceneWithMetadata;
   
   // Set background transparency
   if (finalConfig.transparentBackground) {
@@ -155,12 +175,12 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   const CAMERA_ROTATION_SENSITIVITY = 0.01;
   
   // Load camera state from UI config
-  const initialCameraMode = finalConfig.uiConfig?.camera?.mode || '3D';
+  const initialCameraMode: CameraMode = finalConfig.uiConfig?.camera?.mode === '2D' ? '2D' : '3D';
   const initialCameraLocked = finalConfig.uiConfig?.camera?.locked ?? true;
   let cameraSaveEnabled = finalConfig.uiConfig?.camera?.savePosition ?? false;
   
   // Helper functions for camera controls
-  const applyZoom = (delta) => {
+  const applyZoom = (delta: number): void => {
     const positionManager = scene.metadata?.positionManager;
     if (!positionManager) {
       Logger.warn('MmdModelScene', 'PositionManager not initialized yet');
@@ -200,7 +220,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
   };
   
-  const applyPan = (deltaX, deltaY) => {
+  const applyPan = (deltaX: number, deltaY: number): void => {
     if (mmdCamera.position) {
       const panSpeed = Math.abs(mmdCamera.distance) * CAMERA_PAN_SPEED_MULTIPLIER;
       mmdCamera.position.x -= deltaX * panSpeed;
@@ -209,13 +229,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
   };
   
-  const applyRotation = (deltaX, deltaY) => {
+  const applyRotation = (deltaX: number, deltaY: number): void => {
     mmdCamera.rotation.y -= deltaX * CAMERA_ROTATION_SENSITIVITY;
     mmdCamera.rotation.x -= deltaY * CAMERA_ROTATION_SENSITIVITY;
     saveCameraState();
   };
   
-  const saveCameraState = () => {
+  const saveCameraState = (): void => {
     if (!finalConfig.updateUIConfig) return;
     if (!cameraSaveEnabled) return;
     
@@ -246,7 +266,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
   };
   
-  const loadCameraState = () => {
+  const loadCameraState = (): void => {
     if (!cameraSaveEnabled) return;
     
     const positionManager = scene.metadata?.positionManager;
@@ -286,7 +306,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
   };
   
-  const resetCameraState = () => {
+  const resetCameraState = (): void => {
     const positionManager = scene.metadata?.positionManager;
     const currentMode = mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? '3D' : '2D';
     
@@ -319,7 +339,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     }
   };
   
-  const attachCameraControls = () => {
+  const attachCameraControls = (): void => {
     if (canvas.style.pointerEvents === 'none') {
       canvas.style.pointerEvents = 'auto';
       Logger.log('MmdModelScene', 'Canvas pointer events enabled for camera controls');
@@ -333,7 +353,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     canvas.addEventListener('wheel', onWheel, { passive: false });
   };
   
-  const detachCameraControls = () => {
+  const detachCameraControls = (): void => {
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
@@ -343,7 +363,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     canvas.removeEventListener('wheel', onWheel);
   };
   
-  const setCameraMode = (mode) => {
+  const setCameraMode = (mode: CameraMode): void => {
     if (mode === '3D') {
       mmdCamera.mode = Camera.PERSPECTIVE_CAMERA;
       mmdCamera.distance = CAMERA_3D_DISTANCE;
@@ -372,71 +392,95 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   let initialPinchDistance = 0;
   let isPinching = false;
   
-  const getTouchDistance = (touch1, touch2) => {
+  const getTouchDistance = (touch1: Touch, touch2: Touch): number => {
     const dx = touch1.clientX - touch2.clientX;
     const dy = touch1.clientY - touch2.clientY;
     return Math.sqrt(dx * dx + dy * dy);
   };
   
-  const getTouchCenter = (touch1, touch2) => {
+  const getTouchCenter = (touch1: Touch, touch2: Touch): { x: number; y: number } => {
     return {
       x: (touch1.clientX + touch2.clientX) / 2,
       y: (touch1.clientY + touch2.clientY) / 2
     };
   };
+
+  type CameraPointerEvent = PointerEvent | TouchEvent;
+
+  const isTouchEvent = (event: CameraPointerEvent): event is TouchEvent => {
+    return 'touches' in event;
+  };
+
+  const getPrimaryPoint = (event: CameraPointerEvent): { x: number; y: number } | null => {
+    if (isTouchEvent(event)) {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (!touch) return null;
+      return { x: touch.clientX, y: touch.clientY };
+    }
+    return { x: event.clientX, y: event.clientY };
+  };
   
-  const onPointerDown = (evt) => {
+  const onPointerDown = (evt: CameraPointerEvent): void => {
     if (isCameraLocked) return;
-    
+
     // Check for multi-touch (pinch zoom or pan)
-    if (evt.touches && evt.touches.length === 2) {
+    if (isTouchEvent(evt) && evt.touches.length === 2) {
+      const touchA = evt.touches[0];
+      const touchB = evt.touches[1];
+      if (!touchA || !touchB) return;
       isPinching = true;
-      initialPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
-      const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+      initialPinchDistance = getTouchDistance(touchA, touchB);
+      const center = getTouchCenter(touchA, touchB);
       lastPointerX = center.x;
       lastPointerY = center.y;
       isPointerDown = false; // Disable rotation during pinch
       return;
     }
-    
+
     // Middle mouse button for panning
-    if (evt.button === 1) {
+    if (!isTouchEvent(evt) && evt.button === 1) {
       isPanning = true;
       lastPointerX = evt.clientX;
       lastPointerY = evt.clientY;
       evt.preventDefault();
       return;
     }
-    
+
     // Left mouse button or single touch for rotation
-    if (evt.button === 0 || evt.touches) {
+    if (isTouchEvent(evt) || evt.button === 0) {
+      const point = getPrimaryPoint(evt);
+      if (!point) return;
       isPointerDown = true;
-      lastPointerX = evt.clientX || (evt.touches && evt.touches[0].clientX);
-      lastPointerY = evt.clientY || (evt.touches && evt.touches[0].clientY);
+      lastPointerX = point.x;
+      lastPointerY = point.y;
     }
   };
   
-  const onPointerMove = (evt) => {
+  const onPointerMove = (evt: CameraPointerEvent): void => {
     if (isCameraLocked) return;
-    
+
     // Handle pinch zoom and pan
-    if (evt.touches && evt.touches.length === 2) {
+    if (isTouchEvent(evt) && evt.touches.length === 2) {
+      const touchA = evt.touches[0];
+      const touchB = evt.touches[1];
+      if (!touchA || !touchB) return;
+
       if (!isPinching) {
         isPinching = true;
-        initialPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
-        const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+        initialPinchDistance = getTouchDistance(touchA, touchB);
+        const center = getTouchCenter(touchA, touchB);
         lastPointerX = center.x;
         lastPointerY = center.y;
         return;
       }
       
-      const currentPinchDistance = getTouchDistance(evt.touches[0], evt.touches[1]);
+      const currentPinchDistance = getTouchDistance(touchA, touchB);
       const delta = (currentPinchDistance - initialPinchDistance) * CAMERA_PINCH_SENSITIVITY;
       
       applyZoom(delta);
       
       // Pan based on center movement
-      const center = getTouchCenter(evt.touches[0], evt.touches[1]);
+      const center = getTouchCenter(touchA, touchB);
       const deltaX = center.x - lastPointerX;
       const deltaY = center.y - lastPointerY;
       
@@ -448,7 +492,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       evt.preventDefault();
       return;
     }
-    
+
+    if (isTouchEvent(evt)) return;
+
     // Handle panning with middle mouse
     if (isPanning) {
       const deltaX = evt.clientX - lastPointerX;
@@ -461,29 +507,29 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       evt.preventDefault();
       return;
     }
-    
+
     // Handle rotation
     if (!isPointerDown || isPinching) return;
-    
-    const clientX = evt.clientX || (evt.touches && evt.touches[0].clientX);
-    const clientY = evt.clientY || (evt.touches && evt.touches[0].clientY);
-    
+
+    const clientX = evt.clientX;
+    const clientY = evt.clientY;
+
     const deltaX = clientX - lastPointerX;
     const deltaY = clientY - lastPointerY;
-    
+
     applyRotation(deltaX, deltaY);
-    
+
     lastPointerX = clientX;
     lastPointerY = clientY;
   };
   
-  const onPointerUp = () => {
+  const onPointerUp = (): void => {
     isPointerDown = false;
     isPinching = false;
     isPanning = false;
   };
   
-  const onWheel = (evt) => {
+  const onWheel = (evt: WheelEvent): void => {
     if (isCameraLocked) return;
     evt.preventDefault();
     
@@ -629,8 +675,8 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   const physicsEngine = finalConfig.uiConfig?.physicsEngine || 'bullet';
   
-  let physicsRuntime = null;
-  let mmdPhysics = null;
+  let physicsRuntime: MultiPhysicsRuntime | PhysicsRuntime | null = null;
+  let mmdPhysics: MmdBulletPhysics | MmdPhysics | null = null;
   let isMultiThreadedPhysics = false;
   
   if (finalConfig.enablePhysics) {
@@ -662,7 +708,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
           physicsRuntime = new PhysicsRuntime(wasmInstance);
           physicsRuntime.setGravity(new Vector3(0, -98, 0)); // MMD uses 10x gravity
           physicsRuntime.register(scene);
-          mmdPhysics = new MmdBulletPhysics(physicsRuntime);
+          mmdPhysics = new MmdBulletPhysics(physicsRuntime as unknown as MultiPhysicsRuntime);
           isMultiThreadedPhysics = false;
           Logger.log('MmdModelScene', '✓ Single-threaded Bullet Physics initialized');
         } catch (error) {
@@ -705,8 +751,8 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   Logger.log('MmdModelScene', 'Loading model from:', finalConfig.modelUrl);
   
-  let modelMesh = null;
-  let mmdModel = null;
+  let modelMesh: any = null;
+  let mmdModel: any = null;
   
   try {
     // Load model with progress tracking (no built-in loading UI)
@@ -744,6 +790,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // Add model to scene
     result.addAllToScene();
     modelMesh = result.meshes[0];
+    if (!modelMesh) {
+      throw new Error('Model loaded but no root mesh was returned');
+    }
     
     Logger.log('MmdModelScene', 'Model added to scene successfully');
     
@@ -791,16 +840,16 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       finalConfig.onModelLoaded(modelMesh);
     }
     
-  } catch (error) {
+  } catch (error: unknown) {
     Logger.error('MmdModelScene', 'Failed to load model:', error);
-    throw new Error(`Failed to load MMD model: ${error.message}`);
+    throw new Error(`Failed to load MMD model: ${getErrorMessage(error)}`);
   }
 
   // ========================================
   // STAGE LOADING
   // ========================================
   
-  let stageMesh = null;
+  let stageMesh: any = null;
   
   try {
     // Get default stage from storage
@@ -843,6 +892,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       // Add stage to scene
       stageResult.addAllToScene();
       stageMesh = stageResult.meshes[0];
+      if (!stageMesh) {
+        throw new Error('Stage loaded but no root mesh was returned');
+      }
       
       // Setup stage shadows
       if (finalConfig.enableShadows && shadowGenerator) {
@@ -895,9 +947,9 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       const groundBody = new RigidBody(physicsRuntime, info);
       
       if (isMultiThreadedPhysics) {
-        physicsRuntime.addRigidBodyToGlobal(groundBody);
+        (physicsRuntime as MultiPhysicsRuntime).addRigidBodyToGlobal(groundBody);
       } else {
-        physicsRuntime.addRigidBody(groundBody);
+        (physicsRuntime as PhysicsRuntime).addRigidBody(groundBody);
       }
       Logger.log('MmdModelScene', 'Bullet ground collider added');
     }
@@ -948,7 +1000,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       
       if (currentModel?.metadata?.textures || currentModel?.metadata?.meshParts) {
         // Collect all materials using the same logic as extraction
-        const materials = [];
+        const materials: any[] = [];
         
         if (modelMesh.metadata && modelMesh.metadata.materials) {
           materials.push(...modelMesh.metadata.materials);
@@ -959,7 +1011,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
         }
         
         if (modelMesh.subMeshes) {
-          modelMesh.subMeshes.forEach((subMesh) => {
+          modelMesh.subMeshes.forEach((subMesh: any) => {
             if (subMesh.getMaterial && subMesh.getMaterial()) {
               const subMaterial = subMesh.getMaterial();
               if (subMaterial && !materials.includes(subMaterial)) {
@@ -1067,10 +1119,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     scene,
     mmdRuntime,
     mmdModel,
-    bvmdLoader,
-    vmdLoader,
-    finalConfig.getRandomAnimation,
-    finalConfig.getEnabledAnimations
+    bvmdLoader as unknown as AnimationLoaderLike,
+    vmdLoader as unknown as AnimationLoaderLike,
+    finalConfig.getRandomAnimation as any,
+    finalConfig.getEnabledAnimations as any
   );
   
   // Initialize scene metadata if null
@@ -1097,7 +1149,7 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // If no custom value, try preset
     if (clipPlaneY === 12) {
       const { PositionPresets } = await import('../../config/uiConfig');
-      const presetData = PositionPresets[actualPreset];
+      const presetData = (PositionPresets as Record<string, PositionPresetLike>)[actualPreset];
       clipPlaneY = presetData?.portraitClipPlaneY ?? 12;
     }
     
@@ -1159,10 +1211,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   // Priority: savedModelPosition from context > lastLocation from config > preset
   // savedModelPosition persists across unmount/remount (tab visibility changes)
-  const shouldUseSavedPosition = !isAndroid && (finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation));
+  const shouldUseSavedPosition = !isAndroid && Boolean(finalConfig.savedModelPosition || (preset === 'last-location' && positionConfig.lastLocation));
   
   if (shouldUseSavedPosition) {
-    const savedPos = finalConfig.savedModelPosition || positionConfig.lastLocation;
+    const savedPos = (finalConfig.savedModelPosition || positionConfig.lastLocation) as SavedModelPositionLike;
     const { x, y, width, height, preset: savedPreset } = savedPos;
     Logger.log('MmdModelScene', 'Loading saved position:', savedPos);
     
@@ -1176,9 +1228,13 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
     // Get preset data for dimensions and offset
     const { PositionPresets } = await import('../../config/uiConfig');
     const presetToUse = savedPreset || actualPreset;
-    const presetData = PositionPresets[presetToUse];
+    const presetMap = PositionPresets as Record<string, PositionPresetLike>;
+    const presetData = presetMap[presetToUse] ?? presetMap['bottom-right'];
+    if (!presetData) {
+      throw new Error(`Unknown position preset: ${presetToUse}`);
+    }
     
-    const modelSize = isPortraitMode ? presetData.portraitModelSize : presetData.modelSize;
+    const modelSize = (isPortraitMode ? presetData.portraitModelSize : presetData.modelSize) ?? presetData.modelSize;
     const finalWidth = width || modelSize.width;
     const finalHeight = height || modelSize.height;
     
@@ -1206,7 +1262,11 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
       Logger.log('MmdModelScene', 'Applying saved zoom:', modelSizePx);
       
       const { PositionPresets } = await import('../../config/uiConfig');
-      const presetConfig = PositionPresets[actualPreset];
+      const presetConfig = (PositionPresets as Record<string, PositionPresetLike>)[actualPreset]
+        ?? (PositionPresets as Record<string, PositionPresetLike>)['bottom-right'];
+      if (!presetConfig) {
+        throw new Error(`Unknown position preset: ${actualPreset}`);
+      }
       const padding = presetConfig.padding || 0;
       
       let pixelX, pixelY;
@@ -1279,14 +1339,15 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   
   
   // Get quality settings - either custom or from presets
-  let quality;
+  let quality: RenderQualitySettingsLike;
   if (renderQuality === 'custom' && finalConfig.customQuality) {
     quality = finalConfig.customQuality;
     Logger.log('MmdModelScene', 'Using custom render quality settings:', JSON.stringify(quality));
   } else {
     const { getRenderQualityPresets } = await import('../../config/sceneConfig');
     const qualityPresets = getRenderQualityPresets(isAndroid);
-    quality = qualityPresets[renderQuality] || qualityPresets.medium;
+    const qualityPresetMap = qualityPresets as Record<string, RenderQualitySettingsLike>;
+    quality = qualityPresetMap[renderQuality] || qualityPresets.medium;
     Logger.log('MmdModelScene', `Using preset quality: ${renderQuality}`, JSON.stringify(quality));
   }
   
@@ -1340,10 +1401,10 @@ export const buildMmdModelScene = async (canvas, engine, config) => {
   interactionManager.initialize();
   
   // Drag state for smooth dragging
-  let dragRAF = null;
+  let dragRAF: number | null = null;
   let accumulatedDeltaX = 0;
   let accumulatedDeltaY = 0;
-  let dragBasePosition = null;
+  let dragBasePosition: PositionPixels | null = null;
   
   // Setup drag callbacks to work with PositionManager (only for web/extension mode)
   // In desktop mode, window dragging is handled in CanvasInteractionManager

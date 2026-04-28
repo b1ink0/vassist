@@ -4,7 +4,7 @@
  * Handles model loading, physics, animations, custom model/motion uploads
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
@@ -24,14 +24,173 @@ import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import JSZip from 'jszip';
 import { Button, Input, Select, TabBar } from '../ui';
 
-const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }) => {
+type SubTabId = 'display' | 'performance' | 'models' | 'animations' | 'emotes';
+
+interface TextureInfo {
+  id: string;
+  name: string;
+  type?: string;
+  materialIndex: number;
+  isActive: boolean;
+  [key: string]: unknown;
+}
+
+interface MeshPartInfo {
+  id: string;
+  name: string;
+  type?: string;
+  meshIndex: number;
+  subMeshIndex?: number;
+  isVisible: boolean;
+  [key: string]: unknown;
+}
+
+interface ItemMetadata {
+  fileSize?: number;
+  portraitClipping?: number;
+  textures?: TextureInfo[];
+  meshParts?: MeshPartInfo[];
+  [key: string]: unknown;
+}
+
+interface ModelItem {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  metadata?: ItemMetadata;
+  modelData?: unknown;
+  [key: string]: unknown;
+}
+
+interface StageItem {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  metadata?: ItemMetadata;
+  [key: string]: unknown;
+}
+
+interface MotionItem {
+  id: string;
+  name: string;
+  animationCategories?: string[];
+  enabledByCategory?: Record<string, boolean>;
+  metadata?: ItemMetadata;
+  [key: string]: unknown;
+}
+
+interface EmoteItem {
+  id: string;
+  name: string;
+  isVisible?: boolean;
+  metadata?: {
+    originalAudioFileName?: string;
+    originalMotionFileName?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface ImageProcessingLike {
+  contrast?: number;
+  exposure?: number;
+  colorCurves?: {
+    globalSaturation?: number;
+  };
+  colorCurvesEnabled?: boolean;
+}
+
+interface RenderPipelineLike {
+  samples?: number;
+  fxaaEnabled?: boolean;
+  bloomEnabled?: boolean;
+  bloomThreshold?: number;
+  bloomWeight?: number;
+  bloomScale?: number;
+  bloomKernel?: number;
+  imageProcessing?: ImageProcessingLike;
+}
+
+interface MaterialLike {
+  name?: string;
+  diffuseTexture?: unknown;
+  sphereTexture?: unknown;
+  toonTexture?: unknown;
+  alpha?: number;
+  _originalAlpha?: number;
+  _isHidden?: boolean;
+  [key: string]: unknown;
+}
+
+interface SubMeshLike {
+  getMaterial?: () => MaterialLike | null;
+}
+
+interface MeshLike {
+  name?: string;
+  material?: MaterialLike | null;
+  subMeshes?: SubMeshLike[];
+  setEnabled?: (isVisible: boolean) => void;
+  metadata?: {
+    materials?: MaterialLike[];
+    meshes?: MeshLike[];
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface SceneLike {
+  metadata?: {
+    modelMesh?: MeshLike;
+    renderPipeline?: Record<string, unknown>;
+    portraitClipPlaneY?: number;
+    [key: string]: unknown;
+  };
+  clipPlane?: unknown;
+}
+
+interface EmoteZipFolder {
+  name: string;
+  files: string[];
+}
+
+interface AppContextLike {
+  reloadScene: () => void;
+  sceneRef: { current: SceneLike | null };
+}
+
+interface UploadState {
+  uploading: boolean;
+  progress: string;
+  error: string | null;
+}
+
+interface MotionUploadState extends UploadState {
+  showCategoryPicker: boolean;
+  pendingFiles: File[];
+}
+
+interface ThreeDSettingsProps {
+  isLightBackground: boolean;
+  onRequestDeleteModelDialog?: ((modelId: string) => void) | undefined;
+  onRequestDeleteMotionDialog?: ((motionId: string) => void) | undefined;
+  refreshTrigger: number;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }: ThreeDSettingsProps) => {
   const {
     uiConfig,
     updateUIConfig,
   } = useConfig();
 
-  const { reloadScene } = useApp();
-  const { sceneRef } = useApp();
+  const { reloadScene, sceneRef } = useApp() as unknown as AppContextLike;
 
   const {
     disabledDefaultAnimations,
@@ -42,9 +201,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   } = useAnimation();
   const allowPositionSelection = !isAndroid && !isDesktop;
 
-  const [activeSubTab, setActiveSubTab] = useState('display');
+  const [activeSubTab, setActiveSubTab] = useState<SubTabId>('display');
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({ left: 0, width: 0 });
-  const subTabsRef = useRef({
+  const subTabsRef = useRef<Record<SubTabId, HTMLButtonElement | null>>({
     display: null,
     performance: null,
     models: null,
@@ -53,65 +212,65 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   });
 
   // Model upload state
-  const [models, setModels] = useState([]);
-  const [modelUploadState, setModelUploadState] = useState({
+  const [models, setModels] = useState<ModelItem[]>([]);
+  const [modelUploadState, setModelUploadState] = useState<UploadState>({
     uploading: false,
     progress: '',
     error: null
   });
-  const [editingModelId, setEditingModelId] = useState(null);
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [editingModelName, setEditingModelName] = useState('');
-  const modelFileInputRef = useRef(null);
+  const modelFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Stage upload state
-  const [stages, setStages] = useState([]);
-  const [stageUploadState, setStageUploadState] = useState({
+  const [stages, setStages] = useState<StageItem[]>([]);
+  const [stageUploadState, setStageUploadState] = useState<UploadState>({
     uploading: false,
     progress: '',
     error: null
   });
-  const [editingStageId, setEditingStageId] = useState(null);
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
   const [editingStageName, setEditingStageName] = useState('');
-  const stageFileInputRef = useRef(null);
+  const stageFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Motion upload state
-  const [motions, setMotions] = useState([]);
-  const [motionUploadState, setMotionUploadState] = useState({
+  const [motions, setMotions] = useState<MotionItem[]>([]);
+  const [motionUploadState, setMotionUploadState] = useState<MotionUploadState>({
     uploading: false,
     progress: '',
     error: null,
     showCategoryPicker: false,
     pendingFiles: []
   });
-  const [editingMotionId, setEditingMotionId] = useState(null);
+  const [editingMotionId, setEditingMotionId] = useState<string | null>(null);
   const [editingMotionName, setEditingMotionName] = useState('');
-  const [expandedMotionSettings, setExpandedMotionSettings] = useState(null); // ID of motion showing expanded settings
-  const motionFileInputRef = useRef(null);
+  const [expandedMotionSettings, setExpandedMotionSettings] = useState<string | null>(null); // ID of motion showing expanded settings
+  const motionFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [emotes, setEmotes] = useState([]);
-  const [emoteUploadState, setEmoteUploadState] = useState({
+  const [emotes, setEmotes] = useState<EmoteItem[]>([]);
+  const [emoteUploadState, setEmoteUploadState] = useState<UploadState>({
     uploading: false,
     progress: '',
     error: null
   });
-  const [editingEmoteId, setEditingEmoteId] = useState(null);
+  const [editingEmoteId, setEditingEmoteId] = useState<string | null>(null);
   const [editingEmoteName, setEditingEmoteName] = useState('');
   const [emoteName, setEmoteName] = useState('');
-  const [selectedEmoteAudioFile, setSelectedEmoteAudioFile] = useState(null);
-  const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState(null);
-  const [selectedEmoteCameraFile, setSelectedEmoteCameraFile] = useState(null);
-  const emoteAudioFileInputRef = useRef(null);
-  const emoteMotionFileInputRef = useRef(null);
-  const emoteCameraFileInputRef = useRef(null);
-  const emoteZipFileInputRef = useRef(null);
+  const [selectedEmoteAudioFile, setSelectedEmoteAudioFile] = useState<File | null>(null);
+  const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState<File | null>(null);
+  const [selectedEmoteCameraFile, setSelectedEmoteCameraFile] = useState<File | null>(null);
+  const emoteAudioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const emoteMotionFileInputRef = useRef<HTMLInputElement | null>(null);
+  const emoteCameraFileInputRef = useRef<HTMLInputElement | null>(null);
+  const emoteZipFileInputRef = useRef<HTMLInputElement | null>(null);
   
-  const [expandedModelSettings, setExpandedModelSettings] = useState(null); // ID of model showing expanded settings
+  const [expandedModelSettings, setExpandedModelSettings] = useState<string | null>(null); // ID of model showing expanded settings
   
-  const [builtinModelMetadata, setBuiltinModelMetadata] = useState({ textures: [], meshParts: [] });
+  const [builtinModelMetadata, setBuiltinModelMetadata] = useState<{ textures: TextureInfo[]; meshParts: MeshPartInfo[] }>({ textures: [], meshParts: [] });
 
   const [portraitClipping, setPortraitClipping] = useState(12); // Default value (matches uiConfig)
-  const [currentDefaultModelId, setCurrentDefaultModelId] = useState(null);
-  const portraitClippingSaveTimer = useRef(null);
+  const [currentDefaultModelId, setCurrentDefaultModelId] = useState<string | null>(null);
+  const portraitClippingSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Error dialog state
   const [errorDialogMessage, setErrorDialogMessage] = useState('');
@@ -149,9 +308,33 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   }, [activeSubTab]);
 
+  const processModelUploadWithProgress = pmxConverterService.processModelUpload as unknown as (
+    file: File,
+    modelName: string,
+    onProgress?: (step: string, message: string) => void
+  ) => Promise<string>;
+
+  const saveMotionWithCategories = motionStorageService.saveMotion as unknown as (
+    id: string | null,
+    name: string,
+    bvmdData: ArrayBuffer,
+    animationCategories: string[],
+    metadata: Record<string, unknown>,
+    enabledByCategory: Record<string, boolean>
+  ) => Promise<string>;
+
+  const saveEmoteWithCamera = emoteStorageService.saveEmote as unknown as (
+    id: string | null,
+    name: string,
+    audioFile: File,
+    motionBvmdData: ArrayBuffer,
+    cameraBvmdData?: ArrayBuffer | null,
+    metadata?: Record<string, unknown>
+  ) => Promise<string>;
+
   const loadModels = async () => {
     try {
-      const modelsList = await modelStorageService.getModelsList();
+      const modelsList = await modelStorageService.getModelsList() as ModelItem[];
       // Filter out Unknown Model (default model without data)
       const filteredModels = modelsList.filter(model => model.name !== 'Unknown Model');
       setModels(filteredModels);
@@ -162,8 +345,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   
   const loadBuiltinModelMetadata = async () => {
     try {
-      const metadata = await modelStorageService.getBuiltinModelMetadata();
-      setBuiltinModelMetadata(metadata);
+      const metadata = await modelStorageService.getBuiltinModelMetadata() as { textures?: TextureInfo[]; meshParts?: MeshPartInfo[] };
+      setBuiltinModelMetadata({
+        textures: metadata?.textures || [],
+        meshParts: metadata?.meshParts || [],
+      });
     } catch (error) {
       console.error('Failed to load built-in model metadata:', error);
     }
@@ -171,14 +357,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
   const loadMotions = async () => {
     try {
-      const motionsList = await motionStorageService.getMotionsList();
+      const motionsList = await motionStorageService.getMotionsList() as MotionItem[];
       setMotions(motionsList);
     } catch (error) {
       console.error('Failed to load motions:', error);
     }
   };
 
-  const handleModelUpload = async (file) => {
+  const handleModelUpload = async (file: File) => {
     if (!file) return;
 
     setModelUploadState({ uploading: true, progress: 'Validating...', error: null });
@@ -191,7 +377,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       const modelName = file.name.replace(/\.zip$/i, '');
 
-      await pmxConverterService.processModelUpload(file, modelName, (step, message) => {
+      await processModelUploadWithProgress(file, modelName, (_step, message) => {
         setModelUploadState(prev => ({ ...prev, progress: message }));
       });
 
@@ -203,18 +389,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       setModelUploadState({ 
         uploading: false, 
         progress: '', 
-        error: error.message 
+        error: getErrorMessage(error) 
       });
     }
   };
 
-  const handleMotionUpload = async (files, animationCategories = []) => {
+  const handleMotionUpload = async (files: FileList | File[], animationCategories: string[] = []) => {
     if (!files || files.length === 0) return;
 
     setMotionUploadState({ uploading: true, progress: 'Converting...', error: null, showCategoryPicker: false, pendingFiles: [] });
 
     try {
-      const fileArray = Array.from(files);
+      const fileArray = Array.from(files) as File[];
       
       const results = await vmdConverterService.convertBatch(fileArray);
 
@@ -222,10 +408,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       for (const result of results) {
         if (!result.error && result.bvmdData) {
           const motionName = result.filename.replace(/\.vmd$/i, '');
-          await motionStorageService.saveMotion(
+          await saveMotionWithCategories(
             null,
             motionName,
-            result.bvmdData,
+            result.bvmdData as ArrayBuffer,
             animationCategories,
             { originalFileName: result.filename },
             {} 
@@ -252,26 +438,26 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       setMotionUploadState({
         uploading: false,
         progress: '',
-        error: error.message,
+        error: getErrorMessage(error),
         showCategoryPicker: false,
         pendingFiles: []
       });
     }
   };
 
-  const handleModelFileChange = (e) => {
+  const handleModelFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleModelUpload(file);
   };
 
-  const handleMotionFileChange = (e) => {
+  const handleMotionFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       handleMotionUpload(files, []);
     }
   };
 
-  const handleSetDefault = async (modelId) => {
+  const handleSetDefault = async (modelId: string) => {
     try {
       await modelStorageService.setDefaultModel(modelId);
       await loadModels();
@@ -280,12 +466,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleEditModel = (modelId, currentName) => {
+  const handleEditModel = (modelId: string, currentName: string) => {
     setEditingModelId(modelId);
     setEditingModelName(currentName);
   };
 
-  const handleSaveModelName = async (modelId) => {
+  const handleSaveModelName = async (modelId: string) => {
     try {
       await modelStorageService.updateModelName(modelId, editingModelName);
       setEditingModelId(null);
@@ -301,7 +487,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     setEditingModelName('');
   };
 
-  const handleDeleteModel = async (modelId) => {
+  const handleDeleteModel = async (modelId: string) => {
     if (onRequestDeleteModelDialog) {
       onRequestDeleteModelDialog(modelId);
     }
@@ -309,14 +495,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
   const loadStages = async () => {
     try {
-      const stagesList = await stageStorageService.getStagesList();
+      const stagesList = await stageStorageService.getStagesList() as StageItem[];
       setStages(stagesList);
     } catch (error) {
       console.error('Failed to load stages:', error);
     }
   };
 
-  const handleStageUpload = async (file) => {
+  const handleStageUpload = async (file: File) => {
     if (!file) return;
 
     setStageUploadState({ uploading: true, progress: 'Validating...', error: null });
@@ -329,9 +515,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       const stageName = file.name.replace(/\.zip$/i, '');
 
-      await pmxConverterService.processModelUpload(file, stageName, (step, message) => {
+      await processModelUploadWithProgress(file, stageName, (_step, message) => {
         setStageUploadState(prev => ({ ...prev, progress: message }));
-      }).then(async (modelId) => {
+      }).then(async (modelId: string) => {
         // Get the converted model data
         const modelData = await modelStorageService.getModel(modelId);
         
@@ -357,17 +543,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       setStageUploadState({ 
         uploading: false, 
         progress: '', 
-        error: error.message 
+        error: getErrorMessage(error) 
       });
     }
   };
 
-  const handleStageFileChange = (e) => {
+  const handleStageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleStageUpload(file);
   };
 
-  const handleSetDefaultStage = async (stageId) => {
+  const handleSetDefaultStage = async (stageId: string) => {
     try {
       await stageStorageService.setDefaultStage(stageId);
       await loadStages();
@@ -376,12 +562,12 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleEditStage = (stageId, currentName) => {
+  const handleEditStage = (stageId: string, currentName: string) => {
     setEditingStageId(stageId);
     setEditingStageName(currentName);
   };
 
-  const handleSaveStageName = async (stageId) => {
+  const handleSaveStageName = async (stageId: string) => {
     try {
       await stageStorageService.updateStageName(stageId, editingStageName);
       setEditingStageId(null);
@@ -397,7 +583,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     setEditingStageName('');
   };
 
-  const handleDeleteStage = async (stageId) => {
+  const handleDeleteStage = async (stageId: string) => {
     if (!confirm('Delete this stage?\n\nThis action cannot be undone.')) return;
     
     try {
@@ -408,11 +594,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const groupTexturesByType = (textures) => {
+  const groupTexturesByType = (textures: TextureInfo[] | undefined): Record<string, TextureInfo[]> => {
     if (!textures || textures.length === 0) return {};
     
-    const grouped = {};
-    textures.forEach(texture => {
+    const grouped: Record<string, TextureInfo[]> = {};
+    textures.forEach((texture) => {
       const type = texture.type || 'other';
       if (!grouped[type]) {
         grouped[type] = [];
@@ -421,17 +607,20 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     });
     
     Object.keys(grouped).forEach(type => {
-      grouped[type].sort((a, b) => a.name.localeCompare(b.name));
+      const bucket = grouped[type];
+      if (bucket) {
+        bucket.sort((a, b) => a.name.localeCompare(b.name));
+      }
     });
     
     return grouped;
   };
 
-  const groupMeshPartsByCategory = (meshParts) => {
+  const groupMeshPartsByCategory = (meshParts: MeshPartInfo[] | undefined): Record<string, MeshPartInfo[]> => {
     if (!meshParts || meshParts.length === 0) return {};
     
-    const grouped = {};
-    meshParts.forEach(meshPart => {
+    const grouped: Record<string, MeshPartInfo[]> = {};
+    meshParts.forEach((meshPart) => {
       const category = meshPart.type || 'other';
       if (!grouped[category]) {
         grouped[category] = [];
@@ -440,13 +629,16 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     });
     
     Object.keys(grouped).forEach(category => {
-      grouped[category].sort((a, b) => a.name.localeCompare(b.name));
+      const bucket = grouped[category];
+      if (bucket) {
+        bucket.sort((a, b) => a.name.localeCompare(b.name));
+      }
     });
     
     return grouped;
   };
 
-  const handleToggleTexture = async (modelId, textureId) => {
+  const handleToggleTexture = async (modelId: string, textureId: string) => {
     try {
       if (modelId === 'default') {
         const textures = builtinModelMetadata.textures || [];
@@ -504,7 +696,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleToggleMeshPart = async (modelId, meshPartId) => {
+  const handleToggleMeshPart = async (modelId: string, meshPartId: string) => {
     try {
       if (modelId === 'default') {
         const meshParts = builtinModelMetadata.meshParts || [];
@@ -562,7 +754,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const applyTextureToggleToScene = (texture, isActive) => {
+  const applyTextureToggleToScene = (texture: TextureInfo, isActive: boolean) => {
     try {
       const scene = sceneRef.current;
       if (!scene) {
@@ -578,7 +770,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       console.log('✓ Found model mesh:', modelMesh.name);
 
-      const materials = [];
+      const materials: MaterialLike[] = [];
       
       if (modelMesh.metadata && modelMesh.metadata.materials) {
         console.log(`Adding ${modelMesh.metadata.materials.length} materials from metadata.materials`);
@@ -592,7 +784,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       
       if (modelMesh.subMeshes) {
         console.log(`Checking ${modelMesh.subMeshes.length} submeshes`);
-        modelMesh.subMeshes.forEach((subMesh, idx) => {
+        modelMesh.subMeshes.forEach((subMesh: SubMeshLike, idx: number) => {
           if (subMesh.getMaterial && subMesh.getMaterial()) {
             const subMaterial = subMesh.getMaterial();
             if (subMaterial && !materials.includes(subMaterial)) {
@@ -698,7 +890,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const applyMeshPartToggleToScene = (meshPart, isVisible) => {
+  const applyMeshPartToggleToScene = (meshPart: MeshPartInfo, isVisible: boolean) => {
     try {
       const scene = sceneRef.current;
       if (!scene) {
@@ -729,6 +921,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         // Toggle submesh via material alpha (vassistant approach)
         if (mesh.subMeshes && mesh.subMeshes[meshPart.subMeshIndex]) {
           const subMesh = mesh.subMeshes[meshPart.subMeshIndex];
+          if (!subMesh) {
+            console.warn(`⚠ Submesh ${meshPart.subMeshIndex} not found`);
+            return;
+          }
           const material = subMesh.getMaterial ? subMesh.getMaterial() : mesh.material;
           
           if (material) {
@@ -755,7 +951,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         }
       } else {
         // Toggle main mesh via setEnabled (vassistant approach)
-        mesh.setEnabled(isVisible);
+        mesh.setEnabled?.(isVisible);
         console.log(`✓ Main mesh ${meshPart.name} ${isVisible ? 'shown' : 'hidden'} (setEnabled)`);
       }
 
@@ -765,18 +961,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleDeleteMotion = async (motionId) => {
+  const handleDeleteMotion = async (motionId: string) => {
     if (onRequestDeleteMotionDialog) {
       onRequestDeleteMotionDialog(motionId);
     }
   };
 
-  const handleEditMotion = (motionId, currentName) => {
+  const handleEditMotion = (motionId: string, currentName: string) => {
     setEditingMotionId(motionId);
     setEditingMotionName(currentName);
   };
 
-  const handleSaveMotionName = async (motionId) => {
+  const handleSaveMotionName = async (motionId: string) => {
     try {
       await motionStorageService.updateMotionName(motionId, editingMotionName);
       setEditingMotionId(null);
@@ -802,21 +998,21 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleEmoteAudioFileChange = (event) => {
+  const handleEmoteAudioFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedEmoteAudioFile(file);
     }
   };
 
-  const handleEmoteMotionFileChange = (event) => {
+  const handleEmoteMotionFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedEmoteMotionFile(file);
     }
   };
 
-  const handleEmoteCameraFileChange = (event) => {
+  const handleEmoteCameraFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedEmoteCameraFile(file);
@@ -852,11 +1048,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       setEmoteUploadState({ uploading: true, progress: 'Uploading emote...', error: null });
 
-      await emoteStorageService.saveEmote(
+      await saveEmoteWithCamera(
         null,
         emoteName,
         audioFile,
-        bvmdData,
+        bvmdData as ArrayBuffer,
         cameraBvmdData, // Can be null
         {
           originalAudioFileName: audioFile.name,
@@ -877,27 +1073,33 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       await loadEmotes();
     } catch (error) {
       console.error('Failed to upload emote:', error);
-      setEmoteUploadState({ uploading: false, progress: '', error: error.message || 'Upload failed' });
+      setEmoteUploadState({ uploading: false, progress: '', error: getErrorMessage(error) || 'Upload failed' });
     }
   };
 
-  const handleEmoteZipUpload = async (zipFile) => {
+  const handleEmoteZipUpload = async (zipFile: File) => {
     try {
       setEmoteUploadState({ uploading: true, progress: 'Extracting ZIP...', error: null });
 
       const zip = new JSZip();
       const zipContent = await zip.loadAsync(zipFile);
 
-      const emoteFolders = [];
+      const emoteFolders: EmoteZipFolder[] = [];
       Object.keys(zipContent.files).forEach(path => {
         const parts = path.split('/');
-        if (parts.length >= 2 && !zipContent.files[path].dir) {
+        const fileEntry = zipContent.files[path];
+        if (parts.length >= 2 && fileEntry && !fileEntry.dir) {
           const folderName = parts[0];
+          if (!folderName) {
+            return;
+          }
           if (!emoteFolders.find(f => f.name === folderName)) {
             emoteFolders.push({ name: folderName, files: [] });
           }
           const folder = emoteFolders.find(f => f.name === folderName);
-          folder.files.push(path);
+          if (folder) {
+            folder.files.push(path);
+          }
         }
       });
 
@@ -910,6 +1112,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
 
       for (let i = 0; i < emoteFolders.length; i++) {
         const folder = emoteFolders[i];
+        if (!folder) {
+          continue;
+        }
         const emoteName = folder.name;
 
         try {
@@ -920,21 +1125,21 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           });
 
           // Find VMD files - separate camera from model animation
-          const vmdFiles = folder.files.filter(f => f.toLowerCase().endsWith('.vmd'));
+          const vmdFiles = folder.files.filter((f: string) => f.toLowerCase().endsWith('.vmd'));
           
           // Detect camera VMD (case-insensitive: 'camera' or 'カメラ')
-          const cameraVmdFile = vmdFiles.find(f => {
+          const cameraVmdFile = vmdFiles.find((f: string) => {
             const fileName = f.toLowerCase();
             return fileName.includes('camera') || fileName.includes('カメラ'.toLowerCase());
           });
           
           // Model animation VMD (not camera)
-          const modelVmdFile = vmdFiles.find(f => {
+          const modelVmdFile = vmdFiles.find((f: string) => {
             const fileName = f.toLowerCase();
             return !(fileName.includes('camera') || fileName.includes('カメラ'.toLowerCase()));
           });
           
-          const audioFile = folder.files.find(f => {
+          const audioFile = folder.files.find((f: string) => {
             const lower = f.toLowerCase();
             return lower.endsWith('.mp3') || lower.endsWith('.wav') || 
                    lower.endsWith('.ogg') || lower.endsWith('.m4a') || 
@@ -947,23 +1152,31 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             continue;
           }
 
-          const vmdBlob = await zipContent.files[modelVmdFile].async('blob');
-          const audioBlob = await zipContent.files[audioFile].async('blob');
+          const modelVmdEntry = zipContent.files[modelVmdFile];
+          const audioEntry = zipContent.files[audioFile];
+          if (!modelVmdEntry || !audioEntry) {
+            throw new Error('Required ZIP entries not found');
+          }
+          const vmdBlob = await modelVmdEntry.async('blob');
+          const audioBlob = await audioEntry.async('blob');
           
           // Load camera VMD if found (optional)
           let cameraBlob = null;
           let cameraFileName = null;
           if (cameraVmdFile) {
-            cameraBlob = await zipContent.files[cameraVmdFile].async('blob');
+            const cameraEntry = zipContent.files[cameraVmdFile];
+            if (cameraEntry) {
+              cameraBlob = await cameraEntry.async('blob');
+            }
             cameraFileName = cameraVmdFile.split('/').pop();
           }
 
-          const vmdFileName = modelVmdFile.split('/').pop();
-          const audioFileName = audioFile.split('/').pop();
+          const vmdFileName = modelVmdFile.split('/').pop() || 'motion.vmd';
+          const audioFileName = audioFile.split('/').pop() || 'audio.mp3';
 
           const vmdFileObj = new File([vmdBlob], vmdFileName, { type: 'application/octet-stream' });
           const audioFileObj = new File([audioBlob], audioFileName, { type: audioBlob.type || 'audio/mpeg' });
-          const cameraFileObj = cameraBlob ? new File([cameraBlob], cameraFileName, { type: 'application/octet-stream' }) : null;
+          const cameraFileObj = cameraBlob ? new File([cameraBlob], cameraFileName || 'camera.vmd', { type: 'application/octet-stream' }) : null;
 
           setEmoteUploadState({
             uploading: true,
@@ -985,11 +1198,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             error: null
           });
 
-          await emoteStorageService.saveEmote(
+          await saveEmoteWithCamera(
             null,
             emoteName,
             audioFileObj,
-            bvmdData,
+            bvmdData as ArrayBuffer,
             cameraBvmdData, // Can be null
             {
               originalAudioFileName: audioFileName,
@@ -1030,36 +1243,36 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       }
     } catch (error) {
       console.error('Failed to process ZIP:', error);
-      setEmoteUploadState({ uploading: false, progress: '', error: error.message || 'ZIP import failed' });
+      setEmoteUploadState({ uploading: false, progress: '', error: getErrorMessage(error) || 'ZIP import failed' });
     }
   };
 
-  const handleEmoteZipFileChange = (event) => {
+  const handleEmoteZipFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       handleEmoteZipUpload(file);
     }
   };
 
-  const handleDeleteEmote = async (emoteId) => {
+  const handleDeleteEmote = async (emoteId: string) => {
     if (window.confirm('Are you sure you want to delete this emote?')) {
       try {
         await emoteStorageService.deleteEmote(emoteId);
         await loadEmotes();
       } catch (error) {
         console.error('Failed to delete emote:', error);
-        setErrorDialogMessage(error.message || 'Failed to delete emote');
+        setErrorDialogMessage(getErrorMessage(error) || 'Failed to delete emote');
         setShowErrorDialog(true);
       }
     }
   };
 
-  const handleEditEmote = (emoteId, currentName) => {
+  const handleEditEmote = (emoteId: string, currentName: string) => {
     setEditingEmoteId(emoteId);
     setEditingEmoteName(currentName);
   };
 
-  const handleSaveEmoteName = async (emoteId) => {
+  const handleSaveEmoteName = async (emoteId: string) => {
     try {
       await emoteStorageService.updateEmoteName(emoteId, editingEmoteName);
       setEditingEmoteId(null);
@@ -1067,7 +1280,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       await loadEmotes();
     } catch (error) {
       console.error('Failed to update emote name:', error);
-      setErrorDialogMessage(error.message || 'Failed to update emote name');
+      setErrorDialogMessage(getErrorMessage(error) || 'Failed to update emote name');
       setShowErrorDialog(true);
     }
   };
@@ -1077,7 +1290,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     setEditingEmoteName('');
   };
 
-  const handleToggleEmoteVisibility = async (emoteId, isVisible) => {
+  const handleToggleEmoteVisibility = async (emoteId: string, isVisible: boolean) => {
     try {
       await emoteStorageService.toggleEmoteVisibility(emoteId, isVisible);
       
@@ -1088,13 +1301,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       console.log(`Emote ${emoteId} visibility set to: ${isVisible}`);
     } catch (error) {
       console.error('Failed to toggle emote visibility:', error);
-      setErrorDialogMessage(error.message || 'Failed to toggle emote visibility');
+      setErrorDialogMessage(getErrorMessage(error) || 'Failed to toggle emote visibility');
       setShowErrorDialog(true);
     }
   };
 
   // Handle toggling category for a motion
-  const handleToggleMotionCategory = async (motionId, category, isEnabled) => {
+  const handleToggleMotionCategory = async (motionId: string, category: string, isEnabled: boolean) => {
     try {
       const motion = motions.find(m => m.id === motionId);
       if (!motion) return;
@@ -1117,7 +1330,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           m.enabledByCategory && m.enabledByCategory[category] === true
         );
         
-        if (enabledInCategory.length === 1 && enabledInCategory[0].id === motionId) {
+        if (enabledInCategory.length === 1 && enabledInCategory[0] && enabledInCategory[0].id === motionId) {
           throw new Error(`Cannot disable last enabled motion in category: ${category}`);
         }
         
@@ -1150,17 +1363,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       console.log(`Motion ${motionId} category ${category} ${isEnabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Failed to toggle motion category:', error);
-      setErrorDialogMessage(error.message || 'Failed to toggle motion category');
+      setErrorDialogMessage(getErrorMessage(error) || 'Failed to toggle motion category');
       setShowErrorDialog(true);
     }
   };
 
-  const handleToggleAnimation = async (animationId, newChecked, isDefault, category) => {
+  const handleToggleAnimation = async (animationId: string, newChecked: boolean, isDefault: boolean, category?: string) => {
     try {
       if (isDefault) {
         toggleDefaultAnimation(animationId, newChecked);
         console.log(`Default animation ${animationId} ${newChecked ? 'enabled' : 'disabled'}`);
-      } else {
+      } else if (category) {
         await toggleCustomAnimation(animationId, category, newChecked);
         console.log(`Custom animation ${animationId} ${newChecked ? 'enabled' : 'disabled'} in ${category}`);
       }
@@ -1169,53 +1382,55 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handleCustomQualityChange = async (key, value) => {
+  const handleCustomQualityChange = async (key: string, value: number | boolean) => {
     updateUIConfig(`customQuality.${key}`, value);
     
     const scene = sceneRef?.current;
     if (!scene || !scene.metadata?.renderPipeline) return;
     
-    const pipeline = scene.metadata.renderPipeline;
+    const pipeline = scene.metadata.renderPipeline as RenderPipelineLike;
+    const numericValue = Number(value);
+    const booleanValue = Boolean(value);
     
     switch (key) {
       case 'samples':
-        pipeline.samples = value;
+        pipeline.samples = numericValue;
         break;
       case 'fxaaEnabled':
-        pipeline.fxaaEnabled = value;
+        pipeline.fxaaEnabled = booleanValue;
         break;
       case 'bloomEnabled':
-        pipeline.bloomEnabled = value;
+        pipeline.bloomEnabled = booleanValue;
         break;
       case 'bloomThreshold':
-        pipeline.bloomThreshold = value;
+        pipeline.bloomThreshold = numericValue;
         break;
       case 'bloomWeight':
-        pipeline.bloomWeight = value;
+        pipeline.bloomWeight = numericValue;
         break;
       case 'bloomScale':
-        pipeline.bloomScale = value;
+        pipeline.bloomScale = numericValue;
         break;
       case 'bloomKernel':
-        pipeline.bloomKernel = value;
+        pipeline.bloomKernel = numericValue;
         break;
       case 'contrast':
         if (pipeline.imageProcessing) {
-          pipeline.imageProcessing.contrast = value;
+          pipeline.imageProcessing.contrast = numericValue;
         }
         break;
       case 'exposure':
         if (pipeline.imageProcessing) {
-          pipeline.imageProcessing.exposure = value;
+          pipeline.imageProcessing.exposure = numericValue;
         }
         break;
       case 'saturation':
         if (pipeline.imageProcessing?.colorCurves) {
-          pipeline.imageProcessing.colorCurves.globalSaturation = value;
+          pipeline.imageProcessing.colorCurves.globalSaturation = numericValue;
         } else if (pipeline.imageProcessing) {
           const { ColorCurves } = await import('@babylonjs/core');
           const colorCurves = new ColorCurves();
-          colorCurves.globalSaturation = value;
+          colorCurves.globalSaturation = numericValue;
           pipeline.imageProcessing.colorCurvesEnabled = true;
           pipeline.imageProcessing.colorCurves = colorCurves;
         }
@@ -1223,14 +1438,16 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
     }
   };
 
-  const handlePortraitClippingChange = async (value) => {
+  const handlePortraitClippingChange = async (value: number) => {
     setPortraitClipping(value);
     
     const scene = sceneRef?.current;
     if (scene && scene.clipPlane) {
       const BABYLON = await import('@babylonjs/core');
       scene.clipPlane = new BABYLON.Plane(0, -1, 0, value);
-      scene.metadata.portraitClipPlaneY = value;
+      if (scene.metadata) {
+        scene.metadata.portraitClipPlaneY = value;
+      }
     }
     
     if (portraitClippingSaveTimer.current) {
@@ -1273,7 +1490,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           ]}
           size="compact"
           activeTab={activeSubTab}
-          onTabChange={setActiveSubTab}
+          onTabChange={(tabId) => setActiveSubTab(tabId as SubTabId)}
           tabsRef={subTabsRef}
         />
       </div>
@@ -1455,7 +1672,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                 { value: FPSLimitOptions.NATIVE, label: 'Native (Monitor Rate)' },
               ]}
             />
-            {uiConfig.fpsLimit === FPSLimitOptions.NATIVE || uiConfig.fpsLimit === 'native' ? (
+            {String(uiConfig.fpsLimit) === String(FPSLimitOptions.NATIVE) ? (
               <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
                 <Icon name="alert-triangle" size={14} className="text-yellow-200/90 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-yellow-200/90">
@@ -1668,7 +1885,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                     updateUIConfig('customQuality', { ...DefaultCustomQualitySettings });
                     const scene = sceneRef?.current;
                     if (scene?.metadata?.renderPipeline) {
-                      const pipeline = scene.metadata.renderPipeline;
+                      const pipeline = scene.metadata.renderPipeline as RenderPipelineLike;
                       const d = DefaultCustomQualitySettings;
                       pipeline.samples = d.samples;
                       pipeline.fxaaEnabled = d.fxaaEnabled;
@@ -1881,7 +2098,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                         </p>
                       )}
                       <p className="text-xs text-white/50">
-                        {(model.metadata?.fileSize / 1024 / 1024).toFixed(2)} MB
+                            {(((model.metadata?.fileSize ?? 0) / 1024 / 1024)).toFixed(2)} MB
                       </p>
                     </div>
                     
@@ -1930,7 +2147,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             <Icon name="trash-2" size={16} />
                           </button>
                           <Toggle
-                            checked={model.isDefault}
+                            checked={Boolean(model.isDefault)}
                             onChange={(checked) => {
                               if (checked) {
                                 handleSetDefault(model.id);
@@ -2122,7 +2339,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             </p>
                           )}
                           <p className="text-xs text-white/50">
-                            {(stage.metadata?.fileSize / 1024 / 1024).toFixed(2)} MB
+                            {(((stage.metadata?.fileSize ?? 0) / 1024 / 1024)).toFixed(2)} MB
                           </p>
                         </div>
                         
@@ -2162,7 +2379,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                                 <Icon name="trash-2" size={16} />
                               </button>
                               <Toggle
-                                checked={stage.isDefault}
+                                checked={Boolean(stage.isDefault)}
                                 onChange={(checked) => {
                                   if (checked) {
                                     handleSetDefaultStage(stage.id);
@@ -2249,7 +2466,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             </p>
                           )}
                           <p className="text-xs text-white/50">
-                            {(motion.metadata?.fileSize / 1024).toFixed(1)} KB
+                            {(((motion.metadata?.fileSize ?? 0) / 1024)).toFixed(1)} KB
                           </p>
                         </div>
                         
@@ -2312,7 +2529,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                               <div key={category} className="flex items-center justify-between gap-2">
                                 <span className="text-xs capitalize text-white/80">{category}</span>
                                 <Toggle
-                                  checked={isEnabled}
+                                  checked={Boolean(isEnabled)}
                                   onChange={(checked) => handleToggleMotionCategory(motion.id, category, checked)}
                                   size="sm"
                                   isLightBackground={isLightBackground}
@@ -2335,7 +2552,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* Animation Categories */}
           <div className="space-y-4">
               {Object.keys(AnimationCategory).map((categoryKey) => {
-                const category = AnimationCategory[categoryKey];
+                const category = AnimationCategory[categoryKey as keyof typeof AnimationCategory];
                 return (
                   <AnimationCategorySection
                     key={category}
@@ -2587,6 +2804,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           type="confirm"
           title="Error"
           message={errorDialogMessage}
+          itemId="error"
           confirmLabel="OK"
           confirmStyle="primary"
           isLightBackground={isLightBackground}
@@ -2598,19 +2816,27 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   );
 };
 
+interface AnimationCategorySectionProps {
+  category: string;
+  customMotions: MotionItem[];
+  disabledDefaultAnimations: Record<string, boolean>;
+  onToggleAnimation: (animationId: string, newChecked: boolean, isDefault: boolean, category?: string) => Promise<void>;
+  isLightBackground: boolean;
+}
+
 // Animation Category Section Component
-const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnimations, onToggleAnimation, isLightBackground }) => {
+const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnimations, onToggleAnimation, isLightBackground }: AnimationCategorySectionProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
-  const defaultAnimations = getDefaultAnimationsByCategory(category);
+  const defaultAnimations = getDefaultAnimationsByCategory(category) as Array<{ id: string; name: string; metadata?: { description?: string } }>;
 
-  const customMotionsInCategory = customMotions.filter(m => 
+  const customMotionsInCategory = customMotions.filter((m) => 
     m.animationCategories && m.animationCategories.includes(category)
   );
   
   const totalAnimations = defaultAnimations.length + customMotionsInCategory.length;
-  const enabledDefaultCount = defaultAnimations.filter(anim => !disabledDefaultAnimations[anim.id]).length;
-  const enabledCustomCount = customMotionsInCategory.filter(m => 
+  const enabledDefaultCount = defaultAnimations.filter((anim) => !disabledDefaultAnimations[anim.id]).length;
+  const enabledCustomCount = customMotionsInCategory.filter((m) => 
     m.enabledByCategory && m.enabledByCategory[category] === true
   ).length;
   const totalEnabledCount = enabledDefaultCount + enabledCustomCount;
@@ -2684,14 +2910,14 @@ const AnimationCategorySection = ({ category, customMotions, disabledDefaultAnim
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-white/80 truncate">{motion.name}</p>
                         <p className="text-[10px] text-white/40 truncate">
-                          {(motion.metadata?.fileSize / 1024).toFixed(1)} KB
+                          {(((motion.metadata?.fileSize ?? 0) / 1024)).toFixed(1)} KB
                         </p>
                       </div>
                       {/* Enable/Disable Toggle for this category */}
                       <Toggle
-                        checked={isEnabled}
+                        checked={Boolean(isEnabled)}
                         onChange={async (newChecked) => await onToggleAnimation(motion.id, newChecked, false, category)}
-                        disabled={isLastEnabled}
+                        disabled={Boolean(isLastEnabled)}
                         size="sm"
                         isLightBackground={isLightBackground}
                       />

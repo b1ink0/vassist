@@ -5,8 +5,34 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
+export interface BridgeSendOptions {
+  timeout?: number;
+}
+
+export interface ExtensionBridgeLike {
+  sendMessage(type: string, payload?: unknown, options?: BridgeSendOptions): Promise<unknown>;
+  sendStreamingMessage?(
+    type: string,
+    payload: unknown,
+    onChunk: (chunk: string) => void,
+    options?: BridgeSendOptions
+  ): Promise<void>;
+  addMessageListener?(listener: (message: unknown) => void): void;
+  removeMessageListener?(listener: (message: unknown) => void): void;
+}
+
+declare global {
+  interface Window {
+    __VASSIST_BRIDGE__?: ExtensionBridgeLike;
+  }
+}
+
 export class ServiceProxy {
-  constructor(name) {
+  protected name: string;
+  protected isExtension: boolean;
+  protected _bridge: ExtensionBridgeLike | null;
+
+  constructor(name: string) {
     this.name = name;
     this.isExtension = __EXTENSION_MODE__;
     this._bridge = null;
@@ -16,7 +42,10 @@ export class ServiceProxy {
       try {
         // Import ExtensionBridge synchronously (it's already loaded in main.js)
         import('../../utils/ExtensionBridge').then(module => {
-          this._bridge = module.extensionBridge;
+          const bridge = (module as { extensionBridge?: ExtensionBridgeLike }).extensionBridge;
+          if (bridge) {
+            this._bridge = bridge;
+          }
         }).catch(() => {
           // Silently fail - will retry via waitForBridge
         });
@@ -31,7 +60,7 @@ export class ServiceProxy {
    * Waits for bridge to load if needed (with timeout)
    * @returns {Object|null} ExtensionBridge instance or null if not in extension mode
    */
-  getBridge() {
+  getBridge(): ExtensionBridgeLike | null {
     if (!this.isExtension) {
       return null;
     }
@@ -73,7 +102,7 @@ export class ServiceProxy {
    * @param {number} timeout - Timeout in ms
    * @returns {Promise<Object|null>} Bridge instance
    */
-  async waitForBridge(timeout = 5000) {
+  async waitForBridge(timeout = 5000): Promise<ExtensionBridgeLike | null> {
     const startTime = Date.now();
     while (Date.now() - startTime < timeout) {
       const bridge = this.getBridge();
@@ -91,7 +120,7 @@ export class ServiceProxy {
    * Must be implemented by subclass
    * @returns {Promise<*>} Result
    */
-  async callViaBridge() {
+  async callViaBridge(_method: string, ..._args: unknown[]): Promise<unknown> {
     throw new Error(`${this.name}Proxy.callViaBridge() must be implemented by subclass`);
   }
 
@@ -100,7 +129,7 @@ export class ServiceProxy {
    * Must be implemented by subclass
    * @returns {Promise<*>} Result
    */
-  async callDirect() {
+  async callDirect(_method: string, ..._args: unknown[]): Promise<unknown> {
     throw new Error(`${this.name}Proxy.callDirect() must be implemented by subclass`);
   }
 

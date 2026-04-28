@@ -3,7 +3,16 @@
  * Handles chat display, TTS playback, drag-drop, background detection, and history management.
  */
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from 'react'
 import { Icon } from '../icons';
 import { Button } from '../ui';
 import { cn } from '../../utils/cn';
@@ -26,6 +35,158 @@ import { useApp } from '../../contexts/AppContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import Logger from '../../services/LoggerService';
 import { isDesktop, isAndroid } from '../../utils/PlatformUtils';
+import type { PositionManagerLike } from '../../babylon/types';
+import type { ComponentType } from 'react';
+
+interface ChatContainerProps {
+  modelDisabled?: boolean;
+  onDragDrop?: (data: { text?: string; images?: string[]; audios?: string[]; errors?: string[] }) => void;
+}
+
+interface ButtonPosition {
+  x: number;
+  y: number;
+}
+
+interface ContainerPosition {
+  x: number;
+  y: number;
+}
+
+interface ChatMessageLike {
+  id: string;
+  role: string;
+  isUser?: boolean;
+  content: string;
+  images?: string[];
+  audios?: string[];
+  branchInfo?: { totalBranches?: number; currentBranch?: number; canGoBack?: boolean; canGoForward?: boolean };
+}
+
+interface ChatHistoryPanelPropsLike {
+  isLightBackground: boolean;
+  onClose: () => void;
+  onSelectChat: (chat: unknown) => void;
+  onRequestEditDialog: (chatId: string, title: string) => void;
+  onRequestDeleteDialog: (chatId: string) => void;
+  refreshTrigger: number;
+  animationClass: string;
+}
+
+interface DialogPropsLike {
+  type: string;
+  title: string;
+  message: string;
+  itemId: string;
+  initialValue?: string;
+  inputPlaceholder?: string;
+  inputMaxLength?: number;
+  isLightBackground?: boolean;
+  animationClass?: string;
+  confirmLabel?: string;
+  confirmStyle?: string;
+  onConfirm: (...args: string[]) => void | Promise<void>;
+  onCancel: () => void;
+}
+
+interface DragDropServiceLike {
+  attach: (element: HTMLElement, callbacks: {
+    onSetDragOver?: (isDragging: boolean) => void;
+    onShowError?: (error: unknown) => void;
+    checkVoiceMode?: (() => boolean) | null;
+    getCurrentCounts?: () => { images: number; audios: number };
+    onProcessData?: (data: unknown) => void;
+  }) => void;
+  detach: () => void;
+}
+
+interface StorageServiceLike {
+  configLoad: <T>(key: string, defaultValue?: T) => Promise<T>;
+}
+
+interface TTSServiceLike {
+  isConfigured: () => boolean;
+  addEventListener: (event: string, callback: (event: Event) => void) => void;
+  removeEventListener: (event: string, callback: (event: Event) => void) => void;
+  stopPlayback: () => void;
+  stopGeneration: () => void;
+  resumePlayback: () => void;
+  generateSpeech: (text: string, withLipSync?: boolean) => Promise<{ audio?: Blob | ArrayBuffer; bvmdUrl?: string } | null>;
+  generateChunkedSpeech: (text: string, prefix?: string | null, chunkSize?: number, minChunkSize?: number, sessionId?: string) => Promise<string[]>;
+  queueAudio: (text: string, audioUrl: string, bvmdUrl?: string, sessionId?: string) => void;
+  playAudioSequence: (audioUrls: string[], sessionId?: string) => Promise<void>;
+  cleanupBlobUrls: (audioUrls: string[]) => void;
+}
+
+interface DebugMarker {
+  x: number;
+  y: number;
+  color: string;
+  brightness: number;
+  alpha: number;
+  element: string;
+}
+
+type TTSConfigLike = typeof DefaultTTSConfig & {
+  gptsovits?: {
+    referenceVoiceId?: string | null;
+    referenceText?: string;
+  };
+};
+
+interface DesktopLlmApiLike {
+  deleteModel?: (filename: string, customPath?: string | null) => Promise<{ success?: boolean; error?: string }>;
+}
+
+interface DesktopApiLike {
+  llm?: DesktopLlmApiLike;
+}
+
+interface AndroidApiLike {
+  deleteLLMModel?: (filename: string) => string;
+}
+
+interface AppContextForChatContainer {
+  positionManagerRef: MutableRefObject<PositionManagerLike | null>;
+  chatMessages: ChatMessageLike[];
+  isVoiceMode: boolean;
+  isChatContainerVisible: boolean;
+  isProcessing: boolean;
+  isSpeaking: boolean;
+  playingMessageIndex: number | null;
+  loadingMessageIndex: number | null;
+  isDragOverChat: boolean;
+  isSettingsPanelOpen: boolean;
+  isHistoryPanelOpen: boolean;
+  isTempChat: boolean;
+  buttonPosition: ButtonPosition;
+  isDraggingButton: boolean;
+  isDraggingModel: boolean;
+  setPlayingMessageIndex: Dispatch<SetStateAction<number | null>>;
+  setLoadingMessageIndex: Dispatch<SetStateAction<number | null>>;
+  setIsDragOverChat: Dispatch<SetStateAction<boolean>>;
+  setIsSettingsPanelOpen: Dispatch<SetStateAction<boolean>>;
+  setIsHistoryPanelOpen: Dispatch<SetStateAction<boolean>>;
+  setIsTempChat: Dispatch<SetStateAction<boolean>>;
+  loadChatFromHistory: (chat: unknown) => void;
+  clearChat: () => void;
+  stopGeneration: () => void;
+  closeChat: () => void;
+  startButtonDrag: () => void;
+  endButtonDrag: () => void;
+  startModelDrag: () => void;
+  endModelDrag: () => void;
+  editUserMessage: (messageId: string, content: string, images: string[], audios: string[]) => Promise<void>;
+  regenerateAIMessage: (messageId: string) => Promise<void>;
+  previousBranch: (messageId: string) => void;
+  nextBranch: (messageId: string) => void;
+}
+
+const storageService = StorageServiceProxy as unknown as StorageServiceLike;
+const ttsService = TTSServiceProxy as unknown as TTSServiceLike;
+const dragDropCtor = DragDropService as unknown as new (options: { maxImages: number; maxAudios: number }) => DragDropServiceLike;
+const TypedChatHistoryPanel = ChatHistoryPanel as unknown as ComponentType<ChatHistoryPanelPropsLike>;
+const TypedDialog = Dialog as unknown as ComponentType<DialogPropsLike>;
 
 const ANDROID_CHAT_TOP_OFFSET = 32;
 
@@ -41,7 +202,7 @@ const ANDROID_CHAT_TOP_OFFSET = 32;
 const ChatContainer = ({ 
   modelDisabled = false,
   onDragDrop
-}) => {
+}: ChatContainerProps) => {
   const {
     positionManagerRef,
     chatMessages: messages,
@@ -76,25 +237,25 @@ const ChatContainer = ({
     regenerateAIMessage,
     previousBranch,
     nextBranch,
-  } = useApp();
+  }: AppContextForChatContainer = useApp();
 
   const { updateUIConfig, uiConfig, updateTTSConfig, ttsConfig: ttsConfigFromContext, aiConfig } = useConfig();
-  const { api } = useDesktop();
-  const { api: androidAPI } = useAndroid();
+  const { api } = useDesktop() as { api: DesktopApiLike | null };
+  const { api: androidAPI } = useAndroid() as { api: AndroidApiLike | null };
 
-  const buttonPosRef = useRef(buttonPosition);
+  const buttonPosRef = useRef<ButtonPosition>(buttonPosition);
   const buttonInitializedRef = useRef(false);
-  const [containerPos, setContainerPos] = useState({ x: 0, y: 0 });
-  const scrollRef = useRef(null);
-  const dragDropServiceRef = useRef(null);
-  const currentSessionRef = useRef(null);
+  const [containerPos, setContainerPos] = useState<ContainerPosition>({ x: 0, y: 0 });
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
+  const currentSessionRef = useRef<string | null>(null);
   const [isLightBackground, setIsLightBackground] = useState(false);
-  const [ttsConfig, setTtsConfig] = useState(DefaultTTSConfig);
-  const containerRef = useRef(null);
-  const messagesContainerRef = useRef(null);
-  const [debugMarkers, setDebugMarkers] = useState([]);
-  const chatInputRef = useRef(null);
-  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const [ttsConfig, setTtsConfig] = useState<TTSConfigLike>(DefaultTTSConfig as TTSConfigLike);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [debugMarkers, setDebugMarkers] = useState<DebugMarker[]>([]);
+  const chatInputRef = useRef<HTMLDivElement | null>(null);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousIsGeneratingRef = useRef(false);
   const [shouldForceComplete, setShouldForceComplete] = useState(false);
@@ -103,16 +264,16 @@ const ChatContainer = ({
   const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
   const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
   
-  const [editingChatId, setEditingChatId] = useState(null);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
-  const [deletingChatId, setDeletingChatId] = useState(null);
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const [isEditDialogClosing, setIsEditDialogClosing] = useState(false);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   
-  const [deletingModelId, setDeletingModelId] = useState(null);
-  const [deletingMotionId, setDeletingMotionId] = useState(null);
-  const [deletingVoiceId, setDeletingVoiceId] = useState(null);
-  const [deletingLLMModel, setDeletingLLMModel] = useState(null);
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
+  const [deletingMotionId, setDeletingMotionId] = useState<string | null>(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const [deletingLLMModel, setDeletingLLMModel] = useState<string | null>(null);
   const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] = useState(false);
   const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] = useState(false);
   const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] = useState(false);
@@ -120,11 +281,11 @@ const ChatContainer = ({
   const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   
-  const streamedMessageIdsRef = useRef(new Set());
+  const streamedMessageIdsRef = useRef<Set<string>>(new Set());
   
-  const completedMessageIdsRef = useRef(new Set());
+  const completedMessageIdsRef = useRef<Set<string>>(new Set());
   
-  const lastAnimatedMessageIdRef = useRef(null);
+  const lastAnimatedMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
@@ -295,7 +456,7 @@ const ChatContainer = ({
     const initButton = async () => {
       try {
         const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 68 };
-        const savedPos = await StorageServiceProxy.configLoad('chatButtonPosition', defaultPos);
+        const savedPos = await storageService.configLoad('chatButtonPosition', defaultPos);
         buttonPosRef.current = savedPos;
         buttonInitializedRef.current = true;
         setContainerPos(calculateContainerPosition());
@@ -405,7 +566,10 @@ const ChatContainer = ({
   }, [isVisible, calculateContainerPosition]);
 
   useEffect(() => {
-    const handleButtonMoved = (event) => {
+    const handleButtonMoved = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
       buttonPosRef.current = event.detail;
       const newPos = calculateContainerPosition();
       setContainerPos(newPos);
@@ -427,18 +591,20 @@ const ChatContainer = ({
         return;
       }
 
-      dragDropServiceRef.current = new DragDropService({
+      dragDropServiceRef.current = new dragDropCtor({
         maxImages: 3,
         maxAudios: 1
       });
 
       dragDropServiceRef.current.attach(messagesContainerRef.current, {
-        onSetDragOver: (isDragging) => setIsDragOver(isDragging),
-        onShowError: (error) => Logger.error('ChatContainer', 'Drag-drop error:', error),
+        onSetDragOver: (isDragging: boolean) => setIsDragOver(isDragging),
+        onShowError: (error: unknown) => Logger.error('ChatContainer', 'Drag-drop error:', error),
         checkVoiceMode: null,
         getCurrentCounts: () => ({ images: 0, audios: 0 }),
-        onProcessData: (data) => {
-          if (onDragDrop) onDragDrop(data);
+        onProcessData: (data: unknown) => {
+          if (onDragDrop && data && typeof data === 'object') {
+            onDragDrop(data as { text?: string; images?: string[]; audios?: string[]; errors?: string[] });
+          }
         }
       });
     }, 0);
@@ -477,7 +643,7 @@ const ChatContainer = ({
     }, 200);
   }, [setIsHistoryPanelOpen]);
 
-  const handleSelectChat = useCallback((chat) => {
+  const handleSelectChat = useCallback((chat: unknown) => {
     streamedMessageIdsRef.current.clear();
     Logger.log('ChatContainer', 'Cleared streamed message tracking for history load');
     
@@ -489,12 +655,12 @@ const ChatContainer = ({
     }, 200);
   }, [loadChatFromHistory, setIsHistoryPanelOpen]);
 
-  const handleRequestEditDialog = useCallback((chatId, title) => {
+  const handleRequestEditDialog = useCallback((chatId: string, title: string) => {
     setEditingChatId(chatId);
     setEditingChatTitle(title);
   }, []);
 
-  const handleEditDialogSave = useCallback(async (chatId, newTitle) => {
+  const handleEditDialogSave = useCallback(async (chatId: string, newTitle: string) => {
     try {
       await chatHistoryService.updateChatTitle(chatId, newTitle);
       Logger.log('ChatContainer', 'Updated chat title:', chatId, newTitle);
@@ -522,11 +688,11 @@ const ChatContainer = ({
     }, 200);
   }, []);
 
-  const handleRequestDeleteDialog = useCallback((chatId) => {
+  const handleRequestDeleteDialog = useCallback((chatId: string) => {
     setDeletingChatId(chatId);
   }, []);
 
-  const handleDeleteDialogConfirm = useCallback(async (chatId) => {
+  const handleDeleteDialogConfirm = useCallback(async (chatId: string) => {
     try {
       await chatHistoryService.deleteChat(chatId);
       Logger.log('ChatContainer', 'Deleted chat:', chatId);
@@ -552,11 +718,11 @@ const ChatContainer = ({
     }, 200);
   }, []);
 
-  const handleRequestDeleteModelDialog = useCallback((modelId) => {
+  const handleRequestDeleteModelDialog = useCallback((modelId: string) => {
     setDeletingModelId(modelId);
   }, []);
 
-  const handleDeleteModelConfirm = useCallback(async (modelId) => {
+  const handleDeleteModelConfirm = useCallback(async (modelId: string) => {
     try {
       await modelStorageService.deleteModel(modelId);
       Logger.log('ChatContainer', 'Deleted model:', modelId);
@@ -580,11 +746,11 @@ const ChatContainer = ({
     }, 200);
   }, []);
 
-  const handleRequestDeleteMotionDialog = useCallback((motionId) => {
+  const handleRequestDeleteMotionDialog = useCallback((motionId: string) => {
     setDeletingMotionId(motionId);
   }, []);
 
-  const handleDeleteMotionConfirm = useCallback(async (motionId) => {
+  const handleDeleteMotionConfirm = useCallback(async (motionId: string) => {
     try {
       await motionStorageService.deleteMotion(motionId);
       Logger.log('ChatContainer', 'Deleted motion:', motionId);
@@ -608,11 +774,11 @@ const ChatContainer = ({
     }, 200);
   }, []);
 
-  const handleRequestDeleteVoiceDialog = useCallback((voiceId) => {
+  const handleRequestDeleteVoiceDialog = useCallback((voiceId: string) => {
     setDeletingVoiceId(voiceId);
   }, []);
 
-  const handleDeleteVoiceConfirm = useCallback(async (voiceId) => {
+  const handleDeleteVoiceConfirm = useCallback(async (voiceId: string) => {
     try {
       const { default: voiceStorageService } = await import('../../services/VoiceStorageService');
       await voiceStorageService.deleteVoice(voiceId);
@@ -646,18 +812,23 @@ const ChatContainer = ({
     }, 200);
   }, []);
 
-  const handleRequestDeleteLLMModel = useCallback((filename) => {
+  const handleRequestDeleteLLMModel = useCallback((filename: string) => {
     setDeletingLLMModel(filename);
   }, []);
 
-  const handleDeleteLLMModelConfirm = useCallback(async (filename) => {
+  const handleDeleteLLMModelConfirm = useCallback(async (filename: string) => {
     try {
       let result;
       
       if (isDesktop && api?.llm) {
         // Get custom models path from aiConfig
-        const customPath = aiConfig?.['desktop-local']?.customModelsPath || null;
-        result = await api.llm.deleteModel(filename, customPath);
+        const customPath = (aiConfig as { ['desktop-local']?: { customModelsPath?: string } } | null)?.['desktop-local']?.customModelsPath || null;
+        const deleteModel = api.llm.deleteModel;
+        if (!deleteModel) {
+          Logger.error('ChatContainer', 'Desktop LLM deleteModel API is unavailable');
+          return;
+        }
+        result = await deleteModel(filename, customPath);
       } else if (isAndroid && androidAPI?.deleteLLMModel) {
         const resultJson = androidAPI.deleteLLMModel(filename);
         result = JSON.parse(resultJson);
@@ -731,7 +902,7 @@ const ChatContainer = ({
   useEffect(() => {
     const loadTtsConfig = async () => {
       try {
-        const config = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
+        const config = await storageService.configLoad('ttsConfig', DefaultTTSConfig as TTSConfigLike);
         setTtsConfig(config);
       } catch (error) {
         Logger.error('ChatContainer', 'Failed to load TTS config:', error);
@@ -767,8 +938,8 @@ const ChatContainer = ({
       return;
     }
     
-    let detectionTimeout = null;
-    let scrollTimeout = null;
+    let detectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
     let intervalId = null;
     
     const detectBackgroundBrightness = () => {
@@ -817,7 +988,9 @@ const ChatContainer = ({
     
     // Debounced scroll handler
     const handleScroll = () => {
-      clearTimeout(scrollTimeout);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       scrollTimeout = setTimeout(detectBackgroundBrightness, 500);
     };
     
@@ -827,8 +1000,12 @@ const ChatContainer = ({
     intervalId = setInterval(detectBackgroundBrightness, 4000);
 
     return () => {
-      clearTimeout(detectionTimeout);
-      clearTimeout(scrollTimeout);
+      if (detectionTimeout) {
+        clearTimeout(detectionTimeout);
+      }
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       window.removeEventListener('scroll', handleScroll, true);
       clearInterval(intervalId);
     };
@@ -846,7 +1023,10 @@ const ChatContainer = ({
     
     let voiceMonitoringStarted = false;
     
-    const handleAudioStart = (event) => {
+    const handleAudioStart = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
       const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio started playing for session:', sessionId);
       
@@ -861,7 +1041,8 @@ const ChatContainer = ({
       }
       else if (sessionId?.startsWith('auto_')) {
         for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'assistant') {
+          const messageAtIndex = messages[i];
+          if (messageAtIndex?.role === 'assistant') {
             setLoadingMessageIndex(null);
             setPlayingMessageIndex(i);
             currentSessionRef.current = sessionId;
@@ -871,7 +1052,8 @@ const ChatContainer = ({
       }
       else if (sessionId?.startsWith('voice_')) {
         for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'assistant') {
+          const messageAtIndex = messages[i];
+          if (messageAtIndex?.role === 'assistant') {
             setLoadingMessageIndex(null);
             setPlayingMessageIndex(i);
             currentSessionRef.current = sessionId;
@@ -887,7 +1069,10 @@ const ChatContainer = ({
       }
     };
 
-    const handleAudioEnd = (event) => {
+    const handleAudioEnd = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
       const { sessionId } = event.detail;
       Logger.log('ChatContainer', 'Audio finished playing for session:', sessionId);
       
@@ -896,16 +1081,30 @@ const ChatContainer = ({
       currentSessionRef.current = null;
     };
 
-    const handleTTSAudioStart = (event) => {
-      const { messageIndex, sessionId } = event.detail
+    const handleTTSAudioStart = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+        return;
+      }
+      const detail = event.detail as { messageIndex?: number; sessionId?: string };
+      const { messageIndex, sessionId } = detail;
+      if (typeof messageIndex !== 'number' || typeof sessionId !== 'string') {
+        return;
+      }
       Logger.log('ChatContainer', 'Custom TTS audio start event:', messageIndex, sessionId)
       setLoadingMessageIndex(null)
       setPlayingMessageIndex(messageIndex)
       currentSessionRef.current = sessionId
     }
 
-    const handleTTSAudioEnd = (event) => {
-      const { sessionId } = event.detail
+    const handleTTSAudioEnd = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+        return;
+      }
+      const detail = event.detail as { sessionId?: string };
+      const { sessionId } = detail;
+      if (typeof sessionId !== 'string') {
+        return;
+      }
       Logger.log('ChatContainer', 'Custom TTS audio end event:', sessionId)
       if (currentSessionRef.current === sessionId) {
         setPlayingMessageIndex(null)
@@ -915,13 +1114,13 @@ const ChatContainer = ({
 
     window.addEventListener('ttsAudioStart', handleTTSAudioStart)
     window.addEventListener('ttsAudioEnd', handleTTSAudioEnd)
-    TTSServiceProxy.addEventListener('audioStart', handleAudioStart);
-    TTSServiceProxy.addEventListener('audioEnd', handleAudioEnd);
+    ttsService.addEventListener('audioStart', handleAudioStart);
+    ttsService.addEventListener('audioEnd', handleAudioEnd);
 
     return () => {
       if (!isVoiceMode) {
-        TTSServiceProxy.removeEventListener('audioStart', handleAudioStart);
-        TTSServiceProxy.removeEventListener('audioEnd', handleAudioEnd);
+        ttsService.removeEventListener('audioStart', handleAudioStart);
+        ttsService.removeEventListener('audioEnd', handleAudioEnd);
       }
       window.removeEventListener('ttsAudioStart', handleTTSAudioStart)
       window.removeEventListener('ttsAudioEnd', handleTTSAudioEnd)
@@ -1007,7 +1206,7 @@ const ChatContainer = ({
   /**
    * Handles copying message content to clipboard.
    */
-  const handleCopyMessage = useCallback(async (messageIndex, content) => {
+  const handleCopyMessage = useCallback(async (messageIndex: number, content: string) => {
     const success = await UtilService.copyToClipboard(content);
     if (success) {
       setCopiedMessageIndex(messageIndex);
@@ -1018,7 +1217,7 @@ const ChatContainer = ({
   /**
    * Handle rewriting/regenerating AI message
    */
-  const handleRewriteMessage = useCallback(async (message) => {
+  const handleRewriteMessage = useCallback(async (message: ChatMessageLike) => {
     if (message?.id && message?.role === 'assistant') {
       try {
         Logger.log('ChatContainer', 'Regenerating AI message:', message.id);
@@ -1032,13 +1231,13 @@ const ChatContainer = ({
   /**
    * Handle branch navigation
    */
-  const handlePreviousBranch = useCallback((message) => {
+  const handlePreviousBranch = useCallback((message: ChatMessageLike) => {
     if (message?.id && message?.branchInfo?.canGoBack) {
       previousBranch(message.id);
     }
   }, [previousBranch]);
 
-  const handleNextBranch = useCallback((message) => {
+  const handleNextBranch = useCallback((message: ChatMessageLike) => {
     if (message?.id && message?.branchInfo?.canGoForward) {
       nextBranch(message.id);
     }
@@ -1067,11 +1266,11 @@ const ChatContainer = ({
   /**
    * Handles playing TTS for a message.
    */
-  const handlePlayTTS = useCallback(async (messageIndex, messageContent) => {
+  const handlePlayTTS = useCallback(async (messageIndex: number, messageContent: string) => {
     let ttsConfig;
     try {
-      ttsConfig = await StorageServiceProxy.configLoad('ttsConfig', DefaultTTSConfig);
-      if (!ttsConfig.enabled || !TTSServiceProxy.isConfigured()) {
+      ttsConfig = await storageService.configLoad('ttsConfig', DefaultTTSConfig as TTSConfigLike);
+      if (!ttsConfig.enabled || !ttsService.isConfigured()) {
         Logger.warn('ChatContainer', 'TTS not enabled or configured');
         return;
       }
@@ -1081,7 +1280,7 @@ const ChatContainer = ({
     }
 
     if (playingMessageIndex === messageIndex) {
-      TTSServiceProxy.stopPlayback();
+      ttsService.stopPlayback();
       setPlayingMessageIndex(null);
       setLoadingMessageIndex(null);
       currentSessionRef.current = null;
@@ -1093,10 +1292,10 @@ const ChatContainer = ({
     setPlayingMessageIndex(null);
     setLoadingMessageIndex(messageIndex);
 
-    TTSServiceProxy.resumePlayback();
+    ttsService.resumePlayback();
 
     try {
-      const audioUrls = await TTSServiceProxy.generateChunkedSpeech(
+      const audioUrls = await ttsService.generateChunkedSpeech(
         messageContent,
         null,
         ttsConfig.chunkSize,
@@ -1110,9 +1309,9 @@ const ChatContainer = ({
         return;
       }
 
-      await TTSServiceProxy.playAudioSequence(audioUrls, sessionId);
+      await ttsService.playAudioSequence(audioUrls, sessionId);
 
-      TTSServiceProxy.cleanupBlobUrls(audioUrls);
+      ttsService.cleanupBlobUrls(audioUrls);
 
     } catch (error) {
       Logger.error('ChatContainer', 'TTS playback failed:', error);
@@ -1432,7 +1631,7 @@ const ChatContainer = ({
       {/* Chat History Panel - renders inside ChatContainer */}
       {isHistoryPanelOpen && (
         <div className="absolute inset-0 z-10">
-          <ChatHistoryPanel
+          <TypedChatHistoryPanel
             isLightBackground={isLightBackground}
             onClose={handleHistoryClose}
             onSelectChat={handleSelectChat}
@@ -1447,9 +1646,10 @@ const ChatContainer = ({
       {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {editingChatId && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="edit"
             title="Edit Chat Title"
+            message=""
             itemId={editingChatId}
             initialValue={editingChatTitle}
             inputPlaceholder="Enter new title..."
@@ -1466,7 +1666,7 @@ const ChatContainer = ({
       {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
       {deletingChatId && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="delete"
             title="Delete Chat?"
             message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
@@ -1484,7 +1684,7 @@ const ChatContainer = ({
       {/* Model Delete Dialog - renders outside SettingsPanel */}
       {deletingModelId && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="delete"
             title="Delete Model?"
             message="This will permanently delete this custom model. This cannot be undone."
@@ -1502,7 +1702,7 @@ const ChatContainer = ({
       {/* Motion Delete Dialog - renders outside SettingsPanel */}
       {deletingMotionId && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="delete"
             title="Delete Animation?"
             message="This will permanently delete this custom animation. This cannot be undone."
@@ -1520,7 +1720,7 @@ const ChatContainer = ({
       {/* Voice Delete Dialog - renders outside SettingsPanel */}
       {deletingVoiceId && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="delete"
             title="Delete Voice?"
             message="This will permanently delete this reference voice. This cannot be undone."
@@ -1538,7 +1738,7 @@ const ChatContainer = ({
       {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
       {deletingLLMModel && (
         <div className="absolute inset-0 z-20">
-          <Dialog
+          <TypedDialog
             type="delete"
             title="Delete Model?"
             message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}

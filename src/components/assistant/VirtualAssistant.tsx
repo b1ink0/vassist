@@ -14,6 +14,52 @@ import { useDesktop } from '../../contexts/DesktopContext';
 import { useAnimation } from '../../contexts/AnimationContext';
 import Logger from '../../services/LoggerService';
 import emotePlayerService from '../../services/EmotePlayerService';
+import type { PositionManagerLike, SavedModelPositionLike, SceneWithMetadata } from '../../babylon/types';
+
+interface VirtualAssistantProps {
+  onReady?: (payload: { animationManager: AnimationManagerLike; positionManager: PositionManagerWithPreset | null; scene: SceneWithMetadata }) => void;
+  isPreview?: boolean;
+  forcePortraitMode?: boolean;
+  previewWidth?: string;
+  previewHeight?: string;
+  previewClassName?: string;
+  portraitMode?: boolean;
+  previewPosition?: string;
+}
+
+interface AnimationOptionsLike {
+  primaryWeight?: number;
+  fillWeight?: number;
+}
+
+interface AnimationManagerLike {
+  getCurrentState: () => string;
+  speak: (text: string, mouthAnimationBlobUrl?: string, emotionCategory?: string, options?: AnimationOptionsLike) => Promise<void>;
+  returnToIdle: () => Promise<void>;
+  transitionToState: (state: string) => Promise<void>;
+  playAnimation: (animation: unknown) => Promise<void>;
+  triggerAction: (action: string) => Promise<void>;
+  playComposite: (primaryAnimName: string, fillCategory?: string, options?: AnimationOptionsLike) => Promise<void>;
+  queueSimpleAnimation: (animationName: string, force?: boolean) => void;
+  queueCompositeAnimation: (primaryAnimName: string, fillCategory?: string, options?: AnimationOptionsLike, force?: boolean) => void;
+  queueSpeak: (text: string, mouthBlobUrl?: string, emotionCategory?: string, options?: AnimationOptionsLike, force?: boolean) => void;
+  clearQueue: () => void;
+  getQueueStatus: () => { length: number; isEmpty: boolean; items: unknown[] };
+}
+
+interface PositionManagerWithPreset extends PositionManagerLike {
+  applyPreset: (preset: string) => void;
+}
+
+interface AppContextForVirtualAssistant {
+  savedModelPosition: SavedModelPositionLike | null;
+  setSavedModelPosition: (position: SavedModelPositionLike | null) => void;
+}
+
+interface AnimationContextForVirtualAssistant {
+  getRandomAnimation: (category: string) => unknown;
+  getEnabledAnimations: (category: string) => unknown[];
+}
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.
@@ -31,7 +77,7 @@ import emotePlayerService from '../../services/EmotePlayerService';
  * @param {React.Ref} ref - Forwarded ref for imperative API
  * @returns {JSX.Element} Virtual assistant component
  */
-const VirtualAssistant = forwardRef((props, ref) => {
+const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref) => {
   const { 
     onReady,
     isPreview = false,
@@ -43,24 +89,24 @@ const VirtualAssistant = forwardRef((props, ref) => {
     previewPosition = 'bottom-center'
   } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
-  const { savedModelPosition, setSavedModelPosition } = useApp();
-  const { api: desktopAPI } = useDesktop();
-  const { getRandomAnimation, getEnabledAnimations } = useAnimation();
+  const { savedModelPosition, setSavedModelPosition }: AppContextForVirtualAssistant = useApp();
+  const { api: desktopAPI } = useDesktop() as { api: unknown };
+  const { getRandomAnimation, getEnabledAnimations } = useAnimation() as AnimationContextForVirtualAssistant;
   
-  const [animationManager, setAnimationManager] = useState(null);
-  const [positionManager, setPositionManager] = useState(null);
+  const [animationManager, setAnimationManager] = useState<AnimationManagerLike | null>(null);
+  const [positionManager, setPositionManager] = useState<PositionManagerWithPreset | null>(null);
   const [currentState, setCurrentState] = useState(AssistantState.IDLE);
   const [isReady, setIsReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const initializedSceneRef = useRef(null);
-  const positionManagerRef = useRef(null);
+  const initializedSceneRef = useRef<SceneWithMetadata | null>(null);
+  const positionManagerRef = useRef<PositionManagerWithPreset | null>(null);
 
   /**
    * Handles model loading progress updates.
    * 
    * @param {number} progress - Loading progress (0-100)
    */
-  const handleLoadProgress = useCallback((progress) => {
+  const handleLoadProgress = useCallback((progress: number) => {
     setLoadingProgress(progress);
   }, []);
 
@@ -69,7 +115,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
    * 
    * @param {Object} scene - Babylon.js scene object
    */
-  const handleSceneReady = useCallback((scene) => {
+  const handleSceneReady = useCallback((scene: SceneWithMetadata) => {
     if (initializedSceneRef.current === scene) {
       Logger.log('VirtualAssistant', 'Same scene already initialized, ignoring duplicate callback');
       return;
@@ -84,8 +130,12 @@ const VirtualAssistant = forwardRef((props, ref) => {
     
     initializedSceneRef.current = scene;
     
-    const manager = scene.metadata.animationManager;
-    const posMgr = scene.metadata.positionManager;
+    const manager = scene.metadata.animationManager as AnimationManagerLike | undefined;
+    const posMgr = (scene.metadata.positionManager as PositionManagerWithPreset | undefined) ?? null;
+    if (!manager) {
+      Logger.error('VirtualAssistant', 'AnimationManager missing in scene metadata');
+      return;
+    }
     
     setAnimationManager(manager);
     setPositionManager(posMgr);
@@ -100,11 +150,14 @@ const VirtualAssistant = forwardRef((props, ref) => {
     TTSServiceProxy.initializeBVMDConverter(scene);
     
     // Listen to TTS events for animation control
-    TTSServiceProxy.addEventListener('speak', (event) => {
-      const { text, bvmdUrl, sessionId } = event.detail;
+    TTSServiceProxy.addEventListener('speak', (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+        return;
+      }
+      const { text, bvmdUrl } = event.detail as { text?: string; bvmdUrl?: string };
       // This will be called when audio starts playing
       Logger.log('VirtualAssistant', 'TTS triggering speak animation');
-      if (manager && bvmdUrl) {
+      if (typeof text === 'string' && typeof bvmdUrl === 'string') {
         manager.speak(text, bvmdUrl, 'talking');
       }
     });
@@ -217,7 +270,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      *   speak("Great!", vmdBlobUrl, "celebrating")     // Excited announcement
      *   speak("...", vmdBlobUrl, "idle")               // Calm speech
      */
-    speak: async (text, mouthAnimationBlobUrl, emotionCategory = 'talking', options = {}) => {
+    speak: async (text: string, mouthAnimationBlobUrl?: string, emotionCategory = 'talking', options: AnimationOptionsLike = {}) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot speak');
         return;
@@ -249,7 +302,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * 
      * @param {string} stateOrEmotion - State from AssistantState enum OR emotion string
      */
-    setState: async (stateOrEmotion) => {
+    setState: async (stateOrEmotion: string) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot setState');
         return;
@@ -257,7 +310,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
 
       Logger.log('VirtualAssistant', `setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
       
-      if (Object.values(AssistantState).includes(stateOrEmotion)) {
+      if (Object.values(AssistantState).includes(stateOrEmotion as AssistantState)) {
         await animationManager.transitionToState(stateOrEmotion);
       } else {
         const emotionAnimation = getAnimationForEmotion(stateOrEmotion);
@@ -277,7 +330,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * 
      * @param {string} action - Action name: 'think', 'walk', 'celebrate', 'speak'
      */
-    triggerAction: async (action) => {
+    triggerAction: async (action: string) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot triggerAction');
         return;
@@ -295,7 +348,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * @param {string} fillCategory - Category for fill animations
      * @param {Object} options - Composite options with primaryWeight and fillWeight
      */
-    playComposite: async (primaryAnimName, fillCategory = 'talking', options = {}) => {
+    playComposite: async (primaryAnimName: string, fillCategory = 'talking', options: AnimationOptionsLike = {}) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready, cannot playComposite');
         return;
@@ -338,7 +391,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * 
      * @param {string} preset - Position preset
      */
-    setPosition: (preset) => {
+    setPosition: (preset: string) => {
       if (!positionManager) {
         Logger.warn('VirtualAssistant', 'PositionManager not ready, cannot setPosition');
         return;
@@ -363,7 +416,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * @param {string} animationName - Animation name from registry
      * @param {boolean} force - If true, interrupt current animation and play immediately
      */
-    queueAnimation: (animationName, force = false) => {
+    queueAnimation: (animationName: string, force = false) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
@@ -379,7 +432,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * @param {Object} options - Composite options
      * @param {boolean} force - If true, interrupt current animation
      */
-    queueComposite: (primaryAnimName, fillCategory = 'talking', options = {}, force = false) => {
+    queueComposite: (primaryAnimName: string, fillCategory = 'talking', options: AnimationOptionsLike = {}, force = false) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;
@@ -396,7 +449,7 @@ const VirtualAssistant = forwardRef((props, ref) => {
      * @param {Object} options - Speak options
      * @param {boolean} force - If true, interrupt current animation
      */
-    queueSpeak: (text, mouthBlobUrl, emotionCategory = 'talking', options = {}, force = false) => {
+    queueSpeak: (text: string, mouthBlobUrl?: string, emotionCategory = 'talking', options: AnimationOptionsLike = {}, force = false) => {
       if (!animationManager) {
         Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return;

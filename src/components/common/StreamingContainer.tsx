@@ -2,8 +2,32 @@
  * @fileoverview Container component with smooth expand/collapse animation.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type CSSProperties,
+  type ReactNode,
+  type TransitionEvent,
+} from 'react';
 import { cn } from '../../utils/cn';
+
+type StreamingSpeed = 'fast' | 'normal' | 'slow';
+type StreamingVariant = 'container' | 'panel';
+
+interface StreamingContainerProps {
+  children: ReactNode;
+  active?: boolean;
+  autoActivate?: boolean;
+  speed?: StreamingSpeed;
+  variant?: StreamingVariant;
+  disabled?: boolean;
+  onExpand?: (() => void) | null;
+  onCollapse?: (() => void) | null;
+  className?: string;
+  style?: CSSProperties;
+}
 
 /**
  * Container with streaming expand/collapse animation.
@@ -32,11 +56,11 @@ const StreamingContainer = ({
   onExpand = null, // Callback when expansion completes
   onCollapse = null, // Callback when collapse completes
   className = '', // Additional CSS classes
-  style = {}, // Additional inline styles
-}) => {
+  style, // Additional inline styles
+}: StreamingContainerProps) => {
   const [isActive, setIsActive] = useState(active);
-  const containerRef = useRef(null);
-  const timeoutRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Determine if container should be active
@@ -55,16 +79,16 @@ const StreamingContainer = ({
   /**
    * Handle transition end - mark as complete and trigger callbacks
    */
-  const handleTransitionEnd = useCallback((e) => {
+  const handleTransitionEnd = useCallback((e: TransitionEvent<HTMLDivElement>) => {
     // Only handle our own transition, not children's
     if (e.target !== containerRef.current) return;
     
     // Check if it's the grid-template-rows transition
     if (e.propertyName === 'grid-template-rows') {
       // Trigger appropriate callback
-      if (isActive && onExpand) {
+      if (isActive && typeof onExpand === 'function') {
         onExpand();
-      } else if (!isActive && onCollapse) {
+      } else if (!isActive && typeof onCollapse === 'function') {
         onCollapse();
       }
       
@@ -102,13 +126,13 @@ const StreamingContainer = ({
   /**
    * Determine CSS class based on variant and speed
    */
-  const getContainerClass = () => {
+  const getContainerClass = (): string => {
     const baseClass = variant === 'panel' ? 'streaming-panel' : 'streaming-container';
     const speedSuffix = speed === 'fast' ? '-fast' : speed === 'slow' ? '-slow' : '';
     return `${baseClass}${speedSuffix}`;
   };
 
-  const getContentClass = () => {
+  const getContentClass = (): string => {
     return variant === 'panel' ? 'streaming-panel-content' : 'streaming-content';
   };
 

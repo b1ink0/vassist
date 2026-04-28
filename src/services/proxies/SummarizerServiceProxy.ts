@@ -12,10 +12,33 @@ import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultAIConfig } from '../../config/aiConfig';
 
+interface SummarizerServiceLike {
+  configure(config: unknown): Promise<boolean> | boolean;
+  isConfigured(): boolean;
+  checkAvailability(): Promise<string> | string;
+  summarize(text: string, options?: Record<string, unknown>): Promise<string>;
+  summarizeStreaming(text: string, options?: Record<string, unknown>): AsyncIterable<string>;
+  abort(): void;
+  destroy(): Promise<void> | void;
+  [method: string]: unknown;
+}
+
+interface SummarizerProxyConfig {
+  aiFeatures?: {
+    summarizer?: {
+      enabled?: boolean;
+    };
+  };
+  [key: string]: unknown;
+}
+
 class SummarizerServiceProxy extends ServiceProxy {
+  private directService: SummarizerServiceLike;
+  private _configuring: boolean;
+
   constructor() {
     super('SummarizerService');
-    this.directService = SummarizerService;
+    this.directService = SummarizerService as unknown as SummarizerServiceLike;
     this._configuring = false;
   }
 
@@ -31,7 +54,8 @@ class SummarizerServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const storedConfig = await StorageServiceProxy.configLoad('aiConfig', null) as SummarizerProxyConfig | null;
+      const aiConfig = storedConfig ?? (DefaultAIConfig as unknown as SummarizerProxyConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.summarizer?.enabled !== false) {
         await this.configure(aiConfig);
@@ -46,17 +70,17 @@ class SummarizerServiceProxy extends ServiceProxy {
    * @param {Object} config - Configuration
    * @param {string} config.provider - 'chrome-ai', 'openai', or 'ollama'
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.SUMMARIZER_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as { configured?: boolean };
+      return response.configured === true;
     } else {
-      return this.directService.configure(config);
+      return await this.directService.configure(config);
     }
   }
 
@@ -64,13 +88,13 @@ class SummarizerServiceProxy extends ServiceProxy {
    * Check if service is configured
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.SUMMARIZER_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.SUMMARIZER_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -83,15 +107,15 @@ class SummarizerServiceProxy extends ServiceProxy {
    * Check availability
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability() {
+  async checkAvailability(): Promise<string> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.SUMMARIZER_CHECK_AVAILABILITY,
         {}
-      );
-      return response.availability;
+      ) as { availability?: string };
+      return response.availability || 'unavailable';
     } else {
       return this.directService.checkAvailability();
     }
@@ -103,7 +127,7 @@ class SummarizerServiceProxy extends ServiceProxy {
    * @param {Object} options - Summarization options
    * @returns {Promise<string>} Summary
    */
-  async summarize(text, options = {}) {
+  async summarize(text: string, options: Record<string, unknown> = {}): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -113,8 +137,8 @@ class SummarizerServiceProxy extends ServiceProxy {
         MessageTypes.SUMMARIZER_SUMMARIZE,
         { text, options },
         { timeout: 60000 }
-      );
-      return response.summary;
+      ) as { summary?: string };
+      return response.summary || '';
     } else {
       return this.directService.summarize(text, options);
     }
@@ -126,7 +150,7 @@ class SummarizerServiceProxy extends ServiceProxy {
    * @param {Object} options - Summarization options
    * @returns {AsyncIterable<string>} Streaming summary chunks
    */
-  async *summarizeStreaming(text, options = {}) {
+  async *summarizeStreaming(text: string, options: Record<string, unknown> = {}): AsyncGenerator<string, void, void> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -135,21 +159,27 @@ class SummarizerServiceProxy extends ServiceProxy {
       if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
       
       // Create a queue to hold chunks as they arrive
-      const chunkQueue = [];
+      const chunkQueue: string[] = [];
       let streamComplete = false;
-      let streamError = null;
+      let streamError: unknown = null;
       
       // Start streaming in background (don't await - we yield chunks as they arrive)
-      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+      const streamPromise = bridge.sendStreamingMessage?.(
         MessageTypes.SUMMARIZER_SUMMARIZE_STREAMING,
         { text, options },
-        (chunk) => {
+        (chunk: string) => {
           chunkQueue.push(chunk);
         },
         { timeout: 120000 } // 2 minutes for streaming
-      ).then(() => {
+      );
+
+      if (!streamPromise) {
+        throw new Error('SummarizerServiceProxy: Streaming bridge is not available');
+      }
+
+      streamPromise.then(() => {
         streamComplete = true;
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         streamError = error;
         streamComplete = true;
       });
@@ -157,7 +187,10 @@ class SummarizerServiceProxy extends ServiceProxy {
       // Yield chunks as they become available
       while (!streamComplete || chunkQueue.length > 0) {
         if (chunkQueue.length > 0) {
-          yield chunkQueue.shift();
+          const nextChunk = chunkQueue.shift();
+          if (nextChunk !== undefined) {
+            yield nextChunk;
+          }
         } else {
           // Wait a bit before checking again
           await new Promise(resolve => setTimeout(resolve, 10));
@@ -167,7 +200,7 @@ class SummarizerServiceProxy extends ServiceProxy {
       // If there was an error, throw it now
       if (streamError) {
         Logger.error('SummarizerServiceProxy', 'Streaming failed:', streamError);
-        throw streamError;
+        throw (streamError instanceof Error ? streamError : new Error(String(streamError)));
       }
     } else {
       // Dev mode: Use direct service streaming
@@ -178,7 +211,7 @@ class SummarizerServiceProxy extends ServiceProxy {
   /**
    * Abort ongoing summarization request
    */
-  async abort() {
+  async abort(): Promise<void> {
     if (this.isExtension) {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
@@ -188,7 +221,7 @@ class SummarizerServiceProxy extends ServiceProxy {
       }
       try {
         await bridge.sendMessage(MessageTypes.SUMMARIZER_ABORT, {});
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('SummarizerServiceProxy', 'Abort failed:', error);
       }
     } else {
@@ -200,7 +233,7 @@ class SummarizerServiceProxy extends ServiceProxy {
   /**
    * Destroy all summarizer sessions
    */
-  async destroy() {
+  async destroy(): Promise<void> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('SummarizerServiceProxy: Bridge not available');
@@ -213,8 +246,8 @@ class SummarizerServiceProxy extends ServiceProxy {
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
-    const methodMap = {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
+    const methodMap: Record<string, string> = {
       configure: MessageTypes.SUMMARIZER_CONFIGURE,
       summarize: MessageTypes.SUMMARIZER_SUMMARIZE,
       checkAvailability: MessageTypes.SUMMARIZER_CHECK_AVAILABILITY,
@@ -235,12 +268,13 @@ class SummarizerServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on SummarizerService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 
