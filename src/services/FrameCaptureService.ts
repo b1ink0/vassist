@@ -7,7 +7,24 @@
 
 import Logger from './LoggerService';
 
+type CaptureProvider = {
+  name?: string;
+  type?: string;
+  captureFrame: () => Promise<string | null>;
+};
+
+type CaptureResult = {
+  success: boolean;
+  frame: string | null;
+  error: string | null;
+};
+
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class FrameCaptureService {
+  private provider: CaptureProvider | null;
+  private isCapturing: boolean;
+
   constructor() {
     this.provider = null;
     this.isCapturing = false;
@@ -17,7 +34,7 @@ class FrameCaptureService {
    * Register a capture provider (camera, screen share, etc.)
    * @param {Object} provider - Provider with captureFrame() method
    */
-  registerProvider(provider) {
+  registerProvider(provider: CaptureProvider | null): boolean {
     if (!provider || typeof provider.captureFrame !== 'function') {
       Logger.error('FrameCaptureService', 'Invalid provider - must have captureFrame() method');
       return false;
@@ -31,7 +48,7 @@ class FrameCaptureService {
   /**
    * Unregister current provider
    */
-  unregisterProvider() {
+  unregisterProvider(): void {
     if (this.provider) {
       Logger.log('FrameCaptureService', 'Provider unregistered:', this.provider.name || 'Unknown');
     }
@@ -42,7 +59,7 @@ class FrameCaptureService {
    * Check if capture is enabled (provider registered)
    * @returns {boolean}
    */
-  isEnabled() {
+  isEnabled(): boolean {
     return this.provider !== null;
   }
 
@@ -50,7 +67,7 @@ class FrameCaptureService {
    * Get latest frame from active provider
    * @returns {Promise<{success: boolean, frame: string|null, error: string|null}>}
    */
-  async getLatestFrame() {
+  async getLatestFrame(): Promise<CaptureResult> {
     if (!this.provider) {
       return {
         success: false,
@@ -73,13 +90,13 @@ class FrameCaptureService {
     try {
       Logger.log('FrameCaptureService', 'Requesting frame from provider...');
       
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise<string | null>((_, reject) =>
         setTimeout(() => reject(new Error('Capture timeout (5s)')), 5000)
       );
       
       const capturePromise = this.provider.captureFrame();
       
-      const frame = await Promise.race([capturePromise, timeoutPromise]);
+      const frame = await Promise.race<string | null>([capturePromise, timeoutPromise]);
 
       if (!frame) {
         Logger.warn('FrameCaptureService', 'Provider returned null/empty frame');
@@ -107,11 +124,12 @@ class FrameCaptureService {
       };
 
     } catch (error) {
+      const normalized = asError(error);
       Logger.error('FrameCaptureService', 'Frame capture failed:', error);
       return {
         success: false,
         frame: null,
-        error: error.message || 'Unknown capture error'
+        error: normalized.message || 'Unknown capture error'
       };
     } finally {
       this.isCapturing = false;
@@ -122,7 +140,7 @@ class FrameCaptureService {
    * Get provider info for debugging
    * @returns {Object}
    */
-  getProviderInfo() {
+  getProviderInfo(): { registered: false } | { registered: true; name: string; type: string } {
     if (!this.provider) {
       return { registered: false };
     }

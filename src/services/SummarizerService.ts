@@ -8,18 +8,44 @@
 import OpenAI from 'openai';
 import Logger from './LoggerService';
 
+type SummarizerProvider = 'chrome-ai' | 'openai' | 'ollama';
+type SummarizerAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
+
+interface SummarizerSession {
+  summarize(text: string, options?: { context?: string }): Promise<string>;
+  summarizeStreaming(text: string, options?: { context?: string }): AsyncIterable<string>;
+  destroy?(): void;
+}
+
+interface SummarizerState {
+  summarizerSessions: Map<string, SummarizerSession>;
+  config: { provider: SummarizerProvider; model?: string; temperature?: number } | null;
+  provider: SummarizerProvider | null;
+  llmClient: OpenAI | null;
+  abortController: AbortController | null;
+}
+
+const getSummarizerApi = (): any => (self as typeof globalThis & { Summarizer?: any }).Summarizer ?? null;
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class SummarizerService {
+  private readonly isExtensionMode: boolean;
+  private readonly tabStates: Map<number, SummarizerState>;
+  private readonly devState: SummarizerState;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
+    this.tabStates = new Map();
+    this.devState = {
+      summarizerSessions: new Map(),
+      config: null,
+      provider: null,
+      llmClient: null,
+      abortController: null,
+    };
     
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
-    } else {
-      this.summarizerSessions = new Map(); // key: "type-format-length", value: Summarizer session
-      this.config = null;
-      this.provider = null;
-      this.llmClient = null;
-      this.abortController = null;
+      return;
     }
   }
 
@@ -27,7 +53,7 @@ class SummarizerService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     if (!this.tabStates.has(tabId)) {
@@ -46,7 +72,7 @@ class SummarizerService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     const state = this.tabStates.get(tabId);
@@ -76,12 +102,15 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): SummarizerState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as SummarizerState;
     }
-    return this; // In dev mode, state is on the instance itself
+    return this.devState;
   }
 
   /**
@@ -93,7 +122,7 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async configure(config, tabId = null) {
+  async configure(config: any, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
@@ -103,7 +132,7 @@ class SummarizerService {
     try {
       if (provider === 'chrome-ai') {
         // Check Chrome AI Summarizer availability
-        if (!('Summarizer' in self)) {
+        if (!getSummarizerApi()) {
           throw new Error('Chrome AI Summarizer not available. Chrome 138+ required.');
         }
         
@@ -152,7 +181,7 @@ class SummarizerService {
       state.config = null;
       state.provider = null;
       state.llmClient = null;
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -161,16 +190,16 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if configured
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
-    return state && state.config && state.provider;
+    return Boolean(state.config && state.provider);
   }
 
   /**
    * Abort ongoing summarization request
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  abort(tabId = null) {
+  abort(tabId: number | null = null): void {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -186,7 +215,7 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(tabId = null) {
+  async checkAvailability(tabId: number | null = null): Promise<SummarizerAvailability> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -195,12 +224,13 @@ class SummarizerService {
     }
     
     if (state.provider === 'chrome-ai') {
-      if (!('Summarizer' in self)) {
+      const summarizerApi = getSummarizerApi();
+      if (!summarizerApi) {
         return 'unavailable';
       }
       
       try {
-        const availability = await self.Summarizer.availability();
+        const availability = await summarizerApi.availability();
         Logger.log('other', `${logPrefix} Summarizer availability:`, availability);
         return availability;
       } catch (error) {
@@ -222,7 +252,13 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Summarizer session
    */
-  async _getOrCreateSession(type = 'tldr', format = 'plain-text', length = 'medium', sharedContext = '', tabId = null) {
+  async _getOrCreateSession(
+    type = 'tldr',
+    format = 'plain-text',
+    length = 'medium',
+    sharedContext = '',
+    tabId: number | null = null,
+  ): Promise<SummarizerSession | null> {
     const state = this._getState(tabId);
     const sessionKey = `${type}-${format}-${length}-${sharedContext}`;
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
@@ -233,19 +269,24 @@ class SummarizerService {
     }
     
     if (state.summarizerSessions.has(sessionKey)) {
-      return state.summarizerSessions.get(sessionKey);
+      return state.summarizerSessions.get(sessionKey) ?? null;
     }
     
     // Create new Chrome AI Summarizer session
     try {
       Logger.log('other', `${logPrefix} Creating summarizer session: ${sessionKey}`);
-      const session = await self.Summarizer.create({
+      const summarizerApi = getSummarizerApi();
+      if (!summarizerApi) {
+        throw new Error('Summarizer API unavailable');
+      }
+
+      const session = await summarizerApi.create({
         type,
         format,
         length,
         sharedContext,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
+        monitor(m: any) {
+          m.addEventListener('downloadprogress', (e: { loaded: number }) => {
             Logger.log('other', `${logPrefix} Summarizer model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
@@ -256,7 +297,7 @@ class SummarizerService {
       return session;
     } catch (error) {
       Logger.error('other', `${logPrefix} Failed to create summarizer session:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -272,7 +313,7 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Summary
    */
-  async summarize(text, options = {}, tabId = null) {
+  async summarize(text: string, options: any = {}, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -292,6 +333,9 @@ class SummarizerService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(type, format, length, sharedContext, tabId);
+      if (!session) {
+        throw new Error('Summarizer session unavailable');
+      }
       const summary = await session.summarize(text, { context });
       Logger.log('other', `${logPrefix} Summarization complete:`, summary.substring(0, 50));
       return summary;
@@ -310,7 +354,7 @@ class SummarizerService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {AsyncIterable<string>} Streaming summary chunks
    */
-  async *summarizeStreaming(text, options = {}, tabId = null) {
+  async *summarizeStreaming(text: string, options: any = {}, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -338,6 +382,9 @@ class SummarizerService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(type, format, length, sharedContext, tabId);
+      if (!session) {
+        throw new Error('Summarizer session unavailable');
+      }
       const stream = session.summarizeStreaming(text, { context });
       
       for await (const chunk of stream) {
@@ -356,7 +403,14 @@ class SummarizerService {
    * Summarize using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _summarizeWithOpenAICompatible(text, type, format, length, context, tabId = null) {
+  async _summarizeWithOpenAICompatible(
+    text: string,
+    type: string,
+    format: string,
+    length: string,
+    context: string,
+    tabId: number | null = null,
+  ): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -364,23 +418,26 @@ class SummarizerService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Summarizer LLM client not configured');
+    }
     
     try {
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
       }, {
         signal: state.abortController.signal
       });
       
       state.abortController = null;
-      const summary = response.choices[0].message.content.trim();
+      const summary = response.choices[0]?.message?.content?.trim() ?? '';
       Logger.log('other', `${logPrefix} ${state.provider} summarization complete`);
       return summary;
     } catch (error) {
       Logger.error('other', `${logPrefix} ${state.provider} summarization failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -388,7 +445,14 @@ class SummarizerService {
    * Summarize using OpenAI-compatible API (streaming polyfill for OpenAI/Ollama)
    * @private
    */
-  async *_summarizeStreamingWithOpenAICompatible(text, type, format, length, context, tabId = null) {
+  async *_summarizeStreamingWithOpenAICompatible(
+    text: string,
+    type: string,
+    format: string,
+    length: string,
+    context: string,
+    tabId: number | null = null,
+  ): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     
@@ -396,12 +460,15 @@ class SummarizerService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Summarizer LLM client not configured');
+    }
     
     try {
       const stream = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
         stream: true,
       }, {
         signal: state.abortController.signal
@@ -425,9 +492,10 @@ class SummarizerService {
       state.abortController = null;
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const normalized = asError(error);
+      const isAbort = normalized.name === 'AbortError' ||
+        normalized.message.toLowerCase().includes('abort') ||
+        normalized.message.toLowerCase().includes('cancel');
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Streaming aborted by user`);
@@ -435,7 +503,7 @@ class SummarizerService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} streaming summarization failed:`, error);
-      throw error;
+      throw normalized;
     }
   }
 
@@ -443,7 +511,7 @@ class SummarizerService {
    * Build summary prompt for LLM polyfills
    * @private
    */
-  _buildSummaryPrompt(text, type, format, length, context) {
+  _buildSummaryPrompt(text: string, type: string, format: string, length: string, context: string): string {
     let typeInstruction = '';
     let lengthInstruction = '';
     
@@ -504,7 +572,7 @@ class SummarizerService {
    * Destroy all summarizer sessions
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  async destroy(tabId = null) {
+  async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[SummarizerService] Tab ${tabId}` : '[SummarizerService]';
     

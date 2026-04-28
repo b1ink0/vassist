@@ -51,8 +51,8 @@ interface BridgeAIResponse {
 }
 
 class AIServiceProxy extends ServiceProxy {
-  private directService: AIServiceLike;
-  private _configuring: boolean;
+  protected directService: AIServiceLike;
+  protected _configuring: boolean;
 
   constructor() {
     super('AIService');

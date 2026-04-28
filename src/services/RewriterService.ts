@@ -4,11 +4,27 @@
  * Supports Chrome AI Rewriter API (on-device) and polyfills for OpenAI/Ollama.
  * Works in both extension mode (multi-tab) and dev mode (single instance).
  */
-
 import OpenAI from 'openai';
 import Logger from './LoggerService';
 
+type RewriteState = {
+  rewriterSessions: Map<string, any>;
+  config: any;
+  provider: string | null;
+  llmClient: any;
+  abortController: AbortController | null;
+};
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class RewriterService {
+  private isExtensionMode: boolean;
+  private tabStates: Map<number, RewriteState> = new Map();
+  private rewriterSessions: Map<string, any> = new Map();
+  private config: any = null;
+  private provider: string | null = null;
+  private llmClient: any = null;
+  private abortController: AbortController | null = null;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
     
@@ -27,8 +43,9 @@ class RewriterService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number | null): void {
     if (!this.isExtensionMode) return;
+    if (tabId === null) return;
     
     if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
@@ -46,8 +63,9 @@ class RewriterService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number | null): void {
     if (!this.isExtensionMode) return;
+    if (tabId === null) return;
     
     const state = this.tabStates.get(tabId);
     if (state) {
@@ -76,10 +94,10 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): any {
     if (this.isExtensionMode) {
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId as number);
     }
     return this; // In dev mode, state is on the instance itself
   }
@@ -93,7 +111,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async configure(config, tabId = null) {
+  async configure(config: any, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
@@ -103,7 +121,7 @@ class RewriterService {
     try {
       if (provider === 'chrome-ai') {
         // Check Chrome AI Rewriter availability
-        if (!('Rewriter' in self)) {
+        if (!(self as any).Rewriter) {
           throw new Error('Chrome AI Rewriter not available. Chrome 139+ required with origin trial token.');
         }
         
@@ -161,7 +179,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if configured
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     return state && state.config && state.provider;
   }
@@ -170,7 +188,7 @@ class RewriterService {
    * Abort ongoing rewrite request
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  abort(tabId = null) {
+  abort(tabId: number | null = null): void {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -186,7 +204,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(tabId = null) {
+  async checkAvailability(tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -195,12 +213,12 @@ class RewriterService {
     }
     
     if (state.provider === 'chrome-ai') {
-      if (!('Rewriter' in self)) {
+      if (!(self as any).Rewriter) {
         return 'unavailable';
       }
       
       try {
-        const availability = await self.Rewriter.availability();
+        const availability = await (self as any).Rewriter.availability();
         Logger.log('other', `${logPrefix} Rewriter availability:`, availability);
         return availability;
       } catch (error) {
@@ -222,7 +240,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Rewriter session
    */
-  async _getOrCreateSession(tone = 'as-is', format = 'as-is', length = 'as-is', sharedContext = '', tabId = null) {
+  async _getOrCreateSession(tone = 'as-is', format = 'as-is', length = 'as-is', sharedContext = '', tabId: number | null = null): Promise<any> {
     const state = this._getState(tabId);
     const sessionKey = `${tone}-${format}-${length}-${sharedContext}`;
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
@@ -239,13 +257,13 @@ class RewriterService {
     // Create new Chrome AI Rewriter session
     try {
       Logger.log('other', `${logPrefix} Creating rewriter session: ${sessionKey}`);
-      const session = await self.Rewriter.create({
+      const session = await (self as any).Rewriter.create({
         tone,
         format,
         length,
         sharedContext,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
+        monitor(m: any) {
+          m.addEventListener('downloadprogress', (e: any) => {
             Logger.log('other', `${logPrefix} Rewriter model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
@@ -272,7 +290,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Rewritten text
    */
-  async rewrite(text, options = {}, tabId = null) {
+  async rewrite(text: string, options: any = {}, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -310,7 +328,7 @@ class RewriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {AsyncIterable<string>} Streaming rewrite chunks
    */
-  async *rewriteStreaming(text, options = {}, tabId = null) {
+  async *rewriteStreaming(text: string, options: any = {}, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -348,7 +366,7 @@ class RewriterService {
    * Rewrite using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _rewriteWithOpenAICompatible(text, tone, format, length, context, tabId = null) {
+  async _rewriteWithOpenAICompatible(text: string, tone: string, format: string, length: string, context: string, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -372,11 +390,12 @@ class RewriterService {
       return rewritten;
     } catch (error) {
       state.abortController = null;
+      const normalizedError = asError(error);
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const isAbort = normalizedError.name === 'AbortError' ||
+                      normalizedError.message?.includes('abort') ||
+                      normalizedError.message?.includes('cancel');
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Rewrite aborted by user`);
@@ -384,7 +403,7 @@ class RewriterService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} rewrite failed:`, error);
-      throw error;
+      throw normalizedError;
     }
   }
 
@@ -392,7 +411,7 @@ class RewriterService {
    * Rewrite using OpenAI-compatible API (streaming polyfill for OpenAI/Ollama)
    * @private
    */
-  async *_rewriteStreamingWithOpenAICompatible(text, tone, format, length, context, tabId = null) {
+  async *_rewriteStreamingWithOpenAICompatible(text: string, tone: string, format: string, length: string, context: string, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     
@@ -427,11 +446,12 @@ class RewriterService {
       state.abortController = null;
     } catch (error) {
       state.abortController = null;
+      const normalizedError = asError(error);
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const isAbort = normalizedError.name === 'AbortError' ||
+                      normalizedError.message?.includes('abort') ||
+                      normalizedError.message?.includes('cancel');
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Streaming rewrite aborted by user`);
@@ -439,7 +459,7 @@ class RewriterService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} streaming rewrite failed:`, error);
-      throw error;
+      throw normalizedError;
     }
   }
 
@@ -447,8 +467,8 @@ class RewriterService {
    * Build rewrite prompt for LLM polyfills
    * @private
    */
-  _buildRewritePrompt(text, tone, format, length, context) {
-    let instructions = [];
+  _buildRewritePrompt(text: string, tone: string, format: string, length: string, context: string): string {
+    const instructions: string[] = [];
     
     // Tone-specific instructions
     if (tone === 'more-formal') {
@@ -494,7 +514,7 @@ class RewriterService {
    * Destroy all rewriter sessions
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  async destroy(tabId = null) {
+  async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[RewriterService] Tab ${tabId}` : '[RewriterService]';
     

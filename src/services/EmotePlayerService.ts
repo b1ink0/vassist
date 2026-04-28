@@ -5,7 +5,26 @@
 import emoteStorageService from './EmoteStorageService';
 import Logger from './LoggerService';
 
+interface AnimationManagerLike {
+  queueSimpleAnimation: (config: Record<string, unknown>, force?: boolean) => void;
+}
+
+interface BinaryLikeObject {
+  data?: number[];
+  type?: string;
+  mimeType?: string;
+}
+
 class EmotePlayerService {
+  private currentAudio: HTMLAudioElement | null;
+  private animationManagerRef: AnimationManagerLike | null;
+  private isPlaying: boolean;
+  private currentEmoteId: string | null;
+  private autoPlayActive: boolean;
+  private shuffledQueue: string[];
+  private playedEmotes: Set<string>;
+  private autoPlayDelay: number;
+
   constructor() {
     this.currentAudio = null;
     this.animationManagerRef = null;
@@ -21,7 +40,7 @@ class EmotePlayerService {
    * Set animation manager reference
    * @param {AnimationManager} manager - Animation manager instance
    */
-  setAnimationManager(manager) {
+  setAnimationManager(manager: AnimationManagerLike): void {
     this.animationManagerRef = manager;
     Logger.log('EmotePlayer', 'Animation manager connected');
   }
@@ -31,7 +50,7 @@ class EmotePlayerService {
    * @param {string} emoteId - Emote ID to play
    * @returns {Promise<void>}
    */
-  async playEmote(emoteId) {
+  async playEmote(emoteId: string): Promise<void> {
     try {
       if (this.isPlaying) {
         Logger.warn('EmotePlayer', 'Already playing an emote, stopping current');
@@ -55,7 +74,7 @@ class EmotePlayerService {
       const motionUrl = URL.createObjectURL(motionBlob);
       
       // Create camera animation URL if camera data exists (optional)
-      let cameraUrl = null;
+      let cameraUrl: string | null = null;
       if (emote.cameraData) {
         const cameraBlob = this.toBlob(emote.cameraData, 'application/octet-stream');
         cameraUrl = URL.createObjectURL(cameraBlob);
@@ -66,6 +85,7 @@ class EmotePlayerService {
       this.currentAudio = audio;
       this.isPlaying = true;
       this.currentEmoteId = emoteId;
+      const animationManager = this.animationManagerRef;
 
       audio.addEventListener('play', () => {
         Logger.log('EmotePlayer', `Audio playing, triggering animation for emote: ${emote.name}`);
@@ -84,7 +104,7 @@ class EmotePlayerService {
           preserveRootBone: true,
           disableBlinking: true,
         };
-        this.animationManagerRef.queueSimpleAnimation(emoteAnimConfig, true);
+        animationManager?.queueSimpleAnimation(emoteAnimConfig, true);
       });
 
       audio.addEventListener('ended', () => {
@@ -122,7 +142,7 @@ class EmotePlayerService {
    * @param {string} fallbackType
    * @returns {Blob}
    */
-  toBlob(value, fallbackType = 'application/octet-stream') {
+  toBlob(value: Blob | ArrayBuffer | Uint8Array | number[] | BinaryLikeObject, fallbackType = 'application/octet-stream'): Blob {
     if (value instanceof Blob) {
       return value;
     }
@@ -132,16 +152,20 @@ class EmotePlayerService {
     }
 
     if (value instanceof Uint8Array) {
-      return new Blob([value], { type: fallbackType });
+      const copied = new Uint8Array(value.byteLength);
+      copied.set(value);
+      return new Blob([copied.buffer], { type: fallbackType });
     }
 
     if (Array.isArray(value)) {
       return new Blob([new Uint8Array(value)], { type: fallbackType });
     }
 
-    if (value && Array.isArray(value.data)) {
-      const nestedType = value.type || value.mimeType || fallbackType;
-      return new Blob([new Uint8Array(value.data)], { type: nestedType });
+    if (value && typeof value === 'object' && Array.isArray((value as BinaryLikeObject).data)) {
+      const payload = value as BinaryLikeObject;
+      const nestedType = payload.type || payload.mimeType || fallbackType;
+        const copied = new Uint8Array(payload.data as number[]);
+      return new Blob([copied.buffer], { type: nestedType });
     }
 
     throw new Error('Invalid emote media payload: expected Blob, ArrayBuffer, Uint8Array, or byte array');
@@ -150,7 +174,7 @@ class EmotePlayerService {
   /**
    * Stop currently playing emote
    */
-  stopEmote() {
+  stopEmote(): void {
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
@@ -167,7 +191,7 @@ class EmotePlayerService {
    * @param {string} motionUrl - Motion blob URL to revoke
    * @param {string} cameraUrl - Optional camera blob URL to revoke
    */
-  cleanup(audioUrl, motionUrl, cameraUrl = null) {
+  cleanup(audioUrl: string, motionUrl: string, cameraUrl: string | null = null): void {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     if (motionUrl) URL.revokeObjectURL(motionUrl);
     if (cameraUrl) URL.revokeObjectURL(cameraUrl);
@@ -180,7 +204,7 @@ class EmotePlayerService {
    * Check if an emote is currently playing
    * @returns {boolean}
    */
-  isEmotePlaying() {
+  isEmotePlaying(): boolean {
     return this.isPlaying;
   }
 
@@ -188,7 +212,7 @@ class EmotePlayerService {
    * Get currently playing emote ID
    * @returns {string|null}
    */
-  getCurrentEmoteId() {
+  getCurrentEmoteId(): string | null {
     return this.currentEmoteId;
   }
 
@@ -197,11 +221,17 @@ class EmotePlayerService {
    * @param {Array} array - Array to shuffle
    * @returns {Array} - Shuffled copy of the array
    */
-  shuffleArray(array) {
+  shuffleArray(array: string[]): string[] {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const current = shuffled[i];
+      const target = shuffled[j];
+      if (current === undefined || target === undefined) {
+        continue;
+      }
+      shuffled[i] = target;
+      shuffled[j] = current;
     }
     return shuffled;
   }
@@ -210,7 +240,7 @@ class EmotePlayerService {
    * Start auto-play mode
    * @param {Array} emoteIds - Array of emote IDs to play
    */
-  async startAutoPlay(emoteIds) {
+  async startAutoPlay(emoteIds: string[]): Promise<void> {
     if (!emoteIds || emoteIds.length === 0) {
       Logger.warn('EmotePlayer', 'No emotes to auto-play');
       return;
@@ -229,7 +259,7 @@ class EmotePlayerService {
   /**
    * Stop auto-play mode
    */
-  stopAutoPlay() {
+  stopAutoPlay(): void {
     Logger.log('EmotePlayer', 'Stopping auto-play');
     
     this.autoPlayActive = false;
@@ -241,7 +271,7 @@ class EmotePlayerService {
   /**
    * Play next emote in the shuffle queue
    */
-  async playNextInQueue() {
+  async playNextInQueue(): Promise<void> {
     if (!this.autoPlayActive) {
       return;
     }
@@ -262,6 +292,9 @@ class EmotePlayerService {
     }
 
     const nextEmoteId = this.shuffledQueue.shift();
+    if (!nextEmoteId) {
+      return;
+    }
     this.playedEmotes.add(nextEmoteId);
 
     try {
@@ -282,7 +315,7 @@ class EmotePlayerService {
    * Check if auto-play is currently active
    * @returns {boolean}
    */
-  isAutoPlayActive() {
+  isAutoPlayActive(): boolean {
     return this.autoPlayActive;
   }
 }

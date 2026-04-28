@@ -15,9 +15,9 @@ class PMXConverterService {
    * @param {Mesh} mmdMesh - Loaded MMD mesh
    * @returns {Object} - { textures: Array, meshParts: Array }
    */
-  extractModelMetadata(mmdMesh) {
-    const textures = [];
-    const meshParts = [];
+  extractModelMetadata(mmdMesh: any): { textures: any[]; meshParts: any[] } {
+    const textures: any[] = [];
+    const meshParts: any[] = [];
 
     if (!mmdMesh || !mmdMesh.metadata) {
       Logger.warn('PMXConverter', 'No mesh metadata available');
@@ -26,7 +26,7 @@ class PMXConverterService {
 
     const processedTextureIds = new Set();
 
-    const materials = [];
+    const materials: any[] = [];
     
     if (mmdMesh.metadata.materials) {
       materials.push(...mmdMesh.metadata.materials);
@@ -37,7 +37,7 @@ class PMXConverterService {
     }
     
     if (mmdMesh.subMeshes) {
-      mmdMesh.subMeshes.forEach((subMesh) => {
+      mmdMesh.subMeshes.forEach((subMesh: any) => {
         if (subMesh.getMaterial && subMesh.getMaterial()) {
           const subMaterial = subMesh.getMaterial();
           if (subMaterial && !materials.includes(subMaterial)) {
@@ -111,7 +111,7 @@ class PMXConverterService {
 
     // Extract mesh parts
     if (mmdMesh.metadata.meshes) {
-      mmdMesh.metadata.meshes.forEach((mesh, meshIndex) => {
+      mmdMesh.metadata.meshes.forEach((mesh: any, meshIndex: number) => {
         if (!mesh) return;
 
         const meshName = mesh.name || `Mesh ${meshIndex}`;
@@ -138,7 +138,7 @@ class PMXConverterService {
 
         // Add submeshes if available
         if (mesh.subMeshes && mesh.subMeshes.length > 1) {
-          mesh.subMeshes.forEach((subMesh, subIndex) => {
+          mesh.subMeshes.forEach((subMesh: any, subIndex: number) => {
             meshParts.push({
               id: `submesh_${meshIndex}_${subIndex}`,
               name: `${meshName} - Part ${subIndex + 1}`,
@@ -165,7 +165,7 @@ class PMXConverterService {
    * @param {Object} options - Conversion options
    * @returns {Promise<ArrayBuffer>} BPMX data
    */
-  async convertPMXToBPMX(pmxFile, referenceFiles, scene, options = {}) {
+  async convertPMXToBPMX(pmxFile: File, referenceFiles: File[], scene: any, options: any = {}): Promise<{ bpmxData: ArrayBuffer; modelMetadata: { textures: any[]; meshParts: any[] } }> {
     try {
       Logger.log('PMXConverter', `Converting PMX to BPMX: ${pmxFile.name}`);
       
@@ -233,7 +233,7 @@ class PMXConverterService {
       const bpmxConverter = new BpmxConverter();
       bpmxConverter.loggingEnabled = true;
       
-      const bpmxArrayBuffer = bpmxConverter.convert(mmdMesh, {
+      const bpmxArrayBuffer = bpmxConverter.convert(mmdMesh as any, {
         includeSkinningData: buildSkeleton,
         includeMorphData: buildMorph
       });
@@ -245,8 +245,9 @@ class PMXConverterService {
       return { bpmxData: bpmxArrayBuffer, modelMetadata };
       
     } catch (error) {
-      Logger.error('PMXConverter', 'Conversion failed:', error);
-      throw new Error(`Failed to convert PMX to BPMX: ${error.message}`);
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      Logger.error('PMXConverter', 'Conversion failed:', normalized);
+      throw new Error(`Failed to convert PMX to BPMX: ${normalized.message}`);
     }
   }
 
@@ -255,7 +256,7 @@ class PMXConverterService {
    * Uses NullEngine for headless conversion (useful in workers)
    * @returns {Promise<Scene|null>} Scene or null if failed
    */
-  async createConversionScene() {
+  async createConversionScene(): Promise<any | null> {
     try {
       const { Scene } = await import('@babylonjs/core/scene');
       const { NullEngine } = await import('@babylonjs/core/Engines/nullEngine');
@@ -279,7 +280,7 @@ class PMXConverterService {
    * @param {Object} options - Conversion options
    * @returns {Promise<{bpmxData: ArrayBuffer, modelMetadata: Object}>} BPMX data and extracted metadata
    */
-  async convertWithAutoScene(pmxFile, referenceFiles, options = {}) {
+  async convertWithAutoScene(pmxFile: File, referenceFiles: File[], options: any = {}): Promise<{ bpmxData: ArrayBuffer; modelMetadata: { textures: any[]; meshParts: any[] } }> {
     const scene = await this.createConversionScene();
     if (!scene) {
       throw new Error('Failed to create conversion scene');
@@ -301,7 +302,7 @@ class PMXConverterService {
    * @param {Map<string, ArrayBuffer>} files - Extracted files
    * @returns {{data: ArrayBuffer, filename: string}|null} Largest PMX file or null
    */
-  findMainPMXFile(files) {
+  findMainPMXFile(files: Map<string, ArrayBuffer>): { data: ArrayBuffer; filename: string } | null {
     try {
       let largestPmx = null;
       let largestSize = 0;
@@ -334,8 +335,8 @@ class PMXConverterService {
    * @param {Map<string, ArrayBuffer>} files - Extracted files
    * @returns {{isValid: boolean, pmxCount: number, textureCount: number, totalFiles: number, errors: string[]}}
    */
-  validateModelZip(files) {
-    const errors = [];
+  validateModelZip(files: Map<string, ArrayBuffer>): { isValid: boolean; pmxCount: number; textureCount: number; totalFiles: number; errors: string[] } {
+    const errors: string[] = [];
     let pmxCount = 0;
     let textureCount = 0;
     
@@ -377,13 +378,14 @@ class PMXConverterService {
       };
       
     } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
       Logger.error('PMXConverter', 'Validation error:', error);
       return {
         isValid: false,
         pmxCount: 0,
         textureCount: 0,
         totalFiles: files.size,
-        errors: ['Validation failed: ' + error.message]
+        errors: ['Validation failed: ' + normalized.message]
       };
     }
   }
@@ -395,9 +397,9 @@ class PMXConverterService {
    * @param {Function} progressCallback - Optional progress callback (step, message)
    * @returns {Promise<string[]>} Array of model IDs
    */
-  async processBulkModelUpload(zipFile, progressCallback = null) {
+  async processBulkModelUpload(zipFile: File | Blob, progressCallback: ((step: string, message: string) => void) | null = null): Promise<string[]> {
     try {
-      const reportProgress = (step, message) => {
+      const reportProgress = (step: string, message: string) => {
         Logger.log('PMXConverter', `[BULK ${step}] ${message}`);
         if (progressCallback) progressCallback(step, message);
       };
@@ -406,7 +408,7 @@ class PMXConverterService {
       const filesMap = await zipExtractor.extract(zipFile);
 
       // Extract nested ZIPs
-      const nestedZips = [];
+      const nestedZips: Array<{ filename: string; data: ArrayBuffer }> = [];
       for (const [filename, data] of filesMap.entries()) {
         if (zipExtractor.isZipFile(data)) {
           nestedZips.push({ filename, data });
@@ -420,13 +422,17 @@ class PMXConverterService {
       Logger.log('PMXConverter', `Found ${nestedZips.length} model ZIPs to process`);
       reportProgress('process', `Processing ${nestedZips.length} models...`);
 
-      const modelIds = [];
+      const modelIds: string[] = [];
       let successCount = 0;
       let failCount = 0;
 
       // Process each nested ZIP one by one
       for (let i = 0; i < nestedZips.length; i++) {
-        const { filename, data } = nestedZips[i];
+        const currentZip = nestedZips[i];
+        if (!currentZip) {
+          continue;
+        }
+        const { filename, data } = currentZip;
         const modelName = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9\s-_]/g, '');
         
         try {
@@ -434,13 +440,17 @@ class PMXConverterService {
           
           const zipBlob = new Blob([data], { type: 'application/zip' });
           // Pass skipBulkCheck=true to prevent infinite recursion
-          const modelId = await this.processModelUpload(zipBlob, modelName, (step, msg) => {
+          const modelId = await this.processModelUpload(zipBlob, modelName, (step: string, msg: string) => {
             if (progressCallback) {
               progressCallback(step, `[${i + 1}/${nestedZips.length}] ${msg}`);
             }
           }, true);
           
-          modelIds.push(modelId);
+          if (Array.isArray(modelId)) {
+            modelIds.push(...modelId);
+          } else {
+            modelIds.push(modelId);
+          }
           successCount++;
           Logger.log('PMXConverter', `✓ Model ${i + 1}/${nestedZips.length} completed: ${modelName}`);
           
@@ -456,7 +466,7 @@ class PMXConverterService {
 
     } catch (error) {
       Logger.error('PMXConverter', 'Bulk upload failed:', error);
-      throw error;
+      throw (error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -470,9 +480,9 @@ class PMXConverterService {
    * @param {boolean} skipBulkCheck - Skip bulk import detection (used for nested processing)
    * @returns {Promise<string|string[]>} Model ID or array of IDs for bulk import
    */
-  async processModelUpload(zipFile, modelName, progressCallback = null, skipBulkCheck = false) {
+  async processModelUpload(zipFile: File | Blob, modelName: string, progressCallback: ((step: string, message: string) => void) | null = null, skipBulkCheck = false): Promise<string | string[]> {
     try {
-      const reportProgress = (step, message) => {
+      const reportProgress = (step: string, message: string) => {
         Logger.log('PMXConverter', `[${step}] ${message}`);
         if (progressCallback) progressCallback(step, message);
       };
@@ -495,7 +505,7 @@ class PMXConverterService {
         }
         
         // Check if there's a PMX file directly
-        const hasPMX = Array.from(filesMap.keys()).some(f => f.toLowerCase().endsWith('.pmx'));
+        const hasPMX = Array.from(filesMap.keys()).some((f: string) => f.toLowerCase().endsWith('.pmx'));
         
         // If no PMX found but there are ZIP files, try processing each ZIP
         if (!hasPMX && zipFiles.length > 0) {
@@ -522,7 +532,7 @@ class PMXConverterService {
       
       const referenceFiles = [];
       for (const [filename, data] of filesMap.entries()) {
-        const file = new File([data], filename.split('/').pop(), { type: 'application/octet-stream' });
+        const file = new File([data], filename.split('/').pop() || filename, { type: 'application/octet-stream' });
         Object.defineProperty(file, 'webkitRelativePath', {
           value: filename,
           writable: false
@@ -530,7 +540,7 @@ class PMXConverterService {
         referenceFiles.push(file);
       }
       
-      const pmxFile = referenceFiles.find(f => f.webkitRelativePath === pmxFileInfo.filename);
+      const pmxFile = referenceFiles.find((f: any) => f.webkitRelativePath === pmxFileInfo.filename);
       if (!pmxFile) {
         throw new Error('Failed to create PMX file object');
       }
@@ -556,7 +566,7 @@ class PMXConverterService {
         bpmxData,
         {
           originalFileName: pmxFileInfo.filename,
-          zipFileName: zipFile.name || 'unknown.zip',
+          zipFileName: 'name' in zipFile ? zipFile.name : 'unknown.zip',
           pmxCount: validation.pmxCount,
           textureCount: validation.textureCount,
           totalFiles: validation.totalFiles,
@@ -579,7 +589,7 @@ class PMXConverterService {
       
     } catch (error) {
       Logger.error('PMXConverter', 'Upload failed:', error);
-      throw error;
+      throw (error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -589,7 +599,7 @@ class PMXConverterService {
    * @param {File|Blob} zipFile - ZIP file to validate
    * @returns {Promise<{isValid: boolean, errors: string[]}>}
    */
-  async quickValidate(zipFile) {
+  async quickValidate(zipFile: File | Blob): Promise<{ isValid: boolean; errors: string[]; fileCount?: number; totalSize?: number; hasPMX?: boolean; hasZIP?: boolean }> {
     try {
       const isValidZip = await zipExtractor.isValid(zipFile);
       if (!isValidZip) {
@@ -607,8 +617,8 @@ class PMXConverterService {
         errors.push('ZIP archive is empty');
       }
       
-      const hasPMX = info.fileList.some(f => f.toLowerCase().endsWith('.pmx'));
-      const hasZIP = info.fileList.some(f => f.toLowerCase().endsWith('.zip'));
+      const hasPMX = info.fileList.some((f: string) => f.toLowerCase().endsWith('.pmx'));
+      const hasZIP = info.fileList.some((f: string) => f.toLowerCase().endsWith('.zip'));
       
       // Valid if it has PMX files OR ZIP files (for bulk import)
       if (!hasPMX && !hasZIP) {
@@ -625,10 +635,11 @@ class PMXConverterService {
       };
       
     } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
       Logger.error('PMXConverter', 'Quick validation failed:', error);
       return {
         isValid: false,
-        errors: [error.message]
+        errors: [normalized.message]
       };
     }
   }

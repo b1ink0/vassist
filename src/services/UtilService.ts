@@ -6,6 +6,8 @@
 
 import Logger from './LoggerService';
 class UtilService {
+  private static instance: UtilService | null = null;
+
   constructor() {
     if (UtilService.instance) {
       return UtilService.instance;
@@ -18,7 +20,7 @@ class UtilService {
    * @param {string} text - Text to copy
    * @returns {Promise<boolean>} - Success status
    */
-  async copyToClipboard(text) {
+  async copyToClipboard(text: string): Promise<boolean> {
     try {
       // Modern Clipboard API (preferred)
       if (navigator.clipboard && navigator.clipboard.writeText) {

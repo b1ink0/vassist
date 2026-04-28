@@ -18,7 +18,28 @@ import { STTServiceProxy } from './proxies';
 import Logger from './LoggerService';
 import MicrophoneService from './MicrophoneService';
 
+type VoiceRecordingCallbacks = {
+  onTranscription?: ((text: string) => void) | null;
+  onError?: ((error: unknown) => void) | null;
+  onRecordingStart?: (() => void) | null;
+  onRecordingStop?: (() => void) | null;
+  onVolumeChange?: ((volume: number) => void) | null;
+  onSpeechRealStart?: (() => void) | null;
+};
+
 class VoiceRecordingService {
+  private audioStream: MediaStream | null;
+  private mediaRecorder: MediaRecorder | null;
+  private audioChunks: Blob[];
+  private isRecording: boolean;
+  private isActive: boolean;
+  private onTranscription: ((text: string) => void) | null;
+  private onError: ((error: unknown) => void) | null;
+  private onRecordingStart: (() => void) | null;
+  private onRecordingStop: (() => void) | null;
+  private onVolumeChange: ((volume: number) => void) | null;
+  private onSpeechRealStart: (() => void) | null;
+
   constructor() {
     // Audio stream
     this.audioStream = null;
@@ -35,6 +56,7 @@ class VoiceRecordingService {
     this.onRecordingStart = null; // () => void - Called when recording starts (VAD detected speech)
     this.onRecordingStop = null; // () => void - Called when recording stops (VAD detected silence)
     this.onVolumeChange = null; // (volume: number) => void - Real-time volume feedback
+    this.onSpeechRealStart = null;
     
     Logger.log('VoiceRecording', 'Service initialized with VAD');
   }
@@ -43,7 +65,7 @@ class VoiceRecordingService {
    * Start VAD monitoring and recording system
    * @param {Object} callbacks - { onTranscription, onError, onRecordingStart, onRecordingStop, onVolumeChange }
    */
-  async start(callbacks = {}) {
+  async start(callbacks: VoiceRecordingCallbacks = {}): Promise<void> {
     if (this.isActive) {
       Logger.warn('VoiceRecording', 'Already active');
       return;
@@ -93,7 +115,7 @@ class VoiceRecordingService {
             this.onVolumeChange(0); // Indicate no speech activity
           }
         },
-        onError: (error) => {
+        onError: (error: unknown) => {
           Logger.error('VoiceRecording', 'VAD error:', error);
           if (this.onError) {
             this.onError(error);
@@ -115,7 +137,7 @@ class VoiceRecordingService {
   /**
    * Stop VAD monitoring and recording system
    */
-  async stop() {
+  async stop(): Promise<void> {
     Logger.log('VoiceRecording', 'Stopping...');
     
     // Stop any ongoing recording
@@ -141,15 +163,16 @@ class VoiceRecordingService {
   /**
    * Start recording user speech
    */
-  startRecording() {
+  startRecording(): void {
     if (this.isRecording) return;
+    if (!this.audioStream) return;
     
     try {
       const mimeType = this.getSupportedMimeType();
       this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
       this.audioChunks = [];
       
-      this.mediaRecorder.ondataavailable = (event) => {
+      this.mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
         }
@@ -180,7 +203,7 @@ class VoiceRecordingService {
   /**
    * Stop recording user speech
    */
-  stopRecording() {
+  stopRecording(): void {
     if (!this.isRecording || !this.mediaRecorder) return;
     
     Logger.log('VoiceRecording', 'Stopping recording...');
@@ -196,7 +219,7 @@ class VoiceRecordingService {
   /**
    * Process recorded audio
    */
-  async processRecording() {
+  async processRecording(): Promise<void> {
     try {
       // Create audio blob
       const mimeType = this.getSupportedMimeType();
@@ -241,7 +264,7 @@ class VoiceRecordingService {
   /**
    * Get supported MIME type for MediaRecorder
    */
-  getSupportedMimeType() {
+  getSupportedMimeType(): string {
     const types = [
       'audio/webm;codecs=opus',
       'audio/webm',
@@ -262,14 +285,14 @@ class VoiceRecordingService {
   /**
    * Check if service is active
    */
-  isServiceActive() {
+  isServiceActive(): boolean {
     return this.isActive;
   }
 
   /**
    * Check if currently recording
    */
-  isCurrentlyRecording() {
+  isCurrentlyRecording(): boolean {
     return this.isRecording;
   }
 }

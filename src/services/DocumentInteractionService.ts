@@ -9,7 +9,31 @@
 import Logger from './LoggerService';
 import { PromptConfig } from '../config/promptConfig';
 
+type QueryAnalysis = {
+  needsContext: boolean;
+  contextType: string;
+  selector: string;
+  reason: string;
+  [key: string]: unknown;
+};
+
+type AIResult = {
+  success?: boolean;
+  response?: string;
+  cancelled?: boolean;
+  error?: { message?: string } | string | null;
+};
+
+type AISendMessage = (
+  messages: Array<{ role: string; content: string }>,
+  session?: unknown,
+  options?: Record<string, unknown>
+) => Promise<AIResult>;
+
 class DocumentInteractionService {
+  private lastAnalysis: QueryAnalysis | null;
+  private cachedContext: Map<string, string>;
+
   constructor() {
     this.lastAnalysis = null;
     this.cachedContext = new Map(); // Cache extracted contexts
@@ -24,7 +48,7 @@ class DocumentInteractionService {
    * @param {number} retryCount - Number of retries attempted (internal)
    * @returns {Promise<Object|null>} Analysis result or null
    */
-  async analyzeQuery(userQuery, aiServiceSendMessage, abortSignal = null, retryCount = 0) {
+  async analyzeQuery(userQuery: string, aiServiceSendMessage: AISendMessage, abortSignal: AbortSignal | null = null, retryCount = 0): Promise<QueryAnalysis | null> {
     const logPrefix = '[DocumentInteractionService]';
     const maxRetries = 2; // Allow up to 2 retries
     
@@ -42,7 +66,7 @@ class DocumentInteractionService {
       ];
       
       // Use utility session for analysis (separate from main chat) - NON-STREAMING
-      const result = await aiServiceSendMessage(messages, null, { 
+      const result = await aiServiceSendMessage(messages, null, {
         useUtilitySession: true,
         streaming: false 
       });
@@ -59,7 +83,10 @@ class DocumentInteractionService {
         }
         
         // Don't log as error if it's just not configured (normal during initialization)
-        if (result.error?.message?.includes('not configured')) {
+        const resultErrorMessage = typeof result.error === 'string'
+          ? result.error
+          : result.error?.message;
+        if (resultErrorMessage?.includes('not configured')) {
           Logger.log('other', `${logPrefix} AI not configured yet, skipping analysis`);
         } else {
           Logger.warn('other', `${logPrefix} Analysis failed:`, result.error);
@@ -99,7 +126,8 @@ class DocumentInteractionService {
       
       // On error, retry if we haven't exhausted retries
       if (retryCount < maxRetries) {
-        Logger.warn('other', `${logPrefix} Analysis error, retrying (${retryCount + 1}/${maxRetries}):`, error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        Logger.warn('other', `${logPrefix} Analysis error, retrying (${retryCount + 1}/${maxRetries}): ${errorMessage}`);
         await new Promise(resolve => setTimeout(resolve, 500));
         return this.analyzeQuery(userQuery, aiServiceSendMessage, abortSignal, retryCount + 1);
       }
@@ -116,7 +144,7 @@ class DocumentInteractionService {
    * @param {string} response - Raw AI response
    * @returns {Object|null} Parsed analysis or null if invalid
    */
-  _parseAnalysisResponse(response) {
+  _parseAnalysisResponse(response: string): QueryAnalysis | null {
     const logPrefix = '[DocumentInteractionService]';
     
     try {
@@ -150,7 +178,8 @@ class DocumentInteractionService {
       return analysis;
       
     } catch (error) {
-      Logger.error('other', `${logPrefix} JSON parsing failed:`, error.message);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      Logger.error('other', `${logPrefix} JSON parsing failed: ${errorMessage}`);
       Logger.error('other', `${logPrefix} Raw response:`, response.substring(0, 200));
       return null;
     }
@@ -160,7 +189,7 @@ class DocumentInteractionService {
    * Sanitize JSON string to fix common issues
    * @private
    */
-  _sanitizeJSON(jsonStr) {
+  _sanitizeJSON(jsonStr: string): string {
     // Remove control characters (eslint-disable-next-line)
     // eslint-disable-next-line no-control-regex
     jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, '');
@@ -178,29 +207,30 @@ class DocumentInteractionService {
    * Validate analysis object structure
    * @private
    */
-  _validateAnalysis(analysis) {
+  _validateAnalysis(analysis: unknown): analysis is QueryAnalysis {
     if (!analysis || typeof analysis !== 'object') {
       return false;
     }
+    const parsed = analysis as QueryAnalysis;
     
     // Required fields
-    if (typeof analysis.needsContext !== 'boolean') {
+    if (typeof parsed.needsContext !== 'boolean') {
       return false;
     }
     
     // contextType must be one of the valid values
     const validTypes = ['text', 'links', 'forms', 'images', 'tables', 'code', 'all', 'none'];
-    if (!validTypes.includes(analysis.contextType)) {
+    if (!validTypes.includes(parsed.contextType)) {
       return false;
     }
     
     // selector must be a string (can be empty)
-    if (typeof analysis.selector !== 'string') {
+    if (typeof parsed.selector !== 'string') {
       return false;
     }
     
     // reason must be a string
-    if (typeof analysis.reason !== 'string') {
+    if (typeof parsed.reason !== 'string') {
       return false;
     }
     
@@ -212,7 +242,7 @@ class DocumentInteractionService {
    * @param {Object} analysis - Analysis result from analyzeQuery
    * @returns {string|null} Extracted context or null
    */
-  extractContext(analysis) {
+  extractContext(analysis: QueryAnalysis | null): string | null {
     const logPrefix = '[DocumentInteractionService]';
     
     if (!analysis || !analysis.needsContext) {
@@ -272,7 +302,7 @@ class DocumentInteractionService {
    * @param {AbortSignal} abortSignal - Abort signal to cancel the operation
    * @returns {Promise<string|null>} Extracted context or null
    */
-  async getContextForQuery(userQuery, aiServiceSendMessage, abortSignal = null) {
+  async getContextForQuery(userQuery: string, aiServiceSendMessage: AISendMessage, abortSignal: AbortSignal | null = null): Promise<string | null> {
     const logPrefix = '[DocumentInteractionService]';
     
     if (abortSignal?.aborted) {
@@ -317,7 +347,7 @@ class DocumentInteractionService {
    * Extract text content from elements matching selector
    * @private
    */
-  _extractText(selector) {
+  _extractText(selector: string): string {
     try {
       // Try the provided selector first
       let elements = selector ? document.querySelectorAll(selector) : [];
@@ -366,7 +396,7 @@ class DocumentInteractionService {
    * Extract links information
    * @private
    */
-  _extractLinks(selector) {
+  _extractLinks(selector: string): string {
     try {
       let links = selector ? document.querySelectorAll(selector) : [];
       
@@ -386,7 +416,7 @@ class DocumentInteractionService {
         return 'No links found on the page.';
       }
 
-      const linkInfo = Array.from(links)
+      const linkInfo = (Array.from(links) as Array<HTMLAnchorElement>)
         .filter(link => link.href) // Only links with href
         .slice(0, 50)
         .map((link, i) => {
@@ -408,7 +438,7 @@ class DocumentInteractionService {
    * Extract form information
    * @private
    */
-  _extractForms(selector) {
+  _extractForms(selector: string): string {
     try {
       let elements = selector ? document.querySelectorAll(selector) : [];
       
@@ -430,14 +460,15 @@ class DocumentInteractionService {
         
         formInfo.push(`Form ${i + 1}:`);
         
-        inputs.forEach(input => {
+        (Array.from(inputs) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).forEach(input => {
           const type = input.type || input.tagName.toLowerCase();
           const name = input.name || input.id || 'unnamed';
-          const label = input.labels?.[0]?.textContent?.trim() || input.placeholder || '';
+          const placeholder = 'placeholder' in input ? input.placeholder : '';
+          const label = input.labels?.[0]?.textContent?.trim() || placeholder || '';
           formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ''}`);
         });
         
-        buttons.forEach(btn => {
+        (Array.from(buttons) as Array<HTMLButtonElement | HTMLInputElement>).forEach(btn => {
           formInfo.push(`  - Button: "${btn.textContent.trim() || btn.value || 'Submit'}"`);
         });
       });
@@ -446,10 +477,11 @@ class DocumentInteractionService {
       const standaloneInputs = document.querySelectorAll('input:not(form input), textarea:not(form textarea), select:not(form select)');
       if (standaloneInputs.length > 0) {
         formInfo.push('\nStandalone Input Fields:');
-        Array.from(standaloneInputs).slice(0, 20).forEach(input => {
+        (Array.from(standaloneInputs).slice(0, 20) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).forEach(input => {
           const type = input.type || input.tagName.toLowerCase();
           const name = input.name || input.id || 'unnamed';
-          const label = input.labels?.[0]?.textContent?.trim() || input.placeholder || '';
+          const placeholder = 'placeholder' in input ? input.placeholder : '';
+          const label = input.labels?.[0]?.textContent?.trim() || placeholder || '';
           formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ''}`);
         });
       }
@@ -465,7 +497,7 @@ class DocumentInteractionService {
    * Extract image information
    * @private
    */
-  _extractImages(selector) {
+  _extractImages(selector: string): string {
     try {
       let images = selector ? document.querySelectorAll(selector) : [];
       
@@ -478,7 +510,7 @@ class DocumentInteractionService {
         return 'No images found on the page.';
       }
 
-      const imageInfo = Array.from(images)
+      const imageInfo = (Array.from(images) as Array<HTMLImageElement>)
         .filter(img => img.src)
         .slice(0, 30)
         .map((img, i) => {
@@ -501,7 +533,7 @@ class DocumentInteractionService {
    * Extract table data
    * @private
    */
-  _extractTables(selector) {
+  _extractTables(selector: string): string {
     try {
       let tables = selector ? document.querySelectorAll(selector) : document.querySelectorAll('table');
       
@@ -511,11 +543,11 @@ class DocumentInteractionService {
 
       const tableInfo = [];
       
-      Array.from(tables).slice(0, 5).forEach((table, i) => {
+      (Array.from(tables).slice(0, 5) as Array<HTMLTableElement>).forEach((table, i) => {
         tableInfo.push(`\nTable ${i + 1}:`);
         
         // Extract headers
-        const headers = Array.from(table.querySelectorAll('th'))
+        const headers = (Array.from(table.querySelectorAll('th')) as Array<HTMLTableCellElement>)
           .map(th => th.textContent.trim())
           .filter(text => text.length > 0);
         
@@ -524,9 +556,9 @@ class DocumentInteractionService {
         }
         
         // Extract first few rows
-        const rows = Array.from(table.querySelectorAll('tr')).slice(0, 10);
+        const rows = (Array.from(table.querySelectorAll('tr')).slice(0, 10) as Array<HTMLTableRowElement>);
         rows.forEach((row, ri) => {
-          const cells = Array.from(row.querySelectorAll('td'))
+          const cells = (Array.from(row.querySelectorAll('td')) as Array<HTMLTableCellElement>)
             .map(td => td.textContent.trim())
             .filter(text => text.length > 0);
           
@@ -555,7 +587,7 @@ class DocumentInteractionService {
    * Extract code blocks
    * @private
    */
-  _extractCode(selector) {
+  _extractCode(selector: string): string {
     try {
       let codeBlocks = selector ? document.querySelectorAll(selector) : [];
       
@@ -570,7 +602,7 @@ class DocumentInteractionService {
 
       const codeInfo = [];
       
-      Array.from(codeBlocks).slice(0, 20).forEach((block, i) => {
+      (Array.from(codeBlocks).slice(0, 20) as Array<HTMLElement>).forEach((block, i) => {
         const code = block.textContent.trim();
         const language = block.className.match(/language-(\w+)/)?.[1] || 
                         block.className.match(/lang-(\w+)/)?.[1] || 
@@ -597,7 +629,7 @@ class DocumentInteractionService {
    * Extract all available context - comprehensive page analysis
    * @private
    */
-  _extractAll() {
+  _extractAll(): string {
     const parts = [];
     
     // Basic page info
@@ -628,7 +660,7 @@ class DocumentInteractionService {
     }
     
     // Navigation links
-    const navLinks = Array.from(document.querySelectorAll('nav a, header a, .navigation a'))
+    const navLinks = (Array.from(document.querySelectorAll('nav a, header a, .navigation a')) as Array<HTMLAnchorElement>)
       .slice(0, 15)
       .map(a => `- ${a.textContent.trim()} (${a.href})`)
       .join('\n');
@@ -640,9 +672,9 @@ class DocumentInteractionService {
     const forms = document.querySelectorAll('form');
     if (forms.length > 0) {
       parts.push(`\n=== FORMS ===\nFound ${forms.length} form(s) on the page`);
-      Array.from(forms).slice(0, 3).forEach((form, i) => {
+      (Array.from(forms).slice(0, 3) as Array<HTMLFormElement>).forEach((form, i) => {
         const inputs = form.querySelectorAll('input, textarea, select');
-        const inputList = Array.from(inputs).slice(0, 5).map(inp => 
+        const inputList = (Array.from(inputs).slice(0, 5) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).map(inp =>
           `${inp.type || inp.tagName.toLowerCase()}: ${inp.name || inp.id || 'unnamed'}`
         ).join(', ');
         if (inputList) {
@@ -655,7 +687,7 @@ class DocumentInteractionService {
     const images = document.querySelectorAll('img[src]');
     if (images.length > 0) {
       parts.push(`\n=== IMAGES ===\nFound ${images.length} image(s)`);
-      const imageList = Array.from(images).slice(0, 10).map((img, i) => 
+      const imageList = (Array.from(images).slice(0, 10) as Array<HTMLImageElement>).map((img, i) =>
         `${i + 1}. ${img.alt || 'No alt'}`
       ).join('\n');
       if (imageList) {

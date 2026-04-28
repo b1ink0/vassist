@@ -31,11 +31,15 @@ export class ServiceProxy {
   protected name: string;
   protected isExtension: boolean;
   protected _bridge: ExtensionBridgeLike | null;
+  protected directService: Record<string, unknown>;
+  protected _configuring: boolean;
 
   constructor(name: string) {
     this.name = name;
     this.isExtension = __EXTENSION_MODE__;
     this._bridge = null;
+    this.directService = {};
+    this._configuring = false;
     
     // Pre-load bridge immediately in extension mode (synchronous)
     if (this.isExtension && typeof window !== 'undefined') {

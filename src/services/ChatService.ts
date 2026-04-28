@@ -3,7 +3,57 @@
  */
 
 import Logger from './LoggerService';
+
+type ChatRole = 'system' | 'user' | 'assistant';
+
+interface ChatNode {
+  id: string;
+  parentId: string | null;
+  content: string | null;
+  role: ChatRole;
+  branches: ChatNode[];
+  currentBranchIndex: number;
+  timestamp: number;
+  images?: unknown[];
+  audios?: unknown[];
+  imageFileIds?: string[];
+  audioFileIds?: string[];
+  isEdit?: boolean;
+  originalId?: string;
+}
+
+interface BranchInfo {
+  currentIndex: number;
+  totalBranches: number;
+  parentId: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+interface FlatChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  images: unknown[];
+  audios: unknown[];
+  imageFileIds: string[];
+  audioFileIds: string[];
+  timestamp: number;
+  parentId: string | null;
+  branchInfo: BranchInfo | null;
+}
+
+interface ExportedChatTree {
+  tree: ChatNode;
+  activePath: string[];
+  version: number;
+}
+
 class ChatService {
+  private tree: ChatNode;
+  private activePath: string[];
+  private maxMessages: number;
+
   constructor() {
     // Tree structure
     this.tree = this._createRoot();
@@ -17,7 +67,7 @@ class ChatService {
    * Create root node
    * @private
    */
-  _createRoot() {
+  _createRoot(): ChatNode {
     return {
       id: 'root',
       parentId: null,
@@ -33,7 +83,7 @@ class ChatService {
    * Generate unique message ID
    * @private
    */
-  _generateId() {
+  _generateId(): string {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
@@ -41,7 +91,7 @@ class ChatService {
    * Find node by ID
    * @private
    */
-  _findNode(nodeId, currentNode = this.tree) {
+  _findNode(nodeId: string, currentNode: ChatNode = this.tree): ChatNode | null {
     if (currentNode.id === nodeId) {
       return currentNode;
     }
@@ -66,8 +116,8 @@ class ChatService {
    * @param {Array} audios - Optional audio attachments
    * @returns {string} New message ID
    */
-  addMessage(role, content, images = null, audios = null) {
-    const parentId = this.activePath[this.activePath.length - 1];
+  addMessage(role: ChatRole, content: string, images: unknown[] | null = null, audios: unknown[] | null = null): string {
+    const parentId = this.activePath[this.activePath.length - 1] ?? 'root';
     const parent = this._findNode(parentId);
 
     if (!parent) {
@@ -103,16 +153,20 @@ class ChatService {
    * Get active conversation as flat array (ChatManager compatible)
    * @returns {Array} Array of message objects
    */
-  getMessages() {
-    const messages = [];
+  getMessages(): FlatChatMessage[] {
+    const messages: FlatChatMessage[] = [];
 
     for (let i = 1; i < this.activePath.length; i++) {
-      const node = this._findNode(this.activePath[i]);
+      const nodeId = this.activePath[i];
+      if (!nodeId) {
+        continue;
+      }
+      const node = this._findNode(nodeId);
       if (node && node.role !== 'system') {
         messages.push({
           id: node.id,
           role: node.role,
-          content: node.content,
+          content: node.content ?? '',
           images: node.images || [],
           audios: node.audios || [],
           imageFileIds: node.imageFileIds || [],
@@ -131,13 +185,16 @@ class ChatService {
    * Update the content of the last message in the active path (for streaming)
    * @param {string} content - New content for the last message
    */
-  updateLastMessage(content) {
+  updateLastMessage(content: string): void {
     if (this.activePath.length < 2) {
       Logger.warn('ChatService', 'No messages to update');
       return;
     }
 
     const lastId = this.activePath[this.activePath.length - 1];
+    if (!lastId) {
+      return;
+    }
     const node = this._findNode(lastId);
     
     if (node) {
@@ -150,7 +207,7 @@ class ChatService {
    * Set messages from flat array (for loading from history)
    * @param {Array} messages - Flat array of messages
    */
-  setMessages(messages) {
+  setMessages(messages: Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }>): void {
     this.clear();
     
     for (const msg of messages) {
@@ -169,14 +226,14 @@ class ChatService {
    * Get message count
    * @returns {number}
    */
-  getMessageCount() {
+  getMessageCount(): number {
     return this.activePath.length - 1; // Exclude root
   }
 
   /**
    * Clear all messages
    */
-  clearMessages() {
+  clearMessages(): void {
     this.clear();
   }
 
@@ -185,8 +242,8 @@ class ChatService {
    * @param {string} systemPrompt - System prompt to inject
    * @returns {Array}
    */
-  getFormattedMessages(systemPrompt) {
-    const formatted = [];
+  getFormattedMessages(systemPrompt?: string): Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }> {
+    const formatted: Array<{ role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] }> = [];
 
     // Add system prompt if provided
     if (systemPrompt) {
@@ -198,12 +255,19 @@ class ChatService {
 
     // Add active conversation messages
     const messages = this.getMessages();
-    formatted.push(...messages.map(m => ({
-      role: m.role,
-      content: m.content,
-      images: m.images && m.images.length > 0 ? m.images : undefined,
-      audios: m.audios && m.audios.length > 0 ? m.audios : undefined,
-    })));
+    formatted.push(...messages.map((m) => {
+      const payload: { role: ChatRole; content: string; images?: unknown[]; audios?: unknown[] } = {
+        role: m.role,
+        content: m.content,
+      };
+      if (m.images.length > 0) {
+        payload.images = m.images;
+      }
+      if (m.audios.length > 0) {
+        payload.audios = m.audios;
+      }
+      return payload;
+    }));
 
     return formatted;
   }
@@ -212,20 +276,22 @@ class ChatService {
    * Get last message
    * @returns {Object|null}
    */
-  getLastMessage() {
+  getLastMessage(): FlatChatMessage | null {
     const messages = this.getMessages();
-    return messages.length > 0 ? messages[messages.length - 1] : null;
+    const last = messages[messages.length - 1];
+    return last ?? null;
   }
 
   /**
    * Get last user message
    * @returns {Object|null}
    */
-  getLastUserMessage() {
+  getLastUserMessage(): FlatChatMessage | null {
     const messages = this.getMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        return messages[i];
+      const message = messages[i];
+      if (message && message.role === 'user') {
+        return message;
       }
     }
     return null;
@@ -235,11 +301,12 @@ class ChatService {
    * Get last assistant message
    * @returns {Object|null}
    */
-  getLastAssistantMessage() {
+  getLastAssistantMessage(): FlatChatMessage | null {
     const messages = this.getMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant') {
-        return messages[i];
+      const message = messages[i];
+      if (message && message.role === 'assistant') {
+        return message;
       }
     }
     return null;
@@ -249,7 +316,7 @@ class ChatService {
    * Check if conversation is empty
    * @returns {boolean}
    */
-  isEmpty() {
+  isEmpty(): boolean {
     return this.activePath.length <= 1; // Only root
   }
 
@@ -257,7 +324,7 @@ class ChatService {
    * Trim old messages (not implemented for tree - would be complex)
    * Keeping for ChatManager compatibility
    */
-  trimMessages() {
+  trimMessages(): void {
     // Tree trimming would require removing old branches
     // For now, keep all history (branching needs it)
     // Could implement later if needed
@@ -275,10 +342,14 @@ class ChatService {
    * @param {Array} newAudios - Optional new audios array
    * @returns {string} New message ID
    */
-  editMessage(messageId, newContent, newImages = null, newAudios = null) {
+  editMessage(messageId: string, newContent: string, newImages: unknown[] | null = null, newAudios: unknown[] | null = null): string {
     const node = this._findNode(messageId);
     if (!node || node.role !== 'user') {
       throw new Error('Can only edit user messages');
+    }
+
+    if (!node.parentId) {
+      throw new Error('Cannot edit root/system node');
     }
 
     const parent = this._findNode(node.parentId);
@@ -322,7 +393,7 @@ class ChatService {
    * @param {string} messageId - ID of AI message to regenerate
    * @returns {string} Parent message ID
    */
-  createRegenerationBranch(messageId) {
+  createRegenerationBranch(messageId: string): string {
     const node = this._findNode(messageId);
     if (!node || node.role !== 'assistant') {
       throw new Error('Can only regenerate assistant messages');
@@ -335,7 +406,7 @@ class ChatService {
     }
 
     Logger.log('ChatService', 'Created regeneration point at:', node.parentId);
-    return node.parentId;
+    return node.parentId ?? 'root';
   }
 
   /**
@@ -343,7 +414,7 @@ class ChatService {
    * @param {string} nodeId - Parent node ID
    * @param {number} branchIndex - Index of branch to switch to
    */
-  switchBranch(nodeId, branchIndex) {
+  switchBranch(nodeId: string, branchIndex: number): void {
     const node = this._findNode(nodeId);
     if (!node) {
       throw new Error(`Node ${nodeId} not found`);
@@ -355,6 +426,9 @@ class ChatService {
 
     node.currentBranchIndex = branchIndex;
     const newBranch = node.branches[branchIndex];
+    if (!newBranch) {
+      throw new Error(`Branch ${branchIndex} not found for node ${nodeId}`);
+    }
 
     // Rebuild active path from root to this branch
     const nodeIndex = this.activePath.indexOf(nodeId);
@@ -365,7 +439,11 @@ class ChatService {
       // Continue with first branch of children recursively
       let current = newBranch;
       while (current.branches.length > 0) {
-        current = current.branches[current.currentBranchIndex];
+        const next = current.branches[current.currentBranchIndex];
+        if (!next) {
+          break;
+        }
+        current = next;
         this.activePath.push(current.id);
       }
     }
@@ -377,14 +455,16 @@ class ChatService {
    * Navigate to previous branch
    * @param {string} messageId - Current message ID
    */
-  previousBranch(messageId) {
+  previousBranch(messageId: string): void {
     const node = this._findNode(messageId);
     if (!node) return;
+
+    if (!node.parentId) return;
 
     const parent = this._findNode(node.parentId);
     if (!parent) return;
 
-    const currentIndex = parent.branches.findIndex(b => b.id === messageId);
+    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === messageId);
     if (currentIndex > 0) {
       this.switchBranch(parent.id, currentIndex - 1);
     }
@@ -394,14 +474,16 @@ class ChatService {
    * Navigate to next branch
    * @param {string} messageId - Current message ID
    */
-  nextBranch(messageId) {
+  nextBranch(messageId: string): void {
     const node = this._findNode(messageId);
     if (!node) return;
+
+    if (!node.parentId) return;
 
     const parent = this._findNode(node.parentId);
     if (!parent) return;
 
-    const currentIndex = parent.branches.findIndex(b => b.id === messageId);
+    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === messageId);
     if (currentIndex < parent.branches.length - 1) {
       this.switchBranch(parent.id, currentIndex + 1);
     }
@@ -411,13 +493,17 @@ class ChatService {
    * Get branch information for a message
    * @private
    */
-  _getBranchInfo(node) {
+  _getBranchInfo(node: ChatNode): BranchInfo | null {
+    if (!node.parentId) {
+      return null;
+    }
+
     const parent = this._findNode(node.parentId);
     if (!parent || parent.branches.length <= 1) {
       return null;
     }
 
-    const currentIndex = parent.branches.findIndex(b => b.id === node.id);
+    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === node.id);
     return {
       currentIndex: currentIndex + 1,
       totalBranches: parent.branches.length,
@@ -435,7 +521,7 @@ class ChatService {
    * Export tree for persistence
    * @returns {Object}
    */
-  exportTree() {
+  exportTree(): ExportedChatTree {
     return {
       tree: this.tree,
       activePath: this.activePath,
@@ -447,20 +533,21 @@ class ChatService {
    * Import tree from persistence
    * @param {Object} data
    */
-  importTree(data) {
-    if (!data || !data.tree || !data.activePath) {
+  importTree(data: unknown): void {
+    const typed = data as Partial<ExportedChatTree> | null;
+    if (!typed || !typed.tree || !typed.activePath) {
       throw new Error('Invalid tree data');
     }
 
-    this.tree = data.tree;
-    this.activePath = data.activePath;
+    this.tree = typed.tree;
+    this.activePath = typed.activePath;
     Logger.log('ChatService', 'Imported tree with', this.activePath.length - 1, 'messages');
   }
 
   /**
    * Clear the tree
    */
-  clear() {
+  clear(): void {
     this.tree = this._createRoot();
     this.activePath = ['root'];
     Logger.log('ChatService', 'Cleared');
@@ -469,12 +556,12 @@ class ChatService {
   /**
    * Get tree statistics
    */
-  getStats() {
+  getStats(): { totalNodes: number; totalBranches: number; maxDepth: number; activePathLength: number } {
     let totalNodes = 0;
     let totalBranches = 0;
     let maxDepth = 0;
 
-    const traverse = (node, depth = 0) => {
+    const traverse = (node: ChatNode, depth = 0): void => {
       totalNodes++;
       if (node.branches.length > 1) {
         totalBranches += node.branches.length;

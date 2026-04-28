@@ -1,6 +1,18 @@
 import Logger from './LoggerService';
 
+type DeviceChangePayload = {
+  devices: MediaDeviceInfo[];
+  selectedDeviceId: string | null;
+};
+
+type DeviceChangeListener = (payload: DeviceChangePayload) => void;
+
 class MicrophoneService {
+  private devices: MediaDeviceInfo[];
+  private selectedDeviceId: string | null;
+  private listeners: Set<DeviceChangeListener>;
+  private permissionGranted: boolean;
+
   constructor() {
     this.devices = [];
     this.selectedDeviceId = null;
@@ -12,11 +24,11 @@ class MicrophoneService {
    * Request microphone permission and enumerate devices
    * @returns {Promise<MediaDeviceInfo[]>}
    */
-  async initialize() {
+  async initialize(): Promise<MediaDeviceInfo[]> {
     try {
       // Request mic permission first
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       this.permissionGranted = true;
 
       // Enumerate devices
@@ -24,7 +36,7 @@ class MicrophoneService {
 
       // Listen for device changes
       navigator.mediaDevices.addEventListener('devicechange', () => {
-        this.refreshDevices();
+        void this.refreshDevices();
       });
 
       return this.devices;
@@ -38,14 +50,14 @@ class MicrophoneService {
    * Refresh the list of available audio input devices
    * @returns {Promise<MediaDeviceInfo[]>}
    */
-  async refreshDevices() {
+  async refreshDevices(): Promise<MediaDeviceInfo[]> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      this.devices = devices.filter(device => device.kind === 'audioinput');
+      this.devices = devices.filter((device) => device.kind === 'audioinput');
       Logger.log('MicrophoneService', `Found ${this.devices.length} microphones`);
 
       // If selected device is no longer available, reset to default
-      if (this.selectedDeviceId && !this.devices.find(d => d.deviceId === this.selectedDeviceId)) {
+      if (this.selectedDeviceId && !this.devices.find((d) => d.deviceId === this.selectedDeviceId)) {
         Logger.warn('MicrophoneService', 'Selected device no longer available, resetting to default');
         this.selectedDeviceId = null;
       }
@@ -64,7 +76,7 @@ class MicrophoneService {
    * Get list of available audio input devices
    * @returns {MediaDeviceInfo[]}
    */
-  getDevices() {
+  getDevices(): MediaDeviceInfo[] {
     return this.devices;
   }
 
@@ -72,7 +84,7 @@ class MicrophoneService {
    * Select a microphone by deviceId
    * @param {string} deviceId - Device ID or null for default
    */
-  setSelectedDevice(deviceId) {
+  setSelectedDevice(deviceId: string | null): void {
     const actualDeviceId = deviceId === '' ? null : deviceId;
     Logger.log('MicrophoneService', 'Selected device:', actualDeviceId);
     this.selectedDeviceId = actualDeviceId;
@@ -83,7 +95,7 @@ class MicrophoneService {
    * Get the currently selected device ID
    * @returns {string|null}
    */
-  getSelectedDeviceId() {
+  getSelectedDeviceId(): string | null {
     return this.selectedDeviceId;
   }
 
@@ -91,8 +103,8 @@ class MicrophoneService {
    * Get audio constraints with selected device
    * @returns {Object}
    */
-  getAudioConstraints() {
-    const constraints = {
+  getAudioConstraints(): MediaStreamConstraints {
+    const constraints: MediaStreamConstraints = {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
@@ -101,7 +113,10 @@ class MicrophoneService {
     };
 
     if (this.selectedDeviceId) {
-      constraints.audio.deviceId = { exact: this.selectedDeviceId };
+      const audioConstraints = constraints.audio;
+      if (audioConstraints && typeof audioConstraints === 'object') {
+        (audioConstraints as MediaTrackConstraints).deviceId = { exact: this.selectedDeviceId };
+      }
     }
 
     return constraints;
@@ -112,7 +127,7 @@ class MicrophoneService {
    * @param {Function} callback - Called when devices or selection changes
    * @returns {Function} Unsubscribe function
    */
-  subscribe(callback) {
+  subscribe(callback: DeviceChangeListener): () => boolean {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
   }
@@ -120,8 +135,8 @@ class MicrophoneService {
   /**
    * Notify all listeners of changes
    */
-  notifyListeners() {
-    this.listeners.forEach(callback => {
+  notifyListeners(): void {
+    this.listeners.forEach((callback) => {
       try {
         callback({
           devices: this.devices,
@@ -137,7 +152,7 @@ class MicrophoneService {
    * Check if microphone permission is granted
    * @returns {boolean}
    */
-  isPermissionGranted() {
+  isPermissionGranted(): boolean {
     return this.permissionGranted;
   }
 }

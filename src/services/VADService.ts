@@ -9,7 +9,23 @@ import { isDesktop } from '../utils/PlatformUtils';
 import MicrophoneService from './MicrophoneService';
 import Logger from './LoggerService';
 
+type VADStartOptions = {
+  onSpeechStart?: (() => void) | null;
+  onSpeechRealStart?: (() => void) | null;
+  onSpeechEnd?: ((audio: Float32Array) => void) | null;
+  onError?: ((error: unknown) => void) | null;
+  stream?: MediaStream;
+};
+
 class VADService {
+  private vad: any;
+  private isListening: boolean;
+  private mediaStream: MediaStream | null;
+  private onSpeechStart: (() => void) | null;
+  private onSpeechRealStart: (() => void) | null;
+  private onSpeechEnd: ((audio: Float32Array) => void) | null;
+  private onError: ((error: unknown) => void) | null;
+
   constructor() {
     this.vad = null;
     this.isListening = false;
@@ -17,6 +33,7 @@ class VADService {
     
     // Callbacks
     this.onSpeechStart = null;
+    this.onSpeechRealStart = null;
     this.onSpeechEnd = null;
     this.onError = null;
   }
@@ -29,7 +46,7 @@ class VADService {
    * @param {Function} options.onError - Called on errors
    * @param {MediaStream} options.stream - Optional MediaStream (if not provided, will request mic access)
    */
-  async start(options = {}) {
+  async start(options: VADStartOptions = {}): Promise<void> {
     if (this.isListening) {
       Logger.warn('VAD', 'Already listening');
       return;
@@ -62,7 +79,12 @@ class VADService {
       // Initialize MicVAD with Silero v5 model
       this.vad = await MicVAD.new({
         // Override getStream to use our pre-configured stream with selected microphone
-        getStream: async () => this.mediaStream,
+        getStream: async () => {
+          if (!this.mediaStream) {
+            throw new Error('Media stream unavailable');
+          }
+          return this.mediaStream;
+        },
         
         // Explicitly specify v5 model (required!)
         model: 'v5',
@@ -74,7 +96,7 @@ class VADService {
         onnxWASMBasePath: baseAssetPath,
         
         // ONNX Runtime configuration
-        ortConfig: (ort) => {
+        ortConfig: (ort: any) => {
           // Force web mode - disable Node.js fs even in Electron
           ort.env.wasm.numThreads = 1;
           ort.env.wasm.simd = true;
@@ -86,9 +108,9 @@ class VADService {
         // VAD parameters
         positiveSpeechThreshold: 0.8, // Higher = less sensitive (fewer false positives)
         negativeSpeechThreshold: 0.5, // Lower = more sensitive (catches speech better)
-        redemptionFrames: 8, // Frames to wait before declaring speech end
-        preSpeechPadFrames: 1, // Frames to include before speech start
-        minSpeechFrames: 3, // Minimum frames to consider as speech
+        redemptionMs: 300,
+        preSpeechPadMs: 50,
+        minSpeechMs: 120,
         
         // Callbacks
         onSpeechStart: () => {
@@ -105,7 +127,7 @@ class VADService {
           }
         },
         
-        onSpeechEnd: (audio) => {
+        onSpeechEnd: (audio: Float32Array) => {
           Logger.log('VAD', 'Speech ended');
           if (this.onSpeechEnd) {
             this.onSpeechEnd(audio);
@@ -150,7 +172,7 @@ class VADService {
       }
 
       if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => track.stop());
+        this.mediaStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         this.mediaStream = null;
       }
 
@@ -165,7 +187,7 @@ class VADService {
   /**
    * Pause the VAD without destroying it
    */
-  pause() {
+  pause(): void {
     if (this.vad && this.isListening) {
       Logger.log('VAD', 'Pausing...');
       this.vad.pause();
@@ -175,7 +197,7 @@ class VADService {
   /**
    * Resume the VAD after pausing
    */
-  resume() {
+  resume(): void {
     if (this.vad && this.isListening) {
       Logger.log('VAD', 'Resuming...');
       this.vad.start();
@@ -186,7 +208,7 @@ class VADService {
    * Get the current listening state
    * @returns {boolean}
    */
-  getIsListening() {
+  getIsListening(): boolean {
     return this.isListening;
   }
 }

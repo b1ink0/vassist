@@ -18,7 +18,64 @@ import AIServiceProxy from './proxies/AIServiceProxy';
 import ChatService from './ChatService';
 import Logger from './LoggerService';
 
+type ChatMessage = {
+  id?: string;
+  role?: string;
+  content?: string;
+  images?: Array<string | Blob>;
+  audios?: Array<string | Blob>;
+  imageFileIds?: string[];
+  audioFileIds?: string[];
+  [key: string]: unknown;
+};
+
+type TreeNode = {
+  id?: string;
+  images?: Array<string | Blob>;
+  audios?: Array<string | Blob>;
+  imageFileIds?: string[];
+  audioFileIds?: string[];
+  branches?: TreeNode[];
+  [key: string]: unknown;
+};
+
+type TreeData = {
+  tree?: TreeNode;
+  [key: string]: unknown;
+};
+
+type ChatRecord = {
+  chatId: string;
+  title: string;
+  chatService: TreeData | null;
+  messages: ChatMessage[];
+  messageCount: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  messageTree?: TreeData;
+  chatServiceData?: TreeData;
+  [key: string]: unknown;
+};
+
+type SaveChatInput = {
+  chatId?: string;
+  chatService?: { exportTree: () => TreeData; getMessages: () => ChatMessage[] } | null;
+  messages?: ChatMessage[];
+  title?: string;
+  isTemp?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
 class ChatHistoryService {
+  private cache: {
+    chats: Map<string, ChatRecord>;
+    titles: Map<string, string>;
+  };
+  private storageProxy: typeof storageServiceProxy;
+  private aiService: typeof AIServiceProxy;
+  private MAX_TITLE_CACHE: number;
+
   constructor() {
     this.cache = {
       chats: new Map(), // Cache for loaded chats
@@ -33,7 +90,7 @@ class ChatHistoryService {
   /**
    * Generate a unique chat ID
    */
-  generateChatId() {
+  generateChatId(): string {
     return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
@@ -42,7 +99,7 @@ class ChatHistoryService {
    * @param {Object} chatData - { chatId, chatService?, messages?, title?, isTemp?, metadata? }
    * @returns {Promise<string>} chatId
    */
-  async saveChat(chatData) {
+  async saveChat(chatData: SaveChatInput): Promise<string> {
     try {
       const {
         chatId = this.generateChatId(),
@@ -59,8 +116,8 @@ class ChatHistoryService {
         return chatId;
       }
 
-      let finalMessages = [];
-      let treeData = null;
+      let finalMessages: ChatMessage[] = [];
+      let treeData: TreeData | null = null;
 
       // Handle tree structure
       if (chatService) {
@@ -89,7 +146,7 @@ class ChatHistoryService {
       const processedMessages = !treeData ? await this._processMessagesForSave(finalMessages) : [];
 
       // Prepare chat data for storage
-      const chatRecord = {
+      const chatRecord: ChatRecord = {
         chatId,
         title: finalTitle,
         chatService: processedTree, // NEW: Store tree structure
@@ -97,7 +154,7 @@ class ChatHistoryService {
         messageCount: finalMessages.length,
         metadata: {
           ...metadata,
-          charCount: finalMessages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0),
+          charCount: finalMessages.reduce((sum: number, msg: ChatMessage) => sum + (msg.content?.length || 0), 0),
           hasTree: !!processedTree,
         },
         createdAt: new Date().toISOString(),
@@ -122,7 +179,7 @@ class ChatHistoryService {
    * Process message tree and save associated media files
    * @private
    */
-  async _processTreeForSave(treeData) {
+  async _processTreeForSave(treeData: TreeData | null): Promise<TreeData | null> {
     if (!treeData || !treeData.tree) return null;
 
     const processed = {
@@ -137,7 +194,7 @@ class ChatHistoryService {
    * Recursively process tree nodes and save media
    * @private
    */
-  async _processNodeForSave(node) {
+  async _processNodeForSave(node: TreeNode): Promise<TreeNode> {
     const processedNode = { ...node };
 
     // Save images if present
@@ -145,8 +202,12 @@ class ChatHistoryService {
       processedNode.imageFileIds = [];
       for (let i = 0; i < node.images.length; i++) {
         try {
+            const imageData = node.images[i];
+            if (!imageData) {
+              continue;
+            }
           const fileId = await this._saveMediaFile(
-            node.images[i],
+              imageData,
             'image',
             `${node.id}_img_${i}`
           );
@@ -163,8 +224,12 @@ class ChatHistoryService {
       processedNode.audioFileIds = [];
       for (let i = 0; i < node.audios.length; i++) {
         try {
+            const audioData = node.audios[i];
+            if (!audioData) {
+              continue;
+            }
           const fileId = await this._saveMediaFile(
-            node.audios[i],
+              audioData,
             'audio',
             `${node.id}_audio_${i}`
           );
@@ -192,8 +257,8 @@ class ChatHistoryService {
    * Extracts images and audios, stores them separately, and references via fileIds
    * @private
    */
-  async _processMessagesForSave(messages) {
-    const processed = [];
+  async _processMessagesForSave(messages: ChatMessage[]): Promise<ChatMessage[]> {
+    const processed: ChatMessage[] = [];
 
     for (const msg of messages) {
       const processedMsg = { ...msg };
@@ -203,8 +268,12 @@ class ChatHistoryService {
         processedMsg.imageFileIds = [];
         for (let i = 0; i < msg.images.length; i++) {
           try {
+              const imageData = msg.images[i];
+              if (!imageData) {
+                continue;
+              }
             const fileId = await this._saveMediaFile(
-              msg.images[i],
+                imageData,
               'image',
               `${msg.id || 'unknown'}_img_${i}`
             );
@@ -222,8 +291,12 @@ class ChatHistoryService {
         processedMsg.audioFileIds = [];
         for (let i = 0; i < msg.audios.length; i++) {
           try {
+              const audioData = msg.audios[i];
+              if (!audioData) {
+                continue;
+              }
             const fileId = await this._saveMediaFile(
-              msg.audios[i],
+                audioData,
               'audio',
               `${msg.id || 'unknown'}_audio_${i}`
             );
@@ -246,7 +319,7 @@ class ChatHistoryService {
    * Save a media file (image or audio) to storage
    * @private
    */
-  async _saveMediaFile(dataUrl, type, fileId) {
+  async _saveMediaFile(dataUrl: string | Blob, type: 'image' | 'audio', fileId: string): Promise<string> {
     try {
       // Convert data URL to blob if needed
       let data = dataUrl;
@@ -279,7 +352,7 @@ class ChatHistoryService {
    * Convert data URL to Blob
    * @private
    */
-  async _dataUrlToBlob(dataUrl) {
+  async _dataUrlToBlob(dataUrl: string): Promise<Blob> {
     const response = await fetch(dataUrl);
     return await response.blob();
   }
@@ -289,16 +362,18 @@ class ChatHistoryService {
    * @param {string} chatId
    * @returns {Promise<Object>} chat data with tree/messages and media restored
    */
-  async loadChat(chatId) {
+  async loadChat(chatId: string): Promise<ChatRecord> {
     try {
       // Check cache first
       if (this.cache.chats.has(chatId)) {
         const cached = this.cache.chats.get(chatId);
-        return await this._restoreMediaInChat(cached);
+        if (cached) {
+          return await this._restoreMediaInChat(cached);
+        }
       }
 
       // Load from storage via proxy
-      const chatData = await this.storageProxy.chatLoad(chatId);
+      const chatData = (await this.storageProxy.chatLoad(chatId)) as ChatRecord | null;
       if (!chatData) {
         throw new Error(`Chat not found: ${chatId}`);
       }
@@ -309,7 +384,7 @@ class ChatHistoryService {
       // Cache it
       this.cache.chats.set(chatId, chatData);
 
-      Logger.log('ChatHistoryService', 'Chat loaded:', chatId, 'Has tree:', !!chatData.chatService);
+      Logger.log('ChatHistoryService', `Chat loaded: ${chatId}. Has tree: ${String(!!chatData.chatService)}`);
       return restoredChat;
     } catch (error) {
       Logger.error('ChatHistoryService', 'Failed to load chat:', error);
@@ -321,14 +396,14 @@ class ChatHistoryService {
    * Restore media files in chat (supports both tree and flat messages)
    * @private
    */
-  async _restoreMediaInChat(chatData) {
-    const restored = { ...chatData };
+  async _restoreMediaInChat(chatData: ChatRecord): Promise<ChatRecord> {
+    const restored: ChatRecord = { ...chatData };
 
     // Restore tree structure if present
     if (restored.chatService) {
       restored.chatService = {
         ...restored.chatService,
-        tree: await this._restoreNodeMedia(restored.chatService.tree),
+          tree: await this._restoreNodeMedia(restored.chatService.tree as TreeNode),
       };
 
       // Import tree into ChatService
@@ -340,7 +415,7 @@ class ChatHistoryService {
       // Backward compatibility: old format
       restored.chatService = {
         ...restored.messageTree,
-        tree: await this._restoreNodeMedia(restored.messageTree.tree),
+          tree: await this._restoreNodeMedia(restored.messageTree.tree as TreeNode),
       };
       
       ChatService.importTree(restored.chatService);
@@ -362,15 +437,15 @@ class ChatHistoryService {
    * Recursively restore media in tree nodes
    * @private
    */
-  async _restoreNodeMedia(node) {
-    const restored = { ...node };
+  async _restoreNodeMedia(node: TreeNode): Promise<TreeNode> {
+    const restored: TreeNode = { ...node };
 
     // Restore images
     if (node.imageFileIds && node.imageFileIds.length > 0) {
       restored.images = [];
       for (const fileId of node.imageFileIds) {
         try {
-          const fileData = await this.storageProxy.fileLoad(fileId);
+            const fileData = (await this.storageProxy.fileLoad(fileId)) as { data?: string | Blob } | null;
           if (fileData && fileData.data) {
             const imageUrl = fileData.data instanceof Blob 
               ? await this._blobToDataUrl(fileData.data)
@@ -389,7 +464,7 @@ class ChatHistoryService {
       restored.audios = [];
       for (const fileId of node.audioFileIds) {
         try {
-          const fileData = await this.storageProxy.fileLoad(fileId);
+            const fileData = (await this.storageProxy.fileLoad(fileId)) as { data?: string | Blob } | null;
           if (fileData && fileData.data) {
             const audioUrl = fileData.data instanceof Blob 
               ? await this._blobToDataUrl(fileData.data)
@@ -418,8 +493,8 @@ class ChatHistoryService {
    * Restore media files in flat messages array
    * @private
    */
-  async _restoreMessagesMedia(messages) {
-    const restored = [];
+  async _restoreMessagesMedia(messages: ChatMessage[]): Promise<ChatMessage[]> {
+    const restored: ChatMessage[] = [];
 
     for (const msg of messages) {
       const restoredMsg = { ...msg };
@@ -429,7 +504,7 @@ class ChatHistoryService {
         restoredMsg.images = [];
         for (const fileId of msg.imageFileIds) {
           try {
-            const fileData = await this.storageProxy.fileLoad(fileId);
+              const fileData = (await this.storageProxy.fileLoad(fileId)) as { data?: string | Blob } | null;
             if (fileData && fileData.data) {
               const imageUrl = fileData.data instanceof Blob 
                 ? await this._blobToDataUrl(fileData.data)
@@ -448,7 +523,7 @@ class ChatHistoryService {
         restoredMsg.audios = [];
         for (const fileId of msg.audioFileIds) {
           try {
-            const fileData = await this.storageProxy.fileLoad(fileId);
+              const fileData = (await this.storageProxy.fileLoad(fileId)) as { data?: string | Blob } | null;
             if (fileData && fileData.data) {
               const audioUrl = fileData.data instanceof Blob 
                 ? await this._blobToDataUrl(fileData.data)
@@ -474,10 +549,10 @@ class ChatHistoryService {
    * @param {string} newTitle - New title for the chat
    * @returns {Promise<void>}
    */
-  async updateChatTitle(chatId, newTitle) {
+  async updateChatTitle(chatId: string, newTitle: string): Promise<void> {
     try {
       // Load existing chat
-      const chatData = await this.storageProxy.chatLoad(chatId);
+      const chatData = (await this.storageProxy.chatLoad(chatId)) as ChatRecord | null;
       if (!chatData) {
         throw new Error(`Chat not found: ${chatId}`);
       }
@@ -492,8 +567,10 @@ class ChatHistoryService {
       // Update cache
       if (this.cache.chats.has(chatId)) {
         const cached = this.cache.chats.get(chatId);
-        cached.title = chatData.title;
-        cached.updatedAt = chatData.updatedAt;
+        if (cached) {
+          cached.title = chatData.title;
+          cached.updatedAt = chatData.updatedAt;
+        }
       }
 
       Logger.log('ChatHistoryService', 'Chat title updated:', chatId, newTitle);
@@ -507,10 +584,16 @@ class ChatHistoryService {
    * Convert Blob to Data URL
    * @private
    */
-  async _blobToDataUrl(blob) {
+  async _blobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error('Failed to convert blob to data URL'));
+      };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
@@ -520,10 +603,10 @@ class ChatHistoryService {
    * Delete a chat and all associated media files
    * @param {string} chatId
    */
-  async deleteChat(chatId) {
+  async deleteChat(chatId: string): Promise<void> {
     try {
       // Load chat to get file references via proxy
-      const chatData = await this.storageProxy.chatLoad(chatId);
+      const chatData = (await this.storageProxy.chatLoad(chatId)) as ChatRecord | null;
 
       if (chatData && chatData.messages) {
         // Delete all associated media files
@@ -569,13 +652,13 @@ class ChatHistoryService {
    * @param {number} offset - items to skip
    * @returns {Promise<Array>} sorted by updatedAt (newest first)
    */
-  async getAllChats(limit = 20, offset = 0) {
+  async getAllChats(limit = 20, offset = 0): Promise<ChatRecord[]> {
     try {
-      const allChats = await this.storageProxy.chatGetAll();
+      const allChats = (await this.storageProxy.chatGetAll()) as Record<string, ChatRecord>;
 
       // Convert to array and sort by updatedAt (newest first)
       const chatsArray = Object.values(allChats)
-        .sort((a, b) => {
+        .sort((a: ChatRecord, b: ChatRecord) => {
           const timeA = new Date(a.updatedAt || a.createdAt).getTime();
           const timeB = new Date(b.updatedAt || b.createdAt).getTime();
           return timeB - timeA; // Descending order
@@ -597,24 +680,24 @@ class ChatHistoryService {
    * @param {string} query - search term
    * @returns {Promise<Array>} matching chats sorted by relevance
    */
-  async searchChats(query) {
+  async searchChats(query: string): Promise<ChatRecord[]> {
     try {
       if (!query || query.trim() === '') {
         return await this.getAllChats(100);
       }
 
       const lowerQuery = query.toLowerCase();
-      const allChats = await this.storageProxy.chatGetAll();
+      const allChats = (await this.storageProxy.chatGetAll()) as Record<string, ChatRecord>;
 
       const results = Object.values(allChats)
-        .filter(chat => {
+        .filter((chat: ChatRecord) => {
           // Search in title
           if (chat.title?.toLowerCase().includes(lowerQuery)) {
             return true;
           }
 
           // Search in message content
-          if (chat.messages?.some(msg => 
+          if (chat.messages?.some((msg: ChatMessage) => 
             msg.content?.toLowerCase().includes(lowerQuery)
           )) {
             return true;
@@ -622,7 +705,7 @@ class ChatHistoryService {
 
           return false;
         })
-        .sort((a, b) => {
+        .sort((a: ChatRecord, b: ChatRecord) => {
           const timeA = new Date(a.updatedAt || a.createdAt).getTime();
           const timeB = new Date(b.updatedAt || b.createdAt).getTime();
           return timeB - timeA;
@@ -641,10 +724,10 @@ class ChatHistoryService {
    * @param {string} chatId
    * @returns {Promise<boolean>}
    */
-  async isTempChat(chatId) {
+  async isTempChat(chatId: string): Promise<boolean> {
     try {
-      const tempChats = await this.storageProxy.dataGetByCategory('tempChats');
-      return tempChats && tempChats[chatId] === true;
+      const tempChats = (await this.storageProxy.dataGetByCategory('tempChats')) as Record<string, boolean> | null;
+      return !!(tempChats && tempChats[chatId] === true);
     } catch (error) {
       Logger.error('ChatHistoryService', 'Failed to check temp chat status:', error);
       return false;
@@ -656,7 +739,7 @@ class ChatHistoryService {
    * @param {string} chatId
    * @param {boolean} isTemp
    */
-  async markAsTempChat(chatId, isTemp = true) {
+  async markAsTempChat(chatId: string, isTemp = true): Promise<void> {
     try {
       if (isTemp) {
         await this.storageProxy.dataSave(chatId, true, 'tempChats');
@@ -677,14 +760,14 @@ class ChatHistoryService {
    * Fallback to truncated first message if generation fails
    * @private
    */
-  async _generateTitleFromMessages(messages) {
+  async _generateTitleFromMessages(messages: ChatMessage[]): Promise<string> {
     try {
       if (!messages || messages.length === 0) {
         return 'New Chat';
       }
 
       // Find first user message
-      const firstUserMsg = messages.find(msg => msg.role === 'user');
+      const firstUserMsg = messages.find((msg: ChatMessage) => msg.role === 'user');
       if (!firstUserMsg) {
         return 'New Chat';
       }
@@ -700,7 +783,7 @@ User message: "${firstUserMsg.content}"
 /no_think`;
           
           Logger.log('ChatHistoryService', 'Sending prompt to AIService for title generation');
-          const response = await this.aiService.sendMessage([
+            const response = await (this.aiService as any).sendMessage([
             { role: 'user', content: prompt }
           ], null, null, { disableRouting: true }); // Disable routing for title generation
           Logger.log('ChatHistoryService', 'AIService response:', response);
@@ -712,22 +795,26 @@ User message: "${firstUserMsg.content}"
           setTimeout(() => reject(new Error('Title generation timeout')), 5000)
         );
 
-        const response = await Promise.race([titlePromise, timeoutPromise]);
+        const response = await Promise.race([titlePromise, timeoutPromise]) as {
+          success?: boolean;
+          response?: string;
+        };
 
         if (response?.success && response?.response) {
           const title = response.response.trim().substring(0, 50);
           Logger.log('ChatHistoryService', 'Generated title:', title);
-          this.cache.titles.set(firstUserMsg.content, title);
+          this.cache.titles.set(firstUserMsg.content ?? 'New Chat', title);
           return title;
         } else {
-          Logger.warn('ChatHistoryService', 'LLM returned no text:', response);
+          Logger.warn('ChatHistoryService', `LLM returned no text: ${JSON.stringify(response)}`);
         }
       } catch (error) {
-        Logger.warn('ChatHistoryService', 'LLM title generation failed, using fallback:', error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        Logger.warn('ChatHistoryService', 'LLM title generation failed, using fallback:', errorMessage);
       }
 
       // Fallback: use truncated first message
-      const fallbackTitle = firstUserMsg.content.substring(0, 50).trim();
+      const fallbackTitle = (firstUserMsg.content ?? '').substring(0, 50).trim();
       Logger.log('ChatHistoryService', 'Using fallback title:', fallbackTitle);
       return fallbackTitle || 'New Chat';
     } catch (error) {
@@ -740,9 +827,9 @@ User message: "${firstUserMsg.content}"
    * Get chat count
    * @returns {Promise<number>}
    */
-  async getChatCount() {
+  async getChatCount(): Promise<number> {
     try {
-      const allChats = await this.storageProxy.chatGetAll();
+      const allChats = (await this.storageProxy.chatGetAll()) as Record<string, ChatRecord>;
       return Object.keys(allChats).length;
     } catch (error) {
       Logger.error('ChatHistoryService', 'Failed to get chat count:', error);
@@ -754,7 +841,7 @@ User message: "${firstUserMsg.content}"
    * Clear all chats and media files
    * Warning: This is destructive and cannot be undone
    */
-  async clearAll() {
+  async clearAll(): Promise<void> {
     try {
       Logger.warn('ChatHistoryService', 'Clearing all chats and media files...');
       await this.storageProxy.chatClear();

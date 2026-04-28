@@ -25,6 +25,7 @@ release
 *.njsproj
 *.sln
 *.sw?
+*.tsbuildinfo
 
 docs
 *.patch

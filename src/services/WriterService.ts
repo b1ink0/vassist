@@ -8,18 +8,44 @@
 import OpenAI from 'openai';
 import Logger from './LoggerService';
 
+type WriterProvider = 'chrome-ai' | 'openai' | 'ollama';
+type WriterAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
+
+interface WriterSession {
+  write(prompt: string, options?: { context?: string }): Promise<string>;
+  writeStreaming(prompt: string, options?: { context?: string }): AsyncIterable<string>;
+  destroy?(): void;
+}
+
+interface WriterState {
+  writerSessions: Map<string, WriterSession>;
+  config: { provider: WriterProvider; model?: string; temperature?: number } | null;
+  provider: WriterProvider | null;
+  llmClient: OpenAI | null;
+  abortController: AbortController | null;
+}
+
+const getWriterApi = (): any => (self as typeof globalThis & { Writer?: any }).Writer ?? null;
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class WriterService {
+  private readonly isExtensionMode: boolean;
+  private readonly tabStates: Map<number, WriterState>;
+  private readonly devState: WriterState;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
+    this.tabStates = new Map();
+    this.devState = {
+      writerSessions: new Map(),
+      config: null,
+      provider: null,
+      llmClient: null,
+      abortController: null,
+    };
     
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
-    } else {
-      this.writerSessions = new Map(); // key: "tone-format-length-sharedContext", value: Writer session
-      this.config = null;
-      this.provider = null;
-      this.llmClient = null;
-      this.abortController = null;
+      return;
     }
   }
 
@@ -27,7 +53,7 @@ class WriterService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     if (!this.tabStates.has(tabId)) {
@@ -46,7 +72,7 @@ class WriterService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     const state = this.tabStates.get(tabId);
@@ -76,12 +102,15 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): WriterState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as WriterState;
     }
-    return this; // In dev mode, state is on the instance itself
+    return this.devState;
   }
 
   /**
@@ -93,7 +122,7 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async configure(config, tabId = null) {
+  async configure(config: any, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
@@ -103,7 +132,7 @@ class WriterService {
     try {
       if (provider === 'chrome-ai') {
         // Check Chrome AI Writer availability
-        if (!('Writer' in self)) {
+        if (!getWriterApi()) {
           throw new Error('Chrome AI Writer not available. Chrome 139+ required with origin trial token.');
         }
         
@@ -152,7 +181,7 @@ class WriterService {
       state.config = null;
       state.provider = null;
       state.llmClient = null;
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -161,16 +190,16 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if configured
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
-    return state && state.config && state.provider;
+    return Boolean(state.config && state.provider);
   }
 
   /**
    * Abort ongoing write request
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  abort(tabId = null) {
+  abort(tabId: number | null = null): void {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -186,7 +215,7 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(tabId = null) {
+  async checkAvailability(tabId: number | null = null): Promise<WriterAvailability> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -195,12 +224,13 @@ class WriterService {
     }
     
     if (state.provider === 'chrome-ai') {
-      if (!('Writer' in self)) {
+      const writerApi = getWriterApi();
+      if (!writerApi) {
         return 'unavailable';
       }
       
       try {
-        const availability = await self.Writer.availability();
+        const availability = await writerApi.availability();
         Logger.log('other', `${logPrefix} Writer availability:`, availability);
         return availability;
       } catch (error) {
@@ -222,7 +252,13 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Writer session
    */
-  async _getOrCreateSession(tone = 'neutral', format = 'plain-text', length = 'medium', sharedContext = '', tabId = null) {
+  async _getOrCreateSession(
+    tone = 'neutral',
+    format = 'plain-text',
+    length = 'medium',
+    sharedContext = '',
+    tabId: number | null = null,
+  ): Promise<WriterSession | null> {
     const state = this._getState(tabId);
     const sessionKey = `${tone}-${format}-${length}-${sharedContext}`;
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
@@ -233,19 +269,24 @@ class WriterService {
     }
     
     if (state.writerSessions.has(sessionKey)) {
-      return state.writerSessions.get(sessionKey);
+      return state.writerSessions.get(sessionKey) ?? null;
     }
     
     // Create new Chrome AI Writer session
     try {
       Logger.log('other', `${logPrefix} Creating writer session: ${sessionKey}`);
-      const session = await self.Writer.create({
+      const writerApi = getWriterApi();
+      if (!writerApi) {
+        throw new Error('Writer API unavailable');
+      }
+
+      const session = await writerApi.create({
         tone,
         format,
         length,
         sharedContext,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
+        monitor(m: any) {
+          m.addEventListener('downloadprogress', (e: { loaded: number }) => {
             Logger.log('other', `${logPrefix} Writer model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
@@ -256,7 +297,7 @@ class WriterService {
       return session;
     } catch (error) {
       Logger.error('other', `${logPrefix} Failed to create writer session:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -272,7 +313,7 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Written content
    */
-  async write(prompt, options = {}, tabId = null) {
+  async write(prompt: string, options: any = {}, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -292,6 +333,9 @@ class WriterService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
+      if (!session) {
+        throw new Error('Writer session unavailable');
+      }
       const written = await session.write(prompt, { context });
       Logger.log('other', `${logPrefix} Write complete:`, written.substring(0, 50));
       return written;
@@ -310,7 +354,7 @@ class WriterService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {AsyncIterable<string>} Streaming write chunks
    */
-  async *writeStreaming(prompt, options = {}, tabId = null) {
+  async *writeStreaming(prompt: string, options: any = {}, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -330,6 +374,9 @@ class WriterService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tone, format, length, sharedContext, tabId);
+      if (!session) {
+        throw new Error('Writer session unavailable');
+      }
       const stream = session.writeStreaming(prompt, { context });
       
       for await (const chunk of stream) {
@@ -348,7 +395,14 @@ class WriterService {
    * Write using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _writeWithOpenAICompatible(prompt, tone, format, length, context, tabId = null) {
+  async _writeWithOpenAICompatible(
+    prompt: string,
+    tone: string,
+    format: string,
+    length: string,
+    context: string,
+    tabId: number | null = null,
+  ): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -356,27 +410,31 @@ class WriterService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Writer LLM client not configured');
+    }
     
     try {
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: fullPrompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
       }, {
         signal: state.abortController.signal
       });
       
       state.abortController = null;
-      const written = response.choices[0].message.content.trim();
+      const written = response.choices[0]?.message?.content?.trim() ?? '';
       Logger.log('other', `${logPrefix} ${state.provider} write complete`);
       return written;
     } catch (error) {
       state.abortController = null;
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const normalized = asError(error);
+      const isAbort = normalized.name === 'AbortError' ||
+        normalized.message.toLowerCase().includes('abort') ||
+        normalized.message.toLowerCase().includes('cancel');
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Write aborted by user`);
@@ -384,7 +442,7 @@ class WriterService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} write failed:`, error);
-      throw error;
+      throw normalized;
     }
   }
 
@@ -392,7 +450,14 @@ class WriterService {
    * Write using OpenAI-compatible API (streaming polyfill for OpenAI/Ollama)
    * @private
    */
-  async *_writeStreamingWithOpenAICompatible(prompt, tone, format, length, context, tabId = null) {
+  async *_writeStreamingWithOpenAICompatible(
+    prompt: string,
+    tone: string,
+    format: string,
+    length: string,
+    context: string,
+    tabId: number | null = null,
+  ): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     
@@ -400,12 +465,15 @@ class WriterService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Writer LLM client not configured');
+    }
     
     try {
       const stream = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: fullPrompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
         stream: true,
       }, {
         signal: state.abortController.signal
@@ -429,9 +497,10 @@ class WriterService {
       state.abortController = null;
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const normalized = asError(error);
+      const isAbort = normalized.name === 'AbortError' ||
+        normalized.message.toLowerCase().includes('abort') ||
+        normalized.message.toLowerCase().includes('cancel');
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Streaming write aborted by user`);
@@ -439,7 +508,7 @@ class WriterService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} streaming write failed:`, error);
-      throw error;
+      throw normalized;
     }
   }
 
@@ -447,8 +516,8 @@ class WriterService {
    * Build write prompt for LLM polyfills
    * @private
    */
-  _buildWritePrompt(prompt, tone, format, length, context) {
-    let instructions = [];
+  _buildWritePrompt(prompt: string, tone: string, format: string, length: string, context: string): string {
+    const instructions: string[] = [];
     
     // Tone-specific instructions
     if (tone === 'formal') {
@@ -490,7 +559,7 @@ class WriterService {
    * Destroy all writer sessions
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  async destroy(tabId = null) {
+  async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[WriterService] Tab ${tabId}` : '[WriterService]';
     

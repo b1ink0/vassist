@@ -10,7 +10,22 @@ import Logger from './LoggerService';
 import FrameCaptureService from './FrameCaptureService';
 import { isAndroid } from '../utils/PlatformUtils';
 
+type ScreenShareState = { isActive: boolean };
+type ScreenShareListener = (state: ScreenShareState) => void;
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class ScreenShareService {
+  name: string;
+  type: string;
+  private stream: MediaStream | null;
+  private isActive: boolean;
+  private listeners: Set<ScreenShareListener>;
+  private permissionGranted: boolean;
+  private isInitializing: boolean;
+  private isInitialized: boolean;
+  private captureVideo: HTMLVideoElement | null;
+  private captureCanvas: HTMLCanvasElement | null;
+
   constructor() {
     this.name = 'ScreenShareService';
     this.type = 'screen';
@@ -30,7 +45,7 @@ class ScreenShareService {
    * Initialize screen share service
    * @returns {Promise<boolean>}
    */
-  async initialize() {
+  async initialize(): Promise<boolean> {
     if (this.isInitialized) {
       Logger.log('ScreenShareService', 'Already initialized');
       return true;
@@ -59,8 +74,8 @@ class ScreenShareService {
       Logger.log('ScreenShareService', 'Initialized successfully');
       return true;
     } catch (error) {
-      Logger.error('ScreenShareService', 'Failed to initialize:', error.message);
-      throw error;
+      Logger.error('ScreenShareService', 'Failed to initialize:', asError(error).message);
+      throw asError(error);
     } finally {
       this.isInitializing = false;
     }
@@ -70,17 +85,19 @@ class ScreenShareService {
    * Start screen share using getDisplayMedia()
    * @returns {Promise<MediaStream>}
    */
-  async start() {
+  async start(): Promise<MediaStream> {
     try {
       if (this.isActive) {
         Logger.warn('ScreenShareService', 'Screen share already active');
-        return this.stream;
+        if (this.stream) {
+          return this.stream;
+        }
       }
 
       // Stop any existing stream first
       if (this.stream) {
         Logger.warn('ScreenShareService', 'Stopping existing stream before starting new one');
-        this.stream.getTracks().forEach(track => track.stop());
+        this.stream.getTracks().forEach((track) => track.stop());
         this.stream = null;
       }
 
@@ -88,9 +105,7 @@ class ScreenShareService {
 
       // Request screen share - shows system picker
       this.stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: 'always' // Include cursor in capture
-        },
+        video: true,
         audio: false // No system audio for now
       });
       
@@ -118,23 +133,24 @@ class ScreenShareService {
 
       return this.stream;
     } catch (error) {
-      Logger.error('ScreenShareService', 'Failed to start screen share:', error.message);
+      const normalized = asError(error);
+      Logger.error('ScreenShareService', 'Failed to start screen share:', normalized.message);
       this.isActive = false;
       this.notifyListeners();
       
       // User cancelled the picker
-      if (error.name === 'NotAllowedError') {
+      if (normalized.name === 'NotAllowedError') {
         throw new Error('Screen share permission denied');
       }
       
-      throw error;
+      throw normalized;
     }
   }
 
   /**
    * Stop screen share
    */
-  async stop() {
+  async stop(): Promise<void> {
     try {
       if (!this.isActive) {
         Logger.warn('ScreenShareService', 'Screen share not active');
@@ -143,7 +159,7 @@ class ScreenShareService {
 
       // Stop all tracks
       if (this.stream) {
-        this.stream.getTracks().forEach(track => track.stop());
+        this.stream.getTracks().forEach((track) => track.stop());
         this.stream = null;
       }
       
@@ -174,7 +190,7 @@ class ScreenShareService {
   /**
    * Toggle screen share (convenience method)
    */
-  async toggle() {
+  async toggle(): Promise<void> {
     if (this.isActive) {
       await this.stop();
     } else {
@@ -186,7 +202,7 @@ class ScreenShareService {
    * Check if screen share is active
    * @returns {boolean}
    */
-  isRunning() {
+  isRunning(): boolean {
     return this.isActive;
   }
 
@@ -195,7 +211,7 @@ class ScreenShareService {
    * Uses full resolution from MediaStream
    * @returns {Promise<string|null>}
    */
-  async captureFrame() {
+  async captureFrame(): Promise<string | null> {
     if (!this.isActive || !this.stream) {
       Logger.warn('ScreenShareService', 'Screen share not active, cannot capture frame');
       return null;
@@ -225,10 +241,11 @@ class ScreenShareService {
         this.captureVideo.srcObject = this.stream;
         
         // Wait for video to be ready
-        await new Promise((resolve, reject) => {
-          this.captureVideo.onloadedmetadata = resolve;
-          this.captureVideo.onerror = reject;
-          this.captureVideo.play();
+        const video = this.captureVideo;
+        await new Promise<void>((resolve, reject) => {
+          video.onloadedmetadata = () => resolve();
+          video.onerror = (ev) => reject(ev);
+          void video.play();
         });
       }
 
@@ -249,6 +266,9 @@ class ScreenShareService {
       }
 
       const ctx = this.captureCanvas.getContext('2d');
+      if (!ctx) {
+        return null;
+      }
       ctx.drawImage(this.captureVideo, 0, 0, this.captureCanvas.width, this.captureCanvas.height);
 
       // Convert to data URL with high quality
@@ -267,7 +287,7 @@ class ScreenShareService {
    * Get current video stream (for preview)
    * @returns {MediaStream|null}
    */
-  getStream() {
+  getStream(): MediaStream | null {
     return this.stream;
   }
 
@@ -276,7 +296,7 @@ class ScreenShareService {
    * @param {Function} callback - Callback with {isActive}
    * @returns {Function} Unsubscribe function
    */
-  subscribe(callback) {
+  subscribe(callback: ScreenShareListener): () => void {
     this.listeners.add(callback);
     
     // Immediately call with current state
@@ -292,12 +312,12 @@ class ScreenShareService {
   /**
    * Notify all listeners of state change
    */
-  notifyListeners() {
+  notifyListeners(): void {
     const state = {
       isActive: this.isActive
     };
 
-    this.listeners.forEach(listener => {
+    this.listeners.forEach((listener) => {
       try {
         listener(state);
       } catch (error) {

@@ -14,7 +14,7 @@ import { DefaultAIConfig } from '../../config/aiConfig';
 class LanguageDetectorServiceProxy extends ServiceProxy {
   constructor() {
     super('LanguageDetectorService');
-    this.directService = LanguageDetectorService;
+    this.directService = LanguageDetectorService as any;
     this._configuring = false;
   }
 
@@ -30,7 +30,7 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig) as any;
       
       if (aiConfig && aiConfig.aiFeatures?.languageDetector?.enabled !== false) {
         await this.configure(aiConfig);
@@ -45,17 +45,17 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
    * @param {Object} config - Configuration
    * @param {string} config.provider - 'chrome-ai', 'openai', or 'ollama'
    */
-  async configure(config) {
+  async configure(config: any): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('LanguageDetectorServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.LANGUAGE_DETECTOR_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as { configured?: boolean };
+      return response.configured ?? false;
     } else {
-      return this.directService.configure(config);
+      return (this.directService as any).configure(config);
     }
   }
 
@@ -63,18 +63,18 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
    * Check if service is configured
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.LANGUAGE_DETECTOR_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.LANGUAGE_DETECTOR_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured ?? false;
       } catch {
         return false;
       }
     } else {
-      return this.directService.isConfigured();
+      return (this.directService as any).isConfigured();
     }
   }
 
@@ -82,17 +82,17 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
    * Check availability
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability() {
+  async checkAvailability(): Promise<string> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('LanguageDetectorServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.LANGUAGE_DETECTOR_CHECK_AVAILABILITY,
         {}
-      );
-      return response.availability;
+      ) as { availability?: string };
+      return response.availability ?? 'unavailable';
     } else {
-      return this.directService.checkAvailability();
+      return (this.directService as any).checkAvailability();
     }
   }
 
@@ -101,7 +101,7 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
    * @param {string} text - Text to analyze
    * @returns {Promise<Array>} Array of {detectedLanguage: string, confidence: number}
    */
-  async detect(text) {
+  async detect(text: string): Promise<Array<{ detectedLanguage: string; confidence: number }>> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -111,30 +111,30 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
         MessageTypes.LANGUAGE_DETECTOR_DETECT,
         { text },
         { timeout: 10000 }
-      );
-      return response.results;
+      ) as { results?: Array<{ detectedLanguage: string; confidence: number }> };
+      return response.results ?? [];
     } else {
-      return this.directService.detect(text);
+      return (this.directService as any).detect(text);
     }
   }
 
   /**
    * Destroy language detector session
    */
-  async destroy() {
+  async destroy(): Promise<void> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('LanguageDetectorServiceProxy: Bridge not available');
       await bridge.sendMessage(MessageTypes.LANGUAGE_DETECTOR_DESTROY, {});
     } else {
-      await this.directService.destroy();
+      await (this.directService as any).destroy();
     }
   }
 
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
+  async callViaBridge(method: string, ...args: any[]) {
     const methodMap = {
       configure: MessageTypes.LANGUAGE_DETECTOR_CONFIGURE,
       detect: MessageTypes.LANGUAGE_DETECTOR_DETECT,
@@ -142,7 +142,7 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
       destroy: MessageTypes.LANGUAGE_DETECTOR_DESTROY
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -156,7 +156,7 @@ class LanguageDetectorServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
+  async callDirect(method: string, ...args: any[]) {
     if (typeof this.directService[method] !== 'function') {
       throw new Error(`Method ${method} not found on LanguageDetectorService`);
     }

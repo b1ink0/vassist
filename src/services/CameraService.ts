@@ -8,7 +8,26 @@
 import Logger from './LoggerService';
 import FrameCaptureService from './FrameCaptureService';
 
+type CameraState = {
+  devices: MediaDeviceInfo[];
+  selectedDeviceId: string | null;
+  isActive: boolean;
+};
+
 class CameraService {
+  name: string;
+  type: string;
+  private devices: MediaDeviceInfo[];
+  private selectedDeviceId: string | null;
+  private stream: MediaStream | null;
+  private isActive: boolean;
+  private listeners: Set<(state: CameraState) => void>;
+  private permissionGranted: boolean;
+  private isInitializing: boolean;
+  private isInitialized: boolean;
+  private captureVideo: HTMLVideoElement | null;
+  private captureCanvas: HTMLCanvasElement | null;
+
   constructor() {
     this.name = 'CameraService';
     this.type = 'camera';
@@ -30,7 +49,7 @@ class CameraService {
    * Request camera permission and enumerate devices
    * @returns {Promise<MediaDeviceInfo[]>}
    */
-  async initialize() {
+  async initialize(): Promise<MediaDeviceInfo[]> {
     if (this.isInitialized) {
       Logger.log('CameraService', 'Already initialized, skipping');
       return this.devices;
@@ -47,7 +66,7 @@ class CameraService {
       
       // Request camera permission
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       
       this.permissionGranted = true;
       this.isInitialized = true;
@@ -62,8 +81,9 @@ class CameraService {
       Logger.log('CameraService', 'Initialized successfully with', this.devices.length, 'cameras');
       return this.devices;
     } catch (error) {
-      Logger.error('CameraService', 'Failed to initialize:', error.name, error.message);
-      throw error;
+      const err = error instanceof Error ? error : new Error(String(error));
+      Logger.error('CameraService', `Failed to initialize: ${err.name}: ${err.message}`);
+      throw err;
     } finally {
       this.isInitializing = false;
     }
@@ -73,13 +93,13 @@ class CameraService {
    * Refresh list of available video input devices
    * @returns {Promise<MediaDeviceInfo[]>}
    */
-  async refreshDevices() {
+  async refreshDevices(): Promise<MediaDeviceInfo[]> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      this.devices = devices.filter(device => device.kind === 'videoinput');
+      this.devices = devices.filter((device: MediaDeviceInfo) => device.kind === 'videoinput');
       Logger.log('CameraService', `Found ${this.devices.length} cameras`);
 
-      if (this.selectedDeviceId && !this.devices.find(d => d.deviceId === this.selectedDeviceId)) {
+      if (this.selectedDeviceId && !this.devices.find((d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId)) {
         Logger.warn('CameraService', 'Selected camera no longer available, resetting to default');
         this.selectedDeviceId = null;
       }
@@ -97,7 +117,7 @@ class CameraService {
    * Get list of available cameras
    * @returns {MediaDeviceInfo[]}
    */
-  getDevices() {
+  getDevices(): MediaDeviceInfo[] {
     return this.devices;
   }
 
@@ -105,7 +125,7 @@ class CameraService {
    * Select camera by deviceId
    * @param {string|null} deviceId - Device ID or null for default
    */
-  async setSelectedDevice(deviceId) {
+  async setSelectedDevice(deviceId: string | null): Promise<void> {
     const actualDeviceId = deviceId === '' ? null : deviceId;
     Logger.log('CameraService', 'Selected camera:', actualDeviceId);
     
@@ -126,7 +146,7 @@ class CameraService {
    * Get currently selected device ID
    * @returns {string|null}
    */
-  getSelectedDeviceId() {
+  getSelectedDeviceId(): string | null {
     return this.selectedDeviceId;
   }
 
@@ -134,7 +154,7 @@ class CameraService {
    * Start camera stream
    * @returns {Promise<MediaStream>}
    */
-  async start() {
+  async start(): Promise<MediaStream | null> {
     try {
       if (this.isActive) {
         Logger.warn('CameraService', 'Camera already active');
@@ -143,14 +163,14 @@ class CameraService {
 
       if (this.stream) {
         Logger.warn('CameraService', 'Stopping existing stream before starting new one');
-        this.stream.getTracks().forEach(track => track.stop());
+        this.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         this.stream = null;
       }
 
       await this.refreshDevices();
 
       if (this.selectedDeviceId) {
-        const deviceExists = this.devices.find(d => d.deviceId === this.selectedDeviceId);
+        const deviceExists = this.devices.find((d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId);
         if (!deviceExists) {
           Logger.warn('CameraService', 'Selected device not found, falling back to default');
           this.selectedDeviceId = null;
@@ -200,7 +220,7 @@ class CameraService {
   /**
    * Stop camera stream
    */
-  async stop() {
+  async stop(): Promise<void> {
     try {
       if (!this.isActive) {
         Logger.warn('CameraService', 'Camera not active');
@@ -208,7 +228,7 @@ class CameraService {
       }
 
       if (this.stream) {
-        this.stream.getTracks().forEach(track => track.stop());
+        this.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         this.stream = null;
       }
       
@@ -238,7 +258,7 @@ class CameraService {
    * Check if camera is active
    * @returns {boolean}
    */
-  isRunning() {
+  isRunning(): boolean {
     return this.isActive;
   }
 
@@ -247,7 +267,7 @@ class CameraService {
    * Uses full resolution from MediaStream, not preview video
    * @returns {Promise<string|null>}
    */
-  async captureFrame() {
+  async captureFrame(): Promise<string | null> {
     if (!this.isActive || !this.stream) {
       Logger.warn('CameraService', 'Camera not active, cannot capture frame');
       return null;
@@ -275,12 +295,16 @@ class CameraService {
       // Update video source if changed
       if (this.captureVideo.srcObject !== this.stream) {
         this.captureVideo.srcObject = this.stream;
+        const captureVideo = this.captureVideo;
+        if (!captureVideo) {
+          return null;
+        }
         
         // Wait for video to be ready
-        await new Promise((resolve, reject) => {
-          this.captureVideo.onloadedmetadata = resolve;
-          this.captureVideo.onerror = reject;
-          this.captureVideo.play();
+        await new Promise<void>((resolve, reject) => {
+          captureVideo.onloadedmetadata = () => resolve();
+          captureVideo.onerror = () => reject(new Error('Failed to load camera metadata'));
+          captureVideo.play().catch(reject);
         });
       }
 
@@ -301,6 +325,10 @@ class CameraService {
       }
 
       const ctx = this.captureCanvas.getContext('2d');
+      if (!ctx) {
+        Logger.error('CameraService', 'Failed to get 2D canvas context');
+        return null;
+      }
       ctx.drawImage(this.captureVideo, 0, 0, this.captureCanvas.width, this.captureCanvas.height);
 
       const dataUrl = this.captureCanvas.toDataURL('image/jpeg', 0.85);
@@ -318,7 +346,7 @@ class CameraService {
    * Get current video stream (for preview)
    * @returns {MediaStream|null}
    */
-  getStream() {
+  getStream(): MediaStream | null {
     return this.stream;
   }
 
@@ -327,7 +355,7 @@ class CameraService {
    * @param {Function} callback - Callback with {devices, selectedDeviceId, isActive}
    * @returns {Function} Unsubscribe function
    */
-  subscribe(callback) {
+  subscribe(callback: (state: CameraState) => void): () => void {
     this.listeners.add(callback);
     
     callback({
@@ -344,14 +372,14 @@ class CameraService {
   /**
    * Notify all listeners of state change
    */
-  notifyListeners() {
+  notifyListeners(): void {
     const state = {
       devices: this.devices,
       selectedDeviceId: this.selectedDeviceId,
       isActive: this.isActive
     };
 
-    this.listeners.forEach(listener => {
+    this.listeners.forEach((listener: (state: CameraState) => void) => {
       try {
         listener(state);
       } catch (error) {

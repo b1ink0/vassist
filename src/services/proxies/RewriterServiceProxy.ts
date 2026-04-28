@@ -12,10 +12,33 @@ import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultAIConfig } from '../../config/aiConfig';
 
+interface RewriterServiceLike {
+  configure(config: Record<string, unknown>): Promise<unknown> | unknown;
+  isConfigured(): boolean;
+  checkAvailability(): Promise<string> | string;
+  rewrite(text: string, options?: Record<string, unknown>): Promise<string>;
+  rewriteStreaming(text: string, options?: Record<string, unknown>): AsyncIterable<string>;
+  abort(): void;
+  destroy(): Promise<void> | void;
+  [method: string]: unknown;
+}
+
+interface RewriterProxyConfig {
+  aiFeatures?: {
+    rewriter?: {
+      enabled?: boolean;
+    };
+  };
+  [key: string]: unknown;
+}
+
 class RewriterServiceProxy extends ServiceProxy {
+  protected directService: RewriterServiceLike;
+  protected _configuring: boolean;
+
   constructor() {
     super('RewriterService');
-    this.directService = RewriterService;
+    this.directService = RewriterService as unknown as RewriterServiceLike;
     this._configuring = false;
   }
 
@@ -23,7 +46,7 @@ class RewriterServiceProxy extends ServiceProxy {
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
-  async ensureConfigured() {
+  async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
     
     const configured = await this.isConfigured();
@@ -31,7 +54,8 @@ class RewriterServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const storedConfig = await StorageServiceProxy.configLoad('aiConfig', null) as RewriterProxyConfig | null;
+      const aiConfig = storedConfig ?? (DefaultAIConfig as unknown as RewriterProxyConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.rewriter?.enabled !== false) {
         Logger.log('RewriterServiceProxy', 'Auto-configuring from storage...');
@@ -47,17 +71,18 @@ class RewriterServiceProxy extends ServiceProxy {
    * @param {Object} config - Configuration
    * @param {string} config.provider - 'chrome-ai', 'openai', or 'ollama'
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('RewriterServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.REWRITER_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as { configured?: boolean };
+      return response.configured === true;
     } else {
-      return this.directService.configure(config);
+      await this.directService.configure(config);
+      return true;
     }
   }
 
@@ -65,13 +90,13 @@ class RewriterServiceProxy extends ServiceProxy {
    * Check if service is configured
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.REWRITER_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.REWRITER_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -84,15 +109,15 @@ class RewriterServiceProxy extends ServiceProxy {
    * Check availability
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability() {
+  async checkAvailability(): Promise<string> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('RewriterServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.REWRITER_CHECK_AVAILABILITY,
         {}
-      );
-      return response.availability;
+      ) as { availability?: string };
+      return response.availability || 'unavailable';
     } else {
       return this.directService.checkAvailability();
     }
@@ -104,7 +129,7 @@ class RewriterServiceProxy extends ServiceProxy {
    * @param {Object} options - Rewrite options
    * @returns {Promise<string>} Rewritten content
    */
-  async rewrite(text, options = {}) {
+  async rewrite(text: string, options: Record<string, unknown> = {}): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -114,8 +139,8 @@ class RewriterServiceProxy extends ServiceProxy {
         MessageTypes.REWRITER_REWRITE,
         { text, options },
         { timeout: 60000 }
-      );
-      return response.rewrittenText;
+      ) as { rewrittenText?: string };
+      return response.rewrittenText || '';
     } else {
       return this.directService.rewrite(text, options);
     }
@@ -127,7 +152,7 @@ class RewriterServiceProxy extends ServiceProxy {
    * @param {Object} options - Rewrite options
    * @returns {AsyncIterable<string>} Streaming rewrite chunks
    */
-  async *rewriteStreaming(text, options = {}) {
+  async *rewriteStreaming(text: string, options: Record<string, unknown> = {}): AsyncGenerator<string, void, void> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -136,21 +161,26 @@ class RewriterServiceProxy extends ServiceProxy {
       if (!bridge) throw new Error('RewriterServiceProxy: Bridge not available');
       
       // Create a queue to hold chunks as they arrive
-      const chunkQueue = [];
+      const chunkQueue: string[] = [];
       let streamComplete = false;
-      let streamError = null;
+      let streamError: unknown = null;
+
+      const sendStreamingMessage = bridge.sendStreamingMessage;
+      if (!sendStreamingMessage) {
+        throw new Error('RewriterServiceProxy: Streaming bridge is not available');
+      }
       
       // Start streaming in background (don't await - we yield chunks as they arrive)
-      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+      sendStreamingMessage(
         MessageTypes.REWRITER_REWRITE_STREAMING,
         { text, options },
-        (chunk) => {
+        (chunk: string) => {
           chunkQueue.push(chunk);
         },
         { timeout: 120000 } // 2 minutes for streaming
       ).then(() => {
         streamComplete = true;
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         streamError = error;
         streamComplete = true;
       });
@@ -158,7 +188,10 @@ class RewriterServiceProxy extends ServiceProxy {
       // Yield chunks as they become available
       while (!streamComplete || chunkQueue.length > 0) {
         if (chunkQueue.length > 0) {
-          yield chunkQueue.shift();
+          const nextChunk = chunkQueue.shift();
+          if (nextChunk !== undefined) {
+            yield nextChunk;
+          }
         } else {
           // Wait a bit before checking again
           await new Promise(resolve => setTimeout(resolve, 10));
@@ -168,7 +201,7 @@ class RewriterServiceProxy extends ServiceProxy {
       // If there was an error, throw it now
       if (streamError) {
         Logger.error('RewriterServiceProxy', 'Streaming failed:', streamError);
-        throw streamError;
+        throw (streamError instanceof Error ? streamError : new Error(String(streamError)));
       }
     } else {
       // Dev mode: Use direct service streaming
@@ -179,7 +212,7 @@ class RewriterServiceProxy extends ServiceProxy {
   /**
    * Abort ongoing rewrite request
    */
-  async abort() {
+  async abort(): Promise<void> {
     if (this.isExtension) {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
@@ -189,7 +222,7 @@ class RewriterServiceProxy extends ServiceProxy {
       }
       try {
         await bridge.sendMessage(MessageTypes.REWRITER_ABORT, {});
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('RewriterServiceProxy', 'Abort failed:', error);
       }
     } else {
@@ -201,7 +234,7 @@ class RewriterServiceProxy extends ServiceProxy {
   /**
    * Destroy all rewriter sessions
    */
-  async destroy() {
+  async destroy(): Promise<void> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('RewriterServiceProxy: Bridge not available');
@@ -214,15 +247,15 @@ class RewriterServiceProxy extends ServiceProxy {
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
-    const methodMap = {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
+    const methodMap: Record<'configure' | 'rewrite' | 'checkAvailability' | 'destroy', string> = {
       configure: MessageTypes.REWRITER_CONFIGURE,
       rewrite: MessageTypes.REWRITER_REWRITE,
       checkAvailability: MessageTypes.REWRITER_CHECK_AVAILABILITY,
       destroy: MessageTypes.REWRITER_DESTROY
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -236,12 +269,13 @@ class RewriterServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on RewriterService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 

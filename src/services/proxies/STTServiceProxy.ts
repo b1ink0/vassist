@@ -13,18 +13,63 @@ import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultSTTConfig } from '../../config/aiConfig';
 import MicrophoneService from '../MicrophoneService';
 
+interface STTProxyConfig {
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+interface STTBridgeResponse {
+  configured?: boolean;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface STTServiceLike {
+  configure(config: Record<string, unknown>): Promise<unknown> | unknown;
+  isConfigured(): boolean;
+  isCurrentlyRecording(): boolean;
+  startRecording(deviceId?: string | null): Promise<boolean>;
+  stopRecording(): void;
+  transcribeAudio(audioBlob: Blob): Promise<string>;
+  testRecording(duration?: number, deviceId?: string | null): Promise<string>;
+  setTranscriptionCallback(callback: (text: string) => void): void;
+  setErrorCallback(callback: (error: unknown) => void): void;
+  setRecordingStartCallback(callback: () => void): void;
+  setRecordingStopCallback(callback: () => void): void;
+  [method: string]: unknown;
+}
+
 class STTServiceProxy extends ServiceProxy {
+  protected directService: STTServiceLike;
+  protected _configuring: boolean;
+  private audioStream: MediaStream | null;
+  private mediaRecorder: MediaRecorder | null;
+  private audioChunks: Blob[];
+  private _isRecording: boolean;
+  private onTranscription: ((text: string) => void) | null;
+  private onError: ((error: unknown) => void) | null;
+  private onRecordingStart: (() => void) | null;
+  private onRecordingStop: (() => void) | null;
+
   constructor() {
     super('STTService');
-    this.directService = STTService;
+    this.directService = STTService as unknown as STTServiceLike;
     this._configuring = false;
+    this.audioStream = null;
+    this.mediaRecorder = null;
+    this.audioChunks = [];
+    this._isRecording = false;
+    this.onTranscription = null;
+    this.onError = null;
+    this.onRecordingStart = null;
+    this.onRecordingStop = null;
   }
 
   /**
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
-  async ensureConfigured() {
+  async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
     
     const configured = await this.isConfigured();
@@ -32,7 +77,8 @@ class STTServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const sttConfig = await StorageServiceProxy.configLoad('sttConfig', DefaultSTTConfig);
+      const storedConfig = await StorageServiceProxy.configLoad('sttConfig', null) as STTProxyConfig | null;
+      const sttConfig = storedConfig ?? (DefaultSTTConfig as unknown as STTProxyConfig);
       
       if (sttConfig && sttConfig.enabled) {
         Logger.log('STTServiceProxy', 'Auto-configuring from storage...');
@@ -47,17 +93,18 @@ class STTServiceProxy extends ServiceProxy {
    * Configure STT client with provider settings
    * @param {Object} config - STT configuration
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('STTServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.STT_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as STTBridgeResponse;
+      return response.configured === true;
     } else {
-      return this.directService.configure(config);
+      await this.directService.configure(config);
+      return true;
     }
   }
 
@@ -65,13 +112,13 @@ class STTServiceProxy extends ServiceProxy {
    * Check if service is configured and ready
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.STT_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.STT_IS_CONFIGURED, {}) as STTBridgeResponse;
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -84,7 +131,7 @@ class STTServiceProxy extends ServiceProxy {
    * Check if currently recording
    * @returns {boolean} True if recording
    */
-  isCurrentlyRecording() {
+  isCurrentlyRecording(): boolean {
     if (this.isExtension) {
       // In extension mode, we track locally
       return this._isRecording || false;
@@ -98,7 +145,7 @@ class STTServiceProxy extends ServiceProxy {
    * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording(deviceId = null) {
+  async startRecording(deviceId: string | null = null): Promise<boolean> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -111,7 +158,7 @@ class STTServiceProxy extends ServiceProxy {
 
       try {
         // Get audio constraints with selected microphone (or use provided deviceId)
-        const constraints = deviceId 
+        const constraints: MediaStreamConstraints = deviceId 
           ? {
               audio: {
                 echoCancellation: true,
@@ -130,7 +177,7 @@ class STTServiceProxy extends ServiceProxy {
         this.audioChunks = [];
 
         // Setup event handlers
-        this.mediaRecorder.ondataavailable = (event) => {
+        this.mediaRecorder.ondataavailable = (event: BlobEvent) => {
           if (event.data.size > 0) {
             this.audioChunks.push(event.data);
           }
@@ -159,18 +206,18 @@ class STTServiceProxy extends ServiceProxy {
               MessageTypes.STT_TRANSCRIBE_AUDIO,
               { audioBuffer: audioData, mimeType },
               { timeout: 60000 }
-            );
+            ) as STTBridgeResponse;
             
             // Call transcription callback
             if (this.onTranscription) {
-              this.onTranscription(response.text);
+              this.onTranscription(response.text || '');
             }
             
             // Call stop callback
             if (this.onRecordingStop) {
               this.onRecordingStop();
             }
-          } catch (error) {
+          } catch (error: unknown) {
             Logger.error('STTServiceProxy', 'Transcription failed:', error);
             if (this.onError) {
               this.onError(error);
@@ -181,7 +228,7 @@ class STTServiceProxy extends ServiceProxy {
           }
         };
 
-        this.mediaRecorder.onerror = (error) => {
+        this.mediaRecorder.onerror = (error: Event) => {
           Logger.error('STTServiceProxy', 'MediaRecorder error:', error);
           if (this.onError) {
             this.onError(error);
@@ -198,7 +245,7 @@ class STTServiceProxy extends ServiceProxy {
         }
         
         return true;
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('STTServiceProxy', 'Failed to start recording:', error);
         this.cleanup();
         throw error;
@@ -211,7 +258,7 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Stop recording audio
    */
-  stopRecording() {
+  stopRecording(): void {
     if (this.isExtension) {
       if (!this._isRecording || !this.mediaRecorder) {
         Logger.warn('STTServiceProxy', 'Not recording');
@@ -230,7 +277,7 @@ class STTServiceProxy extends ServiceProxy {
    * @param {Blob} audioBlob - Audio data to transcribe
    * @returns {Promise<string>} Transcribed text
    */
-  async transcribeAudio(audioBlob) {
+  async transcribeAudio(audioBlob: Blob): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -248,7 +295,7 @@ class STTServiceProxy extends ServiceProxy {
         MessageTypes.STT_TRANSCRIBE_AUDIO,
         { audioBuffer: audioData, mimeType },
         { timeout: 60000 }
-      );
+      ) as STTBridgeResponse;
       return response.text || '';
     } else {
       return await this.directService.transcribeAudio(audioBlob);
@@ -261,19 +308,19 @@ class STTServiceProxy extends ServiceProxy {
    * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3, deviceId = null) {
+  async testRecording(duration = 3, deviceId: string | null = null): Promise<string> {
     if (this.isExtension) {
-      return new Promise((resolve, reject) => {
+      return new Promise<string>((resolve, reject) => {
         const originalTranscription = this.onTranscription;
         const originalError = this.onError;
         
-        this.onTranscription = (text) => {
+        this.onTranscription = (text: string) => {
           this.onTranscription = originalTranscription;
           this.onError = originalError;
           resolve(text);
         };
         
-        this.onError = (error) => {
+        this.onError = (error: unknown) => {
           this.onTranscription = originalTranscription;
           this.onError = originalError;
           reject(error);
@@ -294,7 +341,7 @@ class STTServiceProxy extends ServiceProxy {
    * Get supported MIME type for MediaRecorder
    * @returns {string} Supported MIME type
    */
-  getSupportedMimeType() {
+  getSupportedMimeType(): string {
     const types = [
       'audio/webm',
       'audio/mp4',
@@ -314,9 +361,9 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Cleanup recording resources
    */
-  cleanup() {
+  cleanup(): void {
     if (this.audioStream) {
-      this.audioStream.getTracks().forEach(track => track.stop());
+      this.audioStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       this.audioStream = null;
     }
     
@@ -329,7 +376,7 @@ class STTServiceProxy extends ServiceProxy {
    * Set transcription callback
    * @param {Function} callback - Callback function (text: string) => void
    */
-  setTranscriptionCallback(callback) {
+  setTranscriptionCallback(callback: (text: string) => void): void {
     this.onTranscription = callback;
     if (!this.isExtension) {
       this.directService.setTranscriptionCallback(callback);
@@ -340,7 +387,7 @@ class STTServiceProxy extends ServiceProxy {
    * Set error callback
    * @param {Function} callback - Callback function (error: Error) => void
    */
-  setErrorCallback(callback) {
+  setErrorCallback(callback: (error: unknown) => void): void {
     this.onError = callback;
     if (!this.isExtension) {
       this.directService.setErrorCallback(callback);
@@ -351,7 +398,7 @@ class STTServiceProxy extends ServiceProxy {
    * Set recording start callback
    * @param {Function} callback - Callback function () => void
    */
-  setRecordingStartCallback(callback) {
+  setRecordingStartCallback(callback: () => void): void {
     this.onRecordingStart = callback;
     if (!this.isExtension) {
       this.directService.setRecordingStartCallback(callback);
@@ -362,7 +409,7 @@ class STTServiceProxy extends ServiceProxy {
    * Set recording stop callback
    * @param {Function} callback - Callback function () => void
    */
-  setRecordingStopCallback(callback) {
+  setRecordingStopCallback(callback: () => void): void {
     this.onRecordingStop = callback;
     if (!this.isExtension) {
       this.directService.setRecordingStopCallback(callback);
@@ -372,8 +419,8 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
-    const methodMap = {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
+    const methodMap: Record<'configure' | 'transcribeAudio' | 'startRecording' | 'stopRecording' | 'testRecording', string> = {
       configure: MessageTypes.STT_CONFIGURE,
       transcribeAudio: MessageTypes.STT_TRANSCRIBE_AUDIO,
       startRecording: MessageTypes.STT_START_RECORDING,
@@ -381,7 +428,7 @@ class STTServiceProxy extends ServiceProxy {
       testRecording: MessageTypes.STT_TEST_RECORDING
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -395,12 +442,13 @@ class STTServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on STTService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 

@@ -5,7 +5,24 @@
 import storageManager from '../storage';
 import Logger from './LoggerService';
 
+type BackgroundData = {
+  name: string;
+  imageData: Blob;
+  mimeType: string;
+  isActive: boolean;
+  metadata: Record<string, unknown>;
+};
+
+type StoredBackground = {
+  fileId: string;
+  data?: Partial<BackgroundData>;
+};
+
 class BackgroundStorageService {
+  private CATEGORY: string;
+  private MAX_FILE_SIZE: number;
+  private ALLOWED_TYPES: string[];
+
   constructor() {
     this.CATEGORY = 'background';
     this.MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max
@@ -15,14 +32,14 @@ class BackgroundStorageService {
   /**
    * Generate unique background ID
    */
-  generateId() {
+  generateId(): string {
     return `bg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**
    * Validate image file
    */
-  validateImage(file) {
+  validateImage(file: File | null): { valid: boolean; error?: string } {
     if (!file) {
       return { valid: false, error: 'No file provided' };
     }
@@ -44,7 +61,7 @@ class BackgroundStorageService {
    * @param {string} name - Optional name for the background
    * @returns {Promise<string>} Background ID
    */
-  async saveBackground(file, name = null) {
+  async saveBackground(file: File, name: string | null = null): Promise<string> {
     try {
       const validation = this.validateImage(file);
       if (!validation.valid) {
@@ -83,9 +100,9 @@ class BackgroundStorageService {
    * Get all backgrounds
    * @returns {Promise<Array>} List of backgrounds with metadata
    */
-  async getBackgroundsList() {
+  async getBackgroundsList(): Promise<Array<{ id: string; name: string; isActive: boolean; mimeType: string | undefined; metadata: Record<string, unknown>; previewUrl: string | null }>> {
     try {
-      const backgroundsObj = await storageManager.files.getByCategory(this.CATEGORY);
+      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
       
       const backgrounds = Object.entries(backgroundsObj).map(([fileId, data]) => ({
         id: fileId,
@@ -110,9 +127,9 @@ class BackgroundStorageService {
    * @param {string} id - Background ID
    * @returns {Promise<Object|null>} Background data
    */
-  async getBackground(id) {
+  async getBackground(id: string): Promise<{ id: string; name: string | undefined; isActive: boolean; mimeType: string | undefined; imageData: Blob | undefined; metadata: Record<string, unknown> } | null> {
     try {
-      const bg = await storageManager.files.load(id);
+      const bg = (await storageManager.files.load(id)) as StoredBackground | null;
       if (!bg) return null;
 
       return {
@@ -133,9 +150,9 @@ class BackgroundStorageService {
    * Get the active background
    * @returns {Promise<Object|null>} Active background data with URL
    */
-  async getActiveBackground() {
+  async getActiveBackground(): Promise<{ id: string; name: string | undefined; mimeType: string | undefined; imageUrl: string | null } | null> {
     try {
-      const backgroundsObj = await storageManager.files.getByCategory(this.CATEGORY);
+      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
       
       const activeEntry = Object.entries(backgroundsObj).find(([_, data]) => data?.isActive === true);
       
@@ -158,15 +175,15 @@ class BackgroundStorageService {
    * Set a background as active (and deactivate others)
    * @param {string} id - Background ID to activate (null to clear)
    */
-  async setActiveBackground(id) {
+  async setActiveBackground(id: string | null): Promise<void> {
     try {
-      const backgroundsObj = await storageManager.files.getByCategory(this.CATEGORY);
+      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
       
       for (const [fileId, data] of Object.entries(backgroundsObj)) {
         const newIsActive = fileId === id;
         if (data?.isActive !== newIsActive) {
           await storageManager.files.save(fileId, {
-            ...data,
+            ...(data || {}),
             isActive: newIsActive
           }, this.CATEGORY);
         }
@@ -182,7 +199,7 @@ class BackgroundStorageService {
   /**
    * Clear active background
    */
-  async clearActiveBackground() {
+  async clearActiveBackground(): Promise<void> {
     await this.setActiveBackground(null);
   }
 
@@ -190,7 +207,7 @@ class BackgroundStorageService {
    * Delete a background
    * @param {string} id - Background ID
    */
-  async deleteBackground(id) {
+  async deleteBackground(id: string): Promise<void> {
     try {
       await storageManager.files.remove(id);
       Logger.log('BackgroundStorage', `Background deleted: ${id}`);
@@ -205,9 +222,9 @@ class BackgroundStorageService {
    * @param {string} id - Background ID
    * @param {string} newName - New name
    */
-  async updateBackgroundName(id, newName) {
+  async updateBackgroundName(id: string, newName: string): Promise<void> {
     try {
-      const bg = await storageManager.files.load(id);
+      const bg = (await storageManager.files.load(id)) as StoredBackground | null;
       if (!bg) throw new Error('Background not found');
 
       await storageManager.files.save(id, {

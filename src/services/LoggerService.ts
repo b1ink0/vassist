@@ -9,12 +9,21 @@
  */
 
 // Conditional imports based on environment
-let StorageServiceProxy = null;
+let StorageServiceProxy: { configLoad: (key: string, fallback: unknown) => Promise<unknown> } | null = null;
 
 // Check environment at module load time
 const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
 
+type LoggerCategoryConfig = { enabled: boolean; color: string };
+
 class LoggerService {
+  private static instance: LoggerService | null = null;
+  private enabled!: boolean;
+  private categories!: Map<string, LoggerCategoryConfig>;
+  private defaultColor!: string;
+  private initialized!: boolean;
+  private initPromise!: Promise<void> | null;
+
   constructor() {
     if (LoggerService.instance) {
       return LoggerService.instance;
@@ -33,7 +42,7 @@ class LoggerService {
    * Initialize logger with saved preferences from storage
    * @param {Object} storage - Optional storage instance (for service worker to avoid import issues)
    */
-  async init(storage = null) {
+  async init(storage: { config: { load: (key: string, fallback: unknown) => Promise<unknown> } } | null = null): Promise<void> {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
@@ -41,16 +50,21 @@ class LoggerService {
       try {
         if (isServiceWorker && storage) {
           // Service worker - use provided storage instance
-          this.enabled = await storage.config.load('loggerEnabled', false);
+          this.enabled = (await storage.config.load('loggerEnabled', false)) === true;
           const savedCategories = await storage.config.load('loggerCategories', {});
           
-          Object.entries(savedCategories).forEach(([category, config]) => {
+          Object.entries(savedCategories as Record<string, any>).forEach(([category, config]) => {
             if (this.categories.has(category)) {
               const existing = this.categories.get(category);
-              existing.enabled = config.enabled;
-              if (config.color) existing.color = config.color;
+              if (existing) {
+                existing.enabled = config.enabled === true;
+                if (typeof config.color === 'string') existing.color = config.color;
+              }
             } else {
-              this.categories.set(category, config);
+              this.categories.set(category, {
+                enabled: config.enabled === true,
+                color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
+              });
             }
           });
         } else if (!isServiceWorker) {
@@ -61,16 +75,21 @@ class LoggerService {
               StorageServiceProxy = module.default;
             }
             
-            this.enabled = await StorageServiceProxy.configLoad('loggerEnabled', false);
+            this.enabled = (await StorageServiceProxy.configLoad('loggerEnabled', false)) === true;
             const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
             
-            Object.entries(savedCategories).forEach(([category, config]) => {
+            Object.entries(savedCategories as Record<string, any>).forEach(([category, config]) => {
               if (this.categories.has(category)) {
                 const existing = this.categories.get(category);
-                existing.enabled = config.enabled;
-                if (config.color) existing.color = config.color;
+                if (existing) {
+                  existing.enabled = config.enabled === true;
+                  if (typeof config.color === 'string') existing.color = config.color;
+                }
               } else {
-                this.categories.set(category, config);
+                this.categories.set(category, {
+                  enabled: config.enabled === true,
+                  color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
+                });
               }
             });
           } catch {
@@ -95,16 +114,21 @@ class LoggerService {
    * @param {boolean} enabled - Master enable/disable
    * @param {Object} categories - Category configuration {categoryName: {enabled: boolean, color: string}}
    */
-  applyConfig(enabled, categories = {}) {
+  applyConfig(enabled: boolean, categories: Record<string, Partial<LoggerCategoryConfig>> = {}): void {
     this.enabled = enabled;
     
     Object.entries(categories).forEach(([category, config]) => {
       if (this.categories.has(category)) {
         const existing = this.categories.get(category);
-        existing.enabled = config.enabled;
-        if (config.color) existing.color = config.color;
+        if (existing) {
+          existing.enabled = config.enabled === true;
+          if (typeof config.color === 'string') existing.color = config.color;
+        }
       } else {
-        this.categories.set(category, config);
+        this.categories.set(category, {
+          enabled: config.enabled === true,
+          color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
+        });
       }
     });
     
@@ -114,7 +138,7 @@ class LoggerService {
   /**
    * Register a category with default settings
    */
-  registerCategory(category, color = null, enabled = false) {
+  registerCategory(category: string, color: string | null = null, enabled = false): void {
     if (!this.categories.has(category)) {
       this.categories.set(category, {
         enabled,
@@ -126,7 +150,7 @@ class LoggerService {
   /**
    * Generate a unique color for a category based on hash
    */
-  getColorForCategory(category) {
+  getColorForCategory(category: string): string {
     const colors = [
       '#FF6B6B', // Red
       '#4ECDC4', // Teal
@@ -157,13 +181,13 @@ class LoggerService {
       hash = hash & hash; // Convert to 32bit integer
     }
 
-    return colors[Math.abs(hash) % colors.length];
+    return colors[Math.abs(hash) % colors.length] ?? this.defaultColor;
   }
 
   /**
    * Set master enable/disable and save to storage
    */
-  async setEnabled(enabled) {
+  async setEnabled(enabled: boolean): Promise<void> {
     this.enabled = enabled;
     try {
       const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
@@ -183,13 +207,15 @@ class LoggerService {
   /**
    * Set category enable/disable and save to storage
    */
-  async setCategoryEnabled(category, enabled) {
+  async setCategoryEnabled(category: string, enabled: boolean): Promise<void> {
     if (!this.categories.has(category)) {
       this.registerCategory(category);
     }
 
     const config = this.categories.get(category);
-    config.enabled = enabled;
+    if (config) {
+      config.enabled = enabled;
+    }
 
     try {
       await this.saveCategories();
@@ -201,8 +227,8 @@ class LoggerService {
   /**
    * Save all categories to storage
    */
-  async saveCategories() {
-    const categoriesObj = {};
+  async saveCategories(): Promise<void> {
+    const categoriesObj: Record<string, LoggerCategoryConfig> = {};
     this.categories.forEach((config, category) => {
       categoriesObj[category] = config;
     });
@@ -225,8 +251,8 @@ class LoggerService {
   /**
    * Get all categories
    */
-  getCategories() {
-    const categories = [];
+  getCategories(): Array<{ category: string; enabled: boolean; color: string }> {
+    const categories: Array<{ category: string; enabled: boolean; color: string }> = [];
     this.categories.forEach((config, category) => {
       categories.push({ category, ...config });
     });
@@ -237,7 +263,7 @@ class LoggerService {
    * Check if logging is enabled for a category
    * Triggers lazy initialization if needed (NOT in service workers - must call init() manually)
    */
-  shouldLog(category) {
+  shouldLog(category: string): boolean {
     // In service workers, init() must be called manually AFTER imports
     // Don't auto-init here to avoid preload issues
     const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
@@ -250,13 +276,13 @@ class LoggerService {
     if (!this.categories.has(category)) {
       this.registerCategory(category);
     }
-    return this.categories.get(category).enabled;
+    return this.categories.get(category)?.enabled === true;
   }
 
   /**
    * Log message with category
    */
-  log(category, ...args) {
+  log(category: string, ...args: unknown[]): void {
     if (!this.shouldLog(category)) return;
 
     const config = this.categories.get(category);
@@ -272,7 +298,7 @@ class LoggerService {
   /**
    * Log warning with category
    */
-  warn(category, ...args) {
+  warn(category: string, ...args: unknown[]): void {
     if (!this.shouldLog(category)) return;
 
     const config = this.categories.get(category);
@@ -288,7 +314,7 @@ class LoggerService {
   /**
    * Log error with category
    */
-  error(category, ...args) {
+  error(category: string, ...args: unknown[]): void {
     if (!this.shouldLog(category)) return;
 
     const config = this.categories.get(category);
@@ -304,7 +330,7 @@ class LoggerService {
   /**
    * Enable all categories and save
    */
-  async enableAllCategories() {
+  async enableAllCategories(): Promise<void> {
     this.categories.forEach((config) => {
       config.enabled = true;
     });
@@ -314,7 +340,7 @@ class LoggerService {
   /**
    * Disable all categories and save
    */
-  async disableAllCategories() {
+  async disableAllCategories(): Promise<void> {
     this.categories.forEach((config) => {
       config.enabled = false;
     });
@@ -324,7 +350,7 @@ class LoggerService {
   /**
    * Get master enabled state
    */
-  isEnabled() {
+  isEnabled(): boolean {
     return this.enabled;
   }
 }

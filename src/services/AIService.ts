@@ -11,7 +11,28 @@ import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
 import FrameCaptureService from './FrameCaptureService';
 
+type AIMessage = Record<string, any>;
+type SendResult = { success: boolean; response: string | null; cancelled: boolean; error: Error | null };
+type AIState = {
+  client: any;
+  config: any;
+  provider: string | null;
+  abortController: AbortController | null;
+  chromeAISession: any;
+  chromeAIUtilitySession: any;
+};
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class AIService {
+  private isExtensionMode: boolean;
+  private tabStates: Map<number, AIState> = new Map();
+  private client: any;
+  private provider: string | null = null;
+  private config: any;
+  private abortController: AbortController | null = null;
+  private chromeAISession: any;
+  private chromeAIUtilitySession: any;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
     
@@ -31,8 +52,9 @@ class AIService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number | null) {
     if (!this.isExtensionMode) return;
+    if (tabId === null) return;
     
     if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
@@ -51,8 +73,9 @@ class AIService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number | null) {
     if (!this.isExtensionMode) return;
+    if (tabId === null) return;
     
     const state = this.tabStates.get(tabId);
     if (state) {
@@ -69,10 +92,10 @@ class AIService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): any {
     if (this.isExtensionMode) {
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId as number) as AIState;
     }
     return this; // In dev mode, state is on the instance itself
   }
@@ -85,7 +108,7 @@ class AIService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  configure(config, tabId = null) {
+  configure(config: any, tabId: number | null = null) {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
@@ -266,7 +289,7 @@ class AIService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if ready
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     
     if (!state || !state.config || !state.provider) {
@@ -283,7 +306,7 @@ class AIService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {string|null} Provider name or null
    */
-  getCurrentProvider(tabId = null) {
+  getCurrentProvider(tabId: number | null = null): string | null {
     const state = this._getState(tabId);
     return state?.provider || null;
   }
@@ -293,10 +316,11 @@ class AIService {
    * @param {string} dataUrl - Data URL (e.g., data:image/jpeg;base64,...)
    * @returns {Blob} Image blob
    */
-  _dataUrlToBlob(dataUrl) {
+  _dataUrlToBlob(dataUrl: string): Blob {
     const arr = dataUrl.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
+    const mimeMatch = arr[0]?.match(/:(.*?);/);
+    const mime = mimeMatch?.[1] || 'application/octet-stream';
+    const bstr = atob(arr[1] || '');
     let n = bstr.length;
     const u8arr = new Uint8Array(n);
     while (n--) {
@@ -310,9 +334,9 @@ class AIService {
    * @param {string} dataUrl - Data URL (e.g., data:audio/wav;base64,...)
    * @returns {ArrayBuffer} Audio array buffer
    */
-  _dataUrlToArrayBuffer(dataUrl) {
+  _dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
     const arr = dataUrl.split(',');
-    const bstr = atob(arr[1]);
+    const bstr = atob(arr[1] || '');
     let n = bstr.length;
     const u8arr = new Uint8Array(n);
     while (n--) {
@@ -321,23 +345,24 @@ class AIService {
     return u8arr.buffer;
   }
 
-  _isDataUrl(value) {
+  _isDataUrl(value: unknown): boolean {
     return typeof value === 'string' && value.startsWith('data:');
   }
 
-  _extractAttachmentString(value) {
+  _extractAttachmentString(value: unknown): string {
     if (typeof value === 'string') {
       return value;
     }
     if (value && typeof value === 'object') {
-      if (typeof value.dataUrl === 'string') return value.dataUrl;
-      if (typeof value.url === 'string') return value.url;
-      if (typeof value.src === 'string') return value.src;
+      const candidate = value as { dataUrl?: unknown; url?: unknown; src?: unknown };
+      if (typeof candidate.dataUrl === 'string') return candidate.dataUrl;
+      if (typeof candidate.url === 'string') return candidate.url;
+      if (typeof candidate.src === 'string') return candidate.src;
     }
     return '';
   }
 
-  async _toDataUrlIfPossible(value) {
+  async _toDataUrlIfPossible(value: unknown): Promise<string | null> {
     const src = this._extractAttachmentString(value);
     if (!src) {
       return null;
@@ -355,7 +380,7 @@ class AIService {
         }
 
         const blob = await response.blob();
-        const dataUrl = await new Promise((resolve, reject) => {
+        const dataUrl = await new Promise<string | ArrayBuffer | null>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.onerror = reject;
@@ -364,7 +389,8 @@ class AIService {
 
         return typeof dataUrl === 'string' && this._isDataUrl(dataUrl) ? dataUrl : null;
       } catch (error) {
-        Logger.warn('AIService', 'Failed to convert image URL to data URL:', { src, error: error?.message || error });
+        const err = asError(error);
+        Logger.warn('AIService', 'Failed to convert image URL to data URL:', { src, error: err.message || err });
         return null;
       }
     }
@@ -379,7 +405,7 @@ class AIService {
    * @param {string} provider - Provider name
     * @returns {Promise<Array>} Formatted messages
    */
-  async _formatMultiModalMessages(messages, provider) {
+  async _formatMultiModalMessages(messages: AIMessage[], provider: string | null): Promise<AIMessage[]> {
     const formatted = [];
 
     for (const msg of messages) {
@@ -396,7 +422,7 @@ class AIService {
       // Multi-modal message with images and/or audios
       if (provider === AIProviders.CHROME_AI || provider === 'chrome-ai') {
         // Chrome AI format: content is array of {type, value}
-        const content = [
+        const content: Array<Record<string, any>> = [
           { type: 'text', value: msg.content }
         ];
         
@@ -431,7 +457,7 @@ class AIService {
         formatted.push({ role: msg.role, content });
       } else {
         // OpenAI/Ollama format: content is array of {type, text/image_url/input_audio}
-        const content = [
+        const content: Array<Record<string, any>> = [
           { type: 'text', text: msg.content || '' }
         ];
         const unresolvedImageUrls = [];
@@ -455,7 +481,9 @@ class AIService {
         }
 
         if (unresolvedImageUrls.length > 0) {
-          content[0].text = `${content[0].text}\n\n[Some image URLs could not be fetched/converted in-browser and were omitted from vision payload:]\n${unresolvedImageUrls.join('\n')}`;
+          if (content[0]) {
+            content[0].text = `${content[0].text}\n\n[Some image URLs could not be fetched/converted in-browser and were omitted from vision payload:]\n${unresolvedImageUrls.join('\n')}`;
+          }
         }
         
         // Add audios (OpenAI format for audio input)
@@ -490,8 +518,8 @@ class AIService {
    * @param {Array} formattedMessages - Formatted messages
    * @returns {Object} Request body for API call
    */
-  _prepareRequestBody(state, formattedMessages) {
-    const body = {
+  _prepareRequestBody(state: AIState, formattedMessages: AIMessage[]) {
+    const body: any = {
       model: state.config.model,
       messages: formattedMessages,
       temperature: state.config.temperature,
@@ -511,7 +539,7 @@ class AIService {
    * @param {Object} config - Provider config
    * @returns {boolean} True if routing should be applied
    */
-  _shouldApplyRouting(config) {
+  _shouldApplyRouting(config: any): boolean {
     // Check if routing is enabled
     if (!config.routing || !config.routing.enabled) {
       return false;
@@ -525,8 +553,8 @@ class AIService {
    * @param {Array} messages - Messages array
    * @returns {Array} Messages without images
    */
-  _stripImagesFromMessages(messages) {
-    return messages.map(msg => {
+  _stripImagesFromMessages(messages: AIMessage[]): AIMessage[] {
+    return messages.map((msg: AIMessage) => {
       if (msg.images) {
         const { images: _images, ...rest } = msg;
         return rest;
@@ -540,14 +568,14 @@ class AIService {
    * @param {string} response - Raw response text
    * @returns {Object|null} Parsed JSON or null
    */
-  _parseJSONResponse(response) {
+  _parseJSONResponse(response: string): any {
     try {
       // Try direct parse first
       return JSON.parse(response);
     } catch (e) {
       // Try to extract JSON from markdown code block
       const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (jsonMatch) {
+        if (jsonMatch?.[1]) {
         try {
           return JSON.parse(jsonMatch[1]);
         } catch (e2) {
@@ -578,15 +606,15 @@ class AIService {
    * @param {Object} config - Provider config
    * @returns {Promise<Object>} Result object
    */
-  async _applyRouting(messages, onStream, tabId, config) {
+  async _applyRouting(messages: AIMessage[], onStream: ((chunk: string) => void) | null, tabId: number | null, config: any): Promise<SendResult> {
     const logPrefix = this.isExtensionMode ? `[AIService Routing] Tab ${tabId}` : '[AIService Routing]';
     Logger.log('other', `${logPrefix} - Starting multi-model routing`);
 
     const state = this._getState(tabId);
     let captureContext = '';
-    const userMessage = messages[messages.length - 1];
+    const userMessage = messages[messages.length - 1] || {};
     const userText = typeof userMessage.content === 'string' ? userMessage.content : 
-                     (Array.isArray(userMessage.content) ? userMessage.content.find(c => c.type === 'text')?.text || userMessage.content.find(c => c.type === 'text')?.value || '' : '');
+                     (Array.isArray(userMessage.content) ? userMessage.content.find((c: any) => c.type === 'text')?.text || userMessage.content.find((c: any) => c.type === 'text')?.value || '' : '');
 
     const manualImages = userMessage.images && userMessage.images.length > 0 ? userMessage.images : null;
 
@@ -627,13 +655,13 @@ class AIService {
         const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
         state.config = tempConfig;
         
-        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        const result: SendResult = await this.sendMessage(fallbackMessages, onStream, tabId);
         
         state.config = config;
         return result;
       }
 
-      const routerDecision = this._parseJSONResponse(routerResult.response);
+      const routerDecision = this._parseJSONResponse(routerResult.response || '');
       
       // Router returned invalid JSON - fallback to main LLM
       if (!routerDecision) {
@@ -652,7 +680,7 @@ class AIService {
         const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
         state.config = tempConfig;
         
-        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        const result: SendResult = await this.sendMessage(fallbackMessages, onStream, tabId);
         
         state.config = config;
         return result;
@@ -668,7 +696,7 @@ class AIService {
         const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
         state.config = tempConfig;
         
-        const result = await this.sendMessage(messages, onStream, tabId);
+        const result: SendResult = await this.sendMessage(messages, onStream, tabId);
         
         state.config = config;
         return result;
@@ -710,7 +738,7 @@ class AIService {
         const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
         state.config = tempConfig;
         
-        const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+        const result: SendResult = await this.sendMessage(fallbackMessages, onStream, tabId);
         
         state.config = config;
         return result;
@@ -756,7 +784,7 @@ class AIService {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           Logger.log('other', `${logPrefix} - Vision analysis attempt ${attempt}/${maxRetries}`);
           
-          visionResult = await this.sendMessage(visionMessages, null, tabId, { 
+          visionResult = await this.sendMessage(visionMessages, null, tabId, {
             modelOverride: visionModelName,
             useUtilitySession: true 
           });
@@ -772,7 +800,7 @@ class AIService {
         }
         
         if (visionResult && visionResult.success) {
-          visionAnalysis = visionResult.response;
+            visionAnalysis = visionResult.response || '';
           visionStatus = captureContext;
           Logger.log('other', `${logPrefix} - Vision analysis complete (${visionAnalysis.length} chars):`);
           Logger.log('other', `${logPrefix} - VLM Response: ${visionAnalysis}`);
@@ -785,7 +813,7 @@ class AIService {
 
       Logger.log('other', `${logPrefix} - Step 3: Sending to main LLM with vision context`);
       
-      let finalMessages;
+      let finalMessages: AIMessage[];
       
       if (skipVLM) {
         // Main LLM supports vision - send image + router's guidance
@@ -823,7 +851,7 @@ class AIService {
       const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
       state.config = tempConfig;
       
-      const result = await this.sendMessage(finalMessages, onStream, tabId);
+      const result: SendResult = await this.sendMessage(finalMessages, onStream, tabId);
       
       state.config = config;
       
@@ -832,9 +860,10 @@ class AIService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Routing failed:`, error);
+      const normalizedError = asError(error);
       
       // Fallback: Send error as context to main LLM
-      const errorContext = `[Note: Multi-model routing encountered an error: ${error.message}. ${captureContext || 'No visual context available.'}]`;
+      const errorContext = `[Note: Multi-model routing encountered an error: ${normalizedError.message}. ${captureContext || 'No visual context available.'}]`;
       
       const fallbackMessages = [
         ...messages.slice(0, -1),
@@ -847,7 +876,7 @@ class AIService {
       const tempConfig = { ...config, routing: { ...config.routing, enabled: false } };
       state.config = tempConfig;
       
-      const result = await this.sendMessage(fallbackMessages, onStream, tabId);
+      const result: SendResult = await this.sendMessage(fallbackMessages, onStream, tabId);
       
       state.config = config;
       
@@ -861,7 +890,7 @@ class AIService {
    * @param {string} provider - Provider name
    * @returns {string|null} Model name or null
    */
-  _getModelOverride(modelConfig, provider) {
+  _getModelOverride(modelConfig: any, provider: string | null): string | null {
     if (!modelConfig || modelConfig.useSameAsMain) {
       return null;
     }
@@ -886,7 +915,7 @@ class AIService {
    * @param {Object} options - Additional options { useUtilitySession: boolean, modelOverride: string, disableRouting: boolean }
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
-  async sendMessage(messages, onStream = null, tabId = null, options = {}) {
+  async sendMessage(messages: AIMessage[], onStream: ((chunk: string) => void) | null = null, tabId: number | null = null, options: any = {}): Promise<SendResult> {
     const state = this._getState(tabId);
     
     if (!this.isConfigured(tabId)) {
@@ -901,8 +930,8 @@ class AIService {
     }
     
     // Check if any message contains images or audios
-    const hasImages = messages.some(m => m.images && m.images.length > 0);
-    const hasAudios = messages.some(m => m.audios && m.audios.length > 0);
+    const hasImages = messages.some((m: AIMessage) => m.images && m.images.length > 0);
+    const hasAudios = messages.some((m: AIMessage) => m.audios && m.audios.length > 0);
     const hasAttachments = hasImages || hasAudios;
     
     Logger.log('other', `${logPrefix} - Sending message to ${state.provider}:`, {
@@ -970,10 +999,11 @@ class AIService {
       
     } catch (error) {
       state.abortController = null;
+      const normalizedError = asError(error);
       
       // Check if error is from abort - check name AND message
-      const errorMsg = error.message?.toLowerCase() || '';
-      const isAbort = error.name === 'AbortError' || 
+      const errorMsg = normalizedError.message?.toLowerCase() || '';
+      const isAbort = normalizedError.name === 'AbortError' ||
                       errorMsg.includes('abort') || 
                       errorMsg.includes('cancel');
       
@@ -985,12 +1015,12 @@ class AIService {
       Logger.error('other', `${logPrefix} - Request failed:`, error);
       
       // Return error result with enhanced message
-      let errorMessage = error.message;
-      if (error.message?.includes('401')) {
+      let errorMessage = normalizedError.message;
+      if (normalizedError.message?.includes('401')) {
         errorMessage = 'Invalid API key. Please check your configuration.';
-      } else if (error.message?.includes('429')) {
+      } else if (normalizedError.message?.includes('429')) {
         errorMessage = 'Rate limit exceeded. Please try again later.';
-      } else if (error.message?.includes('fetch')) {
+      } else if (normalizedError.message?.includes('fetch')) {
         errorMessage = 'Network error. Please check your connection and endpoint URL.';
       }
       
@@ -1007,24 +1037,24 @@ class AIService {
    * @param {boolean} useUtilitySession - Use utility session instead of main session
    * @returns {Promise<{success: boolean, response: string|null, cancelled: boolean, error: Error|null}>}
    */
-  async _sendMessageChromeAI(state, messages, onStream, logPrefix, useUtilitySession = false) {
+  async _sendMessageChromeAI(state: AIState, messages: AIMessage[], onStream: ((chunk: string) => void) | null, logPrefix: string, useUtilitySession = false): Promise<SendResult> {
     const sessionKey = useUtilitySession ? 'chromeAIUtilitySession' : 'chromeAISession';
     
     try {
-      const systemPrompts = messages.filter(m => m.role === 'system');
-      const conversationMsgs = messages.filter(m => m.role !== 'system');
+      const systemPrompts = messages.filter((m: AIMessage) => m.role === 'system');
+      const conversationMsgs = messages.filter((m: AIMessage) => m.role !== 'system');
       
       let sessionToUse = state[sessionKey];
       
       if (!sessionToUse) {
         Logger.log('other', `${logPrefix} - Creating Chrome AI ${useUtilitySession ? 'utility' : 'main'} session...`);
         
-        if (!self.LanguageModel) {
+        if (!(self as any).LanguageModel) {
           throw new Error('Chrome AI LanguageModel not available');
         }
         
         // Session config
-        const sessionConfig = {
+        const sessionConfig: any = {
           temperature: state.config.temperature,
           topK: state.config.topK,
           language: state.config.outputLanguage || 'en',
@@ -1049,7 +1079,7 @@ class AIService {
           }
         }
         
-        sessionToUse = await self.LanguageModel.create(sessionConfig);
+        sessionToUse = await (self as any).LanguageModel.create(sessionConfig);
         state[sessionKey] = sessionToUse;
         
         Logger.log('other', `${logPrefix} - Chrome AI ${useUtilitySession ? 'utility' : 'main'} session created`);
@@ -1057,7 +1087,7 @@ class AIService {
         messages = conversationMsgs;
       }
 
-      const lastMessage = messages[messages.length - 1];
+      const lastMessage = messages[messages.length - 1] || { content: '' };
       Logger.log('other', `${logPrefix} - Chrome AI prompting with ${messages.length} message(s)`);
 
       // For multi-modal messages (content is array), pass as message object with role
@@ -1095,6 +1125,7 @@ class AIService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Chrome AI error:`, error);
+      const normalizedError = asError(error);
       
       if (state[sessionKey]) {
         try {
@@ -1105,10 +1136,10 @@ class AIService {
         state[sessionKey] = null;
       }
 
-      let errorMessage = error.message;
-      if (error.name === 'NotSupportedError') {
+      let errorMessage = normalizedError.message;
+      if (normalizedError.name === 'NotSupportedError') {
         errorMessage = 'Chrome AI not available. Enable required flags at chrome://flags';
-      } else if (error.name === 'QuotaExceededError') {
+      } else if (normalizedError.name === 'QuotaExceededError') {
         errorMessage = 'Chrome AI context limit exceeded (1028 tokens). Start a new conversation.';
       }
       
@@ -1121,7 +1152,7 @@ class AIService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if aborted
    */
-  abortRequest(tabId = null) {
+  abortRequest(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
     
@@ -1163,7 +1194,7 @@ class AIService {
     return false;
   }
 
-  isGenerating(tabId = null) {
+  isGenerating(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     return state && state.abortController !== null;
   }
@@ -1174,15 +1205,15 @@ class AIService {
    * @param {Array} messages - Messages (extension mode only)
    * @returns {Promise<string>} Full response text
    */
-  async sendMessageSync(messagesOrTabId, messages = null) {
+  async sendMessageSync(messagesOrTabId: AIMessage[] | number, messages: AIMessage[] | null = null): Promise<SendResult> {
     if (this.isExtensionMode) {
-      return await this.sendMessage(messages, null, messagesOrTabId);
+      return await this.sendMessage(messages || [], null, messagesOrTabId as number);
     } else {
-      return await this.sendMessage(messagesOrTabId, null, null);
+      return await this.sendMessage(Array.isArray(messagesOrTabId) ? messagesOrTabId : [], null, null);
     }
   }
 
-  async testConnection(tabId = null) {
+  async testConnection(tabId: number | null = null): Promise<boolean> {
     if (!this.isConfigured(tabId)) {
       throw new Error('AIService not configured');
     }
@@ -1194,7 +1225,7 @@ class AIService {
     if ((state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') && !this.isExtensionMode) {
       const result = await ChromeAIValidator.testConnection();
       if (!result.success) {
-        throw new Error(result.message);
+          throw new Error(typeof result.message === 'string' ? result.message : 'Connection test failed');
       }
       return true;
     }

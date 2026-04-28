@@ -9,8 +9,41 @@
 import MediaExtractionService from './MediaExtractionService';
 import Logger from './LoggerService';
 
+interface DragDropOptions {
+  maxImages?: number;
+  maxAudios?: number;
+  checkVoiceMode?: (() => boolean) | null;
+  getCurrentCounts?: (() => { images: number; audios: number }) | null;
+}
+
+interface DragDropResult {
+  text: string;
+  images: Array<{ dataUrl: string; name: string; size: number; type: 'image' | 'audio' }>;
+  audios: Array<{ dataUrl: string; name: string; size: number; type: 'image' | 'audio' }>;
+  errors: string[];
+}
+
+interface DragDropCallbacks {
+  onProcessData?: ((result: DragDropResult) => void) | null;
+  onShowError?: ((message: string) => void) | null;
+  onSetDragOver?: ((isDragOver: boolean) => void) | null;
+  checkVoiceMode?: (() => boolean) | null;
+  getCurrentCounts?: (() => { images: number; audios: number }) | null;
+}
+
 class DragDropService {
-  constructor(options = {}) {
+  private element: HTMLElement | null;
+  private isDragOver: boolean;
+  private enabled: boolean;
+  private onProcessData: ((result: DragDropResult) => void) | null;
+  private onShowError: ((message: string) => void) | null;
+  private onSetDragOver: ((isDragOver: boolean) => void) | null;
+  private checkVoiceMode: (() => boolean) | null;
+  private getCurrentCounts: () => { images: number; audios: number };
+  private maxImages: number;
+  private maxAudios: number;
+
+  constructor(options: DragDropOptions = {}) {
     this.element = null;
     this.isDragOver = false;
     this.enabled = true;
@@ -20,7 +53,7 @@ class DragDropService {
     this.onShowError = null;
     this.onSetDragOver = null;
     this.checkVoiceMode = null;
-    this.getCurrentCounts = null;
+    this.getCurrentCounts = () => ({ images: 0, audios: 0 });
     
     // Options
     this.maxImages = options.maxImages || 3;
@@ -38,7 +71,7 @@ class DragDropService {
   /**
    * Attach to a DOM element with simple callbacks
    */
-  attach(element, callbacks = {}) {
+  attach(element: HTMLElement, callbacks: DragDropCallbacks = {}): void {
     if (this.element) {
       this.detach();
     }
@@ -62,7 +95,7 @@ class DragDropService {
   /**
    * Detach from current element
    */
-  detach() {
+  detach(): void {
     if (this.element) {
       this.element.removeEventListener('dragenter', this._handleDragEnter);
       this.element.removeEventListener('dragover', this._handleDragOver);
@@ -77,7 +110,7 @@ class DragDropService {
   /**
    * Update options
    */
-  setOptions(options) {
+  setOptions(options: DragDropOptions): void {
     if (options.maxImages !== undefined) this.maxImages = options.maxImages;
     if (options.maxAudios !== undefined) this.maxAudios = options.maxAudios;
     if (options.checkVoiceMode) this.checkVoiceMode = options.checkVoiceMode;
@@ -87,27 +120,29 @@ class DragDropService {
   /**
    * Private event handlers
    */
-  _handleDragEnter(e) {
+  _handleDragEnter(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
     Logger.log('DragDropService', 'Drag enter');
     this._setDragState(true);
   }
 
-  _handleDragOver(e) {
+  _handleDragOver(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
     // Set dropEffect to indicate this is a valid drop target
-    e.dataTransfer.dropEffect = 'copy';
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
   }
 
-  _handleDragLeave(e) {
+  _handleDragLeave(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
     
     // Only set to false if leaving the container entirely
     // Check if relatedTarget is null (left the window) or not contained in our element
-    const isLeavingContainer = !e.relatedTarget || !this.element.contains(e.relatedTarget);
+    const isLeavingContainer = !e.relatedTarget || !this.element?.contains(e.relatedTarget as Node);
     
     if (isLeavingContainer) {
       Logger.log('DragDropService', 'Drag leave (exiting container)');
@@ -115,7 +150,7 @@ class DragDropService {
     }
   }
 
-  async _handleDrop(e) {
+  async _handleDrop(e: DragEvent): Promise<void> {
     e.preventDefault();
     e.stopPropagation();
     this._setDragState(false);
@@ -136,7 +171,10 @@ class DragDropService {
 
     // Show errors
     if (result.errors.length > 0) {
-      this._showError(result.errors[0]);
+      const firstError = result.errors[0];
+      if (firstError) {
+        this._showError(firstError);
+      }
     }
 
     // Execute single callback with ALL data at once
@@ -148,7 +186,7 @@ class DragDropService {
   /**
    * Set drag state and notify component
    */
-  _setDragState(isDragOver) {
+  _setDragState(isDragOver: boolean): void {
     if (this.isDragOver !== isDragOver) {
       this.isDragOver = isDragOver;
       Logger.log('DragDropService', 'Drag state changed:', isDragOver);
@@ -161,7 +199,7 @@ class DragDropService {
   /**
    * Show error to component
    */
-  _showError(message) {
+  _showError(message: string): void {
     if (this.onShowError) {
       this.onShowError(message);
     }
@@ -170,27 +208,31 @@ class DragDropService {
   /**
    * Parse dropped data from drag event
    */
-  async _parseDrop(e, currentCounts = { images: 0, audios: 0 }) {
+  async _parseDrop(e: DragEvent, currentCounts: { images: number; audios: number } = { images: 0, audios: 0 }): Promise<DragDropResult> {
     Logger.log('DragDropService', 'Processing drop event');
 
     // Prepare input for MediaExtractionService
-    const input = {};
+    const input: {
+      files?: FileList;
+      htmlString?: string;
+      textString?: string;
+    } = {};
     
     // Add files if present
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
       input.files = e.dataTransfer.files;
       Logger.log('DragDropService', 'Drop contains files:', e.dataTransfer.files.length);
     }
     
     // Add HTML if present
-    const htmlData = e.dataTransfer.getData('text/html');
+    const htmlData = e.dataTransfer?.getData('text/html') ?? '';
     if (htmlData) {
       input.htmlString = htmlData;
       Logger.log('DragDropService', 'Drop contains HTML');
     }
     
     // Add text if present (and no HTML)
-    const textData = e.dataTransfer.getData('text/plain');
+    const textData = e.dataTransfer?.getData('text/plain') ?? '';
     if (textData && !htmlData) {
       input.textString = textData;
       Logger.log('DragDropService', 'Drop contains text');

@@ -3,6 +3,50 @@
  * Used by both AIToolbar (selection) and DragDropService (HTML drops)
  */
 import Logger from './LoggerService';
+
+interface ExtractionInput {
+  files?: FileList | File[];
+  htmlString?: string;
+  textString?: string;
+  container?: HTMLElement | Document | Element | null;
+  selection?: Selection | null;
+}
+
+interface ExtractionOptions {
+  maxImages?: number;
+  maxAudios?: number;
+  currentImageCount?: number;
+  currentAudioCount?: number;
+}
+
+interface ExtractedMedia {
+  dataUrl: string;
+  name: string;
+  size: number;
+  type: 'image' | 'audio';
+}
+
+interface ExtractionResult {
+  text: string;
+  images: ExtractedMedia[];
+  audios: ExtractedMedia[];
+  errors: string[];
+}
+
+interface MediaItem {
+  type: 'image' | 'audio';
+  name: string;
+  size: number;
+  src?: string;
+  file?: File;
+}
+
+interface DomExtractedItem {
+  src: string;
+  name: string;
+  type: 'image' | 'audio';
+}
+
 class MediaExtractionService {
   /**
    * MAIN METHOD: Process and extract media from any input source
@@ -21,8 +65,11 @@ class MediaExtractionService {
    * @param {number} [options.currentAudioCount=0] - Current audio count (for limit checking)
    * @returns {Promise<{text: string, images: Array, audios: Array, errors: Array}>}
    */
-  static async processAndExtract(input = {}, options = {}) {
-    const result = {
+  static async processAndExtract(
+    input: ExtractionInput = {},
+    options: ExtractionOptions = {},
+  ): Promise<ExtractionResult> {
+    const result: ExtractionResult = {
       text: '',
       images: [],
       audios: [],
@@ -38,18 +85,18 @@ class MediaExtractionService {
 
     try {
       // STEP 1: Gather all media items into a unified array
-      let mediaItems = []; // Format: {type: 'image'|'audio', name, size, src?, file?}
+      let mediaItems: MediaItem[] = []; // Format: {type: 'image'|'audio', name, size, src?, file?}
       
       if (input.files && input.files.length > 0) {
         // From File objects
         mediaItems = Array.from(input.files)
-          .filter(file => file.type.startsWith('image/') || file.type.startsWith('audio/'))
-          .map(file => ({
+          .filter((file: File) => file.type.startsWith('image/') || file.type.startsWith('audio/'))
+          .map((file: File) => ({
             type: file.type.startsWith('image/') ? 'image' : 'audio',
             name: file.name,
             size: file.size,
             file: file // Keep File reference for fileToDataUrl
-          }));
+          })) as MediaItem[];
       } else if (input.htmlString) {
         // From HTML string
         const parser = new DOMParser();
@@ -57,8 +104,8 @@ class MediaExtractionService {
         const media = this._extractMediaFromContainer(doc.body, null);
         
         mediaItems = [
-          ...media.images.map(img => ({ type: 'image', name: img.name, size: 0, src: img.src })),
-          ...media.audios.map(aud => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
+          ...media.images.map((img): MediaItem => ({ type: 'image', name: img.name, size: 0, src: img.src })),
+          ...media.audios.map((aud): MediaItem => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
         ];
         
         // Extract text
@@ -71,8 +118,8 @@ class MediaExtractionService {
         const media = this._extractMediaFromContainer(input.container, input.selection);
         
         mediaItems = [
-          ...media.images.map(img => ({ type: 'image', name: img.name, size: 0, src: img.src })),
-          ...media.audios.map(aud => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
+          ...media.images.map((img): MediaItem => ({ type: 'image', name: img.name, size: 0, src: img.src })),
+          ...media.audios.map((aud): MediaItem => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
         ];
         
         // Extract text from selection
@@ -106,7 +153,7 @@ class MediaExtractionService {
           // Convert to dataUrl (conditionally choose converter based on source)
           const dataUrl = item.file 
             ? await this.fileToDataUrl(item.file)
-            : await this.urlToDataUrl(item.src);
+            : await this.urlToDataUrl(item.src ?? '');
           
           targetArray.push({
             dataUrl,
@@ -115,7 +162,7 @@ class MediaExtractionService {
             type: item.type
           });
         } catch (error) {
-          Logger.error('MediaExtractionService', 'Failed to convert ${item.type}:', error);
+          Logger.error('MediaExtractionService', `Failed to convert ${item.type}:`, error);
           // Silently skip failed items
         }
       }
@@ -132,13 +179,16 @@ class MediaExtractionService {
    * Internal: Extract media from a DOM container
    * @private
    */
-  static _extractMediaFromContainer(container, selection = null) {
-    const images = [];
-    const audios = [];
+  static _extractMediaFromContainer(
+    container: HTMLElement | Document | Element | null | undefined,
+    selection: Selection | null = null,
+  ): { images: DomExtractedItem[]; audios: DomExtractedItem[] } {
+    const images: DomExtractedItem[] = [];
+    const audios: DomExtractedItem[] = [];
     
     // Extract images
     const imgElements = container?.querySelectorAll('img') || [];
-    imgElements.forEach(img => {
+    imgElements.forEach((img: HTMLImageElement) => {
       if (selection && !selection.containsNode(img, true)) {
         return;
       }
@@ -155,7 +205,7 @@ class MediaExtractionService {
     
     // Extract audios
     const audioElements = container?.querySelectorAll('audio') || [];
-    audioElements.forEach(audio => {
+    audioElements.forEach((audio: HTMLAudioElement) => {
       if (selection && !selection.containsNode(audio, true)) {
         return;
       }
@@ -178,7 +228,7 @@ class MediaExtractionService {
    * @param {string} url - URL to convert
    * @returns {Promise<string>} Data URL
    */
-  static async urlToDataUrl(url) {
+  static async urlToDataUrl(url: string): Promise<string> {
     if (url.startsWith('data:')) {
       return url;
     }
@@ -189,7 +239,13 @@ class MediaExtractionService {
       
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Failed to convert blob to data URL'));
+        };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
@@ -204,10 +260,16 @@ class MediaExtractionService {
    * @param {File|Blob} file - File or Blob to convert
    * @returns {Promise<string>} Data URL
    */
-  static fileToDataUrl(file) {
+  static fileToDataUrl(file: File | Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error('Failed to convert file to data URL'));
+      };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });

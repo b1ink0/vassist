@@ -12,10 +12,33 @@ import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultAIConfig } from '../../config/aiConfig';
 
+interface WriterServiceLike {
+  configure(config: Record<string, unknown>): Promise<unknown> | unknown;
+  isConfigured(): boolean;
+  checkAvailability(): Promise<string> | string;
+  write(prompt: string, options?: Record<string, unknown>): Promise<string>;
+  writeStreaming(prompt: string, options?: Record<string, unknown>): AsyncIterable<string>;
+  abort(): void;
+  destroy(): Promise<void> | void;
+  [method: string]: unknown;
+}
+
+interface WriterProxyConfig {
+  aiFeatures?: {
+    writer?: {
+      enabled?: boolean;
+    };
+  };
+  [key: string]: unknown;
+}
+
 class WriterServiceProxy extends ServiceProxy {
+  protected directService: WriterServiceLike;
+  protected _configuring: boolean;
+
   constructor() {
     super('WriterService');
-    this.directService = WriterService;
+    this.directService = WriterService as unknown as WriterServiceLike;
     this._configuring = false;
   }
 
@@ -23,7 +46,7 @@ class WriterServiceProxy extends ServiceProxy {
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
-  async ensureConfigured() {
+  async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
     
     const configured = await this.isConfigured();
@@ -31,7 +54,8 @@ class WriterServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const storedConfig = await StorageServiceProxy.configLoad('aiConfig', null) as WriterProxyConfig | null;
+      const aiConfig = storedConfig ?? (DefaultAIConfig as unknown as WriterProxyConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.writer?.enabled !== false) {
         Logger.log('WriterServiceProxy', 'Auto-configuring from storage...');
@@ -47,17 +71,18 @@ class WriterServiceProxy extends ServiceProxy {
    * @param {Object} config - Configuration
    * @param {string} config.provider - 'chrome-ai', 'openai', or 'ollama'
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('WriterServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.WRITER_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as { configured?: boolean };
+      return response.configured === true;
     } else {
-      return this.directService.configure(config);
+      await this.directService.configure(config);
+      return true;
     }
   }
 
@@ -65,13 +90,13 @@ class WriterServiceProxy extends ServiceProxy {
    * Check if service is configured
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.WRITER_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.WRITER_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -84,15 +109,15 @@ class WriterServiceProxy extends ServiceProxy {
    * Check availability
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability() {
+  async checkAvailability(): Promise<string> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('WriterServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.WRITER_CHECK_AVAILABILITY,
         {}
-      );
-      return response.availability;
+      ) as { availability?: string };
+      return response.availability || 'unavailable';
     } else {
       return this.directService.checkAvailability();
     }
@@ -104,7 +129,7 @@ class WriterServiceProxy extends ServiceProxy {
    * @param {Object} options - Write options
    * @returns {Promise<string>} Written content
    */
-  async write(prompt, options = {}) {
+  async write(prompt: string, options: Record<string, unknown> = {}): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -114,8 +139,8 @@ class WriterServiceProxy extends ServiceProxy {
         MessageTypes.WRITER_WRITE,
         { prompt, options },
         { timeout: 60000 }
-      );
-      return response.writtenContent;
+      ) as { writtenContent?: string };
+      return response.writtenContent || '';
     } else {
       return this.directService.write(prompt, options);
     }
@@ -127,7 +152,7 @@ class WriterServiceProxy extends ServiceProxy {
    * @param {Object} options - Write options
    * @returns {AsyncIterable<string>} Streaming write chunks
    */
-  async *writeStreaming(prompt, options = {}) {
+  async *writeStreaming(prompt: string, options: Record<string, unknown> = {}): AsyncGenerator<string, void, void> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -136,21 +161,26 @@ class WriterServiceProxy extends ServiceProxy {
       if (!bridge) throw new Error('WriterServiceProxy: Bridge not available');
       
       // Create a queue to hold chunks as they arrive
-      const chunkQueue = [];
+      const chunkQueue: string[] = [];
       let streamComplete = false;
-      let streamError = null;
+      let streamError: unknown = null;
+
+      const sendStreamingMessage = bridge.sendStreamingMessage;
+      if (!sendStreamingMessage) {
+        throw new Error('WriterServiceProxy: Streaming bridge is not available');
+      }
       
       // Start streaming in background (don't await - we yield chunks as they arrive)
-      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+      sendStreamingMessage(
         MessageTypes.WRITER_WRITE_STREAMING,
         { prompt, options },
-        (chunk) => {
+        (chunk: string) => {
           chunkQueue.push(chunk);
         },
         { timeout: 120000 } // 2 minutes for streaming
       ).then(() => {
         streamComplete = true;
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         streamError = error;
         streamComplete = true;
       });
@@ -158,7 +188,10 @@ class WriterServiceProxy extends ServiceProxy {
       // Yield chunks as they become available
       while (!streamComplete || chunkQueue.length > 0) {
         if (chunkQueue.length > 0) {
-          yield chunkQueue.shift();
+          const nextChunk = chunkQueue.shift();
+          if (nextChunk !== undefined) {
+            yield nextChunk;
+          }
         } else {
           // Wait a bit before checking again
           await new Promise(resolve => setTimeout(resolve, 10));
@@ -168,7 +201,7 @@ class WriterServiceProxy extends ServiceProxy {
       // If there was an error, throw it now
       if (streamError) {
         Logger.error('WriterServiceProxy', 'Streaming failed:', streamError);
-        throw streamError;
+        throw (streamError instanceof Error ? streamError : new Error(String(streamError)));
       }
     } else {
       // Dev mode: Use direct service streaming
@@ -179,7 +212,7 @@ class WriterServiceProxy extends ServiceProxy {
   /**
    * Abort ongoing write request
    */
-  async abort() {
+  async abort(): Promise<void> {
     if (this.isExtension) {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
@@ -189,7 +222,7 @@ class WriterServiceProxy extends ServiceProxy {
       }
       try {
         await bridge.sendMessage(MessageTypes.WRITER_ABORT, {});
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('WriterServiceProxy', 'Abort failed:', error);
       }
     } else {
@@ -201,7 +234,7 @@ class WriterServiceProxy extends ServiceProxy {
   /**
    * Destroy all writer sessions
    */
-  async destroy() {
+  async destroy(): Promise<void> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('WriterServiceProxy: Bridge not available');
@@ -214,15 +247,15 @@ class WriterServiceProxy extends ServiceProxy {
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
-    const methodMap = {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
+    const methodMap: Record<'configure' | 'write' | 'checkAvailability' | 'destroy', string> = {
       configure: MessageTypes.WRITER_CONFIGURE,
       write: MessageTypes.WRITER_WRITE,
       checkAvailability: MessageTypes.WRITER_CHECK_AVAILABILITY,
       destroy: MessageTypes.WRITER_DESTROY
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -236,12 +269,13 @@ class WriterServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on WriterService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 

@@ -9,11 +9,70 @@
 import { ServiceProxy } from './ServiceProxy';
 import { MessageTypes } from '../../../extension/shared/MessageTypes';
 
+type StorageRecord = Record<string, unknown>;
+
+interface StorageManagerLike {
+  config: {
+    save(key: string, value: unknown): Promise<unknown>;
+    load(key: string, defaultValue?: unknown): Promise<unknown>;
+    exists(key: string): Promise<unknown>;
+    remove(key: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  settings: {
+    save(key: string, value: unknown): Promise<unknown>;
+    load(key: string, defaultValue?: unknown): Promise<unknown>;
+    exists(key: string): Promise<unknown>;
+    remove(key: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  cache: {
+    save(key: string, value: unknown, ttlSeconds?: number): Promise<unknown>;
+    load(key: string): Promise<unknown>;
+    exists(key: string): Promise<unknown>;
+    remove(key: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    cleanup(): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  chat: {
+    save(chatId: string, data: unknown): Promise<unknown>;
+    load(chatId: string): Promise<unknown>;
+    exists(chatId: string): Promise<unknown>;
+    remove(chatId: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  files: {
+    save(fileId: string, data: unknown, category?: string): Promise<unknown>;
+    load(fileId: string): Promise<unknown>;
+    exists(fileId: string): Promise<unknown>;
+    remove(fileId: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    getByCategory(category: string): Promise<unknown>;
+    getMetadataByCategory(category: string): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  data: {
+    save(key: string, value: unknown, category?: string): Promise<unknown>;
+    load(key: string): Promise<unknown>;
+    exists(key: string): Promise<unknown>;
+    remove(key: string): Promise<unknown>;
+    getAll(): Promise<unknown>;
+    getByCategory(category: string): Promise<unknown>;
+    clear(): Promise<unknown>;
+  };
+  getStats?(): Promise<unknown>;
+  clearAll?(): Promise<unknown>;
+}
+
 // In dev mode, we need StorageManager, so use a lazy-loaded module reference
 // In extension mode, this will never be used
-let devStorageManagerPromise = null;
+let devStorageManagerPromise: Promise<StorageManagerLike | null> | null = null;
 
-const initDevStorageManager = async () => {
+const initDevStorageManager = async (): Promise<StorageManagerLike | null> => {
   if (devStorageManagerPromise) {
     return devStorageManagerPromise;
   }
@@ -24,7 +83,7 @@ const initDevStorageManager = async () => {
   
   devStorageManagerPromise = import('../../storage/StorageManager')
     .then(module => module.storageManager)
-    .catch(err => {
+    .catch((err: unknown) => {
       return null;
     });
   
@@ -32,16 +91,22 @@ const initDevStorageManager = async () => {
 };
 
 class StorageServiceProxy extends ServiceProxy {
+  private _devStorageManagerPromise: Promise<StorageManagerLike | null> | null;
+
   constructor() {
     super('StorageService');
     this._devStorageManagerPromise = null;
   }
 
-  async _getDevStorageManager() {
+  async _getDevStorageManager(): Promise<StorageManagerLike> {
     if (!this._devStorageManagerPromise) {
       this._devStorageManagerPromise = initDevStorageManager();
     }
-    return await this._devStorageManagerPromise;
+    const manager = await this._devStorageManagerPromise;
+    if (!manager) {
+      throw new Error('StorageServiceProxy: Dev StorageManager not available');
+    }
+    return manager;
   }
 
   get devStorageManager() {
@@ -55,7 +120,7 @@ class StorageServiceProxy extends ServiceProxy {
    * CONFIG NAMESPACE
    */
 
-  async configSave(key, value) {
+  async configSave(key: string, value: unknown): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -66,7 +131,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async configLoad(key, defaultValue = null) {
+  async configLoad(key: string, defaultValue: unknown = null): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -77,7 +142,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async configExists(key) {
+  async configExists(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -88,7 +153,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async configRemove(key) {
+  async configRemove(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -99,7 +164,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async configGetAll() {
+  async configGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -110,7 +175,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async configClear() {
+  async configClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -125,7 +190,7 @@ class StorageServiceProxy extends ServiceProxy {
    * SETTINGS NAMESPACE
    */
 
-  async settingsSave(key, value) {
+  async settingsSave(key: string, value: unknown): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -135,7 +200,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async settingsLoad(key, defaultValue = null) {
+  async settingsLoad(key: string, defaultValue: unknown = null): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -145,7 +210,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async settingsExists(key) {
+  async settingsExists(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -155,7 +220,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async settingsRemove(key) {
+  async settingsRemove(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -165,7 +230,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async settingsGetAll() {
+  async settingsGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -175,7 +240,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async settingsClear() {
+  async settingsClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -189,7 +254,7 @@ class StorageServiceProxy extends ServiceProxy {
    * CACHE NAMESPACE
    */
 
-  async cacheSave(key, value, ttlSeconds = 3600) {
+  async cacheSave(key: string, value: unknown, ttlSeconds = 3600): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -199,7 +264,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheLoad(key) {
+  async cacheLoad(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -209,7 +274,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheExists(key) {
+  async cacheExists(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -219,7 +284,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheRemove(key) {
+  async cacheRemove(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -229,7 +294,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheGetAll() {
+  async cacheGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -239,7 +304,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheCleanup() {
+  async cacheCleanup(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -249,7 +314,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async cacheClear() {
+  async cacheClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -263,7 +328,7 @@ class StorageServiceProxy extends ServiceProxy {
    * CHAT NAMESPACE
    */
 
-  async chatSave(chatId, data) {
+  async chatSave(chatId: string, data: unknown): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -273,7 +338,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async chatLoad(chatId) {
+  async chatLoad(chatId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -283,7 +348,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async chatExists(chatId) {
+  async chatExists(chatId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -293,7 +358,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async chatRemove(chatId) {
+  async chatRemove(chatId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -303,7 +368,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async chatGetAll() {
+  async chatGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -313,7 +378,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async chatClear() {
+  async chatClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -327,56 +392,64 @@ class StorageServiceProxy extends ServiceProxy {
    * FILES NAMESPACE
    */
 
-  async fileSave(fileId, data, category = 'general') {
+  async fileSave(fileId: string, data: unknown, category = 'general'): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
       
       // Convert Blobs to Arrays for message serialization (structured clone limitation)
-      let messageData = data;
+      let messageData: unknown = data;
       if (data && typeof data === 'object') {
-        messageData = { ...data };
+        const sourceData = data as StorageRecord;
+        const mutableData: StorageRecord = { ...sourceData };
+        messageData = mutableData;
         
         // Handle data.data (general file storage)
-        if (messageData.data instanceof Blob) {
-          const buffer = await messageData.data.arrayBuffer();
-          messageData.data = Array.from(new Uint8Array(buffer));
-          messageData._blobType = data.data.type || 'application/octet-stream';
+        if (mutableData.data instanceof Blob) {
+          const blob = mutableData.data;
+          const buffer = await blob.arrayBuffer();
+          mutableData.data = Array.from(new Uint8Array(buffer));
+          mutableData._blobType = blob.type || 'application/octet-stream';
         }
         
         // Handle motionData (MotionStorageService)
-        if (messageData.motionData instanceof Blob) {
-          const buffer = await messageData.motionData.arrayBuffer();
-          messageData.motionData = Array.from(new Uint8Array(buffer));
-          messageData._motionBlobType = data.motionData.type || 'application/octet-stream';
+        if (mutableData.motionData instanceof Blob) {
+          const blob = mutableData.motionData;
+          const buffer = await blob.arrayBuffer();
+          mutableData.motionData = Array.from(new Uint8Array(buffer));
+          mutableData._motionBlobType = blob.type || 'application/octet-stream';
         }
 
         // Handle audioData (EmoteStorageService)
-        if (messageData.audioData instanceof Blob) {
-          const buffer = await messageData.audioData.arrayBuffer();
-          messageData.audioData = Array.from(new Uint8Array(buffer));
-          messageData._audioBlobType = data.audioData.type || 'audio/mpeg';
+        if (mutableData.audioData instanceof Blob) {
+          const blob = mutableData.audioData;
+          const buffer = await blob.arrayBuffer();
+          mutableData.audioData = Array.from(new Uint8Array(buffer));
+          mutableData._audioBlobType = blob.type || 'audio/mpeg';
         }
 
         // Handle cameraData (EmoteStorageService)
-        if (messageData.cameraData instanceof Blob) {
-          const buffer = await messageData.cameraData.arrayBuffer();
-          messageData.cameraData = Array.from(new Uint8Array(buffer));
-          messageData._cameraBlobType = data.cameraData.type || 'application/octet-stream';
+        if (mutableData.cameraData instanceof Blob) {
+          const blob = mutableData.cameraData;
+          const buffer = await blob.arrayBuffer();
+          mutableData.cameraData = Array.from(new Uint8Array(buffer));
+          mutableData._cameraBlobType = blob.type || 'application/octet-stream';
         }
         
         // Handle modelData (ModelStorageService)
-        if (messageData.modelData instanceof Blob) {
-          const buffer = await messageData.modelData.arrayBuffer();
-          messageData.modelData = Array.from(new Uint8Array(buffer));
-          messageData._modelBlobType = data.modelData.type || 'application/octet-stream';
+        if (mutableData.modelData instanceof Blob) {
+          const blob = mutableData.modelData;
+          const buffer = await blob.arrayBuffer();
+          mutableData.modelData = Array.from(new Uint8Array(buffer));
+          mutableData._modelBlobType = blob.type || 'application/octet-stream';
         }
         
         // Handle stageData (StageStorageService)
-        if (messageData.stageData instanceof Blob) {
-          const buffer = await messageData.stageData.arrayBuffer();
-          messageData.stageData = Array.from(new Uint8Array(buffer));
-          messageData._stageBlobType = data.stageData.type || 'application/octet-stream';
+        if (mutableData.stageData instanceof Blob) {
+          const blob = mutableData.stageData;
+          const buffer = await blob.arrayBuffer();
+          mutableData.stageData = Array.from(new Uint8Array(buffer));
+          mutableData._stageBlobType = blob.type || 'application/octet-stream';
         }
       }
       
@@ -386,7 +459,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async fileLoad(fileId) {
+  async fileLoad(fileId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -394,58 +467,59 @@ class StorageServiceProxy extends ServiceProxy {
       
       // Convert Arrays back to Blobs if needed
       if (result && typeof result === 'object') {
+        const mutableResult = result as StorageRecord;
         // Handle data.data (general file storage)
-        if (Array.isArray(result.data)) {
-          const blobType = result._blobType || 'application/octet-stream';
-          const uint8Array = new Uint8Array(result.data);
+        if (Array.isArray(mutableResult.data)) {
+          const blobType = (mutableResult._blobType as string | undefined) || 'application/octet-stream';
+          const uint8Array = new Uint8Array(mutableResult.data);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.data = blob;
-          delete result._blobType;
+          mutableResult.data = blob;
+          delete mutableResult._blobType;
         }
         
         // Handle motionData (MotionStorageService)
-        if (Array.isArray(result.motionData)) {
-          const blobType = result._motionBlobType || 'application/octet-stream';
-          const uint8Array = new Uint8Array(result.motionData);
+        if (Array.isArray(mutableResult.motionData)) {
+          const blobType = (mutableResult._motionBlobType as string | undefined) || 'application/octet-stream';
+          const uint8Array = new Uint8Array(mutableResult.motionData);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.motionData = blob;
-          delete result._motionBlobType;
+          mutableResult.motionData = blob;
+          delete mutableResult._motionBlobType;
         }
 
         // Handle audioData (EmoteStorageService)
-        if (Array.isArray(result.audioData)) {
-          const blobType = result._audioBlobType || 'audio/mpeg';
-          const uint8Array = new Uint8Array(result.audioData);
+        if (Array.isArray(mutableResult.audioData)) {
+          const blobType = (mutableResult._audioBlobType as string | undefined) || 'audio/mpeg';
+          const uint8Array = new Uint8Array(mutableResult.audioData);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.audioData = blob;
-          delete result._audioBlobType;
+          mutableResult.audioData = blob;
+          delete mutableResult._audioBlobType;
         }
 
         // Handle cameraData (EmoteStorageService)
-        if (Array.isArray(result.cameraData)) {
-          const blobType = result._cameraBlobType || 'application/octet-stream';
-          const uint8Array = new Uint8Array(result.cameraData);
+        if (Array.isArray(mutableResult.cameraData)) {
+          const blobType = (mutableResult._cameraBlobType as string | undefined) || 'application/octet-stream';
+          const uint8Array = new Uint8Array(mutableResult.cameraData);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.cameraData = blob;
-          delete result._cameraBlobType;
+          mutableResult.cameraData = blob;
+          delete mutableResult._cameraBlobType;
         }
         
         // Handle modelData (ModelStorageService)
-        if (Array.isArray(result.modelData)) {
-          const blobType = result._modelBlobType || 'application/octet-stream';
-          const uint8Array = new Uint8Array(result.modelData);
+        if (Array.isArray(mutableResult.modelData)) {
+          const blobType = (mutableResult._modelBlobType as string | undefined) || 'application/octet-stream';
+          const uint8Array = new Uint8Array(mutableResult.modelData);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.modelData = blob;
-          delete result._modelBlobType;
+          mutableResult.modelData = blob;
+          delete mutableResult._modelBlobType;
         }
         
         // Handle stageData (StageStorageService)
-        if (Array.isArray(result.stageData)) {
-          const blobType = result._stageBlobType || 'application/octet-stream';
-          const uint8Array = new Uint8Array(result.stageData);
+        if (Array.isArray(mutableResult.stageData)) {
+          const blobType = (mutableResult._stageBlobType as string | undefined) || 'application/octet-stream';
+          const uint8Array = new Uint8Array(mutableResult.stageData);
           const blob = new Blob([uint8Array], { type: blobType });
-          result.stageData = blob;
-          delete result._stageBlobType;
+          mutableResult.stageData = blob;
+          delete mutableResult._stageBlobType;
         }
       }
       
@@ -455,7 +529,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async fileExists(fileId) {
+  async fileExists(fileId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -465,7 +539,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async fileRemove(fileId) {
+  async fileRemove(fileId: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -475,7 +549,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async filesGetAll() {
+  async filesGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -485,7 +559,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async filesGetByCategory(category) {
+  async filesGetByCategory(category: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -493,11 +567,12 @@ class StorageServiceProxy extends ServiceProxy {
       
       // Convert Arrays back to Blobs for all files
       if (files && typeof files === 'object') {
-        for (const fileData of Object.values(files)) {
+        const mutableFiles = files as Record<string, StorageRecord>;
+        for (const fileData of Object.values(mutableFiles)) {
           if (fileData && typeof fileData === 'object') {
             // Handle data.data (general file storage)
             if (Array.isArray(fileData.data)) {
-              const blobType = fileData._blobType || 'application/octet-stream';
+              const blobType = (fileData._blobType as string | undefined) || 'application/octet-stream';
               const uint8Array = new Uint8Array(fileData.data);
               fileData.data = new Blob([uint8Array], { type: blobType });
               delete fileData._blobType;
@@ -505,7 +580,7 @@ class StorageServiceProxy extends ServiceProxy {
             
             // Handle motionData (MotionStorageService)
             if (Array.isArray(fileData.motionData)) {
-              const blobType = fileData._motionBlobType || 'application/octet-stream';
+              const blobType = (fileData._motionBlobType as string | undefined) || 'application/octet-stream';
               const uint8Array = new Uint8Array(fileData.motionData);
               fileData.motionData = new Blob([uint8Array], { type: blobType });
               delete fileData._motionBlobType;
@@ -513,7 +588,7 @@ class StorageServiceProxy extends ServiceProxy {
 
             // Handle audioData (EmoteStorageService)
             if (Array.isArray(fileData.audioData)) {
-              const blobType = fileData._audioBlobType || 'audio/mpeg';
+              const blobType = (fileData._audioBlobType as string | undefined) || 'audio/mpeg';
               const uint8Array = new Uint8Array(fileData.audioData);
               fileData.audioData = new Blob([uint8Array], { type: blobType });
               delete fileData._audioBlobType;
@@ -521,7 +596,7 @@ class StorageServiceProxy extends ServiceProxy {
 
             // Handle cameraData (EmoteStorageService)
             if (Array.isArray(fileData.cameraData)) {
-              const blobType = fileData._cameraBlobType || 'application/octet-stream';
+              const blobType = (fileData._cameraBlobType as string | undefined) || 'application/octet-stream';
               const uint8Array = new Uint8Array(fileData.cameraData);
               fileData.cameraData = new Blob([uint8Array], { type: blobType });
               delete fileData._cameraBlobType;
@@ -529,7 +604,7 @@ class StorageServiceProxy extends ServiceProxy {
             
             // Handle modelData (ModelStorageService)
             if (Array.isArray(fileData.modelData)) {
-              const blobType = fileData._modelBlobType || 'application/octet-stream';
+              const blobType = (fileData._modelBlobType as string | undefined) || 'application/octet-stream';
               const uint8Array = new Uint8Array(fileData.modelData);
               fileData.modelData = new Blob([uint8Array], { type: blobType });
               delete fileData._modelBlobType;
@@ -537,7 +612,7 @@ class StorageServiceProxy extends ServiceProxy {
             
             // Handle stageData (StageStorageService)
             if (Array.isArray(fileData.stageData)) {
-              const blobType = fileData._stageBlobType || 'application/octet-stream';
+              const blobType = (fileData._stageBlobType as string | undefined) || 'application/octet-stream';
               const uint8Array = new Uint8Array(fileData.stageData);
               fileData.stageData = new Blob([uint8Array], { type: blobType });
               delete fileData._stageBlobType;
@@ -552,7 +627,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async filesGetMetadataByCategory(category) {
+  async filesGetMetadataByCategory(category: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -562,7 +637,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async filesClear() {
+  async filesClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -576,7 +651,7 @@ class StorageServiceProxy extends ServiceProxy {
    * DATA NAMESPACE
    */
 
-  async dataSave(key, value, category = 'general') {
+  async dataSave(key: string, value: unknown, category = 'general'): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -586,7 +661,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataLoad(key) {
+  async dataLoad(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -596,7 +671,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataExists(key) {
+  async dataExists(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -606,7 +681,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataRemove(key) {
+  async dataRemove(key: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -616,7 +691,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataGetAll() {
+  async dataGetAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -626,7 +701,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataGetByCategory(category) {
+  async dataGetByCategory(category: string): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -636,7 +711,7 @@ class StorageServiceProxy extends ServiceProxy {
     }
   }
 
-  async dataClear() {
+  async dataClear(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
@@ -650,23 +725,31 @@ class StorageServiceProxy extends ServiceProxy {
    * UTILITY METHODS
    */
 
-  async getStats() {
+  async getStats(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
       return await bridge.sendMessage(MessageTypes.STORAGE_GET_STATS, {});
     } else {
-      return await (await this._getDevStorageManager()).getStats();
+      const manager = await this._getDevStorageManager();
+      if (!manager.getStats) {
+        throw new Error('StorageServiceProxy: getStats is not supported by StorageManager');
+      }
+      return await manager.getStats();
     }
   }
 
-  async clearAll() {
+  async clearAll(): Promise<unknown> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('StorageServiceProxy: Bridge not available');
       return await bridge.sendMessage(MessageTypes.STORAGE_CLEAR_ALL, {});
     } else {
-      return await (await this._getDevStorageManager()).clearAll();
+      const manager = await this._getDevStorageManager();
+      if (!manager.clearAll) {
+        throw new Error('StorageServiceProxy: clearAll is not supported by StorageManager');
+      }
+      return await manager.clearAll();
     }
   }
 }

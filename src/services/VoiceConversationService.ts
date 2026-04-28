@@ -27,6 +27,15 @@ export const ConversationStates = {
 };
 
 class VoiceConversationService {
+  private isActive: boolean;
+  private currentState: string;
+  private onStateChange: ((state: string) => void) | null;
+  private onTranscription: ((text: string) => void) | null;
+  private onResponse: ((text: string) => void) | null;
+  private onError: ((error: unknown) => void) | null;
+  private boundAudioStartHandler: ((event: any) => void) | null;
+  private boundAudioEndHandler: ((event: any) => void) | null;
+
   constructor() {
     this.isActive = false;
     this.currentState = ConversationStates.IDLE;
@@ -36,12 +45,14 @@ class VoiceConversationService {
     this.onTranscription = null; // (text, images?) => void 
     this.onResponse = null; // (text) => void
     this.onError = null; // (error) => void
+    this.boundAudioStartHandler = null;
+    this.boundAudioEndHandler = null;
   }
 
   /**
    * Start voice conversation mode
    */
-  async start() {
+  async start(): Promise<void> {
     if (this.isActive) {
       Logger.warn('VoiceConversation', 'Already active');
       return;
@@ -94,9 +105,9 @@ class VoiceConversationService {
           }
           
           // In desktop mode, also forward VAD speech detection to main window
-          if (typeof window !== 'undefined' && window.api?.ipc) {
+          if (typeof window !== 'undefined' && (window as any).api?.ipc) {
             Logger.log('VoiceConversation', 'Forwarding VAD real speech detection to main window via IPC');
-            window.api.ipc.send('voice:vadSpeechDetected');
+            (window as any).api.ipc.send('voice:vadSpeechDetected');
           }
         },
         onRecordingStop: () => {
@@ -126,7 +137,7 @@ class VoiceConversationService {
   /**
    * Stop voice conversation mode
    */
-  stop() {
+  stop(): void {
     Logger.log('VoiceConversation', 'Stopping conversation mode...');
     
     // Remove TTS event listeners
@@ -148,7 +159,7 @@ class VoiceConversationService {
   /**
    * Manual interrupt - stop AI from speaking
    */
-  interrupt() {
+  interrupt(): void {
     Logger.log('VoiceConversation', 'Manual interrupt');
     
     // Stop TTS and AI generation
@@ -171,7 +182,7 @@ class VoiceConversationService {
    * Speak AI response (called from outside)
    * Chunks text and generates TTS with concurrency limit for responsiveness
    */
-  async speak(text) {
+  async speak(text: string): Promise<void> {
     try {
       Logger.log('VoiceConversation', `Speaking: "${text.substring(0, 100)}..."`);
       
@@ -191,14 +202,14 @@ class VoiceConversationService {
       /**
        * Generate TTS chunk with concurrency limit
        */
-      const generateChunk = async (chunk, index) => {
+      const generateChunk = async (chunk: string, index: number) => {
         // Wait if at concurrency limit
         while (activeTTSGenerations >= MAX_CONCURRENT_TTS) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
         // Check if stopped
-        if (TTSServiceProxy.isStopped) {
+        if ((TTSServiceProxy as any).isStopped) {
           Logger.log('VoiceConversation', `Stopped, skipping TTS chunk ${index}`);
           return;
         }
@@ -208,20 +219,23 @@ class VoiceConversationService {
           Logger.log('VoiceConversation', `Generating TTS+lip sync ${index + 1}/${chunks.length}: "${chunk.substring(0, 50)}..." (${activeTTSGenerations}/${MAX_CONCURRENT_TTS} active)`);
           
           // Generate TTS audio + lip sync (VMD -> BVMD)
-          const { audio, bvmdUrl } = await TTSServiceProxy.generateSpeech(chunk, true);
+          const ttsResult = await (TTSServiceProxy as any).generateSpeech(chunk, true) as { audio?: Blob; bvmdUrl?: string } | null;
           
           // Check if stopped after generation
-          if (TTSServiceProxy.isStopped) {
+          if ((TTSServiceProxy as any).isStopped) {
             Logger.log('VoiceConversation', `Stopped after generation, discarding chunk ${index}`);
             return;
           }
-          
-          const audioUrl = URL.createObjectURL(audio);
+
+          if (!ttsResult?.audio) {
+            return;
+          }
+          const audioUrl = URL.createObjectURL(ttsResult.audio);
           
           // Queue audio with BVMD for synchronized lip sync
-          TTSServiceProxy.queueAudio(chunk, audioUrl, bvmdUrl);
+          (TTSServiceProxy as any).queueAudio(chunk, audioUrl, ttsResult.bvmdUrl);
           
-          Logger.log('VoiceConversation', `TTS ${index + 1}/${chunks.length} queued${bvmdUrl ? ' with lip sync' : ''}`);
+          Logger.log('VoiceConversation', `TTS ${index + 1}/${chunks.length} queued${ttsResult.bvmdUrl ? ' with lip sync' : ''}`);
         } catch (error) {
           console.warn(`[VoiceConversation] TTS generation failed for chunk ${index + 1}:`, error);
         } finally {
@@ -231,7 +245,7 @@ class VoiceConversationService {
       
       // Start all TTS generations (respecting concurrency limit)
       for (let i = 0; i < chunks.length; i++) {
-        ttsGenerationQueue.push(generateChunk(chunks[i], i));
+        ttsGenerationQueue.push(generateChunk(chunks[i] ?? '', i));
       }
       
       // Wait for all generations to complete
@@ -252,36 +266,40 @@ class VoiceConversationService {
    * Setup TTS event listeners for state transitions
    * Called once during start() - prevents listener duplication
    */
-  _setupTTSEventListeners() {
+  _setupTTSEventListeners(): void {
     Logger.log('VoiceConversation', 'Setting up TTS event listeners');
     
     // Bind methods to preserve 'this' context
-    this._handleAudioStart = this._handleAudioStart.bind(this);
-    this._handleAudioEnd = this._handleAudioEnd.bind(this);
+    this.boundAudioStartHandler = this._handleAudioStart.bind(this);
+    this.boundAudioEndHandler = this._handleAudioEnd.bind(this);
     
     // Add event listeners
-    TTSServiceProxy.addEventListener('audioStart', this._handleAudioStart);
-    TTSServiceProxy.addEventListener('audioEnd', this._handleAudioEnd);
+    if (this.boundAudioStartHandler) {
+      (TTSServiceProxy as any).addEventListener('audioStart', this.boundAudioStartHandler);
+    }
+    if (this.boundAudioEndHandler) {
+      (TTSServiceProxy as any).addEventListener('audioEnd', this.boundAudioEndHandler);
+    }
   }
 
   /**
    * Remove TTS event listeners
    */
-  _removeTTSEventListeners() {
+  _removeTTSEventListeners(): void {
     Logger.log('VoiceConversation', 'Removing TTS event listeners');
     
-    if (this._handleAudioStart) {
-      TTSServiceProxy.removeEventListener('audioStart', this._handleAudioStart);
+    if (this.boundAudioStartHandler) {
+      (TTSServiceProxy as any).removeEventListener('audioStart', this.boundAudioStartHandler);
     }
-    if (this._handleAudioEnd) {
-      TTSServiceProxy.removeEventListener('audioEnd', this._handleAudioEnd);
+    if (this.boundAudioEndHandler) {
+      (TTSServiceProxy as any).removeEventListener('audioEnd', this.boundAudioEndHandler);
     }
   }
 
   /**
    * Handle audio start event
    */
-  _handleAudioStart(event) {
+  _handleAudioStart(event: any): void {
     const { sessionId } = event.detail;
     Logger.log('VoiceConversation', `First audio started playing (session: ${sessionId})`);
     
@@ -296,7 +314,7 @@ class VoiceConversationService {
   /**
    * Handle audio end event
    */
-  _handleAudioEnd(event) {
+  _handleAudioEnd(event: any): void {
     const { sessionId } = event.detail;
     Logger.log('VoiceConversation', `Audio finished playing (session: ${sessionId})`);
     
@@ -321,7 +339,7 @@ class VoiceConversationService {
    * DEPRECATED: Now using event listeners set up in start()
    * Kept for backwards compatibility but does nothing
    */
-  monitorTTSPlayback() {
+  monitorTTSPlayback(): void {
     Logger.log('VoiceConversation', 'monitorTTSPlayback() called - using event listeners instead');
     // Event listeners are already set up in start(), so this is a no-op
   }
@@ -330,7 +348,7 @@ class VoiceConversationService {
    * Chunk text for speech generation
    * Same logic as ChatController but at the service level
    */
-  chunkTextForSpeech(text) {
+  chunkTextForSpeech(text: string): string[] {
     const chunks = [];
     let textBuffer = text;
     
@@ -364,7 +382,7 @@ class VoiceConversationService {
   /**
    * Change conversation state
    */
-  changeState(newState) {
+  changeState(newState: string): void {
     if (this.currentState === newState) return;
     
     Logger.log('VoiceConversation', `State: ${this.currentState} → ${newState}`);
@@ -378,7 +396,7 @@ class VoiceConversationService {
   /**
    * Set callbacks
    */
-  setStateChangeCallback(callback) {
+  setStateChangeCallback(callback: ((state: string) => void) | null): void {
     this.onStateChange = callback;
     
     // Immediately send current state if we're already active
@@ -387,29 +405,29 @@ class VoiceConversationService {
     }
   }
 
-  setTranscriptionCallback(callback) {
+  setTranscriptionCallback(callback: ((text: string) => void) | null): void {
     this.onTranscription = callback;
   }
 
-  setResponseCallback(callback) {
+  setResponseCallback(callback: ((text: string) => void) | null): void {
     this.onResponse = callback;
   }
 
-  setErrorCallback(callback) {
+  setErrorCallback(callback: ((error: unknown) => void) | null): void {
     this.onError = callback;
   }
 
   /**
    * Get current state
    */
-  getState() {
+  getState(): string {
     return this.currentState;
   }
 
   /**
    * Check if active
    */
-  isConversationActive() {
+  isConversationActive(): boolean {
     return this.isActive;
   }
 }

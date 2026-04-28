@@ -12,33 +12,68 @@ import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
 import MicrophoneService from './MicrophoneService';
 
+type STTState = {
+  client: OpenAI | null;
+  provider: string | null;
+  config: any;
+  enabled: boolean;
+  chromeAISession: any;
+};
+
+type STTCallbacks = {
+  onTranscription: ((text: string) => void) | null;
+  onError: ((error: unknown) => void) | null;
+  onRecordingStart: (() => void) | null;
+  onRecordingStop: (() => void) | null;
+};
+
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+const getLanguageModelApi = (): any => (self as typeof globalThis & { LanguageModel?: any }).LanguageModel ?? null;
+const getWebkitAudioContextCtor = (): (new () => AudioContext) | null => {
+  const maybeWindow = window as Window & { webkitAudioContext?: new () => AudioContext };
+  return maybeWindow.webkitAudioContext ?? null;
+};
+
 class STTService {
+  private readonly isExtensionMode: boolean;
+  private tabStates: Map<number, STTState>;
+  private client: OpenAI | null;
+  private provider: string | null;
+  private config: any;
+  private enabled: boolean;
+  private chromeAISession: any;
+  private mediaRecorder: MediaRecorder | null;
+  private audioStream: MediaStream | null;
+  private audioChunks: Blob[];
+  private isRecording: boolean;
+  private onTranscription: ((text: string) => void) | null;
+  private onError: ((error: unknown) => void) | null;
+  private onRecordingStart: (() => void) | null;
+  private onRecordingStop: (() => void) | null;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
+    this.tabStates = new Map();
+    this.client = null;
+    this.provider = null;
+    this.config = null;
+    this.enabled = false;
+    this.chromeAISession = null;
+    this.mediaRecorder = null;
+    this.audioStream = null;
+    this.audioChunks = [];
+    this.isRecording = false;
+    this.onTranscription = null;
+    this.onError = null;
+    this.onRecordingStart = null;
+    this.onRecordingStop = null;
 
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
-    } else {
-      this.client = null;
-      this.provider = null;
-      this.config = null;
-      this.enabled = false;
-
-      this.chromeAISession = null;
-
-      this.mediaRecorder = null;
-      this.audioStream = null;
-      this.audioChunks = [];
-      this.isRecording = false;
-
-      this.onTranscription = null;
-      this.onError = null;
-      this.onRecordingStart = null;
-      this.onRecordingStop = null;
+      return;
     }
   }
 
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
         client: null,
@@ -51,19 +86,22 @@ class STTService {
     }
   }
 
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (this.tabStates.has(tabId)) {
       this.tabStates.delete(tabId);
       Logger.log('STTService', `Tab ${tabId} cleaned up`);
     }
   }
 
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): STTState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as STTState;
     }
-    return this; // dev uses instance
+    return this as unknown as STTState; // dev uses instance
   }
 
   /**
@@ -71,7 +109,7 @@ class STTService {
    * @param {Object} config - STT configuration from aiConfig
    * @param {number|null} tabId - Tab ID (extension mode only)
    */
-  configure(config, tabId = null) {
+  configure(config: any, tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     const { provider, enabled } = config;
     const logPrefix = this.isExtensionMode ? `[STTService] Tab ${tabId}` : '[STTService]';
@@ -185,7 +223,7 @@ class STTService {
       state.client = null;
       state.config = null;
       state.provider = null;
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -193,7 +231,7 @@ class STTService {
    * Check if service is configured and ready
    * @returns {boolean} True if ready
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     if (!state || !state.enabled || !state.config) return false;
     if (state.provider === 'chrome-ai-multimodal') return true;
@@ -204,7 +242,7 @@ class STTService {
    * Check if currently recording
    * @returns {boolean} True if recording
    */
-  isCurrentlyRecording() {
+  isCurrentlyRecording(): boolean {
     return this.isRecording;
   }
 
@@ -213,7 +251,7 @@ class STTService {
    * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<boolean>} Success status
    */
-  async startRecording(deviceId = null) {
+  async startRecording(deviceId: string | null = null): Promise<boolean> {
     if (!this.isConfigured()) {
       throw new Error('STTService not configured. Enable STT and configure settings first.');
     }
@@ -245,7 +283,7 @@ class STTService {
       this.audioChunks = [];
 
       // Setup event handlers
-      this.mediaRecorder.ondataavailable = (event) => {
+      this.mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
         }
@@ -267,7 +305,7 @@ class STTService {
           // TTS tries to use the speakers. Configurable in STT settings.
           let switchDelay = 300; // Default
           try {
-            const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+            const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig) as any;
             switchDelay = sttConfig.audioDeviceSwitchDelay || 300;
           } catch (error) {
             Logger.error('STTService', 'Failed to load STT config:', error);
@@ -301,7 +339,7 @@ class STTService {
         }
       };
 
-      this.mediaRecorder.onerror = (error) => {
+      this.mediaRecorder.onerror = (error: Event) => {
         Logger.error('STTService', 'MediaRecorder error:', error);
         if (this.onError) {
           this.onError(error);
@@ -324,14 +362,14 @@ class STTService {
     } catch (error) {
       Logger.error('STTService', 'Failed to start recording:', error);
       this.cleanup();
-      throw error;
+      throw asError(error);
     }
   }
 
   /**
    * Stop recording audio
    */
-  stopRecording() {
+  stopRecording(): void {
     if (!this.isRecording || !this.mediaRecorder) {
       Logger.warn('STTService', 'Not recording');
       return;
@@ -349,7 +387,7 @@ class STTService {
    * @param {number|null} maybeTabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Transcribed text
    */
-  async transcribeAudio(input, maybeMimeOrTabId = null, maybeTabId = null) {
+  async transcribeAudio(input: Blob | ArrayBuffer, maybeMimeOrTabId: string | number | null = null, maybeTabId: number | null = null): Promise<string> {
     const tabId = this.isExtensionMode ? maybeTabId : null;
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[STTService] Tab ${tabId}` : '[STTService]';
@@ -360,12 +398,12 @@ class STTService {
 
     let audioBlob;
     if (this.isExtensionMode) {
-      const arrayBuffer = input;
-      const mimeType = maybeMimeOrTabId;
+      const arrayBuffer = input as ArrayBuffer;
+      const mimeType = typeof maybeMimeOrTabId === 'string' ? maybeMimeOrTabId : 'audio/webm';
       audioBlob = new Blob([arrayBuffer], { type: mimeType });
       Logger.log('other', `${logPrefix} - Transcribing audio (${arrayBuffer.byteLength} bytes) with ${state.provider}...`);
     } else {
-      audioBlob = input;
+      audioBlob = input as Blob;
       Logger.log('other', `${logPrefix} - Transcribing audio (${audioBlob.size} bytes) with ${state.provider}...`);
     }
 
@@ -386,7 +424,7 @@ class STTService {
       }
       
       const audioFile = new File([fileBlob], fileName, { type: fileBlob.type });
-      const params = { 
+      const params: any = {
         file: audioFile, 
         model: state.config.model 
       };
@@ -398,6 +436,9 @@ class STTService {
         params.temperature = state.config.temperature;
       }
       
+      if (!state.client) {
+        throw new Error('STT client is not configured');
+      }
       const transcription = await state.client.audio.transcriptions.create(params);
       const text = transcription.text.trim();
       
@@ -406,16 +447,17 @@ class STTService {
     } catch (error) {
       Logger.error('other', `${logPrefix} - Transcription API error:`, error);
       
-      if (error.message?.includes('401')) {
+      const normalized = asError(error);
+      if (normalized.message?.includes('401')) {
         throw new Error('Invalid STT API key. Please check your configuration.');
       }
-      if (error.message?.includes('429')) {
+      if (normalized.message?.includes('429')) {
         throw new Error('STT rate limit exceeded. Please try again later.');
       }
-      if (error.message?.includes('fetch')) {
+      if (normalized.message?.includes('fetch')) {
         throw new Error('STT network error. Please check your connection and endpoint URL.');
       }
-      throw error;
+      throw normalized;
     }
   }
 
@@ -425,24 +467,30 @@ class STTService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Transcribed text
    */
-  async transcribeAudioChromeAI(input, tabId = null) {
+  async transcribeAudioChromeAI(input: Blob | ArrayBuffer, tabId: number | null = null): Promise<string> {
     try {
       let arrayBuffer;
       if (this.isExtensionMode) {
         // input is ArrayBuffer
-        arrayBuffer = input;
+        arrayBuffer = input as ArrayBuffer;
       } else {
-        arrayBuffer = await input.arrayBuffer();
+        const audioBlob = input as Blob;
+        arrayBuffer = await audioBlob.arrayBuffer();
         Logger.log('STTService', `Audio converted to ArrayBuffer (${arrayBuffer.byteLength} bytes)`);
-        Logger.log('STTService', `Audio blob type: ${input.type}`);
+        Logger.log('STTService', `Audio blob type: ${audioBlob.type}`);
       }
 
-      const params = await self.LanguageModel.params();
+      const languageModelApi = getLanguageModelApi();
+      if (!languageModelApi) {
+        throw new Error('Chrome AI multimodal not available');
+      }
 
-      const state = this.isExtensionMode ? this._getState(tabId) : this;
+      const params = await languageModelApi.params();
+
+      const state = this._getState(tabId);
       if (!state.chromeAISession) {
         Logger.log('STTService', 'Creating Chrome AI multimodal session...');
-        state.chromeAISession = await self.LanguageModel.create({
+        state.chromeAISession = await languageModelApi.create({
           expectedInputs: [{ type: 'audio' }],
           temperature: 0.1,
           topK: params.defaultTopK,
@@ -471,7 +519,7 @@ class STTService {
       return text;
     } catch (error) {
       Logger.error('STTService', 'Chrome AI transcription error:', error);
-      const state = this.isExtensionMode ? this._getState(tabId) : this;
+      const state = this._getState(tabId);
       if (state.chromeAISession) {
         try {
           state.chromeAISession.destroy();
@@ -480,12 +528,13 @@ class STTService {
         }
         state.chromeAISession = null;
       }
-      if (error.name === 'NotSupportedError') {
+      const normalized = asError(error);
+      if (normalized.name === 'NotSupportedError') {
         throw new Error('Chrome AI multimodal not available. Enable multimodal-input flag at chrome://flags');
-      } else if (error.name === 'QuotaExceededError') {
+      } else if (normalized.name === 'QuotaExceededError') {
         throw new Error('Chrome AI context limit exceeded. Start a new conversation.');
       } else {
-        throw error;
+        throw normalized;
       }
     }
   }
@@ -496,19 +545,19 @@ class STTService {
    * @param {string|null} deviceId - Optional microphone device ID
    * @returns {Promise<string>} Transcribed text
    */
-  async testRecording(duration = 3, deviceId = null) {
+  async testRecording(duration = 3, deviceId: string | null = null): Promise<string> {
     return new Promise((resolve, reject) => {
       // Setup temporary callbacks
       const originalTranscription = this.onTranscription;
       const originalError = this.onError;
       
-      this.onTranscription = (text) => {
+      this.onTranscription = (text: string) => {
         this.onTranscription = originalTranscription;
         this.onError = originalError;
         resolve(text);
       };
       
-      this.onError = (error) => {
+      this.onError = (error: unknown) => {
         this.onTranscription = originalTranscription;
         this.onError = originalError;
         reject(error);
@@ -528,7 +577,7 @@ class STTService {
    * Get supported MIME type for MediaRecorder
    * @returns {string} Supported MIME type
    */
-  getSupportedMimeType() {
+  getSupportedMimeType(): string {
     const types = [
       'audio/webm',
       'audio/mp4',
@@ -550,12 +599,12 @@ class STTService {
   /**
    * Cleanup recording resources
    */
-  cleanup() {
+  cleanup(): void {
     Logger.log('STTService', 'Cleaning up recording resources...');
     
     if (this.audioStream) {
       // Stop all tracks to release microphone
-      this.audioStream.getTracks().forEach(track => {
+      this.audioStream.getTracks().forEach((track) => {
         track.stop();
         Logger.log('STTService', `Stopped audio track: ${track.kind}`);
       });
@@ -573,7 +622,7 @@ class STTService {
    * Set transcription callback
    * @param {Function} callback - Callback function (text: string) => void
    */
-  setTranscriptionCallback(callback) {
+  setTranscriptionCallback(callback: ((text: string) => void) | null): void {
     this.onTranscription = callback;
   }
 
@@ -581,7 +630,7 @@ class STTService {
    * Set error callback
    * @param {Function} callback - Callback function (error: Error) => void
    */
-  setErrorCallback(callback) {
+  setErrorCallback(callback: ((error: unknown) => void) | null): void {
     this.onError = callback;
   }
 
@@ -589,7 +638,7 @@ class STTService {
    * Set recording start callback
    * @param {Function} callback - Callback function () => void
    */
-  setRecordingStartCallback(callback) {
+  setRecordingStartCallback(callback: (() => void) | null): void {
     this.onRecordingStart = callback;
   }
 
@@ -597,7 +646,7 @@ class STTService {
    * Set recording stop callback
    * @param {Function} callback - Callback function () => void
    */
-  setRecordingStopCallback(callback) {
+  setRecordingStopCallback(callback: (() => void) | null): void {
     this.onRecordingStop = callback;
   }
 
@@ -606,8 +655,12 @@ class STTService {
    * @param {Blob} audioBlob - Input audio blob (webm, mp4, etc.)
    * @returns {Promise<Blob>} WAV formatted audio blob
    */
-  async convertToWav(audioBlob) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  async convertToWav(audioBlob: Blob): Promise<Blob> {
+    const AudioContextCtor = window.AudioContext || getWebkitAudioContextCtor();
+    if (!AudioContextCtor) {
+      throw new Error('AudioContext is not available');
+    }
+    const audioContext = new AudioContextCtor();
     
     try {
       const arrayBuffer = await audioBlob.arrayBuffer();
@@ -629,7 +682,9 @@ class STTService {
         const right = audioBuffer.getChannelData(1);
         channelData = new Float32Array(left.length);
         for (let i = 0; i < left.length; i++) {
-          channelData[i] = (left[i] + right[i]) / 2;
+          const leftSample = left[i] ?? 0;
+          const rightSample = right[i] ?? 0;
+          channelData[i] = (leftSample + rightSample) / 2;
         }
       }
       
@@ -643,7 +698,9 @@ class STTService {
           const srcIndexFloor = Math.floor(srcIndex);
           const srcIndexCeil = Math.min(srcIndexFloor + 1, channelData.length - 1);
           const t = srcIndex - srcIndexFloor;
-          samples[i] = channelData[srcIndexFloor] * (1 - t) + channelData[srcIndexCeil] * t;
+          const floorValue = channelData[srcIndexFloor] ?? 0;
+          const ceilValue = channelData[srcIndexCeil] ?? 0;
+          samples[i] = floorValue * (1 - t) + ceilValue * t;
         }
       } else {
         samples = channelData;
@@ -655,14 +712,14 @@ class STTService {
       return new Blob([wavBuffer], { type: 'audio/wav' });
     } catch (error) {
       audioContext.close();
-      throw error;
+      throw asError(error);
     }
   }
 
   /**
    * Create a WAV file buffer from float samples
    */
-  createWavBuffer(samples, sampleRate, numChannels) {
+  createWavBuffer(samples: Float32Array, sampleRate: number, numChannels: number): ArrayBuffer {
     const bytesPerSample = 2; // 16-bit
     const dataLength = samples.length * bytesPerSample;
     const buffer = new ArrayBuffer(44 + dataLength);
@@ -686,7 +743,7 @@ class STTService {
     // Convert float samples to 16-bit PCM
     let offset = 44;
     for (let i = 0; i < samples.length; i++) {
-      const sample = Math.max(-1, Math.min(1, samples[i]));
+      const sample = Math.max(-1, Math.min(1, samples[i] ?? 0));
       const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
       view.setInt16(offset, int16, true);
       offset += 2;
@@ -695,7 +752,7 @@ class STTService {
     return buffer;
   }
 
-  writeString(view, offset, string) {
+  writeString(view: DataView, offset: number, string: string): void {
     for (let i = 0; i < string.length; i++) {
       view.setUint8(offset + i, string.charCodeAt(i));
     }

@@ -12,10 +12,33 @@ import Logger from '../LoggerService';
 import StorageServiceProxy from './StorageServiceProxy';
 import { DefaultAIConfig } from '../../config/aiConfig';
 
+interface TranslatorServiceLike {
+  configure(config: Record<string, unknown>): Promise<unknown> | unknown;
+  isConfigured(): boolean;
+  checkAvailability(sourceLanguage: string, targetLanguage: string): Promise<string> | string;
+  translate(text: string, sourceLanguage: string, targetLanguage: string): Promise<string>;
+  translateStreaming(text: string, sourceLanguage: string, targetLanguage: string): AsyncIterable<string>;
+  abort(): void;
+  destroy(): Promise<void> | void;
+  [method: string]: unknown;
+}
+
+interface TranslatorProxyConfig {
+  aiFeatures?: {
+    translator?: {
+      enabled?: boolean;
+    };
+  };
+  [key: string]: unknown;
+}
+
 class TranslatorServiceProxy extends ServiceProxy {
+  protected directService: TranslatorServiceLike;
+  protected _configuring: boolean;
+
   constructor() {
     super('TranslatorService');
-    this.directService = TranslatorService;
+    this.directService = TranslatorService as unknown as TranslatorServiceLike;
     this._configuring = false;
   }
 
@@ -23,7 +46,7 @@ class TranslatorServiceProxy extends ServiceProxy {
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
-  async ensureConfigured() {
+  async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
     
     const configured = await this.isConfigured();
@@ -31,7 +54,8 @@ class TranslatorServiceProxy extends ServiceProxy {
     
     this._configuring = true;
     try {
-      const aiConfig = await StorageServiceProxy.configLoad('aiConfig', DefaultAIConfig);
+      const storedConfig = await StorageServiceProxy.configLoad('aiConfig', null) as TranslatorProxyConfig | null;
+      const aiConfig = storedConfig ?? (DefaultAIConfig as unknown as TranslatorProxyConfig);
       
       if (aiConfig && aiConfig.aiFeatures?.translator?.enabled !== false) {
         Logger.log('TranslatorServiceProxy', 'Auto-configuring from storage...');
@@ -47,17 +71,18 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @param {Object} config - Configuration
    * @param {string} config.provider - 'chrome-ai', 'openai', or 'ollama'
    */
-  async configure(config) {
+  async configure(config: Record<string, unknown>): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.TRANSLATOR_CONFIGURE,
         { config }
-      );
-      return response.configured;
+      ) as { configured?: boolean };
+      return response.configured === true;
     } else {
-      return this.directService.configure(config);
+      await this.directService.configure(config);
+      return true;
     }
   }
 
@@ -65,13 +90,13 @@ class TranslatorServiceProxy extends ServiceProxy {
    * Check if service is configured
    * @returns {Promise<boolean>} True if ready
    */
-  async isConfigured() {
+  async isConfigured(): Promise<boolean> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
       try {
-        const response = await bridge.sendMessage(MessageTypes.TRANSLATOR_IS_CONFIGURED, {});
-        return response.configured;
+        const response = await bridge.sendMessage(MessageTypes.TRANSLATOR_IS_CONFIGURED, {}) as { configured?: boolean };
+        return response.configured === true;
       } catch {
         return false;
       }
@@ -86,15 +111,15 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @param {string} targetLanguage - Target language code
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(sourceLanguage, targetLanguage) {
+  async checkAvailability(sourceLanguage: string, targetLanguage: string): Promise<string> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
       const response = await bridge.sendMessage(
         MessageTypes.TRANSLATOR_CHECK_AVAILABILITY,
         { sourceLanguage, targetLanguage }
-      );
-      return response.availability;
+      ) as { availability?: string };
+      return response.availability || 'unavailable';
     } else {
       return this.directService.checkAvailability(sourceLanguage, targetLanguage);
     }
@@ -107,7 +132,7 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @param {string} targetLanguage - Target language code
    * @returns {Promise<string>} Translated text
    */
-  async translate(text, sourceLanguage, targetLanguage) {
+  async translate(text: string, sourceLanguage: string, targetLanguage: string): Promise<string> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -117,8 +142,8 @@ class TranslatorServiceProxy extends ServiceProxy {
         MessageTypes.TRANSLATOR_TRANSLATE,
         { text, sourceLanguage, targetLanguage },
         { timeout: 30000 }
-      );
-      return response.translatedText;
+      ) as { translatedText?: string };
+      return response.translatedText || '';
     } else {
       return this.directService.translate(text, sourceLanguage, targetLanguage);
     }
@@ -131,7 +156,7 @@ class TranslatorServiceProxy extends ServiceProxy {
    * @param {string} targetLanguage - Target language code
    * @returns {AsyncIterable<string>} Streaming translation chunks
    */
-  async *translateStreaming(text, sourceLanguage, targetLanguage) {
+  async *translateStreaming(text: string, sourceLanguage: string, targetLanguage: string): AsyncGenerator<string, void, void> {
     await this.ensureConfigured();
     
     if (this.isExtension) {
@@ -140,21 +165,26 @@ class TranslatorServiceProxy extends ServiceProxy {
       if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
       
       // Create a queue to hold chunks as they arrive
-      const chunkQueue = [];
+      const chunkQueue: string[] = [];
       let streamComplete = false;
-      let streamError = null;
+      let streamError: unknown = null;
+
+      const sendStreamingMessage = bridge.sendStreamingMessage;
+      if (!sendStreamingMessage) {
+        throw new Error('TranslatorServiceProxy: Streaming bridge is not available');
+      }
       
       // Start streaming in background (don't await - we yield chunks as they arrive)
-      const _STREAM_PROMISE = bridge.sendStreamingMessage(
+      sendStreamingMessage(
         MessageTypes.TRANSLATOR_TRANSLATE_STREAMING,
         { text, sourceLanguage, targetLanguage },
-        (chunk) => {
+        (chunk: string) => {
           chunkQueue.push(chunk);
         },
         { timeout: 120000 } // 2 minutes for streaming
       ).then(() => {
         streamComplete = true;
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         streamError = error;
         streamComplete = true;
       });
@@ -162,7 +192,10 @@ class TranslatorServiceProxy extends ServiceProxy {
       // Yield chunks as they become available
       while (!streamComplete || chunkQueue.length > 0) {
         if (chunkQueue.length > 0) {
-          yield chunkQueue.shift();
+          const nextChunk = chunkQueue.shift();
+          if (nextChunk !== undefined) {
+            yield nextChunk;
+          }
         } else {
           // Wait a bit before checking again
           await new Promise(resolve => setTimeout(resolve, 10));
@@ -172,7 +205,7 @@ class TranslatorServiceProxy extends ServiceProxy {
       // If there was an error, throw it now
       if (streamError) {
         Logger.error('TranslatorServiceProxy', 'Streaming failed:', streamError);
-        throw streamError;
+        throw (streamError instanceof Error ? streamError : new Error(String(streamError)));
       }
     } else {
       // Dev mode: Use direct service streaming
@@ -183,7 +216,7 @@ class TranslatorServiceProxy extends ServiceProxy {
   /**
    * Abort ongoing translation request
    */
-  async abort() {
+  async abort(): Promise<void> {
     if (this.isExtension) {
       // Extension mode: Send abort message to background
       const bridge = await this.waitForBridge();
@@ -193,7 +226,7 @@ class TranslatorServiceProxy extends ServiceProxy {
       }
       try {
         await bridge.sendMessage(MessageTypes.TRANSLATOR_ABORT, {});
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('TranslatorServiceProxy', 'Abort failed:', error);
       }
     } else {
@@ -205,7 +238,7 @@ class TranslatorServiceProxy extends ServiceProxy {
   /**
    * Destroy all translator sessions
    */
-  async destroy() {
+  async destroy(): Promise<void> {
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error('TranslatorServiceProxy: Bridge not available');
@@ -218,15 +251,15 @@ class TranslatorServiceProxy extends ServiceProxy {
   /**
    * Implementation of callViaBridge (required by ServiceProxy)
    */
-  async callViaBridge(method, ...args) {
-    const methodMap = {
+  async callViaBridge(method: string, ...args: unknown[]): Promise<unknown> {
+    const methodMap: Record<'configure' | 'translate' | 'checkAvailability' | 'destroy', string> = {
       configure: MessageTypes.TRANSLATOR_CONFIGURE,
       translate: MessageTypes.TRANSLATOR_TRANSLATE,
       checkAvailability: MessageTypes.TRANSLATOR_CHECK_AVAILABILITY,
       destroy: MessageTypes.TRANSLATOR_DESTROY
     };
 
-    const messageType = methodMap[method];
+    const messageType = methodMap[method as keyof typeof methodMap];
     if (!messageType) {
       throw new Error(`Unknown method: ${method}`);
     }
@@ -240,12 +273,13 @@ class TranslatorServiceProxy extends ServiceProxy {
   /**
    * Implementation of callDirect (required by ServiceProxy)
    */
-  async callDirect(method, ...args) {
-    if (typeof this.directService[method] !== 'function') {
+  async callDirect(method: string, ...args: unknown[]): Promise<unknown> {
+    const candidateMethod = this.directService[method];
+    if (typeof candidateMethod !== 'function') {
       throw new Error(`Method ${method} not found on TranslatorService`);
     }
 
-    return await this.directService[method](...args);
+    return await (candidateMethod as (...params: unknown[]) => unknown)(...args);
   }
 }
 

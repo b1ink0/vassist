@@ -11,7 +11,51 @@ import { audioWorkerClient } from '../workers/AudioWorkerClient';
 import Logger from './LoggerService';
 import voiceStorageService from './VoiceStorageService';
 
+type TTSState = {
+  client: any;
+  provider: string | null;
+  config: any;
+  enabled: boolean;
+  isGenerating: boolean;
+  isStopped: boolean;
+  lipSyncEnabled: boolean;
+  activeRequests: number;
+  maxConcurrentRequests: number;
+  blobUrls: Map<string, string>;
+};
+
+type QueueItem = {
+  text: string;
+  audioUrl: string;
+  bvmdUrl: string | null;
+  sessionId: string;
+};
+
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class TTSService {
+  private readonly isExtensionMode: boolean;
+  private eventTarget: EventTarget;
+  private hasSessionStarted: boolean;
+  private completedSessions: Set<string>;
+  private lipSyncEnabled: boolean;
+  private audioQueue: Array<QueueItem | string>;
+  private isPlaying: boolean;
+  private isStopped: boolean;
+  private currentAudio: HTMLAudioElement | null;
+  private currentPlaybackSession: string | null;
+  private stoppedSessionIds: Set<string>;
+  private blobUrls: Set<string>;
+  private tabStates: Map<number, TTSState>;
+  private client: OpenAI | string | null;
+  private provider: string | null;
+  private config: Record<string, unknown> | null;
+  private enabled: boolean;
+  private activeRequests: number;
+  private maxConcurrentRequests: number;
+  private kokoroHeartbeatInterval: ReturnType<typeof setInterval> | null;
+  private kokoroHeartbeatEnabled: boolean;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
 
@@ -31,27 +75,24 @@ class TTSService {
     this.currentPlaybackSession = null;
     this.stoppedSessionIds = new Set(); // Track stopped sessions to reject late-arriving chunks
     this.blobUrls = new Set();
+    this.tabStates = new Map();
+    this.client = null;
+    this.provider = null;
+    this.config = null;
+    this.enabled = false;
+    this.activeRequests = 0;
+    this.maxConcurrentRequests = 3;
+    this.kokoroHeartbeatInterval = null;
+    this.kokoroHeartbeatEnabled = false;
 
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
+      return;
     } else {
-      this.client = null;
-      this.provider = null;
-      this.config = null;
-      this.enabled = false;
-
-      this.activeRequests = 0;
-      this.maxConcurrentRequests = 3;
-
       // Worker handles VMD/BVMD in dev mode, no need for these services
-
-      // Kokoro heartbeat to keep model in memory
-      this.kokoroHeartbeatInterval = null;
-      this.kokoroHeartbeatEnabled = false;
     }
   }
 
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
         client: null,
@@ -60,25 +101,31 @@ class TTSService {
         enabled: false,
         isGenerating: false,
         isStopped: false,
+        lipSyncEnabled: true,
+        activeRequests: 0,
+        maxConcurrentRequests: 3,
         blobUrls: new Map(),
       });
       Logger.log('TTSService', `Tab ${tabId} initialized`);
     }
   }
 
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (this.tabStates.has(tabId)) {
       this.tabStates.delete(tabId);
       Logger.log('TTSService', `Tab ${tabId} cleaned up`);
     }
   }
 
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): TTSState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as TTSState;
     }
-    return this; // dev mode uses instance fields
+    return this as unknown as TTSState; // dev mode uses instance fields
   }
 
   /**
@@ -86,7 +133,7 @@ class TTSService {
    * @param {Object} config - TTS configuration from aiConfig
    * @param {number|null} tabId - Tab ID (extension mode only)
    */
-  configure(config, tabId = null) {
+  configure(config: Record<string, any>, tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     const { provider, enabled } = config;
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
@@ -238,12 +285,12 @@ class TTSService {
     }
   }
 
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
     return state && state.enabled && state.client !== null && state.config !== null;
   }
 
-  getCurrentProvider(tabId = null) {
+  getCurrentProvider(tabId: number | null = null): string | null {
     const state = this._getState(tabId);
     return state?.provider || null;
   }
@@ -265,7 +312,7 @@ class TTSService {
    * @param {string} event - Event name
    * @param {Function} listener - Event listener
    */
-  addEventListener(event, listener) {
+  addEventListener(event: string, listener: EventListenerOrEventListenerObject): void {
     this.eventTarget.addEventListener(event, listener);
     Logger.log('TTSService', `Event listener added for: ${event}`);
   }
@@ -275,7 +322,7 @@ class TTSService {
    * @param {string} event - Event name
    * @param {Function} listener - Event listener
    */
-  removeEventListener(event, listener) {
+  removeEventListener(event: string, listener: EventListenerOrEventListenerObject): void {
     this.eventTarget.removeEventListener(event, listener);
     Logger.log('TTSService', `Event listener removed for: ${event}`);
   }
@@ -285,7 +332,7 @@ class TTSService {
    * @param {string} eventName - Event name
    * @param {Object} detail - Event detail data
    */
-  _dispatchEvent(eventName, detail = {}) {
+  _dispatchEvent(eventName: string, detail: Record<string, unknown> = {}): void {
     const event = new CustomEvent(eventName, { detail });
     this.eventTarget.dispatchEvent(event);
   }
@@ -294,7 +341,7 @@ class TTSService {
    * Mark a session as complete (all chunks generated)
    * @param {string} sessionId - Session ID
    */
-  markSessionComplete(sessionId) {
+  markSessionComplete(sessionId: string | null): void {
     if (!sessionId) return;
     this.completedSessions.add(sessionId);
     Logger.log('TTSService', `Session marked complete: ${sessionId}`);
@@ -305,7 +352,7 @@ class TTSService {
    * @param {string} sessionId - Session ID
    * @returns {boolean}
    */
-  isSessionComplete(sessionId) {
+  isSessionComplete(sessionId: string): boolean {
     return this.completedSessions.has(sessionId);
   }
 
@@ -313,7 +360,7 @@ class TTSService {
    * Enable or disable lip sync generation
    * @param {boolean} enabled - Enable lip sync generation
    */
-  setLipSyncEnabled(enabled) {
+  setLipSyncEnabled(enabled: boolean): void {
     this.lipSyncEnabled = enabled;
     Logger.log('TTSService', `Lip sync generation ${enabled ? 'enabled' : 'disabled'}`);
   }
@@ -325,7 +372,7 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and optional BVMD URL
    */
-  async generateSpeech(text, generateLipSync = true, tabId = null) {
+  async generateSpeech(text: string, generateLipSync = true, tabId: number | null = null): Promise<any> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
     
@@ -346,9 +393,7 @@ class TTSService {
     // Handle Kokoro TTS generation
     if (state.provider === TTSProviders.KOKORO) {
       // Auto-initialize Kokoro if not initialized
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
       
       const status = await audioWorkerClient.checkKokoroStatus();
       if (!status.initialized && !status.initializing) {
@@ -378,20 +423,21 @@ class TTSService {
               if (!voiceData) {
                 throw new Error(`Voice ${state.config.referenceVoiceId} not found in IndexedDB`);
               }
-              if (!voiceData.audioData) {
+              const voice = voiceData as { audioData?: Blob; referenceText?: string; language?: string };
+              if (!voice.audioData) {
                 throw new Error('Voice data missing audioData blob');
               }
-              Logger.log('other', `${logPrefix} - Converting blob to base64 (${voiceData.audioData.size} bytes)...`);
-              const audioArrayBuffer = await voiceData.audioData.arrayBuffer();
+              Logger.log('other', `${logPrefix} - Converting blob to base64 (${voice.audioData.size} bytes)...`);
+              const audioArrayBuffer = await voice.audioData.arrayBuffer();
               const audioBytes = new Uint8Array(audioArrayBuffer);
               const binaryString = Array.from(audioBytes).map(b => String.fromCharCode(b)).join('');
               referenceAudioBase64 = btoa(binaryString);
-              refText = voiceData.referenceText;
-              refLang = voiceData.language;
+              refText = voice.referenceText;
+              refLang = voice.language;
               Logger.log('other', `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`);
             } catch (error) {
               Logger.error('other', `${logPrefix} - Failed to load reference audio from IndexedDB:`, error);
-              throw new Error(`Failed to load reference voice: ${error.message}`);
+              throw new Error(`Failed to load reference voice: ${asError(error).message}`);
             }
           }
           
@@ -455,7 +501,7 @@ class TTSService {
       } catch (error) {
         state.isGenerating = false;
         Logger.error('other', `${logPrefix} - Speech generation failed:`, error);
-        throw error;
+        throw asError(error);
       }
     }
 
@@ -483,20 +529,21 @@ class TTSService {
             if (!voiceData) {
               throw new Error(`Voice ${state.config.referenceVoiceId} not found in IndexedDB`);
             }
-            if (!voiceData.audioData) {
+            const voice = voiceData as { audioData?: Blob; referenceText?: string; language?: string };
+            if (!voice.audioData) {
               throw new Error('Voice data missing audioData blob');
             }
-            Logger.log('other', `${logPrefix} - Converting blob to base64 (${voiceData.audioData.size} bytes)...`);
-            const audioArrayBuffer = await voiceData.audioData.arrayBuffer();
+            Logger.log('other', `${logPrefix} - Converting blob to base64 (${voice.audioData.size} bytes)...`);
+            const audioArrayBuffer = await voice.audioData.arrayBuffer();
             const audioBytes = new Uint8Array(audioArrayBuffer);
             const binaryString = Array.from(audioBytes).map(b => String.fromCharCode(b)).join('');
             referenceAudioBase64 = btoa(binaryString);
-            refText = voiceData.referenceText;
-            refLang = voiceData.language;
+            refText = voice.referenceText;
+            refLang = voice.language;
             Logger.log('other', `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`);
           } catch (error) {
             Logger.error('other', `${logPrefix} - Failed to load reference audio from IndexedDB:`, error);
-            throw new Error(`Failed to load reference voice: ${error.message}`);
+            throw new Error(`Failed to load reference voice: ${asError(error).message}`);
           }
         }
         
@@ -550,9 +597,7 @@ class TTSService {
           Logger.log('other', `${logPrefix} - Processing audio with lip sync via Worker...`);
           
           // Initialize worker client if needed
-          if (!audioWorkerClient.isReady) {
-            await audioWorkerClient.init();
-          }
+          await audioWorkerClient.init();
           
           // Process audio in worker (AudioContext on main thread, heavy work in worker)
           const result = await audioWorkerClient.processAudioWithLipSync(arrayBuffer);
@@ -573,7 +618,7 @@ class TTSService {
       return { audio: blob, bvmdUrl };
     } catch (error) {
       Logger.error('other', `${logPrefix} - Speech generation failed:`, error);
-      throw error;
+      throw asError(error);
     } finally {
       state.activeRequests--;
     }
@@ -587,8 +632,8 @@ class TTSService {
    * @param {number} minChunkSize - Minimum chunk size before forced split
    * @returns {string[]} Array of text chunks
    */
-  chunkText(text, maxChunkSize = 500, minChunkSize = 100) {
-    const chunks = [];
+  chunkText(text: string, maxChunkSize = 500, minChunkSize = 100): string[] {
+    const chunks: string[] = [];
     let currentChunk = '';
 
     // First, normalize the text - replace multiple newlines with double newlines
@@ -643,14 +688,23 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<Array<{text: string, audioUrl: string, bvmdUrl: string|null, sessionId: string|null}>>} Array of text, audio URLs and BVMD URLs
    */
-  async generateChunkedSpeech(text, onChunkReady = null, maxChunkSize = 500, minChunkSize = 100, sessionId = null, tabId = null) {
+  async generateChunkedSpeech(
+    text: string,
+    onChunkReady: ((...args: any[]) => void | Promise<void>) | null = null,
+    maxChunkSize = 500,
+    minChunkSize = 100,
+    sessionId: string | null = null,
+    tabId: number | null = null,
+  ): Promise<any> {
     // In extension mode, generateChunkedSpeech will not create Blob URLs; background will return arrays
     if (this.isExtensionMode) {
       const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
       let generatedCount = 0;
       for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        if (!chunk) continue;
         try {
-          const result = await this.generateSpeech(chunks[i], false, tabId);
+          const result = await this.generateSpeech(chunk, false, tabId);
           if (!result) continue;
           if (onChunkReady) await onChunkReady(result.audioBuffer, i);
           generatedCount++;
@@ -673,15 +727,17 @@ class TTSService {
     Logger.log('TTSService', `Generating ${chunks.length} audio chunks${this.lipSyncEnabled ? ' with lip sync' : ''} [Session: ${sessionId}]`);
 
     for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk) continue;
       try {
-        const result = await this.generateSpeech(chunks[i], this.lipSyncEnabled);
+        const result = await this.generateSpeech(chunk, this.lipSyncEnabled);
         if (!result) continue;
         const { audio, bvmdUrl } = result;
         const audioUrl = URL.createObjectURL(audio);
         this.blobUrls.add(audioUrl);
-        const chunkResult = { text: chunks[i], audioUrl, bvmdUrl, sessionId };
+        const chunkResult = { text: chunk, audioUrl, bvmdUrl, sessionId };
         results.push(chunkResult);
-        if (onChunkReady) onChunkReady(chunks[i], audioUrl, bvmdUrl, i, chunks.length);
+        if (onChunkReady) onChunkReady(chunk, audioUrl, bvmdUrl, i, chunks.length);
       } catch (error) {
         Logger.error('TTSService', 'Failed to generate chunk ${i + 1}:', error);
       }
@@ -694,7 +750,7 @@ class TTSService {
    * Get current audio queue length (for just-in-time generation)
    * @returns {number} Number of audio items in queue
    */
-  getQueueLength() {
+  getQueueLength(): number {
     return this.audioQueue.length;
   }
 
@@ -702,7 +758,7 @@ class TTSService {
    * Check if audio is currently playing or queued
    * @returns {boolean} True if audio is playing or in queue
    */
-  isAudioActive() {
+  isAudioActive(): boolean {
     return this.isPlaying || this.audioQueue.length > 0;
   }
 
@@ -713,7 +769,7 @@ class TTSService {
    * @param {string|null} bvmdUrl - Optional BVMD blob URL for lip sync
    * @param {string} sessionId - Unique session ID for this playback request
    */
-  queueAudio(text, audioUrl, bvmdUrl = null, sessionId = null) {
+  queueAudio(text: string, audioUrl: string, bvmdUrl: string | null = null, sessionId: string | null = null): void {
     // Generate session ID if not provided (for new playback requests)
     const effectiveSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -753,7 +809,7 @@ class TTSService {
   /**
    * Play next audio in queue
    */
-  async playNextInQueue() {
+  async playNextInQueue(): Promise<void> {
     // Check if stopped
     if (this.isStopped) {
       this.isPlaying = false;
@@ -769,6 +825,10 @@ class TTSService {
 
     this.isPlaying = true;
     const item = this.audioQueue.shift();
+    if (!item) {
+      this.isPlaying = false;
+      return;
+    }
     
     // Handle both old format (string) and new format (object)
     const text = typeof item === 'object' ? item.text : '';
@@ -800,7 +860,7 @@ class TTSService {
    * @param {string|null} sessionId - Session ID for this audio
    * @returns {Promise<void>} Resolves when audio finishes
    */
-  playAudio(text, audioUrl, bvmdUrl = null, sessionId = null) {
+  playAudio(text: string, audioUrl: string, bvmdUrl: string | null = null, sessionId: string | null = null): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if this audio belongs to the current session
       if (sessionId && this.currentPlaybackSession && sessionId !== this.currentPlaybackSession) {
@@ -865,7 +925,7 @@ class TTSService {
         resolve();
       };
 
-      audio.onerror = (error) => {
+      audio.onerror = (error: Event | string) => {
         Logger.error('TTSService', 'Audio playback error:', error);
         this.currentAudio = null;
         
@@ -883,7 +943,7 @@ class TTSService {
    * @param {string} sessionId - Session ID for this playback sequence
    * @returns {Promise<void>} Resolves when all audio finishes
    */
-  async playAudioSequence(items, sessionId = null) {
+  async playAudioSequence(items: Array<QueueItem | string>, sessionId: string | null = null): Promise<void> {
     Logger.log('TTSService', `Playing ${items.length} audio chunks sequentially [Session: ${sessionId}]`);
     
     // Set current session if provided
@@ -925,7 +985,7 @@ class TTSService {
    * Stop current playback and clear queue
    * Returns a Promise that resolves when stop is complete
    */
-  stopPlayback() {
+  stopPlayback(): void {
     Logger.log('TTSService', 'Stopping playback...');
     
     // Save current session ID before clearing
@@ -966,14 +1026,14 @@ class TTSService {
    * Resume playback (clear stopped flag)
    * Call this before starting new TTS generation
    */
-  resumePlayback() {
+  resumePlayback(): void {
     Logger.log('TTSService', 'Resuming playback (clearing stopped flag and stopped sessions)');
     this.isStopped = false;
     this.stoppedSessionIds.clear();
   }
 
   // Extension-only controls (stop/resume generation)
-  stopGeneration(tabId = null) {
+  stopGeneration(tabId: number | null = null): void {
     if (this.isExtensionMode) {
       const state = this._getState(tabId);
       state.isStopped = true;
@@ -982,7 +1042,7 @@ class TTSService {
     this.isStopped = true;
   }
 
-  resumeGeneration(tabId = null) {
+  resumeGeneration(tabId: number | null = null): void {
     if (this.isExtensionMode) {
       const state = this._getState(tabId);
       state.isStopped = false;
@@ -998,7 +1058,7 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<{audio: Blob, bvmdUrl: string|null}>} Audio blob and optional BVMD URL
    */
-  async generateKokoroSpeech(text, generateLipSync = true, tabId = null) {
+  async generateKokoroSpeech(text: string, generateLipSync = true, tabId: number | null = null): Promise<any> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
@@ -1050,7 +1110,7 @@ class TTSService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro speech generation failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1060,7 +1120,7 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async initializeKokoro(progressCallback = null, tabId = null) {
+  async initializeKokoro(progressCallback: ((progress: unknown) => void) | null = null, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
@@ -1077,9 +1137,7 @@ class TTSService {
 
       // Dev mode: Initialize worker client for SharedWorker
       // Extension mode: This method is NOT called - TTSServiceProxy handles it directly
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       // Initialize Kokoro model via SharedWorker (dev mode only)
       const result = await audioWorkerClient.initKokoro({
@@ -1108,11 +1166,11 @@ class TTSService {
         this.startKokoroHeartbeat(10000); // 10 seconds
       }
       
-      return result.initialized;
+      return (result as { initialized?: boolean }).initialized === true;
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro initialization failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1121,14 +1179,12 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Status object
    */
-  async checkKokoroStatus(tabId = null) {
+  async checkKokoroStatus(tabId: number | null = null): Promise<unknown> {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
       // Initialize worker client if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       const status = await audioWorkerClient.checkKokoroStatus();
       Logger.log('other', `${logPrefix} - Kokoro status:`, status);
@@ -1136,7 +1192,7 @@ class TTSService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro status check failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1145,14 +1201,12 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<string[]>} Array of voice IDs
    */
-  async listKokoroVoices(tabId = null) {
+  async listKokoroVoices(tabId: number | null = null): Promise<string[]> {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
       // Initialize worker client if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       const voices = await audioWorkerClient.listKokoroVoices();
       Logger.log('other', `${logPrefix} - Kokoro voices:`, voices.length);
@@ -1160,7 +1214,7 @@ class TTSService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro list voices failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1169,14 +1223,12 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Cache size information
    */
-  async getKokoroCacheSize(tabId = null) {
+  async getKokoroCacheSize(tabId: number | null = null): Promise<unknown> {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
       // Initialize worker client if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       const sizeInfo = await audioWorkerClient.getKokoroCacheSize();
       Logger.log('other', `${logPrefix} - Kokoro cache size:`, sizeInfo);
@@ -1184,7 +1236,7 @@ class TTSService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro cache size check failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1193,14 +1245,12 @@ class TTSService {
    * Only for dev mode - extension mode uses TTSServiceProxy
    * @returns {Promise<boolean>} True if model is alive
    */
-  async pingKokoro() {
+  async pingKokoro(): Promise<boolean> {
     try {
       const state = this._getState(null);
       
       // Initialize worker if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       // Check if initialized first
       const status = await audioWorkerClient.checkKokoroStatus();
@@ -1226,7 +1276,7 @@ class TTSService {
    * @param {number|null} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async clearKokoroCache(tabId = null) {
+  async clearKokoroCache(tabId: number | null = null): Promise<boolean> {
     const logPrefix = this.isExtensionMode ? `[TTSService] Tab ${tabId}` : '[TTSService]';
 
     try {
@@ -1234,9 +1284,7 @@ class TTSService {
       this.stopKokoroHeartbeat();
       
       // Initialize worker client if needed
-      if (!audioWorkerClient.isReady) {
-        await audioWorkerClient.init();
-      }
+      await audioWorkerClient.init();
 
       const cleared = await audioWorkerClient.clearKokoroCache();
       Logger.log('other', `${logPrefix} - Kokoro cache cleared:`, cleared);
@@ -1244,7 +1292,7 @@ class TTSService {
 
     } catch (error) {
       Logger.error('other', `${logPrefix} - Kokoro cache clear failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -1254,7 +1302,7 @@ class TTSService {
    * Works in both dev mode and extension mode via TTSServiceProxy
    * @param {number} intervalMs - Heartbeat interval in milliseconds (default: 10000 = 10 seconds)
    */
-  startKokoroHeartbeat(intervalMs = 10000) {
+  startKokoroHeartbeat(intervalMs = 10000): void {
     if (this.kokoroHeartbeatInterval) {
       Logger.log('TTSService', 'Kokoro heartbeat already running');
       return;
@@ -1280,7 +1328,7 @@ class TTSService {
   /**
    * Stop Kokoro heartbeat
    */
-  stopKokoroHeartbeat() {
+  stopKokoroHeartbeat(): void {
     if (this.kokoroHeartbeatInterval) {
       Logger.log('TTSService', 'Stopping Kokoro heartbeat');
       clearInterval(this.kokoroHeartbeatInterval);
@@ -1293,12 +1341,12 @@ class TTSService {
    * Clean up blob URLs (audio and BVMD)
    * @param {string[]} urls - Optional specific URLs to revoke, or all if not provided
    */
-  cleanupBlobUrls(urls = null) {
+  cleanupBlobUrls(urls: string[] | null = null): void {
     if (this.isExtensionMode) {
       // In extension mode, just revoke the provided URLs
       // Blob URLs are created in main world (TTSServiceProxy), not tracked here
       if (urls) {
-        urls.forEach(url => {
+        urls.forEach((url) => {
           URL.revokeObjectURL(url);
         });
         Logger.log('TTSService', `Revoked ${urls.length} blob URLs`);
@@ -1306,13 +1354,13 @@ class TTSService {
     } else {
       // Dev mode: track and manage blob URLs
       if (urls) {
-        urls.forEach(url => {
+        urls.forEach((url) => {
           URL.revokeObjectURL(url);
           this.blobUrls.delete(url);
         });
         Logger.log('TTSService', `Cleaned up ${urls.length} blob URLs`);
       } else {
-        this.blobUrls.forEach(url => URL.revokeObjectURL(url));
+        this.blobUrls.forEach((url) => URL.revokeObjectURL(url));
         Logger.log('TTSService', `Cleaned up all ${this.blobUrls.size} blob URLs`);
         this.blobUrls.clear();
       }
@@ -1324,10 +1372,11 @@ class TTSService {
    * Check if TTS is currently playing audio
    * @returns {boolean} True if audio is playing
    */
-  isCurrentlyPlaying(tabId = null) {
+  isCurrentlyPlaying(tabId: number | null = null): boolean {
     if (this.isExtensionMode) {
+      if (tabId === null) return false;
       const state = this.tabStates.get(tabId);
-      return state && state.isGenerating;
+      return state?.isGenerating === true;
     }
     // Check if there's an actual audio element currently playing
     return this.currentAudio !== null;
@@ -1338,7 +1387,7 @@ class TTSService {
    * @param {string} testText - Text to test with
    * @returns {Promise<boolean>} True if successful
    */
-  async testConnection(testText = 'Hello, this is a test of the text to speech system.', tabId = null) {
+  async testConnection(testText = 'Hello, this is a test of the text to speech system.', tabId: number | null = null): Promise<boolean> {
     if (this.isExtensionMode) {
       if (!this.isConfigured(tabId)) throw new Error('TTSService not configured for this tab');
       const result = await this.generateSpeech(testText, false, tabId);
@@ -1357,7 +1406,7 @@ class TTSService {
       return true;
     } catch (error) {
       Logger.error('TTSService', 'TTS test failed:', error);
-      throw error;
+      throw asError(error);
     }
   }
 }

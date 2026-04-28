@@ -8,18 +8,97 @@
 import OpenAI from 'openai';
 import Logger from './LoggerService';
 
+type TranslatorProvider = 'chrome-ai' | 'openai' | 'ollama' | 'desktop-local';
+type AvailabilityResult = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
+
+type TranslatorConfig = {
+  provider: TranslatorProvider;
+  model?: string;
+  temperature?: number;
+};
+
+type ConfigureInput = {
+  provider: TranslatorProvider;
+  openai?: {
+    apiKey: string;
+    model?: string;
+    temperature?: number;
+  };
+  ollama?: {
+    endpoint: string;
+    model: string;
+    temperature?: number;
+  };
+  'desktop-local'?: {
+    endpoint: string;
+    model?: string;
+    temperature?: number;
+  };
+};
+
+interface TranslatorMonitor {
+  addEventListener(event: 'downloadprogress', listener: (event: { loaded: number }) => void): void;
+}
+
+interface TranslatorSession {
+  translate(text: string): Promise<string>;
+  translateStreaming(text: string): AsyncIterable<string>;
+  destroy?(): void;
+}
+
+interface TranslatorAPI {
+  availability(params: { sourceLanguage: string; targetLanguage: string }): Promise<AvailabilityResult>;
+  create(params: {
+    sourceLanguage: string;
+    targetLanguage: string;
+    monitor?: (monitor: TranslatorMonitor) => void;
+  }): Promise<TranslatorSession>;
+}
+
+interface TranslatorState {
+  translatorSessions: Map<string, TranslatorSession>;
+  config: TranslatorConfig | null;
+  provider: TranslatorProvider | null;
+  llmClient: OpenAI | null;
+  abortController: AbortController | null;
+}
+
+const getTranslatorApi = (): TranslatorAPI | null => {
+  const maybeGlobal = self as typeof globalThis & { Translator?: TranslatorAPI };
+  return maybeGlobal.Translator ?? null;
+};
+
+const asError = (error: unknown): Error => {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
+};
+
+const isAbortError = (error: unknown): boolean => {
+  const normalized = asError(error);
+  const msg = normalized.message.toLowerCase();
+  return normalized.name === 'AbortError' || msg.includes('abort') || msg.includes('cancel');
+};
+
 class TranslatorService {
+  private readonly isExtensionMode: boolean;
+  private readonly tabStates: Map<number, TranslatorState>;
+  private readonly devState: TranslatorState;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
+    this.tabStates = new Map();
+    this.devState = {
+      translatorSessions: new Map(),
+      config: null,
+      provider: null,
+      llmClient: null,
+      abortController: null,
+    };
     
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
-    } else {
-      this.translatorSessions = new Map(); // key: "sourceLanguage-targetLanguage", value: Translator session
-      this.config = null;
-      this.provider = null;
-      this.llmClient = null;
-      this.abortController = null;
+      return;
     }
   }
 
@@ -27,7 +106,7 @@ class TranslatorService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     if (!this.tabStates.has(tabId)) {
@@ -46,7 +125,7 @@ class TranslatorService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     const state = this.tabStates.get(tabId);
@@ -76,12 +155,15 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): TranslatorState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as TranslatorState;
     }
-    return this; // In dev mode, state is on the instance itself
+    return this.devState;
   }
 
   /**
@@ -93,7 +175,7 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async configure(config, tabId = null) {
+  async configure(config: ConfigureInput, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
@@ -103,7 +185,7 @@ class TranslatorService {
     try {
       if (provider === 'chrome-ai') {
         // Check Chrome AI Translator availability
-        if (!('Translator' in self)) {
+        if (!getTranslatorApi()) {
           throw new Error('Chrome AI Translator not available. Chrome 138+ required.');
         }
         
@@ -113,6 +195,9 @@ class TranslatorService {
       } 
       else if (provider === 'openai') {
         const openaiConfig = config.openai;
+        if (!openaiConfig?.apiKey) {
+          throw new Error('Missing OpenAI configuration');
+        }
         state.llmClient = new OpenAI({
           apiKey: openaiConfig.apiKey,
           dangerouslyAllowBrowser: !this.isExtensionMode,
@@ -128,6 +213,9 @@ class TranslatorService {
       }
       else if (provider === 'ollama') {
         const ollamaConfig = config.ollama;
+        if (!ollamaConfig?.endpoint || !ollamaConfig.model) {
+          throw new Error('Missing Ollama configuration');
+        }
         state.llmClient = new OpenAI({
           apiKey: 'ollama',
           baseURL: ollamaConfig.endpoint + '/v1',
@@ -144,6 +232,9 @@ class TranslatorService {
       }
       else if (provider === 'desktop-local') {
         const desktopConfig = config['desktop-local'];
+        if (!desktopConfig?.endpoint) {
+          throw new Error('Missing desktop-local configuration');
+        }
         state.llmClient = new OpenAI({
           apiKey: 'desktop-local',
           baseURL: desktopConfig.endpoint + '/v1',
@@ -168,7 +259,7 @@ class TranslatorService {
       state.config = null;
       state.provider = null;
       state.llmClient = null;
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -177,16 +268,16 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if configured
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
-    return state && state.config && state.provider;
+    return Boolean(state.config && state.provider);
   }
 
   /**
    * Abort ongoing translation request
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  abort(tabId = null) {
+  abort(tabId: number | null = null): void {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -204,7 +295,7 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(sourceLanguage, targetLanguage, tabId = null) {
+  async checkAvailability(sourceLanguage: string, targetLanguage: string, tabId: number | null = null): Promise<AvailabilityResult> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -213,12 +304,13 @@ class TranslatorService {
     }
     
     if (state.provider === 'chrome-ai') {
-      if (!('Translator' in self)) {
+      const translatorApi = getTranslatorApi();
+      if (!translatorApi) {
         return 'unavailable';
       }
       
       try {
-        const availability = await self.Translator.availability({
+        const availability = await translatorApi.availability({
           sourceLanguage,
           targetLanguage
         });
@@ -241,7 +333,7 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} Translator session
    */
-  async _getOrCreateSession(sourceLanguage, targetLanguage, tabId = null) {
+  async _getOrCreateSession(sourceLanguage: string, targetLanguage: string, tabId: number | null = null): Promise<TranslatorSession | null> {
     const state = this._getState(tabId);
     const sessionKey = `${sourceLanguage}-${targetLanguage}`;
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
@@ -252,17 +344,22 @@ class TranslatorService {
     }
     
     if (state.translatorSessions.has(sessionKey)) {
-      return state.translatorSessions.get(sessionKey);
+      return state.translatorSessions.get(sessionKey) ?? null;
     }
     
     // Create new Chrome AI Translator session
     try {
       Logger.log('other', `${logPrefix} Creating translator session: ${sessionKey}`);
-      const session = await self.Translator.create({
+      const translatorApi = getTranslatorApi();
+      if (!translatorApi) {
+        throw new Error('Chrome AI Translator API unavailable');
+      }
+
+      const session = await translatorApi.create({
         sourceLanguage,
         targetLanguage,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
+        monitor(monitor: TranslatorMonitor) {
+          monitor.addEventListener('downloadprogress', (e: { loaded: number }) => {
             Logger.log('other', `${logPrefix} Translation model download: ${(e.loaded * 100).toFixed(1)}%`);
           });
         }
@@ -273,7 +370,7 @@ class TranslatorService {
       return session;
     } catch (error) {
       Logger.error('other', `${logPrefix} Failed to create translator session:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -285,7 +382,7 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} Translated text
    */
-  async translate(text, sourceLanguage, targetLanguage, tabId = null) {
+  async translate(text: string, sourceLanguage: string, targetLanguage: string, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -297,6 +394,9 @@ class TranslatorService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(sourceLanguage, targetLanguage, tabId);
+      if (!session) {
+        throw new Error('Translator session unavailable');
+      }
       const translated = await session.translate(text);
       Logger.log('other', `${logPrefix} Translation complete:`, translated.substring(0, 50));
       return translated;
@@ -316,7 +416,7 @@ class TranslatorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {AsyncIterable<string>} Streaming translation chunks
    */
-  async *translateStreaming(text, sourceLanguage, targetLanguage, tabId = null) {
+  async *translateStreaming(text: string, sourceLanguage: string, targetLanguage: string, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -328,6 +428,9 @@ class TranslatorService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(sourceLanguage, targetLanguage, tabId);
+      if (!session) {
+        throw new Error('Translator session unavailable');
+      }
       const stream = session.translateStreaming(text);
       
       for await (const chunk of stream) {
@@ -346,7 +449,7 @@ class TranslatorService {
    * Translate using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _translateWithOpenAICompatible(text, sourceLanguage, targetLanguage, tabId = null) {
+  async _translateWithOpenAICompatible(text: string, sourceLanguage: string, targetLanguage: string, tabId: number | null = null): Promise<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -354,27 +457,28 @@ class TranslatorService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Translator LLM client not configured');
+    }
     
     try {
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
       }, {
         signal: state.abortController.signal
       });
       
       state.abortController = null;
-      const translated = response.choices[0].message.content.trim();
+      const translated = response.choices[0]?.message?.content?.trim() ?? '';
       Logger.log('other', `${logPrefix} ${state.provider} translation complete`);
       return translated;
     } catch (error) {
       state.abortController = null;
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const isAbort = isAbortError(error);
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Translation aborted by user`);
@@ -382,7 +486,7 @@ class TranslatorService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} translation failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -390,7 +494,7 @@ class TranslatorService {
    * Translate using OpenAI-compatible API (streaming polyfill for OpenAI/Ollama)
    * @private
    */
-  async *_translateStreamingWithOpenAICompatible(text, sourceLanguage, targetLanguage, tabId = null) {
+  async *_translateStreamingWithOpenAICompatible(text: string, sourceLanguage: string, targetLanguage: string, tabId: number | null = null): AsyncIterable<string> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     
@@ -398,12 +502,15 @@ class TranslatorService {
     
     // Create abort controller for this request
     state.abortController = new AbortController();
+    if (!state.llmClient || !state.config?.model) {
+      throw new Error('Translator LLM client not configured');
+    }
     
     try {
       const stream = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
         stream: true,
       }, {
         signal: state.abortController.signal
@@ -427,9 +534,7 @@ class TranslatorService {
       state.abortController = null;
       
       // Check if error is from abort
-      const isAbort = error.name === 'AbortError' || 
-                      error.message?.includes('abort') || 
-                      error.message?.includes('cancel');
+      const isAbort = isAbortError(error);
       
       if (isAbort) {
         Logger.log('other', `${logPrefix} Streaming translation aborted by user`);
@@ -437,7 +542,7 @@ class TranslatorService {
       }
       
       Logger.error('other', `${logPrefix} ${state.provider} streaming translation failed:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -445,7 +550,7 @@ class TranslatorService {
    * Get language name from code
    * @private
    */
-  _getLanguageName(code) {
+  _getLanguageName(code: string): string {
     const languageNames = {
       'en': 'English',
       'es': 'Spanish',
@@ -463,14 +568,15 @@ class TranslatorService {
       'pl': 'Polish',
       'tr': 'Turkish',
     };
-    return languageNames[code] || code;
+    const record = languageNames as Record<string, string>;
+    return record[code] || code;
   }
 
   /**
    * Destroy all translator sessions
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  async destroy(tabId = null) {
+  async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[TranslatorService] Tab ${tabId}` : '[TranslatorService]';
     

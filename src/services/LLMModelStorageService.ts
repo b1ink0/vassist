@@ -4,6 +4,62 @@
 
 import { isDesktop, isAndroid } from '../utils/PlatformUtils';
 
+type UnknownRecord = Record<string, unknown>;
+
+interface ModelInfo {
+  name: string;
+  size: number;
+  modified: Date;
+}
+
+interface OperationResult {
+  success: boolean;
+  error?: string;
+  filename?: string;
+  note?: string;
+  canceled?: boolean;
+  downloading?: boolean;
+  path?: string;
+}
+
+interface DownloadProgress {
+  percent: number;
+  status: string;
+}
+
+interface DesktopLLMApi {
+  listModels: (customPath?: string | null) => Promise<OperationResult & { models?: ModelInfo[] }>;
+  pullModel: (modelName: string, customPath?: string | null) => Promise<OperationResult>;
+  downloadModel: (url: string, customPath?: string | null) => Promise<OperationResult>;
+  deleteModel: (filename: string, customPath?: string | null) => Promise<OperationResult>;
+  chooseModelFile: () => Promise<{ canceled?: boolean; path?: string }>;
+  importModel: (filePath: string, customPath?: string | null) => Promise<OperationResult>;
+  chooseModelsFolder: () => Promise<OperationResult & { path?: string }>;
+  onDownloadProgress: (callback: (progress: DownloadProgress) => void) => () => void;
+  getBackendStatus: (backend?: string) => Promise<OperationResult & UnknownRecord>;
+  installBackend: (backend: string) => Promise<OperationResult & UnknownRecord>;
+  cancelBackendInstall: () => Promise<OperationResult & UnknownRecord>;
+  onBackendInstallProgress: (callback: (progress: UnknownRecord) => void) => () => void;
+}
+
+interface AndroidAIApi {
+  listLLMModels?: () => string;
+  pullLLMModel?: (modelName: string) => string;
+  downloadLLMModel?: (url: string) => string;
+  deleteLLMModel?: (filename: string) => string;
+  importLLMModel?: () => string;
+  getLLMModelsDirectory?: () => string;
+  _onDownloadComplete?: ((result: OperationResult) => void) | null;
+  _onDownloadError?: ((error: string) => void) | null;
+  _onDownloadProgress?: ((percent: number, status: string) => void) | null;
+  _onImportComplete?: ((result: OperationResult) => void) | null;
+}
+
+const parseJsonRecord = <T>(json: string): T => JSON.parse(json) as T;
+
+const toErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /**
  * Model information object
  * @typedef {Object} ModelInfo
@@ -38,7 +94,8 @@ class LLMModelStorageBase {
    * @param {string|null} customPath - Optional custom storage path
    * @returns {Promise<OperationResult & {models: ModelInfo[]}>}
    */
-  async listModels(customPath = null) {
+  async listModels(customPath: string | null = null): Promise<OperationResult & { models: ModelInfo[] }> {
+    void customPath;
     throw new Error('listModels() not implemented');
   }
 
@@ -48,7 +105,9 @@ class LLMModelStorageBase {
    * @param {string|null} customPath - Optional custom storage path
    * @returns {Promise<OperationResult>}
    */
-  async downloadFromOllama(modelName, customPath = null) {
+  async downloadFromOllama(modelName: string, customPath: string | null = null): Promise<OperationResult> {
+    void modelName;
+    void customPath;
     throw new Error('downloadFromOllama() not implemented');
   }
 
@@ -58,7 +117,9 @@ class LLMModelStorageBase {
    * @param {string|null} customPath - Optional custom storage path
    * @returns {Promise<OperationResult>}
    */
-  async downloadFromUrl(url, customPath = null) {
+  async downloadFromUrl(url: string, customPath: string | null = null): Promise<OperationResult> {
+    void url;
+    void customPath;
     throw new Error('downloadFromUrl() not implemented');
   }
 
@@ -68,7 +129,9 @@ class LLMModelStorageBase {
    * @param {string|null} customPath - Optional custom storage path
    * @returns {Promise<OperationResult>}
    */
-  async deleteModel(filename, customPath = null) {
+  async deleteModel(filename: string, customPath: string | null = null): Promise<OperationResult> {
+    void filename;
+    void customPath;
     throw new Error('deleteModel() not implemented');
   }
 
@@ -77,7 +140,8 @@ class LLMModelStorageBase {
    * @param {string|null} customPath - Optional custom storage path
    * @returns {Promise<OperationResult>}
    */
-  async importModel(customPath = null) {
+  async importModel(customPath: string | null = null): Promise<OperationResult> {
+    void customPath;
     throw new Error('importModel() not implemented');
   }
 
@@ -85,7 +149,7 @@ class LLMModelStorageBase {
    * Choose custom models folder
    * @returns {Promise<OperationResult & {path?: string}>}
    */
-  async chooseModelsFolder() {
+  async chooseModelsFolder(): Promise<OperationResult & { path?: string }> {
     throw new Error('chooseModelsFolder() not implemented');
   }
 
@@ -94,23 +158,27 @@ class LLMModelStorageBase {
    * @param {function(DownloadProgress): void} callback - Progress callback
    * @returns {function(): void} Unsubscribe function
    */
-  onDownloadProgress(callback) {
+  onDownloadProgress(callback: (progress: DownloadProgress) => void): () => void {
+    void callback;
     throw new Error('onDownloadProgress() not implemented');
   }
 
-  async getBackendStatus(backend = 'auto') {
+  async getBackendStatus(backend = 'auto'): Promise<OperationResult & UnknownRecord> {
+    void backend;
     throw new Error('getBackendStatus() not implemented');
   }
 
-  async installBackend(backend) {
+  async installBackend(backend: string): Promise<OperationResult & UnknownRecord> {
+    void backend;
     throw new Error('installBackend() not implemented');
   }
 
-  async cancelBackendInstall() {
+  async cancelBackendInstall(): Promise<OperationResult & UnknownRecord> {
     throw new Error('cancelBackendInstall() not implemented');
   }
 
-  onBackendInstallProgress(callback) {
+  onBackendInstallProgress(callback: (progress: UnknownRecord) => void): () => void {
+    void callback;
     throw new Error('onBackendInstallProgress() not implemented');
   }
 }
@@ -119,7 +187,9 @@ class LLMModelStorageBase {
  * Desktop implementation using Electron IPC via useDesktop hook
  */
 class DesktopLLMModelStorage extends LLMModelStorageBase {
-  constructor(api) {
+  private readonly api: DesktopLLMApi;
+
+  constructor(api: { llm?: DesktopLLMApi } | null) {
     super();
     if (!api?.llm) {
       throw new Error('Desktop API not provided');
@@ -127,23 +197,27 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
     this.api = api.llm;
   }
 
-  async listModels(customPath = null) {
-    return await this.api.listModels(customPath);
+  async listModels(customPath: string | null = null): Promise<OperationResult & { models: ModelInfo[] }> {
+    const result = await this.api.listModels(customPath);
+    return {
+      ...result,
+      models: Array.isArray(result.models) ? result.models : [],
+    };
   }
 
-  async downloadFromOllama(modelName, customPath = null) {
+  async downloadFromOllama(modelName: string, customPath: string | null = null): Promise<OperationResult> {
     return await this.api.pullModel(modelName, customPath);
   }
 
-  async downloadFromUrl(url, customPath = null) {
+  async downloadFromUrl(url: string, customPath: string | null = null): Promise<OperationResult> {
     return await this.api.downloadModel(url, customPath);
   }
 
-  async deleteModel(filename, customPath = null) {
+  async deleteModel(filename: string, customPath: string | null = null): Promise<OperationResult> {
     return await this.api.deleteModel(filename, customPath);
   }
 
-  async importModel(customPath = null) {
+  async importModel(customPath: string | null = null): Promise<OperationResult> {
     // Desktop uses file dialog, handled by chooseModelFile + importModel
     const fileResult = await this.api.chooseModelFile();
     
@@ -160,27 +234,27 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
     return await this.api.importModel(filePath, customPath);
   }
 
-  async chooseModelsFolder() {
+  async chooseModelsFolder(): Promise<OperationResult & { path?: string }> {
     return await this.api.chooseModelsFolder();
   }
 
-  onDownloadProgress(callback) {
+  onDownloadProgress(callback: (progress: DownloadProgress) => void): () => void {
     return this.api.onDownloadProgress(callback);
   }
 
-  async getBackendStatus(backend = 'auto') {
+  async getBackendStatus(backend = 'auto'): Promise<OperationResult & UnknownRecord> {
     return await this.api.getBackendStatus(backend);
   }
 
-  async installBackend(backend) {
+  async installBackend(backend: string): Promise<OperationResult & UnknownRecord> {
     return await this.api.installBackend(backend);
   }
 
-  async cancelBackendInstall() {
+  async cancelBackendInstall(): Promise<OperationResult & UnknownRecord> {
     return await this.api.cancelBackendInstall();
   }
 
-  onBackendInstallProgress(callback) {
+  onBackendInstallProgress(callback: (progress: UnknownRecord) => void): () => void {
     return this.api.onBackendInstallProgress(callback);
   }
 }
@@ -189,7 +263,9 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
  * Android implementation using AndroidAI JavaScript interface
  */
 class AndroidLLMModelStorage extends LLMModelStorageBase {
-  constructor(api) {
+  private api: AndroidAIApi | null;
+
+  constructor(api: AndroidAIApi | null) {
     super();
     if (!isAndroid) {
       throw new Error('Android platform not detected');
@@ -201,144 +277,169 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     }
   }
 
-  async listModels(customPath = null) {
+  async listModels(customPath: string | null = null): Promise<OperationResult & { models: ModelInfo[] }> {
     try {
+      void customPath;
       if (!this.api?.listLLMModels) {
         console.warn('[Android LLM Storage] AndroidAI.listLLMModels not available');
         return { success: true, models: [] };
       }
       
       const resultJson = this.api.listLLMModels();
-      const result = JSON.parse(resultJson);
-      return result;
+      const result = parseJsonRecord<OperationResult & { models?: ModelInfo[] }>(resultJson);
+      return {
+        ...result,
+        models: Array.isArray(result.models) ? result.models : [],
+      };
     } catch (error) {
       console.error('[Android LLM Storage] listModels error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: toErrorMessage(error), models: [] };
     }
   }
 
-  async downloadFromOllama(modelName, customPath = null) {
+  async downloadFromOllama(modelName: string, customPath: string | null = null): Promise<OperationResult> {
+    void customPath;
     console.log('[Android] downloadFromOllama called:', modelName);
-    return new Promise((resolve, reject) => {
+    return new Promise<OperationResult>((resolve, reject) => {
+      const api = this.api;
       try {
-        if (!this.api?.pullLLMModel) {
+        if (!api?.pullLLMModel) {
           reject(new Error('AndroidAI interface not available'));
           return;
         }
         
         // Set up completion callbacks BEFORE starting download
-        this.api._onDownloadComplete = (result) => {
+        api._onDownloadComplete = (result: OperationResult) => {
           console.log('[Android] Download completed:', result);
           // Clean up callbacks
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           resolve(result);
         };
         
-        this.api._onDownloadError = (error) => {
+        api._onDownloadError = (error: string) => {
           console.log('[Android] Download error:', error);
           // Clean up callbacks
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           reject(new Error(error));
         };
         
-        const resultJson = this.api.pullLLMModel(modelName);
-        const result = JSON.parse(resultJson);
+        const resultJson = api.pullLLMModel(modelName);
+        const result = parseJsonRecord<OperationResult>(resultJson);
         console.log('[Android] pullLLMModel returned:', result);
         
         // Check if download started successfully
         if (!result.success || !result.downloading) {
           console.log('[Android] Download failed to start');
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           reject(new Error(result.error || 'Failed to start download'));
         }
         console.log('[Android] Waiting for download completion...');
         // Otherwise wait for _onDownloadComplete or _onDownloadError to be called
       } catch (error) {
         console.error('[Android LLM Storage] downloadFromOllama error:', error);
-        delete this.api._onDownloadComplete;
-        delete this.api._onDownloadError;
-        reject(error);
+        if (api) {
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
+        }
+        reject(error instanceof Error ? error : new Error(toErrorMessage(error)));
       }
     });
   }
 
-  async downloadFromUrl(url, customPath = null) {
-    return new Promise((resolve, reject) => {
+  async downloadFromUrl(url: string, customPath: string | null = null): Promise<OperationResult> {
+    void customPath;
+    return new Promise<OperationResult>((resolve, reject) => {
+      const api = this.api;
       try {
-        if (!this.api?.downloadLLMModel) {
+        if (!api?.downloadLLMModel) {
           reject(new Error('AndroidAI interface not available'));
           return;
         }
         
         // Set up completion callbacks BEFORE starting download
-        this.api._onDownloadComplete = (result) => {
+        api._onDownloadComplete = (result: OperationResult) => {
           // Clean up callbacks
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           resolve(result);
         };
         
-        this.api._onDownloadError = (error) => {
+        api._onDownloadError = (error: string) => {
           // Clean up callbacks
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           reject(new Error(error));
         };
         
-        const resultJson = this.api.downloadLLMModel(url);
-        const result = JSON.parse(resultJson);
+        const resultJson = api.downloadLLMModel(url);
+        const result = parseJsonRecord<OperationResult>(resultJson);
         
         // Check if download started successfully
         if (!result.success || !result.downloading) {
-          delete this.api._onDownloadComplete;
-          delete this.api._onDownloadError;
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
           reject(new Error(result.error || 'Failed to start download'));
         }
         // Otherwise wait for _onDownloadComplete or _onDownloadError to be called
       } catch (error) {
         console.error('[Android LLM Storage] downloadFromUrl error:', error);
-        delete this.api._onDownloadComplete;
-        delete this.api._onDownloadError;
-        reject(error);
+        if (api) {
+          delete api._onDownloadComplete;
+          delete api._onDownloadError;
+        }
+        reject(error instanceof Error ? error : new Error(toErrorMessage(error)));
       }
     });
   }
 
-  async deleteModel(filename, customPath = null) {
+  async deleteModel(filename: string, customPath: string | null = null): Promise<OperationResult> {
     try {
+      void customPath;
       if (!this.api?.deleteLLMModel) {
         return { success: false, error: 'AndroidAI interface not available' };
       }
       
       const resultJson = this.api.deleteLLMModel(filename);
-      const result = JSON.parse(resultJson);
+      const result = parseJsonRecord<OperationResult>(resultJson);
       return result;
     } catch (error) {
       console.error('[Android LLM Storage] deleteModel error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: toErrorMessage(error) };
     }
   }
 
-  async importModel(customPath = null) {
+  async importModel(customPath: string | null = null): Promise<OperationResult> {
+    void customPath;
     try {
       if (!this.api?.importLLMModel) {
         return { success: false, error: 'AndroidAI interface not available' };
       }
 
       // Set up callback for import completion
-      return new Promise((resolve) => {
-        if (!window.AndroidAI._onImportComplete) {
-          window.AndroidAI._onImportComplete = (result) => {
+      return new Promise<OperationResult>((resolve) => {
+        const api = this.api;
+        if (!api) {
+          resolve({ success: false, error: 'AndroidAI interface not available' });
+          return;
+        }
+
+        if (!api._onImportComplete) {
+          api._onImportComplete = (result: OperationResult) => {
             console.log('[Android LLM Storage] Import completed:', result);
             resolve(result);
           };
         }
 
-        const resultJson = this.api.importLLMModel();
-        const result = JSON.parse(resultJson);
+        if (!api.importLLMModel) {
+          resolve({ success: false, error: 'AndroidAI interface not available' });
+          return;
+        }
+
+        const resultJson = api.importLLMModel();
+        const result = parseJsonRecord<OperationResult>(resultJson);
         
         if (!result.success) {
           resolve(result);
@@ -346,11 +447,11 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
       });
     } catch (error) {
       console.error('[Android LLM Storage] importModel error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: toErrorMessage(error) };
     }
   }
 
-  async chooseModelsFolder() {
+  async chooseModelsFolder(): Promise<OperationResult & { path?: string }> {
     // Android uses fixed external storage location
     try {
       if (this.api?.getLLMModelsDirectory) {
@@ -371,11 +472,11 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     };
   }
 
-  onDownloadProgress(callback) {
+  onDownloadProgress(callback: (progress: DownloadProgress) => void): () => void {
     // Set up event listener for Android download progress
     // Kotlin calls window.AndroidAI._onDownloadProgress(percent, status)
     if (this.api) {
-      this.api._onDownloadProgress = (percent, status) => {
+      this.api._onDownloadProgress = (percent: number, status: string) => {
         callback({ percent, status });
       };
       
@@ -390,28 +491,31 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     return () => {}; // No-op if AndroidAI not available
   }
 
-  async getBackendStatus(backend = 'auto') {
+  async getBackendStatus(backend = 'auto'): Promise<OperationResult & UnknownRecord> {
+    void backend;
     return {
       success: false,
       error: 'Backend management is not available on Android'
     };
   }
 
-  async installBackend(backend) {
+  async installBackend(backend: string): Promise<OperationResult & UnknownRecord> {
+    void backend;
     return {
       success: false,
       error: 'Backend management is not available on Android'
     };
   }
 
-  async cancelBackendInstall() {
+  async cancelBackendInstall(): Promise<OperationResult & UnknownRecord> {
     return {
       success: false,
       error: 'Backend management is not available on Android'
     };
   }
 
-  onBackendInstallProgress(callback) {
+  onBackendInstallProgress(callback: (progress: UnknownRecord) => void): () => void {
+    void callback;
     return () => {};
   }
 }
@@ -421,11 +525,11 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
  * @param {Object} api - Platform API (Desktop API from useDesktop or AndroidAI from useAndroid)
  * @returns {LLMModelStorageBase}
  */
-export function getLLMModelStorage(api = null) {
+export function getLLMModelStorage(api: { llm?: DesktopLLMApi } | AndroidAIApi | null = null): LLMModelStorageBase {
   if (isDesktop) {
-    return new DesktopLLMModelStorage(api);
+    return new DesktopLLMModelStorage(api as { llm?: DesktopLLMApi } | null);
   } else if (isAndroid) {
-    return new AndroidLLMModelStorage(api);
+    return new AndroidLLMModelStorage(api as AndroidAIApi | null);
   } else {
     throw new Error('LLM model storage not available on this platform');
   }

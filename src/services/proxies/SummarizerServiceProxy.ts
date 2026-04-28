@@ -33,8 +33,8 @@ interface SummarizerProxyConfig {
 }
 
 class SummarizerServiceProxy extends ServiceProxy {
-  private directService: SummarizerServiceLike;
-  private _configuring: boolean;
+  protected directService: SummarizerServiceLike;
+  protected _configuring: boolean;
 
   constructor() {
     super('SummarizerService');

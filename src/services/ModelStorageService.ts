@@ -5,7 +5,97 @@
 import storageServiceProxy from './proxies/StorageServiceProxy';
 import Logger from './LoggerService';
 
+type UnknownRecord = Record<string, unknown>;
+
+interface ModelMetadata extends UnknownRecord {
+  originalFileName: string;
+  uploadedAt: number;
+  fileSize: number;
+  conversionInfo: UnknownRecord;
+  lastRenamed?: number;
+}
+
+interface StoredModel extends UnknownRecord {
+  name: string;
+  modelData?: Blob;
+  isDefault: boolean;
+  metadata: ModelMetadata;
+  blobURL?: string;
+}
+
+interface NameValidationResult {
+  valid: boolean;
+  error?: string;
+  name?: string;
+}
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null;
+
+const getDefaultMetadata = (): ModelMetadata => ({
+  originalFileName: 'unknown.pmx',
+  uploadedAt: 0,
+  fileSize: 0,
+  conversionInfo: {},
+});
+
+const normalizeModelMetadata = (value: unknown): ModelMetadata => {
+  if (!isRecord(value)) {
+    return getDefaultMetadata();
+  }
+
+  const originalFileName = typeof value.originalFileName === 'string' ? value.originalFileName : 'unknown.pmx';
+  const uploadedAt = typeof value.uploadedAt === 'number' ? value.uploadedAt : 0;
+  const fileSize = typeof value.fileSize === 'number' ? value.fileSize : 0;
+  const conversionInfo = isRecord(value.conversionInfo) ? value.conversionInfo : {};
+
+  return {
+    ...value,
+    originalFileName,
+    uploadedAt,
+    fileSize,
+    conversionInfo,
+  } as ModelMetadata;
+};
+
+const normalizeStoredModel = (value: unknown): StoredModel | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const name = typeof value.name === 'string' ? value.name : 'Unknown Model';
+  const isDefault = value.isDefault === true;
+  const metadata = normalizeModelMetadata(value.metadata);
+  const normalized: StoredModel = {
+    ...value,
+    name,
+    isDefault,
+    metadata,
+  };
+
+  if (value.modelData instanceof Blob) {
+    normalized.modelData = value.modelData;
+  }
+  if (typeof value.blobURL === 'string') {
+    normalized.blobURL = value.blobURL;
+  }
+
+  return normalized;
+};
+
+type ModelListItem = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  metadata: ModelMetadata;
+};
+
+type ModelWithId = StoredModel & { id: string };
+
 class ModelStorageService {
+  private readonly CATEGORY: string;
+  private readonly MAX_NAME_LENGTH: number;
+
   constructor() {
     this.CATEGORY = 'model';
     this.MAX_NAME_LENGTH = 50;
@@ -16,7 +106,7 @@ class ModelStorageService {
    * @param {string} name - Model name to validate
    * @returns {Object} - { valid: boolean, error: string }
    */
-  validateModelName(name) {
+  validateModelName(name: string): NameValidationResult {
     if (!name || typeof name !== 'string') {
       return { valid: false, error: 'Model name is required' };
     }
@@ -51,12 +141,19 @@ class ModelStorageService {
    * @param {boolean} setAsDefault - Whether to set this as the default model
    * @returns {Promise<string>} - Model ID
    */
-  async saveModel(modelId, modelName, bpmxData, metadata = {}, setAsDefault = false) {
+  async saveModel(
+    modelId: string | null | undefined,
+    modelName: string,
+    bpmxData: Blob | ArrayBuffer,
+    metadata: UnknownRecord = {},
+    setAsDefault = false,
+  ): Promise<string> {
     try {
       const nameValidation = this.validateModelName(modelName);
       if (!nameValidation.valid) {
         throw new Error(nameValidation.error);
       }
+      const validatedName = nameValidation.name ?? modelName.trim();
 
       if (!modelId) {
         modelId = this.generateModelId();
@@ -75,22 +172,22 @@ class ModelStorageService {
         await this.clearAllDefaults();
       }
 
-      const modelData = {
-        name: nameValidation.name,
+      const modelData: StoredModel = {
+        name: validatedName,
         modelData: modelBlob,
         isDefault: setAsDefault,
         metadata: {
-          originalFileName: metadata.originalFileName || 'unknown.pmx',
+          originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : 'unknown.pmx',
           uploadedAt: Date.now(),
           fileSize: modelBlob.size,
-          conversionInfo: metadata.conversionInfo || {},
+          conversionInfo: isRecord(metadata.conversionInfo) ? metadata.conversionInfo : {},
           ...metadata
         }
       };
 
       await storageServiceProxy.fileSave(modelId, modelData, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model saved: ${modelId} (${nameValidation.name})`);
+      Logger.log('ModelStorage', `Model saved: ${modelId} (${validatedName})`);
       
       return modelId;
     } catch (error) {
@@ -104,10 +201,10 @@ class ModelStorageService {
    * @param {string} modelId - Model ID
    * @returns {Promise<Object|null>} - Model data or null
    */
-  async getModel(modelId) {
+  async getModel(modelId: string): Promise<StoredModel | null> {
     try {
       const modelData = await storageServiceProxy.fileLoad(modelId);
-      return modelData || null;
+      return normalizeStoredModel(modelData);
     } catch (error) {
       Logger.error('ModelStorage', `Failed to get model ${modelId}:`, error);
       return null;
@@ -120,20 +217,20 @@ class ModelStorageService {
    * Fetches only metadata from database level, not blob data
    * @returns {Promise<Array>} - Array of model info without blob data
    */
-  async getModelsList() {
+  async getModelsList(): Promise<ModelListItem[]> {
     try {
       const modelsMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const metadataRecord = isRecord(modelsMetadata) ? modelsMetadata : {};
       
-      const modelsList = Object.entries(modelsMetadata).map(([id, data]) => ({
-        id,
-        name: data.value?.name || 'Unknown Model',
-        isDefault: data.value?.isDefault || false,
-        metadata: data.value?.metadata || {
-          originalFileName: 'unknown.pmx',
-          uploadedAt: 0,
-          fileSize: 0
-        },
-      }));
+      const modelsList = Object.entries(metadataRecord).map(([id, data]): ModelListItem => {
+        const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
+        return {
+          id,
+          name: typeof entry.name === 'string' ? entry.name : 'Unknown Model',
+          isDefault: entry.isDefault === true,
+          metadata: normalizeModelMetadata(entry.metadata),
+        };
+      });
 
       Logger.log('ModelStorage', `Retrieved ${modelsList.length} models (metadata only)`);
       return modelsList;
@@ -148,14 +245,23 @@ class ModelStorageService {
    * Only use when you need the actual model data
    * @returns {Promise<Array>} - Array of complete model objects
    */
-  async getAllModels() {
+  async getAllModels(): Promise<ModelWithId[]> {
     try {
       const allModels = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allModelsRecord = isRecord(allModels) ? allModels : {};
       
-      const modelsArray = Object.entries(allModels).map(([id, data]) => ({
-        id,
-        ...data
-      }));
+      const modelsArray = Object.entries(allModelsRecord)
+        .map(([id, data]) => {
+          const normalized = normalizeStoredModel(data);
+          if (!normalized) {
+            return null;
+          }
+          return {
+            id,
+            ...normalized,
+          };
+        })
+        .filter((model): model is ModelWithId => model !== null);
 
       return modelsArray;
     } catch (error) {
@@ -168,7 +274,7 @@ class ModelStorageService {
    * Get the default model
    * @returns {Promise<Object|null>} - Default model with ID or null
    */
-  async getDefaultModel() {
+  async getDefaultModel(): Promise<ModelWithId | null> {
     try {
       const allModels = await this.getAllModels();
       const defaultModel = allModels.find(model => model.isDefault === true);
@@ -184,7 +290,7 @@ class ModelStorageService {
    * @param {string} modelId - Model ID to set as default
    * @returns {Promise<boolean>} - Success status
    */
-  async setDefaultModel(modelId) {
+  async setDefaultModel(modelId: string): Promise<boolean> {
     try {
       await this.clearAllDefaults();
 
@@ -210,7 +316,7 @@ class ModelStorageService {
    * @private
    * @returns {Promise<void>}
    */
-  async clearAllDefaults() {
+  async clearAllDefaults(): Promise<void> {
     try {
       const allModels = await this.getAllModels();
       
@@ -234,28 +340,29 @@ class ModelStorageService {
    * @param {string} newName - New model name
    * @returns {Promise<boolean>} - Success status
    */
-  async updateModelName(modelId, newName) {
+  async updateModelName(modelId: string, newName: string): Promise<boolean> {
     try {
       const nameValidation = this.validateModelName(newName);
       if (!nameValidation.valid) {
         throw new Error(nameValidation.error);
       }
+      const validatedName = nameValidation.name ?? newName.trim();
 
       const model = await this.getModel(modelId);
       if (!model) {
         throw new Error(`Model ${modelId} not found`);
       }
 
-      model.name = nameValidation.name;
+      model.name = validatedName;
 
       if (!model.metadata) {
-        model.metadata = {};
+        model.metadata = getDefaultMetadata();
       }
       model.metadata.lastRenamed = Date.now();
 
       await storageServiceProxy.fileSave(modelId, model, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model ${modelId} renamed to: ${nameValidation.name}`);
+      Logger.log('ModelStorage', `Model ${modelId} renamed to: ${validatedName}`);
       return true;
     } catch (error) {
       Logger.error('ModelStorage', 'Failed to update model name:', error);
@@ -269,7 +376,7 @@ class ModelStorageService {
    * @param {Object} metadataUpdates - Metadata fields to update
    * @returns {Promise<boolean>} - Success status
    */
-  async updateModelMetadata(modelId, metadataUpdates) {
+  async updateModelMetadata(modelId: string, metadataUpdates: UnknownRecord): Promise<boolean> {
     try {
       if (modelId === 'builtin_default_model') {
         const existingMetadata = await this.getBuiltinModelMetadata();
@@ -291,7 +398,7 @@ class ModelStorageService {
       }
 
       if (!model.metadata) {
-        model.metadata = {};
+        model.metadata = getDefaultMetadata();
       }
 
       Object.assign(model.metadata, metadataUpdates);
@@ -310,10 +417,10 @@ class ModelStorageService {
    * Get metadata for built-in default model
    * @returns {Promise<Object>} - Metadata object
    */
-  async getBuiltinModelMetadata() {
+  async getBuiltinModelMetadata(): Promise<UnknownRecord> {
     try {
-      const metadata = await storageServiceProxy.fileLoad('builtin_default_model_metadata', this.CATEGORY);
-      return metadata || { textures: [], meshParts: [] };
+      const metadata = await storageServiceProxy.fileLoad('builtin_default_model_metadata');
+      return isRecord(metadata) ? metadata : { textures: [], meshParts: [] };
     } catch {
       Logger.log('ModelStorage', 'No metadata found for built-in model, returning empty');
       return { textures: [], meshParts: [] };
@@ -326,7 +433,7 @@ class ModelStorageService {
    * @param {boolean} force - Force delete even if default (requires manual confirmation)
    * @returns {Promise<boolean>} - Success status
    */
-  async deleteModel(modelId, force = false) {
+  async deleteModel(modelId: string, force = false): Promise<boolean> {
     try {
       const model = await this.getModel(modelId);
       if (!model) {
@@ -356,9 +463,10 @@ class ModelStorageService {
    * @param {string} modelId - Model ID
    * @returns {Promise<boolean>} - Exists status
    */
-  async modelExists(modelId) {
+  async modelExists(modelId: string): Promise<boolean> {
     try {
-      return await storageServiceProxy.fileExists(modelId);
+      const exists = await storageServiceProxy.fileExists(modelId);
+      return exists === true;
     } catch (error) {
       Logger.error('ModelStorage', `Failed to check if model ${modelId} exists:`, error);
       return false;
@@ -369,7 +477,7 @@ class ModelStorageService {
    * Get total storage size for all models
    * @returns {Promise<number>} - Total size in bytes
    */
-  async getTotalStorageSize() {
+  async getTotalStorageSize(): Promise<number> {
     try {
       const allModels = await this.getAllModels();
       let totalSize = 0;

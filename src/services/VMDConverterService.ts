@@ -12,7 +12,7 @@ class VMDConverterService {
    * Create a minimal scene for VMD loading
    * @returns {Promise<Scene>}
    */
-  async createConversionScene() {
+  async createConversionScene(): Promise<any> {
     try {
       const { Scene } = await import('@babylonjs/core/scene');
       const { NullEngine } = await import('@babylonjs/core/Engines/nullEngine');
@@ -35,12 +35,12 @@ class VMDConverterService {
    * @param {Scene} scene - Optional Babylon scene (creates one if not provided)
    * @returns {Promise<ArrayBuffer>} BVMD data
    */
-  async convertVMDToBVMD(vmdFile, scene = null) {
+  async convertVMDToBVMD(vmdFile: File, scene: any = null): Promise<ArrayBuffer> {
     try {
       Logger.log('VMDConverter', `Converting VMD: ${vmdFile.name} (${vmdFile.size} bytes)`);
       
       let createdScene = false;
-      let conversionScene = scene;
+      let conversionScene: any = scene;
       
       if (!conversionScene) {
         Logger.log('VMDConverter', 'No scene provided, creating conversion scene...');
@@ -75,8 +75,9 @@ class VMDConverterService {
       }
       
     } catch (error) {
-      Logger.error('VMDConverter', `Failed to convert ${vmdFile.name}:`, error);
-      throw new Error(`VMD conversion failed: ${error.message}`);
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      Logger.error('VMDConverter', `Failed to convert ${vmdFile.name}:`, normalized);
+      throw new Error(`VMD conversion failed: ${normalized.message}`);
     }
   }
 
@@ -86,10 +87,10 @@ class VMDConverterService {
    * @param {Scene} scene - Optional shared scene for all conversions
    * @returns {Promise<Array<{filename: string, bvmdData: ArrayBuffer, error: string|null}>>}
    */
-  async convertBatch(vmdFiles, scene = null) {
+  async convertBatch(vmdFiles: File[], scene: any = null): Promise<Array<{ filename: string; bvmdData: ArrayBuffer | null; error: string | null }>> {
     Logger.log('VMDConverter', `Starting batch conversion of ${vmdFiles.length} VMD files`);
     
-    let sharedScene = scene;
+    let sharedScene: any = scene;
     let createdScene = false;
     
     if (!sharedScene) {
@@ -98,7 +99,7 @@ class VMDConverterService {
       createdScene = true;
     }
     
-    const results = [];
+    const results: Array<{ filename: string; bvmdData: ArrayBuffer | null; error: string | null }> = [];
     
     try {
       const { VmdLoader } = await import('babylon-mmd/esm/Loader/vmdLoader');
@@ -124,13 +125,14 @@ class VMDConverterService {
           Logger.log('VMDConverter', `✓ Converted: ${vmdFile.name}`);
           
         } catch (error) {
+          const normalized = error instanceof Error ? error : new Error(String(error));
           results.push({
             filename: vmdFile.name,
             bvmdData: null,
-            error: error.message
+            error: normalized.message
           });
           
-          Logger.error('VMDConverter', `✗ Failed: ${vmdFile.name}`, error);
+          Logger.error('VMDConverter', `✗ Failed: ${vmdFile.name}`, normalized);
         }
       }
       
@@ -155,7 +157,7 @@ class VMDConverterService {
    * @param {File} vmdFile - VMD file
    * @returns {Promise<boolean>} True if appears to be valid VMD
    */
-  async validateVMD(vmdFile) {
+  async validateVMD(vmdFile: File): Promise<boolean> {
     try {
       const headerBuffer = await vmdFile.slice(0, 30).arrayBuffer();
       const header = new Uint8Array(headerBuffer);
@@ -179,7 +181,7 @@ class VMDConverterService {
    * @param {File} vmdFile - VMD file
    * @returns {Promise<Object>} Basic VMD info
    */
-  async getVMDInfo(vmdFile) {
+  async getVMDInfo(vmdFile: File): Promise<{ isValid: boolean; version: string; modelName: string; fileSize: number }> {
     try {
       const headerBuffer = await vmdFile.slice(0, 50).arrayBuffer();
       const header = new Uint8Array(headerBuffer);

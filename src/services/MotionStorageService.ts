@@ -5,7 +5,119 @@
 import storageServiceProxy from './proxies/StorageServiceProxy';
 import Logger from './LoggerService';
 
+type UnknownRecord = Record<string, unknown>;
+
+interface MotionMetadata extends UnknownRecord {
+  originalFileName: string;
+  uploadedAt: number;
+  fileSize: number;
+  conversionInfo: UnknownRecord;
+  lastRenamed?: number;
+  lastToggled?: number;
+}
+
+interface StoredMotion extends UnknownRecord {
+  name: string;
+  motionData?: Blob;
+  animationCategories: string[];
+  enabledByCategory: Record<string, boolean>;
+  animationCategory?: string;
+  isEnabled?: boolean;
+  metadata: MotionMetadata;
+  blobURL?: string;
+}
+
+type MotionWithId = StoredMotion & { id: string };
+
+interface NameValidationResult {
+  valid: boolean;
+  error?: string;
+  name?: string;
+}
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null;
+
+const getDefaultMetadata = (): MotionMetadata => ({
+  originalFileName: 'unknown.vmd',
+  uploadedAt: 0,
+  fileSize: 0,
+  conversionInfo: {},
+});
+
+const normalizeMotionMetadata = (value: unknown): MotionMetadata => {
+  if (!isRecord(value)) {
+    return getDefaultMetadata();
+  }
+
+  const originalFileName = typeof value.originalFileName === 'string' ? value.originalFileName : 'unknown.vmd';
+  const uploadedAt = typeof value.uploadedAt === 'number' ? value.uploadedAt : 0;
+  const fileSize = typeof value.fileSize === 'number' ? value.fileSize : 0;
+  const conversionInfo = isRecord(value.conversionInfo) ? value.conversionInfo : {};
+
+  return {
+    ...value,
+    originalFileName,
+    uploadedAt,
+    fileSize,
+    conversionInfo,
+  } as MotionMetadata;
+};
+
+const normalizeEnabledByCategory = (value: unknown): Record<string, boolean> => {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const result: Record<string, boolean> = {};
+  Object.entries(value).forEach(([key, state]) => {
+    result[key] = state === true;
+  });
+  return result;
+};
+
+const normalizeAnimationCategories = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+};
+
+const normalizeStoredMotion = (value: unknown): StoredMotion | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const animationCategories = normalizeAnimationCategories(value.animationCategories);
+  const enabledByCategory = normalizeEnabledByCategory(value.enabledByCategory);
+  const normalized: StoredMotion = {
+    ...value,
+    name: typeof value.name === 'string' ? value.name : 'Unknown Motion',
+    animationCategories,
+    enabledByCategory,
+    metadata: normalizeMotionMetadata(value.metadata),
+  };
+
+  if (typeof value.animationCategory === 'string') {
+    normalized.animationCategory = value.animationCategory;
+  }
+  if (typeof value.isEnabled === 'boolean') {
+    normalized.isEnabled = value.isEnabled;
+  }
+  if (value.motionData instanceof Blob) {
+    normalized.motionData = value.motionData;
+  }
+  if (typeof value.blobURL === 'string') {
+    normalized.blobURL = value.blobURL;
+  }
+
+  return normalized;
+};
+
 class MotionStorageService {
+  private readonly CATEGORY: string;
+  private readonly MAX_NAME_LENGTH: number;
+
   constructor() {
     this.CATEGORY = 'motion';
     this.MAX_NAME_LENGTH = 50;
@@ -16,7 +128,7 @@ class MotionStorageService {
    * @param {string} name - Motion name to validate
    * @returns {Object} - { valid: boolean, error: string, name: string }
    */
-  validateMotionName(name) {
+  validateMotionName(name: string): NameValidationResult {
     if (!name || typeof name !== 'string') {
       return { valid: false, error: 'Motion name is required' };
     }
@@ -38,7 +150,7 @@ class MotionStorageService {
    * Generate unique motion ID
    * @returns {string} - UUID
    */
-  generateMotionId() {
+  generateMotionId(): string {
     return `motion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
@@ -52,12 +164,20 @@ class MotionStorageService {
    * @param {Object} enabledByCategory - Object mapping category to enabled state {idle: true, thinking: false}
    * @returns {Promise<string>} - Motion ID
    */
-  async saveMotion(motionId, motionName, bvmdData, animationCategories = [], metadata = {}, enabledByCategory = {}) {
+  async saveMotion(
+    motionId: string | null | undefined,
+    motionName: string,
+    bvmdData: Blob | ArrayBuffer,
+    animationCategories: string[] = [],
+    metadata: UnknownRecord = {},
+    enabledByCategory: Record<string, boolean> = {},
+  ): Promise<string> {
     try {
       const nameValidation = this.validateMotionName(motionName);
       if (!nameValidation.valid) {
         throw new Error(nameValidation.error);
       }
+      const validatedName = nameValidation.name ?? motionName.trim();
 
       if (!motionId) {
         motionId = this.generateMotionId();
@@ -72,23 +192,23 @@ class MotionStorageService {
         throw new Error('Invalid motion data format. Expected Blob or ArrayBuffer.');
       }
 
-      const motionData = {
-        name: nameValidation.name,
+      const motionData: StoredMotion = {
+        name: validatedName,
         motionData: motionBlob,
-        animationCategories: animationCategories, 
-        enabledByCategory: enabledByCategory, 
+        animationCategories,
+        enabledByCategory,
         metadata: {
-          originalFileName: metadata.originalFileName || 'unknown.vmd',
+          originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : 'unknown.vmd',
           uploadedAt: Date.now(),
           fileSize: motionBlob.size,
-          conversionInfo: metadata.conversionInfo || {},
+          conversionInfo: isRecord(metadata.conversionInfo) ? metadata.conversionInfo : {},
           ...metadata
         }
       };
 
       await storageServiceProxy.fileSave(motionId, motionData, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion saved: ${motionId} (${nameValidation.name}) - Categories: ${animationCategories.join(', ')}`);
+      Logger.log('MotionStorage', `Motion saved: ${motionId} (${validatedName}) - Categories: ${animationCategories.join(', ')}`);
       
       return motionId;
     } catch (error) {
@@ -102,10 +222,10 @@ class MotionStorageService {
    * @param {string} motionId - Motion ID
    * @returns {Promise<Object|null>} - Motion data or null
    */
-  async getMotion(motionId) {
+  async getMotion(motionId: string): Promise<StoredMotion | null> {
     try {
       const motionData = await storageServiceProxy.fileLoad(motionId);
-      return motionData || null;
+      return normalizeStoredMotion(motionData);
     } catch (error) {
       Logger.error('MotionStorage', `Failed to get motion ${motionId}:`, error);
       return null;
@@ -117,14 +237,23 @@ class MotionStorageService {
    * Only use when you need the actual motion data
    * @returns {Promise<Array>} - Array of complete motion objects
    */
-  async getAllMotions() {
+  async getAllMotions(): Promise<MotionWithId[]> {
     try {
       const allMotions = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const motionRecords = isRecord(allMotions) ? allMotions : {};
       
-      const motionsArray = Object.entries(allMotions).map(([id, data]) => ({
-        id,
-        ...data
-      }));
+      const motionsArray = Object.entries(motionRecords)
+        .map(([id, data]) => {
+          const normalized = normalizeStoredMotion(data);
+          if (!normalized) {
+            return null;
+          }
+          return {
+            id,
+            ...normalized,
+          };
+        })
+        .filter((motion): motion is MotionWithId => motion !== null);
 
       return motionsArray;
     } catch (error) {
@@ -139,21 +268,21 @@ class MotionStorageService {
    * Fetches only metadata from database level, not blob data
    * @returns {Promise<Array>} - Array of motion info without blob data
    */
-  async getMotionsList() {
+  async getMotionsList(): Promise<Array<{ id: string; name: string; animationCategories: string[]; enabledByCategory: Record<string, boolean>; metadata: MotionMetadata }>> {
     try {
       const motionsMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const metadataRecords = isRecord(motionsMetadata) ? motionsMetadata : {};
       
-      const motionsList = Object.entries(motionsMetadata).map(([id, data]) => ({
-        id,
-        name: data.value?.name || 'Unknown Motion',
-        animationCategories: data.value?.animationCategories || [], 
-        enabledByCategory: data.value?.enabledByCategory || {},
-        metadata: data.value?.metadata || {
-          originalFileName: 'unknown.vmd',
-          uploadedAt: 0,
-          fileSize: 0
-        },
-      }));
+      const motionsList = Object.entries(metadataRecords).map(([id, data]) => {
+        const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
+        return {
+          id,
+          name: typeof entry.name === 'string' ? entry.name : 'Unknown Motion',
+          animationCategories: normalizeAnimationCategories(entry.animationCategories),
+          enabledByCategory: normalizeEnabledByCategory(entry.enabledByCategory),
+          metadata: normalizeMotionMetadata(entry.metadata),
+        };
+      });
 
       Logger.log('MotionStorage', `Retrieved ${motionsList.length} motions (metadata only)`);
       return motionsList;
@@ -168,10 +297,10 @@ class MotionStorageService {
    * @param {string} animCategory - Animation category (idle, thinking, etc.)
    * @returns {Promise<Array>} - Array of motions in category
    */
-  async getMotionsByCategory(animCategory) {
+  async getMotionsByCategory(animCategory: string): Promise<MotionWithId[]> {
     try {
       const allMotions = await this.getAllMotions();
-      const categoryMotions = allMotions.filter(motion => 
+      const categoryMotions = allMotions.filter((motion) =>
         motion.animationCategories && motion.animationCategories.includes(animCategory)
       );
 
@@ -189,28 +318,29 @@ class MotionStorageService {
    * @param {string} newName - New motion name
    * @returns {Promise<boolean>} - Success status
    */
-  async updateMotionName(motionId, newName) {
+  async updateMotionName(motionId: string, newName: string): Promise<boolean> {
     try {
       const nameValidation = this.validateMotionName(newName);
       if (!nameValidation.valid) {
         throw new Error(nameValidation.error);
       }
+      const validatedName = nameValidation.name ?? newName.trim();
 
       const motion = await this.getMotion(motionId);
       if (!motion) {
         throw new Error(`Motion ${motionId} not found`);
       }
 
-      motion.name = nameValidation.name;
+      motion.name = validatedName;
 
       if (!motion.metadata) {
-        motion.metadata = {};
+        motion.metadata = getDefaultMetadata();
       }
       motion.metadata.lastRenamed = Date.now();
 
       await storageServiceProxy.fileSave(motionId, motion, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion ${motionId} renamed to: ${nameValidation.name}`);
+      Logger.log('MotionStorage', `Motion ${motionId} renamed to: ${validatedName}`);
       return true;
     } catch (error) {
       Logger.error('MotionStorage', 'Failed to update motion name:', error);
@@ -224,19 +354,29 @@ class MotionStorageService {
    * @param {Object} metadataUpdates - Metadata or top-level fields to update
    * @returns {Promise<boolean>} - Success status
    */
-  async updateMotionMetadata(motionId, metadataUpdates) {
+  async updateMotionMetadata(motionId: string, metadataUpdates: UnknownRecord): Promise<boolean> {
     try {
       const motion = await this.getMotion(motionId);
       if (!motion) {
         throw new Error(`Motion ${motionId} not found`);
       }
 
-      Object.keys(metadataUpdates).forEach(key => {
+      Object.keys(metadataUpdates).forEach((key) => {
         if (key === 'animationCategory' || key === 'animationCategories' || key === 'enabledByCategory' || key === 'isEnabled' || key === 'name') {
-          motion[key] = metadataUpdates[key];
+          if (key === 'animationCategories') {
+            motion.animationCategories = normalizeAnimationCategories(metadataUpdates[key]);
+          } else if (key === 'enabledByCategory') {
+            motion.enabledByCategory = normalizeEnabledByCategory(metadataUpdates[key]);
+          } else if (key === 'animationCategory' && typeof metadataUpdates[key] === 'string') {
+            motion.animationCategory = metadataUpdates[key] as string;
+          } else if (key === 'isEnabled' && typeof metadataUpdates[key] === 'boolean') {
+            motion.isEnabled = metadataUpdates[key] as boolean;
+          } else if (key === 'name' && typeof metadataUpdates[key] === 'string') {
+            motion.name = metadataUpdates[key] as string;
+          }
         } else {
           if (!motion.metadata) {
-            motion.metadata = {};
+            motion.metadata = getDefaultMetadata();
           }
           motion.metadata[key] = metadataUpdates[key];
         }
@@ -258,7 +398,7 @@ class MotionStorageService {
    * @param {boolean} enabled - Enabled state
    * @returns {Promise<boolean>} - Success status
    */
-  async toggleMotionEnabled(motionId, enabled) {
+  async toggleMotionEnabled(motionId: string, enabled: boolean): Promise<boolean> {
     try {
       const motion = await this.getMotion(motionId);
       if (!motion) {
@@ -266,18 +406,21 @@ class MotionStorageService {
       }
 
       if (!enabled) {
-        const categoryMotions = await this.getMotionsByCategory(motion.animationCategory);
-        const enabledMotions = categoryMotions.filter(m => m.isEnabled);
+        const motionCategory = motion.animationCategory ?? motion.animationCategories[0];
+        if (motionCategory) {
+          const categoryMotions = await this.getMotionsByCategory(motionCategory);
+          const enabledMotions = categoryMotions.filter((m) => m.isEnabled);
         
-        if (enabledMotions.length === 1 && enabledMotions[0].id === motionId) {
-          throw new Error(`Cannot disable last enabled motion in category: ${motion.animationCategory}`);
+          if (enabledMotions.length === 1 && enabledMotions[0]?.id === motionId) {
+            throw new Error(`Cannot disable last enabled motion in category: ${motionCategory}`);
+          }
         }
       }
 
       motion.isEnabled = enabled;
       
       if (!motion.metadata) {
-        motion.metadata = {};
+        motion.metadata = getDefaultMetadata();
       }
       motion.metadata.lastToggled = Date.now();
 
@@ -296,7 +439,7 @@ class MotionStorageService {
    * @param {string} motionId - Motion ID
    * @returns {Promise<boolean>} - Success status
    */
-  async deleteMotion(motionId) {
+  async deleteMotion(motionId: string): Promise<boolean> {
     try {
       const motion = await this.getMotion(motionId);
       if (!motion) {
@@ -311,11 +454,11 @@ class MotionStorageService {
           // Only check categories where this motion is enabled
           if (enabledByCategory[category] === true) {
             const categoryMotions = await this.getMotionsByCategory(category);
-            const enabledMotions = categoryMotions.filter(m => 
+            const enabledMotions = categoryMotions.filter((m) =>
               m.enabledByCategory && m.enabledByCategory[category] === true
             );
             
-            if (enabledMotions.length === 1 && enabledMotions[0].id === motionId) {
+            if (enabledMotions.length === 1 && enabledMotions[0]?.id === motionId) {
               throw new Error(`Cannot delete last enabled motion in category: ${category}`);
             }
           }
@@ -341,9 +484,10 @@ class MotionStorageService {
    * @param {string} motionId - Motion ID
    * @returns {Promise<boolean>} - Exists status
    */
-  async motionExists(motionId) {
+  async motionExists(motionId: string): Promise<boolean> {
     try {
-      return await storageServiceProxy.fileExists(motionId);
+      const exists = await storageServiceProxy.fileExists(motionId);
+      return exists === true;
     } catch (error) {
       Logger.error('MotionStorage', `Failed to check if motion ${motionId} exists:`, error);
       return false;
@@ -354,7 +498,7 @@ class MotionStorageService {
    * Get total storage size for all motions
    * @returns {Promise<number>} - Total size in bytes
    */
-  async getTotalStorageSize() {
+  async getTotalStorageSize(): Promise<number> {
     try {
       const allMotions = await this.getAllMotions();
       let totalSize = 0;
@@ -376,10 +520,10 @@ class MotionStorageService {
    * Get storage statistics grouped by category
    * @returns {Promise<Object>} - Statistics object
    */
-  async getStorageStats() {
+  async getStorageStats(): Promise<Record<string, { count: number; enabled: number; disabled: number; totalSize: number }>> {
     try {
       const allMotions = await this.getAllMotions();
-      const stats = {};
+      const stats: Record<string, { count: number; enabled: number; disabled: number; totalSize: number }> = {};
 
       for (const motion of allMotions) {
         const category = motion.animationCategory || 'unknown';

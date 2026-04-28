@@ -8,17 +8,43 @@
 import OpenAI from 'openai';
 import Logger from './LoggerService';
 
+type DetectorProvider = 'chrome-ai' | 'openai' | 'ollama';
+type DetectorAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
+
+type DetectionResult = { detectedLanguage: string; confidence: number };
+
+interface DetectorSession {
+  detect(text: string): Promise<DetectionResult[]>;
+  destroy?(): void;
+}
+
+interface DetectorState {
+  detectorSession: DetectorSession | null;
+  config: { provider: DetectorProvider; model?: string; temperature?: number } | null;
+  provider: DetectorProvider | null;
+  llmClient: OpenAI | null;
+}
+
+const getLanguageDetectorApi = (): any => (self as typeof globalThis & { LanguageDetector?: any }).LanguageDetector ?? null;
+const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 class LanguageDetectorService {
+  private readonly isExtensionMode: boolean;
+  private readonly tabStates: Map<number, DetectorState>;
+  private readonly devState: DetectorState;
+
   constructor() {
     this.isExtensionMode = __EXTENSION_MODE__;
+    this.tabStates = new Map();
+    this.devState = {
+      detectorSession: null,
+      config: null,
+      provider: null,
+      llmClient: null,
+    };
     
     if (this.isExtensionMode) {
-      this.tabStates = new Map();
-    } else {
-      this.detectorSession = null;
-      this.config = null;
-      this.provider = null;
-      this.llmClient = null;
+      return;
     }
   }
 
@@ -26,7 +52,7 @@ class LanguageDetectorService {
    * Initialize state for a tab (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  initTab(tabId) {
+  initTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     if (!this.tabStates.has(tabId)) {
@@ -44,7 +70,7 @@ class LanguageDetectorService {
    * Cleanup tab state (extension mode only)
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     if (!this.isExtensionMode) return;
     
     const state = this.tabStates.get(tabId);
@@ -69,12 +95,15 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Object} State object
    */
-  _getState(tabId = null) {
+  _getState(tabId: number | null = null): DetectorState {
     if (this.isExtensionMode) {
+      if (tabId === null) {
+        throw new Error('tabId is required in extension mode');
+      }
       this.initTab(tabId);
-      return this.tabStates.get(tabId);
+      return this.tabStates.get(tabId) as DetectorState;
     }
-    return this; // In dev mode, state is on the instance itself
+    return this.devState;
   }
 
   /**
@@ -86,7 +115,7 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<boolean>} Success status
    */
-  async configure(config, tabId = null) {
+  async configure(config: any, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
@@ -96,7 +125,7 @@ class LanguageDetectorService {
     try {
       if (provider === 'chrome-ai') {
         // Check Chrome AI LanguageDetector availability
-        if (!('LanguageDetector' in self)) {
+        if (!getLanguageDetectorApi()) {
           throw new Error('Chrome AI LanguageDetector not available. Chrome 138+ required.');
         }
         
@@ -145,7 +174,7 @@ class LanguageDetectorService {
       state.config = null;
       state.provider = null;
       state.llmClient = null;
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -154,9 +183,9 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {boolean} True if configured
    */
-  isConfigured(tabId = null) {
+  isConfigured(tabId: number | null = null): boolean {
     const state = this._getState(tabId);
-    return state && state.config && state.provider;
+    return Boolean(state.config && state.provider);
   }
 
   /**
@@ -164,7 +193,7 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(tabId = null) {
+  async checkAvailability(tabId: number | null = null): Promise<DetectorAvailability> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
@@ -173,12 +202,13 @@ class LanguageDetectorService {
     }
     
     if (state.provider === 'chrome-ai') {
-      if (!('LanguageDetector' in self)) {
+      const detectorApi = getLanguageDetectorApi();
+      if (!detectorApi) {
         return 'unavailable';
       }
       
       try {
-        const availability = await self.LanguageDetector.availability();
+        const availability = await detectorApi.availability();
         Logger.log('other', `${logPrefix} LanguageDetector availability:`, availability);
         return availability;
       } catch (error) {
@@ -196,7 +226,7 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} LanguageDetector session
    */
-  async _getOrCreateSession(tabId = null) {
+  async _getOrCreateSession(tabId: number | null = null): Promise<DetectorSession | null> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
@@ -212,14 +242,18 @@ class LanguageDetectorService {
     // Create new Chrome AI LanguageDetector session
     try {
       Logger.log('other', `${logPrefix} Creating language detector session`);
-      const session = await self.LanguageDetector.create();
+      const detectorApi = getLanguageDetectorApi();
+      if (!detectorApi) {
+        throw new Error('LanguageDetector API unavailable');
+      }
+      const session = await detectorApi.create();
       
       state.detectorSession = session;
       Logger.log('other', `${logPrefix} Language detector session created`);
       return session;
     } catch (error) {
       Logger.error('other', `${logPrefix} Failed to create language detector session:`, error);
-      throw error;
+      throw asError(error);
     }
   }
 
@@ -229,7 +263,7 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Array>} Array of {detectedLanguage: string, confidence: number} sorted by confidence
    */
-  async detect(text, tabId = null) {
+  async detect(text: string, tabId: number | null = null): Promise<DetectionResult[]> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
@@ -241,6 +275,9 @@ class LanguageDetectorService {
     
     if (state.provider === 'chrome-ai') {
       const session = await this._getOrCreateSession(tabId);
+      if (!session) {
+        throw new Error('Language detector session unavailable');
+      }
       const results = await session.detect(text);
       Logger.log('other', `${logPrefix} Detection complete:`, results.slice(0, 3));
       return results;
@@ -256,7 +293,7 @@ class LanguageDetectorService {
    * Detect language using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _detectWithOpenAICompatible(text, tabId = null) {
+  async _detectWithOpenAICompatible(text: string, tabId: number | null = null): Promise<DetectionResult[]> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
@@ -271,13 +308,16 @@ Use ISO 639-1 language codes (en, es, fr, de, ja, zh, etc.). The confidence valu
 Text: ${text}`;
     
     try {
+      if (!state.llmClient || !state.config?.model) {
+        throw new Error('Language detector LLM client not configured');
+      }
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: state.config.temperature,
+        temperature: state.config.temperature ?? null,
       });
       
-      const content = response.choices[0].message.content.trim();
+      const content = response.choices[0]?.message?.content?.trim() ?? '';
       // Parse JSON from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
@@ -286,7 +326,7 @@ Text: ${text}`;
       
       const results = JSON.parse(jsonMatch[0]);
       Logger.log('other', `${logPrefix} ${state.provider} detection complete:`, results.slice(0, 3));
-      return results;
+      return results as DetectionResult[];
     } catch (error) {
       Logger.error('other', `${logPrefix} ${state.provider} detection failed:`, error);
       // Fallback to English with low confidence
@@ -300,7 +340,7 @@ Text: ${text}`;
    * Destroy language detector session
    * @param {number} tabId - Tab ID (extension mode only)
    */
-  async destroy(tabId = null) {
+  async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
     const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
     
