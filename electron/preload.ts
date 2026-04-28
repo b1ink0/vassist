@@ -4,6 +4,9 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
+import type { IpcRendererEvent } from 'electron';
+
+type GenericCallback<T = unknown> = (payload: T) => void;
 
 console.log('Preload script is executing!');
 
@@ -17,14 +20,14 @@ contextBridge.exposeInMainWorld('electron', {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
     toggleAlwaysOnTop: () => ipcRenderer.invoke('window:toggle-always-on-top'),
-    setIgnoreMouseEvents: (ignore, options) => ipcRenderer.invoke('window:set-ignore-mouse-events', ignore, options),
+    setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => ipcRenderer.invoke('window:set-ignore-mouse-events', ignore, options),
     frontendReady: () => ipcRenderer.invoke('window:frontend-ready'),
-    setPosition: (x, y) => ipcRenderer.invoke('window:set-position', x, y),
+    setPosition: (x: number, y: number) => ipcRenderer.invoke('window:set-position', x, y),
     getPosition: () => ipcRenderer.invoke('window:get-position'),
-    setSize: (width, height) => ipcRenderer.invoke('window:set-size', width, height),
+    setSize: (width: number, height: number) => ipcRenderer.invoke('window:set-size', width, height),
     getSize: () => ipcRenderer.invoke('window:get-size'),
-    updateWindowSizeForZoom: (modelWidth, modelHeight) => ipcRenderer.invoke('window:update-size-for-zoom', modelWidth, modelHeight),
-    setScaleFactor: (scaleFactor) => ipcRenderer.invoke('window:set-scale-factor', scaleFactor),
+    updateWindowSizeForZoom: (modelWidth: number, modelHeight: number) => ipcRenderer.invoke('window:update-size-for-zoom', modelWidth, modelHeight),
+    setScaleFactor: (scaleFactor: number, scaleFactorHeight?: number) => ipcRenderer.invoke('window:set-scale-factor', scaleFactor, scaleFactorHeight),
     getScaleFactor: () => ipcRenderer.invoke('window:get-scale-factor'),
   },
   
@@ -37,9 +40,9 @@ contextBridge.exposeInMainWorld('electron', {
   
   // IPC communication for window-to-window state sync
   ipc: {
-    send: (channel, data) => ipcRenderer.send(channel, data),
-    on: (channel, callback) => {
-      const subscription = (event, ...args) => callback(...args);
+    send: (channel: string, data: unknown) => ipcRenderer.send(channel, data),
+    on: (channel: string, callback: (...args: unknown[]) => void) => {
+      const subscription = (_event: IpcRendererEvent, ...args: unknown[]) => callback(...args);
       ipcRenderer.on(channel, subscription);
       return () => ipcRenderer.removeListener(channel, subscription);
     },
@@ -53,13 +56,13 @@ contextBridge.exposeInMainWorld('electron', {
   
   // Shortcuts
   shortcuts: {
-    register: (shortcuts) => ipcRenderer.invoke('shortcuts:register', shortcuts),
+    register: (shortcuts: Record<string, unknown>) => ipcRenderer.invoke('shortcuts:register', shortcuts),
     // Listen for shortcut events from main process
-    onOpenChat: (callback) => {
+    onOpenChat: (callback: GenericCallback) => {
       ipcRenderer.on('shortcut:open-chat', callback);
       return () => ipcRenderer.removeListener('shortcut:open-chat', callback);
     },
-    onToggleModel: (callback) => {
+    onToggleModel: (callback: GenericCallback) => {
       ipcRenderer.on('shortcut:toggle-model', callback);
       return () => ipcRenderer.removeListener('shortcut:toggle-model', callback);
     },
@@ -73,30 +76,30 @@ contextBridge.exposeInMainWorld('electron', {
   
   // Server API
   server: {
-    start: (options) => ipcRenderer.invoke('server:start', options),
+    start: (options: Record<string, unknown>) => ipcRenderer.invoke('server:start', options),
     stop: () => ipcRenderer.invoke('server:stop'),
     getStatus: () => ipcRenderer.invoke('server:status'),
   },
   
   // LLM Model Management
   llm: {
-    listModels: (customPath) => ipcRenderer.invoke('llm:list-models', customPath),
-    downloadModel: (url, customPath) => ipcRenderer.invoke('llm:download-model', url, customPath),
-    pullModel: (modelName, customPath) => ipcRenderer.invoke('llm:pull-model', modelName, customPath),
-    deleteModel: (filename, customPath) => ipcRenderer.invoke('llm:delete-model', filename, customPath),
-    importModel: (sourcePath, customPath) => ipcRenderer.invoke('llm:import-model', sourcePath, customPath),
+    listModels: (customPath?: string | null) => ipcRenderer.invoke('llm:list-models', customPath),
+    downloadModel: (url: string, customPath?: string | null) => ipcRenderer.invoke('llm:download-model', url, customPath),
+    pullModel: (modelName: string, customPath?: string | null) => ipcRenderer.invoke('llm:pull-model', modelName, customPath),
+    deleteModel: (filename: string, customPath?: string | null) => ipcRenderer.invoke('llm:delete-model', filename, customPath),
+    importModel: (sourcePath: string, customPath?: string | null) => ipcRenderer.invoke('llm:import-model', sourcePath, customPath),
     chooseModelsFolder: () => ipcRenderer.invoke('llm:choose-models-folder'),
     chooseModelFile: () => ipcRenderer.invoke('llm:choose-model-file'),
-    onDownloadProgress: (callback) => {
-      const subscription = (event, progress) => callback(progress);
+    onDownloadProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) => callback(progress);
       ipcRenderer.on('llm:download-progress', subscription);
       return () => ipcRenderer.removeListener('llm:download-progress', subscription);
     },
-    getBackendStatus: (backend) => ipcRenderer.invoke('llm:backend-status', backend),
-    installBackend: (backend) => ipcRenderer.invoke('llm:backend-install', backend),
+    getBackendStatus: (backend: string) => ipcRenderer.invoke('llm:backend-status', backend),
+    installBackend: (backend: string) => ipcRenderer.invoke('llm:backend-install', backend),
     cancelBackendInstall: () => ipcRenderer.invoke('llm:backend-cancel-install'),
-    onBackendInstallProgress: (callback) => {
-      const subscription = (event, progress) => callback(progress);
+    onBackendInstallProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) => callback(progress);
       ipcRenderer.on('llm:backend-install-progress', subscription);
       return () => ipcRenderer.removeListener('llm:backend-install-progress', subscription);
     },
@@ -104,16 +107,16 @@ contextBridge.exposeInMainWorld('electron', {
   
   // GPT-SoVITS Setup
   gptSovitsSetup: {
-    start: (options = {}) => ipcRenderer.invoke('gptsovits:setup:start', options),
+    start: (options: Record<string, unknown> = {}) => ipcRenderer.invoke('gptsovits:setup:start', options),
     cancel: () => ipcRenderer.invoke('gptsovits:setup:cancel'),
     getStatus: () => ipcRenderer.invoke('gptsovits:setup:status'),
-    onLog: (callback) => {
-      const subscription = (event, log) => callback(log);
+    onLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) => callback(log);
       ipcRenderer.on('gptsovits:setup:log', subscription);
       return () => ipcRenderer.removeListener('gptsovits:setup:log', subscription);
     },
-    onComplete: (callback) => {
-      const subscription = (event, result) => callback(result);
+    onComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) => callback(result);
       ipcRenderer.on('gptsovits:setup:complete', subscription);
       return () => ipcRenderer.removeListener('gptsovits:setup:complete', subscription);
     },
@@ -121,16 +124,16 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Whisper STT Setup
   whisperSetup: {
-    start: (options = {}) => ipcRenderer.invoke('whisper:setup:start', options),
+    start: (options: Record<string, unknown> = {}) => ipcRenderer.invoke('whisper:setup:start', options),
     cancel: () => ipcRenderer.invoke('whisper:setup:cancel'),
     getStatus: () => ipcRenderer.invoke('whisper:setup:status'),
-    onLog: (callback) => {
-      const subscription = (event, log) => callback(log);
+    onLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) => callback(log);
       ipcRenderer.on('whisper:setup:log', subscription);
       return () => ipcRenderer.removeListener('whisper:setup:log', subscription);
     },
-    onComplete: (callback) => {
-      const subscription = (event, result) => callback(result);
+    onComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) => callback(result);
       ipcRenderer.on('whisper:setup:complete', subscription);
       return () => ipcRenderer.removeListener('whisper:setup:complete', subscription);
     },

@@ -1,4 +1,20 @@
-export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, state, registerGlobalShortcuts }) {
+import type { App, BrowserWindow, BrowserWindow as BrowserWindowInstance, IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
+
+type WindowState = {
+  mainWindow: BrowserWindowInstance | null;
+  inputWindow: BrowserWindowInstance | null;
+};
+
+type UIHandlersDeps = {
+  ipcMain: IpcMain;
+  BrowserWindow: typeof import('electron').BrowserWindow;
+  app: App;
+  process: NodeJS.Process;
+  state: WindowState;
+  registerGlobalShortcuts: (shortcuts: Record<string, unknown>) => void;
+};
+
+export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, state, registerGlobalShortcuts }: UIHandlersDeps) {
   ipcMain.handle('window:minimize', () => {
     if (state.mainWindow) state.mainWindow.minimize();
   });
@@ -26,7 +42,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     return false;
   });
 
-  ipcMain.handle('window:set-ignore-mouse-events', (event, ignore, options) => {
+  ipcMain.handle('window:set-ignore-mouse-events', (_event: IpcMainInvokeEvent, ignore: boolean, options?: { forward?: boolean }) => {
     if (state.mainWindow) {
       state.mainWindow.setIgnoreMouseEvents(ignore, options);
     }
@@ -50,11 +66,11 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     };
   });
 
-  ipcMain.handle('shortcuts:register', (event, shortcuts) => {
+  ipcMain.handle('shortcuts:register', (_event: IpcMainInvokeEvent, shortcuts: Record<string, unknown>) => {
     registerGlobalShortcuts(shortcuts);
   });
 
-  ipcMain.handle('window:set-position', (event, x, y) => {
+  ipcMain.handle('window:set-position', (_event: IpcMainInvokeEvent, x: number, y: number) => {
     if (state.mainWindow) {
       state.mainWindow.setPosition(Math.floor(x), Math.floor(y));
     }
@@ -68,7 +84,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     return { x: 0, y: 0 };
   });
 
-  ipcMain.handle('window:set-size', (event, width, height) => {
+  ipcMain.handle('window:set-size', (event: IpcMainInvokeEvent, width: number, height: number) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
     if (senderWindow) {
       const currentBounds = senderWindow.getBounds();
@@ -86,7 +102,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
   let windowScaleFactorWidth = 0.85;
   let windowScaleFactorHeight = 0.75;
 
-  ipcMain.handle('window:update-size-for-zoom', (event, modelWidth, modelHeight) => {
+  ipcMain.handle('window:update-size-for-zoom', (event: IpcMainInvokeEvent, modelWidth: number, modelHeight: number) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
     if (senderWindow) {
       const baseWidth = 400;
@@ -112,7 +128,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.handle('window:set-scale-factor', (event, newScaleFactorWidth, newScaleFactorHeight) => {
+  ipcMain.handle('window:set-scale-factor', (_event: IpcMainInvokeEvent, newScaleFactorWidth: number, newScaleFactorHeight?: number) => {
     windowScaleFactorWidth = newScaleFactorWidth;
     if (newScaleFactorHeight !== undefined) {
       windowScaleFactorHeight = newScaleFactorHeight;
@@ -152,13 +168,13 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     return state.inputWindow && state.inputWindow.getOpacity() > 0;
   });
 
-  ipcMain.on('chatInput:send', (event, data) => {
+  ipcMain.on('chatInput:send', (_event: IpcMainEvent, data: unknown) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('chatInput:send', data);
     }
   });
 
-  ipcMain.on('chatInput:setPendingDropData', (event, data) => {
+  ipcMain.on('chatInput:setPendingDropData', (_event: IpcMainEvent, data: unknown) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('chatInput:setPendingDropData', data);
     }
@@ -170,19 +186,19 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('state:isChatInputVisible', (event, visible) => {
+  ipcMain.on('state:isChatInputVisible', (_event: IpcMainEvent, visible: boolean) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:isChatInputVisible', visible);
     }
   });
 
-  ipcMain.on('state:pendingDropData', (event, data) => {
+  ipcMain.on('state:pendingDropData', (_event: IpcMainEvent, data: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:pendingDropData', data);
     }
   });
 
-  ipcMain.on('state:micDevices', (event, data) => {
+  ipcMain.on('state:micDevices', (_event: IpcMainEvent, data: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:micDevices', data);
     }
@@ -194,7 +210,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('state:selectedMicId', (event, deviceId) => {
+  ipcMain.on('state:selectedMicId', (event: IpcMainEvent, deviceId: string) => {
     if (state.mainWindow && state.mainWindow.webContents && event.sender !== state.mainWindow.webContents) {
       state.mainWindow.webContents.send('state:selectedMicId', deviceId);
     }
@@ -203,19 +219,19 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('state:cameraDevices', (event, data) => {
+  ipcMain.on('state:cameraDevices', (_event: IpcMainEvent, data: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:cameraDevices', data);
     }
   });
 
-  ipcMain.on('state:screenShare', (event, data) => {
+  ipcMain.on('state:screenShare', (_event: IpcMainEvent, data: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:screenShare', data);
     }
   });
 
-  ipcMain.on('camera:selectDevice', (event, deviceId) => {
+  ipcMain.on('camera:selectDevice', (_event: IpcMainEvent, deviceId: string) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('camera:selectDevice', deviceId);
     }
@@ -233,7 +249,7 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('state:selectedCameraId', (event, deviceId) => {
+  ipcMain.on('state:selectedCameraId', (event: IpcMainEvent, deviceId: string) => {
     if (state.mainWindow && state.mainWindow.webContents && event.sender !== state.mainWindow.webContents) {
       state.mainWindow.webContents.send('state:selectedCameraId', deviceId);
     }
@@ -242,25 +258,25 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('chatInput:voiceTranscription', (event, data) => {
+  ipcMain.on('chatInput:voiceTranscription', (_event: IpcMainEvent, data: unknown) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('chatInput:voiceTranscription', data);
     }
   });
 
-  ipcMain.on('voice:transcriptionReceived', (event, text) => {
+  ipcMain.on('voice:transcriptionReceived', (_event: IpcMainEvent, text: string) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('voice:transcriptionReceived', text);
     }
   });
 
-  ipcMain.on('stt:transcriptionReceived', (event, text) => {
+  ipcMain.on('stt:transcriptionReceived', (_event: IpcMainEvent, text: string) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('stt:transcriptionReceived', text);
     }
   });
 
-  ipcMain.on('chatInput:voiceMode', (event, isActive) => {
+  ipcMain.on('chatInput:voiceMode', (_event: IpcMainEvent, isActive: boolean) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send('chatInput:voiceMode', isActive);
     }
@@ -284,13 +300,13 @@ export function registerUIIPCHandlers({ ipcMain, BrowserWindow, app, process, st
     }
   });
 
-  ipcMain.on('state:voiceState', (event, stateValue) => {
+  ipcMain.on('state:voiceState', (_event: IpcMainEvent, stateValue: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:voiceState', stateValue);
     }
   });
 
-  ipcMain.on('state:sttRecording', (event, payload) => {
+  ipcMain.on('state:sttRecording', (_event: IpcMainEvent, payload: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send('state:sttRecording', payload);
     }

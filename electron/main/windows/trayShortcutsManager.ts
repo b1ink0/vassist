@@ -1,3 +1,33 @@
+import type { App, BrowserWindow, GlobalShortcut, Tray as ElectronTray } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+
+type WindowState = {
+  mainWindow: BrowserWindow | null;
+  inputWindow: BrowserWindow | null;
+  tray: ElectronTray | null;
+};
+
+type ShortcutConfig = {
+  enabled?: boolean;
+  openChat?: string;
+  toggleMode?: string;
+  toggleVisibility?: string;
+};
+
+type TrayShortcutsDeps = {
+  app: App & { isQuitting?: boolean };
+  globalShortcut: GlobalShortcut;
+  Tray: typeof import('electron').Tray;
+  Menu: typeof import('electron').Menu;
+  nativeImage: typeof import('electron').nativeImage;
+  fs: typeof fsType;
+  path: typeof pathType;
+  process: NodeJS.Process;
+  __dirname: string;
+  state: WindowState;
+};
+
 export function createTrayShortcutsManager({
   app,
   globalShortcut,
@@ -9,15 +39,15 @@ export function createTrayShortcutsManager({
   process,
   __dirname,
   state,
-}) {
-  function convertToElectronAccelerator(browserCombo) {
+}: TrayShortcutsDeps) {
+  function convertToElectronAccelerator(browserCombo: string | undefined | null) {
     if (!browserCombo) return null;
 
     const normalizedParts = browserCombo
       .split('+')
-      .map((part) => part.trim())
+      .map((part: string) => part.trim())
       .filter(Boolean)
-      .map((part) => {
+      .map((part: string) => {
         const lowerPart = part.toLowerCase();
 
         if (['ctrl', 'control', 'cmd', 'command', 'meta'].includes(lowerPart)) {
@@ -36,7 +66,7 @@ export function createTrayShortcutsManager({
         return part;
       });
 
-    const dedupedParts = [];
+    const dedupedParts: string[] = [];
     for (const part of normalizedParts) {
       if (!dedupedParts.includes(part)) {
         dedupedParts.push(part);
@@ -63,7 +93,7 @@ export function createTrayShortcutsManager({
     state.mainWindow.focus();
   }
 
-  function registerGlobalShortcuts(shortcuts) {
+  function registerGlobalShortcuts(shortcuts: ShortcutConfig | undefined) {
     globalShortcut.unregisterAll();
 
     if (!shortcuts || !shortcuts.enabled) {

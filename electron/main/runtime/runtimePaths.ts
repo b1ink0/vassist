@@ -1,4 +1,16 @@
-export function createRuntimePaths({ app, path, fs, serverBasePath, isDevServer }) {
+import type { App } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+
+type RuntimePathsDeps = {
+  app: App;
+  path: typeof pathType;
+  fs: typeof fsType;
+  serverBasePath: string;
+  isDevServer: boolean;
+};
+
+export function createRuntimePaths({ app, path, fs, serverBasePath, isDevServer }: RuntimePathsDeps) {
   function getRuntimeServerBasePath() {
     if (isDevServer) {
       return serverBasePath;

@@ -2,12 +2,67 @@ import https from 'https';
 import http from 'http';
 import { pathToFileURL } from 'url';
 import * as tar from 'tar';
+import type { App, IpcMainInvokeEvent } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
 
-const SUPPORTED_BACKENDS = ['auto', 'cpu', 'cuda', 'vulkan', 'metal'];
+const SUPPORTED_BACKENDS = ['auto', 'cpu', 'cuda', 'vulkan', 'metal'] as const;
 const NODE_LLAMA_CPP_VERSION = '3.18.1';
 const NODE_LLAMA_CORE_BUNDLE_FILENAME = 'node-llama-core.tgz';
 
-function toNodeLlamaGpu(backend) {
+type BackendName = (typeof SUPPORTED_BACKENDS)[number];
+type InstallableBackend = Exclude<BackendName, 'auto'>;
+
+type BackendPackage = {
+  packageName: string;
+  url: string;
+};
+
+type BackendPackageMap = Record<BackendName, BackendPackage | null>;
+
+type InstalledBackendInfo = {
+  ok?: boolean;
+  version?: string | null;
+  installedAt?: string | null;
+  sourceUrl?: string | null;
+  packageCachePath?: string | null;
+  packageCacheBytes?: number | null;
+  packageCachedAt?: string | null;
+};
+
+type PersistedState = {
+  installedBackends: Partial<Record<BackendName, InstalledBackendInfo>>;
+  updatedAt: string | null;
+};
+
+type DownloadArchiveResult = {
+  cachedFilePath: string;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  cached: boolean;
+};
+
+type LLMBackendManagerDeps = {
+  app: App;
+  fs: typeof fsType;
+  path: typeof pathType;
+  platform?: NodeJS.Platform;
+  arch?: string;
+};
+
+type InstallState = {
+  backend: InstallableBackend;
+  startedAt: number;
+} | null;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function toNodeLlamaGpu(backend: BackendName): 'auto' | 'cuda' | 'vulkan' | 'metal' | false {
   switch (backend) {
     case 'cpu':
       return false;
@@ -24,13 +79,13 @@ function toNodeLlamaGpu(backend) {
   }
 }
 
-function normalizeBackend(backend) {
+function normalizeBackend(backend: string | undefined | null): BackendName {
   if (!backend || typeof backend !== 'string') return 'auto';
-  const normalized = backend.toLowerCase();
+  const normalized = backend.toLowerCase() as BackendName;
   return SUPPORTED_BACKENDS.includes(normalized) ? normalized : 'auto';
 }
 
-function getBackendSupport(platform) {
+function getBackendSupport(platform: NodeJS.Platform): Record<BackendName, boolean> {
   return {
     auto: true,
     cpu: true,
@@ -40,12 +95,13 @@ function getBackendSupport(platform) {
   };
 }
 
-function getBackendPackageMap(version, platform, arch) {
+function getBackendPackageMap(version: string, platform: NodeJS.Platform, arch: string): BackendPackageMap {
   const v = String(version || '').replace(/^\^/, '');
 
   if (platform === 'win32') {
     if (arch === 'x64') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/win-x64', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64/-/win-x64-${v}.tgz` },
         cuda: { packageName: '@node-llama-cpp/win-x64-cuda', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-cuda/-/win-x64-cuda-${v}.tgz` },
         vulkan: { packageName: '@node-llama-cpp/win-x64-vulkan', url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-vulkan/-/win-x64-vulkan-${v}.tgz` },
@@ -55,6 +111,7 @@ function getBackendPackageMap(version, platform, arch) {
 
     if (arch === 'arm64') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/win-arm64', url: `https://registry.npmjs.org/@node-llama-cpp/win-arm64/-/win-arm64-${v}.tgz` },
         cuda: null,
         vulkan: null,
@@ -66,6 +123,7 @@ function getBackendPackageMap(version, platform, arch) {
   if (platform === 'linux') {
     if (arch === 'x64') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/linux-x64', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64/-/linux-x64-${v}.tgz` },
         cuda: { packageName: '@node-llama-cpp/linux-x64-cuda', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-cuda/-/linux-x64-cuda-${v}.tgz` },
         vulkan: { packageName: '@node-llama-cpp/linux-x64-vulkan', url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-vulkan/-/linux-x64-vulkan-${v}.tgz` },
@@ -75,6 +133,7 @@ function getBackendPackageMap(version, platform, arch) {
 
     if (arch === 'arm64') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/linux-arm64', url: `https://registry.npmjs.org/@node-llama-cpp/linux-arm64/-/linux-arm64-${v}.tgz` },
         cuda: null,
         vulkan: null,
@@ -84,6 +143,7 @@ function getBackendPackageMap(version, platform, arch) {
 
     if (arch === 'arm') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/linux-armv7l', url: `https://registry.npmjs.org/@node-llama-cpp/linux-armv7l/-/linux-armv7l-${v}.tgz` },
         cuda: null,
         vulkan: null,
@@ -95,6 +155,7 @@ function getBackendPackageMap(version, platform, arch) {
   if (platform === 'darwin') {
     if (arch === 'arm64') {
       return {
+        auto: null,
         cpu: null,
         cuda: null,
         vulkan: null,
@@ -104,6 +165,7 @@ function getBackendPackageMap(version, platform, arch) {
 
     if (arch === 'x64') {
       return {
+        auto: null,
         cpu: { packageName: '@node-llama-cpp/mac-x64', url: `https://registry.npmjs.org/@node-llama-cpp/mac-x64/-/mac-x64-${v}.tgz` },
         cuda: null,
         vulkan: null,
@@ -113,6 +175,7 @@ function getBackendPackageMap(version, platform, arch) {
   }
 
   return {
+    auto: null,
     cpu: null,
     cuda: null,
     vulkan: null,
@@ -120,7 +183,7 @@ function getBackendPackageMap(version, platform, arch) {
   };
 }
 
-export function createLLMBackendManager({ app, fs, path, platform = process.platform, arch = process.arch }) {
+export function createLLMBackendManager({ app, fs, path, platform = process.platform, arch = process.arch }: LLMBackendManagerDeps) {
   const stateDir = path.join(app.getPath('userData'), 'llama-backends');
   const packageCacheDir = path.join(stateDir, 'packages');
   const runtimeRootDir = path.join(stateDir, 'runtime');
@@ -131,7 +194,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
   const support = getBackendSupport(platform);
   const backendPackageMap = getBackendPackageMap(NODE_LLAMA_CPP_VERSION, platform, arch);
 
-  let activeInstall = null;
+  let activeInstall: InstallState = null;
 
   const ensureStateDir = () => {
     if (!fs.existsSync(stateDir)) {
@@ -145,7 +208,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     }
   };
 
-  const packageNameToPath = (name) => path.join(runtimeNodeModulesDir, ...name.split('/'));
+  const packageNameToPath = (name: string) => path.join(runtimeNodeModulesDir, ...name.split('/'));
 
   const resolveBundledCoreArchivePath = () => {
     const appPath = app.getAppPath();
@@ -165,7 +228,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     return null;
   };
 
-  const installNodeLlamaCoreIntoRuntime = async ({ event, backend }) => {
+  const installNodeLlamaCoreIntoRuntime = async ({ event, backend }: { event: IpcMainInvokeEvent | undefined; backend: BackendName }) => {
     ensureStateDir();
     const hasCoreRuntime = fs.existsSync(runtimeNodeLlamaEntry);
 
@@ -216,7 +279,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     }
   };
 
-  const installBackendPackageIntoRuntime = async ({ packageName, archivePath }) => {
+  const installBackendPackageIntoRuntime = async ({ packageName, archivePath }: { packageName: string; archivePath: string }) => {
     ensureStateDir();
 
     const extractTempDir = path.join(packageCacheDir, `_extract-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -229,7 +292,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
       });
     } catch (error) {
       fs.rmSync(extractTempDir, { recursive: true, force: true });
-      throw new Error(`Failed to extract backend package archive (${packageName}): ${error?.message || 'unknown error'}`);
+      throw new Error(`Failed to extract backend package archive (${packageName}): ${getErrorMessage(error) || 'unknown error'}`);
     }
 
     const extractedPackageDir = path.join(extractTempDir, 'package');
@@ -274,14 +337,14 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     };
   };
 
-  const readState = () => {
+  const readState = (): PersistedState => {
     ensureStateDir();
     if (!fs.existsSync(statePath)) {
       return { installedBackends: {}, updatedAt: null };
     }
 
     try {
-      const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Partial<PersistedState>;
       return {
         installedBackends: parsed.installedBackends || {},
         updatedAt: parsed.updatedAt || null,
@@ -291,21 +354,21 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     }
   };
 
-  const writeState = (nextState) => {
+  const writeState = (nextState: PersistedState) => {
     ensureStateDir();
     fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2), 'utf8');
   };
 
-  const emitProgress = (event, payload) => {
+  const emitProgress = (event: IpcMainInvokeEvent | undefined, payload: Record<string, unknown>) => {
     if (event?.sender && !event.sender.isDestroyed()) {
       event.sender.send('llm:backend-install-progress', payload);
     }
   };
 
-  const downloadBackendPackageWithProgress = ({ event, backend, url }) => {
+  const downloadBackendPackageWithProgress = ({ event, backend, url }: { event: IpcMainInvokeEvent | undefined; backend: BackendName; url: string }): Promise<DownloadArchiveResult> => {
     const cachedFilePath = path.join(packageCacheDir, `${backend}-${NODE_LLAMA_CPP_VERSION}.tgz`);
 
-    return new Promise((resolve, reject) => {
+    return new Promise<DownloadArchiveResult>((resolve, reject) => {
       ensureStateDir();
 
       if (fs.existsSync(cachedFilePath)) {
@@ -330,7 +393,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
         fs.unlinkSync(cachedFilePath);
       }
 
-      const requestUrl = (nextUrl, redirects = 0) => {
+      const requestUrl = (nextUrl: string, redirects = 0) => {
         if (redirects > 5) {
           reject(new Error('Too many redirects while downloading backend package'));
           return;
@@ -411,7 +474,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     });
   };
 
-  const isBackendInstalled = (backend) => {
+  const isBackendInstalled = (backend: string) => {
     const normalizedBackend = normalizeBackend(backend);
     if (normalizedBackend === 'auto') return true;
 
@@ -424,7 +487,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
     return false;
   };
 
-  const installBackend = async ({ event, backend }) => {
+  const installBackend = async ({ event, backend }: { event?: IpcMainInvokeEvent; backend?: string } = {}) => {
     const normalizedBackend = normalizeBackend(backend);
     if (!support[normalizedBackend]) {
       return {
@@ -438,6 +501,10 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
         success: false,
         error: 'Another backend installation is already in progress',
       };
+    }
+
+    if (normalizedBackend === 'auto') {
+      return { success: false, error: 'Select a concrete backend to install' };
     }
 
     activeInstall = { backend: normalizedBackend, startedAt: Date.now() };
@@ -498,7 +565,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
           status: 'Starting backend package download...',
         });
 
-        let downloadedArchive = null;
+        let downloadedArchive: DownloadArchiveResult | null = null;
         try {
           downloadedArchive = await downloadBackendPackageWithProgress({
             event,
@@ -537,7 +604,7 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
             backend: normalizedBackend,
             percent: 50,
             stage: 'download',
-            status: `Backend package download unavailable, continuing install: ${downloadError?.message || 'unknown error'}`,
+            status: `Backend package download unavailable, continuing install: ${getErrorMessage(downloadError) || 'unknown error'}`,
           });
         }
       }
@@ -592,16 +659,16 @@ export function createLLMBackendManager({ app, fs, path, platform = process.plat
         backend: normalizedBackend,
         percent: 100,
         stage: 'error',
-        status: error?.message || 'Backend installation failed',
+        status: getErrorMessage(error) || 'Backend installation failed',
       });
 
-      return { success: false, error: error?.message || 'Backend installation failed' };
+      return { success: false, error: getErrorMessage(error) || 'Backend installation failed' };
     } finally {
       activeInstall = null;
     }
   };
 
-  const getStatus = ({ backend } = {}) => {
+  const getStatus = ({ backend }: { backend?: string } = {}) => {
     const normalizedBackend = normalizeBackend(backend || 'auto');
     const state = readState();
 

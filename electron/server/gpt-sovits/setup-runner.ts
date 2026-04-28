@@ -8,6 +8,7 @@ import fs from 'fs';
 import PythonBootstrap from './bootstrap';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import type { ChildProcessWithoutNullStreams } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,7 +17,31 @@ const SCRIPT_DIR = __dirname;
 const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
 const IS_WINDOWS = process.platform === 'win32';
 
-function resolvePythonDir(torchBackend) {
+type SetupLog = {
+  type: 'info' | 'stdout' | 'stderr' | 'error';
+  message: string;
+};
+
+type SetupOptions = {
+  torchBackend?: string;
+  force?: boolean;
+};
+
+type SetupStatus = {
+  isSetup: boolean;
+  pythonExists: boolean;
+  modelsExist: boolean;
+  gptsovitsExists: boolean;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function resolvePythonDir(torchBackend: string | undefined | null): string {
   const backend = (torchBackend || 'auto').toString().trim().toLowerCase();
   if (IS_WINDOWS && backend === 'rocm') {
     return path.join(BASE_DIR, 'python312');
@@ -25,24 +50,31 @@ function resolvePythonDir(torchBackend) {
 }
 
 class SetupRunner {
+  process: ChildProcessWithoutNullStreams | null;
+  logCallback: ((logData: SetupLog) => void) | null;
+  cancelled: boolean;
+  torchBackend: string;
+  forceReinstall: boolean;
+
   constructor() {
     this.process = null;
     this.logCallback = null;
     this.cancelled = false;
     this.torchBackend = 'auto';
+    this.forceReinstall = false;
   }
 
   /**
    * Get the Python runtime directory for the currently selected backend
    */
-  getPythonDir() {
+  getPythonDir(): string {
     return resolvePythonDir(this.torchBackend);
   }
 
   /**
    * Get embedded Python executable path
    */
-  getPythonExe() {
+  getPythonExe(): string {
     if (IS_WINDOWS) {
       return path.join(this.getPythonDir(), 'python.exe');
     } else {
@@ -53,7 +85,7 @@ class SetupRunner {
   /**
    * Check if setup is already complete
    */
-  getStatus() {
+  getStatus(): SetupStatus {
     // Check both possible python dirs (standard 3.10 and ROCm 3.12)
     const pythonDirDefault = path.join(BASE_DIR, 'python');
     const pythonDir312 = path.join(BASE_DIR, 'python312');
@@ -77,7 +109,7 @@ class SetupRunner {
   async bootstrap() {
     this.log({ type: 'info', message: '\n=== PHASE 1: PYTHON BOOTSTRAP ===\n' });
     
-    const bootstrap = new PythonBootstrap((message) => {
+    const bootstrap = new PythonBootstrap((message: string) => {
       this.log({ type: 'stdout', message: message + '\n' });
     }, { backend: this.torchBackend });
     
@@ -87,7 +119,7 @@ class SetupRunner {
   /**
    * Run setup.py with embedded Python
    */
-  async runSetup(options = {}) {
+  async runSetup(options: SetupOptions = {}) {
     this.log({ type: 'info', message: '\n=== PHASE 2: DEPENDENCIES & MODELS ===\n' });
     
     const pythonExe = this.getPythonExe();
@@ -104,7 +136,7 @@ class SetupRunner {
     const selectedBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
     const forceReinstall = options?.force ? '1' : '0';
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
         cwd: BASE_DIR,
         env: { 
@@ -117,19 +149,19 @@ class SetupRunner {
         }
       });
       
-      this.process.stdout.on('data', (data) => {
+      this.process.stdout.on('data', (data: Buffer) => {
         if (this.cancelled) return;
         const message = data.toString();
         this.log({ type: 'stdout', message });
       });
       
-      this.process.stderr.on('data', (data) => {
+      this.process.stderr.on('data', (data: Buffer) => {
         if (this.cancelled) return;
         const message = data.toString();
         this.log({ type: 'stderr', message });
       });
       
-      this.process.on('close', (code) => {
+      this.process.on('close', (code: number | null) => {
         this.process = null;
         
         if (this.cancelled) {
@@ -142,7 +174,7 @@ class SetupRunner {
         }
       });
       
-      this.process.on('error', (err) => {
+      this.process.on('error', (err: Error) => {
         this.process = null;
         reject(err);
       });
@@ -153,7 +185,7 @@ class SetupRunner {
    * Run full setup process
    * @param {Function} logCallback - Called with { type, message } for each log line
    */
-  async run(logCallback, options = {}) {
+  async run(logCallback: (logData: SetupLog) => void, options: SetupOptions = {}) {
     this.logCallback = logCallback;
     this.cancelled = false;
     this.torchBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
@@ -183,7 +215,7 @@ class SetupRunner {
       await this.runSetup({ ...options, force: this.forceReinstall });
       
     } catch (error) {
-      this.log({ type: 'error', message: `\n✗ Setup failed: ${error.message}\n` });
+      this.log({ type: 'error', message: `\n✗ Setup failed: ${getErrorMessage(error)}\n` });
       throw error;
     }
   }
@@ -204,7 +236,7 @@ class SetupRunner {
   /**
    * Send log to callback
    */
-  log(logData) {
+  log(logData: SetupLog) {
     if (this.logCallback) {
       this.logCallback(logData);
     }

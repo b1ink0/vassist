@@ -16,11 +16,84 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import FormData from 'form-data';
 import multer from 'multer';
+import type { Express, NextFunction, Request, Response } from 'express';
+import type { Server } from 'http';
+import type { Multer } from 'multer';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+type LLMBackend = 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'rocm';
+
+type ServerConfig = {
+  llm: {
+    modelPath: string | null;
+    defaultModelsDir: string | null;
+    backend: LLMBackend;
+    temperature: number;
+    maxTokens: number;
+    contextSize: number;
+    gpuLayers: number | 'auto';
+  };
+  stt: {
+    modelPath?: string | null;
+    proxyUrl: string;
+    model?: string;
+    language?: string;
+  };
+  tts: {
+    proxyUrl: string;
+    enabled: boolean;
+  };
+  server: {
+    shareOnNetwork: boolean;
+    host: string;
+    port?: number;
+  };
+};
+
+type LlamaApi = {
+  getLlama: (opts: { gpu: 'auto' | 'cuda' | 'vulkan' | 'metal' | false }) => Promise<{ gpu?: string; loadModel: (opts: { modelPath: string; gpuLayers: number | 'auto' }) => Promise<{ gpuLayers?: number; createContext: (opts: { contextSize: number }) => Promise<{ getSequence: () => unknown; dispose: () => Promise<void> }>; dispose: () => Promise<void> }> }>;
+  LlamaChat: new (opts: { contextSequence: unknown }) => { generateResponse: (history: unknown[], opts: { temperature: number; maxTokens: number; onTextChunk?: (chunk: string) => void }) => Promise<{ response: string }> };
+};
+
+type WhisperContextLike = {
+  release: () => Promise<void>;
+};
+
+type LocalAIServerDeps = {
+  loadLlamaApi?: (() => Promise<unknown>) | null;
+  ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export class LocalAIServer {
-  constructor({ loadLlamaApi, ensureTTSBackendRunning } = {}) {
+  app: Express;
+  server: Server | null;
+  port: number;
+  host: string;
+  llama: { gpu?: string; loadModel: (opts: { modelPath: string; gpuLayers: number | 'auto' }) => Promise<{ gpuLayers?: number; createContext: (opts: { contextSize: number }) => Promise<{ getSequence: () => unknown; dispose: () => Promise<void> }>; dispose: () => Promise<void> }> } | null;
+  llamaModel: { gpuLayers?: number; createContext: (opts: { contextSize: number }) => Promise<{ getSequence: () => unknown; dispose: () => Promise<void> }>; dispose: () => Promise<void> } | null;
+  llamaContext: { getSequence: () => unknown; dispose: () => Promise<void> } | null;
+  whisperContext: WhisperContextLike | null;
+  llamaChat: { generateResponse: (history: unknown[], opts: { temperature: number; maxTokens: number; onTextChunk?: (chunk: string) => void }) => Promise<{ response: string }> } | null;
+  currentModelPath: string | null;
+  loadLlamaApi: (() => Promise<unknown>) | null;
+  ensureTTSBackendRunning: (() => void | Promise<void>) | null;
+  isLoadingModel: boolean;
+  loadPromise: Promise<void> | null;
+  lastUsed: number | null;
+  idleTimer: NodeJS.Timeout | null;
+  readonly IDLE_TIMEOUT: number;
+  config: ServerConfig;
+  upload!: Multer;
+
+  constructor({ loadLlamaApi, ensureTTSBackendRunning }: LocalAIServerDeps = {}) {
     this.app = express();
     this.server = null;
     this.port = 11438;
@@ -31,6 +104,7 @@ export class LocalAIServer {
     this.llamaModel = null;
     this.llamaContext = null;
     this.llamaChat = null;
+    this.whisperContext = null;
     this.currentModelPath = null;
     this.loadLlamaApi = loadLlamaApi || null;
     this.ensureTTSBackendRunning = typeof ensureTTSBackendRunning === 'function' ? ensureTTSBackendRunning : null;
@@ -81,7 +155,7 @@ export class LocalAIServer {
     this.app.use(express.raw({ type: 'audio/*', limit: '100mb' }));
     
     // CORS
-    this.app.use((req, res, next) => {
+    this.app.use((req: Request, res: Response, next: NextFunction) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.header('Access-Control-Allow-Headers', '*');
@@ -91,14 +165,14 @@ export class LocalAIServer {
       next();
     });
 
-    this.app.use((req, res, next) => {
+    this.app.use((req: Request, _res: Response, next: NextFunction) => {
       console.log(`[HTTP] ${req.method} ${req.path}`);
       next();
     });
   }
 
   setupRoutes() {
-    this.app.get('/health', (req, res) => {
+    this.app.get('/health', (_req: Request, res: Response) => {
       res.json({
         status: 'ok',
         llm: this.llamaModel !== null,
@@ -107,38 +181,38 @@ export class LocalAIServer {
       });
     });
 
-    this.app.post('/v1/chat/completions', async (req, res) => {
+    this.app.post('/v1/chat/completions', async (req: Request, res: Response) => {
       try {
         await this.handleChatCompletion(req, res);
       } catch (error) {
         console.error('[LLM] Error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: getErrorMessage(error) });
       }
     });
 
-    this.app.post('/v1/audio/transcriptions', this.upload.single('file'), async (req, res) => {
+    this.app.post('/v1/audio/transcriptions', this.upload.single('file'), async (req: Request, res: Response) => {
       try {
         await this.handleTranscription(req, res);
       } catch (error) {
         console.error('[STT] Error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: getErrorMessage(error) });
       }
     });
 
-    this.app.post('/v1/audio/speech', async (req, res) => {
+    this.app.post('/v1/audio/speech', async (req: Request, res: Response) => {
       try {
         await this.handleTextToSpeech(req, res);
       } catch (error) {
         console.error('[TTS] Error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: getErrorMessage(error) });
       }
     });
 
-    this.app.get('/v1/models', (req, res) => {
+    this.app.get('/v1/models', (_req: Request, res: Response) => {
       res.json({
         object: 'list',
         data: this.llamaModel ? [{
-          id: path.basename(this.config.llm.modelPath),
+          id: path.basename(this.config.llm.modelPath ?? 'local-model.gguf'),
           object: 'model',
           created: Date.now(),
           owned_by: 'local'
@@ -147,7 +221,7 @@ export class LocalAIServer {
     });
   }
 
-  getClientIp(req) {
+  getClientIp(req: Request): string {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string' && forwarded.length > 0) {
       const firstForwardedIp = forwarded.split(',')[0]?.trim();
@@ -158,7 +232,7 @@ export class LocalAIServer {
     return req.ip || req.socket?.remoteAddress || '';
   }
 
-  isLoopbackAddress(ipAddress) {
+  isLoopbackAddress(ipAddress: string): boolean {
     if (!ipAddress || typeof ipAddress !== 'string') {
       return false;
     }
@@ -171,7 +245,7 @@ export class LocalAIServer {
     );
   }
 
-  async handleChatCompletion(req, res) {
+  async handleChatCompletion(req: Request, res: Response) {
     const { messages, stream = false, temperature, max_tokens, model, customModelsPath } = req.body;
     
     console.log('[LLM] Request received:');
@@ -231,7 +305,7 @@ export class LocalAIServer {
       await this.ensureModelLoaded();
     } catch (error) {
       console.error('[LLM] Failed to load model:', error);
-      return res.status(503).json({ error: `Failed to load model: ${error.message}` });
+      return res.status(503).json({ error: `Failed to load model: ${getErrorMessage(error)}` });
     }
 
     if (!this.llamaChat) {
@@ -275,12 +349,12 @@ export class LocalAIServer {
         await this.llamaChat.generateResponse(chatHistory, {
           temperature: temperature ?? this.config.llm.temperature,
           maxTokens: max_tokens ?? this.config.llm.maxTokens,
-          onTextChunk: (chunk) => {
+          onTextChunk: (chunk: string) => {
             const chunkData = {
               id: `chatcmpl-${Date.now()}`,
               object: 'chat.completion.chunk',
               created: Math.floor(Date.now() / 1000),
-              model: path.basename(this.config.llm.modelPath),
+              model: path.basename(this.config.llm.modelPath ?? 'local-model.gguf'),
               choices: [{
                 index: 0,
                 delta: { content: chunk },
@@ -296,7 +370,7 @@ export class LocalAIServer {
           id: `chatcmpl-${Date.now()}`,
           object: 'chat.completion.chunk',
           created: Math.floor(Date.now() / 1000),
-          model: path.basename(this.config.llm.modelPath),
+          model: path.basename(this.config.llm.modelPath ?? 'local-model.gguf'),
           choices: [{
             index: 0,
             delta: {},
@@ -310,7 +384,7 @@ export class LocalAIServer {
 
       } catch (error) {
         console.error('[LLM] Streaming error:', error);
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: getErrorMessage(error) })}\n\n`);
         res.end();
       }
 
@@ -326,7 +400,7 @@ export class LocalAIServer {
         id: `chatcmpl-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: path.basename(this.config.llm.modelPath),
+        model: path.basename(this.config.llm.modelPath ?? 'local-model.gguf'),
         choices: [{
           index: 0,
           message: {
@@ -344,7 +418,7 @@ export class LocalAIServer {
     }
   }
 
-  async handleTranscription(req, res) {
+  async handleTranscription(req: Request, res: Response) {
     try {
       console.log('[STT] Proxying to Faster Whisper server:', this.config.stt.proxyUrl);
       
@@ -399,18 +473,18 @@ export class LocalAIServer {
 
       res.json(response.data);
     } catch (error) {
-      console.error('[STT] Proxy error:', error.message);
-      if (error.response) {
+      console.error('[STT] Proxy error:', getErrorMessage(error));
+      if (axios.isAxiosError(error) && error.response) {
         return res.status(error.response.status).json(error.response.data);
       }
       res.status(500).json({ 
         error: 'STT proxy failed',
-        details: error.message
+        details: getErrorMessage(error)
       });
     }
   }
 
-  async handleTextToSpeech(req, res) {
+  async handleTextToSpeech(req: Request, res: Response) {
     const { input, reference_audio, reference_text, reference_language = 'en' } = req.body;
 
     if (!input) {
@@ -454,15 +528,15 @@ export class LocalAIServer {
       res.send(Buffer.from(response.data));
 
     } catch (error) {
-      console.error('[TTS] Proxy error:', error.message);
-      if (error.response) {
+      console.error('[TTS] Proxy error:', getErrorMessage(error));
+      if (axios.isAxiosError(error) && error.response) {
         console.error('[TTS] GPT-SoVITS error:', error.response.status, error.response.statusText);
       }
       throw new Error('TTS service unavailable');
     }
   }
 
-  async initialize(config = {}) {
+  async initialize(config: Partial<ServerConfig> = {}) {
     console.log('[Server] Initializing...');
     console.log('[Server] Received config:', JSON.stringify(config, null, 2));
     
@@ -564,7 +638,7 @@ export class LocalAIServer {
       console.log('[LLM]   Model:', this.config.llm.modelPath);
       console.log('[LLM]   Backend:', this.config.llm.backend || 'auto');
 
-      const backendToGpu = {
+      const backendToGpu: Record<LLMBackend, 'auto' | 'cuda' | 'vulkan' | 'metal' | false> = {
         auto: 'auto',
         cpu: false,
         cuda: 'cuda',
@@ -581,7 +655,7 @@ export class LocalAIServer {
         throw new Error('Runtime llama API loader is not configured');
       }
 
-      const runtimeApi = await this.loadLlamaApi();
+      const runtimeApi = await this.loadLlamaApi() as LlamaApi;
       getLlamaFn = runtimeApi.getLlama;
       LlamaChatClass = runtimeApi.LlamaChat;
 
@@ -596,7 +670,7 @@ export class LocalAIServer {
       console.log('[LLM]   GPU:', gpuType);
       
       this.llamaModel = await this.llama.loadModel({
-        modelPath: this.config.llm.modelPath,
+        modelPath: this.config.llm.modelPath ?? '',
         gpuLayers: this.config.llm.gpuLayers
       });
       console.log('[LLM]   Layers on GPU:', this.llamaModel.gpuLayers);
@@ -688,7 +762,7 @@ export class LocalAIServer {
       return;
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const listener = this.app.listen(this.port, this.host);
 
       listener.once('listening', () => {
@@ -698,7 +772,7 @@ export class LocalAIServer {
         resolve();
       });
 
-      listener.once('error', (error) => {
+      listener.once('error', (error: Error) => {
         this.server = null;
         console.error('[Server] Failed to start:', error);
         reject(error);
@@ -730,8 +804,9 @@ export class LocalAIServer {
     }
     
     if (this.server) {
-      await new Promise((resolve) => {
-        this.server.close(resolve);
+      const activeServer = this.server;
+      await new Promise<void>((resolve) => {
+        activeServer.close(() => resolve());
       });
       this.server = null;
     }

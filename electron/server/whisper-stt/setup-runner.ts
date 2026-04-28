@@ -5,9 +5,9 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import PythonBootstrap from '../gpt-sovits/bootstrap';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname } from 'path';
+import type { ChildProcessWithoutNullStreams } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,8 +25,8 @@ function resolvePythonDir() {
   return python;
 }
 
-function resolveSitePackagesDirs(pythonDir) {
-  const sitePackages = [];
+function resolveSitePackagesDirs(pythonDir: string): string[] {
+  const sitePackages: string[] = [];
 
   if (IS_WINDOWS) {
     const winSitePackages = path.join(pythonDir, 'Lib', 'site-packages');
@@ -61,7 +61,7 @@ function resolveSitePackagesDirs(pythonDir) {
   return sitePackages;
 }
 
-function moduleExists(sitePackagesDir, moduleName) {
+function moduleExists(sitePackagesDir: string, moduleName: string): boolean {
   const candidates = [
     path.join(sitePackagesDir, moduleName),
     path.join(sitePackagesDir, `${moduleName}.py`),
@@ -70,6 +70,11 @@ function moduleExists(sitePackagesDir, moduleName) {
 }
 
 class WhisperSetupRunner {
+  process: ChildProcessWithoutNullStreams | null;
+  logCallback: ((logData: Record<string, unknown>) => void) | null;
+  cancelled: boolean;
+  model: string;
+
   constructor() {
     this.process = null;
     this.logCallback = null;
@@ -94,7 +99,7 @@ class WhisperSetupRunner {
   getWhisperSetupDir() {
     const envDir = process.env.WHISPER_SETUP_DIR;
     const fallbackRuntimeDir = path.join(path.dirname(BASE_DIR), 'whisper-stt');
-    const candidateDirs = [envDir, fallbackRuntimeDir, SCRIPT_DIR].filter(Boolean);
+    const candidateDirs = [envDir, fallbackRuntimeDir, SCRIPT_DIR].filter((candidate): candidate is string => Boolean(candidate));
 
     for (const candidate of candidateDirs) {
       try {
@@ -218,7 +223,12 @@ class WhisperSetupRunner {
   async bootstrap() {
     this.log({ type: 'info', message: '\n=== PHASE 1: PYTHON BOOTSTRAP ===\n' });
 
-    const bootstrap = new PythonBootstrap((message) => {
+    const bootstrapModulePath = path.join(path.dirname(SCRIPT_DIR), 'gpt-sovits', 'bootstrap.js');
+    const bootstrapModule = await import(pathToFileURL(bootstrapModulePath).href) as {
+      default: new (logCallback: (message: string) => void) => { run: () => Promise<void> };
+    };
+
+    const bootstrap = new bootstrapModule.default((message: string) => {
       this.log({ type: 'stdout', message: `${message}\n` });
     });
 
@@ -240,7 +250,7 @@ class WhisperSetupRunner {
       throw new Error(`Whisper setup.py not found at ${setupScript}`);
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
         cwd: whisperSetupDir,
         env: {
@@ -258,17 +268,17 @@ class WhisperSetupRunner {
         },
       });
 
-      this.process.stdout.on('data', (data) => {
+      this.process.stdout.on('data', (data: Buffer) => {
         if (this.cancelled) return;
         this.log({ type: 'stdout', message: data.toString() });
       });
 
-      this.process.stderr.on('data', (data) => {
+      this.process.stderr.on('data', (data: Buffer) => {
         if (this.cancelled) return;
         this.log({ type: 'stderr', message: data.toString() });
       });
 
-      this.process.on('close', (code) => {
+      this.process.on('close', (code: number | null) => {
         this.process = null;
 
         if (this.cancelled) {
@@ -281,14 +291,14 @@ class WhisperSetupRunner {
         }
       });
 
-      this.process.on('error', (err) => {
+      this.process.on('error', (err: Error) => {
         this.process = null;
         reject(err);
       });
     });
   }
 
-  async run(logCallback, options = {}) {
+  async run(logCallback: (logData: Record<string, unknown>) => void, options: { model?: string } = {}) {
     this.logCallback = logCallback;
     this.cancelled = false;
     this.model = (options?.model || 'tiny').toString().trim() || 'tiny';
@@ -312,7 +322,8 @@ class WhisperSetupRunner {
 
       await this.runSetup();
     } catch (error) {
-      this.log({ type: 'error', message: `\n✗ Setup failed: ${error.message}\n` });
+      const message = error instanceof Error ? error.message : String(error);
+      this.log({ type: 'error', message: `\n✗ Setup failed: ${message}\n` });
       throw error;
     }
   }
@@ -327,7 +338,7 @@ class WhisperSetupRunner {
     }
   }
 
-  log(logData) {
+  log(logData: Record<string, unknown>) {
     if (this.logCallback) {
       this.logCallback(logData);
     }

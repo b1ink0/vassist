@@ -1,3 +1,43 @@
+import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from 'child_process';
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+import type { pathToFileURL as pathToFileURLType } from 'url';
+
+type SetupLog = Record<string, unknown>;
+
+type SetupRunnerLike = {
+  run: (onLog: (log: SetupLog) => void, options?: Record<string, unknown>) => Promise<void>;
+  cancel: () => void;
+  getStatus: () => Record<string, unknown>;
+};
+
+type SetupRunnerCtor = new () => SetupRunnerLike;
+
+type LocalServerManagerLike = {
+  restartIfRunning: () => Promise<void>;
+  stopIfRunning: () => void;
+};
+
+type PythonServerManagerDeps = {
+  fs: typeof fsType;
+  path: typeof pathType;
+  spawn: (command: string, args: readonly string[], options: SpawnOptionsWithoutStdio) => ChildProcessWithoutNullStreams;
+  pathToFileURL: typeof pathToFileURLType;
+  processEnv: NodeJS.ProcessEnv;
+  serverBasePath: string;
+  ensureRuntimeServerScripts: () => void;
+  getRuntimeServerBasePath: () => string;
+  getGPTSoVITSDataDir: () => string;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function createPythonServerManager({
   fs,
   path,
@@ -8,13 +48,13 @@ export function createPythonServerManager({
   ensureRuntimeServerScripts,
   getRuntimeServerBasePath,
   getGPTSoVITSDataDir,
-}) {
-  let gptsovitsProcess = null;
-  let whisperProcess = null;
-  let setupRunner = null;
-  let whisperSetupRunner = null;
+}: PythonServerManagerDeps) {
+  let gptsovitsProcess: ChildProcessWithoutNullStreams | null = null;
+  let whisperProcess: ChildProcessWithoutNullStreams | null = null;
+  let setupRunner: SetupRunnerLike | null = null;
+  let whisperSetupRunner: SetupRunnerLike | null = null;
 
-  function resolveEmbeddedPythonExecutable(gptsovitsDataDir) {
+  function resolveEmbeddedPythonExecutable(gptsovitsDataDir: string): string {
     const candidates = process.platform === 'win32'
       ? [
           path.join(gptsovitsDataDir, 'python312', 'python.exe'),
@@ -25,7 +65,7 @@ export function createPythonServerManager({
           path.join(gptsovitsDataDir, 'python', 'bin', 'python'),
         ];
 
-    return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+    return candidates.find((candidate) => fs.existsSync(candidate)) || path.join(gptsovitsDataDir, process.platform === 'win32' ? 'python.exe' : 'python3');
   }
 
   function startGPTSoVITSServer() {
@@ -72,20 +112,20 @@ export function createPythonServerManager({
         }
       });
 
-      gptsovitsProcess.stdout.on('data', (data) => {
+      gptsovitsProcess.stdout.on('data', (data: Buffer) => {
         console.log(`[GPT-SoVITS] ${data.toString().trim()}`);
       });
 
-      gptsovitsProcess.stderr.on('data', (data) => {
+      gptsovitsProcess.stderr.on('data', (data: Buffer) => {
         console.error(`[GPT-SoVITS] ${data.toString().trim()}`);
       });
 
-      gptsovitsProcess.on('error', (error) => {
+      gptsovitsProcess.on('error', (error: Error) => {
         console.error('[GPT-SoVITS] Failed to start:', error);
         gptsovitsProcess = null;
       });
 
-      gptsovitsProcess.on('exit', (code, signal) => {
+      gptsovitsProcess.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
         console.log(`[GPT-SoVITS] Process exited with code ${code}, signal ${signal}`);
         gptsovitsProcess = null;
       });
@@ -148,20 +188,20 @@ export function createPythonServerManager({
         }
       });
 
-      whisperProcess.stdout.on('data', (data) => {
+      whisperProcess.stdout.on('data', (data: Buffer) => {
         console.log(`[Whisper] ${data.toString().trim()}`);
       });
 
-      whisperProcess.stderr.on('data', (data) => {
+      whisperProcess.stderr.on('data', (data: Buffer) => {
         console.error(`[Whisper] ${data.toString().trim()}`);
       });
 
-      whisperProcess.on('error', (error) => {
+      whisperProcess.on('error', (error: Error) => {
         console.error('[Whisper] Failed to start:', error);
         whisperProcess = null;
       });
 
-      whisperProcess.on('exit', (code, signal) => {
+      whisperProcess.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
         console.log(`[Whisper] Process exited with code ${code}, signal ${signal}`);
         whisperProcess = null;
       });
@@ -180,8 +220,8 @@ export function createPythonServerManager({
     }
   }
 
-  function registerSetupIPCHandlers(ipcMain, localServerManager) {
-    ipcMain.handle('gptsovits:setup:start', async (event, options = {}) => {
+  function registerSetupIPCHandlers(ipcMain: IpcMain, localServerManager: LocalServerManagerLike) {
+    ipcMain.handle('gptsovits:setup:start', async (event: IpcMainInvokeEvent, options: Record<string, unknown> = {}) => {
       ensureRuntimeServerScripts();
 
       const gptSovitsDataDir = getGPTSoVITSDataDir();
@@ -192,19 +232,19 @@ export function createPythonServerManager({
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
-      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
 
       if (setupRunner) {
         throw new Error('Setup already running');
       }
 
-      const selectedBackend = (options?.torchBackend || 'auto').toString().trim().toLowerCase();
+      const selectedBackend = String(options.torchBackend ?? 'auto').trim().toLowerCase();
 
       console.log('[GPT-SoVITS] Starting setup...');
       console.log('[GPT-SoVITS] Selected PyTorch backend:', selectedBackend);
       setupRunner = new SetupRunner();
 
-      setupRunner.run((log) => {
+      setupRunner.run((log: SetupLog) => {
         event.sender.send('gptsovits:setup:log', log);
       }, { torchBackend: selectedBackend }).then(async () => {
         console.log('[GPT-SoVITS] Setup complete');
@@ -219,11 +259,11 @@ export function createPythonServerManager({
           startWhisperServer();
           await localServerManager.restartIfRunning();
         }, 2000);
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         console.error('[GPT-SoVITS] Setup failed:', error);
         event.sender.send('gptsovits:setup:complete', {
           success: false,
-          error: error.message
+          error: getErrorMessage(error)
         });
         setupRunner = null;
       });
@@ -252,7 +292,7 @@ export function createPythonServerManager({
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
-      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
       const runner = new SetupRunner();
 
       try {
@@ -266,12 +306,12 @@ export function createPythonServerManager({
           pythonExists: false,
           modelsExist: false,
           gptsovitsExists: false,
-          error: error.message
+          error: getErrorMessage(error)
         };
       }
     });
 
-    ipcMain.handle('whisper:setup:start', async (event, options = {}) => {
+    ipcMain.handle('whisper:setup:start', async (event: IpcMainInvokeEvent, options: Record<string, unknown> = {}) => {
       ensureRuntimeServerScripts();
 
       const gptSovitsDataDir = getGPTSoVITSDataDir();
@@ -282,7 +322,7 @@ export function createPythonServerManager({
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
-      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
 
       if (whisperSetupRunner) {
         throw new Error('Whisper setup already running');
@@ -295,7 +335,7 @@ export function createPythonServerManager({
       console.log('[Whisper] Starting setup...');
       whisperSetupRunner = new WhisperSetupRunner();
 
-      whisperSetupRunner.run((log) => {
+      whisperSetupRunner.run((log: SetupLog) => {
         event.sender.send('whisper:setup:log', log);
       }, options).then(async () => {
         console.log('[Whisper] Setup complete');
@@ -309,11 +349,11 @@ export function createPythonServerManager({
           startWhisperServer();
           await localServerManager.restartIfRunning();
         }, 1500);
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         console.error('[Whisper] Setup failed:', error);
         event.sender.send('whisper:setup:complete', {
           success: false,
-          error: error.message
+          error: getErrorMessage(error)
         });
         whisperSetupRunner = null;
       });
@@ -342,7 +382,7 @@ export function createPythonServerManager({
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
       const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
-      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href);
+      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
       const runner = new WhisperSetupRunner();
 
       try {
@@ -356,13 +396,13 @@ export function createPythonServerManager({
           pythonExists: false,
           dependenciesInstalled: false,
           modelExists: false,
-          error: error.message
+          error: getErrorMessage(error)
         };
       }
     });
   }
 
-  function cleanupBeforeQuit(localServerManager) {
+  function cleanupBeforeQuit(localServerManager: LocalServerManagerLike) {
     if (setupRunner) {
       console.log('[GPT-SoVITS] Cancelling setup on app quit...');
       try {

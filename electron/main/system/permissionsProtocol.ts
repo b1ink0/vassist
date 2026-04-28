@@ -1,4 +1,36 @@
-export function registerPrivilegedSchemes(protocol) {
+import type {
+  BrowserWindow,
+  DesktopCapturer,
+  DesktopCapturerSource,
+  IpcMainEvent,
+  IpcMain,
+  Protocol,
+  SourcesOptions,
+  WebFrameMain,
+  WebContents,
+} from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+
+type DesktopPermissionsDeps = {
+  session: typeof import('electron').session;
+  desktopCapturer: DesktopCapturer;
+  BrowserWindow: typeof import('electron').BrowserWindow;
+  ipcMain: IpcMain;
+  path: typeof pathType;
+  __dirname: string;
+  devServerUrl: string | undefined;
+  maybeOpenDevTools: (window: BrowserWindow | null | undefined) => void;
+};
+
+type AppProtocolDeps = {
+  protocol: Protocol;
+  fs: typeof fsType;
+  path: typeof pathType;
+  __dirname: string;
+};
+
+export function registerPrivilegedSchemes(protocol: Protocol) {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'app',
@@ -13,27 +45,29 @@ export function registerPrivilegedSchemes(protocol) {
   ]);
 }
 
-export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindow, ipcMain, path, __dirname, devServerUrl, maybeOpenDevTools }) {
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'camera' || permission === 'display-capture') {
+export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindow, ipcMain, path, __dirname, devServerUrl, maybeOpenDevTools }: DesktopPermissionsDeps) {
+  session.defaultSession.setPermissionRequestHandler((_webContents: WebContents, permission, callback) => {
+    if (permission === 'media' || permission === 'display-capture') {
       callback(true);
     } else {
       callback(false);
     }
   });
 
-  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'camera' || permission === 'display-capture') {
+  session.defaultSession.setPermissionCheckHandler((_webContents: WebContents | null, permission, _requestingOrigin, _details) => {
+    if (permission === 'media') {
       return true;
     }
     return false;
   });
 
-  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    desktopCapturer.getSources({
+  const sourceOptions: SourcesOptions = {
       types: ['screen', 'window'],
       thumbnailSize: { width: 1920, height: 1080 }
-    }).then((sources) => {
+    };
+
+  const mediaHandler = (_request: unknown, callback: (result: { video?: DesktopCapturerSource; audio?: 'loopback' | 'loopbackWithMute' | WebFrameMain }) => void) => {
+    desktopCapturer.getSources(sourceOptions).then((sources) => {
       if (sources.length === 0) {
         return callback({});
       }
@@ -41,14 +75,14 @@ export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindo
       let callbackCalled = false;
       let cleanupDone = false;
 
-      const safeCallback = (result) => {
+      const safeCallback = (result: { video?: DesktopCapturerSource; audio?: 'loopback' | 'loopbackWithMute' | WebFrameMain }) => {
         if (!callbackCalled) {
           callbackCalled = true;
           callback(result);
         }
       };
 
-      let pickerWindow = new BrowserWindow({
+      let pickerWindow: BrowserWindow | null = new BrowserWindow({
         width: 900,
         height: 600,
         resizable: false,
@@ -75,7 +109,7 @@ export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindo
         pickerWindow.loadURL('app://./electron/index.html?mode=screenPicker');
       }
 
-      const sourcesData = sources.map(source => ({
+      const sourcesData = sources.map((source) => ({
         id: source.id,
         name: source.name,
         thumbnail: source.thumbnail.toDataURL(),
@@ -92,9 +126,9 @@ export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindo
         }
       };
 
-      const handlePickerSelect = (event, sourceId) => {
+      const handlePickerSelect = (_event: IpcMainEvent, sourceId: string) => {
         console.log('Picker: Source selected:', sourceId);
-        const selectedSource = sources.find(s => s.id === sourceId);
+        const selectedSource = sources.find((s) => s.id === sourceId);
         if (selectedSource) {
           safeCallback({ video: selectedSource, audio: 'loopback' });
         } else {
@@ -133,20 +167,22 @@ export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindo
         console.log('Picker: Window closed event');
         if (!callbackCalled) {
           callbackCalled = true;
-          callback();
+          callback({});
         }
         cleanup();
       });
 
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       console.error('Failed to get desktop sources:', error);
       callback({});
     });
-  });
+  };
+
+  session.defaultSession.setDisplayMediaRequestHandler(mediaHandler);
 }
 
-export function setupAppProtocolHandler({ protocol, fs, path, __dirname }) {
-  protocol.handle('app', (request) => {
+export function setupAppProtocolHandler({ protocol, fs, path, __dirname }: AppProtocolDeps) {
+  protocol.handle('app', (request: Request) => {
     const url = request.url.substring('app://'.length);
     const rawPath = url.split('?')[0] || '';
     const requestedPath = rawPath
@@ -177,7 +213,7 @@ export function setupAppProtocolHandler({ protocol, fs, path, __dirname }) {
     const fileBuffer = fs.readFileSync(filePath);
 
     const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes = {
+    const mimeTypes: Record<string, string> = {
       '.html': 'text/html',
       '.js': 'application/javascript',
       '.mjs': 'application/javascript',

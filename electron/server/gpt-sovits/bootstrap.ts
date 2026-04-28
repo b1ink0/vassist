@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import unzipper from 'unzipper';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import type { IncomingMessage } from 'http';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,8 +19,23 @@ const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || __dirname;
 const IS_WINDOWS = process.platform === 'win32';
 const IS_MACOS = process.platform === 'darwin';
 
+type BootstrapOptions = {
+  backend?: string;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 class PythonBootstrap {
-  constructor(logCallback, options = {}) {
+  logCallback: (message: string) => void;
+  backend: string;
+  pythonDir: string;
+
+  constructor(logCallback?: (message: string) => void, options: BootstrapOptions = {}) {
     this.logCallback = logCallback || console.log;
     this.backend = (options.backend || 'auto').toString().trim().toLowerCase();
     this.pythonDir = (IS_WINDOWS && this.backend === 'rocm')
@@ -27,26 +43,31 @@ class PythonBootstrap {
       : path.join(BASE_DIR, 'python');
   }
 
-  log(message) {
+  log(message: string) {
     this.logCallback(message);
   }
 
   /**
    * Download file with progress
    */
-  async downloadFile(url, destPath) {
-    return new Promise((resolve, reject) => {
+  async downloadFile(url: string, destPath: string) {
+    return new Promise<void>((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
       
       this.log(`[DOWNLOAD] Starting: ${path.basename(destPath)}`);
       this.log(`[DOWNLOAD] URL: ${url}`);
       
-      https.get(url, (response) => {
+      https.get(url, (response: IncomingMessage) => {
         // Handle redirects
         if (response.statusCode === 302 || response.statusCode === 301) {
           file.close();
           fs.unlinkSync(destPath);
-          return this.downloadFile(response.headers.location, destPath)
+          const redirectLocation = response.headers.location;
+          if (!redirectLocation) {
+            reject(new Error('Redirect without location header'));
+            return;
+          }
+          return this.downloadFile(redirectLocation, destPath)
             .then(resolve)
             .catch(reject);
         }
@@ -57,13 +78,13 @@ class PythonBootstrap {
           return reject(new Error(`Download failed: ${response.statusCode}`));
         }
         
-        const totalSize = parseInt(response.headers['content-length'], 10);
+        const totalSize = parseInt(response.headers['content-length'] ?? '0', 10);
         let downloadedSize = 0;
         let lastPercent = 0;
         
-        response.on('data', (chunk) => {
+        response.on('data', (chunk: Buffer) => {
           downloadedSize += chunk.length;
-          const percent = Math.floor((downloadedSize / totalSize) * 100);
+          const percent = totalSize > 0 ? Math.floor((downloadedSize / totalSize) * 100) : 0;
           
           // Log every 10%
           if (percent >= lastPercent + 10) {
@@ -80,7 +101,7 @@ class PythonBootstrap {
           resolve();
         });
         
-      }).on('error', (err) => {
+      }).on('error', (err: Error) => {
         file.close();
         if (fs.existsSync(destPath)) {
           fs.unlinkSync(destPath);
@@ -88,7 +109,7 @@ class PythonBootstrap {
         reject(err);
       });
       
-      file.on('error', (err) => {
+      file.on('error', (err: Error) => {
         file.close();
         if (fs.existsSync(destPath)) {
           fs.unlinkSync(destPath);
@@ -101,10 +122,10 @@ class PythonBootstrap {
   /**
    * Extract ZIP file
    */
-  async extractZip(zipPath, extractPath) {
+  async extractZip(zipPath: string, extractPath: string) {
     this.log(`[EXTRACT] Extracting ${path.basename(zipPath)}...`);
     
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       fs.createReadStream(zipPath)
         .pipe(unzipper.Extract({ path: extractPath }))
         .on('close', () => {
@@ -156,13 +177,13 @@ class PythonBootstrap {
     this.log('[SETUP] Installing pip...');
     const pythonExe = path.join(this.pythonDir, 'python.exe');
     
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const proc = spawn(pythonExe, [getPipPath], {
         cwd: this.pythonDir,
         stdio: 'inherit'
       });
       
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null) => {
         if (code === 0) {
           this.log('[SETUP] Pip installed');
           resolve();
@@ -205,12 +226,12 @@ class PythonBootstrap {
     // The tarball contains python/bin, python/lib, etc.
     // --strip-components=1 removes the top 'python/' directory
     this.log('[SETUP] Extracting Python...');
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const proc = spawn('tar', ['-xzf', tarPath, '-C', this.pythonDir, '--strip-components=1'], {
         stdio: 'inherit'
       });
       
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null) => {
         if (code === 0) {
           resolve();
         } else {
@@ -218,7 +239,7 @@ class PythonBootstrap {
         }
       });
       
-      proc.on('error', (err) => {
+      proc.on('error', (err: Error) => {
         reject(new Error(`Failed to run tar: ${err.message}`));
       });
     });
@@ -231,12 +252,12 @@ class PythonBootstrap {
     this.log('[SETUP] Verifying pip...');
     const pythonExe = path.join(this.pythonDir, 'bin', 'python3');
     
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const proc = spawn(pythonExe, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
         stdio: 'inherit'
       });
       
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null) => {
         if (code === 0) {
           this.log('[SETUP] Pip upgraded');
           resolve();
@@ -285,12 +306,12 @@ class PythonBootstrap {
     this.log('[SETUP] Installing pip...');
     const pythonExe = path.join(this.pythonDir, 'python.exe');
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const proc = spawn(pythonExe, [getPipPath], {
         cwd: this.pythonDir,
         stdio: 'inherit'
       });
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null) => {
         if (code === 0) { this.log('[SETUP] Pip installed'); resolve(); }
         else reject(new Error(`Pip installation failed with code ${code}`));
       });
@@ -327,7 +348,7 @@ class PythonBootstrap {
       this.log('\n✓ Python runtime setup complete!');
       
     } catch (error) {
-      this.log(`\n✗ Bootstrap failed: ${error.message}`);
+      this.log(`\n✗ Bootstrap failed: ${getErrorMessage(error)}`);
       throw error;
     }
   }

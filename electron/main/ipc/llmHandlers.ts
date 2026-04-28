@@ -1,5 +1,51 @@
-export function createGetModelsDir({ app, fs, path, baseDir }) {
-  const ensureDirectory = (dirPath) => {
+import type { App, IpcMain, IpcMainInvokeEvent } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+import type { IncomingMessage } from 'http';
+
+type ModelDirDeps = {
+  app: App;
+  fs: typeof fsType;
+  path: typeof pathType;
+  baseDir: string;
+};
+
+type DownloadProgress = {
+  percent: number;
+  status: string;
+};
+
+type DownloadedLayer = {
+  path: string;
+  size: number;
+  type: 'model' | 'mmproj';
+};
+
+type LLMHandlersDeps = {
+  ipcMain: IpcMain;
+  fs: typeof fsType;
+  path: typeof pathType;
+  require: NodeRequire;
+  getModelsDir: (customPath?: string | null) => string;
+  llmBackendManager: {
+    getStatus: (arg: { backend?: string }) => unknown;
+    installBackend: (arg: { event?: IpcMainInvokeEvent; backend?: string }) => Promise<unknown>;
+  } | null;
+};
+
+type HuggingFaceTreeEntry = {
+  path?: string;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+export function createGetModelsDir({ app, fs, path, baseDir }: ModelDirDeps) {
+  const ensureDirectory = (dirPath: string): string => {
     if (fs.existsSync(dirPath)) {
       const stat = fs.statSync(dirPath);
       if (!stat.isDirectory()) {
@@ -12,7 +58,7 @@ export function createGetModelsDir({ app, fs, path, baseDir }) {
     return dirPath;
   };
 
-  return function getModelsDir(customPath = null) {
+  return function getModelsDir(customPath: string | null = null): string {
     if (customPath && typeof customPath === 'string') {
       const normalizedCustomPath = customPath.trim();
       if (normalizedCustomPath) {
@@ -40,9 +86,9 @@ export function createGetModelsDir({ app, fs, path, baseDir }) {
   };
 }
 
-export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, llmBackendManager }) {
+export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, llmBackendManager }: LLMHandlersDeps) {
   // List models in models directory
-  ipcMain.handle('llm:list-models', async (event, customPath = null) => {
+  ipcMain.handle('llm:list-models', async (_event: IpcMainInvokeEvent, customPath: string | null = null) => {
     try {
       const modelsDir = getModelsDir(customPath);
 
@@ -53,8 +99,8 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
 
       const files = fs.readdirSync(modelsDir);
       const models = files
-        .filter(file => file.endsWith('.gguf') && !file.startsWith('mmproj-')) // Exclude mmproj files
-        .map(file => {
+        .filter((file: string) => file.endsWith('.gguf') && !file.startsWith('mmproj-')) // Exclude mmproj files
+        .map((file: string) => {
           const filePath = path.join(modelsDir, file);
           const stats = fs.statSync(filePath);
 
@@ -74,12 +120,12 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return { success: true, models };
     } catch (error) {
       console.error('[LLM] List models error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
   // Pull model using Ollama (free, open source)
-  ipcMain.handle('llm:pull-model', async (event, modelName, customPath = null) => {
+  ipcMain.handle('llm:pull-model', async (event: IpcMainInvokeEvent, modelName: string, customPath: string | null = null) => {
     const https = require('https');
     const http = require('http');
 
@@ -90,7 +136,8 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
         fs.mkdirSync(modelsDir, { recursive: true });
       }
 
-      const [model, tag = 'latest'] = modelName.split(':');
+      const [rawModel, tag = 'latest'] = modelName.split(':');
+      const model = rawModel || modelName;
       const namespace = model.includes('/') ? model : `library/${model}`;
 
       event.sender.send('llm:download-progress', { status: 'Pulling manifest...', percent: 0 });
@@ -104,12 +151,12 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
         throw new Error(`Model not found: ${modelName}`);
       }
 
-      const manifest = await manifestRes.json();
+      const manifest = await manifestRes.json() as { layers?: Array<{ digest: string; size: number; mediaType?: string }> };
       const layers = manifest.layers || [];
 
       // Separate model and mmproj layers by mediaType
-      const modelLayers = [];
-      const mmprojLayers = [];
+      const modelLayers: Array<{ digest: string; size: number; mediaType?: string }> = [];
+      const mmprojLayers: Array<{ digest: string; size: number; mediaType?: string }> = [];
 
       for (const layer of layers) {
         const mediaType = layer.mediaType || '';
@@ -130,13 +177,13 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
         percent: 2
       });
 
-      const downloadFile = (url, destPath, layerSize, layerIndex, totalLayersCount, fileType = 'model') => {
-        return new Promise((resolve, reject) => {
+      const downloadFile = (url: string, destPath: string, layerSize: number, layerIndex: number, totalLayersCount: number, fileType: 'model' | 'mmproj' = 'model') => {
+        return new Promise<DownloadedLayer>((resolve, reject) => {
           const protocol = url.startsWith('https') ? https : http;
           const file = fs.createWriteStream(destPath);
           let downloadedBytes = 0;
 
-          const request = protocol.get(url, (response) => {
+          const request = protocol.get(url, (response: IncomingMessage) => {
             if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
               file.close();
               if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
@@ -160,9 +207,9 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
               return;
             }
 
-            const totalBytes = parseInt(response.headers['content-length'], 10) || layerSize;
+            const totalBytes = parseInt(response.headers['content-length'] ?? '0', 10) || layerSize;
 
-            response.on('data', (chunk) => {
+            response.on('data', (chunk: Buffer) => {
               downloadedBytes += chunk.length;
               file.write(chunk);
 
@@ -184,20 +231,20 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
               resolve({ path: destPath, size: downloadedBytes, type: fileType });
             });
 
-            response.on('error', (err) => {
+            response.on('error', (err: Error) => {
               file.close();
               fs.unlinkSync(destPath);
               reject(err);
             });
           });
 
-          request.on('error', (err) => {
+          request.on('error', (err: Error) => {
             file.close();
             if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             reject(err);
           });
 
-          file.on('error', (err) => {
+          file.on('error', (err: Error) => {
             file.close();
             if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             reject(err);
@@ -206,9 +253,12 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       };
 
       // Download model layers
-      const downloadedModelFiles = [];
+      const downloadedModelFiles: DownloadedLayer[] = [];
       for (let i = 0; i < modelLayers.length; i++) {
         const layer = modelLayers[i];
+        if (!layer) {
+          continue;
+        }
         const digest = layer.digest;
         const size = layer.size;
 
@@ -226,10 +276,13 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       }
 
       // Download mmproj layers if multimodal
-      const downloadedMmprojFiles = [];
+      const downloadedMmprojFiles: DownloadedLayer[] = [];
       if (isMultimodal) {
         for (let i = 0; i < mmprojLayers.length; i++) {
           const layer = mmprojLayers[i];
+          if (!layer) {
+            continue;
+          }
           const digest = layer.digest;
           const size = layer.size;
 
@@ -250,7 +303,11 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       event.sender.send('llm:download-progress', { status: 'Processing files...', percent: 95 });
 
       // Save main model (largest file from model layers)
-      let largestModelFile = downloadedModelFiles[0];
+      const initialModelFile = downloadedModelFiles[0];
+      if (!initialModelFile) {
+        throw new Error('No model layers were downloaded');
+      }
+      let largestModelFile = initialModelFile;
       for (const file of downloadedModelFiles) {
         if (file.size > largestModelFile.size) {
           largestModelFile = file;
@@ -264,7 +321,11 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       // Save mmproj if exists (largest file from mmproj layers)
       let mmprojFileName = null;
       if (downloadedMmprojFiles.length > 0) {
-        let largestMmprojFile = downloadedMmprojFiles[0];
+        const initialMmprojFile = downloadedMmprojFiles[0];
+        if (!initialMmprojFile) {
+          throw new Error('No vision layers were downloaded');
+        }
+        let largestMmprojFile = initialMmprojFile;
         for (const file of downloadedMmprojFiles) {
           if (file.size > largestMmprojFile.size) {
             largestMmprojFile = file;
@@ -305,12 +366,12 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       };
     } catch (error) {
       console.error('[LLM] Pull error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
   // Download model from Hugging Face
-  ipcMain.handle('llm:download-model', async (event, url, customPath = null) => {
+  ipcMain.handle('llm:download-model', async (event: IpcMainInvokeEvent, url: string, customPath: string | null = null) => {
     try {
       const https = require('https');
       const modelsDir = getModelsDir(customPath);
@@ -321,13 +382,13 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
 
       // Extract filename from URL
       const urlParts = url.split('/');
-      let filename = urlParts[urlParts.length - 1];
+      let filename = urlParts[urlParts.length - 1] || 'model.gguf';
 
       // Handle Hugging Face URLs and remove query parameters
       if (url.includes('huggingface.co') && url.includes('/resolve/')) {
-        filename = urlParts[urlParts.length - 1];
+        filename = urlParts[urlParts.length - 1] || filename;
       }
-      filename = filename.split('?')[0];
+      filename = filename.split('?')[0] || filename;
 
       if (!filename.endsWith('.gguf')) {
         return { success: false, error: 'Invalid file: must be a .gguf model file' };
@@ -350,15 +411,18 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
           const match = url.match(/huggingface\.co\/([^\/]+)\/([^\/]+)\/resolve\/([^\/]+)\//);
           if (match) {
             const [, org, repo, branch] = match;
+            if (!org || !repo || !branch) {
+              return { success: false, error: 'Unable to parse Hugging Face URL.' };
+            }
 
             // Try to find mmproj in the same repo
             const apiUrl = `https://huggingface.co/api/models/${org}/${repo}/tree/${branch}`;
             const apiRes = await fetch(apiUrl);
 
             if (apiRes.ok) {
-              const files = await apiRes.json();
+                const files = await apiRes.json() as HuggingFaceTreeEntry[];
               // Look for mmproj-*.gguf file
-              const mmprojFile = files.find(f => f.path && f.path.match(/mmproj.*\.gguf$/i));
+                const mmprojFile = files.find((f) => typeof f.path === 'string' && /mmproj.*\.gguf$/i.test(f.path));
 
               if (mmprojFile) {
                 mmprojFilename = `mmproj-${filename}`;
@@ -372,8 +436,8 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
                 try {
                   const fallbackRes = await fetch(fallbackApiUrl);
                   if (fallbackRes.ok) {
-                    const fallbackFiles = await fallbackRes.json();
-                    const fallbackMmproj = fallbackFiles.find(f => f.path && f.path.match(/mmproj.*\.gguf$/i));
+                    const fallbackFiles = await fallbackRes.json() as HuggingFaceTreeEntry[];
+                    const fallbackMmproj = fallbackFiles.find((f) => typeof f.path === 'string' && /mmproj.*\.gguf$/i.test(f.path));
 
                     if (fallbackMmproj) {
                       mmprojFilename = `mmproj-${filename}`;
@@ -382,13 +446,13 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
                     }
                   }
                 } catch (fallbackErr) {
-                  console.log('[LLM] No mmproj in fallback repo:', fallbackErr.message);
+                  console.log('[LLM] No mmproj in fallback repo:', getErrorMessage(fallbackErr));
                 }
               }
             }
           }
         } catch (apiError) {
-          console.log('[LLM] Could not check for mmproj:', apiError.message);
+          console.log('[LLM] Could not check for mmproj:', getErrorMessage(apiError));
         }
       }
 
@@ -399,16 +463,21 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       });
 
       await new Promise((resolve, reject) => {
-        https.get(url, (response) => {
+        https.get(url, (response: IncomingMessage) => {
           if (response.statusCode === 302 || response.statusCode === 301) {
             // Follow redirect
-            https.get(response.headers.location, (redirectResponse) => {
+            const redirectLocation = response.headers.location;
+            if (!redirectLocation) {
+              reject(new Error('Redirect without location header'));
+              return;
+            }
+            https.get(redirectLocation, (redirectResponse: IncomingMessage) => {
               downloadFile(redirectResponse, filePath, event, resolve, reject, path, fs, 'model', mmprojUrl ? 50 : 100);
             });
           } else {
             downloadFile(response, filePath, event, resolve, reject, path, fs, 'model', mmprojUrl ? 50 : 100);
           }
-        }).on('error', (err) => {
+        }).on('error', (err: Error) => {
           reject(new Error(`Download failed: ${err.message}`));
         });
       });
@@ -423,15 +492,20 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
         const mmprojPath = path.join(modelsDir, mmprojFilename);
 
         await new Promise((resolve, reject) => {
-          https.get(mmprojUrl, (response) => {
+          https.get(mmprojUrl, (response: IncomingMessage) => {
             if (response.statusCode === 302 || response.statusCode === 301) {
-              https.get(response.headers.location, (redirectResponse) => {
+              const redirectLocation = response.headers.location;
+              if (!redirectLocation) {
+                resolve({ success: true });
+                return;
+              }
+              https.get(redirectLocation, (redirectResponse: IncomingMessage) => {
                 downloadFile(redirectResponse, mmprojPath, event, resolve, reject, path, fs, 'mmproj', 100, 50);
               });
             } else {
               downloadFile(response, mmprojPath, event, resolve, reject, path, fs, 'mmproj', 100, 50);
             }
-          }).on('error', (err) => {
+          }).on('error', (err: Error) => {
             console.warn('[LLM] Failed to download mmproj (non-critical):', err.message);
             resolve({ success: true }); // Continue even if mmproj fails
           });
@@ -455,12 +529,12 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       };
     } catch (error) {
       console.error('[LLM] Download error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
   // Delete model
-  ipcMain.handle('llm:delete-model', async (event, filename, customPath = null) => {
+  ipcMain.handle('llm:delete-model', async (_event: IpcMainInvokeEvent, filename: string, customPath: string | null = null) => {
     try {
       const modelsDir = getModelsDir(customPath);
       const filePath = path.join(modelsDir, filename);
@@ -495,11 +569,11 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return { success: true };
     } catch (error) {
       console.error('[LLM] Delete error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
-  ipcMain.handle('llm:import-model', async (event, sourcePath, customPath = null) => {
+  ipcMain.handle('llm:import-model', async (_event: IpcMainInvokeEvent, sourcePath: string, customPath: string | null = null) => {
     try {
       console.log('[LLM] Importing model from:', sourcePath);
       const modelsDir = getModelsDir(customPath);
@@ -525,7 +599,7 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return { success: true, filename };
     } catch (error) {
       console.error('[LLM] Import model error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -545,7 +619,7 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return { success: true, path: result.filePaths[0] };
     } catch (error) {
       console.error('[LLM] Choose folder error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -569,11 +643,11 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return { success: true, path: result.filePaths[0] };
     } catch (error) {
       console.error('[LLM] Choose file error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
-  ipcMain.handle('llm:backend-status', async (event, backend = 'auto') => {
+  ipcMain.handle('llm:backend-status', async (_event: IpcMainInvokeEvent, backend = 'auto') => {
     try {
       if (!llmBackendManager) {
         return { success: false, error: 'LLM backend manager unavailable' };
@@ -581,11 +655,11 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return llmBackendManager.getStatus({ backend });
     } catch (error) {
       console.error('[LLM] Backend status error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
-  ipcMain.handle('llm:backend-install', async (event, backend = 'auto') => {
+  ipcMain.handle('llm:backend-install', async (event: IpcMainInvokeEvent, backend = 'auto') => {
     try {
       if (!llmBackendManager) {
         return { success: false, error: 'LLM backend manager unavailable' };
@@ -593,7 +667,7 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
       return await llmBackendManager.installBackend({ event, backend });
     } catch (error) {
       console.error('[LLM] Backend install error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -603,8 +677,19 @@ export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, 
   });
 }
 
-function downloadFile(response, filePath, event, resolve, reject, path, fs, fileType = 'model', maxPercent = 100, startPercent = 0) {
-  const totalSize = parseInt(response.headers['content-length'], 10);
+function downloadFile(
+  response: IncomingMessage,
+  filePath: string,
+  event: IpcMainInvokeEvent,
+  resolve: (value: { success: boolean; filename?: string }) => void,
+  reject: (reason?: unknown) => void,
+  path: typeof pathType,
+  fs: typeof fsType,
+  fileType: 'model' | 'mmproj' = 'model',
+  maxPercent = 100,
+  startPercent = 0,
+) {
+  const totalSize = parseInt(response.headers['content-length'] ?? '0', 10);
   let downloadedSize = 0;
   let lastReportedPercent = 0;
 
@@ -612,7 +697,7 @@ function downloadFile(response, filePath, event, resolve, reject, path, fs, file
 
   response.pipe(fileStream);
 
-  response.on('data', (chunk) => {
+  response.on('data', (chunk: Buffer) => {
     downloadedSize += chunk.length;
     const downloadPercent = Math.round((downloadedSize / totalSize) * 1000) / 10;
     const actualPercent = startPercent + (downloadPercent / 100) * (maxPercent - startPercent);
@@ -638,7 +723,7 @@ function downloadFile(response, filePath, event, resolve, reject, path, fs, file
     resolve({ success: true, filename: path.basename(filePath) });
   });
 
-  fileStream.on('error', (err) => {
+  fileStream.on('error', (err: Error) => {
     fs.unlink(filePath, () => {});
     reject(new Error(`File write error: ${err.message}`));
   });

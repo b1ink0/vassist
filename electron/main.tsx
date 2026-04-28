@@ -8,7 +8,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from '../src/App'
 
-createRoot(document.getElementById('root')).render(
+const rootElement = document.getElementById('root')
+
+if (!rootElement) {
+  throw new Error('Missing root element for desktop renderer')
+}
+
+createRoot(rootElement).render(
   <StrictMode>
     <App mode="desktop" />
   </StrictMode>,

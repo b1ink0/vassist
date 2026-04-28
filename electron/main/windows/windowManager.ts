@@ -1,3 +1,22 @@
+import type { App, BrowserWindow, BrowserWindowConstructorOptions, BrowserWindow as BrowserWindowInstance, Event } from 'electron';
+import type * as pathType from 'path';
+
+type WindowState = {
+  mainWindow: BrowserWindowInstance | null;
+  inputWindow: BrowserWindowInstance | null;
+};
+
+type WindowManagerDeps = {
+  BrowserWindow: typeof import('electron').BrowserWindow;
+  screen: typeof import('electron').screen;
+  path: typeof pathType;
+  app: App & { isQuitting?: boolean };
+  __dirname: string;
+  devServerUrl: string | undefined;
+  state: WindowState;
+  maybeOpenDevTools: (window: BrowserWindowInstance | null | undefined) => void;
+};
+
 export function createWindowManager({
   BrowserWindow,
   screen,
@@ -7,7 +26,7 @@ export function createWindowManager({
   devServerUrl,
   state,
   maybeOpenDevTools,
-}) {
+}: WindowManagerDeps) {
   function createInputWindow() {
     if (state.inputWindow) return;
 
@@ -15,7 +34,7 @@ export function createWindowManager({
     const inputWidth = 600;
     const inputHeight = 400;
 
-    state.inputWindow = new BrowserWindow({
+    const inputWindowOptions: BrowserWindowConstructorOptions = {
       width: inputWidth,
       height: inputHeight,
       x: Math.floor((screenWidth - inputWidth) / 2),
@@ -31,22 +50,25 @@ export function createWindowManager({
         sandbox: false,
         preload: path.join(__dirname, 'preload.mjs'),
       },
-    });
+    };
+
+    state.inputWindow = new BrowserWindow(inputWindowOptions);
+    const inputWindow = state.inputWindow;
 
     if (devServerUrl) {
-      state.inputWindow.loadURL(devServerUrl + '/electron/index.html?window=input');
+      inputWindow.loadURL(devServerUrl + '/electron/index.html?window=input');
     } else {
-      state.inputWindow.loadURL('app://./electron/index.html?window=input');
+      inputWindow.loadURL('app://./electron/index.html?window=input');
     }
-    maybeOpenDevTools(state.inputWindow);
+    maybeOpenDevTools(inputWindow);
 
-    state.inputWindow.once('ready-to-show', () => {
-      state.inputWindow.show();
-      state.inputWindow.setOpacity(0);
-      state.inputWindow.setIgnoreMouseEvents(true);
+    inputWindow.once('ready-to-show', () => {
+      inputWindow.show();
+      inputWindow.setOpacity(0);
+      inputWindow.setIgnoreMouseEvents(true);
     });
 
-    state.inputWindow.on('closed', () => {
+    inputWindow.on('closed', () => {
       state.inputWindow = null;
     });
   }
@@ -57,7 +79,7 @@ export function createWindowManager({
     const initialWidth = 400;
     const initialHeight = 525;
 
-    state.mainWindow = new BrowserWindow({
+    const mainWindowOptions: BrowserWindowConstructorOptions = {
       width: initialWidth,
       height: initialHeight,
       x: Math.floor((screenWidth - initialWidth) / 2),
@@ -74,29 +96,32 @@ export function createWindowManager({
         sandbox: false,
         preload: path.join(__dirname, 'preload.mjs'),
       },
-    });
+    };
+
+    state.mainWindow = new BrowserWindow(mainWindowOptions);
+    const mainWindow = state.mainWindow;
 
     if (devServerUrl) {
-      state.mainWindow.loadURL(devServerUrl + '/electron/index.html');
+      mainWindow.loadURL(devServerUrl + '/electron/index.html');
     } else {
-      state.mainWindow.loadURL('app://./electron/index.html');
+      mainWindow.loadURL('app://./electron/index.html');
     }
-    maybeOpenDevTools(state.mainWindow);
+    maybeOpenDevTools(mainWindow);
 
-    state.mainWindow.once('ready-to-show', () => {
-      state.mainWindow.show();
-      state.mainWindow.setIgnoreMouseEvents(true);
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+      mainWindow.setIgnoreMouseEvents(true);
       createInputWindow();
     });
 
-    state.mainWindow.on('close', (event) => {
+    mainWindow.on('close', (event: Event) => {
       if (!app.isQuitting) {
         event.preventDefault();
-        state.mainWindow.hide();
+        mainWindow.hide();
       }
     });
 
-    state.mainWindow.on('closed', () => {
+    mainWindow.on('closed', () => {
       state.mainWindow = null;
     });
   }

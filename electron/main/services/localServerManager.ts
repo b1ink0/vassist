@@ -1,3 +1,82 @@
+import type { IpcMain, IpcMainInvokeEvent } from 'electron';
+import type * as fsType from 'fs';
+import type * as pathType from 'path';
+
+type ServerRuntimeConfig = {
+  backend?: string;
+  model?: string;
+  customModelsPath?: string;
+  temperature?: number;
+  maxTokens?: number;
+  contextSize?: number;
+  gpuLayers?: number | 'auto';
+  shareOnNetwork?: boolean;
+  serverPort?: number;
+  stt?: {
+    model?: string;
+    language?: string;
+  };
+  tts?: {
+    enabled?: boolean;
+  };
+};
+
+type LocalAIServerLike = {
+  config: {
+    llm: {
+      modelPath: string | null;
+      defaultModelsDir?: string | null;
+      backend?: string;
+      temperature?: number;
+      maxTokens?: number;
+      contextSize?: number;
+      gpuLayers?: number | 'auto';
+    };
+    stt: {
+      modelPath?: string | null;
+      proxyUrl?: string;
+      model?: string;
+      language?: string;
+    };
+    tts: {
+      proxyUrl?: string;
+      enabled?: boolean;
+    };
+    server: {
+      shareOnNetwork?: boolean;
+      host?: string;
+      port?: number;
+    };
+  };
+  host: string;
+  port: number;
+  initialize: (config: Record<string, unknown>) => Promise<void>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  getStatus: () => { running: boolean } & Record<string, unknown>;
+};
+
+type LocalServerManagerDeps = {
+  LocalAIServer: new (deps: {
+    loadLlamaApi?: () => Promise<unknown>;
+    ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+  }) => LocalAIServerLike;
+  path: typeof pathType;
+  fs: typeof fsType;
+  baseDir: string;
+  getModelsDir: (customPath?: string | null) => string;
+  loadLlamaApi?: () => Promise<unknown>;
+  ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+  stopTTSBackend?: (() => void) | null;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function createLocalServerManager({
   LocalAIServer,
   path,
@@ -7,21 +86,31 @@ export function createLocalServerManager({
   loadLlamaApi,
   ensureTTSBackendRunning,
   stopTTSBackend,
-}) {
-  let server = null;
-  let restartPromise = null;
-  let lastServerError = null;
+}: LocalServerManagerDeps) {
+  let server: LocalAIServerLike | null = null;
+  let restartPromise: Promise<void> | null = null;
+  let lastServerError: string | null = null;
 
-  function registerIPCHandlers(ipcMain) {
-    ipcMain.handle('server:start', async (event, config = {}) => {
+  function registerIPCHandlers(ipcMain: IpcMain) {
+    ipcMain.handle('server:start', async (_event: IpcMainInvokeEvent, config: ServerRuntimeConfig = {}) => {
       console.log('[Server] Starting with config:', config);
 
       if (!server) {
         try {
-          server = new LocalAIServer({ loadLlamaApi, ensureTTSBackendRunning });
+          const serverDeps: {
+            loadLlamaApi?: () => Promise<unknown>;
+            ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+          } = {};
+          if (loadLlamaApi) {
+            serverDeps.loadLlamaApi = loadLlamaApi;
+          }
+          if (ensureTTSBackendRunning !== undefined) {
+            serverDeps.ensureTTSBackendRunning = ensureTTSBackendRunning;
+          }
+          server = new LocalAIServer(serverDeps);
         } catch (error) {
           console.error('[Server] Failed to create server:', error);
-          return { success: false, error: error.message };
+          return { success: false, error: getErrorMessage(error) };
         }
       }
 
@@ -39,7 +128,12 @@ export function createLocalServerManager({
       const parsedPort = Number(config.serverPort);
       const desiredPort = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 11438;
 
-      const serverConfig = {
+      const serverConfig: {
+        llm: LocalAIServerLike['config']['llm'];
+        stt: LocalAIServerLike['config']['stt'];
+        tts: LocalAIServerLike['config']['tts'];
+        server: LocalAIServerLike['config']['server'];
+      } = {
         llm: {
           modelPath: null,
           defaultModelsDir: getModelsDir(),
@@ -131,8 +225,8 @@ export function createLocalServerManager({
         return { success: true, ...status };
       } catch (error) {
         console.error('[Server] Start error:', error);
-        lastServerError = error.message;
-        return { success: false, error: error.message };
+        lastServerError = getErrorMessage(error);
+        return { success: false, error: getErrorMessage(error) };
       }
     });
 
@@ -150,8 +244,8 @@ export function createLocalServerManager({
         return { success: true };
       } catch (error) {
         console.error('[Server] Stop error:', error);
-        lastServerError = error.message;
-        return { success: false, error: error.message };
+        lastServerError = getErrorMessage(error);
+        return { success: false, error: getErrorMessage(error) };
       }
     });
 
@@ -164,8 +258,8 @@ export function createLocalServerManager({
         return { ...server.getStatus(), error: lastServerError };
       } catch (error) {
         console.error('[Server] Status error:', error);
-        lastServerError = error.message;
-        return { running: false, error: error.message };
+        lastServerError = getErrorMessage(error);
+        return { running: false, error: getErrorMessage(error) };
       }
     });
   }
@@ -174,7 +268,17 @@ export function createLocalServerManager({
     setTimeout(async () => {
       try {
         if (!server) {
-          server = new LocalAIServer({ loadLlamaApi, ensureTTSBackendRunning });
+          const serverDeps: {
+            loadLlamaApi?: () => Promise<unknown>;
+            ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+          } = {};
+          if (loadLlamaApi) {
+            serverDeps.loadLlamaApi = loadLlamaApi;
+          }
+          if (ensureTTSBackendRunning !== undefined) {
+            serverDeps.ensureTTSBackendRunning = ensureTTSBackendRunning;
+          }
+          server = new LocalAIServer(serverDeps);
         }
 
         if (server.getStatus().running) {
@@ -204,7 +308,7 @@ export function createLocalServerManager({
         await server.start();
         console.log('[Server] HTTP proxy server started on port 11438');
       } catch (error) {
-        console.error('[Server] Failed to auto-start:', error.message);
+        console.error('[Server] Failed to auto-start:', getErrorMessage(error));
       }
     }, 2000);
   }
@@ -232,7 +336,7 @@ export function createLocalServerManager({
         await server.start();
         console.log('[Server] Restart complete');
       } catch (err) {
-        if (err?.code === 'EADDRINUSE') {
+        if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: string }).code === 'EADDRINUSE') {
           console.warn('[Server] Restart skipped: port 11438 already in use');
           return;
         }
