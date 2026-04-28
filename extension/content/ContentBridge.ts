@@ -8,6 +8,19 @@
 
 import { MessageBridge } from '../shared/MessageBridge';
 
+type BridgePayloadValue = string | number | boolean | null | undefined | object;
+type BridgePayload = Record<string, BridgePayloadValue>;
+
+interface OutgoingMessage {
+  type: string;
+  requestId: string;
+  data: BridgePayload;
+  timestamp: number;
+  tabId?: number | null;
+  priority?: number;
+  streaming?: boolean;
+}
+
 export class ContentBridge extends MessageBridge {
   constructor() {
     super('ContentBridge');
@@ -17,7 +30,7 @@ export class ContentBridge extends MessageBridge {
   /**
    * Set up listeners for push messages from background (streaming only)
    */
-  setupListeners() {
+  setupListeners(): void {
     // Streaming is handled in content/index.js via chrome.runtime.onMessage
     // This ContentBridge doesn't need a listener - responses come via await
   }
@@ -27,7 +40,7 @@ export class ContentBridge extends MessageBridge {
    * @param {Object} message - Message to send
    * @returns {Promise} Send result
    */
-  async _sendMessageImpl(message) {
+  async _sendMessageImpl(message: OutgoingMessage): Promise<void> {
     try {
       const response = await chrome.runtime.sendMessage(message);
       // Handle the response to resolve the pending promise

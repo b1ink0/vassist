@@ -118,6 +118,7 @@ export interface SceneAnimationConfigLike {
 export interface SceneBuildConfig {
   enableModelLoading?: boolean;
   modelUrl: string;
+  customModelFile?: File;
   modelId?: string;
   modelFileName?: string;
   portraitClipping?: number;

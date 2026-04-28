@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "composite": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "tools/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "build",
+    "node_modules"
+  ]
+}

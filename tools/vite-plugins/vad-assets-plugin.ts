@@ -3,6 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { IncomingMessage, ServerResponse } from 'http';
+import type { Plugin, ViteDevServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,22 +16,27 @@ const rootDir = path.join(__dirname, '..', '..');
  * Also serves them during dev mode
  * @param {string} outDir - Output directory (e.g., 'dist', 'dist-desktop', 'dist-android', 'dist-extension')
  */
-export function vadAssetsPlugin(outDir) {
+export function vadAssetsPlugin(outDir: string): Plugin {
   return {
     name: 'vad-assets',
     
     // Serve VAD assets during dev mode
-    configureServer(server) {
+    configureServer(server: ViteDevServer) {
       const vadDistPath = path.join(rootDir, 'node_modules', '@ricky0123', 'vad-web', 'dist');
       const onnxDistPath = path.join(rootDir, 'node_modules', 'onnxruntime-web', 'dist');
       
       // Middleware to serve VAD assets from node_modules
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
         // Match /assets/*.onnx, /assets/*.wasm, /assets/*.mjs, /assets/vad.worklet.bundle.min.js
-        const match = req.url.match(/^\/assets\/(.*\.(onnx|wasm|mjs)|vad\.worklet\.bundle\.min\.js)$/);
+        const requestUrl = req.url ?? '';
+        const match = requestUrl.match(/^\/assets\/(.*\.(onnx|wasm|mjs)|vad\.worklet\.bundle\.min\.js)$/);
         
         if (match) {
           const filename = match[1];
+          if (!filename) {
+            next();
+            return;
+          }
           let filePath;
           
           // Check VAD dist first
@@ -42,7 +49,7 @@ export function vadAssetsPlugin(outDir) {
           if (fs.existsSync(filePath)) {
             // Set appropriate content type
             const ext = path.extname(filename);
-            const contentTypes = {
+            const contentTypes: Record<string, string> = {
               '.onnx': 'application/octet-stream',
               '.wasm': 'application/wasm',
               '.mjs': 'application/javascript',

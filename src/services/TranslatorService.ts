@@ -7,6 +7,7 @@
 
 import OpenAI from 'openai';
 import Logger from './LoggerService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type TranslatorProvider = 'chrome-ai' | 'openai' | 'ollama' | 'desktop-local';
 type AvailabilityResult = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
@@ -87,7 +88,7 @@ class TranslatorService {
   private readonly devState: TranslatorState;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     this.tabStates = new Map();
     this.devState = {
       translatorSessions: new Map(),

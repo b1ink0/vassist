@@ -188,10 +188,38 @@ export const MessagePriority = {
   LOW: 2
 };
 
+type MessagePayload = Record<string, unknown>;
+
+interface MessageOptions {
+  requestId?: string;
+  tabId?: number | null;
+  priority?: number;
+}
+
+interface BaseMessage {
+  type: string;
+  data: MessagePayload;
+  requestId: string;
+  tabId: number | null;
+  timestamp: number;
+  priority: number;
+}
+
+interface ResponseMessage {
+  type: string;
+  requestId: string;
+  data: MessagePayload;
+  timestamp: number;
+}
+
 /**
  * Create a message with proper structure
  */
-export function createMessage(type, data = {}, options = {}) {
+export function createMessage(
+  type: string,
+  data: MessagePayload = {},
+  options: MessageOptions = {},
+): BaseMessage {
   return {
     type,
     data,
@@ -205,7 +233,11 @@ export function createMessage(type, data = {}, options = {}) {
 /**
  * Create a response message
  */
-export function createResponse(requestId, data = {}, success = true) {
+export function createResponse(
+  requestId: string,
+  data: MessagePayload = {},
+  success = true,
+): ResponseMessage {
   return {
     type: success ? MessageTypes.SUCCESS : MessageTypes.ERROR,
     requestId,
@@ -217,6 +249,6 @@ export function createResponse(requestId, data = {}, success = true) {
 /**
  * Generate unique request ID
  */
-export function generateRequestId() {
+export function generateRequestId(): string {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }

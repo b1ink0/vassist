@@ -15,6 +15,7 @@ import type { PositionManagerOptionsLike, RenderQualitySettingsLike } from '../b
 interface SceneConfigData {
   enableModelLoading: boolean;
   modelUrl: string;
+  customModelFile?: File;
   cameraAnimationUrl: string;
   enableCameraAnimation: boolean;
   orthoHeight: number;
@@ -194,14 +195,15 @@ export async function getSceneConfigAsync(): Promise<SceneConfigData> {
     
     
     if (customDefaultModel && customDefaultModel.modelData) {
-      const customModelUrl = URL.createObjectURL(customDefaultModel.modelData);
-      
-      config.modelUrl = customModelUrl;
+      const customFileName = customDefaultModel.name || 'model.bpmx';
+      config.customModelFile = new File([customDefaultModel.modelData], customFileName, {
+        type: customDefaultModel.modelData.type || 'application/octet-stream',
+      });
+      config.modelUrl = customFileName;
       config.modelId = customDefaultModel.id;
-      config.modelFileName = customDefaultModel.name || 'model.bpmx';
-        const portraitClippingValue = customDefaultModel.metadata?.portraitClipping;
-        config.portraitClipping = typeof portraitClippingValue === 'number' ? portraitClippingValue : 12;
-      config._customModelBlobUrl = customModelUrl;
+      config.modelFileName = customFileName;
+      const portraitClippingValue = customDefaultModel.metadata?.portraitClipping;
+      config.portraitClipping = typeof portraitClippingValue === 'number' ? portraitClippingValue : 12;
     } else {
       config.modelId = 'builtin_default_model';
       config.modelFileName = 'vassist_default.bpmx';

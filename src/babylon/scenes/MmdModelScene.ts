@@ -817,7 +817,8 @@ export const buildMmdModelScene = async (
   // MODEL LOADING (ASYNC WITH PROGRESS)
   // ========================================
   
-  Logger.log('MmdModelScene', 'Loading model from:', finalConfig.modelUrl);
+  const modelSource = finalConfig.customModelFile ?? finalConfig.modelUrl;
+  Logger.log('MmdModelScene', 'Loading model from:', finalConfig.customModelFile ? `custom file ${finalConfig.customModelFile.name}` : finalConfig.modelUrl);
   
   let modelMesh: Mesh | null = null;
   let mmdModel: MmdModelLike | null = null;
@@ -826,10 +827,10 @@ export const buildMmdModelScene = async (
     // Load model with progress tracking (no built-in loading UI)
     // For blob URLs from custom models, LoadAssetContainerAsync can load directly
     const result = await LoadAssetContainerAsync(
-      finalConfig.modelUrl,
+      modelSource,
       scene,
       {
-        // Specify plugin explicitly for blob URLs
+        // Specify plugin explicitly for custom model files
         ...(finalConfig.modelFileName ? { pluginExtension: '.bpmx' } : {}),
         pluginOptions: {
           mmdmodel: {

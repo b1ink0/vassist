@@ -5,8 +5,46 @@
 
 import { generateRequestId } from './MessageTypes';
 
+type MessagePayloadValue = string | number | boolean | null | undefined | object;
+type MessagePayload = Record<string, MessagePayloadValue>;
+
+interface SendOptions {
+  timeout?: number;
+  priority?: number;
+  tabId?: number | null;
+}
+
+interface OutgoingMessage {
+  type: string;
+  data: MessagePayload;
+  requestId: string;
+  timestamp: number;
+  tabId?: number | null;
+  priority?: number;
+  streaming?: boolean;
+}
+
+interface IncomingResponse {
+  requestId?: string;
+  type?: string;
+  data?: MessagePayload;
+  error?: string;
+}
+
+interface PendingRequest {
+  resolve: (value: MessagePayload | undefined) => void;
+  reject: (reason?: Error | string) => void;
+  timeout: ReturnType<typeof setTimeout>;
+  type: string;
+  onChunk?: (chunk: MessagePayload | undefined) => void;
+}
+
 export class MessageBridge {
-  constructor(name) {
+  name: string;
+  pendingRequests: Map<string, PendingRequest>;
+  defaultTimeout: number;
+
+  constructor(name: string) {
     this.name = name;
     this.pendingRequests = new Map(); // requestId -> { resolve, reject, timeout }
     this.defaultTimeout = 30000; // 30 seconds
@@ -20,7 +58,11 @@ export class MessageBridge {
    * @param {Object} options - Options (timeout, priority)
    * @returns {Object} { requestId, promise } - Request ID and response promise
    */
-  sendMessage(type, data = {}, options = {}) {
+  sendMessage(
+    type: string,
+    data: MessagePayload = {},
+    options: SendOptions = {},
+  ): { requestId: string; promise: Promise<MessagePayload | undefined> } {
     const requestId = generateRequestId();
     const timeout = options.timeout || this.defaultTimeout;
     
@@ -33,7 +75,7 @@ export class MessageBridge {
       priority: options.priority || 1
     };
     
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Promise<MessagePayload | undefined>((resolve, reject) => {
       // Set up timeout
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
@@ -49,7 +91,7 @@ export class MessageBridge {
       });
       
       // Send message (implemented by subclass)
-      this._sendMessageImpl(message).catch(error => {
+      this._sendMessageImpl(message).catch((error: Error) => {
         clearTimeout(timeoutId);
         this.pendingRequests.delete(requestId);
         reject(error);
@@ -68,7 +110,12 @@ export class MessageBridge {
    * @param {Object} options - Options
    * @returns {Promise} Completion promise
    */
-  async sendStreamingMessage(type, data = {}, onChunk, options = {}) {
+  async sendStreamingMessage(
+    type: string,
+    data: MessagePayload = {},
+    onChunk: (chunk: MessagePayload | undefined) => void,
+    options: SendOptions = {},
+  ): Promise<MessagePayload | undefined> {
     const requestId = generateRequestId();
     const timeout = options.timeout || 120000; // 2 minutes for streaming
     
@@ -81,7 +128,7 @@ export class MessageBridge {
       timestamp: Date.now()
     };
     
-    return new Promise((resolve, reject) => {
+    return new Promise<MessagePayload | undefined>((resolve, reject) => {
       // Set up timeout (resets on each chunk)
       let timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
@@ -94,7 +141,7 @@ export class MessageBridge {
         reject,
         timeout: timeoutId,
         type,
-        onChunk: (chunk) => {
+        onChunk: (chunk: MessagePayload | undefined) => {
           // Reset timeout on each chunk
           clearTimeout(timeoutId);
           timeoutId = setTimeout(() => {
@@ -107,7 +154,7 @@ export class MessageBridge {
       });
       
       // Send message
-      this._sendMessageImpl(message).catch(error => {
+      this._sendMessageImpl(message).catch((error: Error) => {
         clearTimeout(timeoutId);
         this.pendingRequests.delete(requestId);
         reject(error);
@@ -119,7 +166,7 @@ export class MessageBridge {
    * Handle incoming response
    * @param {Object} response - Response message
    */
-  handleResponse(response) {
+  handleResponse(response: IncomingResponse): void {
     const { requestId, type, data, error } = response;
     
     if (!requestId) {
@@ -150,7 +197,8 @@ export class MessageBridge {
     if (type === 'ERROR' || error) {
       clearTimeout(pending.timeout);
       this.pendingRequests.delete(requestId);
-      pending.reject(new Error(error || data?.message || 'Unknown error'));
+      const message = error || (typeof data?.message === 'string' ? data.message : 'Unknown error');
+      pending.reject(new Error(message));
       return;
     }
     
@@ -166,7 +214,7 @@ export class MessageBridge {
   /**
    * Clean up pending requests (on disconnect, etc.)
    */
-  cleanup() {
+  cleanup(): void {
     for (const [_requestId, pending] of this.pendingRequests.entries()) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('Bridge connection closed'));
@@ -178,7 +226,7 @@ export class MessageBridge {
   /**
    * Get pending request count
    */
-  getPendingCount() {
+  getPendingCount(): number {
     return this.pendingRequests.size;
   }
 
@@ -186,7 +234,7 @@ export class MessageBridge {
    * Subclass must implement actual message sending
    * @returns {Promise} Send result
    */
-  async _sendMessageImpl() {
+  async _sendMessageImpl(_message: OutgoingMessage): Promise<void> {
     throw new Error('_sendMessageImpl must be implemented by subclass');
   }
 }

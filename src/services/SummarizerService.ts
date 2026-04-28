@@ -7,6 +7,7 @@
 
 import OpenAI from 'openai';
 import Logger from './LoggerService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type SummarizerProvider = 'chrome-ai' | 'openai' | 'ollama';
 type SummarizerAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
@@ -34,7 +35,7 @@ class SummarizerService {
   private readonly devState: SummarizerState;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     this.tabStates = new Map();
     this.devState = {
       summarizerSessions: new Map(),

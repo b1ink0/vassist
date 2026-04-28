@@ -10,6 +10,7 @@ import { TTSProviders } from '../config/aiConfig';
 import { audioWorkerClient } from '../workers/AudioWorkerClient';
 import Logger from './LoggerService';
 import voiceStorageService from './VoiceStorageService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type TTSState = {
   client: any;
@@ -57,7 +58,7 @@ class TTSService {
   private kokoroHeartbeatEnabled: boolean;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
 
     // Shared state needed in both extension and dev modes.
     this.eventTarget = new EventTarget();

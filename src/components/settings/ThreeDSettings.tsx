@@ -20,7 +20,7 @@ import { modelStorageService } from '../../services/ModelStorageService';
 import { stageStorageService } from '../../services/StageStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
 import emoteStorageService from '../../services/EmoteStorageService';
-import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
+import { isAndroid, isDesktop, isExtension } from '../../utils/PlatformUtils';
 import JSZip from 'jszip';
 import { Button, Input, Select, TabBar } from '../ui';
 
@@ -1636,7 +1636,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
             </div>
             
             {/* Physics Engine Selector - Only show in non-extension mode when physics is enabled */}
-            {uiConfig.enablePhysics !== false && (typeof __EXTENSION_MODE__ === 'undefined' || !__EXTENSION_MODE__) && (
+            {uiConfig.enablePhysics !== false && !isExtension && (
               <div className="mt-3 pt-3 border-t border-white/10">
                 <label className="block text-xs text-white/70 font-medium mb-2">Physics Engine</label>
                 <Select

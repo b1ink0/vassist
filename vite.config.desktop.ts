@@ -104,7 +104,7 @@ export default defineConfig(({ mode }) => {
       electron({
         main: {
           // Main process entry point
-          entry: 'electron/main.js',
+          entry: 'electron/app.ts',
           onstart(args) {
             if (args.startup) {
               args.startup(['--inspect=5858', '.']);
@@ -137,7 +137,7 @@ export default defineConfig(({ mode }) => {
         },
         preload: {
           // Preload script for secure IPC
-          entry: 'electron/preload.js',
+          entry: 'electron/preload.ts',
           vite: {
             build: {
               outDir: 'dist-desktop',

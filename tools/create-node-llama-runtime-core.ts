@@ -9,17 +9,17 @@ const outputArchivePath = path.join(outputDir, 'node-llama-core.tgz');
 const stagingRoot = path.join(rootDir, '.tmp', 'node-llama-core-staging');
 const stagingNodeModulesDir = path.join(stagingRoot, 'node_modules');
 
-const copied = new Set();
+const copied = new Set<string>();
 
-function packagePath(packageName, baseDir) {
+function packagePath(packageName: string, baseDir: string): string {
   return path.join(baseDir, ...packageName.split('/'));
 }
 
-function readJson(jsonPath) {
+function readJson(jsonPath: string): { dependencies?: Record<string, string>; optionalDependencies?: Record<string, string> } {
   return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
 }
 
-function copyPackageRecursive(packageName, optional = false) {
+function copyPackageRecursive(packageName: string, optional = false): void {
   if (!packageName || copied.has(packageName)) {
     return;
   }
@@ -60,12 +60,12 @@ function copyPackageRecursive(packageName, optional = false) {
   }
 }
 
-function ensureCleanDir(dir) {
+function ensureCleanDir(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
 }
 
-async function main() {
+async function main(): Promise<void> {
   const coreSource = path.join(nodeModulesDir, 'node-llama-cpp');
   if (!fs.existsSync(coreSource)) {
     throw new Error('node_modules/node-llama-cpp is missing. Install dependencies before building runtime core bundle.');
@@ -97,6 +97,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('[runtime-core] Failed:', error?.message || error);
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[runtime-core] Failed:', message);
   process.exitCode = 1;
 });

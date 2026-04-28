@@ -10,6 +10,7 @@ import { PromptConfig } from '../config/promptConfig';
 import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
 import FrameCaptureService from './FrameCaptureService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type AIMessage = Record<string, any>;
 type SendResult = { success: boolean; response: string | null; cancelled: boolean; error: Error | null };
@@ -34,7 +35,7 @@ class AIService {
   private chromeAIUtilitySession: any;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();

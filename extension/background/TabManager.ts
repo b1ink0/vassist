@@ -4,7 +4,21 @@
  */
 
 import Logger from '../../src/services/LoggerService';
+
+interface TabState {
+  id: number;
+  chatState: {
+    messages: object[];
+    isProcessing: boolean;
+  };
+  abortControllers: Map<string, AbortController>;
+  created: number;
+  lastActivity: number;
+}
+
 export class TabManager {
+  tabs: Map<number, TabState>;
+
   constructor() {
     this.tabs = new Map(); // tabId -> tabState
     Logger.log('TabManager', 'Initialized');
@@ -13,9 +27,9 @@ export class TabManager {
   /**
    * Initialize tab
    */
-  initTab(tabId) {
+  initTab(tabId: number): TabState {
     if (this.tabs.has(tabId)) {
-      return this.tabs.get(tabId);
+      return this.tabs.get(tabId) as TabState;
     }
 
     Logger.log('TabManager', 'Initializing tab ${tabId}');
@@ -38,14 +52,14 @@ export class TabManager {
   /**
    * Get tab state
    */
-  getTab(tabId) {
+  getTab(tabId: number): TabState | undefined {
     return this.tabs.get(tabId);
   }
 
   /**
    * Update tab state
    */
-  updateTab(tabId, updates) {
+  updateTab(tabId: number, updates: Partial<TabState>): void {
     const tab = this.tabs.get(tabId);
     if (tab) {
       Object.assign(tab, updates);
@@ -56,7 +70,7 @@ export class TabManager {
   /**
    * Clean up tab
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     Logger.log('TabManager', 'Cleaning up tab ${tabId}');
 
     const tab = this.tabs.get(tabId);
@@ -77,14 +91,14 @@ export class TabManager {
   /**
    * Get all active tab IDs
    */
-  getActiveTabs() {
+  getActiveTabs(): number[] {
     return Array.from(this.tabs.keys());
   }
 
   /**
    * Clean up inactive tabs (no activity for 1 hour)
    */
-  cleanupInactiveTabs() {
+  cleanupInactiveTabs(): void {
     const oneHour = 60 * 60 * 1000;
     const now = Date.now();
 
@@ -98,16 +112,16 @@ export class TabManager {
   /**
    * Get abort controller for request
    */
-  getAbortController(tabId, requestId) {
+  getAbortController(tabId: number, requestId: string): AbortController | null {
     const tab = this.tabs.get(tabId);
     if (!tab) return null;
-    return tab.abortControllers.get(requestId);
+    return tab.abortControllers.get(requestId) ?? null;
   }
 
   /**
    * Set abort controller for request
    */
-  setAbortController(tabId, requestId, controller) {
+  setAbortController(tabId: number, requestId: string, controller: AbortController): void {
     const tab = this.tabs.get(tabId);
     if (tab) {
       tab.abortControllers.set(requestId, controller);
@@ -117,7 +131,7 @@ export class TabManager {
   /**
    * Remove abort controller
    */
-  removeAbortController(tabId, requestId) {
+  removeAbortController(tabId: number, requestId: string): void {
     const tab = this.tabs.get(tabId);
     if (tab) {
       tab.abortControllers.delete(requestId);

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 import { fileURLToPath } from 'url';
+import type { Plugin } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +14,7 @@ const rootDir = path.join(__dirname, '..', '..');
  * Recursively copy directory
  * Returns true if any files were copied (used to skip empty directories)
  */
-function copyDir(src, dest, excludePrivateTests = false) {
+function copyDir(src: string, dest: string, excludePrivateTests = false): boolean {
   const entries = fs.readdirSync(src, { withFileTypes: true });
   let hasFiles = false;
   
@@ -49,7 +50,7 @@ function copyDir(src, dest, excludePrivateTests = false) {
 /**
  * Plugin to wrap content script as IIFE
  */
-export function wrapContentScriptPlugin() {
+export function wrapContentScriptPlugin(): Plugin {
   return {
     name: 'wrap-content-script',
     writeBundle() {
@@ -94,7 +95,7 @@ export function wrapContentScriptPlugin() {
 /**
  * Plugin to copy assets to extension build
  */
-export function copyAssetsPlugin(shouldZip) {
+export function copyAssetsPlugin(shouldZip: boolean): Plugin {
   return {
     name: 'copy-assets',
     closeBundle() {
@@ -175,7 +176,7 @@ export function copyAssetsPlugin(shouldZip) {
  * Create zip file of the extension
  * Excludes private_test folder from the ZIP
  */
-function createExtensionZip(distDir) {
+function createExtensionZip(distDir: string): void {
   const buildDir = path.join(rootDir, 'build');
   const tempZipDir = path.join(buildDir, 'temp-zip');
   
@@ -205,7 +206,7 @@ function createExtensionZip(distDir) {
     fs.rmSync(tempZipDir, { recursive: true, force: true });
   });
 
-  archive.on('warning', (err) => {
+  archive.on('warning', (err: Error & { code?: string }) => {
     if (err.code === 'ENOENT') {
       console.warn('[zip-extension] Warning:', err);
     } else {
@@ -213,7 +214,7 @@ function createExtensionZip(distDir) {
     }
   });
 
-  archive.on('error', (err) => {
+  archive.on('error', (err: Error) => {
     console.error('[zip-extension] Error:', err);
     throw err;
   });

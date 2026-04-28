@@ -11,6 +11,7 @@ import storageManager from '../storage';
 import ChromeAIValidator from './ChromeAIValidator';
 import Logger from './LoggerService';
 import MicrophoneService from './MicrophoneService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type STTState = {
   client: OpenAI | null;
@@ -52,7 +53,7 @@ class STTService {
   private onRecordingStop: (() => void) | null;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     this.tabStates = new Map();
     this.client = null;
     this.provider = null;

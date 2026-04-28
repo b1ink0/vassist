@@ -6,6 +6,7 @@ import https from 'https';
 import { fileURLToPath } from 'url';
 import * as tar from 'tar';
 import unbzip2Stream from 'unbzip2-stream';
+import type { Plugin } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,15 +43,32 @@ const MODELS = {
 const CACHE_DIR = path.join(rootDir, 'node_modules/.cache/android-models');
 const CACHE_MARKER = path.join(CACHE_DIR, '.models-downloaded');
 
+type ModelFileSpec = string | { src: string; dest: string };
+
+interface ModelConfig {
+  url: string;
+  size: string;
+  files: ModelFileSpec[];
+  extractDir: string;
+  targetDir: string;
+}
+
+const getErrorMessage = (error: object | string | null | undefined): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error ?? 'Unknown error');
+};
+
 /**
  * Check if models are already cached
  */
-function areModelsCached() {
+function areModelsCached(): boolean {
   if (!fs.existsSync(CACHE_MARKER)) {
     return false;
   }
   
-  for (const [name, config] of Object.entries(MODELS)) {
+  for (const [name, config] of Object.entries(MODELS as Record<string, ModelConfig>)) {
     const cacheModelDir = path.join(CACHE_DIR, name);
     const files = config.files.map(f => typeof f === 'string' ? f : f.dest);
     
@@ -68,15 +86,20 @@ function areModelsCached() {
 /**
  * Download file with progress
  */
-function downloadFile(url, destPath) {
+function downloadFile(url: string, destPath: string): Promise<void> {
   const fileName = path.basename(destPath);
   
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     console.log(`[android-models] Downloading ${fileName}...`);
     
     https.get(url, { headers: { 'User-Agent': 'vassist-build' } }, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
-        downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        const redirectLocation = response.headers.location;
+        if (!redirectLocation) {
+          reject(new Error('Redirect response missing location header'));
+          return;
+        }
+        downloadFile(redirectLocation, destPath).then(resolve).catch(reject);
         return;
       }
       
@@ -85,13 +108,14 @@ function downloadFile(url, destPath) {
         return;
       }
       
-      const totalSize = parseInt(response.headers['content-length'], 10);
+      const contentLengthHeader = response.headers['content-length'];
+      const totalSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
       let downloaded = 0;
       let lastPercent = 0;
       
-      response.on('data', (chunk) => {
+      response.on('data', (chunk: Buffer) => {
         downloaded += chunk.length;
-        const percent = Math.floor((downloaded / totalSize) * 100);
+        const percent = totalSize > 0 ? Math.floor((downloaded / totalSize) * 100) : 0;
         if (percent !== lastPercent && percent % 20 === 0) {
           console.log(`[android-models] Progress: ${percent}%`);
           lastPercent = percent;
@@ -120,7 +144,7 @@ function downloadFile(url, destPath) {
 /**
  * Extract tar.bz2 archive using tar package with bzip2 decompression
  */
-async function extractTarBz2(archivePath, files, destDir, extractDir) {
+async function extractTarBz2(archivePath: string, files: ModelFileSpec[], destDir: string, extractDir: string): Promise<void> {
   console.log(`[android-models] Extracting to ${destDir}...`);
   
   const tempExtractDir = path.join(CACHE_DIR, 'temp-extract');
@@ -128,13 +152,13 @@ async function extractTarBz2(archivePath, files, destDir, extractDir) {
   
   try {
     // Extract tar.bz2 with decompression
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       fs.createReadStream(archivePath)
         .pipe(unbzip2Stream())
         .pipe(tar.x({
           cwd: tempExtractDir,
-          filter: (path) => {
-            const fileName = path.split('/').pop();
+          filter: (entryPath) => {
+            const fileName = entryPath.split('/').pop();
             return files.some(f => {
               const name = typeof f === 'string' ? f : f.src;
               return fileName === name;
@@ -187,12 +211,12 @@ async function extractTarBz2(archivePath, files, destDir, extractDir) {
 /**
  * Download and cache models
  */
-async function downloadModels() {
+async function downloadModels(): Promise<void> {
   console.log('[android-models] Downloading STT/TTS models...\n');
   
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   
-  for (const [name, config] of Object.entries(MODELS)) {
+  for (const [name, config] of Object.entries(MODELS as Record<string, ModelConfig>)) {
     console.log(`[android-models] Processing ${name.toUpperCase()} (${config.size})`);
     
     const cacheModelDir = path.join(CACHE_DIR, name);
@@ -217,7 +241,7 @@ async function downloadModels() {
           fs.unlinkSync(archivePath);
         }
       } catch (error) {
-        console.error(`[android-models] ❌ Extraction failed: ${error.message}`);
+        console.error(`[android-models] ❌ Extraction failed: ${getErrorMessage(error instanceof Error ? error : String(error))}`);
         // Delete corrupted archive so it gets re-downloaded next time
         if (fs.existsSync(archivePath)) {
           fs.unlinkSync(archivePath);
@@ -240,10 +264,10 @@ async function downloadModels() {
 /**
  * Copy cached models to Android assets
  */
-function copyModelsToAssets() {
+function copyModelsToAssets(): void {
   console.log('[android-models] Copying models to Android assets...');
   
-  for (const [name, config] of Object.entries(MODELS)) {
+  for (const [name, config] of Object.entries(MODELS as Record<string, ModelConfig>)) {
     const cacheModelDir = path.join(CACHE_DIR, name);
     const targetDir = path.join(rootDir, config.targetDir);
     
@@ -274,7 +298,7 @@ function copyModelsToAssets() {
  * @param {boolean} packageModels - Whether to package models
  * @returns {import('vite').Plugin}
  */
-export function androidModelsPlugin(packageModels = false) {
+export function androidModelsPlugin(packageModels = false): Plugin {
   return {
     name: 'android-models',
     
@@ -293,7 +317,7 @@ export function androidModelsPlugin(packageModels = false) {
         
         copyModelsToAssets();
       } catch (error) {
-        console.error('[android-models] ❌ Error:', error.message);
+        console.error('[android-models] ❌ Error:', getErrorMessage(error instanceof Error ? error : String(error)));
         throw error;
       }
     }

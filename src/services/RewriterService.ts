@@ -6,6 +6,7 @@
  */
 import OpenAI from 'openai';
 import Logger from './LoggerService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type RewriteState = {
   rewriterSessions: Map<string, any>;
@@ -26,7 +27,7 @@ class RewriterService {
   private abortController: AbortController | null = null;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     
     if (this.isExtensionMode) {
       this.tabStates = new Map();

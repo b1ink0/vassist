@@ -8,6 +8,7 @@
 
 import { ServiceProxy } from './ServiceProxy';
 import { MessageTypes } from '../../../extension/shared/MessageTypes';
+import { isExtension } from '../../utils/PlatformUtils';
 
 type StorageRecord = Record<string, unknown>;
 
@@ -77,7 +78,7 @@ const initDevStorageManager = async (): Promise<StorageManagerLike | null> => {
     return devStorageManagerPromise;
   }
   
-  if (__EXTENSION_MODE__) {
+  if (isExtension) {
     return null;
   }
   

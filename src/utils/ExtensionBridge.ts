@@ -241,6 +241,31 @@ class ExtensionBridge {
   }
 
   /**
+   * Create a blob URL in extension context via content script.
+   * This avoids host-page-origin blob URLs when running in extension mode.
+   */
+  async createBlobURL(blob: Blob): Promise<string> {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const payload = {
+      bytes: Array.from(bytes),
+      mimeType: blob.type || 'application/octet-stream',
+    };
+
+    const response = await this.sendMessage('CREATE_BLOB_URL', payload, { timeout: 10000 }) as { url?: string };
+    if (!response.url) {
+      throw new Error('Failed to create blob URL in extension context');
+    }
+    return response.url;
+  }
+
+  /**
+   * Revoke a blob URL previously created by createBlobURL.
+   */
+  async revokeBlobURL(url: string): Promise<void> {
+    await this.sendMessage('REVOKE_BLOB_URL', { url }, { timeout: 5000 });
+  }
+
+  /**
    * Add a message listener for broadcast messages
    * Used for progress updates, notifications, etc.
    * @param {Function} listener - Callback function (message) => {}

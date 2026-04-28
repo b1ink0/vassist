@@ -10,7 +10,23 @@ import { ContentBridge } from './ContentBridge';
 import { MessageTypes } from '../shared/MessageTypes';
 import Logger from '../../src/services/LoggerService';
 
+type BridgeValue = string | number | boolean | null | undefined | object;
+
+declare global {
+  interface Window {
+    __virtualAssistant?: VirtualAssistantInjector;
+  }
+}
+
 class VirtualAssistantInjector {
+  shadowRoot: ShadowRoot | null;
+  container: HTMLDivElement | null;
+  scriptElement: HTMLScriptElement | null;
+  bridge: ContentBridge;
+  isInjected: boolean;
+  isVisible: boolean;
+  isFadingOut: boolean;
+
   constructor() {
     this.shadowRoot = null;
     this.container = null;
@@ -107,12 +123,18 @@ class VirtualAssistantInjector {
       Logger.log('Content Script', '✅ Virtual Assistant injected successfully');
       
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       Logger.error('Content Script', '❌ Failed to inject assistant:', error);
-      Logger.error('Content Script', 'Error stack:', error.stack);
+      Logger.error('Content Script', 'Error stack:', errorStack || errorMessage);
     }
   }
 
   async injectStyles() {
+        if (!this.shadowRoot) {
+          throw new Error('Shadow root is not initialized');
+        }
+
     Logger.log('Content Script', 'injectStyles: Creating link element');
     // Inject Tailwind and app styles into shadow DOM
     const style = document.createElement('link');
@@ -126,10 +148,10 @@ class VirtualAssistantInjector {
     
     // Wait for styles to load with a timeout fallback
     // Note: link elements in Shadow DOM may not fire onload reliably
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       let resolved = false;
       
-      const finish = (source) => {
+      const finish = (source: string) => {
         if (!resolved) {
           resolved = true;
           Logger.log('Content Script', 'injectStyles: Finished via', source);
@@ -151,6 +173,10 @@ class VirtualAssistantInjector {
   }
 
   async injectReactApp() {
+        if (!this.shadowRoot) {
+          throw new Error('Shadow root is not initialized');
+        }
+
     Logger.log('Content Script', 'injectReactApp: Creating root div');
     // Create root div for React
     const root = document.createElement('div');
@@ -171,25 +197,26 @@ class VirtualAssistantInjector {
     Logger.log('Content Script', 'injectReactApp: Script URL:', scriptUrl);
     
     // Create script element in the main document
-    this.scriptElement = document.createElement('script');
-    this.scriptElement.src = scriptUrl;
-    this.scriptElement.type = 'module';
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.type = 'module';
+    this.scriptElement = script;
     
     Logger.log('Content Script', 'injectReactApp: Waiting for script to load...');
     
     // Wait for script to load
-    await new Promise((resolve, reject) => {
-      this.scriptElement.onload = () => {
+    await new Promise<void>((resolve, reject) => {
+      script.onload = () => {
         Logger.log('Content Script', 'injectReactApp: Script loaded successfully ✓');
         resolve();
       };
-      this.scriptElement.onerror = (error) => {
+      script.onerror = (error) => {
         Logger.error('Content Script', 'injectReactApp: Failed to load script ❌', error);
         reject(error);
       };
       // Append to document head (not shadow root)
       Logger.log('Content Script', 'injectReactApp: Appending script to document.head');
-      document.head.appendChild(this.scriptElement);
+      document.head.appendChild(script);
     });
     
     Logger.log('Content Script', 'injectReactApp: Complete');
@@ -205,6 +232,7 @@ class VirtualAssistantInjector {
   _setupMessageBridge() {
     // Track streaming requests to properly route tokens
     const streamingRequests = new Map(); // mainWorldRequestId -> backgroundRequestId
+    const extensionBlobUrls = new Set<string>();
     
     // Global listener for ALL stream tokens from background
     chrome.runtime.onMessage.addListener((message) => {
@@ -237,12 +265,12 @@ class VirtualAssistantInjector {
     });
     
     // Listen for messages from main world
-    window.addEventListener('message', async (event) => {
+    window.addEventListener('message', async (event: MessageEvent) => {
       // Only accept messages from same window
       if (event.source !== window) return;
       
       // Check for our message format
-      if (event.data && event.data.__VASSIST_MESSAGE__) {
+      if (event.data && (event.data as Record<string, BridgeValue>).__VASSIST_MESSAGE__) {
         const { type, payload, requestId, streaming, timeout } = event.data;
         Logger.log('Content Script Bridge', 'Received from main world:', type, streaming ? '(streaming)' : '', timeout ? `(timeout: ${timeout}ms)` : '');
         
@@ -261,6 +289,34 @@ class VirtualAssistantInjector {
               __VASSIST_RESPONSE__: true,
               requestId,
               payload: response
+            }, '*');
+          } else if (type === 'CREATE_BLOB_URL') {
+            const byteValues = Array.isArray(payload?.bytes) ? payload.bytes : [];
+            const mimeType = typeof payload?.mimeType === 'string' && payload.mimeType.length > 0
+              ? payload.mimeType
+              : 'application/octet-stream';
+            const blobBytes = new Uint8Array(byteValues);
+            const blob = new Blob([blobBytes], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            extensionBlobUrls.add(url);
+
+            Logger.log('Content Script Bridge', 'Created extension blob URL:', url);
+            window.postMessage({
+              __VASSIST_RESPONSE__: true,
+              requestId,
+              payload: { url }
+            }, '*');
+          } else if (type === 'REVOKE_BLOB_URL') {
+            if (typeof payload?.url === 'string' && extensionBlobUrls.has(payload.url)) {
+              URL.revokeObjectURL(payload.url);
+              extensionBlobUrls.delete(payload.url);
+              Logger.log('Content Script Bridge', 'Revoked extension blob URL:', payload.url);
+            }
+
+            window.postMessage({
+              __VASSIST_RESPONSE__: true,
+              requestId,
+              payload: { ok: true }
             }, '*');
           } else if (streaming) {
             // STREAMING REQUEST - Set up token forwarding
@@ -284,13 +340,14 @@ class VirtualAssistantInjector {
                 requestId
               }, '*');
             } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               Logger.log('Content Script Bridge', 'Stream error:', error);
               
               // Send stream error to main world
               window.postMessage({
                 __VASSIST_STREAM_ERROR__: true,
                 requestId,
-                error: error.message
+                error: errorMessage
               }, '*');
             } finally {
               // Clean up mapping
@@ -314,11 +371,12 @@ class VirtualAssistantInjector {
             Logger.log('Content Script Bridge', 'Forwarded response to main world for request:', requestId);
           }
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
           // Send error back to main world
           window.postMessage({
             __VASSIST_RESPONSE__: true,
             requestId,
-            error: error.message
+            error: errorMessage
           }, '*');
         }
       }
@@ -400,7 +458,7 @@ class VirtualAssistantInjector {
     }
     
     // Wait for fade-out animation (700ms to match canvas transition)
-    await new Promise(resolve => setTimeout(resolve, 700));
+    await new Promise<void>((resolve) => setTimeout(resolve, 700));
     
     // Check if fade-out was cancelled (user clicked again)
     if (!this.isFadingOut) {
@@ -458,7 +516,7 @@ class VirtualAssistantInjector {
 const injector = new VirtualAssistantInjector();
 
 // Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: Record<string, BridgeValue>, _sender, sendResponse) => {
   Logger.log('Content Script', 'Received message:', message);
   
   const handleMessage = async () => {
@@ -484,8 +542,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return { success: false, error: 'Unknown message type' };
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       Logger.error('Content Script', 'Error handling message:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: errorMessage };
     }
   };
   

@@ -5,6 +5,8 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
+import { isExtension } from '../../utils/PlatformUtils';
+
 export interface BridgeSendOptions {
   timeout?: number;
 }
@@ -36,7 +38,7 @@ export class ServiceProxy {
 
   constructor(name: string) {
     this.name = name;
-    this.isExtension = __EXTENSION_MODE__;
+    this.isExtension = isExtension;
     this._bridge = null;
     this.directService = {};
     this._configuring = false;

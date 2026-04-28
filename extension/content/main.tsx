@@ -9,13 +9,14 @@ import { createRoot } from 'react-dom/client';
 import { extensionBridge } from '../../src/utils/ExtensionBridge';
 import App from '../../src/App';
 import Logger from '../../src/services/LoggerService';
+import type { Root } from 'react-dom/client';
 
 // Make bridge globally accessible
 window.__VASSIST_BRIDGE__ = extensionBridge;
 
 
 let isInitialized = false;
-let reactRoot = null;
+let reactRoot: Root | null = null;
 let isInitializing = false;
 
 const getShadowRoot = () => {
@@ -68,8 +69,8 @@ const initReactApp = () => {
 
 const observer = new MutationObserver((mutations) => {
   for (const mutation of mutations) {
-    for (const node of mutation.addedNodes) {
-      if (node.id === 'virtual-assistant-extension-root') {
+    for (const node of Array.from(mutation.addedNodes)) {
+      if (node instanceof HTMLElement && node.id === 'virtual-assistant-extension-root') {
         Logger.log('Extension Content', 'Container detected, initializing...');
         isInitialized = false;
         reactRoot = null;
@@ -78,8 +79,8 @@ const observer = new MutationObserver((mutations) => {
       }
     }
     
-    for (const node of mutation.removedNodes) {
-      if (node.id === 'virtual-assistant-extension-root') {
+    for (const node of Array.from(mutation.removedNodes)) {
+      if (node instanceof HTMLElement && node.id === 'virtual-assistant-extension-root') {
         Logger.log('Extension Content', 'Container removed, cleaning up...');
         
         if (reactRoot) {
@@ -87,8 +88,9 @@ const observer = new MutationObserver((mutations) => {
           try {
             reactRoot.unmount();
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             // Ignore portal-related unmount errors (canvas is in document.body via portal)
-            Logger.log('Extension Content', 'React unmount error (expected for portals):', error.message);
+            Logger.log('Extension Content', 'React unmount error (expected for portals):', errorMessage);
           }
         }
         

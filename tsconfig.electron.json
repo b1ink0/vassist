@@ -8,7 +8,8 @@
   },
   "include": [
     "electron",
-    "src/types"
+    "src/types",
+    "src/env.d.ts"
   ],
   "exclude": [
     "dist",

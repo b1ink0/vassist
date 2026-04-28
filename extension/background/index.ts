@@ -25,6 +25,145 @@ import writerService from '../../src/services/WriterService';
 import Logger from '../../src/services/LoggerService';
 import { DefaultAIConfig, DefaultTTSConfig, DefaultSTTConfig } from '../../src/config/aiConfig';
 
+type MessageValue = string | number | boolean | null | undefined | object;
+type MessageData = Record<string, MessageValue>;
+type FileRecord = Record<string, MessageValue> & {
+  data?: Blob | number[];
+  motionData?: Blob | number[];
+  modelData?: Blob | number[];
+  _blobType?: string;
+  _motionBlobType?: string;
+  _modelBlobType?: string;
+};
+
+const asMessageData = (value: MessageValue): MessageData => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as MessageData;
+  }
+  return {};
+};
+
+const asString = (value: MessageValue, fallback = ''): string => {
+  return typeof value === 'string' ? value : fallback;
+};
+
+const asNumber = (value: MessageValue, fallback = 0): number => {
+  return typeof value === 'number' ? value : fallback;
+};
+
+const asNumberArray = (value: MessageValue): number[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is number => typeof item === 'number');
+};
+
+const requireSenderTabId = (sender: chrome.runtime.MessageSender): number => {
+  if (typeof sender.tab?.id !== 'number') {
+    throw new Error('Sender tab ID required');
+  }
+
+  return sender.tab.id;
+};
+
+const messageFromError = (error: object | string | null | undefined): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error ?? 'Unknown error');
+};
+
+type TranslatorProvider = 'chrome-ai' | 'openai' | 'ollama' | 'desktop-local';
+
+type TranslatorConfigureInput = {
+  provider: TranslatorProvider;
+  openai?: {
+    apiKey: string;
+    model?: string;
+    temperature?: number;
+  };
+  ollama?: {
+    endpoint: string;
+    model: string;
+    temperature?: number;
+  };
+  'desktop-local'?: {
+    endpoint: string;
+    model?: string;
+    temperature?: number;
+  };
+};
+
+const toTranslatorProvider = (value: MessageValue): TranslatorProvider => {
+  if (value === 'openai' || value === 'ollama' || value === 'desktop-local' || value === 'chrome-ai') {
+    return value;
+  }
+  return 'chrome-ai';
+};
+
+const toTranslatorConfigureInput = (config: MessageData): TranslatorConfigureInput => {
+  const normalized: TranslatorConfigureInput = {
+    provider: toTranslatorProvider(config.provider),
+  };
+
+  const openai = asMessageData(config.openai);
+  const openAiKey = asString(openai.apiKey);
+  if (openAiKey) {
+    const openAiConfig: { apiKey: string; model?: string; temperature?: number } = {
+      apiKey: openAiKey,
+    };
+
+    const openAiModel = asString(openai.model);
+    if (openAiModel) {
+      openAiConfig.model = openAiModel;
+    }
+
+    if (typeof openai.temperature === 'number') {
+      openAiConfig.temperature = openai.temperature;
+    }
+
+    normalized.openai = openAiConfig;
+  }
+
+  const ollama = asMessageData(config.ollama);
+  const ollamaEndpoint = asString(ollama.endpoint);
+  const ollamaModel = asString(ollama.model);
+  if (ollamaEndpoint && ollamaModel) {
+    const ollamaConfig: { endpoint: string; model: string; temperature?: number } = {
+      endpoint: ollamaEndpoint,
+      model: ollamaModel,
+    };
+
+    if (typeof ollama.temperature === 'number') {
+      ollamaConfig.temperature = ollama.temperature;
+    }
+
+    normalized.ollama = ollamaConfig;
+  }
+
+  const desktopLocal = asMessageData(config['desktop-local']);
+  const desktopEndpoint = asString(desktopLocal.endpoint);
+  if (desktopEndpoint) {
+    const desktopConfig: { endpoint: string; model?: string; temperature?: number } = {
+      endpoint: desktopEndpoint,
+    };
+
+    const desktopModel = asString(desktopLocal.model);
+    if (desktopModel) {
+      desktopConfig.model = desktopModel;
+    }
+
+    if (typeof desktopLocal.temperature === 'number') {
+      desktopConfig.temperature = desktopLocal.temperature;
+    }
+
+    normalized['desktop-local'] = desktopConfig;
+  }
+
+  return normalized;
+};
+
 console.log('Background: Service worker starting...');
 
 /**
@@ -33,22 +172,24 @@ console.log('Background: Service worker starting...');
 async function registerHandlers() {
   // Storage handlers - CONFIG namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_SAVE, async (message) => {
-    const { key, value } = message.data;
+    const key = asString(message.data.key);
+    const value = message.data.value;
     return await storageManager.config.save(key, value);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_LOAD, async (message) => {
-    const { key, defaultValue } = message.data;
+    const key = asString(message.data.key);
+    const defaultValue = message.data.defaultValue;
     return await storageManager.config.load(key, defaultValue);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_EXISTS, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.config.exists(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CONFIG_REMOVE, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.config.remove(key);
   });
 
@@ -62,22 +203,24 @@ async function registerHandlers() {
 
   // Storage handlers - SETTINGS namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_SAVE, async (message) => {
-    const { key, value } = message.data;
+    const key = asString(message.data.key);
+    const value = message.data.value;
     return await storageManager.settings.save(key, value);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_LOAD, async (message) => {
-    const { key, defaultValue } = message.data;
+    const key = asString(message.data.key);
+    const defaultValue = message.data.defaultValue;
     return await storageManager.settings.load(key, defaultValue);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_EXISTS, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.settings.exists(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_SETTINGS_REMOVE, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.settings.remove(key);
   });
 
@@ -91,22 +234,24 @@ async function registerHandlers() {
 
   // Storage handlers - CACHE namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_SAVE, async (message) => {
-    const { key, value, ttlSeconds } = message.data;
+    const key = asString(message.data.key);
+    const value = message.data.value;
+    const ttlSeconds = asNumber(message.data.ttlSeconds, 3600);
     return await storageManager.cache.save(key, value, ttlSeconds);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_LOAD, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.cache.load(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_EXISTS, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.cache.exists(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CACHE_REMOVE, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.cache.remove(key);
   });
 
@@ -124,7 +269,8 @@ async function registerHandlers() {
 
   // Storage handlers - CHAT namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_SAVE, async (message) => {
-    const { chatId, data } = message.data;
+    const chatId = asString(message.data.chatId);
+    const data = asMessageData(message.data.data);
     Logger.log('Background', 'STORAGE_CHAT_SAVE handler called for:', chatId);
     Logger.log('Background', 'Chat data keys:', Object.keys(data || {}));
     try {
@@ -138,17 +284,17 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_LOAD, async (message) => {
-    const { chatId } = message.data;
+    const chatId = asString(message.data.chatId);
     return await storageManager.chat.load(chatId);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_EXISTS, async (message) => {
-    const { chatId } = message.data;
+    const chatId = asString(message.data.chatId);
     return await storageManager.chat.exists(chatId);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_CHAT_REMOVE, async (message) => {
-    const { chatId } = message.data;
+    const chatId = asString(message.data.chatId);
     return await storageManager.chat.remove(chatId);
   });
 
@@ -162,42 +308,46 @@ async function registerHandlers() {
 
   // Storage handlers - FILES namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_SAVE, async (message) => {
-    const { fileId, data, category } = message.data;
+    const fileId = asString(message.data.fileId);
+    const category = asString(message.data.category);
+    const data = message.data.data;
     Logger.log('Background', 'STORAGE_FILE_SAVE handler called for:', fileId);
     
     // Convert serialized data back to Blob if needed
     let storageData = data;
     if (data && typeof data === 'object') {
-      storageData = { ...data };
+      const rawData = data as FileRecord;
+      const mutableData: FileRecord = { ...rawData };
+      storageData = mutableData;
       
       // Handle data.data (general file storage)
-      if (Array.isArray(data.data)) {
+      if (Array.isArray(rawData.data)) {
         Logger.log('Background', 'Converting data.data Uint8Array back to Blob');
-        const blobType = data._blobType || 'application/octet-stream';
-        const uint8Array = new Uint8Array(data.data);
+        const blobType = asString(rawData._blobType, 'application/octet-stream');
+        const uint8Array = new Uint8Array(asNumberArray(rawData.data));
         const blob = new Blob([uint8Array], { type: blobType });
-        storageData.data = blob;
-        delete storageData._blobType;
+        mutableData.data = blob;
+        delete mutableData._blobType;
       }
       
       // Handle motionData (MotionStorageService)
-      if (Array.isArray(data.motionData)) {
+      if (Array.isArray(rawData.motionData)) {
         Logger.log('Background', 'Converting motionData Uint8Array back to Blob');
-        const blobType = data._motionBlobType || 'application/octet-stream';
-        const uint8Array = new Uint8Array(data.motionData);
+        const blobType = asString(rawData._motionBlobType, 'application/octet-stream');
+        const uint8Array = new Uint8Array(asNumberArray(rawData.motionData));
         const blob = new Blob([uint8Array], { type: blobType });
-        storageData.motionData = blob;
-        delete storageData._motionBlobType;
+        mutableData.motionData = blob;
+        delete mutableData._motionBlobType;
       }
       
       // Handle modelData (ModelStorageService)
-      if (Array.isArray(data.modelData)) {
+      if (Array.isArray(rawData.modelData)) {
         Logger.log('Background', 'Converting modelData Uint8Array back to Blob');
-        const blobType = data._modelBlobType || 'application/octet-stream';
-        const uint8Array = new Uint8Array(data.modelData);
+        const blobType = asString(rawData._modelBlobType, 'application/octet-stream');
+        const uint8Array = new Uint8Array(asNumberArray(rawData.modelData));
         const blob = new Blob([uint8Array], { type: blobType });
-        storageData.modelData = blob;
-        delete storageData._modelBlobType;
+        mutableData.modelData = blob;
+        delete mutableData._modelBlobType;
       }
     }
     
@@ -212,8 +362,8 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_LOAD, async (message) => {
-    const { fileId } = message.data;
-    const result = await storageManager.files.load(fileId);
+    const fileId = asString(message.data.fileId);
+    const result = (await storageManager.files.load(fileId)) as FileRecord | null;
     
     // Convert Blobs to Arrays for message serialization (structured clone limitation)
     if (result && typeof result === 'object') {
@@ -249,12 +399,12 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_EXISTS, async (message) => {
-    const { fileId } = message.data;
+    const fileId = asString(message.data.fileId);
     return await storageManager.files.exists(fileId);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILE_REMOVE, async (message) => {
-    const { fileId } = message.data;
+    const fileId = asString(message.data.fileId);
     return await storageManager.files.remove(fileId);
   });
 
@@ -263,12 +413,13 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_BY_CATEGORY, async (message) => {
-    const { category } = message.data;
+    const category = asString(message.data.category);
     const files = await storageManager.files.getByCategory(category);
     
     // Convert Blobs to Arrays for all files in the result
     if (files && typeof files === 'object') {
-      for (const [_fileId, fileData] of Object.entries(files)) {
+      for (const [_fileId, entry] of Object.entries(files)) {
+        const fileData = entry as FileRecord;
         if (fileData && typeof fileData === 'object') {
           // Handle data.data (general file storage)
           if (fileData.data instanceof Blob) {
@@ -301,7 +452,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_FILES_GET_METADATA_BY_CATEGORY, async (message) => {
-    const { category } = message.data;
+    const category = asString(message.data.category);
     return await storageManager.files.getMetadataByCategory(category);
   });
 
@@ -311,22 +462,24 @@ async function registerHandlers() {
 
   // Storage handlers - DATA namespace
   backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_SAVE, async (message) => {
-    const { key, value, category } = message.data;
+    const key = asString(message.data.key);
+    const value = message.data.value;
+    const category = asString(message.data.category);
     return await storageManager.data.save(key, value, category);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_LOAD, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.data.load(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_EXISTS, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.data.exists(key);
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_REMOVE, async (message) => {
-    const { key } = message.data;
+    const key = asString(message.data.key);
     return await storageManager.data.remove(key);
   });
 
@@ -335,7 +488,7 @@ async function registerHandlers() {
   });
 
   backgroundBridge.registerHandler(MessageTypes.STORAGE_DATA_GET_BY_CATEGORY, async (message) => {
-    const { category } = message.data;
+    const category = asString(message.data.category);
     return await storageManager.data.getByCategory(category);
   });
 
@@ -359,9 +512,9 @@ async function registerHandlers() {
       
       Logger.log('Background', `TAB_INIT: Auto-configuring services for tab ${tabId}...`);
       try {
-        const aiConfig = await storageManager.config.load('aiConfig', DefaultAIConfig);
-        const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
-        const sttConfig = await storageManager.config.load('sttConfig', DefaultSTTConfig);
+        const aiConfig = (await storageManager.config.load('aiConfig', DefaultAIConfig)) as typeof DefaultAIConfig;
+        const ttsConfig = (await storageManager.config.load('ttsConfig', DefaultTTSConfig)) as typeof DefaultTTSConfig;
+        const sttConfig = (await storageManager.config.load('sttConfig', DefaultSTTConfig)) as typeof DefaultSTTConfig;
         
         if (aiConfig.provider) {
           await aiService.configure(aiConfig, tabId);
@@ -369,7 +522,7 @@ async function registerHandlers() {
         }
         
         if (aiConfig.provider && aiConfig.aiFeatures?.translator?.enabled !== false) {
-          await translatorService.configure(aiConfig, tabId);
+          await translatorService.configure(toTranslatorConfigureInput(aiConfig as MessageData), tabId);
           Logger.log('Background', `TAB_INIT: Translator configured for tab ${tabId}`);
         }
         
@@ -428,7 +581,7 @@ async function registerHandlers() {
   // AI Service handlers
   backgroundBridge.registerHandler(MessageTypes.AI_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     Logger.log('Background', 'AI_CONFIGURE called for tab:', tabId);
     await aiService.configure(config, tabId);
     Logger.log('Background', 'AI_CONFIGURE complete for tab:', tabId);
@@ -444,15 +597,17 @@ async function registerHandlers() {
   backgroundBridge.registerHandler(MessageTypes.AI_SEND_MESSAGE, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
     
-    const { messages, options = {} } = message.data;
+    const messagesRaw = message.data.messages;
+    const options = asMessageData(message.data.options);
+    const messages = Array.isArray(messagesRaw) ? messagesRaw : [];
     
     // Check if streaming is requested (if message has streaming flag or isStreaming option)
-    const isStreamingRequest = message.streaming || options.streaming;
+    const isStreamingRequest = message.streaming || options.streaming === true;
     
     // Only provide streaming callback if actually needed
-    const streamCallback = isStreamingRequest ? (token) => {
+    const streamCallback = isStreamingRequest ? (token: string) => {
       // Send streaming token back to content script
-      chrome.tabs.sendMessage(sender.tab.id, {
+      chrome.tabs.sendMessage(requireSenderTabId(sender), {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token }
@@ -510,11 +665,11 @@ async function registerHandlers() {
       Logger.log('Background', 'Triggering download by creating session...');
       
       // Set up progress listener to relay progress to content script
-      const progressCallback = (progress) => {
+      const progressCallback = (progress: object) => {
         Logger.log('Background', 'Chrome AI Download progress:', progress);
         
         // Send progress update to content script
-        chrome.tabs.sendMessage(sender.tab.id, {
+        chrome.tabs.sendMessage(requireSenderTabId(sender), {
           type: MessageTypes.CHROME_AI_DOWNLOAD_PROGRESS,
           requestId: message.requestId,
           data: progress
@@ -533,7 +688,7 @@ async function registerHandlers() {
       Logger.error('Background', 'Failed to start download:', error);
       return { 
         success: false, 
-        message: error.message || 'Failed to start download. Please manually check chrome://components and click "Check for update" on "Optimization Guide On Device Model".' 
+        message: messageFromError(error instanceof Error ? error : String(error)) || 'Failed to start download. Please manually check chrome://components and click "Check for update" on "Optimization Guide On Device Model".' 
       };
     }
   });
@@ -541,7 +696,7 @@ async function registerHandlers() {
   // TTS Service handlers
   backgroundBridge.registerHandler(MessageTypes.TTS_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await ttsService.configure(config, tabId);
     return { configured: true };
   });
@@ -554,12 +709,12 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.TTS_GENERATE_SPEECH, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text } = message.data;
-    Logger.log('Background', 'TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text?.substring(0, 50));
+    const text = asString(message.data.text);
+    Logger.log('Background', 'TTS_GENERATE_SPEECH called for tab:', tabId, 'text:', text.substring(0, 50));
     
     // Get the configured provider for this tab
-    const tabState = ttsService.tabStates.get(tabId);
-    const provider = tabState?.provider;
+    const tabState = ttsService._getState(tabId);
+    const provider = tabState.provider;
     
     // For Kokoro provider, bypass TTSService and use offscreen directly
     if (provider === 'kokoro') {
@@ -572,7 +727,8 @@ async function registerHandlers() {
           requestId: `auto_check_${Date.now()}`
         });
         
-        if (!statusCheck.data.initialized) {
+        const statusData = asMessageData(statusCheck.data ?? null);
+        if (statusData.initialized !== true) {
           Logger.log('Background', 'Kokoro not initialized, auto-initializing...');
           
           const autoInitId = `auto_init_${Date.now()}`;
@@ -591,7 +747,8 @@ async function registerHandlers() {
             
             const initResult = await offscreenManager.sendToOffscreen(initMessage);
             
-            if (!initResult.data.initialized) {
+            const initData = asMessageData(initResult.data ?? null);
+            if (initData.initialized !== true) {
               throw new Error('Failed to auto-initialize Kokoro model');
             }
             
@@ -602,7 +759,7 @@ async function registerHandlers() {
         }
       } catch (initError) {
         Logger.error('Background', 'Kokoro auto-initialization failed:', initError);
-        throw new Error(`Kokoro initialization failed: ${initError.message}`);
+        throw new Error(`Kokoro initialization failed: ${messageFromError(initError instanceof Error ? initError : String(initError))}`);
       }
       
       // Forward to KOKORO_GENERATE handler
@@ -621,14 +778,15 @@ async function registerHandlers() {
         };
         
         const result = await offscreenManager.sendToOffscreen(kokoroMessage);
+        const resultData = asMessageData(result.data ?? null);
         
         // Convert ArrayBuffer to Array
-        if (result.data.audioBuffer instanceof ArrayBuffer) {
-          result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-          Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+        if (resultData.audioBuffer instanceof ArrayBuffer) {
+          resultData.audioBuffer = Array.from(new Uint8Array(resultData.audioBuffer));
+          Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', asNumber((resultData.audioBuffer as number[]).length));
         }
         
-        return { audioBuffer: result.data.audioBuffer, mimeType: 'audio/wav' };
+        return { audioBuffer: resultData.audioBuffer ?? null, mimeType: 'audio/wav' };
       } finally {
         offscreenManager.endLongRunningJob(genRequestId);
       }
@@ -689,7 +847,7 @@ async function registerHandlers() {
     
     // CRITICAL: Mark as long-running job BEFORE forwarding
     // Kokoro model download can take 1-2 minutes, needs keepalive
-    const requestId = message.requestId;
+    const requestId = message.requestId ?? `kokoro_init_${Date.now()}`;
     offscreenManager.startLongRunningJob(requestId);
     
     // Forward to offscreen for model initialization
@@ -700,11 +858,11 @@ async function registerHandlers() {
     };
     
     // Set up progress listener to relay progress from offscreen to content script
-    const progressListener = (offscreenResponse) => {
+    const progressListener = (offscreenResponse: { type?: string; data?: object }) => {
       // Only handle progress messages
       if (offscreenResponse.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
         // Relay progress to content script
-        chrome.tabs.sendMessage(sender.tab.id, {
+        chrome.tabs.sendMessage(requireSenderTabId(sender), {
           type: MessageTypes.KOKORO_DOWNLOAD_PROGRESS,
           data: offscreenResponse.data
         }).catch(err => Logger.error('Background', 'Failed to send Kokoro progress:', err));
@@ -725,7 +883,7 @@ async function registerHandlers() {
       
       // Load TTS config to get the configured voice for warmup
       const { DefaultTTSConfig } = await import('../../src/config/aiConfig');
-      const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+      const ttsConfig = (await storageManager.config.load('ttsConfig', DefaultTTSConfig)) as typeof DefaultTTSConfig;
       
       // Warm up the model with a test generation (ensures it's fully ready)
       Logger.log('Background', 'Warming up Kokoro model with test generation...');
@@ -758,20 +916,21 @@ async function registerHandlers() {
     Logger.log('Background', 'KOKORO_GENERATE called for tab:', tabId);
     
     // Mark as long-running job - generation can take 5-15 seconds for long text
-    const requestId = message.requestId;
+    const requestId = message.requestId ?? `kokoro_generate_${Date.now()}`;
     offscreenManager.startLongRunningJob(requestId);
     
     try {
       // Forward to offscreen for speech generation
       const result = await offscreenManager.sendToOffscreen(message);
+      const resultData = asMessageData(result.data ?? null);
       
       // Convert ArrayBuffer in result to Array for sending to main world
-      if (result.data.audioBuffer instanceof ArrayBuffer) {
-        result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
-        Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', result.data.audioBuffer.length);
+      if (resultData.audioBuffer instanceof ArrayBuffer) {
+        resultData.audioBuffer = Array.from(new Uint8Array(resultData.audioBuffer));
+        Logger.log('Background', 'Converted Kokoro audioBuffer to Array:', (resultData.audioBuffer as number[]).length);
       }
       
-      return result.data;
+      return resultData;
     } finally {
       offscreenManager.endLongRunningJob(requestId);
     }
@@ -816,7 +975,7 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.KOKORO_PING, async (message) => {
     const { DefaultTTSConfig } = await import('../../src/config/aiConfig');
-    const ttsConfig = await storageManager.config.load('ttsConfig', DefaultTTSConfig);
+    const ttsConfig = (await storageManager.config.load('ttsConfig', DefaultTTSConfig)) as typeof DefaultTTSConfig;
     
     // Add voice and speed to the message data
     const pingMessage = {
@@ -836,14 +995,15 @@ async function registerHandlers() {
     Logger.log('Background', 'TTS_PROCESS_AUDIO_WITH_LIPSYNC');
     
     // Mark as long-running job - audio processing + VMD generation can take 10-30 seconds
-    const requestId = message.requestId;
+    const requestId = message.requestId ?? `tts_lipsync_${Date.now()}`;
     offscreenManager.startLongRunningJob(requestId);
     
     try {
       // DON'T convert to ArrayBuffer! Keep as Array for offscreen message passing
       // Chrome's sendMessage transfers ArrayBuffers but copies Arrays
       // Offscreen will convert Array back to ArrayBuffer when it receives it
-      const { audioBuffer, mimeType } = message.data;
+      const audioBuffer = message.data.audioBuffer;
+      const mimeType = asString(message.data.mimeType, 'audio/wav');
       
       if (!Array.isArray(audioBuffer)) {
         throw new Error('audioBuffer must be an Array, got: ' + typeof audioBuffer);
@@ -861,18 +1021,19 @@ async function registerHandlers() {
       };
       
       const result = await offscreenManager.sendToOffscreen(offscreenMessage);
+      const resultData = asMessageData(result.data ?? null);
       
       // Convert ArrayBuffer in result back to Array for sending to main world
-      if (result.data.audioBuffer instanceof ArrayBuffer) {
-        result.data.audioBuffer = Array.from(new Uint8Array(result.data.audioBuffer));
+      if (resultData.audioBuffer instanceof ArrayBuffer) {
+        resultData.audioBuffer = Array.from(new Uint8Array(resultData.audioBuffer));
         Logger.log('Background', 'Converted result audioBuffer to Array');
       }
-      if (result.data.bvmdData instanceof ArrayBuffer) {
-        result.data.bvmdData = Array.from(new Uint8Array(result.data.bvmdData));
+      if (resultData.bvmdData instanceof ArrayBuffer) {
+        resultData.bvmdData = Array.from(new Uint8Array(resultData.bvmdData));
         Logger.log('Background', 'Converted result bvmdData to Array');
       }
       
-      return result.data; // Contains { audioBuffer: Array, bvmdData: Array|null }
+      return resultData; // Contains { audioBuffer: Array, bvmdData: Array|null }
     } finally {
       offscreenManager.endLongRunningJob(requestId);
     }
@@ -881,7 +1042,7 @@ async function registerHandlers() {
   // STT Service handlers
   backgroundBridge.registerHandler(MessageTypes.STT_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await sttService.configure(config, tabId);
     return { configured: true };
   });
@@ -894,7 +1055,8 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.STT_TRANSCRIBE_AUDIO, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { audioBuffer, mimeType } = message.data;
+    const audioBuffer = message.data.audioBuffer;
+    const mimeType = asString(message.data.mimeType, 'audio/wav');
     
     // Convert Array back to ArrayBuffer (received as Array from content script)
     if (!Array.isArray(audioBuffer)) {
@@ -911,8 +1073,8 @@ async function registerHandlers() {
   // Translator Service handlers
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
-    await translatorService.configure(config, tabId);
+    const config = asMessageData(message.data.config);
+    await translatorService.configure(toTranslatorConfigureInput(config), tabId);
     return { configured: true };
   });
 
@@ -924,14 +1086,17 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_CHECK_AVAILABILITY, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { sourceLanguage, targetLanguage } = message.data;
+    const sourceLanguage = asString(message.data.sourceLanguage);
+    const targetLanguage = asString(message.data.targetLanguage);
     const availability = await translatorService.checkAvailability(sourceLanguage, targetLanguage, tabId);
     return { availability };
   });
 
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, sourceLanguage, targetLanguage } = message.data;
+    const text = asString(message.data.text);
+    const sourceLanguage = asString(message.data.sourceLanguage);
+    const targetLanguage = asString(message.data.targetLanguage);
     Logger.log('Background', `TRANSLATOR_TRANSLATE (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     const translatedText = await translatorService.translate(text, sourceLanguage, targetLanguage, tabId);
     return { translatedText };
@@ -939,7 +1104,9 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.TRANSLATOR_TRANSLATE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, sourceLanguage, targetLanguage } = message.data;
+    const text = asString(message.data.text);
+    const sourceLanguage = asString(message.data.sourceLanguage);
+    const targetLanguage = asString(message.data.targetLanguage);
     Logger.log('Background', `TRANSLATOR_TRANSLATE_STREAMING (${sourceLanguage}->${targetLanguage}):`, text.substring(0, 50));
     
     let fullTranslation = '';
@@ -947,7 +1114,7 @@ async function registerHandlers() {
     // Stream translation chunks back to content script
     for await (const chunk of translatorService.translateStreaming(text, sourceLanguage, targetLanguage, tabId)) {
       // Send streaming token back to content script
-      chrome.tabs.sendMessage(sender.tab.id, {
+      chrome.tabs.sendMessage(requireSenderTabId(sender), {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
@@ -974,7 +1141,7 @@ async function registerHandlers() {
   // Language Detector Service handlers
   backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await languageDetectorService.configure(config, tabId);
     return { configured: true };
   });
@@ -993,7 +1160,7 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.LANGUAGE_DETECTOR_DETECT, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text } = message.data;
+    const text = asString(message.data.text);
     Logger.log('Background', 'LANGUAGE_DETECTOR_DETECT:', text.substring(0, 50));
     const results = await languageDetectorService.detect(text, tabId);
     return { results };
@@ -1008,7 +1175,7 @@ async function registerHandlers() {
   // Summarizer Service handlers
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await summarizerService.configure(config, tabId);
     return { configured: true };
   });
@@ -1027,7 +1194,8 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, options } = message.data;
+    const text = asString(message.data.text);
+    const options = asMessageData(message.data.options);
     Logger.log('Background', `SUMMARIZER_SUMMARIZE (${options?.type || 'tldr'}):`, text.substring(0, 50));
     const summary = await summarizerService.summarize(text, options, tabId);
     return { summary };
@@ -1035,7 +1203,8 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.SUMMARIZER_SUMMARIZE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, options } = message.data;
+    const text = asString(message.data.text);
+    const options = asMessageData(message.data.options);
     Logger.log('Background', `SUMMARIZER_SUMMARIZE_STREAMING (${options?.type || 'tldr'}):`, text.substring(0, 50));
     
     let fullSummary = '';
@@ -1043,7 +1212,7 @@ async function registerHandlers() {
     // Stream summary chunks back to content script
     for await (const chunk of summarizerService.summarizeStreaming(text, options, tabId)) {
       // Send streaming token back to content script
-      chrome.tabs.sendMessage(sender.tab.id, {
+      chrome.tabs.sendMessage(requireSenderTabId(sender), {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
@@ -1070,7 +1239,7 @@ async function registerHandlers() {
   // Rewriter Service handlers
   backgroundBridge.registerHandler(MessageTypes.REWRITER_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await rewriterService.configure(config, tabId);
     return { configured: true };
   });
@@ -1089,7 +1258,8 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, options } = message.data;
+    const text = asString(message.data.text);
+    const options = asMessageData(message.data.options);
     Logger.log('Background', `REWRITER_REWRITE (${options?.tone || 'as-is'}):`, text.substring(0, 50));
     const rewrittenText = await rewriterService.rewrite(text, options, tabId);
     return { rewrittenText };
@@ -1097,7 +1267,8 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.REWRITER_REWRITE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { text, options } = message.data;
+    const text = asString(message.data.text);
+    const options = asMessageData(message.data.options);
     Logger.log('Background', `REWRITER_REWRITE_STREAMING (${options?.tone || 'as-is'}):`, text.substring(0, 50));
     
     let fullRewrite = '';
@@ -1105,7 +1276,7 @@ async function registerHandlers() {
     // Stream rewrite chunks back to content script
     for await (const chunk of rewriterService.rewriteStreaming(text, options, tabId)) {
       // Send streaming token back to content script
-      chrome.tabs.sendMessage(sender.tab.id, {
+      chrome.tabs.sendMessage(requireSenderTabId(sender), {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
@@ -1132,7 +1303,7 @@ async function registerHandlers() {
   // Writer Service handlers
   backgroundBridge.registerHandler(MessageTypes.WRITER_CONFIGURE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { config } = message.data;
+    const config = asMessageData(message.data.config);
     await writerService.configure(config, tabId);
     return { configured: true };
   });
@@ -1151,23 +1322,25 @@ async function registerHandlers() {
 
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE, async (message, _sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { prompt, options } = message.data;
-    Logger.log('Background', `WRITER_WRITE (${options?.tone || 'neutral'}):`, prompt?.substring(0, 50) || 'no prompt');
+    const prompt = asString(message.data.prompt);
+    const options = asMessageData(message.data.options);
+    Logger.log('Background', `WRITER_WRITE (${options?.tone || 'neutral'}):`, prompt.substring(0, 50) || 'no prompt');
     const writtenText = await writerService.write(prompt, options, tabId);
     return { writtenText };
   });
 
   backgroundBridge.registerHandler(MessageTypes.WRITER_WRITE_STREAMING, async (message, sender, tabId) => {
     if (!tabId) throw new Error('Tab ID required');
-    const { prompt, options } = message.data;
-    Logger.log('Background', `WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, prompt?.substring(0, 50) || 'no prompt');
+    const prompt = asString(message.data.prompt);
+    const options = asMessageData(message.data.options);
+    Logger.log('Background', `WRITER_WRITE_STREAMING (${options?.tone || 'neutral'}):`, prompt.substring(0, 50) || 'no prompt');
     
     let fullWritten = '';
     
     // Stream write chunks back to content script
     for await (const chunk of writerService.writeStreaming(prompt, options, tabId)) {
       // Send streaming token back to content script
-      chrome.tabs.sendMessage(sender.tab.id, {
+      chrome.tabs.sendMessage(requireSenderTabId(sender), {
         type: MessageTypes.AI_STREAM_TOKEN,
         requestId: message.requestId,
         data: { token: chunk }
@@ -1216,7 +1389,7 @@ async function registerHandlers() {
     Logger.log('Background', 'OFFSCREEN_VMD_GENERATE');
     
     // Mark as long-running job - VMD generation can take 10-20 seconds
-    const requestId = message.requestId;
+    const requestId = message.requestId ?? `offscreen_vmd_${Date.now()}`;
     offscreenManager.startLongRunningJob(requestId);
     
     try {
@@ -1254,6 +1427,10 @@ chrome.action.onClicked.addListener(async (tab) => {
   Logger.log('Background', 'Action clicked for tab:', tab.id);
   
   try {
+    if (typeof tab.id !== 'number') {
+      throw new Error('Missing tab id for action click');
+    }
+
     // Send toggle message to content script (which is always loaded via manifest)
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: 'TOGGLE_ASSISTANT'
@@ -1275,7 +1452,7 @@ setInterval(() => {
 /**
  * Keep service worker alive during active sessions
  */
-let keepAliveInterval;
+let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 function startKeepAlive() {
   if (!keepAliveInterval) {
     keepAliveInterval = setInterval(() => {

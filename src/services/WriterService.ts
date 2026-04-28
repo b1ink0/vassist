@@ -7,6 +7,7 @@
 
 import OpenAI from 'openai';
 import Logger from './LoggerService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type WriterProvider = 'chrome-ai' | 'openai' | 'ollama';
 type WriterAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
@@ -34,7 +35,7 @@ class WriterService {
   private readonly devState: WriterState;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     this.tabStates = new Map();
     this.devState = {
       writerSessions: new Map(),

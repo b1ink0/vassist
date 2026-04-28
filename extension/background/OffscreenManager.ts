@@ -7,7 +7,25 @@
 /* global chrome */
 
 import Logger from '../../src/services/LoggerService';
+
+type OffscreenValue = string | number | boolean | null | undefined | object;
+type OffscreenMessage = Record<string, OffscreenValue | Record<string, OffscreenValue> | null | undefined>;
+
+interface OffscreenResponse {
+  type?: string;
+  requestId?: string;
+  data?: Record<string, OffscreenValue> | null;
+  [key: string]: OffscreenValue | Record<string, OffscreenValue> | null | undefined;
+}
+
 export class OffscreenManager {
+  isOffscreenOpen: boolean;
+  activeJobs: number;
+  closeTimer: ReturnType<typeof setTimeout> | null;
+  closeDelay: number;
+  keepaliveInterval: ReturnType<typeof setInterval> | null;
+  longRunningJobs: Set<string>;
+
   constructor() {
     this.isOffscreenOpen = false;
     this.activeJobs = 0;
@@ -22,7 +40,7 @@ export class OffscreenManager {
   /**
    * Ensure offscreen document exists
    */
-  async ensureOffscreen() {
+  async ensureOffscreen(): Promise<void> {
     if (this.isOffscreenOpen) {
       this.resetCloseTimer();
       return;
@@ -46,8 +64,9 @@ export class OffscreenManager {
       
       Logger.log('OffscreenManager', 'Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER');
     } catch (error) {
+      const errorText = error instanceof Error ? error.message : String(error);
       // Document might already exist
-      if (error.message.includes('Only a single offscreen')) {
+      if (errorText.includes('Only a single offscreen')) {
         Logger.log('OffscreenManager', 'Offscreen already exists');
         this.isOffscreenOpen = true;
         this.resetCloseTimer();
@@ -61,7 +80,7 @@ export class OffscreenManager {
   /**
    * Close offscreen document
    */
-  async closeOffscreen() {
+  async closeOffscreen(): Promise<void> {
     // Don't close if there are active jobs!
     if (this.activeJobs > 0) {
       Logger.log('OffscreenManager', 'Skipping close - ${this.activeJobs} active jobs');
@@ -77,8 +96,9 @@ export class OffscreenManager {
       this.isOffscreenOpen = false;
       Logger.log('OffscreenManager', 'Offscreen document closed');
     } catch (error) {
+      const errorText = error instanceof Error ? error.message : String(error);
       // If no current document, it's already closed - not an error
-      if (error.message.includes('No current offscreen')) {
+      if (errorText.includes('No current offscreen')) {
         Logger.log('OffscreenManager', 'Offscreen already closed');
         this.isOffscreenOpen = false;
       } else {
@@ -90,7 +110,7 @@ export class OffscreenManager {
   /**
    * Send message to offscreen document
    */
-  async sendToOffscreen(message) {
+  async sendToOffscreen(message: object): Promise<OffscreenResponse> {
     // Don't use startJob/endJob here - let the caller manage job lifecycle
     // This is because sendToOffscreen returns immediately, but the WORK in offscreen
     // might still be ongoing (e.g., Kokoro downloading model for 2 minutes)
@@ -105,13 +125,14 @@ export class OffscreenManager {
         target: 'offscreen'
       };
       
-      const response = await chrome.runtime.sendMessage(offscreenMessage);
+      const response = await chrome.runtime.sendMessage(offscreenMessage) as OffscreenResponse;
       return response;
     } catch (error) {
       Logger.error('OffscreenManager', 'Failed to send message:', error);
+      const errorText = error instanceof Error ? error.message : String(error);
       
       // If receiving end doesn't exist, offscreen was closed
-      if (error.message.includes('Receiving end does not exist')) {
+      if (errorText.includes('Receiving end does not exist')) {
         this.isOffscreenOpen = false;
         await this.ensureOffscreen();
         
@@ -121,7 +142,7 @@ export class OffscreenManager {
             ...message,
             target: 'offscreen'
           };
-          const response = await chrome.runtime.sendMessage(offscreenMessage);
+          const response = await chrome.runtime.sendMessage(offscreenMessage) as OffscreenResponse;
           return response;
         } catch (retryError) {
           Logger.error('OffscreenManager', 'Retry failed:', retryError);
@@ -136,7 +157,7 @@ export class OffscreenManager {
   /**
    * Start a job (prevents closing)
    */
-  startJob() {
+  startJob(): void {
     this.activeJobs++;
     Logger.log('OffscreenManager', 'Job started, active jobs: ${this.activeJobs}');
     this.startKeepalive();
@@ -146,7 +167,7 @@ export class OffscreenManager {
   /**
    * End a job (allows closing when all done)
    */
-  endJob() {
+  endJob(): void {
     this.activeJobs = Math.max(0, this.activeJobs - 1);
     Logger.log('OffscreenManager', 'Job ended, active jobs: ${this.activeJobs}');
     
@@ -162,7 +183,7 @@ export class OffscreenManager {
    * Use this for operations that take >30 seconds (e.g., model downloads)
    * @param {string} requestId - Unique request ID
    */
-  startLongRunningJob(requestId) {
+  startLongRunningJob(requestId: string): void {
     this.longRunningJobs.add(requestId);
     this.startJob();
     Logger.log('OffscreenManager', 'Long-running job started: ${requestId}');
@@ -172,7 +193,7 @@ export class OffscreenManager {
    * End long-running job tracking
    * @param {string} requestId - Unique request ID
    */
-  endLongRunningJob(requestId) {
+  endLongRunningJob(requestId: string): void {
     if (this.longRunningJobs.has(requestId)) {
       this.longRunningJobs.delete(requestId);
       this.endJob();
@@ -185,7 +206,7 @@ export class OffscreenManager {
    * Chrome closes offscreen documents after 30 seconds of no activity
    * We send a ping every 20 seconds to keep it alive during long operations
    */
-  startKeepalive() {
+  startKeepalive(): void {
     if (this.keepaliveInterval) return; // Already running
 
     Logger.log('OffscreenManager', 'Starting keepalive pings (every 20s)');
@@ -203,7 +224,7 @@ export class OffscreenManager {
   /**
    * Stop keepalive interval
    */
-  stopKeepalive() {
+  stopKeepalive(): void {
     if (this.keepaliveInterval) {
       Logger.log('OffscreenManager', 'Stopping keepalive pings');
       clearInterval(this.keepaliveInterval);
@@ -214,7 +235,7 @@ export class OffscreenManager {
   /**
    * Reset the close timer
    */
-  resetCloseTimer() {
+  resetCloseTimer(): void {
     // ALWAYS clear any existing timer first
     if (this.closeTimer) {
       clearTimeout(this.closeTimer);
@@ -232,7 +253,7 @@ export class OffscreenManager {
   /**
    * Keep offscreen alive (call during active sessions)
    */
-  keepAlive() {
+  keepAlive(): void {
     this.resetCloseTimer();
   }
 }

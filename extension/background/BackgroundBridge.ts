@@ -9,7 +9,47 @@
 import { MessageTypes } from '../shared/MessageTypes';
 import Logger from '../../src/services/LoggerService';
 
+type BridgeValue = string | number | boolean | null | undefined | object;
+type BridgeData = Record<string, BridgeValue>;
+
+interface BridgeMessage {
+  type: string;
+  requestId?: string;
+  tabId?: number;
+  target?: string;
+  streaming?: boolean;
+  data: BridgeData;
+}
+
+interface BridgeResponse {
+  type: string;
+  requestId?: string;
+  data?: BridgeData | BridgeValue | null;
+  error?: string;
+}
+
+interface TabState {
+  chatState: {
+    messages: BridgeData[];
+    isProcessing: boolean;
+  };
+  abortControllers: Map<string, AbortController>;
+  lastActivity: number;
+}
+
+type HandlerResult = BridgeData | BridgeValue | null | void;
+type MessageHandler = (
+  message: BridgeMessage,
+  sender: chrome.runtime.MessageSender,
+  tabId: number | undefined,
+) => Promise<HandlerResult> | HandlerResult;
+
 export class BackgroundBridge {
+  name: string;
+  tabStates: Map<number, TabState>;
+  messageHandlers: Map<string, MessageHandler>;
+  offscreenReady: boolean;
+
   constructor() {
     this.name = 'BackgroundBridge';
     this.tabStates = new Map(); // tabId -> { chatState, abortControllers, etc. }
@@ -23,9 +63,9 @@ export class BackgroundBridge {
   /**
    * Set up message listeners
    */
-  setupListeners() {
+  setupListeners(): void {
     // Listen for messages from content scripts and offscreen
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((message: BridgeMessage, sender: chrome.runtime.MessageSender, sendResponse) => {
       // CRITICAL: Only handle messages targeted to background or without target
       // Ignore messages for offscreen or other contexts
       if (message.target && message.target !== 'background') {
@@ -42,12 +82,13 @@ export class BackgroundBridge {
       
       this.handleMessage(message, sender)
         .then(sendResponse)
-        .catch(error => {
+        .catch((error) => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
           Logger.error('BackgroundBridge', 'Message handling error:', error);
           sendResponse({
             type: MessageTypes.ERROR,
             requestId: message.requestId,
-            error: error.message
+            error: errorMessage
           });
         });
       
@@ -68,7 +109,7 @@ export class BackgroundBridge {
    * @param {string} messageType - Message type to handle
    * @param {Function} handler - Handler function (message, sender) => Promise<data>
    */
-  registerHandler(messageType, handler) {
+  registerHandler(messageType: string, handler: MessageHandler): void {
     this.messageHandlers.set(messageType, handler);
     Logger.log('BackgroundBridge', 'Registered handler for ${messageType}');
   }
@@ -79,7 +120,7 @@ export class BackgroundBridge {
    * @param {Object} sender - Message sender info
    * @returns {Promise<Object>} Response
    */
-  async handleMessage(message, sender) {
+  async handleMessage(message: BridgeMessage, sender: chrome.runtime.MessageSender): Promise<BridgeResponse> {
     const { type, requestId, tabId: messageTabId } = message;
     const tabId = messageTabId || sender.tab?.id;
 
@@ -100,10 +141,17 @@ export class BackgroundBridge {
     try {
       const data = await handler(message, sender, tabId);
       
+      if (data === undefined) {
+        return {
+          type: MessageTypes.SUCCESS,
+          ...(requestId ? { requestId } : {}),
+        };
+      }
+
       return {
         type: MessageTypes.SUCCESS,
-        requestId,
-        data
+        ...(requestId ? { requestId } : {}),
+        data,
       };
     } catch (error) {
       Logger.error('BackgroundBridge', 'Handler error for ${type}:', error);
@@ -116,7 +164,7 @@ export class BackgroundBridge {
    * @param {number} tabId - Target tab ID
    * @param {Object} message - Message to send
    */
-  async sendToTab(tabId, message) {
+  async sendToTab(tabId: number, message: BridgeMessage): Promise<void> {
     try {
       await chrome.tabs.sendMessage(tabId, message);
     } catch (error) {
@@ -129,7 +177,7 @@ export class BackgroundBridge {
    * @param {Object} message - Message to send
    * @returns {Promise<Object>} Response
    */
-  async sendToOffscreen(message) {
+  async sendToOffscreen(message: BridgeMessage): Promise<BridgeResponse> {
     try {
       const response = await chrome.runtime.sendMessage(message);
       return response;
@@ -143,7 +191,7 @@ export class BackgroundBridge {
    * Initialize tab state
    * @param {number} tabId - Tab ID
    */
-  initializeTab(tabId) {
+  initializeTab(tabId: number): void {
     Logger.log('BackgroundBridge', 'Initializing tab ${tabId}');
     
     this.tabStates.set(tabId, {
@@ -161,7 +209,7 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    * @returns {Object} Tab state
    */
-  getTabState(tabId) {
+  getTabState(tabId: number): TabState | undefined {
     return this.tabStates.get(tabId);
   }
 
@@ -170,7 +218,7 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    * @param {Object} updates - State updates
    */
-  updateTabState(tabId, updates) {
+  updateTabState(tabId: number, updates: Partial<TabState>): void {
     const state = this.tabStates.get(tabId);
     if (state) {
       Object.assign(state, updates);
@@ -182,7 +230,7 @@ export class BackgroundBridge {
    * Clean up tab state when tab closes
    * @param {number} tabId - Tab ID
    */
-  cleanupTab(tabId) {
+  cleanupTab(tabId: number): void {
     Logger.log('BackgroundBridge', 'Cleaning up tab ${tabId}');
     
     const state = this.tabStates.get(tabId);
@@ -200,14 +248,14 @@ export class BackgroundBridge {
    * Get all active tab IDs
    * @returns {number[]} Array of tab IDs
    */
-  getActiveTabs() {
+  getActiveTabs(): number[] {
     return Array.from(this.tabStates.keys());
   }
 
   /**
    * Clean up inactive tabs (no activity for 1 hour)
    */
-  cleanupInactiveTabs() {
+  cleanupInactiveTabs(): void {
     const oneHour = 60 * 60 * 1000;
     const now = Date.now();
     

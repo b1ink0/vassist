@@ -7,6 +7,7 @@
 
 import OpenAI from 'openai';
 import Logger from './LoggerService';
+import { isExtension } from '../utils/PlatformUtils';
 
 type DetectorProvider = 'chrome-ai' | 'openai' | 'ollama';
 type DetectorAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
@@ -34,7 +35,7 @@ class LanguageDetectorService {
   private readonly devState: DetectorState;
 
   constructor() {
-    this.isExtensionMode = __EXTENSION_MODE__;
+    this.isExtensionMode = isExtension;
     this.tabStates = new Map();
     this.devState = {
       detectorSession: null,
