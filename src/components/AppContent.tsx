@@ -13,6 +13,20 @@ import { useApp } from '../contexts/AppContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useVisibilityUnmount } from '../hooks/useVisibilityUnmount';
 import Logger from '../services/LoggerService';
+import type { PositionManagerLike, SceneWithMetadata } from '../babylon/types';
+
+interface AppContentProps {
+  mode?: string;
+  requireSetupOnChatClick?: boolean;
+  onRequireSetup?: () => void;
+  forcePortraitMode?: boolean;
+}
+
+interface AssistantReadyPayload {
+  animationManager: { getCurrentState: () => string };
+  positionManager: (PositionManagerLike & { applyPreset: (preset: string, options?: { modelSizePx?: { width: number; height: number } }) => void }) | null;
+  scene: SceneWithMetadata;
+}
 
 /**
  * Main application content component shared between development and extension modes.
@@ -24,7 +38,7 @@ import Logger from '../services/LoggerService';
  * @param {boolean} props.forcePortraitMode - Force portrait mode for runtime preview
  * @returns {JSX.Element}
  */
-function AppContent({ mode = 'development', requireSetupOnChatClick = false, onRequireSetup, forcePortraitMode = false }) {
+function AppContent({ mode = 'development', requireSetupOnChatClick = false, onRequireSetup, forcePortraitMode = false }: AppContentProps) {
   const [currentState, setCurrentState] = useState('IDLE');
   
   const {
@@ -39,6 +53,7 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
   } = useApp();
 
   const { kokoroStatus, ttsConfig } = useConfig();
+  const chatControllerProps = onRequireSetup ? { onRequireSetup } : {};
   
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
   
@@ -55,7 +70,7 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
    * @param {Object} params.positionManager - Position manager instance
    * @param {Object} params.scene - Babylon.js scene instance
    */
-  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
+  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: AssistantReadyPayload) => {
     Logger.log('AppContent ${mode}', 'VirtualAssistant ready!');
     setCurrentState(animationManager.getCurrentState());
     
@@ -101,9 +116,9 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
           <ControlPanel
             isAssistantReady={isAssistantReady}
             currentState={currentState}
-            assistantRef={assistantRef}
+            assistantRef={assistantRef as any}
             sceneRef={sceneRef}
-            positionManagerRef={positionManagerRef}
+            positionManagerRef={positionManagerRef as any}
             onStateChange={setCurrentState}
           />
 
@@ -111,7 +126,7 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
             <ChatController
               modelDisabled={!enableModelLoading}
               requireSetupOnChatClick={requireSetupOnChatClick}
-              onRequireSetup={onRequireSetup}
+              {...chatControllerProps}
             />
           </div>
           

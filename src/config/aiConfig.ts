@@ -300,6 +300,7 @@ export const DefaultAIConfig = {
   'desktop-local': {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: 'qwen3:0.6b', // Default model name
+    customModelsPath: null,
     shareOnNetwork: false,
     serverPort: 11438,
     backend: 'auto',
@@ -392,6 +393,7 @@ export const DefaultTTSConfig = {
     endpoint: ANDROID_LOCAL_SERVER.baseUrl,
     model: 'vits-local',
     voice: 'default',
+    speakerId: 0,
     speed: 1.0,
   },
   

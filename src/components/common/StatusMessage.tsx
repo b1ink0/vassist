@@ -13,6 +13,24 @@
 import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
 
+type StatusType = 'success' | 'warning' | 'error' | 'info';
+
+interface ParsedMessage {
+  type: StatusType;
+  text: string;
+  icon: string | null;
+  bgColor: string;
+  borderColor: string;
+  textColor: string;
+  iconColor?: string;
+}
+
+interface StatusMessageProps {
+  message?: string;
+  className?: string;
+  isLightBackground?: boolean;
+}
+
 /**
  * Status message component with prefix parsing.
  * 
@@ -23,7 +41,7 @@ import { cn } from '../../utils/cn';
  * @param {boolean} props.isLightBackground - Whether background is light
  * @returns {JSX.Element|null} Status message component
  */
-const StatusMessage = ({ message, className = '', isLightBackground = false }) => {
+const StatusMessage = ({ message, className = '', isLightBackground = false }: StatusMessageProps) => {
   if (!message) return null;
 
   /**
@@ -32,7 +50,7 @@ const StatusMessage = ({ message, className = '', isLightBackground = false }) =
    * @param {string} msg - Message to parse
    * @returns {Object} Parsed message config
    */
-  const parseMessage = (msg) => {
+  const parseMessage = (msg: string): ParsedMessage => {
     const prefixMatch = msg.match(/^(success|warning|error):\s*(.+)$/i);
     
     if (!prefixMatch) {
@@ -46,10 +64,10 @@ const StatusMessage = ({ message, className = '', isLightBackground = false }) =
       };
     }
 
-    const [, type, text] = prefixMatch;
-    const lowerType = type.toLowerCase();
+    const [, rawType, text = msg] = prefixMatch;
+    const normalizedType = (rawType ?? '').toLowerCase();
 
-    const config = {
+    const config: Record<'success' | 'warning' | 'error', Omit<ParsedMessage, 'type' | 'text'>> = {
       success: {
         icon: 'check',
         bgColor: 'bg-green-500/10',
@@ -73,10 +91,21 @@ const StatusMessage = ({ message, className = '', isLightBackground = false }) =
       },
     };
 
+    if (normalizedType !== 'success' && normalizedType !== 'warning' && normalizedType !== 'error') {
+      return {
+        type: 'info',
+        text,
+        icon: null,
+        bgColor: 'bg-white/5',
+        borderColor: 'border-white/10',
+        textColor: isLightBackground ? 'text-gray-700' : 'text-white/90',
+      };
+    }
+
     return {
-      type: lowerType,
+      type: normalizedType,
       text,
-      ...config[lowerType],
+      ...config[normalizedType],
     };
   };
 

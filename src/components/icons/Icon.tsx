@@ -4,6 +4,18 @@ import { getIconColor } from './iconColors';
 import { useApp } from '../../contexts/AppContext';
 import Logger from '../../services/LoggerService';
 
+type IconName = keyof typeof iconMap;
+type IconContext = 'toolbar' | 'chat' | 'general';
+
+interface IconProps {
+  name: string;
+  size?: number;
+  className?: string;
+  context?: IconContext;
+  style?: React.CSSProperties;
+  [key: string]: unknown;
+}
+
 /**
  * Universal Icon Component (Heroicons)
  * 
@@ -25,17 +37,17 @@ const Icon = ({
   context = 'general',
   style = {},
   ...props 
-}) => {
+}: IconProps) => {
   const { uiConfig } = useApp();
-  const IconComponent = iconMap[name];
+  const IconComponent = iconMap[name as IconName];
 
   if (!IconComponent) {
     Logger.warn('other', `Icon "${name}" not found in iconMap`);
     return null;
   }
 
-  const enableColored = uiConfig?.enableColoredIcons || false;
-  const toolbarOnly = uiConfig?.enableColoredIconsToolbarOnly || false;
+  const enableColored = Boolean(uiConfig?.enableColoredIcons);
+  const toolbarOnly = Boolean(uiConfig?.enableColoredIconsToolbarOnly);
   
   const shouldUseColor = enableColored && (!toolbarOnly || context === 'toolbar');
   

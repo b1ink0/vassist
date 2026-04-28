@@ -10,7 +10,7 @@ import App from '../src/App'
 const urlParams = new URLSearchParams(window.location.search);
 const isWallpaperMode = urlParams.get('mode') === 'wallpaper';
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App mode="android" isWallpaperMode={isWallpaperMode} />
   </StrictMode>

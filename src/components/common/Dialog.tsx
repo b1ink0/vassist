@@ -3,9 +3,35 @@
  * Handles delete confirmations (chat, model, motion) and edit operations.
  */
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui';
+
+type DialogType = 'delete' | 'edit' | 'confirm' | 'input';
+
+interface DialogProps {
+  type?: DialogType;
+  title: string;
+  message?: string;
+  itemId?: string;
+  initialValue?: string;
+  inputPlaceholder?: string;
+  inputMaxLength?: number;
+  isLightBackground?: boolean;
+  animationClass?: string;
+  confirmLabel?: string;
+  confirmStyle?: 'primary' | 'error';
+  cancelLabel?: string;
+  onConfirm: (itemId?: string, value?: string) => Promise<void> | void;
+  onCancel: () => void;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An error occurred';
+};
 
 /**
  * Unified dialog component for various modal interactions.
@@ -43,7 +69,7 @@ const Dialog = ({
   cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
-}) => {
+}: DialogProps) => {
   const [inputValue, setInputValue] = useState(initialValue);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -66,8 +92,8 @@ const Dialog = ({
         await onConfirm(itemId);
       }
       setIsProcessing(false);
-    } catch (error) {
-      setErrorMessage(error.message || 'An error occurred');
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error));
       setIsProcessing(false);
     }
   };
@@ -75,7 +101,7 @@ const Dialog = ({
   /**
    * Handles backdrop click.
    */
-  const handleBackdropClick = (e) => {
+  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (!isProcessing) {
       onCancel();
@@ -85,7 +111,7 @@ const Dialog = ({
   /**
    * Handles dialog content click (prevents backdrop close).
    */
-  const handleDialogClick = (e) => {
+  const handleDialogClick = (e: MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
   };
 
@@ -130,7 +156,7 @@ const Dialog = ({
             maxLength={inputMaxLength}
             autoFocus
             disabled={isProcessing}
-            onKeyDown={(e) => {
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
               if (e.key === 'Enter') handleConfirm();
               if (e.key === 'Escape') onCancel();
             }}

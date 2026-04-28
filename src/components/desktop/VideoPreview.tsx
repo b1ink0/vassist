@@ -3,11 +3,28 @@
  * Works with both camera and screen share
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import Logger from '../../services/LoggerService';
 import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
 import { isAndroid } from '../../utils/PlatformUtils';
+
+interface VideoDevice {
+  deviceId: string;
+}
+
+interface VideoServiceLike {
+  subscribe: (callback: (state: { isActive: boolean }) => void) => (() => void) | void;
+  getStream: () => MediaStream | null;
+  getDevices?: () => VideoDevice[];
+  getSelectedDeviceId?: () => string | null;
+  setSelectedDevice?: (deviceId: string) => Promise<void>;
+}
+
+interface VideoPreviewProps {
+  service: VideoServiceLike;
+  type?: 'camera' | 'screen';
+}
 
 /**
  * Draggable video preview component
@@ -17,9 +34,9 @@ import { isAndroid } from '../../utils/PlatformUtils';
  * @param {Object} props.service - Video service (CameraService or ScreenShareService)
  * @param {string} props.type - Type of preview ('camera' or 'screen')
  */
-const VideoPreview = ({ service, type = 'camera' }) => {
+const VideoPreview = ({ service, type = 'camera' }: VideoPreviewProps) => {
   const [isActive, setIsActive] = useState(false);
-  const [stream, setStream] = useState(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   
   // Different sizes for camera vs screen share
   const getInitialDimensions = () => {
@@ -48,8 +65,8 @@ const VideoPreview = ({ service, type = 'camera' }) => {
   const [dimensions, setDimensions] = useState(initialDims);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartElementPos = useRef({ x: 0, y: 0 });
-  const videoRef = useRef(null);
-  const containerRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Subscribe to service state
   useEffect(() => {
@@ -65,7 +82,11 @@ const VideoPreview = ({ service, type = 'camera' }) => {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, [service]);
 
   // Update video element when stream changes
@@ -91,7 +112,7 @@ const VideoPreview = ({ service, type = 'camera' }) => {
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.play().catch(err => {
+    video.play().catch((err: unknown) => {
       Logger.error('VideoPreview', `Failed to play ${type} video:`, err);
     });
 
@@ -110,11 +131,16 @@ const VideoPreview = ({ service, type = 'camera' }) => {
   }, [isDragging, position]);
 
   // Drag handlers for desktop
-  const handleMouseDown = (e) => {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (!target) {
       return;
     }
-    if (e.target.tagName === 'VIDEO') {
+
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
+      return;
+    }
+    if (target.tagName === 'VIDEO') {
       e.preventDefault();
     }
     setIsDragging(true);
@@ -122,7 +148,7 @@ const VideoPreview = ({ service, type = 'camera' }) => {
     dragStartElementPos.current = { ...position };
   };
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDraggingRef.current) return;
 
     const deltaX = e.clientX - dragStartPos.current.x;
@@ -147,22 +173,31 @@ const VideoPreview = ({ service, type = 'camera' }) => {
   }, []);
 
   // Touch handlers for mobile
-  const handleTouchStart = (e) => {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+  const handleTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (!target) {
+      return;
+    }
+
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
       return;
     }
     if (e.touches.length === 1) {
-      const touch = e.touches[0];
+      const touch = e.touches.item(0);
+      if (!touch) {
+        return;
+      }
       setIsDragging(true);
       dragStartPos.current = { x: touch.clientX, y: touch.clientY };
       dragStartElementPos.current = { ...position };
     }
   };
 
-  const handleTouchMove = useCallback((e) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isDraggingRef.current || e.touches.length !== 1) return;
 
-    const touch = e.touches[0];
+    const touch = e.touches.item(0);
+    if (!touch) return;
     const deltaX = touch.clientX - dragStartPos.current.x;
     const deltaY = touch.clientY - dragStartPos.current.y;
 
@@ -191,12 +226,14 @@ const VideoPreview = ({ service, type = 'camera' }) => {
     const devices = service.getDevices();
     if (devices.length <= 1) return;
     
-    const currentDeviceId = service.getSelectedDeviceId();
-    const currentIndex = devices.findIndex(d => d.deviceId === currentDeviceId);
+    const currentDeviceId = service.getSelectedDeviceId?.() ?? null;
+    const currentIndex = devices.findIndex((d) => d.deviceId === currentDeviceId);
     const nextIndex = (currentIndex + 1) % devices.length;
     const nextDevice = devices[nextIndex];
-    
-    await service.setSelectedDevice(nextDevice.deviceId);
+
+    if (nextDevice?.deviceId && service.setSelectedDevice) {
+      await service.setSelectedDevice(nextDevice.deviceId);
+    }
   };
 
   useEffect(() => {

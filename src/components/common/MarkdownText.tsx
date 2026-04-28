@@ -3,14 +3,29 @@
  * Supports: **bold**, *italic*, `code`, ```code blocks```, lists, links, headers
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Button } from '../ui';
 import { cn } from '../../utils/cn';
 
 /**
  * Code block component with copy button
  */
-const CodeBlock = ({ code, language }) => {
+interface CodeBlockProps {
+  code: string;
+  language?: string;
+}
+
+interface MarkdownTextProps {
+  text?: string;
+  className?: string;
+}
+
+interface InlinePattern {
+  regex: RegExp;
+  component: (...parts: string[]) => ReactNode;
+}
+
+const CodeBlock = ({ code, language }: CodeBlockProps) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -55,19 +70,19 @@ const CodeBlock = ({ code, language }) => {
  * @param {string} text - Markdown text to parse
  * @returns {Array} Array of React elements
  */
-const parseMarkdown = (text) => {
+const parseMarkdown = (text: string): ReactNode[] => {
   if (!text) return [];
   
-  const elements = [];
+  const elements: ReactNode[] = [];
   const trimmedText = text.replace(/\n+$/, '');
   const lines = trimmedText.split('\n');
   let inCodeBlock = false;
-  let codeBlockContent = [];
+  let codeBlockContent: string[] = [];
   let codeBlockLang = '';
   let elementKey = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? '';
     
     // Code block handling
     if (line.trim().startsWith('```')) {
@@ -145,7 +160,7 @@ const parseMarkdown = (text) => {
     // Ordered lists
     if (line.match(/^[\s]*\d+\.\s/)) {
       const match = line.match(/^[\s]*(\d+)\.\s/);
-      const number = match[1];
+      const number = match?.[1] ?? '1';
       const content = line.replace(/^[\s]*\d+\.\s/, '');
       elements.push(
         <div key={elementKey++} className="flex gap-2 my-1">
@@ -184,44 +199,44 @@ const parseMarkdown = (text) => {
  * @param {string} text - Text to parse
  * @returns {Array} Array of React elements and strings
  */
-const parseInline = (text) => {
+const parseInline = (text: string): ReactNode => {
   if (!text) return '';
   
-  const elements = [];
+  const elements: ReactNode[] = [];
   let remaining = text;
   let key = 0;
 
   // Regex patterns for inline elements
-  const patterns = [
+  const patterns: InlinePattern[] = [
     // Bold with ** or __
-    { regex: /\*\*(.+?)\*\*/, component: (match) => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
-    { regex: /__(.+?)__/, component: (match) => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
+    { regex: /\*\*(.+?)\*\*/, component: (match = '') => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
+    { regex: /__(.+?)__/, component: (match = '') => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
     // Italic with * or _
-    { regex: /\*(.+?)\*/, component: (match) => <em key={key++} className="italic text-white/90">{match}</em> },
-    { regex: /_(.+?)_/, component: (match) => <em key={key++} className="italic text-white/90">{match}</em> },
+    { regex: /\*(.+?)\*/, component: (match = '') => <em key={key++} className="italic text-white/90">{match}</em> },
+    { regex: /_(.+?)_/, component: (match = '') => <em key={key++} className="italic text-white/90">{match}</em> },
     // Inline code with `
-    { regex: /`(.+?)`/, component: (match) => <code key={key++} className="bg-white/5 backdrop-blur-sm px-1.5 py-0.5 mx-0.5 rounded text-sm font-mono text-white/90 border border-white/10 break-all inline-block">{match}</code> },
+    { regex: /`(.+?)`/, component: (match = '') => <code key={key++} className="bg-white/5 backdrop-blur-sm px-1.5 py-0.5 mx-0.5 rounded text-sm font-mono text-white/90 border border-white/10 break-all inline-block">{match}</code> },
     // Links [text](url)
-    { regex: /\[(.+?)\]\((.+?)\)/, component: (text, url) => <a key={key++} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline break-all">{text}</a> },
+    { regex: /\[(.+?)\]\((.+?)\)/, component: (label = '', url = '') => <a key={key++} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline break-all">{label}</a> },
   ];
 
   while (remaining.length > 0) {
     let foundMatch = false;
-    let earliestMatch = null;
+    let earliestMatch: RegExpMatchArray | null = null;
     let earliestIndex = remaining.length;
-    let matchedPattern = null;
+    let matchedPattern: InlinePattern | null = null;
 
     // Find the earliest match
     for (const pattern of patterns) {
       const match = remaining.match(pattern.regex);
-      if (match && match.index < earliestIndex) {
+      if (match && typeof match.index === 'number' && match.index < earliestIndex) {
         earliestMatch = match;
         earliestIndex = match.index;
         matchedPattern = pattern;
       }
     }
 
-    if (earliestMatch) {
+    if (earliestMatch && matchedPattern) {
       // Add text before match
       if (earliestIndex > 0) {
         const textBefore = remaining.slice(0, earliestIndex);
@@ -229,13 +244,7 @@ const parseInline = (text) => {
       }
 
       // Add matched element
-      if (matchedPattern.regex.source.includes('\\[')) {
-        // Link pattern - has 2 capture groups
-        elements.push(matchedPattern.component(earliestMatch[1], earliestMatch[2]));
-      } else {
-        // Other patterns - 1 capture group
-        elements.push(matchedPattern.component(earliestMatch[1]));
-      }
+      elements.push(matchedPattern.component(...earliestMatch.slice(1)));
 
       // Continue with remaining text
       remaining = remaining.slice(earliestIndex + earliestMatch[0].length);
@@ -262,7 +271,7 @@ const parseInline = (text) => {
  * @param {string} [props.className=''] - Additional CSS classes
  * @returns {JSX.Element} Rendered markdown
  */
-const MarkdownText = ({ text = '', className = '' }) => {
+const MarkdownText = ({ text = '', className = '' }: MarkdownTextProps) => {
   const elements = useMemo(() => parseMarkdown(text), [text]);
 
   return (

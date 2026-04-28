@@ -853,7 +853,7 @@ const ChatContainer = ({
       
       if (isDesktop && api?.llm) {
         // Get custom models path from aiConfig
-        const customPath = (aiConfig as { ['desktop-local']?: { customModelsPath?: string } } | null)?.['desktop-local']?.customModelsPath || null;
+        const customPath = ((aiConfig as unknown) as { ['desktop-local']?: { customModelsPath?: string } } | null)?.['desktop-local']?.customModelsPath || null;
         const deleteModel = api.llm.deleteModel;
         if (!deleteModel) {
           Logger.error('ChatContainer', 'Desktop LLM deleteModel API is unavailable');

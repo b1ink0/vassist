@@ -11,12 +11,76 @@ import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 import FlagCopyButton from '../../common/FlagCopyButton';
 import { Button, Input } from '../../ui';
 
-const LLMProviderStep = ({ isLightBackground = false }) => {
+type LLMProviderId = 'android-local' | 'desktop-local' | 'chrome-ai' | 'openai' | 'ollama';
+
+interface LLMProviderStepProps {
+  isLightBackground?: boolean;
+}
+
+interface TestResultState {
+  success: boolean;
+  message: string;
+}
+
+interface ChromeAIStatusState {
+  checking: boolean;
+  available: boolean;
+  ready: boolean;
+  message: string;
+  needsFlags: boolean;
+  needsDownload: boolean;
+  downloading: boolean;
+  downloadProgress: number;
+  downloadDetails: string;
+  downloadTimedOut: boolean;
+  downloadAttempts: number;
+  flags: string[];
+  state: string;
+}
+
+interface LLMConfigShape {
+  provider?: string;
+  openai?: { apiKey?: string; model?: string };
+  ollama?: { endpoint?: string; model?: string };
+  'android-local'?: { endpoint?: string; model?: string };
+  'desktop-local'?: { endpoint?: string; model?: string };
+}
+
+interface LLMTestConfig {
+  provider: string;
+  chromeAi?: { enableImageSupport: boolean; enableAudioSupport: boolean };
+  openai?: { apiKey: string; model: string };
+  ollama?: { endpoint: string; model: string };
+  'android-local'?: { endpoint: string; model: string; temperature: number; maxTokens: number };
+  'desktop-local'?: {
+    endpoint: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    contextSize: number;
+    gpuLayers: number;
+    threads: number;
+  };
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return String(error);
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+  return {};
+};
+
+const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const isWebMode = !isAndroid && !isDesktop;
   const defaultProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
-  const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
+  const [selectedProvider, setSelectedProvider] = useState<LLMProviderId>(defaultProvider as LLMProviderId);
   const [apiKey, setApiKey] = useState('');
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState('llama2');
@@ -24,8 +88,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
   const [desktopEndpoint, setDesktopEndpoint] = useState('http://127.0.0.1:11438');
   const [desktopModel, setDesktopModel] = useState('qwen3:0.6b');
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [chromeAIStatus, setChromeAIStatus] = useState({
+  const [testResult, setTestResult] = useState<TestResultState | null>(null);
+  const [chromeAIStatus, setChromeAIStatus] = useState<ChromeAIStatusState>({
     checking: false,
     available: false,
     ready: false,
@@ -37,6 +101,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     downloadDetails: '',
     downloadTimedOut: false,
     downloadAttempts: 0,
+    flags: [],
+    state: '',
   });
 
   useEffect(() => {
@@ -46,11 +112,11 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     }
     
     // Load existing setup data if any (only on first mount)
-    const llmData = setupData?.llm;
+    const llmData = setupData?.llm as LLMConfigShape | undefined;
     if (llmData) {
       if (llmData.provider) {
         const normalizedProvider = (!isWebMode && llmData.provider === 'chrome-ai') ? defaultProvider : llmData.provider;
-        setSelectedProvider(normalizedProvider);
+        setSelectedProvider(normalizedProvider as LLMProviderId);
       }
       
       // Load provider-specific configs
@@ -113,36 +179,42 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     setChromeAIStatus(prev => ({ ...prev, checking: true }));
     
     try {
-      const result = await AIServiceProxy.checkChromeAIAvailability();
+      const rawResult = await AIServiceProxy.checkChromeAIAvailability();
+      const result = asRecord(rawResult);
+      const available = result.available === true;
+      const state = typeof result.state === 'string' ? result.state : undefined;
+      const message = typeof result.message === 'string' ? result.message : '';
+      const requiresFlags = result.requiresFlags === true;
+      const flags = Array.isArray(result.flags) ? result.flags.filter((flag): flag is string => typeof flag === 'string') : [];
       
       // ChromeAIValidator returns 'available: true' when ready, not 'ready: true'
-      const isReady = result.available === true;
-      const needsDownload = result.state === 'after-download' || result.state === 'downloadable';
-      const isDownloading = result.state === 'downloading';
-      const needsFlags = result.requiresFlags === true;
+      const isReady = available;
+      const needsDownload = state === 'after-download' || state === 'downloadable';
+      const isDownloading = state === 'downloading';
+      const needsFlags = requiresFlags;
       
       setChromeAIStatus(prev => ({
         ...prev, // PRESERVE downloadAttempts!
         checking: false,
-        available: result.available || false,
+        available,
         ready: isReady,
-        message: result.message || (isReady ? 'Chrome AI is ready!' : 'Setup required'),
+        message: message || (isReady ? 'Chrome AI is ready!' : 'Setup required'),
         needsFlags: needsFlags,
         needsDownload: needsDownload && !needsFlags,
         downloading: isDownloading,
         downloadProgress: isDownloading ? prev.downloadProgress : 0,
         downloadDetails: isDownloading ? prev.downloadDetails : '',
         downloadAttempts: (isReady || isDownloading) ? 0 : prev.downloadAttempts, // Reset only if ready or downloading
-        flags: result.flags || [],
-        state: result.state,
+        flags,
+        state: state ?? '',
       }));
-    } catch (error) {
+    } catch (error: unknown) {
       setChromeAIStatus(prev => ({
         ...prev, // PRESERVE downloadAttempts!
         checking: false,
         available: false,
         ready: false,
-        message: error.message || 'Failed to check Chrome AI availability',
+        message: getErrorMessage(error) || 'Failed to check Chrome AI availability',
         needsFlags: false,
         needsDownload: false,
         downloading: false,
@@ -174,35 +246,39 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     
     try {
       // Trigger model download with progress callback
-      const result = await AIServiceProxy.downloadChromeAIModel((progress) => {
+      const rawResult = await AIServiceProxy.downloadChromeAIModel((progress: unknown) => {
+        const progressRecord = asRecord(progress);
+        const progressValue = typeof progressRecord.progress === 'number' ? progressRecord.progress : 0;
+        const details = typeof progressRecord.details === 'string' ? progressRecord.details : `${progressValue.toFixed(1)}%`;
         setChromeAIStatus(prev => ({
           ...prev,
-          downloadProgress: progress.progress || 0,
-          downloadDetails: progress.details || `${(progress.progress || 0).toFixed(1)}%`
+          downloadProgress: progressValue,
+          downloadDetails: details
         }));
       });
+      const result = asRecord(rawResult);
       
       clearTimeout(timeoutId);
       
       Logger.log('LLMProviderStep', 'Download result:', result);
 
-      if (result.success) {
+      if (result.success === true) {
         setChromeAIStatus(prev => ({
           ...prev,
-          downloadDetails: result.message || 'Download initiated. Please check chrome://on-device-internals for progress.',
+          downloadDetails: (typeof result.message === 'string' ? result.message : '') || 'Download initiated. Please check chrome://on-device-internals for progress.',
         }));
       }
       
       // Recheck status after download
       await checkChromeAIStatus();
-    } catch (error) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
       Logger.error('LLMProviderStep', 'Download error:', error);
       setChromeAIStatus(prev => ({ 
         ...prev, 
         downloading: false,
         downloadTimedOut: false,
-        message: error.message || 'Failed to download model',
+        message: getErrorMessage(error) || 'Failed to download model',
         downloadDetails: 'Please try manually at chrome://components or check chrome://flags'
       }));
     }
@@ -270,8 +346,8 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
     }
   ];
 
-  const handleProviderSelect = (providerId) => {
-    setSelectedProvider(providerId);
+  const handleProviderSelect = (providerId: string) => {
+    setSelectedProvider(providerId as LLMProviderId);
     setTestResult(null);
   };
 
@@ -281,7 +357,7 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
 
     try {
       // Build config based on selected provider
-      const testConfig = {
+      const testConfig: LLMTestConfig = {
         provider: selectedProvider
       };
 
@@ -326,14 +402,14 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
       }
 
       // Configure AIService with test config
-      await AIServiceProxy.configure(testConfig);
+      await AIServiceProxy.configure(testConfig as unknown as Record<string, unknown>);
 
       // Test connection (returns true on success, throws on failure)
       await AIServiceProxy.testConnection();
       
       setTestResult({ success: true, message: `${selectedProvider.toUpperCase()} is working!` });
-    } catch (error) {
-      setTestResult({ success: false, message: error.message });
+    } catch (error: unknown) {
+      setTestResult({ success: false, message: getErrorMessage(error) });
     } finally {
       setTesting(false);
     }
@@ -418,11 +494,10 @@ const LLMProviderStep = ({ isLightBackground = false }) => {
             model: desktopModel
           }}
           onChange={(updates) => {
-            if (updates.endpoint !== undefined) setDesktopEndpoint(updates.endpoint);
-            if (updates.model !== undefined) setDesktopModel(updates.model);
+            if (typeof updates.endpoint === 'string') setDesktopEndpoint(updates.endpoint);
+            if (typeof updates.model === 'string') setDesktopModel(updates.model);
           }}
           isSetupMode={true}
-          showTitle={false}
         />
       )}
 

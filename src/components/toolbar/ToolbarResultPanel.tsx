@@ -8,15 +8,39 @@
  * - Streaming indicator
  */
 
-import { forwardRef, useRef, useEffect, useState } from 'react'
+import { forwardRef, useRef, useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
-import { Icon } from '../icons';;
+import { Icon } from '../icons';
 import { TranslationLanguages } from '../../config/aiConfig';
 import StreamingText from '../common/StreamingText';
 import MarkdownText from '../common/MarkdownText';
 import StreamingContainer from '../common/StreamingContainer';
 
-const ToolbarResultPanel = forwardRef(({
+interface ToolbarResultPanelProps {
+  result: string;
+  error: string;
+  isLoading: boolean;
+  action: string | null;
+  position: { x: number; y: number };
+  showAbove?: boolean;
+  isLightBackground?: boolean;
+  animationClass?: string;
+  detectedLanguageName?: string | null;
+  selectedTargetLanguage?: string | null;
+  onTargetLanguageChange?: (lang: string) => void;
+  aiConfig?: any;
+  isRegenerating?: boolean;
+  onRegenerateClick?: () => void;
+  copySuccess?: boolean;
+  onCopyClick?: () => void;
+  isSpeaking?: boolean;
+  isTTSGenerating?: boolean;
+  onSpeakerClick?: () => void;
+  ttsConfig?: any;
+  onClose: () => void;
+}
+
+const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(({ 
   result,
   error,
   isLoading,
@@ -40,7 +64,7 @@ const ToolbarResultPanel = forwardRef(({
   onClose,
 }, ref) => {
 
-  const contentRef = useRef(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const [hasCompletedStreaming, setHasCompletedStreaming] = useState(false);
 
   // Reset streaming state when result changes

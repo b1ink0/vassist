@@ -10,15 +10,38 @@ import StatusMessage from '../../common/StatusMessage';
 import Logger from '../../../services/LoggerService';
 import { Button, Select } from '../../ui';
 
+interface ChromeAISTTConfigShape {
+  outputLanguage?: string;
+  language?: string;
+}
+
+interface ChromeAiStatusShape {
+  checking: boolean;
+  state: string | null;
+  message: string;
+  details: string;
+  downloading: boolean;
+}
+
+interface ChromeAISTTConfigProps {
+  config: ChromeAISTTConfigShape;
+  onChange: (updates: ChromeAISTTConfigShape) => void;
+  chromeAiStatus: ChromeAiStatusShape;
+  onCheckStatus?: () => void;
+  onStartDownload?: () => void;
+  isLightBackground?: boolean;
+  isSetupMode?: boolean;
+}
+
 const ChromeAISTTConfig = ({ 
   config, 
   onChange, 
   chromeAiStatus, 
   onCheckStatus, 
   onStartDownload,
-  isLightBackground,
+  isLightBackground = false,
   isSetupMode = false
-}) => {
+}: ChromeAISTTConfigProps) => {
   const hasCheckedRef = useRef(false);
 
   useEffect(() => {

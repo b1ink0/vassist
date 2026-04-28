@@ -22,7 +22,47 @@ import { isDesktop } from '../../../utils/PlatformUtils';
 import { cn } from '../../../utils/cn';
 import { Button, Input, Select } from '../../ui';
 
-const getAudioDuration = (file) => {
+interface VoiceItem {
+  id: string;
+  name: string;
+  audioData: Blob;
+  referenceText: string;
+  language: string;
+  metadata: Record<string, unknown>;
+}
+
+interface GPTSoVITSConfigShape {
+  referenceVoiceId?: string | null;
+  referenceText?: string;
+  referenceLanguage?: string;
+  speed?: number;
+  topK?: number;
+  topP?: number;
+  temperature?: number;
+  pytorchBackend?: string;
+}
+
+interface GPTSoVITSConfigProps {
+  config: GPTSoVITSConfigShape;
+  onChange?: (field: string, value: string | number | null) => void;
+  showTitle?: boolean;
+  isSetupMode?: boolean;
+  onRequestDeleteVoiceDialog?: ((voiceId: string) => void) | undefined;
+  refreshTrigger?: unknown;
+  isLightBackground?: boolean;
+  skipSetup?: boolean;
+  errorMessage?: string;
+  setErrorMessage?: (message: string) => void;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const getAudioDuration = (file: File): Promise<number> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
     audio.addEventListener('loadedmetadata', () => {
@@ -44,26 +84,39 @@ const GPTSoVITSConfig = ({
   refreshTrigger,
   isLightBackground = false,
   skipSetup = false,
-}) => {
-  const [voices, setVoices] = useState([]);
+  errorMessage: externalErrorMessage,
+  setErrorMessage: externalSetErrorMessage,
+}: GPTSoVITSConfigProps) => {
+  const [voices, setVoices] = useState<VoiceItem[]>([]);
   const [uploadingVoice, setUploadingVoice] = useState(false);
-  const voiceFileInputRef = useRef(null);
+  const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // New voice upload state
   const [newVoiceName, setNewVoiceName] = useState('');
-  const [newAudioFile, setNewAudioFile] = useState(null);
+  const [newAudioFile, setNewAudioFile] = useState<File | null>(null);
   const [newReferenceText, setNewReferenceText] = useState('');
   const [newLanguage, setNewLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
 
-  const [editingVoiceId, setEditingVoiceId] = useState(null);
+  const [editingVoiceId, setEditingVoiceId] = useState<string | null>(null);
   const [editVoiceName, setEditVoiceName] = useState('');
   const [editReferenceText, setEditReferenceText] = useState('');
   const [editLanguage, setEditLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
   const [errorMessage, setErrorMessage] = useState('');
 
+  useEffect(() => {
+    if (typeof externalErrorMessage === 'string') {
+      setErrorMessage(externalErrorMessage);
+    }
+  }, [externalErrorMessage]);
+
+  const setStatusMessage = (message: string) => {
+    setErrorMessage(message);
+    externalSetErrorMessage?.(message);
+  };
+
   const loadVoices = async () => {
     try {
-      const allVoices = await voiceStorageService.getAllVoices();
+      const allVoices = await voiceStorageService.getAllVoices() as VoiceItem[];
       setVoices(allVoices);
     } catch (error) {
       Logger.error('GPTSoVITSConfig', 'Failed to load voices:', error);
@@ -76,29 +129,29 @@ const GPTSoVITSConfig = ({
 
   const handleSaveNewVoice = async () => {
     if (!newVoiceName || !newAudioFile || !newReferenceText) {
-      setErrorMessage('error-status:Please fill in all required fields (name, audio, reference text)');
+      setStatusMessage('error-status:Please fill in all required fields (name, audio, reference text)');
       return;
     }
 
     try {
-      setErrorMessage('hourglass:Validating audio file...');
+      setStatusMessage('hourglass:Validating audio file...');
       const audioDuration = await getAudioDuration(newAudioFile);
       if (audioDuration < 3) {
-        setErrorMessage('error-status:Audio must be at least 3 seconds long');
+        setStatusMessage('error-status:Audio must be at least 3 seconds long');
         return;
       }
       if (audioDuration > 10) {
-        setErrorMessage('error-status:Audio must be no longer than 10 seconds');
+        setStatusMessage('error-status:Audio must be no longer than 10 seconds');
         return;
       }
     } catch (error) {
       Logger.error('GPTSoVITSConfig', 'Failed to validate audio duration:', error);
-      setErrorMessage('error-status:Failed to validate audio file. Please try a different file.');
+      setStatusMessage('error-status:Failed to validate audio file. Please try a different file.');
       return;
     }
 
     setUploadingVoice(true);
-    setErrorMessage('hourglass:Uploading voice...');
+    setStatusMessage('hourglass:Uploading voice...');
     try {
       const voiceId = await voiceStorageService.saveVoice(
         null,
@@ -125,19 +178,22 @@ const GPTSoVITSConfig = ({
         voiceFileInputRef.current.value = '';
       }
       
-      setErrorMessage(`✅ Voice "${newVoiceName}" uploaded successfully!`);
-      setTimeout(() => setErrorMessage(''), 3000);
-    } catch (error) {
+      setStatusMessage(`✅ Voice "${newVoiceName}" uploaded successfully!`);
+      setTimeout(() => setStatusMessage(''), 3000);
+    } catch (error: unknown) {
       Logger.error('GPTSoVITSConfig', 'Failed to upload voice:', error);
-      setErrorMessage(`error-status:Failed to upload voice: ${error.message}`);
+      setStatusMessage(`error-status:Failed to upload voice: ${getErrorMessage(error)}`);
     } finally {
       setUploadingVoice(false);
     }
   };
 
-  const handleSetDefault = async (voiceId) => {
+  const handleSetDefault = async (voiceId: string) => {
     try {
       const voiceData = await voiceStorageService.getVoice(voiceId);
+      if (!voiceData) {
+        return;
+      }
       
       if (onChange) {
         onChange('referenceVoiceId', voiceId);
@@ -149,9 +205,12 @@ const GPTSoVITSConfig = ({
     }
   };
 
-  const handleEditVoice = async (voiceId) => {
+  const handleEditVoice = async (voiceId: string) => {
     try {
       const voiceData = await voiceStorageService.getVoice(voiceId);
+      if (!voiceData) {
+        return;
+      }
       setEditingVoiceId(voiceId);
       setEditVoiceName(voiceData.name);
       setEditReferenceText(voiceData.referenceText);
@@ -161,9 +220,12 @@ const GPTSoVITSConfig = ({
     }
   };
 
-  const handleSaveVoiceName = async (voiceId) => {
+  const handleSaveVoiceName = async (voiceId: string) => {
     try {
       const voiceData = await voiceStorageService.getVoice(voiceId);
+      if (!voiceData) {
+        return;
+      }
       
       await voiceStorageService.saveVoice(
         voiceId,
@@ -198,7 +260,7 @@ const GPTSoVITSConfig = ({
     setEditLanguage(GPTSoVITSLanguages.ENGLISH);
   };
 
-  const handleDeleteVoice = async (voiceId) => {
+  const handleDeleteVoice = async (voiceId: string) => {
     if (onRequestDeleteVoiceDialog) {
       onRequestDeleteVoiceDialog(voiceId);
     }
@@ -213,7 +275,7 @@ const GPTSoVITSConfig = ({
           <GPTSoVITSSetup
             isLightBackground={isLightBackground}
             config={config}
-            onConfigChange={onChange}
+            {...(onChange ? { onConfigChange: onChange } : {})}
           />
         </div>
       )}
@@ -262,7 +324,7 @@ const GPTSoVITSConfig = ({
           ref={voiceFileInputRef}
           type="file"
           accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a"
-          onChange={(e) => setNewAudioFile(e.target.files[0])}
+          onChange={(e) => setNewAudioFile(e.target.files?.[0] ?? null)}
           className="hidden"
         />
         

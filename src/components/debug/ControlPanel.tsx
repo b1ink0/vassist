@@ -2,7 +2,7 @@
  * @fileoverview Developer control panel for debugging assistant behavior, animations, and performance.
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type MouseEvent } from 'react'
 import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import DebugOverlay from './DebugOverlay';
@@ -10,6 +10,62 @@ import ResourceLoader from '../../utils/ResourceLoader';
 import { StorageServiceProxy } from '../../services/proxies';
 import { useConfig } from '../../contexts/ConfigContext';
 import Logger from '../../services/LoggerService';
+import * as BABYLON from '@babylonjs/core';
+
+interface AssistantHandle {
+  isReady: () => boolean;
+  triggerAction: (action: string) => Promise<void>;
+  getState: () => string;
+  idle: () => Promise<void>;
+  speak: (text: string, mouthAnimationBlobUrl?: string, emotionCategory?: string) => Promise<void>;
+  setPosition: (preset: string) => void;
+  playComposite: (primaryAnimName: string, fillCategory?: string, options?: Record<string, unknown>) => Promise<void>;
+  queueAnimation: (animationName: string, force?: boolean) => void;
+  queueSpeak: (text: string, mouthBlobUrl?: string, emotionCategory?: string, options?: Record<string, unknown>, force?: boolean) => void;
+  clearQueue: () => void;
+  getQueueStatus: () => QueueStatus;
+}
+
+interface QueueItem {
+  type?: string;
+  animationName?: string;
+  primary?: string;
+  text?: string;
+}
+
+interface QueueStatus {
+  length: number;
+  isEmpty: boolean;
+  items: QueueItem[];
+}
+
+interface LogCategory {
+  category: string;
+  enabled: boolean;
+  color: string;
+}
+
+interface PositionManagerLike {
+  offset?: { x?: number; y?: number };
+  modelHeightPx?: number;
+  modelWidthPx?: number;
+  positionX: number;
+  positionY: number;
+  effectiveHeightPx: number;
+  customBoundaries?: { left?: number; right?: number; top?: number; bottom?: number };
+  updateCameraFrustum: () => void;
+  setPositionPixels: (x: number, y: number, width: number, height: number, effectiveHeight: number, offset: { x?: number; y?: number }) => void;
+  setCustomBoundaries: (boundaries: { left?: number; right?: number; top?: number; bottom?: number }) => void;
+}
+
+interface ControlPanelProps {
+  isAssistantReady: boolean;
+  currentState: string;
+  assistantRef: React.MutableRefObject<AssistantHandle | null>;
+  sceneRef: React.MutableRefObject<BABYLON.Scene | null>;
+  positionManagerRef: React.MutableRefObject<PositionManagerLike | null>;
+  onStateChange: (state: string) => void;
+}
 
 /**
  * Developer control panel component with debug tools and performance metrics.
@@ -31,13 +87,13 @@ const ControlPanel = ({
   sceneRef,
   positionManagerRef,
   onStateChange
-}) => {
+}: ControlPanelProps) => {
   const { uiConfig } = useConfig();
   const [showPerf, setShowPerf] = useState(false);
   const [perfData, setPerfData] = useState({ fps: 0, meshes: 0, particles: 0, drawCalls: 0 });
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
-  const [queueStatus, setQueueStatus] = useState({ length: 0, isEmpty: true, items: [] });
+  const [queueStatus, setQueueStatus] = useState<QueueStatus>({ length: 0, isEmpty: true, items: [] });
   const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
@@ -45,25 +101,27 @@ const ControlPanel = ({
   const dragStartButtonPos = useRef({ x: 0, y: 0 });
   
   const [loggerEnabled, setLoggerEnabled] = useState(false);
-  const [logCategories, setLogCategories] = useState([]);
+  const [logCategories, setLogCategories] = useState<LogCategory[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const blobUrlsRef = useRef([]);
+  const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const loadButtonPosition = async () => {
       const defaultPos = { x: window.innerWidth - 180, y: 20 };
       try {
-        const savedPos = await StorageServiceProxy.configLoad('devControlPanelButtonPosition', defaultPos);
+        const savedPos = await StorageServiceProxy.configLoad('devControlPanelButtonPosition', defaultPos) as { x?: number; y?: number };
         
         const buttonSize = 48;
-        const boundedX = Math.max(10, Math.min(savedPos.x, window.innerWidth - buttonSize - 10));
-        const boundedY = Math.max(10, Math.min(savedPos.y, window.innerHeight - buttonSize - 10));
+        const rawX = typeof savedPos?.x === 'number' ? savedPos.x : defaultPos.x;
+        const rawY = typeof savedPos?.y === 'number' ? savedPos.y : defaultPos.y;
+        const boundedX = Math.max(10, Math.min(rawX, window.innerWidth - buttonSize - 10));
+        const boundedY = Math.max(10, Math.min(rawY, window.innerHeight - buttonSize - 10));
         
         const validPos = { x: boundedX, y: boundedY };
         setButtonPos(validPos);
         
-        if (boundedX !== savedPos.x || boundedY !== savedPos.y) {
+        if (boundedX !== rawX || boundedY !== rawY) {
           await StorageServiceProxy.configSave('devControlPanelButtonPosition', validPos);
         }
       } catch (error) {
@@ -113,7 +171,7 @@ const ControlPanel = ({
   /**
    * Handles mouse down on drag button.
    */
-  const handleButtonMouseDown = (e) => {
+  const handleButtonMouseDown = (e: MouseEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     
     setIsDragging(true);
@@ -177,7 +235,7 @@ const ControlPanel = ({
   useEffect(() => {
     if (!isDragging) return;
 
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
       setHasDragged(true);
       
       const deltaX = e.clientX - dragStartPos.current.x;
@@ -225,7 +283,7 @@ const ControlPanel = ({
    * 
    * @param {string} action - Action to trigger
    */
-  const triggerAction = async (action) => {
+  const triggerAction = async (action: string) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
@@ -252,7 +310,7 @@ const ControlPanel = ({
    * @param {string} emotionCategory - Emotion category for body animation
    * @param {string} text - Text to speak
    */
-  const testEmotion = async (emotionCategory, text) => {
+  const testEmotion = async (emotionCategory: string, text: string) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
@@ -280,7 +338,7 @@ const ControlPanel = ({
    * 
    * @param {string} preset - Position preset name
    */
-  const changePosition = (preset) => {
+  const changePosition = (preset: string) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
@@ -295,7 +353,7 @@ const ControlPanel = ({
    * @param {string} fillCategory - Fill category for stitched animation
    * @param {Object} options - Additional options
    */
-  const playComposite = async (primaryAnimName, fillCategory = 'talking', options = {}) => {
+  const playComposite = async (primaryAnimName: string, fillCategory = 'talking', options: Record<string, unknown> = {}) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
@@ -312,7 +370,7 @@ const ControlPanel = ({
    * @param {string} animationName - Animation name to queue
    * @param {boolean} force - Whether to force play
    */
-  const queueSimple = (animationName, force = false) => {
+  const queueSimple = (animationName: string, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;
@@ -344,7 +402,7 @@ const ControlPanel = ({
    * @param {string} emotionCategory - Emotion category for body animation
    * @param {boolean} force - Whether to force play
    */
-  const queueSpeakTest = async (emotionCategory, force = false) => {
+  const queueSpeakTest = async (emotionCategory: string, force = false) => {
     if (!assistantRef.current || !assistantRef.current.isReady()) {
       Logger.warn('ControlPanel', 'VirtualAssistant not ready');
       return;

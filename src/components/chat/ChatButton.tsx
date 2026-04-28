@@ -81,16 +81,6 @@ type SceneWithCameraControls = SceneWithMetadata & {
   metadata?: SceneWithMetadata['metadata'] & SceneMetadataCameraControls;
 };
 
-interface AppContextForChatButton {
-  positionManagerRef: MutableRefObject<PositionManagerForButton | null>;
-  buttonPosition: ButtonPosition;
-  updateButtonPosition: Dispatch<SetStateAction<ButtonPosition>>;
-  startButtonDrag: () => void;
-  endButtonDrag: () => void;
-  setPendingDropData: (data: unknown) => void;
-  sceneRef: MutableRefObject<SceneWithCameraControls | null>;
-}
-
 interface DesktopApiForChatButton {
   window?: {
     getSize?: () => Promise<{ width: number; height: number }>;
@@ -175,7 +165,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     endButtonDrag,
     setPendingDropData,
     sceneRef,
-  }: AppContextForChatButton = useApp();
+  } = useApp();
   
   const { uiConfig, updateUIConfig } = useConfig();
   const { api: desktopAPI } = useDesktop() as { api: DesktopApiForChatButton | null };
@@ -849,7 +839,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
           getCurrentCounts: () => ({ images: 0, audios: 0 }),
           onProcessData: (data) => {
             if (!isChatOpen) handleClick();
-            setPendingDropData(data);
+              setPendingDropData(data as never);
           }
         });
       }).catch(err => Logger.error('ChatButton', 'load DragDropService failed', err));

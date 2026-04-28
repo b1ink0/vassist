@@ -3,11 +3,24 @@ import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import { useApp } from '../../contexts/AppContext';
 
-const DocumentInteractionDemo = ({ theme, isDark }) => {
+interface DemoTheme {
+  gradient: string;
+  textSecondary: string;
+  textPrimary: string;
+  card: string;
+  ctaGradient: string;
+}
+
+interface DocumentInteractionDemoProps {
+  theme: DemoTheme;
+  isDark: boolean;
+}
+
+const DocumentInteractionDemo = ({ theme, isDark }: DocumentInteractionDemoProps) => {
   const [showHiddenContent, setShowHiddenContent] = useState(false);
   const { handleAddToChat } = useApp();
 
-  const handleTryAction = (question) => {
+  const handleTryAction = (question: string) => {
     handleAddToChat({
       text: question
     }, true); // Enable auto-send

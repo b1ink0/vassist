@@ -2,6 +2,50 @@ import { useState, useEffect } from 'react';
 import { Icon } from '../../icons';
 import { Button } from '../../ui';
 
+type ModelType = 'whisper' | 'vits';
+
+interface ModelStatus {
+  downloaded?: boolean;
+  size?: number;
+}
+
+interface StatusResponse {
+  success?: boolean;
+  status?: {
+    whisper?: ModelStatus;
+    vits?: ModelStatus;
+  };
+  error?: string;
+}
+
+interface ProgressEntry {
+  percent: number;
+  status: string;
+}
+
+interface AndroidSttTtsApi {
+  getSTTTTSStatus?: () => string;
+  downloadWhisperModel?: () => string;
+  downloadVitsModel?: () => string;
+  deleteWhisperModel?: () => string;
+  deleteVitsModel?: () => string;
+  _onSTTTTSProgress?: ((modelType: ModelType, percent: number, statusText: string) => void) | null;
+  _onSTTTTSComplete?: ((modelType: ModelType, result: { success?: boolean; error?: string }) => void) | null;
+  _onSTTTTSError?: ((modelType: ModelType, errorMsg: string) => void) | null;
+}
+
+interface STTTTSModelManagerProps {
+  androidAPI: AndroidSttTtsApi | null;
+  isLightBackground?: boolean;
+}
+
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+};
+
 /**
  * STTTTSModelManager - UI for managing on-device STT/TTS models (Android only)
  * 
@@ -15,24 +59,24 @@ import { Button } from '../../ui';
  * @param {Object} androidAPI - AndroidAI interface from useAndroid hook
  * @param {boolean} isLightBackground - Light background theme flag
  */
-const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
-  const [status, setStatus] = useState(null);
+const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSModelManagerProps) => {
+  const [status, setStatus] = useState<StatusResponse['status'] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState({});
+  const [downloadProgress, setDownloadProgress] = useState<Partial<Record<ModelType, ProgressEntry>>>({});
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
   // Load model status
   const loadStatus = async () => {
-    if (!androidAPI) return;
+    if (!androidAPI?.getSTTTTSStatus) return;
     
     try {
       const resultJson = androidAPI.getSTTTTSStatus();
-      const result = JSON.parse(resultJson);
+      const result = JSON.parse(resultJson) as StatusResponse;
       if (result?.success) {
         setStatus(result.status);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to load STT/TTS status:', err);
     }
   };
@@ -46,7 +90,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
     if (!androidAPI) return;
 
     // Progress callback - Kotlin calls this: window.AndroidAI._onSTTTTSProgress(modelType, percent, status)
-    androidAPI._onSTTTTSProgress = (modelType, percent, statusText) => {
+    androidAPI._onSTTTTSProgress = (modelType: ModelType, percent: number, statusText: string) => {
       setDownloadProgress(prev => ({
         ...prev,
         [modelType]: { percent, status: statusText }
@@ -54,7 +98,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
     };
 
     // Complete callback
-    androidAPI._onSTTTTSComplete = (modelType, result) => {
+    androidAPI._onSTTTTSComplete = (modelType: ModelType) => {
       setDownloadProgress(prev => {
         const { [modelType]: removed, ...rest } = prev;
         return rest;
@@ -66,7 +110,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
     };
 
     // Error callback
-    androidAPI._onSTTTTSError = (modelType, errorMsg) => {
+    androidAPI._onSTTTTSError = (modelType: ModelType, errorMsg: string) => {
       setDownloadProgress(prev => {
         const { [modelType]: removed, ...rest } = prev;
         return rest;
@@ -84,7 +128,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
     };
   }, [androidAPI]);
 
-  const handleDownload = async (modelType) => {
+  const handleDownload = async (modelType: ModelType) => {
     if (!androidAPI) {
       setError('Android API not available');
       return;
@@ -95,22 +139,25 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
 
     try {
       const resultJson = modelType === 'whisper'
-        ? androidAPI.downloadWhisperModel()
-        : androidAPI.downloadVitsModel();
+        ? androidAPI.downloadWhisperModel?.()
+        : androidAPI.downloadVitsModel?.();
+      if (!resultJson) {
+        throw new Error('Download API is unavailable');
+      }
       
-      const result = JSON.parse(resultJson);
+      const result = JSON.parse(resultJson) as { success?: boolean; error?: string };
       
       if (!result?.success) {
         setError(result?.error || 'Download failed');
         setLoading(false);
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
       setLoading(false);
     }
   };
 
-  const handleDelete = async (modelType) => {
+  const handleDelete = async (modelType: ModelType) => {
     if (!androidAPI) return;
 
     const modelName = modelType === 'whisper' ? 'Whisper STT' : 'VITS-VCTK TTS';
@@ -120,10 +167,13 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
 
     try {
       const resultJson = modelType === 'whisper'
-        ? androidAPI.deleteWhisperModel()
-        : androidAPI.deleteVitsModel();
+        ? androidAPI.deleteWhisperModel?.()
+        : androidAPI.deleteVitsModel?.();
+      if (!resultJson) {
+        throw new Error('Delete API is unavailable');
+      }
       
-      const result = JSON.parse(resultJson);
+      const result = JSON.parse(resultJson) as { success?: boolean; error?: string };
       
       if (result?.success) {
         setSuccessMessage(`${modelName} deleted successfully`);
@@ -132,12 +182,12 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
       } else {
         setError(result?.error || 'Delete failed');
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     }
   };
 
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 MB';
     const mb = bytes / (1024 * 1024);
     return `${mb.toFixed(1)} MB`;
@@ -185,7 +235,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Model Size:</span>
             <span className="text-white/90">
-              {whisperStatus.downloaded ? formatBytes(whisperStatus.size) : '~99 MB'}
+              {whisperStatus.downloaded ? formatBytes(whisperStatus.size ?? 0) : '~99 MB'}
             </span>
           </div>
           <div className="flex justify-between text-xs">
@@ -226,7 +276,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           ) : (
             <Button
               onClick={() => handleDownload('whisper')}
-              disabled={loading || downloadProgress.whisper}
+              disabled={loading || Boolean(downloadProgress.whisper)}
               variant={isLightBackground ? 'dark' : 'default'}
               className="flex-1"
             >
@@ -286,7 +336,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Model Size:</span>
             <span className="text-white/90">
-              {vitsStatus.downloaded ? formatBytes(vitsStatus.size) : '~152 MB'}
+              {vitsStatus.downloaded ? formatBytes(vitsStatus.size ?? 0) : '~152 MB'}
             </span>
           </div>
           <div className="flex justify-between text-xs">
@@ -331,7 +381,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }) => {
           ) : (
             <Button
               onClick={() => handleDownload('vits')}
-              disabled={loading || downloadProgress.vits}
+              disabled={loading || Boolean(downloadProgress.vits)}
               variant={isLightBackground ? 'dark' : 'default'}
               className="flex-1"
             >

@@ -10,7 +10,11 @@ import ChromeAIValidator from '../../services/ChromeAIValidator';
 import React from 'react';
 import AIFeaturesConfig from '../common/AIFeaturesConfig';
 
-const AIFeaturesSettings = ({ isLightBackground }) => {
+interface AIFeaturesSettingsProps {
+  isLightBackground?: boolean;
+}
+
+const AIFeaturesSettings = ({ isLightBackground = false }: AIFeaturesSettingsProps) => {
   const {
     aiConfig,
     updateAIConfig,
@@ -23,13 +27,13 @@ const AIFeaturesSettings = ({ isLightBackground }) => {
   } = useConfig();
 
   const chromeVersion = ChromeAIValidator.getChromeVersion();
-  const needsFlags = chromeVersion > 0 && chromeVersion < 138;
+  const needsFlags = typeof chromeVersion === 'number' && chromeVersion > 0 && chromeVersion < 138;
 
-  const handleFeatureChange = (featureName, enabled) => {
+  const handleFeatureChange = (featureName: string, enabled: boolean) => {
     updateAIConfig(`aiFeatures.${featureName}.enabled`, enabled);
   };
 
-  const handleTargetLanguageChange = (languageCode) => {
+  const handleTargetLanguageChange = (languageCode: string) => {
     updateAIConfig('aiFeatures.translator.defaultTargetLanguage', languageCode);
   };
 

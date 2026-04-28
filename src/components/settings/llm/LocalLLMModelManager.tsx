@@ -4,6 +4,57 @@ import Toggle from '../../common/Toggle';
 import { Button, Input } from '../../ui';
 import { cn } from '../../../utils/cn';
 
+interface ModelEntry {
+  name: string;
+  size: number;
+  modified?: string | Date;
+  hasImageSupport?: boolean;
+}
+
+interface DownloadProgress {
+  percent: number;
+  status: string;
+}
+
+interface StorageResult {
+  success?: boolean;
+  error?: string;
+  note?: string;
+  filename?: string;
+  canceled?: boolean;
+  path?: string;
+  models?: ModelEntry[];
+}
+
+interface LLMStorageServiceLike {
+  listModels: (customPath?: string | null) => Promise<StorageResult>;
+  onDownloadProgress: (callback: (progress: DownloadProgress) => void) => (() => void) | undefined;
+  downloadFromOllama: (modelName: string, customPath?: string | null) => Promise<StorageResult>;
+  downloadFromUrl: (url: string, customPath?: string | null) => Promise<StorageResult>;
+  deleteModel: (filename: string, customPath?: string | null) => Promise<StorageResult>;
+  importModel: (customPath?: string | null) => Promise<StorageResult>;
+  chooseModelsFolder?: () => Promise<StorageResult>;
+}
+
+interface LocalLLMModelManagerProps {
+  storageService: LLMStorageServiceLike | null;
+  selectedModel: string | null;
+  onModelSelect: (modelName: string) => void;
+  customModelsPath?: string | null;
+  onCustomPathChange?: ((path: string | null) => void) | null | undefined;
+  isLightBackground?: boolean;
+  onRequestDeleteModel?: ((filename: string) => void) | null | undefined;
+  refreshTrigger?: unknown;
+  supportsCustomFolder?: boolean;
+}
+
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+};
+
 /**
  * LocalLLMModelManager - Shared UI component for local LLM model management
  * 
@@ -35,12 +86,12 @@ const LocalLLMModelManager = ({
   onRequestDeleteModel = null,
   refreshTrigger = null,
   supportsCustomFolder = true
-}) => {
-  const [models, setModels] = useState([]);
+}: LocalLLMModelManagerProps) => {
+  const [models, setModels] = useState<ModelEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState('');
   const [ollamaModel, setOllamaModel] = useState('');
-  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [downloadMethod, setDownloadMethod] = useState('ollama'); // 'huggingface' or 'ollama'
@@ -94,7 +145,7 @@ const LocalLLMModelManager = ({
         ? await storageService.downloadFromOllama(ollamaModel, customModelsPath)
         : await storageService.downloadFromUrl(downloadUrl, customModelsPath);
       
-      unsubscribe();
+      unsubscribe?.();
 
       if (result?.success) {
         setDownloadUrl('');
@@ -110,8 +161,8 @@ const LocalLLMModelManager = ({
         setError(result?.error || 'Download failed');
         setDownloadProgress(null);
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
       setDownloadProgress(null);
     } finally {
       setLoading(false);
@@ -119,7 +170,7 @@ const LocalLLMModelManager = ({
   };
 
   // Delete model
-  const handleDelete = async (filename) => {
+  const handleDelete = async (filename: string) => {
     if (!storageService) return;
 
     if (onRequestDeleteModel) {
@@ -136,8 +187,8 @@ const LocalLLMModelManager = ({
         } else {
           setError(result?.error || 'Delete failed');
         }
-      } catch (err) {
-        setError(err.message);
+      } catch (err: unknown) {
+        setError(getErrorMessage(err));
       }
     }
   };
@@ -164,8 +215,8 @@ const LocalLLMModelManager = ({
       } else {
         setError(result?.error || 'Import failed');
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -176,6 +227,10 @@ const LocalLLMModelManager = ({
     if (!storageService || !supportsCustomFolder) return;
 
     try {
+      if (!storageService.chooseModelsFolder) {
+        setError('Choosing a custom folder is not supported in this environment');
+        return;
+      }
       const result = await storageService.chooseModelsFolder();
       
       if (result?.success && result.path) {
@@ -186,8 +241,8 @@ const LocalLLMModelManager = ({
       } else if (!result?.canceled) {
         setError(result?.error || 'Failed to select folder');
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     }
   };
 
@@ -198,7 +253,7 @@ const LocalLLMModelManager = ({
     await loadModels();
   };
 
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];

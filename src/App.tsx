@@ -15,6 +15,18 @@ import { AndroidProvider } from './contexts/AndroidContext'
 import { isAndroid, isInputWindow, isScreenPicker } from './utils/PlatformUtils'
 import { lazy, Suspense, useState } from 'react'
 
+interface AppWithSetupProps {
+  mode?: string;
+  deferSetupUntilStarted?: boolean;
+  setupStarted?: boolean;
+  onStartSetup?: () => void;
+}
+
+interface AppProps {
+  mode?: string;
+  isWallpaperMode?: boolean;
+}
+
 const LazyAppContent = lazy(() => import('./components/AppContent'))
 const LazySetupWizard = lazy(() => import('./components/setup/SetupWizard'))
 const LazyChatInput = lazy(() => import('./components/chat/ChatInput'))
@@ -31,9 +43,10 @@ const LazyAndroidBackground = lazy(() => import('./components/android/AndroidBac
  * @param {string} props.mode - Application mode ('development'|'extension'|'android')
  * @returns {JSX.Element}
  */
-function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, setupStarted = true, onStartSetup }) {
+function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, setupStarted = true, onStartSetup }: AppWithSetupProps) {
   const { setupCompleted, isLoading } = useSetup();
   const requireSetupOnChatClick = deferSetupUntilStarted && !setupStarted && !setupCompleted;
+  const appContentProps = onStartSetup ? { onRequireSetup: onStartSetup } : {};
   
   if (isLoading) {
     return <LoadingIndicator isVisible={true} />;
@@ -46,7 +59,7 @@ function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, se
           <LazyAppContent
             mode={mode}
             requireSetupOnChatClick={requireSetupOnChatClick}
-            onRequireSetup={onStartSetup}
+            {...appContentProps}
             forcePortraitMode={true}
           />
         </Suspense>
@@ -65,7 +78,7 @@ function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, se
       <LazyAppContent
         mode={mode}
         requireSetupOnChatClick={requireSetupOnChatClick}
-        onRequireSetup={onStartSetup}
+        {...appContentProps}
       />
     </Suspense>
   );
@@ -94,11 +107,12 @@ function isWallpaperMode() {
   return mode !== 'app';
 }
 
-function DevelopmentDemoSite({ onStartSetup }) {
+function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
   const { setupCompleted, isLoading } = useSetup();
   const launchHandler = !isLoading && !setupCompleted ? onStartSetup : undefined;
+  const demoSiteProps = launchHandler ? { onLaunchAssistant: launchHandler } : {};
 
-  return <DemoSite onLaunchAssistant={launchHandler} />;
+  return <DemoSite {...demoSiteProps} />;
 }
 
 /**
@@ -108,14 +122,14 @@ function DevelopmentDemoSite({ onStartSetup }) {
  * @param {string} props.mode - Application mode ('development'|'extension'|'desktop'|'android')
  * @returns {JSX.Element}
  */
-function App({ mode = 'development' }) {
+function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: AppProps) {
   const [devSetupStarted, setDevSetupStarted] = useState(false);
 
   // Determine actual mode based on build-time constants and props
   const actualMode = __DESKTOP_MODE__ ? 'desktop' : isAndroid ? 'android' : mode;
   
   if (actualMode === 'android') {
-    if (isWallpaperMode()) {
+    if ((typeof explicitWallpaperMode === 'boolean' ? explicitWallpaperMode : isWallpaperMode())) {
       return (
         <AndroidProvider>
           <ConfigProvider>

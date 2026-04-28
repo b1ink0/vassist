@@ -43,27 +43,6 @@ interface ChatInputProps {
   onVoiceMode?: (enabled: boolean) => void;
 }
 
-interface AppContextForChatInput {
-  isChatInputVisible: boolean;
-  pendingDropData: DropData | null;
-  setPendingDropData: (data: DropData | null) => void;
-  isSettingsPanelOpen: boolean;
-  isHistoryPanelOpen: boolean;
-}
-
-interface DesktopIpcLike {
-  send: (channel: string, payload?: unknown) => void;
-  on: <T = unknown>(channel: string, callback: (payload: T) => void) => (() => void) | undefined;
-}
-
-interface DesktopApiLike {
-  ipc?: DesktopIpcLike;
-}
-
-interface DesktopContextForChatInput {
-  api: DesktopApiLike | null;
-}
-
 interface MicStateLike {
   devices: MediaDeviceInfo[];
   selectedDeviceId: string | null;
@@ -118,10 +97,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     setPendingDropData,
     isSettingsPanelOpen,
     isHistoryPanelOpen,
-  }: AppContextForChatInput = useApp();
+  } = useApp();
   
   const { uiConfig } = useConfig();
-  const { api } = useDesktop() as DesktopContextForChatInput;
+  const { api } = useDesktop();
   
   // Local state for input window (synced from main window)
   const [localPendingDropData, setLocalPendingDropData] = useState<DropData | null>(null);
@@ -217,7 +196,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     if (isInputWindow) {
       api?.ipc?.send('chatInput:setPendingDropData', data);
     } else {
-      setPendingDropData(data);
+      setPendingDropData(data as never);
     }
   }, [setPendingDropData, api]);
 
@@ -252,26 +231,26 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
 
     api.ipc.send('mic:requestState');
 
-    const unsubscribePendingDrop = api.ipc.on<DropData | null>('state:pendingDropData', (data) => {
+    const unsubscribePendingDrop = api.ipc.on('state:pendingDropData', (data: DropData | null) => {
       setLocalPendingDropData(data);
     });
 
-    const unsubscribeMicDevices = api.ipc.on<MicStateLike>('state:micDevices', (data) => {
+    const unsubscribeMicDevices = api.ipc.on('state:micDevices', (data: MicStateLike) => {
       setMicDevices(data.devices);
       setSelectedMicId(data.selectedDeviceId);
     });
 
-    const unsubscribeSelectedMic = api.ipc.on<string | null>('state:selectedMicId', (deviceId) => {
+    const unsubscribeSelectedMic = api.ipc.on('state:selectedMicId', (deviceId: string | null) => {
       MicrophoneService.setSelectedDevice(deviceId);
     });
 
     // Listen for voice state changes from main window
-    const unsubscribeVoiceState = api.ipc.on<string>('state:voiceState', (state) => {
+    const unsubscribeVoiceState = api.ipc.on('state:voiceState', (state: string) => {
       Logger.log('ChatInput', 'Voice state received from main window:', state);
       setVoiceState(state);
     });
 
-    const unsubscribeTranscription = api.ipc.on<string>('voice:transcriptionReceived', (text) => {
+    const unsubscribeTranscription = api.ipc.on('voice:transcriptionReceived', (text: string) => {
       Logger.log('ChatInput', 'Transcription received from main window:', text);
       
       const images = attachedImages.length > 0 
@@ -285,7 +264,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       setAttachedImages([]);
     });
 
-    const unsubscribeSttTranscription = api.ipc.on<string>('stt:transcriptionReceived', (text) => {
+    const unsubscribeSttTranscription = api.ipc.on('stt:transcriptionReceived', (text: string) => {
       if (typeof text !== 'string' || text.trim().length === 0) {
         return;
       }
@@ -306,7 +285,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       }
     });
 
-    const unsubscribeSttRecording = api.ipc.on<{ isRecording?: boolean; isProcessing?: boolean; error?: string }>('state:sttRecording', (payload = {}) => {
+    const unsubscribeSttRecording = api.ipc.on('state:sttRecording', (payload: { isRecording?: boolean; isProcessing?: boolean; error?: string } = {}) => {
       setIsRecording(Boolean(payload.isRecording));
       setIsProcessingRecording(Boolean(payload.isProcessing));
       if (payload.error) {
@@ -361,7 +340,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       
       const container = containerRef.current;
       const canvas = document.getElementById('vassist-babylon-canvas');
-      const elementsToDisable = [container, canvas].filter(Boolean);
+      const elementsToDisable: HTMLElement[] = [container, canvas].filter((element): element is HTMLElement => element instanceof HTMLElement);
       
       const result = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
         return BackgroundDetector.detectBrightness({
@@ -372,10 +351,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
             width: 600,
             padding: 20,
           },
-          elementsToIgnore: [
-            container,
-            canvas,
-          ],
+          elementsToIgnore: elementsToDisable,
           logPrefix: '[ChatInput]',
         });
       });
@@ -457,9 +433,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       }
     });
 
-    STTServiceProxy.setErrorCallback((error: { message?: string } | string) => {
+    STTServiceProxy.setErrorCallback((error: unknown) => {
       Logger.error('ChatInput', 'STT error:', error);
-      const errorMessage = typeof error === 'string' ? error : (error?.message || 'Recording failed');
+      const errorMessage = typeof error === 'string'
+        ? error
+        : (error instanceof Error ? error.message : 'Recording failed');
       setRecordingError(errorMessage);
       setIsRecording(false);
       setIsProcessingRecording(false);
@@ -479,10 +457,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     });
 
     return () => {
-      STTServiceProxy.setTranscriptionCallback(null);
-      STTServiceProxy.setErrorCallback(null);
-      STTServiceProxy.setRecordingStartCallback(null);
-      STTServiceProxy.setRecordingStopCallback(null);
+      STTServiceProxy.setTranscriptionCallback(() => {});
+      STTServiceProxy.setErrorCallback(() => {});
+      STTServiceProxy.setRecordingStartCallback(() => {});
+      STTServiceProxy.setRecordingStopCallback(() => {});
     };
   }, []);
 
@@ -510,9 +488,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       setAttachedImages([]);
     };
 
-    const handleError = (error: { message?: string } | string) => {
+    const handleError = (error: unknown) => {
       Logger.error('ChatInput', 'Voice error:', error);
-      const errorMessage = typeof error === 'string' ? error : (error?.message || 'Voice conversation error');
+      const errorMessage = typeof error === 'string'
+        ? error
+        : (error instanceof Error ? error.message : 'Voice conversation error');
       setRecordingError(errorMessage);
     };
 
@@ -526,9 +506,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
 
     return () => {
       if (!isInputWindow) {
-        VoiceConversationService.setStateChangeCallback(null);
-        VoiceConversationService.setTranscriptionCallback(null);
-        VoiceConversationService.setErrorCallback(null);
+        VoiceConversationService.setStateChangeCallback(() => {});
+        VoiceConversationService.setTranscriptionCallback(() => {});
+        VoiceConversationService.setErrorCallback(() => {});
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -561,7 +541,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     };
     initDevices();
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+    };
   }, [api]);
 
   // Initialize camera service
@@ -574,7 +556,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
 
       // Listen for camera state from main window
       if (api?.ipc) {
-        const unsubscribeCameraDevices = api.ipc.on<CameraStateLike>('state:cameraDevices', (data) => {
+        const unsubscribeCameraDevices = api.ipc.on('state:cameraDevices', (data: CameraStateLike) => {
           didReceiveIpcCameraState = true;
           Logger.log('ChatInput', 'Input window: Received camera state via IPC:', data);
           setCameraDevices(data.devices);
@@ -649,7 +631,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     if (isInputWindow) {
       Logger.log('ChatInput', 'Input window: Setting up IPC listener for screen share state');
       if (api?.ipc) {
-        const unsubscribeScreenShare = api.ipc.on<ScreenShareStateLike>('state:screenShare', (data) => {
+        const unsubscribeScreenShare = api.ipc.on('state:screenShare', (data: ScreenShareStateLike) => {
           Logger.log('ChatInput', 'Input window: Received screen share state via IPC:', data);
           setIsScreenShareActive(data.isActive);
         });
@@ -695,7 +677,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
 
     Logger.log('ChatInput', 'Main window: Setting up camera IPC listeners');
     
-    const unsubscribeSelectDevice = api.ipc.on<string | null>('camera:selectDevice', async (deviceId) => {
+    const unsubscribeSelectDevice = api.ipc.on('camera:selectDevice', async (deviceId: string | null) => {
       Logger.log('ChatInput', 'Main window: Received IPC camera:selectDevice:', deviceId);
       await CameraService.setSelectedDevice(deviceId);
     });

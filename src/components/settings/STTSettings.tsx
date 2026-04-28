@@ -17,8 +17,24 @@ import WhisperModelDownloader from './stt/WhisperModelDownloader';
 import Toggle from '../common/Toggle';
 import { Button, Select, Card, SettingsRow } from '../ui';
 
-const STTSettings = ({ isLightBackground, hasChromeAI }) => {
-  const [devices, setDevices] = useState([]);
+interface STTSettingsProps {
+  isLightBackground?: boolean;
+  hasChromeAI?: boolean;
+}
+
+type STTProviderKey =
+  | 'android-local'
+  | 'desktop-local'
+  | 'chrome-ai-multimodal'
+  | 'openai'
+  | 'openai-compatible';
+
+interface ProviderRecord {
+  [key: string]: string;
+}
+
+const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSettingsProps) => {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   
   const { api: androidAPI } = useAndroid();
@@ -40,11 +56,11 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
     const loadDevices = async () => {
       try {
         const deviceList = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = deviceList.filter(device => device.kind === 'audioinput');
+        const audioInputs = deviceList.filter((device) => device.kind === 'audioinput');
         setDevices(audioInputs);
         
         if (!selectedDeviceId && audioInputs.length > 0) {
-          setSelectedDeviceId(audioInputs[0].deviceId);
+          setSelectedDeviceId(audioInputs[0]?.deviceId ?? '');
         }
       } catch (error) {
         console.error('Failed to enumerate devices:', error);
@@ -56,14 +72,14 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
-      return STTProviders;
+      return STTProviders as ProviderRecord;
     }
     if (isDesktop) {
       const { ANDROID_LOCAL, CHROME_AI_MULTIMODAL, ...desktopProviders } = STTProviders;
-      return desktopProviders;
+      return desktopProviders as ProviderRecord;
     }
     const { ANDROID_LOCAL, ...otherProviders } = STTProviders;
-    return otherProviders;
+    return otherProviders as ProviderRecord;
   }, []);
 
   return (
@@ -147,7 +163,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
               <h4 className="text-sm font-semibold text-white/90">Desktop Local STT (Whisper)</h4>
               <DesktopSTTConfig
                 config={sttConfig['desktop-local'] || {}}
-                onChange={(updates) => {
+                onChange={(updates: Record<string, unknown>) => {
                   Object.entries(updates).forEach(([key, value]) => {
                     updateSTTConfig(`desktop-local.${key}`, value);
                   });
@@ -162,7 +178,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
           {sttConfig.provider === STTProviders.OPENAI && (
             <OpenAISTTConfig
               config={sttConfig.openai || {}}
-              onChange={(field, value) => updateSTTConfig(`openai.${field}`, value)}
+              onChange={(field: string, value: string) => updateSTTConfig(`openai.${field}`, value)}
               isLightBackground={isLightBackground}
             />
           )}
@@ -171,7 +187,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
           {sttConfig.provider === STTProviders.OPENAI_COMPATIBLE && (
             <OpenAICompatibleSTTConfig
               config={sttConfig['openai-compatible'] || {}}
-              onChange={(field, value) => updateSTTConfig(`openai-compatible.${field}`, value)}
+              onChange={(field: string, value: string) => updateSTTConfig(`openai-compatible.${field}`, value)}
               isLightBackground={isLightBackground}
             />
           )}
@@ -180,7 +196,11 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
           {sttConfig.provider === STTProviders.CHROME_AI_MULTIMODAL && (
             <ChromeAISTTConfig
               config={sttConfig['chrome-ai-multimodal'] || {}}
-              onChange={(field, value) => updateSTTConfig(`chrome-ai-multimodal.${field}`, value)}
+              onChange={(updates) => {
+                Object.entries(updates).forEach(([field, value]) => {
+                  updateSTTConfig(`chrome-ai-multimodal.${field}`, value);
+                });
+              }}
               chromeAiStatus={chromeAiStatus}
               onCheckStatus={checkChromeAIAvailability}
               onStartDownload={startChromeAIDownload}
@@ -201,7 +221,7 @@ const STTSettings = ({ isLightBackground, hasChromeAI }) => {
               value={selectedDeviceId}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
               variant={isLightBackground ? 'dark' : 'default'}
-              options={devices.map(d => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.substring(0, 8)}` }))}
+              options={devices.map((d) => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.substring(0, 8)}` }))}
             />
           </div>
         )}

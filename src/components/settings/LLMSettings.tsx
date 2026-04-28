@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as React from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
-import { AIProviders } from '../../config/aiConfig';
+import { AIProviders, DefaultAIConfig } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import { useAndroid } from '../../contexts/AndroidContext';
@@ -21,7 +21,107 @@ import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
 import { Button, Input, Select, Card, SettingsRow } from '../ui';
 
-const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }) => {
+interface RoutingModelConfig {
+  useSameAsMain?: boolean;
+  modelName?: string;
+  selectedModel?: string;
+}
+
+interface RoutingConfig {
+  enabled?: boolean;
+  visionModel?: RoutingModelConfig;
+  routerModel?: RoutingModelConfig;
+}
+
+interface LocalModelEntry {
+  name: string;
+  size: number;
+  modified: Date;
+  hasImageSupport?: boolean;
+}
+
+interface LocalModelResult {
+  success?: boolean;
+  models?: LocalModelEntry[];
+}
+
+interface StorageServiceLike {
+  listModels: (customModelsPath?: string | null) => Promise<LocalModelResult>;
+}
+
+interface ModelConfigRemoteProps {
+  providerKey: 'openai' | 'ollama';
+  routing: RoutingConfig | undefined;
+  onChange: (field: string, value: unknown) => void;
+  isLightBackground: boolean;
+}
+
+interface ModelConfigLocalProps {
+  routing: RoutingConfig | undefined;
+  onChange: (field: string, value: unknown) => void;
+  storageService: StorageServiceLike | null;
+  refreshTrigger: unknown;
+  customModelsPath: string | null;
+}
+
+type AIConfigShape = typeof DefaultAIConfig;
+
+interface ImageAudioToggleProps {
+  providerKey: 'openai' | 'ollama' | 'android-local' | 'desktop-local' | 'chromeAi';
+  updateAIConfig: (path: string, value: unknown) => void;
+  aiConfig: AIConfigShape;
+  additionalNote?: string;
+}
+
+interface SystemPromptSectionProps {
+  providerKey: 'openai' | 'ollama' | 'android-local' | 'desktop-local' | 'chromeAi';
+  isLightBackground: boolean;
+  updateAIConfig: (path: string, value: unknown) => void;
+  aiConfig: AIConfigShape;
+}
+
+interface LLMSettingsProps {
+  isLightBackground?: boolean;
+  hasChromeAI?: boolean;
+  onRequestDeleteLLMModel?: ((modelName: string) => void) | undefined;
+  refreshTrigger?: unknown;
+}
+
+interface DesktopLlmBridge {
+  listModels: (customPath?: string | null) => Promise<unknown>;
+  pullModel: (modelName: string, customPath?: string | null) => Promise<unknown>;
+  downloadModel: (url: string, customPath?: string | null) => Promise<unknown>;
+  deleteModel: (filename: string, customPath?: string | null) => Promise<unknown>;
+  chooseModelFile: () => Promise<unknown>;
+  importModel: (filePath: string, customPath?: string | null) => Promise<unknown>;
+  chooseModelsFolder: () => Promise<unknown>;
+  onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => (() => void) | undefined;
+  getBackendStatus: (backend?: string) => Promise<unknown>;
+  installBackend: (backend: string) => Promise<unknown>;
+  cancelBackendInstall: () => Promise<unknown>;
+  onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => (() => void) | undefined;
+}
+
+const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.listModels === 'function'
+    && typeof record.pullModel === 'function'
+    && typeof record.downloadModel === 'function'
+    && typeof record.deleteModel === 'function'
+    && typeof record.chooseModelFile === 'function'
+    && typeof record.importModel === 'function'
+    && typeof record.chooseModelsFolder === 'function'
+    && typeof record.onDownloadProgress === 'function'
+    && typeof record.getBackendStatus === 'function'
+    && typeof record.installBackend === 'function'
+    && typeof record.cancelBackendInstall === 'function'
+    && typeof record.onBackendInstallProgress === 'function';
+};
+
+const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }: ModelConfigRemoteProps) => {
   const examples = providerKey === 'openai' ? {
     vision: 'gpt-4-vision-preview',
     router: 'gpt-3.5-turbo'
@@ -111,8 +211,8 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
   );
 };
 
-const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, customModelsPath }) => {
-  const [models, setModels] = React.useState([]);
+const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, customModelsPath }: ModelConfigLocalProps) => {
+  const [models, setModels] = React.useState<LocalModelEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -132,7 +232,7 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
     loadModels();
   }, [storageService, refreshTrigger, customModelsPath]);
 
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes: number) => {
     if (!bytes) return 'Unknown';
     const mb = bytes / (1024 * 1024);
     if (mb >= 1024) {
@@ -306,7 +406,9 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
   );
 };
 
-const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
+const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }: ImageAudioToggleProps) => {
+  const providerConfig = aiConfig[providerKey as keyof AIConfigShape] as Record<string, unknown> | undefined;
+  return (
   <div className="space-y-2">
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
       <label htmlFor={`${providerKey}-image-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
@@ -317,14 +419,17 @@ const ImageSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalN
       </label>
       <Toggle
         id={`${providerKey}-image-support`}
-        checked={aiConfig[providerKey]?.enableImageSupport !== false}
+        checked={providerConfig?.enableImageSupport !== false}
         onChange={(checked) => updateAIConfig(`${providerKey}.enableImageSupport`, checked)}
       />
     </div>
   </div>
-);
+  );
+};
 
-const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }) => (
+const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalNote = '' }: ImageAudioToggleProps) => {
+  const providerConfig = aiConfig[providerKey as keyof AIConfigShape] as Record<string, unknown> | undefined;
+  return (
   <div className="space-y-2">
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
       <label htmlFor={`${providerKey}-audio-support`} className="text-sm font-medium text-white/90 cursor-pointer flex-1">
@@ -335,17 +440,20 @@ const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalN
       </label>
       <Toggle
         id={`${providerKey}-audio-support`}
-        checked={aiConfig[providerKey]?.enableAudioSupport !== false}
+        checked={providerConfig?.enableAudioSupport !== false}
         onChange={(checked) => updateAIConfig(`${providerKey}.enableAudioSupport`, checked)}
       />
     </div>
   </div>
-);
+  );
+};
 
-const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, aiConfig }) => {
+const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, aiConfig }: SystemPromptSectionProps) => {
   const providerConfig = aiConfig[providerKey] || {};
-  const currentType = providerConfig.systemPromptType || 'default';
-  const currentPrompt = providerConfig.systemPrompt || '';
+  const currentType = typeof providerConfig.systemPromptType === 'string' ? providerConfig.systemPromptType : 'default';
+  const currentPrompt = typeof providerConfig.systemPrompt === 'string' ? providerConfig.systemPrompt : '';
+  const systemPrompts = PromptConfig.systemPrompts;
+  const promptKey = (currentType in systemPrompts ? currentType : 'default') as keyof typeof systemPrompts;
   
   return (
     <>
@@ -381,7 +489,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
           value={
             currentType === 'custom' 
               ? currentPrompt 
-              : (PromptConfig.systemPrompts[currentType]?.prompt || '')
+              : (systemPrompts[promptKey]?.prompt || '')
           }
           onChange={(e) => {
             const newValue = e.target.value;
@@ -391,7 +499,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
             updateAIConfig(`${providerKey}.systemPrompt`, newValue);
           }}
           placeholder="Enter custom system prompt..."
-          rows="4"
+          rows={4}
           className={cn('glass-input w-full resize-y', isLightBackground && 'glass-input-dark')}
         />
         <p className="text-xs text-white/50">
@@ -402,7 +510,7 @@ const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, a
   );
 };
 
-const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, refreshTrigger }) => {
+const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequestDeleteLLMModel, refreshTrigger = 0 }: LLMSettingsProps) => {
   const {
     aiConfig,
     aiTesting,
@@ -416,7 +524,28 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
   const { api: androidAPI } = useAndroid();
   const { api: desktopAPI } = useDesktop();
-  const [_desktopServerStatus, setDesktopServerStatus] = useState(null);
+  const desktopLlmBridge = isDesktopLlmBridge(desktopAPI?.llm) ? desktopAPI.llm : null;
+  const desktopLlmApi = desktopLlmBridge ? {
+    listModels: (customPath?: string | null) => desktopLlmBridge.listModels(customPath) as Promise<{ success: boolean; models?: LocalModelEntry[] }>,
+    pullModel: (modelName: string, customPath?: string | null) => desktopLlmBridge.pullModel(modelName, customPath) as Promise<{ success: boolean; error?: string }>,
+    downloadModel: (url: string, customPath?: string | null) => desktopLlmBridge.downloadModel(url, customPath) as Promise<{ success: boolean; error?: string }>,
+    deleteModel: (filename: string, customPath?: string | null) => desktopLlmBridge.deleteModel(filename, customPath) as Promise<{ success: boolean; error?: string }>,
+    chooseModelFile: () => desktopLlmBridge.chooseModelFile() as Promise<{ canceled?: boolean; path?: string }>,
+    importModel: (filePath: string, customPath?: string | null) => desktopLlmBridge.importModel(filePath, customPath) as Promise<{ success: boolean; error?: string }>,
+    chooseModelsFolder: () => desktopLlmBridge.chooseModelsFolder() as Promise<{ success: boolean; error?: string; path?: string }>,
+    onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => {
+      const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
+      return () => unsubscribe?.();
+    },
+    getBackendStatus: (backend = 'auto') => desktopLlmBridge.getBackendStatus(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+    installBackend: (backend: string) => desktopLlmBridge.installBackend(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+    cancelBackendInstall: () => desktopLlmBridge.cancelBackendInstall() as Promise<{ success: boolean } & Record<string, unknown>>,
+    onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => {
+      const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
+      return () => unsubscribe?.();
+    },
+  } : null;
+  const [_desktopServerStatus, setDesktopServerStatus] = useState<unknown | null>(null);
   const desktopServerPort = Number(aiConfig['desktop-local']?.serverPort || 11438);
   const isDesktopServerPortValid = Number.isInteger(desktopServerPort) && desktopServerPort >= 1 && desktopServerPort <= 65535;
 
@@ -428,8 +557,12 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
     let active = true;
 
     const refreshStatus = async () => {
+      const getStatus = desktopAPI?.server?.getStatus;
+      if (!getStatus) {
+        return;
+      }
       try {
-        const status = await desktopAPI.server.getStatus();
+        const status = await getStatus();
         if (active) {
           setDesktopServerStatus(status);
         }
@@ -468,6 +601,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
 
             <SettingsRow
               className="mt-2"
+              label="Share On Local Network"
               description="When enabled, binds to LAN so other devices can use your hosted server."
             >
               <Toggle
@@ -555,7 +689,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
             <ModelConfigRemote
               providerKey="openai"
               routing={aiConfig.openai?.routing}
-              onChange={(field, value) => updateAIConfig(`openai.${field}`, value)}
+              onChange={(field: string, value: unknown) => updateAIConfig(`openai.${field}`, value)}
               isLightBackground={isLightBackground}
             />
           </div>
@@ -604,7 +738,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
             <ModelConfigRemote
               providerKey="ollama"
               routing={aiConfig.ollama?.routing}
-              onChange={(field, value) => updateAIConfig(`ollama.${field}`, value)}
+              onChange={(field: string, value: unknown) => updateAIConfig(`ollama.${field}`, value)}
               isLightBackground={isLightBackground}
             />
           </div>
@@ -640,7 +774,7 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
           <LocalLLMModelManager
             storageService={getLLMModelStorage(androidAPI)}
             selectedModel={aiConfig['android-local']?.model || null}
-            onModelSelect={(modelName) => updateAIConfig('android-local.model', modelName)}
+            onModelSelect={(modelName: string) => updateAIConfig('android-local.model', modelName)}
             customModelsPath={null}
             onCustomPathChange={null}
             isLightBackground={isLightBackground}
@@ -708,15 +842,15 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
         <>
           <DesktopLLMConfig
             config={aiConfig['desktop-local'] || {}}
-            onChange={(updates) => {
+            onChange={(updates: Record<string, unknown>) => {
               Object.entries(updates).forEach(([key, value]) => {
                 updateAIConfig(`desktop-local.${key}`, value);
               });
             }}
             isSetupMode={false}
             isLightBackground={isLightBackground}
-            onRequestDeleteModel={onRequestDeleteLLMModel}
-            refreshTrigger={refreshTrigger}
+            {...(onRequestDeleteLLMModel ? { onRequestDeleteModel: onRequestDeleteLLMModel } : {})}
+            {...(typeof refreshTrigger !== 'undefined' ? { refreshTrigger } : {})}
           />          <SystemPromptSection providerKey="desktop-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
           
           {/* Model Routing */}
@@ -725,9 +859,9 @@ const LLMSettings = ({ isLightBackground, hasChromeAI, onRequestDeleteLLMModel, 
             <ModelConfigLocal
               routing={aiConfig['desktop-local']?.routing}
               onChange={(field, value) => updateAIConfig(`desktop-local.${field}`, value)}
-              storageService={getLLMModelStorage(desktopAPI)}
+              storageService={desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null}
               refreshTrigger={refreshTrigger}
-              customModelsPath={aiConfig['desktop-local']?.customModelsPath}
+              customModelsPath={aiConfig['desktop-local']?.customModelsPath ?? null}
             />
           </div>
         </>

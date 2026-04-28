@@ -289,7 +289,8 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       const defaultModel = await modelStorageService.getDefaultModel();
       if (defaultModel) {
         setCurrentDefaultModelId(defaultModel.id);
-        const clipping = defaultModel.metadata?.portraitClipping ?? 12;
+        const rawClipping = defaultModel.metadata?.portraitClipping;
+        const clipping = typeof rawClipping === 'number' ? rawClipping : 12;
         setPortraitClipping(clipping);
       } else {
         setCurrentDefaultModelId(null);
@@ -520,6 +521,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       }).then(async (modelId: string) => {
         // Get the converted model data
         const modelData = await modelStorageService.getModel(modelId);
+        if (!modelData?.modelData) {
+          throw new Error('Converted model data is unavailable');
+        }
         
         // Save as stage instead
         const stageId = await stageStorageService.saveStage(

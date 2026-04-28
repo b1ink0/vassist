@@ -9,6 +9,39 @@ import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../../contexts/ConfigContext';
 import Logger from '../../services/LoggerService';
 
+interface PositionManagerLike {
+  offset?: { x?: number; y?: number };
+  modelHeightPx?: number;
+  modelWidthPx?: number;
+  effectiveHeightPx?: number;
+  positionX: number;
+  positionY: number;
+  customBoundaries?: { left?: number; right?: number; top?: number; bottom?: number };
+  updateCameraFrustum: () => void;
+  setPositionPixels: (x: number, y: number, width: number, height: number, effectiveHeight: number, offset: { x?: number; y?: number }) => void;
+  setCustomBoundaries: (boundaries: { left?: number; right?: number; top?: number; bottom?: number }) => void;
+}
+
+interface AxisHelper {
+  xAxis: BABYLON.LinesMesh;
+  yAxis: BABYLON.LinesMesh;
+  zAxis: BABYLON.LinesMesh;
+}
+
+interface DebugOverlayProps {
+  scene: BABYLON.Scene | null;
+  positionManager: PositionManagerLike | null;
+  embedded?: boolean;
+}
+
+type MoveDirection = 'up' | 'down' | 'left' | 'right';
+type OffsetAxis = 'x' | 'y';
+type BoundaryEdge = 'left' | 'right' | 'top' | 'bottom';
+
+const toNumber = (value: number | string): number => {
+  return typeof value === 'number' ? value : Number.parseFloat(value);
+};
+
 /**
  * Debug overlay component providing camera controls and visualization tools.
  * 
@@ -17,7 +50,7 @@ import Logger from '../../services/LoggerService';
  * @param {Object} props.positionManager - Position manager for camera controls
  * @returns {JSX.Element}
  */
-const DebugOverlay = ({ scene, positionManager }) => {
+const DebugOverlay = ({ scene, positionManager }: DebugOverlayProps) => {
   const { uiConfig, updateUIConfig } = useConfig();
   const [activeTab, setActiveTab] = useState('debug');
   const [showAxis, setShowAxis] = useState(false);
@@ -25,7 +58,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
   const [showPickingBox, setShowPickingBox] = useState(false);
   const [is3DView, setIs3DView] = useState(false);
   const [clipPlaneY, setClipPlaneY] = useState(6.5);
-  const [coords, setCoords] = useState({ x: 0, y: 0, scale: 12 });
+  const [coords, setCoords] = useState<{ x: string; y: string; scale: string }>({ x: '0', y: '0', scale: '12' });
   
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
@@ -34,16 +67,16 @@ const DebugOverlay = ({ scene, positionManager }) => {
   const [boundaryTop, setBoundaryTop] = useState(0);
   const [boundaryBottom, setBoundaryBottom] = useState(0);
   
-  const [axisHelper, setAxisHelper] = useState(null);
+  const [axisHelper, setAxisHelper] = useState<AxisHelper | null>(null);
 
   useEffect(() => {
     if (!positionManager || !showCoords) return;
     
     const interval = setInterval(() => {
       setCoords({
-        x: positionManager.offset?.x?.toFixed(2) || 0,
-        y: positionManager.offset?.y?.toFixed(2) || 0,
-        scale: positionManager.modelHeightPx?.toFixed(0) || 500
+        x: positionManager.offset?.x?.toFixed(2) ?? '0',
+        y: positionManager.offset?.y?.toFixed(2) ?? '0',
+        scale: positionManager.modelHeightPx?.toFixed(0) ?? '500'
       });
     }, 100);
     
@@ -107,11 +140,14 @@ const DebugOverlay = ({ scene, positionManager }) => {
    * @param {string} direction - Direction to move ('up'|'down'|'left'|'right')
    * @param {number} amount - Amount to move in world units
    */
-  const moveCamera = (direction, amount = 1) => {
+  const moveCamera = (direction: MoveDirection, amount = 1) => {
     if (!positionManager) return;
     
     const currentOffset = positionManager.offset || { x: 0, y: 0 };
-    const newOffset = { ...currentOffset };
+    const newOffset: { x: number; y: number } = {
+      x: currentOffset.x ?? 0,
+      y: currentOffset.y ?? 0
+    };
     
     switch(direction) {
       case 'up':
@@ -137,7 +173,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
    * 
    * @param {string} direction - Zoom direction ('in'|'out')
    */
-  const zoom = (direction) => {
+  const zoom = (direction: 'in' | 'out') => {
     if (!positionManager) return;
     
     const currentSize = positionManager.modelHeightPx || 500;
@@ -209,7 +245,7 @@ const DebugOverlay = ({ scene, positionManager }) => {
    * 
    * @param {number} newY - New Y coordinate for clipping plane
    */
-  const updateClipPlaneY = (newY) => {
+  const updateClipPlaneY = (newY: number) => {
     if (!scene || !scene.clipPlane) return;
     
     setClipPlaneY(newY);
@@ -223,21 +259,25 @@ const DebugOverlay = ({ scene, positionManager }) => {
    * @param {string} axis - Axis to update ('x'|'y')
    * @param {number} value - New offset value
    */
-  const updateOffset = (axis, value) => {
+  const updateOffset = (axis: OffsetAxis, value: number | string) => {
     if (!positionManager) return;
     
-    const newOffset = { ...positionManager.offset };
-    newOffset[axis] = parseFloat(value);
+    const currentOffset = positionManager.offset || { x: 0, y: 0 };
+    const newOffset = {
+      x: currentOffset.x ?? 0,
+      y: currentOffset.y ?? 0
+    };
+    newOffset[axis] = toNumber(value);
     
-    if (axis === 'x') setOffsetX(value);
-    if (axis === 'y') setOffsetY(value);
+    if (axis === 'x') setOffsetX(toNumber(value));
+    if (axis === 'y') setOffsetY(toNumber(value));
     
     positionManager.setPositionPixels(
       positionManager.positionX,
       positionManager.positionY,
-      positionManager.modelWidthPx,
-      positionManager.modelHeightPx,
-      positionManager.effectiveHeightPx,
+      positionManager.modelWidthPx ?? 300,
+      positionManager.modelHeightPx ?? 500,
+      positionManager.effectiveHeightPx ?? 500,
       newOffset
     );
   };
@@ -248,16 +288,16 @@ const DebugOverlay = ({ scene, positionManager }) => {
    * @param {string} edge - Edge to update ('left'|'right'|'top'|'bottom')
    * @param {number} value - New boundary value
    */
-  const updateBoundary = (edge, value) => {
+  const updateBoundary = (edge: BoundaryEdge, value: number | string) => {
     if (!positionManager) return;
     
     const newBoundaries = { ...positionManager.customBoundaries };
-    newBoundaries[edge] = parseFloat(value);
+    newBoundaries[edge] = toNumber(value);
     
-    if (edge === 'left') setBoundaryLeft(value);
-    if (edge === 'right') setBoundaryRight(value);
-    if (edge === 'top') setBoundaryTop(value);
-    if (edge === 'bottom') setBoundaryBottom(value);
+    if (edge === 'left') setBoundaryLeft(toNumber(value));
+    if (edge === 'right') setBoundaryRight(toNumber(value));
+    if (edge === 'top') setBoundaryTop(toNumber(value));
+    if (edge === 'bottom') setBoundaryBottom(toNumber(value));
     
     positionManager.setCustomBoundaries(newBoundaries);
   };
@@ -391,8 +431,9 @@ const DebugOverlay = ({ scene, positionManager }) => {
                 onChange={(e) => {
                   const newValue = e.target.checked;
                   setShowPickingBox(newValue);
-                  if (scene?.pickingBox) {
-                    scene.pickingBox.isVisible = newValue;
+                  const pickingBox = scene?.metadata?.animationManager?.pickingBox;
+                  if (pickingBox) {
+                    pickingBox.isVisible = newValue;
                   }
                 }}
                 className="mr-2"

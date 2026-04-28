@@ -10,7 +10,7 @@ import chatHistoryService from '../../services/ChatHistoryService';
 import Logger from '../../services/LoggerService';
 
 interface ChatHistoryMessage {
-  role: string;
+  role?: string;
   content?: string;
 }
 
@@ -21,7 +21,7 @@ interface ChatHistoryItem {
   messageCount?: number;
   updatedAt?: string;
   createdAt?: string;
-  metadata?: { sourceUrl?: string };
+  metadata?: Record<string, unknown>;
 }
 
 interface ChatHistoryPanelProps {
@@ -69,7 +69,6 @@ const ChatHistoryPanel = ({
   
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevScrollHeightRef = useRef(0);
   const WINDOW_SIZE = 30;
@@ -243,11 +242,13 @@ const ChatHistoryPanel = ({
 
     if (scrollTimeoutRef.current) return;
     scrollTimeoutRef.current = setTimeout(() => {
-      clearTimeout(scrollTimeoutRef.current);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
       scrollTimeoutRef.current = null;
     }, 150);
 
-    const element = e.target;
+    const element = e.currentTarget;
     const scrollTop = element.scrollTop;
     const scrollHeight = element.scrollHeight;
     const clientHeight = element.clientHeight;
@@ -362,7 +363,6 @@ const ChatHistoryPanel = ({
         {/* Search Input */}
         <div className="relative">
           <Input
-            ref={searchInputRef}
             type="text"
             placeholder="Search chats..."
             value={searchQuery}
@@ -373,7 +373,6 @@ const ChatHistoryPanel = ({
             <Button
               onClick={() => {
                 setSearchQuery('');
-                searchInputRef.current?.focus();
               }}
               variant="default"
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 h-auto"
@@ -432,7 +431,7 @@ const ChatHistoryPanel = ({
                     <span>•</span>
                     <span>{formatDate(chat.updatedAt || chat.createdAt)}</span>
                   </div>
-                  {chat.metadata?.sourceUrl && (
+                  {typeof chat.metadata?.sourceUrl === 'string' && (
                     <div className="flex items-center gap-1 text-xs truncate text-white/30">
                       <Icon name="location" size={12} />
                       <span>{formatUrl(chat.metadata.sourceUrl)}</span>

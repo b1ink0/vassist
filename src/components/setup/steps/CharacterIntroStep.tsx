@@ -10,8 +10,8 @@ import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
 const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
-  const normalRef = useRef(null);
-  const portraitRef = useRef(null);
+  const normalRef = useRef<any>(null);
+  const portraitRef = useRef<any>(null);
   const allowPositionSelection = !isAndroid && !isDesktop;
   
   // Character enabled state (on by default)
@@ -30,7 +30,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
   );
 
   // Auto-save to setup data whenever values change
-  const handleCharacterToggle = (enabled) => {
+  const handleCharacterToggle = (enabled: boolean) => {
     setCharacterEnabled(enabled);
     const uiConfig = {
       enableModelLoading: enabled,
@@ -41,7 +41,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
     updateSetupData({ ui: uiConfig });
   };
 
-  const handleDisplayModeChange = (mode) => {
+  const handleDisplayModeChange = (mode: 'normal' | 'portrait') => {
     setDisplayMode(mode);
     const uiConfig = {
       enableModelLoading: characterEnabled,
@@ -52,7 +52,7 @@ const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disabl
     updateSetupData({ ui: uiConfig });
   };
 
-  const handlePositionChange = (position) => {
+  const handlePositionChange = (position: string) => {
     setSelectedPosition(position);
     const uiConfig = {
       enableModelLoading: characterEnabled,

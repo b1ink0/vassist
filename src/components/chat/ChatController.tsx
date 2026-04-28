@@ -55,6 +55,7 @@ interface ChatMessageLike {
   content: string;
   images?: string[];
   audios?: string[];
+  [key: string]: string | number | boolean | null | undefined | object;
 }
 
 interface ChatServiceLike {
@@ -63,29 +64,6 @@ interface ChatServiceLike {
   getFormattedMessages: (systemPrompt: string) => AIMessage[];
   getLastUserMessage: () => ChatMessageLike | null;
   updateLastMessage: (content: string) => void;
-}
-
-interface AppContextForChatController {
-  assistantRef: MutableRefObject<AssistantHandle | null>;
-  isAssistantReady: boolean;
-  isChatInputVisible: boolean;
-  isChatContainerVisible: boolean;
-  chatMessages: ChatMessageLike[];
-  isVoiceMode: boolean;
-  currentChatId: string | null;
-  isTempChat: boolean;
-  pendingDropData: unknown;
-  setIsChatInputVisible: Dispatch<SetStateAction<boolean>>;
-  setIsChatContainerVisible: Dispatch<SetStateAction<boolean>>;
-  setChatMessages: Dispatch<SetStateAction<ChatMessageLike[]>>;
-  setIsProcessing: Dispatch<SetStateAction<boolean>>;
-  setIsVoiceMode: Dispatch<SetStateAction<boolean>>;
-  setIsSpeaking: Dispatch<SetStateAction<boolean>>;
-  setCurrentChatId: Dispatch<SetStateAction<string | null>>;
-  setPendingDropData: Dispatch<SetStateAction<unknown>>;
-  regenerateWithStreamingRef: MutableRefObject<(() => Promise<void>) | null>;
-  editWithStreamingRef: MutableRefObject<(() => Promise<void>) | null>;
-  closeChat: () => void;
 }
 
 interface DesktopApiForChatController {
@@ -263,7 +241,7 @@ const ChatController = ({
   const inputWindowSttProcessingRef = useRef(false);
   
   const {
-    assistantRef,
+    assistantRef: appAssistantRef,
     isAssistantReady,
     isChatInputVisible,
     isChatContainerVisible,
@@ -283,7 +261,9 @@ const ChatController = ({
     regenerateWithStreamingRef,
     editWithStreamingRef,
     closeChat,
-  }: AppContextForChatController = useApp();
+  } = useApp();
+
+  const assistantRef = appAssistantRef as MutableRefObject<AssistantHandle | null>;
 
   const canUseAssistant = useCallback((): boolean => {
     return assistantRef.current?.isReady?.() === true;
@@ -1051,7 +1031,7 @@ const ChatController = ({
       
       if (!isChatInputVisible) {
         Logger.log('ChatController', 'Storing drop data as pending (chat not open yet)')
-        setPendingDropData(event.detail)
+        setPendingDropData(event.detail as never)
       }
     }
 
@@ -1515,7 +1495,7 @@ const ChatController = ({
 
     const unsubscribePendingDrop = api.ipc.on('chatInput:setPendingDropData', (data: unknown) => {
       Logger.log('ChatController', 'Received setPendingDropData from input window via IPC', data);
-      setPendingDropData(data);
+      setPendingDropData(data as never);
     });
 
     const unsubscribeClose = api.ipc.on('chatInput:close', () => {

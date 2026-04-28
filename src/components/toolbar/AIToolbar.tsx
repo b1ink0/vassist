@@ -19,6 +19,43 @@ import ToolbarResultPanel from './ToolbarResultPanel';
 import { Icon } from '../icons';
 import Logger from '../../services/LoggerService';
 
+type ToolbarPosition = { x: number; y: number };
+type ToolbarAction = string | null;
+type DictationMode = 'manual' | 'auto-insert' | null;
+type EditableType = 'input' | 'textarea' | 'contenteditable' | null;
+type EditableElement = (HTMLInputElement | HTMLTextAreaElement | HTMLElement) & {
+  value?: string;
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+  setSelectionRange?: (start: number, end: number) => void;
+};
+type SavedCursorPosition = {
+  element: EditableElement;
+  start?: number | null;
+  end?: number | null;
+  range?: Range;
+} | null;
+
+interface SelectionSnapshot {
+  text: string;
+  images: any[];
+  audios: any[];
+  selection: Selection | null;
+}
+
+interface EditableCheckResult {
+  isEditable: boolean;
+  element: EditableElement | null;
+  originalContent: string | null;
+  selectionStart: number;
+  selectionEnd: number;
+  editableType: EditableType;
+}
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return 'Unknown error';
+};
+
 const AIToolbar = () => {
   const { uiConfig, aiConfig, handleAddToChat } = useApp();
   const { ttsConfig } = useConfig();
@@ -26,67 +63,67 @@ const AIToolbar = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [lockedPosition, setLockedPosition] = useState(null);
+  const [position, setPosition] = useState<ToolbarPosition>({ x: 0, y: 0 });
+  const [lockedPosition, setLockedPosition] = useState<ToolbarPosition | null>(null);
   const [resultPanelActive, setResultPanelActive] = useState(false);
   const [shouldRenderResultPanel, setShouldRenderResultPanel] = useState(false);
   const [isResultPanelClosing, setIsResultPanelClosing] = useState(false);
   const [selectedText, setSelectedText] = useState('');
-  const [selectedImages, setSelectedImages] = useState([]);
-  const [selectedAudios, setSelectedAudios] = useState([]);
-  const [hoveredImageElement, setHoveredImageElement] = useState(null);
-  const savedCursorPositionRef = useRef(null);
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
+  const [selectedAudios, setSelectedAudios] = useState<any[]>([]);
+  const [hoveredImageElement, setHoveredImageElement] = useState<HTMLImageElement | null>(null);
+  const savedCursorPositionRef = useRef<SavedCursorPosition>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [action, setAction] = useState(null);
+  const [action, setAction] = useState<ToolbarAction>(null);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [isLightBackgroundToolbar, setIsLightBackgroundToolbar] = useState(false);
   const [isLightBackgroundPanel, setIsLightBackgroundPanel] = useState(false);
-  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(null);
-  const [detectedLanguageName, setDetectedLanguageName] = useState(null);
+  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState<string | null>(null);
+  const [detectedLanguageName, setDetectedLanguageName] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTTSGenerating, setIsTTSGenerating] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   
   const [writerPrompt, setWriterPrompt] = useState('');
   const [showWriterInput, setShowWriterInput] = useState(false);
   
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [dictationMode, setDictationMode] = useState(null);
+  const [dictationMode, setDictationMode] = useState<DictationMode>(null);
   const [accumulatedTranscription, setAccumulatedTranscription] = useState('');
-  const recordingIntervalRef = useRef(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isProcessingRef = useRef(false);
   
   const [isEditableContent, setIsEditableContent] = useState(false);
-  const [editableElement, setEditableElement] = useState(null);
-  const [originalContent, setOriginalContent] = useState(null);
-  const [editableType, setEditableType] = useState(null);
+  const [editableElement, setEditableElement] = useState<EditableElement | null>(null);
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
+  const [editableType, setEditableType] = useState<EditableType>(null);
   const [editableSelectionStart, setEditableSelectionStart] = useState(0);
   const [editableSelectionEnd, setEditableSelectionEnd] = useState(0);
   const [hasInserted, setHasInserted] = useState(false);
-  const [improvedContent, setImprovedContent] = useState(null);
+  const [improvedContent, setImprovedContent] = useState<string | null>(null);
   
-  const toolbarRef = useRef(null);
-  const resultPanelRef = useRef(null);
-  const selectionTimeoutRef = useRef(null);
-  const abortControllerRef = useRef(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const resultPanelRef = useRef<HTMLDivElement | null>(null);
+  const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const hasInsertedRef = useRef(false);
   const showingFromInputFocusRef = useRef(false);
   const showingFromImageHoverRef = useRef(false);
-  const pendingResultRef = useRef(null);
-  const resultUpdateRafRef = useRef(null);
-  const resultPanelCloseTimeoutRef = useRef(null);
+  const pendingResultRef = useRef<string | null>(null);
+  const resultUpdateRafRef = useRef<number | null>(null);
+  const resultPanelCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const resultRef = useRef('');
   const errorRef = useRef('');
   const isLoadingRef = useRef(false);
-  const lockedPositionRef = useRef(null);
+  const lockedPositionRef = useRef<ToolbarPosition | null>(null);
   const isVisibleRef = useRef(false);
   const showWriterInputRef = useRef(false);
   
-  const setResultThrottled = useCallback((newResult) => {
+  const setResultThrottled = useCallback((newResult: string) => {
     pendingResultRef.current = newResult;
     
     if (resultUpdateRafRef.current !== null) {
@@ -213,6 +250,8 @@ const AIToolbar = () => {
    * Check if toolbar is enabled
    */
   const isEnabled = uiConfig?.enableAIToolbar !== false;
+  const aiToolbarSettings = (uiConfig?.aiToolbar as { showOnInputFocus?: boolean; showOnImageHover?: boolean } | undefined);
+  const backgroundMode = (uiConfig?.backgroundDetection as { mode?: 'adaptive' | 'light' | 'dark' } | undefined)?.mode || 'adaptive';
 
   /**
    * Determine selection type based on word count
@@ -220,12 +259,12 @@ const AIToolbar = () => {
    * - Short phrase: 3-10 words (show both dictionary and summarize)
    * - Passage: >10 words (show only summarize)
    */
-  const getSelectionType = useCallback((text) => {
+  const getSelectionType = useCallback((text: string) => {
     if (!text || !text.trim()) {
       return { isSingleWord: false, wordCount: 0 };
     }
     
-    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    const words = text.trim().split(/\s+/).filter((w: string) => w.length > 0);
     const wordCount = words.length;
     
     return {
@@ -234,14 +273,14 @@ const AIToolbar = () => {
     };
   }, []);
 
-  const checkEditableContent = useCallback(() => {
+  const checkEditableContent = useCallback((): EditableCheckResult => {
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
       (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
     
     if (isInputOrTextarea) {
-      const element = activeElement;
+      const element = activeElement as HTMLInputElement | HTMLTextAreaElement;
       
       if (element.tagName === 'INPUT') {
         const type = element.type.toLowerCase();
@@ -256,14 +295,14 @@ const AIToolbar = () => {
       const start = element.selectionStart;
       const end = element.selectionEnd;
       
-      if (start !== undefined && end !== undefined && start !== end) {
+      if (start != null && end != null && start !== end) {
         return {
           isEditable: true,
           element: element,
           originalContent: element.value,
           selectionStart: start,
           selectionEnd: end,
-          editableType: element.tagName.toLowerCase(),
+          editableType: element.tagName.toLowerCase() as 'input' | 'textarea',
         };
       }
       
@@ -282,10 +321,10 @@ const AIToolbar = () => {
     const startElement = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer;
     const endElement = endContainer.nodeType === 3 ? endContainer.parentElement : endContainer;
 
-    const findContentEditableAncestor = (element) => {
+    const findContentEditableAncestor = (element: Element | null) => {
       let current = element;
       while (current && current !== document.body) {
-        if (current.isContentEditable || current.getAttribute('contenteditable') === 'true') {
+        if ((current as HTMLElement).isContentEditable || current.getAttribute('contenteditable') === 'true') {
           return current;
         }
         if (current.getAttribute('g_editable') === 'true') {
@@ -296,8 +335,8 @@ const AIToolbar = () => {
       return null;
     };
 
-    const startEditable = findContentEditableAncestor(startElement);
-    const endEditable = findContentEditableAncestor(endElement);
+    const startEditable = findContentEditableAncestor(startElement as Element | null);
+    const endEditable = findContentEditableAncestor(endElement as Element | null);
 
     if (!startEditable || !endEditable || startEditable !== endEditable) {
       return { isEditable: false, element: null, originalContent: null, selectionStart: 0, selectionEnd: 0, editableType: null };
@@ -305,7 +344,7 @@ const AIToolbar = () => {
 
     return {
       isEditable: true,
-      element: startEditable,
+      element: startEditable as HTMLElement,
       originalContent: startEditable.innerHTML,
       selectionStart: range.startOffset,
       selectionEnd: range.endOffset,
@@ -317,7 +356,7 @@ const AIToolbar = () => {
    * Set up TTS event listeners for speaker icon
    */
   useEffect(() => {
-    const handleAudioStart = (event) => {
+    const handleAudioStart = (event: any) => {
       const { sessionId } = event.detail;
       Logger.log('AIToolbar', 'TTS audio started:', sessionId);
       if (sessionId === currentSessionId) {
@@ -325,7 +364,7 @@ const AIToolbar = () => {
       }
     };
 
-    const handleAudioEnd = (event) => {
+    const handleAudioEnd = (event: any) => {
       const { sessionId } = event.detail;
       Logger.log('AIToolbar', 'TTS audio ended:', sessionId);
       // Update speaking state regardless of sessionId match
@@ -408,9 +447,9 @@ const AIToolbar = () => {
 
       setIsSpeaking(false);
       setCurrentSessionId(null);
-    } catch (err) {
+    } catch (err: unknown) {
       Logger.error('AIToolbar', 'TTS failed:', err);
-      setError('Text-to-Speech failed: ' + (err.message || 'Unknown error'));
+      setError('Text-to-Speech failed: ' + getErrorMessage(err));
       setIsTTSGenerating(false);
       setIsSpeaking(false);
       setCurrentSessionId(null);
@@ -436,7 +475,7 @@ const AIToolbar = () => {
         } else if (action?.startsWith('image-')) {
           await AIServiceProxy.abortRequest();
         }
-      } catch (error) {
+      } catch (error: unknown) {
         Logger.error('AIToolbar', 'Service abort failed:', error);
       }
       
@@ -466,18 +505,18 @@ const AIToolbar = () => {
     }, 500);
   }, [isLoading, action, isSpeaking, currentSessionId]);
 
-  const getSelection = useCallback(() => {
+  const getSelection = useCallback((): SelectionSnapshot => {
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
       (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
     
     if (isInputOrTextarea) {
-      const element = activeElement;
+      const element = activeElement as HTMLInputElement | HTMLTextAreaElement;
       const start = element.selectionStart;
       const end = element.selectionEnd;
       
-      if (start !== undefined && end !== undefined && start !== end) {
+      if (start != null && end != null && start !== end) {
         const text = element.value.substring(start, end).trim();
         return { 
           text, 
@@ -499,7 +538,7 @@ const AIToolbar = () => {
     const range = selection.getRangeAt(0);
     const container = range.commonAncestorContainer;
     
-    const containerEl = container.nodeType === 3 ? container.parentElement : container;
+    const containerEl = container.nodeType === 3 ? container.parentElement : (container as Element | null);
     
     const media = MediaExtractionService._extractMediaFromContainer(containerEl, selection);
     
@@ -514,7 +553,7 @@ const AIToolbar = () => {
   /**
    * Calculate optimal position for toolbar at selection start
    */
-  const calculatePosition = useCallback((selection) => {
+  const calculatePosition = useCallback((selection: Selection | null): ToolbarPosition | null => {
     const activeElement = document.activeElement;
     const isInputOrTextarea = 
       activeElement && 
@@ -523,7 +562,7 @@ const AIToolbar = () => {
     let rect;
     
     if (isInputOrTextarea) {
-      const element = activeElement;
+      const element = activeElement as HTMLInputElement | HTMLTextAreaElement;
       const start = element.selectionStart || 0;
       
       const tempSpan = document.createElement('span');
@@ -777,14 +816,14 @@ const AIToolbar = () => {
   /**
    * Hides toolbar when clicking outside using shadow DOM-compatible event path checking
    */
-  const handleClickOutside = useCallback((e) => {
-    const path = e.composedPath ? e.composedPath() : (e.path || [e.target]);
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    const path = e.composedPath ? e.composedPath() : [e.target as EventTarget];
     
-    const clickedInside = path.some(el => {
+    const clickedInside = path.some((el: EventTarget) => {
       if (el === toolbarRef.current || el === resultPanelRef.current) {
         return true;
       }
-      if (el.nodeType === 1) {
+      if (el instanceof Element) {
         const classList = el.classList || [];
         const classStr = Array.from(classList).join(' ');
         if (
@@ -839,21 +878,20 @@ const AIToolbar = () => {
   /**
    * Handles input/textarea focus to show toolbar with dictation action
    */
-  const handleInputFocus = useCallback((e) => {
+  const handleInputFocus = useCallback((e: FocusEvent) => {
+    const target = e.target as HTMLElement;
     Logger.log('AIToolbar', 'handleInputFocus triggered', {
-      enabled: uiConfig?.aiToolbar?.showOnInputFocus,
-      target: e.target,
-      tagName: e.target.tagName,
-      isContentEditable: e.target.isContentEditable,
+      enabled: aiToolbarSettings?.showOnInputFocus,
+      target,
+      tagName: target?.tagName,
+      isContentEditable: target?.isContentEditable,
       uiConfig: uiConfig
     });
     
-    if (uiConfig?.aiToolbar?.showOnInputFocus === false) {
+    if (aiToolbarSettings?.showOnInputFocus === false) {
       Logger.log('AIToolbar', 'Input focus disabled in settings');
       return;
     }
-    
-    const target = e.target;
     
     if (toolbarRef.current?.contains(target) || resultPanelRef.current?.contains(target)) {
       Logger.log('AIToolbar', 'Focus inside toolbar/panel, ignoring');
@@ -869,15 +907,16 @@ const AIToolbar = () => {
       Logger.log('AIToolbar', 'Input focused, showing toolbar with dictation');
       
       if (isInput) {
+        const textTarget = target as HTMLInputElement | HTMLTextAreaElement;
         savedCursorPositionRef.current = {
-          element: target,
-          start: target.selectionStart,
-          end: target.selectionEnd
+          element: textTarget,
+          start: textTarget.selectionStart,
+          end: textTarget.selectionEnd
         };
         Logger.log('AIToolbar', 'Saved cursor position:', savedCursorPositionRef.current);
       } else {
         const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
+        if (selection && selection.rangeCount > 0) {
           savedCursorPositionRef.current = {
             element: target,
             range: selection.getRangeAt(0).cloneRange()
@@ -918,8 +957,9 @@ const AIToolbar = () => {
       setEditableType(isContentEditable ? 'contenteditable' : 'input');
       
       if (!isContentEditable) {
-        setEditableSelectionStart(target.selectionStart);
-        setEditableSelectionEnd(target.selectionEnd);
+        const textTarget = target as HTMLInputElement | HTMLTextAreaElement;
+        setEditableSelectionStart(textTarget.selectionStart ?? 0);
+        setEditableSelectionEnd(textTarget.selectionEnd ?? 0);
       }
       
       showingFromInputFocusRef.current = true;
@@ -928,21 +968,21 @@ const AIToolbar = () => {
     } else {
       Logger.log('AIToolbar', 'Not an input element, ignoring');
     }
-  }, [uiConfig]);
+  }, [aiToolbarSettings, uiConfig]);
 
   /**
    * Handles image hover to show toolbar with image analysis actions
    */
-  const handleImageHover = useCallback((e) => {
+  const handleImageHover = useCallback((e: MouseEvent) => {
     Logger.log('AIToolbar', 'handleImageHover triggered', {
-      enabled: uiConfig?.aiToolbar?.showOnImageHover,
-      target: e.target.tagName,
-      src: e.target.src
+      enabled: aiToolbarSettings?.showOnImageHover,
+      target: (e.target as HTMLElement)?.tagName,
+      src: (e.target as HTMLImageElement)?.src
     });
     
-    if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
+    if (aiToolbarSettings?.showOnImageHover === false) return;
     
-    const target = e.target;
+    const target = e.target as HTMLElement;
     if (target.tagName === 'IMG') {
       Logger.log('AIToolbar', 'Image hovered, showing toolbar (will extract on button click)');
       
@@ -994,7 +1034,7 @@ const AIToolbar = () => {
       setPosition({ x, y });
       setIsVisible(true);
       
-      setHoveredImageElement(target);
+      setHoveredImageElement(target as HTMLImageElement);
       setSelectedImages([]);
       setSelectedText('');
       setSelectedAudios([]);
@@ -1003,7 +1043,7 @@ const AIToolbar = () => {
       
       Logger.log('AIToolbar', 'Set showingFromImageHoverRef to true, will clear on hide');
     }
-  }, [uiConfig, hoveredImageElement]);
+  }, [aiToolbarSettings, hoveredImageElement]);
 
   /**
    * Handle image leave - only hide if result panel not active
@@ -1011,23 +1051,23 @@ const AIToolbar = () => {
   /**
    * Handles image mouse leave - keeps toolbar visible to prevent flickering
    */
-  const handleImageLeave = useCallback((e) => {
+  const handleImageLeave = useCallback((e: MouseEvent) => {
     Logger.log('AIToolbar', 'handleImageLeave triggered', {
-      enabled: uiConfig?.aiToolbar?.showOnImageHover,
+      enabled: aiToolbarSettings?.showOnImageHover,
       resultPanelActive: resultPanelActive
     });
     
-    if (uiConfig?.aiToolbar?.showOnImageHover === false) return;
+    if (aiToolbarSettings?.showOnImageHover === false) return;
     
-    const target = e.target;
+    const target = e.target as HTMLElement;
     if (target.tagName === 'IMG') {
       Logger.log('AIToolbar', 'Image unhovered, but keeping toolbar visible');
     }
-  }, [uiConfig, resultPanelActive]);
+  }, [aiToolbarSettings, resultPanelActive]);
 
   useEffect(() => {
-    const showOnInputFocus = uiConfig?.aiToolbar?.showOnInputFocus !== false;
-    const showOnImageHover = uiConfig?.aiToolbar?.showOnImageHover !== false;
+    const showOnInputFocus = aiToolbarSettings?.showOnInputFocus !== false;
+    const showOnImageHover = aiToolbarSettings?.showOnImageHover !== false;
     
     if (!isEnabled) {
       setIsVisible(false);
@@ -1043,7 +1083,7 @@ const AIToolbar = () => {
       document.addEventListener('focusin', handleInputFocus);
     }
     
-    let observer;
+    let observer: MutationObserver | null = null;
     if (showOnImageHover) {
       const images = document.querySelectorAll('img');
       images.forEach(img => {
@@ -1054,12 +1094,12 @@ const AIToolbar = () => {
       observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
-            if (node.tagName === 'IMG') {
+            if (node instanceof HTMLElement && node.tagName === 'IMG') {
               node.addEventListener('mouseenter', handleImageHover);
               node.addEventListener('mouseleave', handleImageLeave);
-            } else if (node.querySelectorAll) {
+            } else if (node instanceof Element) {
               const imgs = node.querySelectorAll('img');
-              imgs.forEach(img => {
+              imgs.forEach((img) => {
                 img.addEventListener('mouseenter', handleImageHover);
                 img.addEventListener('mouseleave', handleImageLeave);
               });
@@ -1097,7 +1137,7 @@ const AIToolbar = () => {
         clearTimeout(selectionTimeoutRef.current);
       }
     };
-  }, [isEnabled, uiConfig?.aiToolbar?.showOnInputFocus, uiConfig?.aiToolbar?.showOnImageHover, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave]);
+  }, [isEnabled, aiToolbarSettings?.showOnInputFocus, aiToolbarSettings?.showOnImageHover, handleMouseUp, handleSelectionChange, handleClickOutside, handleScroll, handleInputFocus, handleImageHover, handleImageLeave]);
 
   /**
    * Clears flags and stops dictation when toolbar becomes invisible
@@ -1133,7 +1173,7 @@ const AIToolbar = () => {
     const updateCursorPosition = () => {
       if (editableType === 'contenteditable') {
         const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
+        if (selection && selection.rangeCount > 0) {
           savedCursorPositionRef.current = {
             element: editableElement,
             range: selection.getRangeAt(0).cloneRange()
@@ -1141,14 +1181,15 @@ const AIToolbar = () => {
           Logger.log('AIToolbar', 'Updated cursor position (contenteditable)');
         }
       } else {
+        const textElement = editableElement as HTMLInputElement | HTMLTextAreaElement;
         savedCursorPositionRef.current = {
-          element: editableElement,
-          start: editableElement.selectionStart,
-          end: editableElement.selectionEnd
+          element: textElement,
+          start: textElement.selectionStart ?? 0,
+          end: textElement.selectionEnd ?? 0
         };
         Logger.log('AIToolbar', 'Updated cursor position:', {
-          start: editableElement.selectionStart,
-          end: editableElement.selectionEnd
+          start: textElement.selectionStart,
+          end: textElement.selectionEnd
         });
       }
     };
@@ -1187,7 +1228,7 @@ const AIToolbar = () => {
     if (!isVisible) return;
     
     const detectBackgrounds = () => {
-      const mode = uiConfig?.backgroundDetection?.mode || 'adaptive';
+      const mode = backgroundMode;
       
       if (mode !== 'adaptive') {
         if (mode === 'light') {
@@ -1205,7 +1246,7 @@ const AIToolbar = () => {
       const panel = resultPanelRef.current;
       
       if (toolbar) {
-        const elementsToDisable = [canvas, toolbar].filter(Boolean);
+        const elementsToDisable = [canvas, toolbar].filter((el): el is HTMLElement => Boolean(el));
         const toolbarResult = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
           return BackgroundDetector.detectBrightness({
             sampleArea: {
@@ -1216,7 +1257,7 @@ const AIToolbar = () => {
               height: 40,
               padding: 20,
             },
-            elementsToIgnore: [canvas, toolbar],
+            elementsToIgnore: [canvas, toolbar].filter((el): el is HTMLElement => Boolean(el)),
             logPrefix: '[AIToolbar-Toolbar]',
           });
         });
@@ -1225,7 +1266,7 @@ const AIToolbar = () => {
       }
       
       if (panel && shouldRenderResultPanel) {
-        const elementsToDisable = [canvas, panel].filter(Boolean);
+        const elementsToDisable = [canvas, panel].filter((el): el is HTMLElement => Boolean(el));
         const panelResult = BackgroundDetector.withDisabledPointerEvents(elementsToDisable, () => {
           return BackgroundDetector.detectBrightness({
             sampleArea: {
@@ -1236,7 +1277,7 @@ const AIToolbar = () => {
               height: 200,
               padding: 30,
             },
-            elementsToIgnore: [canvas, panel],
+            elementsToIgnore: [canvas, panel].filter((el): el is HTMLElement => Boolean(el)),
             logPrefix: '[AIToolbar-Panel]',
           });
         });
@@ -1250,7 +1291,7 @@ const AIToolbar = () => {
     const timeoutId = setTimeout(detectBackgrounds, 400);
     
     return () => clearTimeout(timeoutId);
-  }, [isVisible, position, shouldRenderResultPanel, uiConfig?.backgroundDetection?.mode]);
+  }, [isVisible, position, shouldRenderResultPanel, backgroundMode]);
 
   /**
    * Handle Summarize action with streaming
@@ -1311,10 +1352,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', 'Summary streaming complete');
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Summarize failed:', err);
-        setError('Summarization failed: ' + (err.message || 'Unknown error'));
+        setError('Summarization failed: ' + getErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
@@ -1349,6 +1390,9 @@ const AIToolbar = () => {
       
       if (detectionResults && detectionResults.length > 0) {
         const detected = detectionResults[0];
+        if (!detected) {
+          throw new Error('Could not detect language');
+        }
         const langInfo = TranslationLanguages.find(l => l.code === detected.detectedLanguage);
         const languageName = langInfo ? langInfo.name : detected.detectedLanguage.toUpperCase();
         
@@ -1359,9 +1403,9 @@ const AIToolbar = () => {
       } else {
         throw new Error('Could not detect language');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       Logger.error('AIToolbar', 'Language detection failed:', err);
-      setError(err.message || 'Failed to detect language');
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -1373,7 +1417,7 @@ const AIToolbar = () => {
    * @param {boolean} useAutoDetect - Whether to auto-detect source language (default: true)
    * @param {boolean} skipClearResult - Don't clear result (for regenerate)
    */
-  const onTranslateClick = async (targetLang = null, useAutoDetect = true, skipClearResult = false) => {
+  const onTranslateClick = async (targetLang: string | null = null, useAutoDetect = true, skipClearResult = false) => {
     Logger.log('AIToolbar', 'onTranslateClick START', { targetLang, useAutoDetect, skipClearResult, currentResult: result, currentError: error, currentIsLoading: isLoading });
     
     if (!selectedText) {
@@ -1407,18 +1451,22 @@ const AIToolbar = () => {
         throw new Error('Translator is disabled in settings');
       }
       
-      let sourceLang = null;
+      let sourceLang: string | null = null;
       if (useAutoDetect) {
         try {
           const { LanguageDetectorServiceProxy } = await import('../../services/proxies');
           const detectionResults = await LanguageDetectorServiceProxy.detect(selectedText);
           if (detectionResults && detectionResults.length > 0) {
-            sourceLang = detectionResults[0].detectedLanguage;
+            const detected = detectionResults[0];
+            if (!detected) {
+              throw new Error('Could not detect source language');
+            }
+            sourceLang = detected.detectedLanguage;
             
             const langInfo = TranslationLanguages.find(l => l.code === sourceLang);
             setDetectedLanguageName(langInfo ? langInfo.name : sourceLang.toUpperCase());
           }
-        } catch (err) {
+        } catch (err: unknown) {
           Logger.warn('AIToolbar', 'Language detection failed:', err);
           throw new Error('Could not detect source language');
         }
@@ -1430,9 +1478,10 @@ const AIToolbar = () => {
         return;
       }
       
+      const sourceLanguageForTranslate = sourceLang ?? 'auto';
       let fullTranslation = '';
       
-      for await (const chunk of TranslatorServiceProxy.translateStreaming(selectedText, sourceLang, targetLanguage)) {
+      for await (const chunk of TranslatorServiceProxy.translateStreaming(selectedText, sourceLanguageForTranslate, targetLanguage)) {
         if (abortControllerRef.current?.signal.aborted) {
           Logger.log('AIToolbar', 'Translate streaming aborted');
           break;
@@ -1450,10 +1499,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', 'Translation streaming complete');
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Translate failed:', err);
-        setError('Translation failed: ' + (err.message || 'Unknown error'));
+        setError('Translation failed: ' + getErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
@@ -1465,7 +1514,7 @@ const AIToolbar = () => {
    * Handle Image Analysis action with streaming
    * @param {string} analysisType - 'describe', 'extract-text', or 'analyze'
    */
-  const onImageAnalysisClick = async (analysisType, skipClearResult = false) => {
+  const onImageAnalysisClick = async (analysisType: string, skipClearResult = false) => {
     if (!hoveredImageElement && (!selectedImages || selectedImages.length === 0)) {
       setError('No images selected');
       return;
@@ -1499,9 +1548,9 @@ const AIToolbar = () => {
         const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
         
         const fakeSelection = {
-          containsNode: (node) => node === hoveredImageElement,
+          containsNode: (node: Node) => node === hoveredImageElement,
           toString: () => ''
-        };
+        } as unknown as Selection;
         
         processedMedia = await MediaExtractionService.processAndExtract({
           container: containerToUse,
@@ -1518,7 +1567,7 @@ const AIToolbar = () => {
         
         const range = selection.getRangeAt(0);
         const container = range.commonAncestorContainer;
-        const containerEl = container.nodeType === 3 ? container.parentElement : container;
+        const containerEl = container.nodeType === 3 ? container.parentElement : (container as Element | null);
         
         processedMedia = await MediaExtractionService.processAndExtract({
           container: containerEl,
@@ -1580,10 +1629,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', 'Image analysis streaming complete');
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Image analysis failed:', err);
-        setError('Image analysis failed: ' + (err.message || 'Unknown error'));
+        setError('Image analysis failed: ' + getErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
@@ -1597,7 +1646,7 @@ const AIToolbar = () => {
    * @param {string} actionName - Display name for logging
    * @param {Function} promptBuilder - Function that takes the word and returns the prompt string
    */
-  const handleDictionaryAction = async (actionType, actionName, promptBuilder, skipClearResult = false) => {
+  const handleDictionaryAction = async (actionType: string, actionName: string, promptBuilder: (word: string) => string, skipClearResult = false) => {
     if (!selectedText) {
       setError('No word selected');
       return;
@@ -1648,7 +1697,7 @@ const AIToolbar = () => {
       }
       
       if (!response?.success) {
-        const errorMsg = response?.error?.message || 'AI request failed';
+        const errorMsg = response?.error ? getErrorMessage(response.error as unknown) : 'AI request failed';
         Logger.error('AIToolbar', '${actionName} request failed:', response?.error);
         setError(errorMsg);
         return;
@@ -1667,10 +1716,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', `${actionName} streaming complete`);
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', '${actionName} failed:', err);
-        setError(`${actionName} lookup failed: ` + (err.message || 'Unknown error'));
+        setError(`${actionName} lookup failed: ` + getErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
@@ -1719,7 +1768,7 @@ const AIToolbar = () => {
    * @param {string} actionName - Display name for action
    * @param {Object} rewriteOptions - RewriterService options (tone, format, length)
    */
-  const handleRewrite = async (actionType, actionName, rewriteOptions = {}, skipClearResult = false) => {
+  const handleRewrite = async (actionType: string, actionName: string, rewriteOptions: Record<string, unknown> = {}, skipClearResult = false) => {
     if (showWriterInput) {
       setShowWriterInput(false);
     }
@@ -1774,10 +1823,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', `${actionName} streaming complete`);
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', '${actionName} failed:', err);
-        setError(`${actionName} failed: ` + (err.message || 'Unknown error'));
+        setError(`${actionName} failed: ` + getErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
@@ -1915,7 +1964,7 @@ const AIToolbar = () => {
   /**
    * Handle Custom Rewrite - Rewrite selected text with custom instructions
    */
-  const handleCustomRewrite = async (customInstructions, skipClearResult = false) => {
+  const handleCustomRewrite = async (customInstructions: string, skipClearResult = false) => {
     if (!customInstructions || !selectedText) {
       Logger.error('AIToolbar', 'No instructions or selected text for custom rewrite');
       return;
@@ -1938,7 +1987,7 @@ const AIToolbar = () => {
   /**
    * Write - Generate content using Writer API
    */
-  const handleWrite = async (writerOptions, skipClearResult = false) => {
+  const handleWrite = async (writerOptions: Record<string, unknown>, skipClearResult = false) => {
     if (!skipClearResult) {
       setResult('');
     }
@@ -1988,10 +2037,10 @@ const AIToolbar = () => {
       }
       
       Logger.log('AIToolbar', 'Write streaming complete');
-    } catch (err) {
-      if (err.name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError' && !abortControllerRef.current?.signal.aborted) {
         Logger.error('AIToolbar', 'Write failed:', err);
-        setError('Write failed: ' + (err.message || 'Unknown error'));
+        setError('Write failed: ' + getErrorMessage(err));
         setShowWriterInput(true);
       }
     } finally {
@@ -2027,7 +2076,7 @@ const AIToolbar = () => {
       } else if (action?.startsWith('image-') || action?.startsWith('dictionary-')) {
         await AIServiceProxy.abortRequest();
       }
-    } catch (err) {
+    } catch (err: unknown) {
       Logger.error('AIToolbar', 'Service abort failed:', err);
     }
   };
@@ -2123,9 +2172,9 @@ const AIToolbar = () => {
       const containerToUse = hoveredImageElement.parentElement || hoveredImageElement;
       
       const fakeSelection = {
-        containsNode: (node) => node === hoveredImageElement,
+        containsNode: (node: Node) => node === hoveredImageElement,
         toString: () => ''
-      };
+      } as unknown as Selection;
       
       result = await MediaExtractionService.processAndExtract({
         container: containerToUse,
@@ -2140,7 +2189,7 @@ const AIToolbar = () => {
       
       const range = selection.getRangeAt(0);
       const container = range.commonAncestorContainer;
-      const containerEl = container.nodeType === 3 ? container.parentElement : container;
+      const containerEl = container.nodeType === 3 ? container.parentElement : (container as Element | null);
       
       result = await MediaExtractionService.processAndExtract({
         container: containerEl,
@@ -2152,8 +2201,8 @@ const AIToolbar = () => {
     
     handleAddToChat({
       text: result.text || selectedText || '',
-      images: result.images,
-      audios: result.audios
+      images: result.images as any,
+      audios: result.audios as any
     });
     
     setIsVisible(false);
@@ -2179,7 +2228,7 @@ const AIToolbar = () => {
    * Generic handler for content manipulation (Insert, Undo/Redo Toggle)
    * @param {string} operation - 'insert' or 'toggle'
    */
-  const handleContentManipulation = async (operation) => {
+  const handleContentManipulation = async (operation: 'insert' | 'toggle') => {
     if (!editableElement || !isEditableContent) return;
     
     let newContent = '';
@@ -2209,30 +2258,31 @@ const AIToolbar = () => {
     
     try {
       if (editableType === 'input' || editableType === 'textarea') {
+        const textElement = editableElement as HTMLInputElement | HTMLTextAreaElement;
         if (operation === 'insert') {
-          const currentValue = editableElement.value;
+          const currentValue = textElement.value;
           const start = editableSelectionStart;
           const end = editableSelectionEnd;
           const improvedValue = currentValue.substring(0, start) + newContent + currentValue.substring(end);
           
           setImprovedContent(improvedValue);
           
-          editableElement.value = improvedValue;
+          textElement.value = improvedValue;
           selectionStart = start;
           selectionEnd = start + newContent.length;
         } else {
-          editableElement.value = newContent;
+          textElement.value = newContent;
           if (!hasInserted) {
             selectionStart = editableSelectionStart;
-            selectionEnd = editableSelectionStart + (improvedContent.length - originalContent.length + (editableSelectionEnd - editableSelectionStart));
+            selectionEnd = editableSelectionStart + (((improvedContent ?? '').length - (originalContent ?? '').length) + (editableSelectionEnd - editableSelectionStart));
           }
         }
         
-        editableElement.dispatchEvent(new Event('input', { bubbles: true }));
-        editableElement.dispatchEvent(new Event('change', { bubbles: true }));
+        textElement.dispatchEvent(new Event('input', { bubbles: true }));
+        textElement.dispatchEvent(new Event('change', { bubbles: true }));
         
-        editableElement.focus();
-        editableElement.setSelectionRange(selectionStart, selectionEnd);
+        textElement.focus();
+        textElement.setSelectionRange(selectionStart, selectionEnd);
         
       } else if (editableType === 'contenteditable') {
         if (operation === 'insert') {
@@ -2291,7 +2341,7 @@ const AIToolbar = () => {
                 let found = false;
                 
                 for (const textNode of textNodes) {
-                  const nodeLength = textNode.textContent.length;
+                  const nodeLength = (textNode.textContent ?? '').length;
                   
                   if (!found && charCount + nodeLength >= selectionStart) {
                     startNode = textNode;
@@ -2309,16 +2359,20 @@ const AIToolbar = () => {
                 }
                 
                 if (startNode && endNode) {
-                  range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
-                  range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
-                  selection.removeAllRanges();
-                  selection.addRange(range);
+                  range.setStart(startNode, Math.min(startOffset, (startNode.textContent ?? '').length));
+                  range.setEnd(endNode, Math.min(endOffset, (endNode.textContent ?? '').length));
+                  if (selection) {
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                  }
                 }
               }
             } else {
               range.selectNodeContents(editableElement);
-              selection.removeAllRanges();
-              selection.addRange(range);
+              if (selection) {
+                selection.removeAllRanges();
+                selection.addRange(range);
+              }
             }
           } catch (selectionErr) {
             Logger.warn('AIToolbar', 'Could not restore selection for toggle:', selectionErr);
@@ -2338,9 +2392,9 @@ const AIToolbar = () => {
         Logger.log('AIToolbar', `Toggled to ${hasInserted ? 'original' : 'improved'} content`);
       }
       
-    } catch (err) {
+    } catch (err: unknown) {
       Logger.error('AIToolbar', 'Failed to ${operation}:', err);
-      setError(`Failed to ${operation}: ` + (err.message || 'Unknown error'));
+      setError(`Failed to ${operation}: ` + getErrorMessage(err));
     }
   };
 
@@ -2372,19 +2426,22 @@ const AIToolbar = () => {
         const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(editableElement);
-        selection.removeAllRanges();
-        selection.addRange(range);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
         
         setSelectedText(editableElement.textContent || editableElement.innerText);
-      } catch (err) {
+      } catch (err: unknown) {
         Logger.warn('AIToolbar', 'Could not restore selection after undo:', err);
       }
     } else {
-      editableElement.value = originalContent;
-      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
-      editableElement.focus();
+      const textElement = editableElement as HTMLInputElement | HTMLTextAreaElement;
+      textElement.value = originalContent;
+      textElement.dispatchEvent(new Event('input', { bubbles: true }));
+      textElement.focus();
       
-      editableElement.setSelectionRange(0, originalContent.length);
+      textElement.setSelectionRange(0, originalContent.length);
       
       setSelectedText(originalContent);
     }
@@ -2410,19 +2467,22 @@ const AIToolbar = () => {
         const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(editableElement);
-        selection.removeAllRanges();
-        selection.addRange(range);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
         
         setSelectedText(editableElement.textContent || editableElement.innerText);
-      } catch (err) {
+      } catch (err: unknown) {
         Logger.warn('AIToolbar', 'Could not restore selection after redo:', err);
       }
     } else {
-      editableElement.value = improvedContent;
-      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
-      editableElement.focus();
+      const textElement = editableElement as HTMLInputElement | HTMLTextAreaElement;
+      textElement.value = improvedContent;
+      textElement.dispatchEvent(new Event('input', { bubbles: true }));
+      textElement.focus();
       
-      editableElement.setSelectionRange(0, improvedContent.length);
+      textElement.setSelectionRange(0, improvedContent.length);
       
       setSelectedText(improvedContent);
     }
@@ -2478,7 +2538,7 @@ const AIToolbar = () => {
                     range = savedCursorPositionRef.current.range;
                   } else {
                     const selection = window.getSelection();
-                    if (selection.rangeCount > 0) {
+                    if (selection && selection.rangeCount > 0) {
                       range = selection.getRangeAt(0);
                     }
                   }
@@ -2490,20 +2550,21 @@ const AIToolbar = () => {
                     savedCursorPositionRef.current = { element: editableElement, range: range.cloneRange() };
                   }
                 } else {
-                  const currentValue = editableElement.value;
-                  const cursorPos = savedCursorPositionRef.current?.start ?? editableElement.selectionStart ?? editableSelectionStart;
+                  const textElement = editableElement as HTMLInputElement | HTMLTextAreaElement;
+                  const currentValue = textElement.value;
+                  const cursorPos = savedCursorPositionRef.current?.start ?? textElement.selectionStart ?? editableSelectionStart;
                   const newValue = 
                     currentValue.slice(0, cursorPos) + 
                     separator + transcription + 
                     currentValue.slice(cursorPos);
-                  editableElement.value = newValue;
+                  textElement.value = newValue;
                   const newCursorPos = cursorPos + separator.length + transcription.length;
-                  editableElement.setSelectionRange(newCursorPos, newCursorPos);
-                  editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+                  textElement.setSelectionRange(newCursorPos, newCursorPos);
+                  textElement.dispatchEvent(new Event('input', { bubbles: true }));
                   
                   setEditableSelectionStart(newCursorPos);
                   setEditableSelectionEnd(newCursorPos);
-                  savedCursorPositionRef.current = { element: editableElement, start: newCursorPos, end: newCursorPos };
+                  savedCursorPositionRef.current = { element: textElement, start: newCursorPos, end: newCursorPos };
                 }
                 
                 setAccumulatedTranscription(prev => prev + separator + transcription);
@@ -2519,9 +2580,9 @@ const AIToolbar = () => {
               });
             }
           },
-          onError: (errorMsg) => {
+          onError: (errorMsg: unknown) => {
             Logger.error('AIToolbar', 'Dictation error:', errorMsg);
-            setError(errorMsg.message || errorMsg.toString());
+            setError(getErrorMessage(errorMsg));
             setIsRecording(false);
             if (recordingIntervalRef.current) {
               clearInterval(recordingIntervalRef.current);
@@ -2548,9 +2609,9 @@ const AIToolbar = () => {
         }
         Logger.log('AIToolbar', 'Dictation session ended, toolbar remains open');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('AIToolbar', 'Dictation error:', error);
-      setError(error.message || 'Failed to start dictation');
+      setError(getErrorMessage(error));
       setIsRecording(false);
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);

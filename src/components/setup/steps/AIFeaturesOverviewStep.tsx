@@ -13,17 +13,41 @@ import { Card } from '../../ui';
 import { cn } from '../../../utils/cn';
 import { isAndroid } from '../../../utils/PlatformUtils';
 
+type FeatureKey = 'translator' | 'languageDetector' | 'summarizer' | 'rewriter' | 'writer';
+
+interface FeatureState {
+  translator: { enabled: boolean };
+  languageDetector: { enabled: boolean };
+  summarizer: { enabled: boolean };
+  rewriter: { enabled: boolean };
+  writer: { enabled: boolean };
+}
+
+interface ShortcutState {
+  enabled: boolean;
+  openChat: string;
+  toggleMode: string;
+  toggleVisibility: string;
+}
+
+interface FeatureItem {
+  key: FeatureKey;
+  icon: string;
+  name: string;
+  description: string;
+}
+
 const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
-  const [features, setFeatures] = useState({
+  const [features, setFeatures] = useState<FeatureState>({
     translator: { enabled: true },
     languageDetector: { enabled: true },
     summarizer: { enabled: true },
     rewriter: { enabled: true },
     writer: { enabled: true },
   });
-  const [shortcuts, setShortcuts] = useState({
+  const [shortcuts, setShortcuts] = useState<ShortcutState>({
     enabled: false,
     openChat: '',
     toggleMode: '',
@@ -57,7 +81,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
     updateSetupData({ aiFeatures: features });
   }, [features, updateSetupData]);
   
-  const handleShortcutsChange = useCallback((newShortcuts) => {
+  const handleShortcutsChange = useCallback((newShortcuts: ShortcutState) => {
     setShortcuts(newShortcuts);
     
     if (!initialLoadRef.current) {
@@ -66,14 +90,14 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
     }
   }, [updateSetupData]);
 
-  const handleToggle = (featureKey) => {
+  const handleToggle = (featureKey: FeatureKey) => {
     setFeatures(prev => ({
       ...prev,
       [featureKey]: { enabled: !prev[featureKey]?.enabled }
     }));
   };
 
-  const featureList = [
+  const featureList: FeatureItem[] = [
     {
       key: 'translator',
       icon: 'language',
@@ -129,7 +153,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
 
       {/* Feature Toggles */}
       <div className="space-y-2">
-        {featureList.map((feature) => (
+        {featureList.map((feature: FeatureItem) => (
           <Card
             key={feature.key}
             className="hover:border-white/20 transition-all"
@@ -162,7 +186,7 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
           <div className="text-xs text-white/80">
             <p className="font-semibold mb-1">Ready to Go!</p>
             <p className="text-white/70">
-              {Object.values(features).filter(f => f?.enabled !== false).length} of {featureList.length} features enabled
+              {Object.values(features).filter((f) => f?.enabled !== false).length} of {featureList.length} features enabled
             </p>
           </div>
         </div>

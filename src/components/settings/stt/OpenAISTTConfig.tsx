@@ -5,12 +5,25 @@
 
 import { Input } from '../../ui';
 
-const OpenAISTTConfig = ({ config, onChange, isLightBackground }) => {
-  const handleFieldChange = (field, value) => {
+interface OpenAISTTConfigShape {
+  apiKey?: string;
+  model?: string;
+}
+
+type OpenAISTTOnChange = ((field: string, value: string) => void) | ((updates: OpenAISTTConfigShape) => void);
+
+interface OpenAISTTConfigProps {
+  config: OpenAISTTConfigShape;
+  onChange: OpenAISTTOnChange;
+  isLightBackground?: boolean;
+}
+
+const OpenAISTTConfig = ({ config, onChange, isLightBackground = false }: OpenAISTTConfigProps) => {
+  const handleFieldChange = (field: keyof OpenAISTTConfigShape, value: string) => {
     if (onChange.length === 2) {
-      onChange(field, value);
+      (onChange as (field: string, value: string) => void)(field, value);
     } else {
-      onChange({
+      (onChange as (updates: OpenAISTTConfigShape) => void)({
         ...config,
         [field]: value
       });

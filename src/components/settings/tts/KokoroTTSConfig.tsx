@@ -12,11 +12,47 @@ import StatusMessage from '../../common/StatusMessage';
 import { cn } from '../../../utils/cn';
 import { Button, Select, Input } from '../../ui';
 
+interface KokoroConfigShape {
+  voice?: string;
+  speed?: number;
+  device?: string;
+  modelId?: string;
+  keepModelLoaded?: boolean;
+}
+
+interface KokoroStatusShape {
+  checking: boolean;
+  initialized: boolean;
+  downloading: boolean;
+  progress: number;
+  details: string;
+  message: string;
+}
+
+interface VoiceGroupOption {
+  value: string;
+  label: string;
+}
+
+interface KokoroTTSConfigProps {
+  config: KokoroConfigShape;
+  onChange: (field: string, value: string | number | boolean) => void;
+  kokoroStatus: KokoroStatusShape;
+  onInitialize?: () => void | Promise<void>;
+  onCheckStatus?: (desiredDeviceOverride?: string | null) => void | Promise<unknown>;
+  onTestVoice?: (() => void | Promise<void>) | null;
+  testingVoice?: boolean;
+  isLightBackground?: boolean;
+  showTitle?: boolean;
+  showTestButton?: boolean;
+  isSetupMode?: boolean;
+}
+
 /**
  * Helper function to format voice key into a readable label
  * Example: AF_HEART -> Heart, AM_ADAM -> Adam
  */
-const formatVoiceLabel = (key) => {
+const formatVoiceLabel = (key: string): string => {
   const name = key.split('_').slice(1).join(' '); // Remove prefix (AF, AM, BF, BM)
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 };
@@ -25,8 +61,8 @@ const formatVoiceLabel = (key) => {
  * Helper function to group voices by accent and gender
  * Dynamically generated from KokoroVoices enum
  */
-const getVoiceGroups = () => {
-  const groups = {
+const getVoiceGroups = (): Array<{ label: string; voices: VoiceGroupOption[] }> => {
+  const groups: Record<string, VoiceGroupOption[]> = {
     'American English - Female': [],
     'American English - Male': [],
     'British English - Female': [],
@@ -37,13 +73,17 @@ const getVoiceGroups = () => {
     const label = formatVoiceLabel(key);
     
     if (key.startsWith('AF_')) {
-      groups['American English - Female'].push({ value, label });
+      const bucket = groups['American English - Female'];
+      if (bucket) bucket.push({ value, label });
     } else if (key.startsWith('AM_')) {
-      groups['American English - Male'].push({ value, label });
+      const bucket = groups['American English - Male'];
+      if (bucket) bucket.push({ value, label });
     } else if (key.startsWith('BF_')) {
-      groups['British English - Female'].push({ value, label });
+      const bucket = groups['British English - Female'];
+      if (bucket) bucket.push({ value, label });
     } else if (key.startsWith('BM_')) {
-      groups['British English - Male'].push({ value, label });
+      const bucket = groups['British English - Male'];
+      if (bucket) bucket.push({ value, label });
     }
   });
 
@@ -56,17 +96,21 @@ const getVoiceGroups = () => {
  * Helper function to get device options with descriptions
  * Dynamically generated from KokoroDevice enum
  */
-const getDeviceOptions = () => {
-  const descriptions = {
+const getDeviceOptions = (): Array<{ value: string; label: string; description: string }> => {
+  const descriptions: Record<string, { label: string; description: string }> = {
     [KokoroDevice.AUTO]: { label: 'Auto (Recommended)', description: 'Automatically chooses the best available backend' },
     [KokoroDevice.WEBGPU]: { label: 'WebGPU', description: 'GPU acceleration (2-10x faster, fp32 precision)' },
     [KokoroDevice.WASM]: { label: 'WASM', description: 'CPU-based (slower but more stable, q8 quantized)' }
   };
 
-  return Object.entries(KokoroDevice).map(([, value]) => ({
-    value,
-    ...descriptions[value]
-  }));
+  return Object.entries(KokoroDevice).map(([, value]) => {
+    const description = descriptions[value] ?? { label: value, description: '' };
+    return {
+      value,
+      label: description.label,
+      description: description.description,
+    };
+  });
 };
 
 const KokoroTTSConfig = ({ 
@@ -81,8 +125,8 @@ const KokoroTTSConfig = ({
   showTitle = true,
   showTestButton = true,
   isSetupMode = false, // New prop for setup wizard
-}) => {
-  const handleChange = (field, value) => {
+}: KokoroTTSConfigProps) => {
+  const handleChange = (field: string, value: string | number | boolean) => {
     onChange(field, value);
   };
 
@@ -326,7 +370,9 @@ const KokoroTTSConfig = ({
               <Button
                 variant={isLightBackground ? 'dark' : 'default'}
                 size="icon"
-                onClick={onCheckStatus}
+                onClick={() => {
+                  void onCheckStatus();
+                }}
                 disabled={kokoroStatus.checking}
                 title="Check model status"
               >

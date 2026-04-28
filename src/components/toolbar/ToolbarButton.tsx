@@ -9,8 +9,25 @@
  */
 
 import { useRef } from 'react';
+import type { MouseEventHandler } from 'react';
 import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
+
+export interface ToolbarButtonProps {
+  icon: string;
+  loadingIcon?: string;
+  label: string;
+  onClick: MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
+  isLoading?: boolean;
+  actionType?: string;
+  className?: string;
+  title?: string;
+  isLightBackground?: boolean;
+  maxLabelWidth?: string;
+  onMouseEnterButton?: MouseEventHandler<HTMLButtonElement>;
+  onMouseLeaveButton?: MouseEventHandler<HTMLButtonElement>;
+}
 
 const ToolbarButton = ({
   icon,
@@ -26,11 +43,11 @@ const ToolbarButton = ({
   maxLabelWidth = '100px',
   onMouseEnterButton,
   onMouseLeaveButton,
-}) => {
-  const buttonRef = useRef(null);
-  const labelRef = useRef(null);
+}: ToolbarButtonProps) => {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
 
-  const handleMouseEnter = (e) => {
+  const handleMouseEnter: MouseEventHandler<HTMLButtonElement> = (e) => {
     if (onMouseEnterButton) {
       onMouseEnterButton(e);
     }
@@ -45,7 +62,7 @@ const ToolbarButton = ({
     }
   };
 
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave: MouseEventHandler<HTMLButtonElement> = (e) => {
     if (onMouseLeaveButton) {
       onMouseLeaveButton(e);
     }
@@ -63,7 +80,7 @@ const ToolbarButton = ({
   };
 
   const getHoverBgClass = () => {
-    const colorMap = {
+    const colorMap: Record<string, string> = {
       'summarize': 'hover:bg-blue-500/30',
       'summarize-tldr': 'hover:bg-blue-500/30',
       'summarize-headline': 'hover:bg-orange-500/30',

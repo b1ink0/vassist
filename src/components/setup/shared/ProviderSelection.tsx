@@ -14,6 +14,28 @@ import { Icon } from '../../icons';
 import { Badge } from '../../ui';
 import { cn } from '../../../utils/cn';
 
+interface ProviderItem {
+  id: string;
+  name: string;
+  description: string;
+  iconName?: string;
+  icon?: string;
+  recommended?: boolean;
+  available?: boolean;
+  requirements?: string;
+  pros?: string[];
+  cons?: string[];
+}
+
+interface ProviderSelectionProps {
+  providers: ProviderItem[];
+  selectedProvider: string;
+  onProviderSelect: (providerId: string) => void;
+  isLightBackground?: boolean;
+  compact?: boolean;
+  showProsCons?: boolean;
+}
+
 const ProviderSelection = ({ 
   providers, 
   selectedProvider, 
@@ -21,7 +43,7 @@ const ProviderSelection = ({
   isLightBackground = false,
   compact = false,
   showProsCons = false
-}) => {
+}: ProviderSelectionProps) => {
   const textColor = isLightBackground ? 'text-gray-900' : 'text-white';
   const mutedColor = isLightBackground ? 'text-gray-700' : 'text-white/90';
   const subtleColor = isLightBackground ? 'text-gray-600' : 'text-white/80';
@@ -97,7 +119,7 @@ const ProviderSelection = ({
                       <div>
                         <p className={cn(compact ? 'text-[10px] sm:text-xs' : 'text-sm', 'font-semibold text-white/80 mb-1')}>Pros:</p>
                         <ul className={cn(compact ? 'text-[10px]' : 'text-xs', subtleColor, 'space-y-1')}>
-                          {provider.pros.map((pro, idx) => (
+                          {provider.pros.map((pro: string, idx: number) => (
                             <li key={idx} className="flex items-start gap-1.5">
                               <Icon name="check" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />
                               <span>{pro}</span>
@@ -112,7 +134,7 @@ const ProviderSelection = ({
                       <div>
                         <p className={cn(compact ? 'text-[10px] sm:text-xs' : 'text-sm', 'font-semibold text-white/80 mb-1')}>Cons:</p>
                         <ul className={cn(compact ? 'text-[10px]' : 'text-xs', subtleColor, 'space-y-1')}>
-                          {provider.cons.map((con, idx) => (
+                          {provider.cons.map((con: string, idx: number) => (
                             <li key={idx} className="flex items-start gap-1.5">
                               <Icon name="warning" size={10} className="text-white/80 mt-0.5 flex-shrink-0" />
                               <span>{con}</span>

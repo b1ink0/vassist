@@ -5,6 +5,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 
+interface StreamingTextProps {
+  text?: string;
+  wordsPerSecond?: number;
+  showCursor?: boolean;
+  onComplete?: (() => void) | null;
+  className?: string;
+  disabled?: boolean;
+  forceComplete?: boolean;
+  smoothHeightAnimation?: boolean;
+}
+
 /**
  * Streaming text component with word-by-word animation.
  * 
@@ -29,18 +40,18 @@ const StreamingText = ({
   disabled = false,
   forceComplete = false,
   smoothHeightAnimation = false,
-}) => {
-  const [displayedWords, setDisplayedWords] = useState([]);
+}: StreamingTextProps) => {
+  const [displayedWords, setDisplayedWords] = useState<string[]>([]);
   const [isInstantComplete, setIsInstantComplete] = useState(false);
   const [instantCompleteStartIndex, setInstantCompleteStartIndex] = useState(0);
   const [containerHeight, setContainerHeight] = useState('auto');
-  const wordsArrayRef = useRef([]);
+  const wordsArrayRef = useRef<string[]>([]);
   const displayedCountRef = useRef(0);
-  const animationIdRef = useRef(null);
-  const startTimeRef = useRef(null);
+  const animationIdRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
   const previousForceCompleteRef = useRef(false);
-  const contentRef = useRef(null);
-  const heightRafRef = useRef(null);
+  const contentRef = useRef<HTMLSpanElement | null>(null);
+  const heightRafRef = useRef<number | null>(null);
   const currentHeightRef = useRef(0);
   const targetHeightRef = useRef(0);
   const initializedRef = useRef(false);
@@ -74,7 +85,7 @@ const StreamingText = ({
 
   useEffect(() => {
     const MAX_CHUNK_SIZE = 50;
-    let chunks = [];
+    const chunks: string[] = [];
     
     const words = text.split(/(\s+)/);
     
@@ -125,12 +136,13 @@ const StreamingText = ({
 
     const msPerWord = 1000 / wordsPerSecond;
     
-    const animate = (currentTime) => {
+    const animate = (currentTime: number) => {
+      const startTime = startTimeRef.current ?? currentTime;
       if (startTimeRef.current === null) {
-        startTimeRef.current = currentTime;
+        startTimeRef.current = startTime;
       }
 
-      const elapsed = currentTime - startTimeRef.current;
+      const elapsed = currentTime - startTime;
       
       const targetWordCount = Math.min(
         Math.floor(elapsed / msPerWord) + 1,

@@ -29,8 +29,8 @@ const SetupWizard = () => {
   } = useSetup();
 
   // Reference to content area for scrolling
-  const contentRef = useRef(null);
-  const containerRef = useRef(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const isLightBackground = true;
 

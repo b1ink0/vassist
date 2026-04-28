@@ -2,6 +2,35 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../icons';
 import { Button, Card } from '../../ui';
 
+interface ModelStatus {
+  downloaded?: boolean;
+}
+
+interface ModelProgress {
+  percent: number;
+  status: string;
+}
+
+interface AndroidApiLike {
+  getSTTTTSStatus?: () => string;
+  _onSTTTTSProgress?: ((type: string, percent: number, statusText: string) => void) | null;
+  _onSTTTTSComplete?: ((type: string, result: { success?: boolean; error?: string }) => void) | null;
+  _onSTTTTSError?: ((type: string, errorMsg: string) => void) | null;
+}
+
+interface ModelDownloaderProps {
+  androidAPI: AndroidApiLike | null;
+  isLightBackground?: boolean;
+  modelType: string;
+  statusKey: string;
+  downloadFn: () => string;
+  deleteFn: () => string;
+  title: string;
+  downloadSize: string;
+  deleteConfirmMsg: string;
+  successMsg: string;
+}
+
 /**
  * Generic model downloader for Android TTS/STT models.
  *
@@ -27,19 +56,26 @@ const ModelDownloader = ({
   downloadSize,
   deleteConfirmMsg,
   successMsg,
-}) => {
-  const [status, setStatus] = useState(null);
+}: ModelDownloaderProps) => {
+  const [status, setStatus] = useState<ModelStatus | null>(null);
   const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState(null);
+  const [progress, setProgress] = useState<ModelProgress | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const loadStatus = useCallback(async () => {
     if (!androidAPI) return;
     try {
-      const result = JSON.parse(androidAPI.getSTTTTSStatus());
+      const statusJson = androidAPI.getSTTTTSStatus?.();
+      if (!statusJson) {
+        return;
+      }
+      const result = JSON.parse(statusJson) as {
+        success?: boolean;
+        status?: Record<string, ModelStatus | undefined>;
+      };
       if (result?.success) {
-        setStatus(result.status?.[statusKey]);
+        setStatus(result.status?.[statusKey] ?? null);
       }
     } catch (err) {
       console.error(`Failed to load ${modelType} status:`, err);
@@ -53,13 +89,13 @@ const ModelDownloader = ({
   useEffect(() => {
     if (!androidAPI) return;
 
-    androidAPI._onSTTTTSProgress = (type, percent, statusText) => {
+    androidAPI._onSTTTTSProgress = (type: string, percent: number, statusText: string) => {
       if (type === modelType) {
         setProgress({ percent, status: statusText });
       }
     };
 
-    androidAPI._onSTTTTSComplete = (type, result) => {
+    androidAPI._onSTTTTSComplete = (type: string) => {
       if (type === modelType) {
         setProgress(null);
         setDownloading(false);
@@ -69,7 +105,7 @@ const ModelDownloader = ({
       }
     };
 
-    androidAPI._onSTTTTSError = (type, errorMsg) => {
+    androidAPI._onSTTTTSError = (type: string, errorMsg: string) => {
       if (type === modelType) {
         setProgress(null);
         setDownloading(false);
@@ -84,14 +120,14 @@ const ModelDownloader = ({
     setError('');
     setProgress({ percent: 0, status: 'Starting download...' });
     try {
-      const result = JSON.parse(downloadFn());
+      const result = JSON.parse(downloadFn()) as { success?: boolean; error?: string };
       if (!result?.success) {
         setError(result?.error || 'Download failed');
         setDownloading(false);
         setProgress(null);
       }
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
       setDownloading(false);
       setProgress(null);
     }
@@ -101,7 +137,7 @@ const ModelDownloader = ({
     if (!androidAPI) return;
     if (!confirm(`Delete ${title}?\n\n${deleteConfirmMsg}`)) return;
     try {
-      const result = JSON.parse(deleteFn());
+      const result = JSON.parse(deleteFn()) as { success?: boolean; error?: string };
       if (result?.success) {
         setSuccess('Model deleted successfully');
         setTimeout(() => setSuccess(''), 3000);
@@ -110,7 +146,7 @@ const ModelDownloader = ({
         setError(result?.error || 'Delete failed');
       }
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

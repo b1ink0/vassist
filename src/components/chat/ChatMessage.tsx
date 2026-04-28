@@ -2,7 +2,7 @@
  * @fileoverview Individual chat message component with editing, TTS, and multimedia attachment support.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, type ChangeEvent, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import { Button } from '../ui';
@@ -12,6 +12,47 @@ import StreamingText from '../common/StreamingText';
 import MarkdownText from '../common/MarkdownText';
 import StreamingContainer from '../common/StreamingContainer';
 import Logger from '../../services/LoggerService';
+
+interface MessageBranchInfo {
+  currentIndex?: number;
+  currentBranch?: number;
+  totalBranches?: number;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+}
+
+interface ChatMessageModel {
+  id: string;
+  role: string;
+  content: string;
+  images?: string[];
+  audios?: string[];
+  branchInfo?: MessageBranchInfo;
+}
+
+interface ChatMessageProps {
+  message: ChatMessageModel;
+  messageIndex: number;
+  isLightBackground: boolean;
+  ttsEnabled: boolean;
+  playingMessageIndex: number | null;
+  loadingMessageIndex: number | null;
+  copiedMessageIndex: number | null;
+  streamedMessageIdsRef: MutableRefObject<Set<string>>;
+  completedMessageIdsRef: MutableRefObject<Set<string>>;
+  shouldForceComplete: boolean;
+  currentSessionRef: MutableRefObject<string | null>;
+  smoothStreamingAnimation?: boolean;
+  shouldAnimate?: boolean;
+  onCopyMessage: (messageIndex: number, content: string) => void | Promise<void>;
+  onPlayTTS: (messageIndex: number, content: string) => void | Promise<void>;
+  onEditUserMessage: (messageId: string, newContent: string, newImages: string[], newAudios: string[]) => void | Promise<void>;
+  onRewriteMessage: (message: ChatMessageModel) => void | Promise<void>;
+  onPreviousBranch: (message: ChatMessageModel) => void;
+  onNextBranch: (message: ChatMessageModel) => void;
+  setLoadingMessageIndex: Dispatch<SetStateAction<number | null>>;
+  setPlayingMessageIndex: Dispatch<SetStateAction<number | null>>;
+}
 
 /**
  * Chat message component with editing, streaming, and multimedia features.
@@ -63,12 +104,12 @@ const ChatMessage = ({
   onNextBranch,
   setLoadingMessageIndex,
   setPlayingMessageIndex,
-}) => {
+}: ChatMessageProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingContent, setEditingContent] = useState('');
-  const [editingImages, setEditingImages] = useState([]);
-  const [editingAudios, setEditingAudios] = useState([]);
-  const editTextareaRef = useRef(null);
+  const [editingImages, setEditingImages] = useState<string[]>([]);
+  const [editingAudios, setEditingAudios] = useState<string[]>([]);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isUser = message.role === 'user';
   const isError = message.content.toLowerCase().startsWith('error:');
@@ -83,6 +124,8 @@ const ChatMessage = ({
   const shouldDisableStreaming = !isUser && !isError && (!wasStreamedInSession || hasCompletedStreaming);
   
   const shouldForceCompleteThis = shouldForceComplete && !isUser && !isError;
+  const branchTotal = message.branchInfo?.totalBranches ?? 0;
+  const branchIndex = message.branchInfo?.currentIndex ?? message.branchInfo?.currentBranch ?? 0;
 
   const animationClass = shouldAnimate 
     ? (isUser ? 'animate-slide-right-up' : 'animate-slide-left-up')
@@ -159,7 +202,7 @@ const ChatMessage = ({
    * 
    * @param {Event} e - Change event
    */
-  const handleEditContentChange = useCallback((e) => {
+  const handleEditContentChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     setEditingContent(e.target.value);
     setTimeout(() => adjustEditTextareaHeight(), 0);
   }, [adjustEditTextareaHeight]);
@@ -169,7 +212,7 @@ const ChatMessage = ({
    * 
    * @param {number} index - Index of image to remove
    */
-  const handleRemoveEditingImage = useCallback((index) => {
+  const handleRemoveEditingImage = useCallback((index: number) => {
     setEditingImages(prev => prev.filter((_, i) => i !== index));
   }, []);
 
@@ -178,7 +221,7 @@ const ChatMessage = ({
    * 
    * @param {number} index - Index of audio to remove
    */
-  const handleRemoveEditingAudio = useCallback((index) => {
+  const handleRemoveEditingAudio = useCallback((index: number) => {
     setEditingAudios(prev => prev.filter((_, i) => i !== index));
   }, []);
 
@@ -357,7 +400,7 @@ const ChatMessage = ({
             </div>
             
             <div className={cn('flex items-center gap-1', isUser ? 'justify-end' : 'justify-start', 'mt-1')}>
-              {!isUser && message.branchInfo && message.branchInfo.totalBranches > 1 && !isEditing && (
+              {!isUser && message.branchInfo && branchTotal > 1 && !isEditing && (
                 <>
                   <Button
                     onClick={() => onPreviousBranch(message)}
@@ -369,7 +412,7 @@ const ChatMessage = ({
                     <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}>◀</span>
                   </Button>
                   <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px] opacity-70')}>
-                    {message.branchInfo.currentIndex}/{message.branchInfo.totalBranches}
+                    {branchIndex}/{branchTotal}
                   </span>
                   <Button
                     onClick={() => onNextBranch(message)}
@@ -438,7 +481,7 @@ const ChatMessage = ({
                 </Button>
               )}
               
-              {isUser && message.branchInfo && message.branchInfo.totalBranches > 1 && !isEditing && (
+              {isUser && message.branchInfo && branchTotal > 1 && !isEditing && (
                 <>
                   <Button
                     onClick={() => onPreviousBranch(message)}
@@ -450,7 +493,7 @@ const ChatMessage = ({
                     <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[9px]')}>◀</span>
                   </Button>
                   <span className={cn(isLightBackground ? 'glass-text' : 'glass-text-black', 'text-[10px] opacity-70')}>
-                    {message.branchInfo.currentIndex}/{message.branchInfo.totalBranches}
+                    {branchIndex}/{branchTotal}
                   </span>
                   <Button
                     onClick={() => onNextBranch(message)}

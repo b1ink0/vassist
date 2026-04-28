@@ -8,6 +8,13 @@ import { useMemo, useCallback } from 'react';
 import VirtualAssistant from "../src/components/assistant/VirtualAssistant";
 import { useApp } from '../src/contexts/AppContext';
 import Logger from '../src/services/LoggerService';
+import type { PositionManagerLike, SceneWithMetadata } from '../src/babylon/types';
+
+interface AssistantReadyPayload {
+  animationManager: object | null;
+  positionManager: (PositionManagerLike & { applyPreset: (preset: string, options?: { modelSizePx?: { width: number; height: number } }) => void }) | null;
+  scene: SceneWithMetadata;
+}
 
 /**
  * Android content component optimized for live wallpaper.
@@ -23,7 +30,7 @@ function AndroidContent() {
   /**
    * Handles VirtualAssistant ready event.
    */
-  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }) => {
+  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: AssistantReadyPayload) => {
     Logger.log('AndroidContent', 'VirtualAssistant ready for live wallpaper!');
     contextHandleAssistantReady({ animationManager, positionManager, scene });
   }, [contextHandleAssistantReady]);

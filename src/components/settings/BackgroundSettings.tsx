@@ -10,11 +10,36 @@ import Logger from '../../services/LoggerService';
 import { backgroundStorageService } from '../../services/BackgroundStorageService';
 import { Button } from '../ui';
 
-const BackgroundSettings = ({ isLightBackground }) => {
-  const [backgrounds, setBackgrounds] = useState([]);
-  const [uploadState, setUploadState] = useState({ uploading: false, error: null });
-  const [activeBackgroundId, setActiveBackgroundId] = useState(null);
-  const fileInputRef = useRef(null);
+interface BackgroundItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  mimeType: string | undefined;
+  metadata: Record<string, unknown>;
+  previewUrl: string | null;
+}
+
+interface UploadState {
+  uploading: boolean;
+  error: string | null;
+}
+
+interface BackgroundSettingsProps {
+  isLightBackground?: boolean;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const BackgroundSettings = ({ isLightBackground = false }: BackgroundSettingsProps) => {
+  const [backgrounds, setBackgrounds] = useState<BackgroundItem[]>([]);
+  const [uploadState, setUploadState] = useState<UploadState>({ uploading: false, error: null });
+  const [activeBackgroundId, setActiveBackgroundId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadBackgrounds();
@@ -24,14 +49,14 @@ const BackgroundSettings = ({ isLightBackground }) => {
     try {
       const list = await backgroundStorageService.getBackgroundsList();
       setBackgrounds(list);
-      const active = list.find(bg => bg.isActive);
+      const active = list.find((bg) => bg.isActive);
       setActiveBackgroundId(active?.id || null);
     } catch (error) {
       Logger.error('BackgroundSettings', 'Failed to load backgrounds:', error);
     }
   };
 
-  const handleUpload = async (file) => {
+  const handleUpload = async (file: File) => {
     if (!file) return;
     
     setUploadState({ uploading: true, error: null });
@@ -40,12 +65,12 @@ const BackgroundSettings = ({ isLightBackground }) => {
       await backgroundStorageService.saveBackground(file);
       await loadBackgrounds();
       setUploadState({ uploading: false, error: null });
-    } catch (error) {
-      setUploadState({ uploading: false, error: error.message });
+    } catch (error: unknown) {
+      setUploadState({ uploading: false, error: getErrorMessage(error) });
     }
   };
 
-  const handleSetActive = async (id) => {
+  const handleSetActive = async (id: string) => {
     try {
       await backgroundStorageService.setActiveBackground(id);
       setActiveBackgroundId(id);
@@ -67,7 +92,7 @@ const BackgroundSettings = ({ isLightBackground }) => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     try {
       await backgroundStorageService.deleteBackground(id);
       if (activeBackgroundId === id) {

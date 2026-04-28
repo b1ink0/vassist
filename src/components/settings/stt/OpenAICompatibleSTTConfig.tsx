@@ -5,12 +5,27 @@
 
 import { Input, Select } from '../../ui';
 
-const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground }) => {
-  const handleFieldChange = (field, value) => {
+interface OpenAICompatibleSTTConfigShape {
+  endpoint?: string;
+  apiKey?: string;
+  model?: string;
+  language?: string;
+}
+
+type OpenAICompatibleOnChange = ((field: string, value: string) => void) | ((updates: OpenAICompatibleSTTConfigShape) => void);
+
+interface OpenAICompatibleSTTConfigProps {
+  config: OpenAICompatibleSTTConfigShape;
+  onChange: OpenAICompatibleOnChange;
+  isLightBackground?: boolean;
+}
+
+const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false }: OpenAICompatibleSTTConfigProps) => {
+  const handleFieldChange = (field: keyof OpenAICompatibleSTTConfigShape, value: string) => {
     if (onChange.length === 2) {
-      onChange(field, value);
+      (onChange as (field: string, value: string) => void)(field, value);
     } else {
-      onChange({
+      (onChange as (updates: OpenAICompatibleSTTConfigShape) => void)({
         ...config,
         [field]: value
       });

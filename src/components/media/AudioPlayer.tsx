@@ -1,13 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import { Button } from '../ui';
 
-const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
+interface AudioPlayerProps {
+  audioUrl: string;
+  isLightBackground?: boolean;
+}
+
+const AudioPlayer = ({ audioUrl, isLightBackground = false }: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const audioRef = useRef(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -40,7 +45,7 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
     setIsPlaying(!isPlaying);
   };
 
-  const handleSeek = (e) => {
+  const handleSeek = (e: MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -50,7 +55,7 @@ const AudioPlayer = ({ audioUrl, isLightBackground = false }) => {
     audio.currentTime = percentage * duration;
   };
 
-  const formatTime = (time) => {
+  const formatTime = (time: number) => {
     if (!time || isNaN(time)) return '0:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);

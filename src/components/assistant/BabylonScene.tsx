@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneConfigAsync } from '../../config/sceneConfig';
@@ -38,14 +38,6 @@ interface ModelOverlayPosition {
   y: number;
   width: number;
   height: number;
-}
-
-interface BabylonSceneAppContextValue {
-  modelOverlayPos: ModelOverlayPosition;
-  setModelOverlayPos: Dispatch<SetStateAction<ModelOverlayPosition>>;
-  setShowModelLoadingOverlay: Dispatch<SetStateAction<boolean>>;
-  setPendingDropData: Dispatch<SetStateAction<unknown>>;
-  openChat: () => void;
 }
 
 interface UIConfigForScene {
@@ -249,7 +241,7 @@ const BabylonScene = ({
     setShowModelLoadingOverlay,
     setPendingDropData,
     openChat
-  }: BabylonSceneAppContextValue = useApp();
+  } = useApp();
   
   const isFirstMountRef = useRef(true);
   
@@ -655,7 +647,7 @@ const BabylonScene = ({
       onProcessData: (data: unknown) => {
         Logger.log('BabylonScene', 'Opening chat from model drop with data:', data);
         openChat();
-        setPendingDropData(data);
+          setPendingDropData(data as never);
       }
     });
 

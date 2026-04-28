@@ -3,19 +3,30 @@ import { Button } from '../ui';
 import { cn } from '../../utils/cn';
 import { useDesktop } from '../../contexts/DesktopContext';
 
+interface DesktopShareSource {
+  id: string;
+  name: string;
+  thumbnail: string;
+  appIcon?: string;
+}
+
 const DesktopScreenShareDialog = () => {
   const { api } = useDesktop();
-  const [sources, setSources] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [sources, setSources] = useState<DesktopShareSource[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('DesktopScreenShareDialog mounted, api:', api);
     
     // Listen for sources from main process
     if (api?.ipc) {
-      const unsubscribe = api.ipc.on('picker:sources', (sourcesData) => {
+      const unsubscribe = api.ipc.on('picker:sources', (sourcesData: unknown) => {
         console.log('Received sources:', sourcesData);
-        setSources(sourcesData);
+        if (Array.isArray(sourcesData)) {
+          setSources(sourcesData as DesktopShareSource[]);
+          return;
+        }
+        setSources([]);
       });
 
       // Request sources
@@ -42,8 +53,8 @@ const DesktopScreenShareDialog = () => {
     }
   };
 
-  const screens = sources.filter(s => s.id.startsWith('screen:'));
-  const windows = sources.filter(s => s.id.startsWith('window:'));
+  const screens = sources.filter((s) => s.id.startsWith('screen:'));
+  const windows = sources.filter((s) => s.id.startsWith('window:'));
 
   return (
     <div className="w-full h-screen bg-[#1a1a1a] text-white p-5 overflow-y-auto font-sans">

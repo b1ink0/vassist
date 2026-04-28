@@ -10,7 +10,19 @@
  */
 
 import { useState, useEffect } from 'react';
+import type { MouseEventHandler } from 'react';
 import ToolbarButton from './ToolbarButton';
+import type { ToolbarButtonProps } from './ToolbarButton';
+
+type ToolbarSectionButton = Omit<ToolbarButtonProps, 'isLightBackground' | 'onMouseEnterButton' | 'onMouseLeaveButton'>;
+
+interface ToolbarSectionProps {
+  mainButton: ToolbarSectionButton;
+  subButtons?: ToolbarSectionButton[];
+  isLoading?: boolean;
+  showSeparator?: boolean;
+  isLightBackground?: boolean;
+}
 
 const ToolbarSection = ({
   mainButton,
@@ -18,7 +30,7 @@ const ToolbarSection = ({
   isLoading = false,
   showSeparator = true,
   isLightBackground = false,
-}) => {
+}: ToolbarSectionProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -42,13 +54,13 @@ const ToolbarSection = ({
 
   const [hoveredSubButton, setHoveredSubButton] = useState(false);
 
-  const handleMainButtonMouseEnter = (e) => {
+  const handleMainButtonMouseEnter: MouseEventHandler<HTMLButtonElement> = (e) => {
     if (!hoveredSubButton) {
       e.currentTarget.dataset.mainHovered = 'true';
     }
   };
 
-  const handleMainButtonMouseLeave = (e) => {
+  const handleMainButtonMouseLeave: MouseEventHandler<HTMLButtonElement> = (e) => {
     e.currentTarget.dataset.mainHovered = 'false';
   };
 

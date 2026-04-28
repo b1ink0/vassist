@@ -18,9 +18,19 @@ import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 import { Button, Input, Select, Card, SettingsRow } from '../ui';
 
-const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTrigger }) => {
+interface TTSSettingsProps {
+  isLightBackground?: boolean;
+  onRequestDeleteVoiceDialog?: ((voiceId: string) => void) | undefined;
+  refreshTrigger?: unknown;
+}
+
+interface KokoroCacheSize {
+  usage?: number;
+}
+
+const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, refreshTrigger }: TTSSettingsProps) => {
   const [clearingCache, setClearingCache] = useState(false);
-  const [cacheSize, setCacheSize] = useState(null);
+  const [cacheSize, setCacheSize] = useState<KokoroCacheSize | null>(null);
   const [testText, setTestText] = useState('Hello, this is a test of the text to speech system.');
   const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
   
@@ -135,7 +145,7 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
               <h4 className="text-sm font-semibold text-white/90 mb-3">Desktop Local TTS (GPT-SoVITS)</h4>
               <GPTSoVITSConfig
                 config={ttsConfig['desktop-local'] || {}}
-                onChange={(field, value) => {
+                onChange={(field: string, value: string | number | null) => {
                   updateTTSConfig(`desktop-local.${field}`, value);
                 }}
                 showTitle={false}
@@ -169,7 +179,7 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
               {/* Voice Cloning Configuration - Reuse GPTSoVITSConfig */}
               <GPTSoVITSConfig
                 config={ttsConfig['gptsovits-remote'] || {}}
-                onChange={(field, value) => {
+                onChange={(field: string, value: string | number | null) => {
                   updateTTSConfig(`gptsovits-remote.${field}`, value);
                 }}
                 showTitle={false}
@@ -189,9 +199,9 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
             <>
               <KokoroTTSConfig
                 config={ttsConfig.kokoro || {}}
-                onChange={(field, value) => {
+                onChange={(field: string, value: string | number | boolean) => {
                   updateTTSConfig(`kokoro.${field}`, value);
-                  if (field === 'device') {
+                  if (field === 'device' && typeof value === 'string') {
                     setTimeout(() => checkKokoroStatus(value), 100);
                   }
                 }}
@@ -217,7 +227,7 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                   <div className="flex gap-2">
                   <Button variant={isLightBackground ? 'dark' : 'default'} size="sm" onClick={async () => {
                         try {
-                          const size = await TTSServiceProxy.getKokoroCacheSize();
+                          const size = await TTSServiceProxy.getKokoroCacheSize() as KokoroCacheSize;
                           setCacheSize(size);
                         } catch (error) {
                           Logger.error('other', 'Failed to get cache size:', error);
@@ -293,20 +303,6 @@ const TTSSettings = ({ isLightBackground, onRequestDeleteVoiceDialog, refreshTri
                   variant={isLightBackground ? 'dark' : 'default'}
                   options={Object.entries(OpenAIVoices).map(([key, value]) => ({ value, label: key.charAt(0) + key.slice(1).toLowerCase() }))}
                 />
-              </div>
-            </>
-          )}
-
-          {/* ElevenLabs Configuration */}
-          {ttsConfig.provider === TTSProviders.ELEVENLABS && (
-            <>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">API Key</label>
-                <Input type="password" value={ttsConfig.elevenlabs?.apiKey || ''} onChange={(e) => updateTTSConfig('elevenlabs.apiKey', e.target.value)} variant={isLightBackground ? 'dark' : 'default'} />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">Voice ID</label>
-                <Input type="text" value={ttsConfig.elevenlabs?.voiceId || ''} onChange={(e) => updateTTSConfig('elevenlabs.voiceId', e.target.value)} variant={isLightBackground ? 'dark' : 'default'} />
               </div>
             </>
           )}

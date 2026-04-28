@@ -4,6 +4,44 @@ import { useDesktop } from '../../../contexts/DesktopContext';
 import { cn } from '../../../utils/cn';
 import { Button, Input, Select } from '../../ui';
 
+interface DesktopSTTConfigShape {
+  endpoint?: string;
+  model?: string;
+  language?: string;
+  threads?: number;
+}
+
+interface SetupStatus {
+  isSetup?: boolean;
+  pythonExists?: boolean;
+  dependenciesInstalled?: boolean;
+  modelExists?: boolean;
+}
+
+interface SetupLogMessage {
+  message: string;
+}
+
+interface SetupResult {
+  success?: boolean;
+  error?: string;
+}
+
+interface WhisperSetupApi {
+  getStatus?: () => Promise<SetupStatus>;
+  onLog?: (callback: (log: SetupLogMessage) => void) => (() => void) | undefined;
+  onComplete?: (callback: (result: SetupResult) => void) => (() => void) | undefined;
+  start?: (options: { model: string }) => Promise<void>;
+  cancel?: () => Promise<void>;
+}
+
+interface DesktopSTTConfigProps {
+  config?: DesktopSTTConfigShape;
+  onChange: (updates: Record<string, unknown>) => void;
+  isSetupMode?: boolean;
+  isLightBackground?: boolean;
+}
+
 /**
  * Reusable Desktop STT Configuration Component
  * Used in both setup wizard and settings panel for desktop-local STT provider
@@ -19,41 +57,42 @@ const DesktopSTTConfig = ({
   onChange, 
   isSetupMode = false,
   isLightBackground = false
-}) => {
+}: DesktopSTTConfigProps) => {
   const { api: desktopAPI } = useDesktop();
-  const [setupStatus, setSetupStatus] = useState(null);
+  const whisperSetup = desktopAPI?.whisperSetup as WhisperSetupApi | undefined;
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
-  const [setupError, setSetupError] = useState(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [setupComplete, setSetupComplete] = useState(false);
-  const [logs, setLogs] = useState([]);
-  const logsContainerRef = useRef(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const handleChange = (key, value) => {
+  const handleChange = (key: string, value: string | number) => {
     onChange({ [key]: value });
   };
 
   useEffect(() => {
-    if (!desktopAPI?.whisperSetup) return;
+    if (!whisperSetup?.getStatus) return;
 
-    desktopAPI.whisperSetup.getStatus().then(setSetupStatus).catch((error) => {
+    whisperSetup.getStatus().then(setSetupStatus).catch((error: unknown) => {
       console.error('[DesktopSTTConfig] Whisper status check failed:', error);
     });
-  }, [desktopAPI]);
+  }, [whisperSetup]);
 
   useEffect(() => {
-    if (!desktopAPI?.whisperSetup) return;
+    if (!whisperSetup?.onLog || !whisperSetup?.onComplete) return;
 
-    const unsubscribeLog = desktopAPI.whisperSetup.onLog((log) => {
+    const unsubscribeLog = whisperSetup.onLog((log: SetupLogMessage) => {
       setLogs((prev) => [...prev, log.message]);
     });
 
-    const unsubscribeComplete = desktopAPI.whisperSetup.onComplete((result) => {
+    const unsubscribeComplete = whisperSetup.onComplete((result: SetupResult) => {
       setIsSetupRunning(false);
 
       if (result.success) {
         setSetupComplete(true);
         setSetupError(null);
-        desktopAPI.whisperSetup.getStatus().then(setSetupStatus).catch((error) => {
+        whisperSetup.getStatus?.().then(setSetupStatus).catch((error: unknown) => {
           console.error('[DesktopSTTConfig] Whisper status refresh failed:', error);
         });
       } else {
@@ -66,7 +105,7 @@ const DesktopSTTConfig = ({
       unsubscribeLog?.();
       unsubscribeComplete?.();
     };
-  }, [desktopAPI]);
+  }, [whisperSetup]);
 
   useEffect(() => {
     if (!logsContainerRef.current) return;
@@ -74,7 +113,7 @@ const DesktopSTTConfig = ({
   }, [logs]);
 
   const handleStartSetup = async () => {
-    if (!desktopAPI?.whisperSetup) return;
+    if (!whisperSetup?.start) return;
 
     setIsSetupRunning(true);
     setSetupError(null);
@@ -83,18 +122,18 @@ const DesktopSTTConfig = ({
 
     try {
       const selectedModel = (config.model || 'tiny').toString().trim();
-      await desktopAPI.whisperSetup.start({ model: selectedModel });
-    } catch (error) {
+      await whisperSetup.start({ model: selectedModel });
+    } catch (error: unknown) {
       setIsSetupRunning(false);
-      setSetupError(error.message || 'Failed to start setup');
+      setSetupError(error instanceof Error ? error.message : 'Failed to start setup');
     }
   };
 
   const handleCancelSetup = async () => {
-    if (!desktopAPI?.whisperSetup) return;
+    if (!whisperSetup?.cancel) return;
 
     try {
-      await desktopAPI.whisperSetup.cancel();
+      await whisperSetup.cancel();
       setIsSetupRunning(false);
       setLogs((prev) => [...prev, '\n❌ Setup cancelled by user\n']);
     } catch (error) {
@@ -103,17 +142,17 @@ const DesktopSTTConfig = ({
   };
 
   const handleVerifySetup = async () => {
-    if (!desktopAPI?.whisperSetup) return;
+    if (!whisperSetup?.getStatus) return;
 
     try {
       setSetupError(null);
-      const status = await desktopAPI.whisperSetup.getStatus();
+      const status = await whisperSetup.getStatus();
       setSetupStatus(status);
       if (status?.isSetup) {
         setSetupComplete(true);
       }
-    } catch (error) {
-      setSetupError(error.message || 'Failed to verify setup status');
+    } catch (error: unknown) {
+      setSetupError(error instanceof Error ? error.message : 'Failed to verify setup status');
     }
   };
 
@@ -123,7 +162,7 @@ const DesktopSTTConfig = ({
       !setupStatus.isSetup &&
       (setupStatus.pythonExists || setupStatus.dependenciesInstalled || setupStatus.modelExists)
   );
-  const canManageSetup = Boolean(desktopAPI?.whisperSetup);
+  const canManageSetup = Boolean(whisperSetup);
 
   return (
     <div className="space-y-3">

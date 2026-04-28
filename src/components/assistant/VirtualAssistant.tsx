@@ -14,10 +14,12 @@ import { useDesktop } from '../../contexts/DesktopContext';
 import { useAnimation } from '../../contexts/AnimationContext';
 import Logger from '../../services/LoggerService';
 import emotePlayerService from '../../services/EmotePlayerService';
-import type { PositionManagerLike, SavedModelPositionLike, SceneWithMetadata } from '../../babylon/types';
+import type { PositionManagerLike, SavedModelPositionLike, SceneAnimationConfigLike, SceneBuildConfig, SceneWithMetadata, UIConfigLike } from '../../babylon/types';
 
 interface VirtualAssistantProps {
   onReady?: (payload: { animationManager: AnimationManagerLike; positionManager: PositionManagerWithPreset | null; scene: SceneWithMetadata }) => void;
+  mode?: string;
+  isWallpaperMode?: boolean;
   isPreview?: boolean;
   forcePortraitMode?: boolean;
   previewWidth?: string;
@@ -32,6 +34,11 @@ interface AnimationOptionsLike {
   fillWeight?: number;
 }
 
+interface AssistantHandleLike {
+  isReady?: () => boolean;
+  idle?: () => void | Promise<void>;
+}
+
 interface AnimationManagerLike {
   getCurrentState: () => string;
   speak: (text: string, mouthAnimationBlobUrl?: string, emotionCategory?: string, options?: AnimationOptionsLike) => Promise<void>;
@@ -40,7 +47,7 @@ interface AnimationManagerLike {
   playAnimation: (animation: unknown) => Promise<void>;
   triggerAction: (action: string) => Promise<void>;
   playComposite: (primaryAnimName: string, fillCategory?: string, options?: AnimationOptionsLike) => Promise<void>;
-  queueSimpleAnimation: (animationName: string, force?: boolean) => void;
+  queueSimpleAnimation: (animation: unknown, force?: boolean) => void;
   queueCompositeAnimation: (primaryAnimName: string, fillCategory?: string, options?: AnimationOptionsLike, force?: boolean) => void;
   queueSpeak: (text: string, mouthBlobUrl?: string, emotionCategory?: string, options?: AnimationOptionsLike, force?: boolean) => void;
   clearQueue: () => void;
@@ -51,15 +58,7 @@ interface PositionManagerWithPreset extends PositionManagerLike {
   applyPreset: (preset: string) => void;
 }
 
-interface AppContextForVirtualAssistant {
-  savedModelPosition: SavedModelPositionLike | null;
-  setSavedModelPosition: (position: SavedModelPositionLike | null) => void;
-}
-
-interface AnimationContextForVirtualAssistant {
-  getRandomAnimation: (category: string) => unknown;
-  getEnabledAnimations: (category: string) => unknown[];
-}
+type AssistantStateValue = typeof AssistantState[keyof typeof AssistantState];
 
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.
@@ -77,7 +76,7 @@ interface AnimationContextForVirtualAssistant {
  * @param {React.Ref} ref - Forwarded ref for imperative API
  * @returns {JSX.Element} Virtual assistant component
  */
-const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref) => {
+const VirtualAssistant = forwardRef<AssistantHandleLike, VirtualAssistantProps>((props, ref) => {
   const { 
     onReady,
     isPreview = false,
@@ -89,9 +88,9 @@ const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref)
     previewPosition = 'bottom-center'
   } = props;
   const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
-  const { savedModelPosition, setSavedModelPosition }: AppContextForVirtualAssistant = useApp();
-  const { api: desktopAPI } = useDesktop() as { api: unknown };
-  const { getRandomAnimation, getEnabledAnimations } = useAnimation() as AnimationContextForVirtualAssistant;
+  const { savedModelPosition, setSavedModelPosition } = useApp();
+  const { api: desktopAPI } = useDesktop();
+  const { getRandomAnimation, getEnabledAnimations } = useAnimation();
   
   const [animationManager, setAnimationManager] = useState<AnimationManagerLike | null>(null);
   const [positionManager, setPositionManager] = useState<PositionManagerWithPreset | null>(null);
@@ -150,7 +149,8 @@ const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref)
     TTSServiceProxy.initializeBVMDConverter(scene);
     
     // Listen to TTS events for animation control
-    TTSServiceProxy.addEventListener('speak', (event: Event) => {
+    TTSServiceProxy.addEventListener('speak', (...args: unknown[]) => {
+      const event = args[0];
       if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
         return;
       }
@@ -310,7 +310,7 @@ const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref)
 
       Logger.log('VirtualAssistant', `setState("${stateOrEmotion}") called - current state: ${animationManager.getCurrentState()}`);
       
-      if (Object.values(AssistantState).includes(stateOrEmotion as AssistantState)) {
+      if (Object.values(AssistantState).includes(stateOrEmotion as AssistantStateValue)) {
         await animationManager.transitionToState(stateOrEmotion);
       } else {
         const emotionAnimation = getAnimationForEmotion(stateOrEmotion);
@@ -482,6 +482,58 @@ const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref)
     },
   }), [animationManager, positionManager, currentState, isReady]);
 
+  const normalizeAnimation = useCallback((animation: ReturnType<typeof getRandomAnimation>): SceneAnimationConfigLike | null => {
+    if (!animation) {
+      return null;
+    }
+
+    const { filePath, ...rest } = animation;
+
+    return {
+      ...rest,
+      ...(typeof filePath === 'string' ? { filePath } : {}),
+    };
+  }, []);
+
+  const normalizeAnimations = useCallback((animations: ReturnType<typeof getEnabledAnimations>): SceneAnimationConfigLike[] => {
+    return animations.map((animation) => {
+      const { filePath, ...rest } = animation;
+      return {
+        ...rest,
+        ...(typeof filePath === 'string' ? { filePath } : {}),
+      };
+    });
+  }, []);
+
+  const baseUiConfig = uiConfig as unknown as UIConfigLike | undefined;
+  const sceneUiConfig: UIConfigLike | undefined = isPreview
+    ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } }
+    : (forcePortraitMode ? { ...(baseUiConfig ?? {}), enablePortraitMode: true } : baseUiConfig);
+
+  const getRandomSceneAnimation = useCallback((category: string): SceneAnimationConfigLike | null => {
+    return normalizeAnimation(getRandomAnimation(category));
+  }, [getRandomAnimation, normalizeAnimation]);
+
+  const getEnabledSceneAnimations = useCallback((category: string): SceneAnimationConfigLike[] => {
+    return normalizeAnimations(getEnabledAnimations(category));
+  }, [getEnabledAnimations, normalizeAnimations]);
+
+  const sceneBuildConfig: Partial<SceneBuildConfig> = {
+    enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
+    renderQuality: isPreview ? 'low' : (uiConfig?.renderQuality || 'medium'),
+    savedModelPosition: isPreview ? null : savedModelPosition,
+    getRandomAnimation: getRandomSceneAnimation,
+    getEnabledAnimations: getEnabledSceneAnimations,
+    desktopAPI: desktopAPI ?? null,
+  };
+
+  if (sceneUiConfig) {
+    sceneBuildConfig.uiConfig = sceneUiConfig;
+  }
+  if (uiConfig?.customQuality) {
+    sceneBuildConfig.customQuality = uiConfig.customQuality;
+  }
+
   return (
     <>
       {!isPreview && <LoadingIndicator isVisible={!isReady || isConfigLoading} progress={loadingProgress} />}
@@ -496,18 +548,7 @@ const VirtualAssistant = forwardRef<unknown, VirtualAssistantProps>((props, ref)
           previewWidth={previewWidth}
           previewHeight={previewHeight}
           previewClassName={previewClassName}
-          sceneConfig={{ 
-            uiConfig: isPreview
-              ? { enablePortraitMode: portraitMode, position: { preset: previewPosition } }
-              : (forcePortraitMode ? { ...uiConfig, enablePortraitMode: true } : uiConfig),
-            enablePhysics: isPreview ? false : (uiConfig?.enablePhysics !== false),
-            renderQuality: isPreview ? 'low' : (uiConfig?.renderQuality || 'medium'),
-            customQuality: uiConfig?.customQuality,
-            savedModelPosition: isPreview ? null : savedModelPosition,
-            getRandomAnimation,
-            getEnabledAnimations,
-            desktopAPI,
-          }}
+            sceneConfig={sceneBuildConfig}
         />
       )}
     </>

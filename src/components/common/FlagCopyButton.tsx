@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
 
-const FlagCopyButton = ({ flagUrl, flagValue }) => {
+interface FlagCopyButtonProps {
+  flagUrl: string;
+  flagValue: string;
+}
+
+const FlagCopyButton = ({ flagUrl, flagValue }: FlagCopyButtonProps) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {

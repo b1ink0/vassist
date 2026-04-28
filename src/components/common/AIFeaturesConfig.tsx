@@ -13,6 +13,59 @@ import { TranslationLanguages } from '../../config/aiConfig';
 import { cn } from '../../utils/cn';
 import { Button, Card, SettingsRow } from '../ui';
 
+type TestStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface TestResultState {
+  status: TestStatus;
+  message: string;
+}
+
+interface FeatureToggle {
+  enabled?: boolean;
+}
+
+interface AIFeatureState {
+  translator?: FeatureToggle;
+  languageDetector?: FeatureToggle;
+  summarizer?: FeatureToggle;
+  rewriter?: FeatureToggle;
+  writer?: FeatureToggle;
+}
+
+interface DetectedLanguageResult {
+  detectedLanguage: string;
+  confidence: number;
+}
+
+type TestTranslator = (text: string, sourceLanguage: string, targetLanguage: string) => Promise<unknown>;
+type TestLanguageDetector = (text: string) => Promise<unknown>;
+type TestSummarizer = (text: string, options: { type: string; format: string; length: string }) => Promise<unknown>;
+type TestRewriter = (text: string, options: { tone: string }) => Promise<unknown>;
+type TestWriter = (prompt: string, options: { tone: string; length: string }) => Promise<unknown>;
+
+interface AIFeaturesConfigProps {
+  features?: AIFeatureState;
+  onFeatureChange?: (featureName: keyof AIFeatureState, enabled: boolean) => void;
+  onTargetLanguageChange?: (languageCode: string) => void;
+  defaultTargetLanguage?: string;
+  testTranslator?: TestTranslator;
+  testLanguageDetector?: TestLanguageDetector;
+  testSummarizer?: TestSummarizer;
+  testRewriter?: TestRewriter;
+  testWriter?: TestWriter;
+  isChromeAI?: boolean;
+  needsFlags?: boolean;
+  showTesting?: boolean;
+  isLightBackground?: boolean;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
 /**
  * Displays test results with streaming animation.
  * 
@@ -22,7 +75,7 @@ import { Button, Card, SettingsRow } from '../ui';
  * @param {string} props.message - Test result message
  * @returns {JSX.Element|null} Test result component
  */
-const TestResult = ({ status, message }) => {
+const TestResult = ({ status, message }: TestResultState) => {
   if (!status || status === 'idle') return null;
 
   const bgClass = status === 'success' ? 'bg-emerald-900/10' : status === 'loading' ? 'bg-amber-900/10' : 'bg-red-900/10';
@@ -33,7 +86,7 @@ const TestResult = ({ status, message }) => {
       <div className={cn('mt-2 rounded-lg p-2 text-sm', bgClass)}>
         <span className={textClass} style={{whiteSpace: 'pre-wrap'}}>
           {status === 'loading' ? (
-            <StreamingText text={message} speed={5} showCursor={true} />
+            <StreamingText text={message} wordsPerSecond={5} showCursor={true} />
           ) : (
             message
           )}
@@ -77,16 +130,16 @@ const AIFeaturesConfig = ({
   needsFlags = false,
   showTesting = true,
   isLightBackground = false
-}) => {
-  const [translatorTest, setTranslatorTest] = useState({ status: 'idle', message: '' });
+}: AIFeaturesConfigProps) => {
+  const [translatorTest, setTranslatorTest] = useState<TestResultState>({ status: 'idle', message: '' });
   const [targetLanguage, setTargetLanguage] = useState(defaultTargetLanguage);
-  const [languageDetectorTest, setLanguageDetectorTest] = useState({ status: 'idle', message: '' });
+  const [languageDetectorTest, setLanguageDetectorTest] = useState<TestResultState>({ status: 'idle', message: '' });
   const [languageDetectorInput, setLanguageDetectorInput] = useState('Bonjour, comment allez-vous?');
-  const [summarizerTest, setSummarizerTest] = useState({ status: 'idle', message: '' });
-  const [rewriterTest, setRewriterTest] = useState({ status: 'idle', message: '' });
-  const [writerTest, setWriterTest] = useState({ status: 'idle', message: '' });
+  const [summarizerTest, setSummarizerTest] = useState<TestResultState>({ status: 'idle', message: '' });
+  const [rewriterTest, setRewriterTest] = useState<TestResultState>({ status: 'idle', message: '' });
+  const [writerTest, setWriterTest] = useState<TestResultState>({ status: 'idle', message: '' });
 
-  const handleTargetLanguageChange = (langCode) => {
+  const handleTargetLanguageChange = (langCode: string) => {
     setTargetLanguage(langCode);
     if (onTargetLanguageChange) {
       onTargetLanguageChange(langCode);
@@ -103,8 +156,8 @@ const AIFeaturesConfig = ({
       const res = await testTranslator('Hello, how are you?', 'en', targetLanguage);
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
       setTranslatorTest({ status: 'success', message: `Translation: "${msg}"` });
-    } catch (err) {
-      setTranslatorTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    } catch (err: unknown) {
+      setTranslatorTest({ status: 'error', message: getErrorMessage(err) });
     }
   };
 
@@ -118,15 +171,15 @@ const AIFeaturesConfig = ({
       const res = await testLanguageDetector(languageDetectorInput);
       
       if (Array.isArray(res) && res.length > 0) {
-        const topResult = res[0];
+        const topResult = res[0] as DetectedLanguageResult;
         const msg = `Detected: ${topResult.detectedLanguage} (${(topResult.confidence * 100).toFixed(1)}% confidence)`;
         setLanguageDetectorTest({ status: 'success', message: msg });
       } else {
         const msg = typeof res === 'string' ? res : JSON.stringify(res);
         setLanguageDetectorTest({ status: 'success', message: msg });
       }
-    } catch (err) {
-      setLanguageDetectorTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    } catch (err: unknown) {
+      setLanguageDetectorTest({ status: 'error', message: getErrorMessage(err) });
     }
   };
 
@@ -143,8 +196,8 @@ const AIFeaturesConfig = ({
       );
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
       setSummarizerTest({ status: 'success', message: `Summary: "${msg.substring(0, 150)}${msg.length > 150 ? '...' : ''}"`  });
-    } catch (err) {
-      setSummarizerTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    } catch (err: unknown) {
+      setSummarizerTest({ status: 'error', message: getErrorMessage(err) });
     }
   };
 
@@ -161,8 +214,8 @@ const AIFeaturesConfig = ({
       );
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
       setRewriterTest({ status: 'success', message: `Rewritten: "${msg}"` });
-    } catch (err) {
-      setRewriterTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    } catch (err: unknown) {
+      setRewriterTest({ status: 'error', message: getErrorMessage(err) });
     }
   };
 
@@ -179,8 +232,8 @@ const AIFeaturesConfig = ({
       );
       const msg = typeof res === 'string' ? res : JSON.stringify(res);
       setWriterTest({ status: 'success', message: `Written: "${msg.substring(0, 150)}${msg.length > 150 ? '...' : ''}"`  });
-    } catch (err) {
-      setWriterTest({ status: 'error', message: `${(err && err.message) ? err.message : String(err)}` });
+    } catch (err: unknown) {
+      setWriterTest({ status: 'error', message: getErrorMessage(err) });
     }
   };
 

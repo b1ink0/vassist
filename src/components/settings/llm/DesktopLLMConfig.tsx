@@ -6,6 +6,94 @@ import { Button, Select, Input } from '../../ui';
 import LocalLLMModelManager from './LocalLLMModelManager';
 import { getLLMModelStorage } from '../../../services/LLMModelStorageService';
 
+interface DesktopLLMConfigShape {
+  endpoint?: string;
+  model?: string;
+  customModelsPath?: string | null;
+  backend?: string;
+  temperature?: number;
+  maxTokens?: number;
+  contextSize?: number;
+  gpuLayers?: number;
+  threads?: number;
+}
+
+interface BackendItem {
+  name: string;
+  supported?: boolean;
+}
+
+interface BackendStatus {
+  success?: boolean;
+  error?: string;
+  selectedInstalled?: boolean;
+  supportedBackends?: BackendItem[];
+}
+
+interface BackendProgress {
+  downloadedBytes?: number;
+  totalBytes?: number;
+  percent?: number;
+  stage?: string;
+  status?: string;
+}
+
+interface DesktopLlmBridge {
+  listModels: (customPath?: string | null) => Promise<unknown>;
+  pullModel: (modelName: string, customPath?: string | null) => Promise<unknown>;
+  downloadModel: (url: string, customPath?: string | null) => Promise<unknown>;
+  deleteModel: (filename: string, customPath?: string | null) => Promise<unknown>;
+  chooseModelFile: () => Promise<unknown>;
+  importModel: (filePath: string, customPath?: string | null) => Promise<unknown>;
+  chooseModelsFolder: () => Promise<unknown>;
+  onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => (() => void) | undefined;
+  getBackendStatus: (backend?: string) => Promise<unknown>;
+  installBackend: (backend: string) => Promise<unknown>;
+  cancelBackendInstall: () => Promise<unknown>;
+  onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => (() => void) | undefined;
+}
+
+interface ModelEntry {
+  name: string;
+  size: number;
+  modified: Date;
+}
+
+const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.listModels === 'function'
+    && typeof record.pullModel === 'function'
+    && typeof record.downloadModel === 'function'
+    && typeof record.deleteModel === 'function'
+    && typeof record.chooseModelFile === 'function'
+    && typeof record.importModel === 'function'
+    && typeof record.chooseModelsFolder === 'function'
+    && typeof record.onDownloadProgress === 'function'
+    && typeof record.getBackendStatus === 'function'
+    && typeof record.installBackend === 'function'
+    && typeof record.cancelBackendInstall === 'function'
+    && typeof record.onBackendInstallProgress === 'function';
+};
+
+interface DesktopLLMConfigProps {
+  config?: DesktopLLMConfigShape;
+  onChange: (updates: Record<string, unknown>) => void;
+  isLightBackground?: boolean;
+  isSetupMode?: boolean;
+  onRequestDeleteModel?: ((modelName: string) => void) | null;
+  refreshTrigger?: unknown;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
 /**
  * Reusable Desktop LLM Configuration Component
  * Used in both setup wizard and settings panel for desktop-local LLM provider
@@ -23,33 +111,54 @@ const DesktopLLMConfig = ({
   isSetupMode = false,
   onRequestDeleteModel,
   refreshTrigger
-}) => {
+}: DesktopLLMConfigProps) => {
   const { api } = useDesktop();
-  const [backendStatus, setBackendStatus] = useState(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
   const [backendLoading, setBackendLoading] = useState(false);
   const [backendError, setBackendError] = useState('');
-  const [backendProgress, setBackendProgress] = useState(null);
+  const [backendProgress, setBackendProgress] = useState<BackendProgress | null>(null);
 
-  const handleChange = (key, value) => {
+  const handleChange = (key: string, value: string | number | null) => {
     onChange({ [key]: value });
   };
 
-  const handleModelSelect = (modelName) => {
+  const handleModelSelect = (modelName: string) => {
     handleChange('model', modelName);
   };
 
-  const handleCustomPathChange = (path) => {
+  const handleCustomPathChange = (path: string | null) => {
     handleChange('customModelsPath', path);
   };
 
-  const storageService = isDesktop && api ? getLLMModelStorage(api) : null;
+  const desktopLlmBridge = isDesktopLlmBridge(api?.llm) ? api.llm : null;
+  const desktopLlmApi = desktopLlmBridge ? {
+    listModels: (customPath?: string | null) => desktopLlmBridge.listModels(customPath) as Promise<{ success: boolean; models?: ModelEntry[] }>,
+    pullModel: (modelName: string, customPath?: string | null) => desktopLlmBridge.pullModel(modelName, customPath) as Promise<{ success: boolean; error?: string }>,
+    downloadModel: (url: string, customPath?: string | null) => desktopLlmBridge.downloadModel(url, customPath) as Promise<{ success: boolean; error?: string }>,
+    deleteModel: (filename: string, customPath?: string | null) => desktopLlmBridge.deleteModel(filename, customPath) as Promise<{ success: boolean; error?: string }>,
+    chooseModelFile: () => desktopLlmBridge.chooseModelFile() as Promise<{ canceled?: boolean; path?: string }>,
+    importModel: (filePath: string, customPath?: string | null) => desktopLlmBridge.importModel(filePath, customPath) as Promise<{ success: boolean; error?: string }>,
+    chooseModelsFolder: () => desktopLlmBridge.chooseModelsFolder() as Promise<{ success: boolean; error?: string; path?: string }>,
+    onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => {
+      const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
+      return () => unsubscribe?.();
+    },
+    getBackendStatus: (backend = 'auto') => desktopLlmBridge.getBackendStatus(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+    installBackend: (backend: string) => desktopLlmBridge.installBackend(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+    cancelBackendInstall: () => desktopLlmBridge.cancelBackendInstall() as Promise<{ success: boolean } & Record<string, unknown>>,
+    onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => {
+      const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
+      return () => unsubscribe?.();
+    },
+  } : null;
+  const storageService = isDesktop && desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null;
   const selectedBackend = config.backend || 'auto';
   const backendProgressBytes = useMemo(() => {
     if (!backendProgress) return null;
-    const downloaded = Number.isFinite(backendProgress.downloadedBytes)
+    const downloaded = typeof backendProgress.downloadedBytes === 'number'
       ? backendProgress.downloadedBytes
       : null;
-    const total = Number.isFinite(backendProgress.totalBytes)
+    const total = typeof backendProgress.totalBytes === 'number'
       ? backendProgress.totalBytes
       : null;
     if (downloaded === null) return null;
@@ -72,8 +181,8 @@ const DesktopLLMConfig = ({
       } else if (status?.error) {
         setBackendError(status.error);
       }
-    } catch (error) {
-      setBackendError(error.message || 'Failed to load backend status');
+    } catch (error: unknown) {
+      setBackendError(getErrorMessage(error) || 'Failed to load backend status');
     }
   }, [selectedBackend, storageService]);
 
@@ -82,7 +191,7 @@ const DesktopLLMConfig = ({
 
     loadBackendStatus();
 
-    const unsubscribe = storageService.onBackendInstallProgress((progress) => {
+    const unsubscribe = storageService.onBackendInstallProgress((progress: BackendProgress) => {
       setBackendProgress(progress);
       if (progress?.stage === 'done') {
         setBackendLoading(false);
@@ -94,9 +203,7 @@ const DesktopLLMConfig = ({
       }
     });
 
-    return () => {
-      unsubscribe?.();
-    };
+    return () => unsubscribe?.();
   }, [storageService, selectedBackend, loadBackendStatus]);
 
   const installSelectedBackend = async () => {
@@ -112,9 +219,9 @@ const DesktopLLMConfig = ({
         setBackendLoading(false);
         setBackendError(result?.error || 'Backend installation failed');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       setBackendLoading(false);
-      setBackendError(error.message || 'Backend installation failed');
+      setBackendError(getErrorMessage(error) || 'Backend installation failed');
     }
   };
 
@@ -335,7 +442,7 @@ const DesktopLLMConfig = ({
       {!isSetupMode && isDesktop && storageService && (
         <LocalLLMModelManager
           storageService={storageService}
-          selectedModel={config.model}
+          selectedModel={config.model ?? null}
           onModelSelect={handleModelSelect}
           customModelsPath={config.customModelsPath || null}
           onCustomPathChange={handleCustomPathChange}

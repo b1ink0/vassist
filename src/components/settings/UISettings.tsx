@@ -17,7 +17,11 @@ import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import BackgroundSettings from './BackgroundSettings';
 import { Button, Select, Input, Card, SettingsRow } from '../ui';
 
-const UISettings = ({ isLightBackground }) => {
+interface UISettingsProps {
+  isLightBackground?: boolean;
+}
+
+const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
   const {
     uiConfig,
     updateUIConfig,
@@ -262,7 +266,7 @@ const UISettings = ({ isLightBackground }) => {
           
           <ShortcutsConfig
             shortcuts={uiConfig.shortcuts || { enabled: false, openChat: '', toggleMode: '', toggleVisibility: '' }}
-            onShortcutsChange={(shortcuts) => updateUIConfig('shortcuts', shortcuts)}
+            onShortcutsChange={(shortcuts: { enabled: boolean; openChat: string; toggleMode: string; toggleVisibility: string }) => updateUIConfig('shortcuts', shortcuts)}
             isLightBackground={isLightBackground}
           />
         </div>

@@ -17,19 +17,176 @@ import { Button, Card, Input, Select } from '../../ui';
 import { cn } from '../../../utils/cn';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
 
-const TTSProviderStep = ({ isLightBackground = false }) => {
+interface TestResultState {
+  success: boolean;
+  message: string;
+}
+
+type TTSProviderId = 'android-local' | 'desktop-local' | 'disabled' | 'kokoro' | 'openai' | 'openai-compatible';
+
+interface TTSProviderStepProps {
+  isLightBackground?: boolean;
+}
+
+interface KokoroConfigState {
+  modelId?: string;
+  voice?: string;
+  speed?: number;
+  device?: string;
+  keepModelLoaded?: boolean;
+}
+
+interface KokoroStatusState {
+  checking: boolean;
+  initialized: boolean;
+  loading: boolean;
+  downloading: boolean;
+  progress: number;
+  details: string;
+  message: string;
+}
+
+interface TTSPersistedData {
+  provider?: string;
+  kokoro?: KokoroConfigState;
+  openai?: {
+    apiKey?: string;
+    model?: string;
+    voice?: string;
+  };
+  'openai-compatible'?: {
+    endpoint?: string;
+    apiKey?: string;
+    model?: string;
+    voice?: string;
+  };
+  'android-local'?: {
+    endpoint?: string;
+  };
+  'desktop-local'?: {
+    endpoint?: string;
+    referenceText?: string;
+    referenceLanguage?: string;
+    speed?: number;
+    topK?: number;
+    topP?: number;
+    temperature?: number;
+    pytorchBackend?: string;
+    trained?: boolean;
+  };
+}
+
+interface STTPersistedData {
+  provider?: string;
+}
+
+interface SetupDataWithMultimodal {
+  multimodal?: {
+    audioSupport?: boolean;
+  };
+}
+
+interface KokoroStatusResult {
+  initialized?: boolean;
+  config?: {
+    device?: string | null;
+  };
+}
+
+interface TTSServiceTestConfig {
+  provider: string;
+  enabled: boolean;
+  openai?: {
+    apiKey: string;
+    model: string;
+    voice: string;
+  };
+  'openai-compatible'?: {
+    endpoint: string;
+    apiKey: string;
+    model: string;
+    voice: string;
+  };
+}
+
+interface ChromeAiSTTStatus {
+  checking: boolean;
+  available?: boolean;
+  state: string | null;
+  message: string;
+  details: string;
+  downloading: boolean;
+}
+
+interface STTConfigState {
+  openai: {
+    apiKey: string;
+    model: string;
+    language?: string;
+    temperature?: number;
+  };
+  'openai-compatible': {
+    endpoint: string;
+    apiKey: string;
+    model: string;
+    language?: string;
+    temperature?: number;
+  };
+  chromeAi: {
+    language: string;
+    outputLanguage?: string;
+    temperature?: number;
+    topK?: number;
+  };
+  'android-local'?: {
+    endpoint: string;
+    model: string;
+  };
+  'desktop-local'?: {
+    endpoint: string;
+    model: string;
+    language: string;
+    threads: number;
+  };
+}
+
+interface OpenAISTTUpdates {
+  apiKey?: string;
+  model?: string;
+}
+
+interface OpenAICompatibleSTTUpdates {
+  endpoint?: string;
+  apiKey?: string;
+  model?: string;
+  language?: string;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return 'Unknown error';
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+  return {};
+};
+
+const TTSProviderStep = ({ isLightBackground = false }: TTSProviderStepProps) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const isWebMode = !isAndroid && !isDesktop;
   
   // TTS state
   const defaultTTSProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'kokoro');
-  const [selectedProvider, setSelectedProvider] = useState(defaultTTSProvider);
+  const [selectedProvider, setSelectedProvider] = useState<TTSProviderId>(defaultTTSProvider as TTSProviderId);
   const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState('http://127.0.0.1:8765');
   
   // Desktop TTS state
   const [desktopTTSEndpoint, setDesktopTTSEndpoint] = useState('http://127.0.0.1:11438');
-  const [desktopReferenceAudio, setDesktopReferenceAudio] = useState(null);
+  const [desktopReferenceAudio, setDesktopReferenceAudio] = useState<string | null>(null);
   const [desktopReferenceText, setDesktopReferenceText] = useState('');
   const [desktopReferenceLanguage, setDesktopReferenceLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
   const [desktopSpeed, setDesktopSpeed] = useState(1.0);
@@ -40,13 +197,15 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [desktopTrained, setDesktopTrained] = useState(false);
   
   // Kokoro config state
-  const [kokoroConfig, setKokoroConfig] = useState(DefaultTTSConfig.kokoro || {});
-  const [kokoroStatus, setKokoroStatus] = useState({ 
+  const [kokoroConfig, setKokoroConfig] = useState<KokoroConfigState>(DefaultTTSConfig.kokoro || {});
+  const [kokoroStatus, setKokoroStatus] = useState<KokoroStatusState>({ 
+    checking: false,
     initialized: false, 
     loading: false,
     downloading: false,
     progress: 0,
-    details: ''
+    details: '',
+    message: ''
   });
   const [testingVoice, setTestingVoice] = useState(false);
   
@@ -62,7 +221,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [customVoice, setCustomVoice] = useState('default');
   
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
+  const [testResult, setTestResult] = useState<TestResultState | null>(null);
 
   // STT state
   const defaultSTTProvider = isAndroid ? STTProviders.ANDROID_LOCAL : (isDesktop ? STTProviders.DESKTOP_LOCAL : STTProviders.CHROME_AI_MULTIMODAL);
@@ -71,8 +230,8 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   const [desktopSTTEndpoint, setDesktopSTTEndpoint] = useState('http://127.0.0.1:11438');
   const [desktopSTTModel, setDesktopSTTModel] = useState('tiny');
   const [desktopSTTLanguage, setDesktopSTTLanguage] = useState('auto');
-  const [chromeAiSTTStatus, setChromeAiSTTStatus] = useState(null);
-  const [sttConfig, setSTTConfig] = useState({
+  const [chromeAiSTTStatus, setChromeAiSTTStatus] = useState<ChromeAiSTTStatus | null>(null);
+  const [sttConfig, setSTTConfig] = useState<STTConfigState>({
     openai: {
       apiKey: '',
       model: 'whisper-1'
@@ -94,16 +253,16 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     }
     
     // Load existing setup data (only on first mount)
-    const ttsData = setupData?.tts;
-    const sttData = setupData?.stt;
-    const sttConfigData = setupData?.sttConfig;
+    const ttsData = setupData?.tts as TTSPersistedData | undefined;
+    const sttData = setupData?.stt as STTPersistedData | undefined;
+    const sttConfigData = setupData?.sttConfig as STTConfigState | undefined;
     
     if (ttsData) {
       if (ttsData.provider) {
         const normalizedTTSProvider = (isAndroid || isDesktop) && ttsData.provider === 'kokoro'
           ? defaultTTSProvider
           : ttsData.provider;
-        setSelectedProvider(normalizedTTSProvider);
+          setSelectedProvider(normalizedTTSProvider as TTSProviderId);
       }
       if (ttsData.kokoro) setKokoroConfig(ttsData.kokoro);
       if (ttsData.openai?.apiKey) setOpenAIKey(ttsData.openai.apiKey);
@@ -342,10 +501,10 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   ];
 
   // Handler for Kokoro config changes
-  const handleKokoroConfigChange = (field, value) => {
+  const handleKokoroConfigChange = (field: string, value: unknown) => {
     setKokoroConfig(prev => ({ ...prev, [field]: value }));
     if (field === 'device') {
-      setTimeout(() => handleCheckKokoroStatus(value), 100);
+      setTimeout(() => handleCheckKokoroStatus(typeof value === 'string' ? value : null), 100);
     }
   };
 
@@ -359,30 +518,33 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         kokoro: kokoroConfig
       });
       
-      await TTSServiceProxy.initializeKokoro((progressData) => {
-        const percent = typeof progressData.percent === 'number' ? progressData.percent : 0;
-        const details = progressData.file || progressData.status || 'Downloading...';
+      await TTSServiceProxy.initializeKokoro((progressData: unknown) => {
+        const progressRecord = asRecord(progressData);
+        const percent = typeof progressRecord.percent === 'number' ? progressRecord.percent : 0;
+        const details = typeof progressRecord.file === 'string'
+          ? progressRecord.file
+          : (typeof progressRecord.status === 'string' ? progressRecord.status : 'Downloading...');
         setKokoroStatus(prev => ({ ...prev, progress: percent, downloading: true, details }));
       });
       
-      setKokoroStatus({ initialized: true, downloading: false, progress: 100, details: 'Complete!' });
-    } catch (error) {
+      setKokoroStatus(prev => ({ ...prev, initialized: true, downloading: false, progress: 100, details: 'Complete!', message: 'Ready' }));
+    } catch (error: unknown) {
       Logger.error('other', 'Kokoro init failed:', error);
-      setKokoroStatus({ initialized: false, downloading: false, error: error.message, progress: 0, details: '' });
+      setKokoroStatus(prev => ({ ...prev, initialized: false, downloading: false, progress: 0, details: '', message: getErrorMessage(error) }));
     }
   };
 
   // Check Kokoro status
-  const handleCheckKokoroStatus = async (desiredDeviceOverride = null) => {
+  const handleCheckKokoroStatus = async (desiredDeviceOverride: string | null = null) => {
     try {
-      const status = await TTSServiceProxy.checkKokoroStatus();
+      const status = await TTSServiceProxy.checkKokoroStatus() as KokoroStatusResult;
 
       const desiredDevice = desiredDeviceOverride || kokoroConfig.device || 'auto';
       const actualDevice = status.config?.device || null;
       const isInitializedWithCorrectDevice = status.initialized && actualDevice === desiredDevice;
       
       setKokoroStatus(prev => ({ ...prev, initialized: isInitializedWithCorrectDevice || false }));
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('other', 'Check status failed:', error);
     }
   };
@@ -400,7 +562,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       
       // Generate and play test speech
       await TTSServiceProxy.testConnection('Hello! This is a test of the Kokoro voice.');
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('other', 'Voice test failed:', error);
     } finally {
       setTestingVoice(false);
@@ -408,7 +570,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   };
 
   // STT Providers
-  const hasMultimodal = setupData?.multimodal?.audioSupport;
+  const hasMultimodal = Boolean((setupData as SetupDataWithMultimodal | undefined)?.multimodal?.audioSupport);
   
   const sttProviders = [
     ...(isAndroid ? [{
@@ -468,11 +630,11 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
     }
   ];
 
-  const handleSTTProviderSelect = (providerId) => {
+  const handleSTTProviderSelect = (providerId: string) => {
     setSelectedSTTProvider(providerId);
   };
 
-  const handleSTTConfigChange = (providerKey, newConfig) => {
+  const handleSTTConfigChange = <K extends keyof STTConfigState>(providerKey: K, newConfig: STTConfigState[K]) => {
     setSTTConfig(prev => ({
       ...prev,
       [providerKey]: newConfig
@@ -482,27 +644,35 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   // Chrome AI STT Status Check
   const handleCheckChromeAISTTStatus = async () => {
     Logger.log('TTSProviderStep', 'Checking Chrome AI STT status...');
-    setChromeAiSTTStatus({ checking: true });
+    setChromeAiSTTStatus({
+      checking: true,
+      state: null,
+      message: 'Checking status...',
+      details: '',
+      downloading: false,
+    });
     
     try {
       // Use regular Chrome AI availability check (same API, just with audio support)
-      const result = await AIServiceProxy.checkChromeAIAvailability();
+      const rawResult = await AIServiceProxy.checkChromeAIAvailability();
+      const result = asRecord(rawResult);
       Logger.log('TTSProviderStep', 'Chrome AI STT status result:', result);
       
       setChromeAiSTTStatus({
         checking: false,
-        available: result.available || false,
-        state: result.state,
-        message: result.message || 'Unknown status',
-        details: result.details || '',
+        available: result.available === true,
+        state: typeof result.state === 'string' ? result.state : null,
+        message: (typeof result.message === 'string' ? result.message : '') || 'Unknown status',
+        details: typeof result.details === 'string' ? result.details : '',
         downloading: result.state === 'downloading',
       });
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('TTSProviderStep', 'Chrome AI STT status check failed:', error);
       setChromeAiSTTStatus({
         checking: false,
         available: false,
-        message: error.message || 'Failed to check status',
+        state: null,
+        message: getErrorMessage(error),
         details: '',
         downloading: false,
       });
@@ -512,23 +682,23 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
   // Chrome AI STT Download
   const handleStartChromeAISTTDownload = async () => {
     Logger.log('TTSProviderStep', 'Starting Chrome AI model download...');
-    setChromeAiSTTStatus(prev => ({ ...prev, downloading: true }));
+    setChromeAiSTTStatus(prev => ({ ...(prev ?? { checking: false, state: null, message: '', details: '', downloading: false }), downloading: true }));
     
     try {
       await AIServiceProxy.startChromeAIDownload();
       await handleCheckChromeAISTTStatus();
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error('TTSProviderStep', 'Chrome AI download failed:', error);
       setChromeAiSTTStatus(prev => ({
-        ...prev,
+        ...(prev ?? { checking: false, state: null, message: '', details: '', downloading: false }),
         downloading: false,
-        message: error.message || 'Download failed'
+        message: getErrorMessage(error)
       }));
     }
   };
 
-  const handleProviderSelect = (providerId) => {
-    setSelectedProvider(providerId);
+  const handleProviderSelect = (providerId: string) => {
+    setSelectedProvider(providerId as TTSProviderId);
     setTestResult(null);
   };
 
@@ -538,7 +708,7 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
 
     try {
       // Build config based on selected provider
-      const testConfig = {
+      const testConfig: TTSServiceTestConfig = {
         provider: selectedProvider,
         enabled: true
       };
@@ -565,14 +735,14 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       }
 
       // Configure TTS service
-      await TTSServiceProxy.configure(testConfig);
+      await TTSServiceProxy.configure(testConfig as unknown as Record<string, unknown>);
 
       // Test with sample text
       await TTSServiceProxy.testConnection('Hello, this is a test.');
 
       setTestResult({ success: true, message: 'TTS connection successful!' });
-    } catch (error) {
-      setTestResult({ success: false, message: error.message });
+    } catch (error: unknown) {
+      setTestResult({ success: false, message: getErrorMessage(error) });
     } finally {
       setTesting(false);
     }
@@ -667,30 +837,22 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
       {selectedProvider === 'desktop-local' && (
         <GPTSoVITSConfig
           config={{
-            endpoint: desktopTTSEndpoint,
-            model: 'GPT-SoVITS',
             pytorchBackend: desktopPytorchBackend,
-            referenceAudio: desktopReferenceAudio,
             referenceText: desktopReferenceText,
             referenceLanguage: desktopReferenceLanguage,
             speed: desktopSpeed,
             topK: desktopTopK,
             topP: desktopTopP,
             temperature: desktopTemperature,
-            trained: desktopTrained,
-            checkpointPath: ''
           }}
           onChange={(field, value) => {
-            if (field === 'endpoint') setDesktopTTSEndpoint(value);
-            if (field === 'pytorchBackend') setDesktopPytorchBackend(value);
-            if (field === 'referenceAudio') setDesktopReferenceAudio(value);
-            if (field === 'referenceText') setDesktopReferenceText(value);
-            if (field === 'referenceLanguage') setDesktopReferenceLanguage(value);
-            if (field === 'speed') setDesktopSpeed(value);
-            if (field === 'topK') setDesktopTopK(value);
-            if (field === 'topP') setDesktopTopP(value);
-            if (field === 'temperature') setDesktopTemperature(value);
-            if (field === 'trained') setDesktopTrained(value);
+            if (field === 'pytorchBackend' && typeof value === 'string') setDesktopPytorchBackend(value);
+            if (field === 'referenceText' && typeof value === 'string') setDesktopReferenceText(value);
+            if (field === 'referenceLanguage' && typeof value === 'string') setDesktopReferenceLanguage(value);
+            if (field === 'speed' && typeof value === 'number') setDesktopSpeed(value);
+            if (field === 'topK' && typeof value === 'number') setDesktopTopK(value);
+            if (field === 'topP' && typeof value === 'number') setDesktopTopP(value);
+            if (field === 'temperature' && typeof value === 'number') setDesktopTemperature(value);
           }}
           isSetupMode={true}
           showTitle={false}
@@ -977,20 +1139,25 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
               language: desktopSTTLanguage,
             }}
             onChange={(updates) => {
-              if (updates.endpoint !== undefined) setDesktopSTTEndpoint(updates.endpoint);
-              if (updates.model !== undefined) setDesktopSTTModel(updates.model);
-              if (updates.language !== undefined) setDesktopSTTLanguage(updates.language);
+              if (typeof updates.endpoint === 'string') setDesktopSTTEndpoint(updates.endpoint);
+              if (typeof updates.model === 'string') setDesktopSTTModel(updates.model);
+              if (typeof updates.language === 'string') setDesktopSTTLanguage(updates.language);
             }}
             isSetupMode={true}
-            showTitle={false}
           />
         )}
 
         {isWebMode && selectedSTTProvider === STTProviders.CHROME_AI_MULTIMODAL && (
           <ChromeAISTTConfig
             config={sttConfig.chromeAi}
-            onChange={(newConfig) => handleSTTConfigChange('chromeAi', newConfig)}
-            chromeAiStatus={chromeAiSTTStatus}
+            onChange={(updates) => handleSTTConfigChange('chromeAi', { ...sttConfig.chromeAi, ...updates })}
+            chromeAiStatus={chromeAiSTTStatus ?? {
+              checking: false,
+              state: null,
+              message: '',
+              details: '',
+              downloading: false,
+            }}
             onCheckStatus={handleCheckChromeAISTTStatus}
             onStartDownload={handleStartChromeAISTTDownload}
             isLightBackground={false}
@@ -1001,17 +1168,19 @@ const TTSProviderStep = ({ isLightBackground = false }) => {
         {selectedSTTProvider === STTProviders.OPENAI && (
           <OpenAISTTConfig
             config={sttConfig.openai}
-            onChange={(newConfig) => handleSTTConfigChange('openai', newConfig)}
+            onChange={(updates: OpenAISTTUpdates) => {
+              handleSTTConfigChange('openai', { ...sttConfig.openai, ...updates });
+            }}
             isLightBackground={false}
-            canReuseAPIKey={selectedProvider === 'openai' && openAIKey}
-            llmApiKey={openAIKey}
           />
         )}
 
         {selectedSTTProvider === STTProviders.OPENAI_COMPATIBLE && (
           <OpenAICompatibleSTTConfig
             config={sttConfig['openai-compatible']}
-            onChange={(newConfig) => handleSTTConfigChange('openai-compatible', newConfig)}
+            onChange={(updates: OpenAICompatibleSTTUpdates) => {
+              handleSTTConfigChange('openai-compatible', { ...sttConfig['openai-compatible'], ...updates });
+            }}
             isLightBackground={false}
           />
         )}

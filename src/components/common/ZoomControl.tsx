@@ -7,6 +7,16 @@ import { Icon } from '../icons';
 import { Button } from '../ui';
 import { cn } from '../../utils/cn';
 
+interface ZoomControlProps {
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onReset: () => void;
+  isZoomOutDisabled?: boolean;
+  isLeftSide?: boolean;
+  isLightBackground?: boolean;
+  isVisible?: boolean;
+}
+
 /**
  * Zoom control with expand/collapse functionality
  * Shows zoom in/reset/zoom out buttons when expanded
@@ -28,7 +38,7 @@ const ZoomControl = ({
   isLeftSide = false, 
   isLightBackground = false,
   isVisible = true 
-}) => {
+}: ZoomControlProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleToggle = () => {

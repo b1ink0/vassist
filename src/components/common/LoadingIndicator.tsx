@@ -13,7 +13,13 @@
  */
 import { cn } from '../../utils/cn';
 
-const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }) => {
+interface LoadingIndicatorProps {
+  isVisible?: boolean;
+  progress?: number | null;
+  centered?: boolean;
+}
+
+const LoadingIndicator = ({ isVisible = false, progress = null, centered = false }: LoadingIndicatorProps) => {
   if (!isVisible) return null;
 
   return (

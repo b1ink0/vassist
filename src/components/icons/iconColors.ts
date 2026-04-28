@@ -135,10 +135,14 @@ export const iconColors = {
  * @param {boolean} enableColored - Whether colored icons are enabled
  * @returns {string} - Tailwind color class
  */
-export const getIconColor = (iconName, enableColored = false) => {
+export const getIconColor = (iconName: string, enableColored = false): string => {
   if (!enableColored) {
     return 'text-gray-300'; // Default monochrome color (ChatGPT style)
   }
-  
-  return iconColors[iconName] || iconColors['default'];
+
+  const key = Object.prototype.hasOwnProperty.call(iconColors, iconName)
+    ? (iconName as keyof typeof iconColors)
+    : 'default';
+
+  return iconColors[key];
 };

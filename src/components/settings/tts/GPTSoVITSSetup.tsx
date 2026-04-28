@@ -10,6 +10,47 @@ import { useDesktop } from '../../../contexts/DesktopContext';
 import { cn } from '../../../utils/cn';
 import { Button, Select } from '../../ui';
 
+interface GPTSoVITSConfigShape {
+  pytorchBackend?: string;
+}
+
+interface SetupStatus {
+  isSetup?: boolean;
+  pythonExists?: boolean;
+  modelsExist?: boolean;
+  gptsovitsExists?: boolean;
+}
+
+interface SetupLogMessage {
+  message: string;
+}
+
+interface SetupResult {
+  success?: boolean;
+  error?: string;
+}
+
+interface GPTSoVITSSetupApi {
+  getStatus?: () => Promise<SetupStatus>;
+  onLog?: (callback: (log: SetupLogMessage) => void) => (() => void) | undefined;
+  onComplete?: (callback: (result: SetupResult) => void) => (() => void) | undefined;
+  start?: (options: { torchBackend: string; force?: boolean }) => Promise<void>;
+  cancel?: () => Promise<void>;
+}
+
+interface GPTSoVITSSetupProps {
+  isLightBackground?: boolean;
+  config?: GPTSoVITSConfigShape;
+  onConfigChange?: (field: string, value: string) => void;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
 const TORCH_BACKEND_OPTIONS = [
   { value: 'auto', label: 'Auto Detect' },
   { value: 'cpu', label: 'CPU' },
@@ -19,48 +60,49 @@ const TORCH_BACKEND_OPTIONS = [
   { value: 'metal', label: 'Metal (Apple Silicon)' },
 ];
 
-const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange }) => {
+const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange }: GPTSoVITSSetupProps) => {
   const { api: desktopAPI } = useDesktop();
+  const setupApi = desktopAPI?.gptSovitsSetup as GPTSoVITSSetupApi | undefined;
   const [selectedBackend, setSelectedBackend] = useState((config?.pytorchBackend || 'auto').toLowerCase());
   
   // Setup state
-  const [setupStatus, setSetupStatus] = useState(null);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState<string[]>([]);
   const [setupComplete, setSetupComplete] = useState(false);
-  const [setupError, setSetupError] = useState(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
   
   // Auto-scroll ref
-  const logsEndRef = useRef(null);
-  const logsContainerRef = useRef(null);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
   
   // Check setup status on mount
   useEffect(() => {
-    if (desktopAPI?.gptSovitsSetup) {
-      desktopAPI.gptSovitsSetup.getStatus().then((status) => {
+    if (setupApi?.getStatus) {
+      setupApi.getStatus().then((status) => {
         console.log('[GPTSoVITSSetup] Initial status:', status);
         setSetupStatus(status);
-      }).catch((err) => {
+      }).catch((err: unknown) => {
         console.error('[GPTSoVITSSetup] Status check failed:', err);
       });
     }
-  }, [desktopAPI]);
+  }, [setupApi]);
   
   // Listen for logs and completion
   useEffect(() => {
-    if (!desktopAPI?.gptSovitsSetup) return;
+    if (!setupApi?.onLog || !setupApi?.onComplete) return;
     
-    const unsubscribeLog = desktopAPI.gptSovitsSetup.onLog((log) => {
+    const unsubscribeLog = setupApi.onLog((log: SetupLogMessage) => {
       setLogs(prev => [...prev, log.message]);
     });
     
-    const unsubscribeComplete = desktopAPI.gptSovitsSetup.onComplete((result) => {
+    const unsubscribeComplete = setupApi.onComplete((result: SetupResult) => {
       setIsSetupRunning(false);
       if (result.success) {
         setSetupComplete(true);
         setSetupError(null);
         // Refresh status
-        desktopAPI.gptSovitsSetup.getStatus().then(setSetupStatus);
+        setupApi.getStatus?.().then(setSetupStatus);
       } else {
         setSetupError(result.error || 'Setup failed');
         setSetupComplete(false);
@@ -71,7 +113,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
       unsubscribeLog?.();
       unsubscribeComplete?.();
     };
-  }, [desktopAPI]);
+  }, [setupApi]);
   
   // Auto-scroll logs to bottom
   useEffect(() => {
@@ -93,16 +135,16 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
     setSetupError(null);
     
     try {
-      await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend });
-    } catch (error) {
-      setSetupError(error.message);
+      await setupApi?.start?.({ torchBackend: selectedBackend });
+    } catch (error: unknown) {
+      setSetupError(getErrorMessage(error));
       setIsSetupRunning(false);
     }
   };
   
   const handleCancelSetup = async () => {
     try {
-      await desktopAPI.gptSovitsSetup.cancel();
+      await setupApi?.cancel?.();
       setIsSetupRunning(false);
       setLogs(prev => [...prev, '\n❌ Setup cancelled by user\n']);
     } catch (error) {
@@ -117,9 +159,9 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
       setSetupComplete(false);
       setSetupError(null);
       try {
-        await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend, force: true });
-      } catch (error) {
-        setSetupError(error.message);
+        await setupApi?.start?.({ torchBackend: selectedBackend, force: true });
+      } catch (error: unknown) {
+        setSetupError(getErrorMessage(error));
         setIsSetupRunning(false);
       }
     }
@@ -133,15 +175,15 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
     setSetupError(null);
     
     try {
-      await desktopAPI.gptSovitsSetup.start({ torchBackend: selectedBackend });
-    } catch (error) {
-      setSetupError(error.message);
+      await setupApi?.start?.({ torchBackend: selectedBackend });
+    } catch (error: unknown) {
+      setSetupError(getErrorMessage(error));
       setIsSetupRunning(false);
     }
   };
   
   // Don't render if not in desktop mode
-  if (!desktopAPI?.gptSovitsSetup) {
+  if (!setupApi) {
     return null;
   }
   
