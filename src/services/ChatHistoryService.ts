@@ -783,9 +783,9 @@ User message: "${firstUserMsg.content}"
 /no_think`;
           
           Logger.log('ChatHistoryService', 'Sending prompt to AIService for title generation');
-            const response = await (this.aiService as any).sendMessage([
+            const response = await this.aiService.sendMessage([
             { role: 'user', content: prompt }
-          ], null, null, { disableRouting: true }); // Disable routing for title generation
+          ], null, { disableRouting: true }); // Disable routing for title generation
           Logger.log('ChatHistoryService', 'AIService response:', response);
           return response;
         })();

@@ -15,6 +15,7 @@ import { useAnimation } from '../../contexts/AnimationContext';
 import Logger from '../../services/LoggerService';
 import emotePlayerService from '../../services/EmotePlayerService';
 import type { PositionManagerLike, SavedModelPositionLike, SceneAnimationConfigLike, SceneBuildConfig, SceneWithMetadata, UIConfigLike } from '../../babylon/types';
+import type { AssistantHandle, AnimationOptionsLike, AssistantQueueItem } from '../../types/assistant';
 
 interface VirtualAssistantProps {
   onReady?: (payload: { animationManager: AnimationManagerLike; positionManager: PositionManagerWithPreset | null; scene: SceneWithMetadata }) => void;
@@ -27,16 +28,6 @@ interface VirtualAssistantProps {
   previewClassName?: string;
   portraitMode?: boolean;
   previewPosition?: string;
-}
-
-interface AnimationOptionsLike {
-  primaryWeight?: number;
-  fillWeight?: number;
-}
-
-interface AssistantHandleLike {
-  isReady?: () => boolean;
-  idle?: () => void | Promise<void>;
 }
 
 interface AnimationManagerLike {
@@ -76,7 +67,7 @@ type AssistantStateValue = typeof AssistantState[keyof typeof AssistantState];
  * @param {React.Ref} ref - Forwarded ref for imperative API
  * @returns {JSX.Element} Virtual assistant component
  */
-const VirtualAssistant = forwardRef<AssistantHandleLike, VirtualAssistantProps>((props, ref) => {
+const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>((props, ref) => {
   const { 
     onReady,
     isPreview = false,
@@ -478,7 +469,23 @@ const VirtualAssistant = forwardRef<AssistantHandleLike, VirtualAssistantProps>(
         Logger.warn('VirtualAssistant', 'AnimationManager not ready');
         return { length: 0, isEmpty: true, items: [] };
       }
-      return animationManager.getQueueStatus();
+      const queueStatus = animationManager.getQueueStatus();
+      const normalizedItems: AssistantQueueItem[] = Array.isArray(queueStatus.items)
+        ? queueStatus.items
+            .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+            .map((item) => ({
+              ...(typeof item.type === 'string' ? { type: item.type } : {}),
+              ...(typeof item.animationName === 'string' ? { animationName: item.animationName } : {}),
+              ...(typeof item.primary === 'string' ? { primary: item.primary } : {}),
+              ...(typeof item.text === 'string' ? { text: item.text } : {}),
+            }))
+        : [];
+
+      return {
+        length: typeof queueStatus.length === 'number' ? queueStatus.length : normalizedItems.length,
+        isEmpty: typeof queueStatus.isEmpty === 'boolean' ? queueStatus.isEmpty : normalizedItems.length === 0,
+        items: normalizedItems,
+      };
     },
   }), [animationManager, positionManager, currentState, isReady]);
 

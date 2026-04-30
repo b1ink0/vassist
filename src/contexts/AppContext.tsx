@@ -23,6 +23,7 @@ import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
 import type { PositionManagerLike, SavedModelPositionLike, SceneWithMetadata } from '../babylon/types';
+import type { AssistantHandle } from '../types/assistant';
 
 interface ChatMessageItem {
   id: string;
@@ -31,11 +32,6 @@ interface ChatMessageItem {
   images?: string[];
   audios?: string[];
   [key: string]: string | number | boolean | null | undefined | object;
-}
-
-interface AssistantHandle {
-  isReady?: () => boolean;
-  idle?: () => void | Promise<void>;
 }
 
 interface AppPositionManager extends PositionManagerLike {
@@ -285,6 +281,7 @@ interface AppContextValue {
 
   sceneKey: number;
   reloadScene: () => void;
+  forceChatOnlyMode: (reason?: string) => void;
 
   uiConfig: UIConfigState | null;
   aiConfig: AIConfigState | null;
@@ -1259,6 +1256,33 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     setSceneKey(prev => prev + 1);
   }, []);
 
+  const forceChatOnlyMode = useCallback((reason = '3d-scene-error') => {
+    Logger.error('AppContext', `Forcing chat-only mode due to 3D failure (${reason})`);
+
+    setEnableModelLoading(false);
+    setIsAssistantReady(true);
+    setIsChatUIReady(true);
+    setShowModelLoadingOverlay(false);
+
+    const nextUIConfig: UIConfigState = {
+      ...(uiConfig ?? {}),
+      enableModelLoading: false,
+    };
+
+    setUIConfig(nextUIConfig);
+    window.dispatchEvent(new CustomEvent('vassist-config-updated', {
+      detail: { type: 'uiConfig', config: nextUIConfig }
+    }));
+
+    StorageServiceProxy.configSave('uiConfig', nextUIConfig)
+      .then(() => {
+        Logger.log('AppContext', 'Persisted chat-only fallback config after 3D failure');
+      })
+      .catch((error) => {
+        Logger.error('AppContext', 'Failed to persist chat-only fallback config:', error);
+      });
+  }, [uiConfig]);
+
   // ========================================
   // CONTEXT VALUE
   // ========================================
@@ -1372,6 +1396,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     // Scene actions
     sceneKey,
     reloadScene,
+    forceChatOnlyMode,
 
     // Config state
     uiConfig,

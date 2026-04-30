@@ -40,7 +40,7 @@ export interface ElectronInputWindow {
 }
 
 export interface ElectronShortcuts {
-  register: (shortcuts: any) => Promise<void>;
+  register: (shortcuts: Record<string, string | boolean | null | undefined>) => Promise<void>;
   onOpenChat: (callback: () => void) => () => void;
   onToggleModel: (callback: () => void) => () => void;
 }
@@ -55,8 +55,8 @@ export interface ElectronApp {
 }
 
 export interface ElectronIPC {
-  send: (channel: string, data?: any) => void;
-  on: (channel: string, callback: (...args: any[]) => void) => () => void;
+  send: (channel: string, data?: unknown) => void;
+  on: <TArgs extends unknown[]>(channel: string, callback: (...args: TArgs) => void) => () => void;
 }
 
 export interface ElectronAPI {

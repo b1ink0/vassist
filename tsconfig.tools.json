@@ -10,7 +10,8 @@
     "checkJs": true
   },
   "include": [
-    "tools/**/*.ts"
+    "tools/**/*.ts",
+    "vite.config*.ts"
   ],
   "exclude": [
     "dist",

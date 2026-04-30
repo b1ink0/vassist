@@ -7,11 +7,16 @@ import Toggle from '../../common/Toggle';
 import VirtualAssistant from '../../assistant/VirtualAssistant';
 import { PositionPresets } from '../../../config/uiConfig';
 import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
+import type { AssistantHandle } from '../../../types/assistant';
 
-const CharacterIntroStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
+interface CharacterIntroStepProps {
+  isLightBackground?: boolean;
+}
+
+const CharacterIntroStep = ({ isLightBackground = false }: CharacterIntroStepProps) => { // eslint-disable-line no-unused-vars
   const { setupData, updateSetupData } = useSetup();
-  const normalRef = useRef<any>(null);
-  const portraitRef = useRef<any>(null);
+  const normalRef = useRef<AssistantHandle | null>(null);
+  const portraitRef = useRef<AssistantHandle | null>(null);
   const allowPositionSelection = !isAndroid && !isDesktop;
   
   // Character enabled state (on by default)

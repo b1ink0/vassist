@@ -19,6 +19,9 @@ import {
 } from '../services/proxies';
 import { 
   AIProviders,
+  type AIConfig,
+  type TTSConfig,
+  type STTConfig,
   DefaultAIConfig, 
   DefaultTTSConfig, 
   DefaultSTTConfig, 
@@ -28,15 +31,10 @@ import {
   validateTTSConfig, 
   validateSTTConfig 
 } from '../config/aiConfig';
-import { DefaultUIConfig } from '../config/uiConfig';
+import { DefaultUIConfig, type UIConfig } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop } from '../utils/PlatformUtils';
-
-type UIConfig = typeof DefaultUIConfig;
-type AIConfig = typeof DefaultAIConfig;
-type TTSConfig = typeof DefaultTTSConfig;
-type STTConfig = typeof DefaultSTTConfig;
 
 interface ChromeAiStatus {
   checking: boolean;

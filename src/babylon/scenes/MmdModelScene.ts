@@ -69,6 +69,16 @@ const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
+const isWasmCspError = (error: unknown): boolean => {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('content security policy') ||
+    message.includes('unsafe-eval') ||
+    message.includes('instantiate') ||
+    message.includes('wasm')
+  );
+};
+
 type MaterialWithState = {
   diffuseTexture?: unknown;
   sphereTexture?: unknown;
@@ -748,10 +758,10 @@ export const buildMmdModelScene = async (
   let isMultiThreadedPhysics = false;
   
   if (finalConfig.enablePhysics) {
-    const useBullet = !isExtension && physicsEngine === 'bullet';
+    const useBullet = physicsEngine === 'bullet';
     
     if (useBullet) {
-      if (hasSharedArrayBuffer) {
+      if (!isExtension && hasSharedArrayBuffer) {
         // Multi-threaded Bullet physics (faster, requires SharedArrayBuffer)
         Logger.log('MmdModelScene', 'Initializing Multi-threaded Bullet Physics...');
         try {
@@ -770,7 +780,7 @@ export const buildMmdModelScene = async (
       
       // Fall back to single-threaded if multi-threaded failed or SharedArrayBuffer not available
       if (!mmdPhysics) {
-        Logger.log('MmdModelScene', 'Initializing Single-threaded Bullet Physics (Android/WebView mode)...');
+        Logger.log('MmdModelScene', `Initializing Single-threaded Bullet Physics (${isExtension ? 'Extension/Page mode' : 'Android/WebView mode'})...`);
         try {
           const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeSPR());
           physicsRuntime = new PhysicsRuntime(wasmInstance);
@@ -1006,10 +1016,19 @@ export const buildMmdModelScene = async (
     
     if (!useBullet) {
       Logger.log('MmdModelScene', 'Initializing Havok scene physics...');
-      const havokInstance = await havokPhysics();
-      const havokPlugin = new HavokPlugin(true, havokInstance);
-      scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
-      Logger.log('MmdModelScene', 'Havok scene physics initialized');
+      try {
+        const havokInstance = await havokPhysics();
+        const havokPlugin = new HavokPlugin(true, havokInstance);
+        scene.enablePhysics(new Vector3(0, -9.8 * 10, 0), havokPlugin);
+        Logger.log('MmdModelScene', 'Havok scene physics initialized');
+      } catch (error) {
+        if (isExtension && isWasmCspError(error)) {
+          Logger.warn('MmdModelScene', 'Havok blocked by host-page CSP in extension mode. Disabling physics for this session.');
+          mmdPhysics = null;
+        } else {
+          throw error;
+        }
+      }
     } else if (physicsRuntime) {
       Logger.log('MmdModelScene', 'Adding Bullet ground collider...');
       const info = new RigidBodyConstructionInfo(physicsRuntime.wasmInstance);

@@ -137,7 +137,7 @@ export default defineConfig(({ mode }) => {
         },
         preload: {
           // Preload script for secure IPC
-          entry: 'electron/preload.ts',
+          input: 'electron/preload.ts',
           vite: {
             build: {
               outDir: 'dist-desktop',
@@ -158,16 +158,6 @@ export default defineConfig(({ mode }) => {
                   'onnxruntime-web'
                 ],
               },
-            },
-          },
-        },
-        // Use Node.js API in the renderer process
-        renderer: {
-          resolve: {
-            // Tell renderer to use electron/index.html
-            '@electron-renderer': {
-              find: '@electron-renderer',
-              replacement: resolve(__dirname, './electron'),
             },
           },
         },
@@ -220,11 +210,6 @@ export default defineConfig(({ mode }) => {
         '@ricky0123/vad-web',
       ],
       force: false,
-      rollupOptions: {
-        output: {
-          format: 'es',
-        },
-      },
       holdUntilCrawlEnd: true,
     },
     

@@ -116,9 +116,9 @@ function AppContent({ mode = 'development', requireSetupOnChatClick = false, onR
           <ControlPanel
             isAssistantReady={isAssistantReady}
             currentState={currentState}
-            assistantRef={assistantRef as any}
+            assistantRef={assistantRef}
             sceneRef={sceneRef}
-            positionManagerRef={positionManagerRef as any}
+            positionManagerRef={positionManagerRef}
             onStateChange={setCurrentState}
           />
 

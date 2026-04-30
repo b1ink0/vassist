@@ -8,18 +8,11 @@ import { Icon } from '../icons';
 import * as BABYLON from '@babylonjs/core';
 import { useConfig } from '../../contexts/ConfigContext';
 import Logger from '../../services/LoggerService';
+import type { PositionManagerLike as BabylonPositionManagerLike } from '../../babylon/types';
 
-interface PositionManagerLike {
-  offset?: { x?: number; y?: number };
-  modelHeightPx?: number;
-  modelWidthPx?: number;
-  effectiveHeightPx?: number;
-  positionX: number;
-  positionY: number;
+export interface DebugOverlayPositionManagerLike extends BabylonPositionManagerLike {
   customBoundaries?: { left?: number; right?: number; top?: number; bottom?: number };
-  updateCameraFrustum: () => void;
-  setPositionPixels: (x: number, y: number, width: number, height: number, effectiveHeight: number, offset: { x?: number; y?: number }) => void;
-  setCustomBoundaries: (boundaries: { left?: number; right?: number; top?: number; bottom?: number }) => void;
+  setCustomBoundaries?: (boundaries: { left?: number; right?: number; top?: number; bottom?: number }) => void;
 }
 
 interface AxisHelper {
@@ -30,7 +23,7 @@ interface AxisHelper {
 
 interface DebugOverlayProps {
   scene: BABYLON.Scene | null;
-  positionManager: PositionManagerLike | null;
+  positionManager: DebugOverlayPositionManagerLike | null;
   embedded?: boolean;
 }
 
@@ -299,7 +292,7 @@ const DebugOverlay = ({ scene, positionManager }: DebugOverlayProps) => {
     if (edge === 'top') setBoundaryTop(toNumber(value));
     if (edge === 'bottom') setBoundaryBottom(toNumber(value));
     
-    positionManager.setCustomBoundaries(newBoundaries);
+    positionManager.setCustomBoundaries?.(newBoundaries);
   };
 
   useEffect(() => {

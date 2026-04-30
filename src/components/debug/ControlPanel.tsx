@@ -6,38 +6,13 @@ import { useState, useRef, useEffect, type MouseEvent } from 'react'
 import { cn } from '../../utils/cn';
 import { Icon } from '../icons';
 import DebugOverlay from './DebugOverlay';
+import type { DebugOverlayPositionManagerLike } from './DebugOverlay';
 import ResourceLoader from '../../utils/ResourceLoader';
 import { StorageServiceProxy } from '../../services/proxies';
 import { useConfig } from '../../contexts/ConfigContext';
 import Logger from '../../services/LoggerService';
 import * as BABYLON from '@babylonjs/core';
-
-interface AssistantHandle {
-  isReady: () => boolean;
-  triggerAction: (action: string) => Promise<void>;
-  getState: () => string;
-  idle: () => Promise<void>;
-  speak: (text: string, mouthAnimationBlobUrl?: string, emotionCategory?: string) => Promise<void>;
-  setPosition: (preset: string) => void;
-  playComposite: (primaryAnimName: string, fillCategory?: string, options?: Record<string, unknown>) => Promise<void>;
-  queueAnimation: (animationName: string, force?: boolean) => void;
-  queueSpeak: (text: string, mouthBlobUrl?: string, emotionCategory?: string, options?: Record<string, unknown>, force?: boolean) => void;
-  clearQueue: () => void;
-  getQueueStatus: () => QueueStatus;
-}
-
-interface QueueItem {
-  type?: string;
-  animationName?: string;
-  primary?: string;
-  text?: string;
-}
-
-interface QueueStatus {
-  length: number;
-  isEmpty: boolean;
-  items: QueueItem[];
-}
+import type { AssistantHandle, AssistantQueueStatus } from '../../types/assistant';
 
 interface LogCategory {
   category: string;
@@ -45,25 +20,12 @@ interface LogCategory {
   color: string;
 }
 
-interface PositionManagerLike {
-  offset?: { x?: number; y?: number };
-  modelHeightPx?: number;
-  modelWidthPx?: number;
-  positionX: number;
-  positionY: number;
-  effectiveHeightPx: number;
-  customBoundaries?: { left?: number; right?: number; top?: number; bottom?: number };
-  updateCameraFrustum: () => void;
-  setPositionPixels: (x: number, y: number, width: number, height: number, effectiveHeight: number, offset: { x?: number; y?: number }) => void;
-  setCustomBoundaries: (boundaries: { left?: number; right?: number; top?: number; bottom?: number }) => void;
-}
-
 interface ControlPanelProps {
   isAssistantReady: boolean;
   currentState: string;
   assistantRef: React.MutableRefObject<AssistantHandle | null>;
   sceneRef: React.MutableRefObject<BABYLON.Scene | null>;
-  positionManagerRef: React.MutableRefObject<PositionManagerLike | null>;
+  positionManagerRef: React.MutableRefObject<DebugOverlayPositionManagerLike | null>;
   onStateChange: (state: string) => void;
 }
 
@@ -93,7 +55,7 @@ const ControlPanel = ({
   const [perfData, setPerfData] = useState({ fps: 0, meshes: 0, particles: 0, drawCalls: 0 });
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('actions');
-  const [queueStatus, setQueueStatus] = useState<QueueStatus>({ length: 0, isEmpty: true, items: [] });
+  const [queueStatus, setQueueStatus] = useState<AssistantQueueStatus>({ length: 0, isEmpty: true, items: [] });
   const [buttonPos, setButtonPos] = useState({ x: -100, y: -100 }); // Start off-screen
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
