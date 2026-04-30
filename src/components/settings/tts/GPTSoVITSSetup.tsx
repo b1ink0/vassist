@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../icons';
+import Dialog from '../../common/Dialog';
 import { useDesktop } from '../../../contexts/DesktopContext';
 import { cn } from '../../../utils/cn';
 import { Button, Select } from '../../ui';
@@ -71,6 +72,7 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
   const [logs, setLogs] = useState<string[]>([]);
   const [setupComplete, setSetupComplete] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [showReinstallConfirmDialog, setShowReinstallConfirmDialog] = useState(false);
   
   // Auto-scroll ref
   const logsEndRef = useRef<HTMLDivElement | null>(null);
@@ -152,18 +154,22 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
     }
   };
   
-  const handleReinstall = async () => {
-    if (window.confirm('This will delete existing files and reinstall GPT-SoVITS. Continue?')) {
-      setIsSetupRunning(true);
-      setLogs([]);
-      setSetupComplete(false);
-      setSetupError(null);
-      try {
-        await setupApi?.start?.({ torchBackend: selectedBackend, force: true });
-      } catch (error: unknown) {
-        setSetupError(getErrorMessage(error));
-        setIsSetupRunning(false);
-      }
+  const handleReinstall = () => {
+    setShowReinstallConfirmDialog(true);
+  };
+
+  const confirmReinstall = async () => {
+    setShowReinstallConfirmDialog(false);
+    setIsSetupRunning(true);
+    setLogs([]);
+    setSetupComplete(false);
+    setSetupError(null);
+
+    try {
+      await setupApi?.start?.({ torchBackend: selectedBackend, force: true });
+    } catch (error: unknown) {
+      setSetupError(getErrorMessage(error));
+      setIsSetupRunning(false);
     }
   };
   
@@ -385,6 +391,19 @@ const GPTSoVITSSetup = ({ isLightBackground = false, config = {}, onConfigChange
             Note: No system Python required! Everything is downloaded automatically.
           </p>
         </div>
+      )}
+
+      {showReinstallConfirmDialog && (
+        <Dialog
+          type="confirm"
+          title="Re-install GPT-SoVITS"
+          message="This will delete existing files and reinstall GPT-SoVITS. Continue?"
+          confirmLabel="Re-install"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmReinstall}
+          onCancel={() => setShowReinstallConfirmDialog(false)}
+        />
       )}
     </div>
   );

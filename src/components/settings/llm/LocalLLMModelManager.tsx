@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Icon } from '../../icons';
+import Dialog from '../../common/Dialog';
 import Toggle from '../../common/Toggle';
 import { Button, Input } from '../../ui';
 import { cn } from '../../../utils/cn';
@@ -95,6 +96,7 @@ const LocalLLMModelManager = ({
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [downloadMethod, setDownloadMethod] = useState('ollama'); // 'huggingface' or 'ollama'
+  const [pendingDeleteFilename, setPendingDeleteFilename] = useState<string | null>(null);
 
   // Load model list
   const loadModels = async () => {
@@ -176,20 +178,25 @@ const LocalLLMModelManager = ({
     if (onRequestDeleteModel) {
       onRequestDeleteModel(filename);
     } else {
-      if (!confirm(`Delete model "${filename}"?\n\nThis will permanently remove the file.`)) {
-        return;
-      }
+      setPendingDeleteFilename(filename);
+    }
+  };
 
-      try {
-        const result = await storageService.deleteModel(filename, customModelsPath);
-        if (result?.success) {
-          await loadModels();
-        } else {
-          setError(result?.error || 'Delete failed');
-        }
-      } catch (err: unknown) {
-        setError(getErrorMessage(err));
+  const confirmDelete = async () => {
+    if (!storageService || !pendingDeleteFilename) return;
+
+    const filename = pendingDeleteFilename;
+    setPendingDeleteFilename(null);
+
+    try {
+      const result = await storageService.deleteModel(filename, customModelsPath);
+      if (result?.success) {
+        await loadModels();
+      } else {
+        setError(result?.error || 'Delete failed');
       }
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     }
   };
 
@@ -568,6 +575,19 @@ const LocalLLMModelManager = ({
           </div>
         )}
       </div>
+
+      {pendingDeleteFilename && (
+        <Dialog
+          type="confirm"
+          title={`Delete model "${pendingDeleteFilename}"?`}
+          message="This will permanently remove the file."
+          confirmLabel="Delete"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteFilename(null)}
+        />
+      )}
     </div>
   );
 };

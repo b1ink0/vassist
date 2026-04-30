@@ -275,6 +275,10 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   // Error dialog state
   const [errorDialogMessage, setErrorDialogMessage] = useState('');
   const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [pendingDeleteStageId, setPendingDeleteStageId] = useState<string | null>(null);
+  const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
+  const [pendingDeleteEmoteId, setPendingDeleteEmoteId] = useState<string | null>(null);
+  const [showDeleteEmoteDialog, setShowDeleteEmoteDialog] = useState(false);
 
   useEffect(() => {
     loadModels();
@@ -588,8 +592,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   };
 
   const handleDeleteStage = async (stageId: string) => {
-    if (!confirm('Delete this stage?\n\nThis action cannot be undone.')) return;
-    
+    setPendingDeleteStageId(stageId);
+    setShowDeleteStageDialog(true);
+  };
+
+  const confirmDeleteStage = async () => {
+    if (!pendingDeleteStageId) return;
+
+    const stageId = pendingDeleteStageId;
+    setShowDeleteStageDialog(false);
+    setPendingDeleteStageId(null);
+
     try {
       await stageStorageService.deleteStage(stageId);
       await loadStages();
@@ -1259,15 +1272,24 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   };
 
   const handleDeleteEmote = async (emoteId: string) => {
-    if (window.confirm('Are you sure you want to delete this emote?')) {
-      try {
-        await emoteStorageService.deleteEmote(emoteId);
-        await loadEmotes();
-      } catch (error) {
-        console.error('Failed to delete emote:', error);
-        setErrorDialogMessage(getErrorMessage(error) || 'Failed to delete emote');
-        setShowErrorDialog(true);
-      }
+    setPendingDeleteEmoteId(emoteId);
+    setShowDeleteEmoteDialog(true);
+  };
+
+  const confirmDeleteEmote = async () => {
+    if (!pendingDeleteEmoteId) return;
+
+    const emoteId = pendingDeleteEmoteId;
+    setShowDeleteEmoteDialog(false);
+    setPendingDeleteEmoteId(null);
+
+    try {
+      await emoteStorageService.deleteEmote(emoteId);
+      await loadEmotes();
+    } catch (error) {
+      console.error('Failed to delete emote:', error);
+      setErrorDialogMessage(getErrorMessage(error) || 'Failed to delete emote');
+      setShowErrorDialog(true);
     }
   };
 
@@ -2803,6 +2825,38 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
 
       {/* Error Dialog */}
+      {showDeleteStageDialog && (
+        <Dialog
+          type="confirm"
+          title="Delete Stage"
+          message="Delete this stage? This action cannot be undone."
+          confirmLabel="Delete"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmDeleteStage}
+          onCancel={() => {
+            setShowDeleteStageDialog(false);
+            setPendingDeleteStageId(null);
+          }}
+        />
+      )}
+
+      {showDeleteEmoteDialog && (
+        <Dialog
+          type="confirm"
+          title="Delete Emote"
+          message="Are you sure you want to delete this emote?"
+          confirmLabel="Delete"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmDeleteEmote}
+          onCancel={() => {
+            setShowDeleteEmoteDialog(false);
+            setPendingDeleteEmoteId(null);
+          }}
+        />
+      )}
+
       {showErrorDialog && (
         <Dialog
           type="confirm"

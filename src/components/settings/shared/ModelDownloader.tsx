@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../icons';
+import Dialog from '../../common/Dialog';
 import { Button, Card } from '../../ui';
 
 interface ModelStatus {
@@ -62,6 +63,7 @@ const ModelDownloader = ({
   const [progress, setProgress] = useState<ModelProgress | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadStatus = useCallback(async () => {
     if (!androidAPI) return;
@@ -133,9 +135,14 @@ const ModelDownloader = ({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
     if (!androidAPI) return;
-    if (!confirm(`Delete ${title}?\n\n${deleteConfirmMsg}`)) return;
+    setShowDeleteDialog(false);
+
     try {
       const result = JSON.parse(deleteFn()) as { success?: boolean; error?: string };
       if (result?.success) {
@@ -236,6 +243,19 @@ const ModelDownloader = ({
           <Icon name="error" size={12} />
           <span>{error}</span>
         </div>
+      )}
+
+      {showDeleteDialog && (
+        <Dialog
+          type="confirm"
+          title={`Delete ${title}?`}
+          message={deleteConfirmMsg}
+          confirmLabel="Delete"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmDelete}
+          onCancel={() => setShowDeleteDialog(false)}
+        />
       )}
     </Card>
   );

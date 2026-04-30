@@ -9,6 +9,7 @@ import { BackgroundThemeModes, PositionPresets } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
 import ShortcutsConfig from '../common/ShortcutsConfig';
+import Dialog from '../common/Dialog';
 import { useSetup } from '../../contexts/SetupContext';
 import { useState } from 'react';
 import Icon from '../icons/Icon';
@@ -29,9 +30,29 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
 
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false);
+  const [showResetErrorDialog, setShowResetErrorDialog] = useState(false);
+  const [resetErrorDialogMessage, setResetErrorDialogMessage] = useState('');
   const allowPositionSelection = !isAndroid && !isDesktop;
 
   const isExtensionMode = ExtensionBridge.isExtensionMode();
+
+  const handleResetSetup = async () => {
+    if (isResetting) return;
+
+    try {
+      setIsResetting(true);
+      setShowResetConfirmDialog(false);
+      await resetSetup();
+      window.location.reload();
+    } catch (error) {
+      Logger.error('other', 'Failed to reset setup:', error);
+      setResetErrorDialogMessage('Failed to reset setup. Please try again.');
+      setShowResetErrorDialog(true);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -64,22 +85,7 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
         <Button
           variant="default"
           className="w-full font-semibold"
-          onClick={async () => {
-            if (isResetting) return;
-            
-            if (window.confirm('This will reset the setup wizard and take you back to the beginning. Continue?')) {
-              try {
-                setIsResetting(true);
-                await resetSetup();
-                window.location.reload();
-              } catch (error) {
-                Logger.error('other', 'Failed to reset setup:', error);
-                alert('Failed to reset setup. Please try again.');
-              } finally {
-                setIsResetting(false);
-              }
-            }
-          }}
+          onClick={() => setShowResetConfirmDialog(true)}
           disabled={isResetting}
         >
           <Icon name="refresh" size={16} />
@@ -284,6 +290,31 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
           />
         </SettingsRow>
       </div>
+
+      {showResetConfirmDialog && (
+        <Dialog
+          type="confirm"
+          title="Reset Setup Wizard?"
+          message="This will reset the setup wizard and take you back to the beginning."
+          confirmLabel="Reset"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={handleResetSetup}
+          onCancel={() => setShowResetConfirmDialog(false)}
+        />
+      )}
+
+      {showResetErrorDialog && (
+        <Dialog
+          type="confirm"
+          title="Reset Failed"
+          message={resetErrorDialogMessage}
+          confirmLabel="OK"
+          isLightBackground={isLightBackground}
+          onConfirm={() => setShowResetErrorDialog(false)}
+          onCancel={() => setShowResetErrorDialog(false)}
+        />
+      )}
     </div>
   );
 };

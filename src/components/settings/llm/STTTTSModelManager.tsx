@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Icon } from '../../icons';
+import Dialog from '../../common/Dialog';
 import { Button } from '../../ui';
 
 type ModelType = 'whisper' | 'vits';
@@ -65,6 +66,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
   const [downloadProgress, setDownloadProgress] = useState<Partial<Record<ModelType, ProgressEntry>>>({});
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [pendingDeleteModelType, setPendingDeleteModelType] = useState<ModelType | null>(null);
 
   // Load model status
   const loadStatus = async () => {
@@ -157,13 +159,18 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
     }
   };
 
-  const handleDelete = async (modelType: ModelType) => {
+  const handleDelete = (modelType: ModelType) => {
+    setPendingDeleteModelType(modelType);
+  };
+
+  const confirmDelete = async () => {
     if (!androidAPI) return;
+    const modelType = pendingDeleteModelType;
+    if (!modelType) return;
+
+    setPendingDeleteModelType(null);
 
     const modelName = modelType === 'whisper' ? 'Whisper STT' : 'VITS-VCTK TTS';
-    if (!confirm(`Delete ${modelName} model?\n\nThis will free up ~${modelType === 'whisper' ? '99' : '152'} MB of storage.`)) {
-      return;
-    }
 
     try {
       const resultJson = modelType === 'whisper'
@@ -437,6 +444,19 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
             <span>{error}</span>
           </div>
         </div>
+      )}
+
+      {pendingDeleteModelType && (
+        <Dialog
+          type="confirm"
+          title={`Delete ${pendingDeleteModelType === 'whisper' ? 'Whisper STT' : 'VITS-VCTK TTS'} model?`}
+          message={`This will free up ~${pendingDeleteModelType === 'whisper' ? '99' : '152'} MB of storage.`}
+          confirmLabel="Delete"
+          confirmStyle="error"
+          isLightBackground={isLightBackground}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteModelType(null)}
+        />
       )}
     </div>
   );
