@@ -1870,6 +1870,10 @@ export class AnimationManager {
       this.oldSpansToRemove = null;
       this.oldSpansRemovalFrame = null;
     }
+
+    if (this._isPaused) {
+      return;
+    }
     
     // IMMEDIATE CHECK: If in SPEAKING_HOLD and no audio active, return to IDLE immediately
     if (this.currentState === AssistantState.SPEAKING_HOLD && !this._isTransitioning) {
@@ -2273,6 +2277,66 @@ export class AnimationManager {
    */
   getCurrentFrame(): number {
     return this.mmdRuntime.currentFrameTime;
+  }
+
+  /**
+   * Get current animation duration in frames.
+   */
+  getCurrentAnimationDurationFrames(): number {
+    return Math.max(0, this.currentAnimationDuration || 0);
+  }
+
+  /**
+   * Get normalized progress for current animation (0 - 1).
+   */
+  getCurrentAnimationProgress(): number {
+    const duration = this.getCurrentAnimationDurationFrames();
+    if (duration <= 0) {
+      return 0;
+    }
+
+    const absoluteFrame = this.getCurrentFrame();
+    const relativeFrame = absoluteFrame - this.animationStartFrame;
+    return Math.max(0, Math.min(1, relativeFrame / duration));
+  }
+
+  /**
+   * Seek current animation timeline to normalized progress (0 - 1)
+   */
+  seekToProgress(progress: number): void {
+    const duration = this.currentAnimationDuration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return;
+    }
+
+    const clampedProgress = Math.max(0, Math.min(1, progress));
+    const targetRelativeFrame = duration * clampedProgress;
+    const targetAbsoluteFrame = Math.max(0, this.animationStartFrame + targetRelativeFrame);
+
+    if (typeof this.mmdRuntime.seekAnimation === 'function') {
+      this.mmdRuntime.seekAnimation(targetAbsoluteFrame, true).catch((error) => {
+        Logger.warn('AnimationManager', 'seekAnimation failed:', error);
+      });
+    } else {
+      Logger.warn('AnimationManager', 'Runtime seek API unavailable, skipping timeline seek');
+    }
+
+    if (!this.cameraAnimationEnabled || !this.currentCameraAnimation) {
+      return;
+    }
+
+    try {
+      const cameraDuration = this.currentCameraAnimation.endFrame;
+      const mmdCamera = this.scene.activeCamera as MmdCameraLike;
+      if (!mmdCamera?.currentAnimation || cameraDuration <= 0) {
+        return;
+      }
+
+      const loopedCameraFrame = targetRelativeFrame % cameraDuration;
+      mmdCamera.currentAnimation.animate(loopedCameraFrame);
+    } catch (error) {
+      Logger.warn('AnimationManager', 'Failed to sync camera during seek:', error);
+    }
   }
 
   /**

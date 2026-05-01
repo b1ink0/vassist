@@ -444,6 +444,10 @@ export function SetupProvider({ children }: SetupProviderProps) {
           custom: { x: 0, y: 0 },
         },
         enableAIToolbar: setupState.setupData.ui?.enableAIToolbar ?? true,
+        emotePlayback: {
+          showDurationBar: true,
+          showTime: true,
+        },
         enableChatHistory: true,
         enableVoiceInput: false,
         theme: 'dark',

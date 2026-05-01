@@ -255,12 +255,14 @@ const BabylonScene = ({
   const onSceneReadyRef = useRef<BabylonSceneProps['onSceneReady']>(onSceneReady);
   const onLoadProgressRef = useRef<BabylonSceneProps['onLoadProgress']>(onLoadProgress);
   const sceneConfigRef = useRef<Partial<SceneBuildConfig>>(sceneConfig);
+  const forceChatOnlyModeRef = useRef(forceChatOnlyMode);
   
   useEffect(() => {
     onSceneReadyRef.current = onSceneReady;
     onLoadProgressRef.current = onLoadProgress;
     sceneConfigRef.current = sceneConfig;
-  }, [onSceneReady, onLoadProgress, sceneConfig]);
+    forceChatOnlyModeRef.current = forceChatOnlyMode;
+  }, [onSceneReady, onLoadProgress, sceneConfig, forceChatOnlyMode]);
 
   useEffect(() => {
     if (isPreview) return;
@@ -406,7 +408,7 @@ const BabylonScene = ({
           Logger.error('BabylonScene', 'Scene initialization failed, switching to chat-only mode:', error);
 
           setShowModelLoadingOverlay(false);
-          forceChatOnlyMode('scene-build-failed');
+          forceChatOnlyModeRef.current('scene-build-failed');
 
           delete canvas.dataset.babylonInitialized;
           delete canvas.dataset.babylonInitializing;
@@ -591,7 +593,7 @@ const BabylonScene = ({
         canvasElementRef.current = null;
       }
     };
-  }, [sceneBuilder, fpsLimit, forceChatOnlyMode, setShowModelLoadingOverlay]);
+  }, [sceneBuilder, fpsLimit, setShowModelLoadingOverlay]);
 
   useEffect(() => {
     const handleDragStart = () => setIsDragging(true);

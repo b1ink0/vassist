@@ -22,6 +22,7 @@ import { cn } from '../../utils/cn';
 import Logger from '../../services/LoggerService';
 import emoteStorageService from '../../services/EmoteStorageService';
 import emotePlayerService from '../../services/EmotePlayerService';
+import EmotePlaybackBar from './EmotePlaybackBar';
 import { modelStorageService } from '../../services/ModelStorageService';
 import { stageStorageService } from '../../services/StageStorageService';
 import ZoomControl from '../common/ZoomControl';
@@ -184,6 +185,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const [isAutoPlayActive, setIsAutoPlayActive] = useState(false);
   const [isEmotePlaying, setIsEmotePlaying] = useState(false);
   const [currentPlayingEmoteId, setCurrentPlayingEmoteId] = useState<string | null>(null);
+  const [emoteCurrentTime, setEmoteCurrentTime] = useState(0);
+  const [emoteDuration, setEmoteDuration] = useState(0);
+  const [emoteProgress, setEmoteProgress] = useState(0);
+  const [isEmotePaused, setIsEmotePaused] = useState(false);
+  const [modelAnchorPos, setModelAnchorPos] = useState<PositionPixels | null>(null);
+  const wasPausedBeforeSeekRef = useRef(false);
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
   const [models, setModels] = useState<StoredModelItem[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -271,6 +278,15 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       // Update current playing emote ID
       const currentEmoteId = emotePlayerService.getCurrentEmoteId();
       setCurrentPlayingEmoteId(currentEmoteId);
+
+      const currentTime = emotePlayerService.getPlaybackCurrentTime();
+      const duration = emotePlayerService.getPlaybackDuration();
+      const progress = emotePlayerService.getPlaybackProgress();
+      const isPaused = emotePlayerService.isPlaybackPaused();
+      setEmoteCurrentTime(currentTime);
+      setEmoteDuration(duration);
+      setEmoteProgress(progress);
+      setIsEmotePaused(isPaused);
       
       // Update auto-play active state
       const autoPlayActive = emotePlayerService.isAutoPlayActive();
@@ -620,6 +636,8 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
         }
       } else return;
 
+      setModelAnchorPos(modelPos);
+
       try {
         const buttonSize = 48;
         const offsetX = 15;
@@ -690,6 +708,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       window.removeEventListener('resize', updateFromModel);
     };
   }, [modelDisabled, positionManagerRef, setButtonPos, desktopAPI]);
+
+  useEffect(() => {
+    if (modelDisabled) {
+      setModelAnchorPos(null);
+    }
+  }, [modelDisabled]);
 
   const handleMouseDown = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     if (!modelDisabled) return;
@@ -1030,6 +1054,30 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     }
   }, [isAutoPlayActive, emotes]);
 
+  const handleEmoteSeek = useCallback((nextProgress: number) => {
+    emotePlayerService.seekToProgress(nextProgress);
+    setEmoteProgress(nextProgress);
+    setEmoteCurrentTime(nextProgress * emoteDuration);
+  }, [emoteDuration]);
+
+  const handleEmoteSeekStart = useCallback(() => {
+    wasPausedBeforeSeekRef.current = emotePlayerService.isPlaybackPaused();
+    if (!wasPausedBeforeSeekRef.current) {
+      emotePlayerService.pausePlayback();
+    }
+  }, []);
+
+  const handleEmoteSeekEnd = useCallback(() => {
+    if (!wasPausedBeforeSeekRef.current) {
+      emotePlayerService.resumePlayback();
+    }
+    wasPausedBeforeSeekRef.current = false;
+  }, []);
+
+  const handleEmotePauseToggle = useCallback(() => {
+    emotePlayerService.togglePlayback();
+  }, []);
+
   const handleModelSelect = useCallback(async (modelId: string | null) => {
     try {
       if (modelId === null) {
@@ -1179,6 +1227,12 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   const showUtilityButtons = !isChatOpen && !modelDisabled;
   const visualButtonOffset = showUtilityButtons ? TOTAL_BUTTON_OFFSET : 0;
+  const showEmotePlaybackBar =
+    !modelDisabled &&
+    uiConfig.emotePlayback?.showDurationBar !== false &&
+    isEmotePlaying &&
+    emoteDuration > 0;
+  const showEmotePlaybackTime = uiConfig.emotePlayback?.showTime !== false;
 
   const androidPosition = isAndroid ? {
     left: '20px',
@@ -1191,6 +1245,23 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
 
   return (
     <>
+    <EmotePlaybackBar
+      isVisible={showEmotePlaybackBar}
+      progress={emoteProgress}
+      currentTime={emoteCurrentTime}
+      duration={emoteDuration}
+      isPaused={isEmotePaused}
+      showTime={showEmotePlaybackTime}
+      isLightBackground={isLightBackground}
+      isAndroidPlatform={isAndroid}
+      isChatOpen={isChatOpen}
+      modelAnchor={modelAnchorPos}
+      onSeek={handleEmoteSeek}
+      onTogglePause={handleEmotePauseToggle}
+      onSeekStart={handleEmoteSeekStart}
+      onSeekEnd={handleEmoteSeekEnd}
+    />
+
     {/* Emote List */}
     {isEmotePanelOpen && !isChatOpen && !modelDisabled && (
       <Card

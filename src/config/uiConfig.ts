@@ -74,6 +74,10 @@ export interface UIConfig {
   enableColoredIcons: boolean;
   enableColoredIconsToolbarOnly: boolean;
   enableDebugPanel: boolean;
+  emotePlayback: {
+    showDurationBar: boolean;
+    showTime: boolean;
+  };
   position: {
     preset: string;
     lastLocation: {
@@ -383,6 +387,11 @@ export const DefaultUIConfig: UIConfig = {
   enableColoredIconsToolbarOnly: false,
   
   enableDebugPanel: false,
+
+  emotePlayback: {
+    showDurationBar: true,
+    showTime: true,
+  },
   
   position: {
     preset: (isDesktop || isAndroid) ? 'bottom-center' : 'bottom-right',

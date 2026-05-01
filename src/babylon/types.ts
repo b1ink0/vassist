@@ -218,6 +218,7 @@ export interface MmdRuntimeLike {
   playAnimation: (() => Promise<void> | void) | boolean;
   timeScale: number;
   setManualAnimationDuration: (duration: number) => void;
+  seekAnimation: (frameTime: number, forceEvaluate?: boolean) => Promise<void>;
 }
 
 export interface MorphControllerLike {
