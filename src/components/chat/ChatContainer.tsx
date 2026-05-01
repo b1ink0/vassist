@@ -28,6 +28,8 @@ import ChatMessage from './ChatMessage';
 import chatHistoryService from '../../services/ChatHistoryService';
 import { modelStorageService } from '../../services/ModelStorageService';
 import { motionStorageService } from '../../services/MotionStorageService';
+import { stageStorageService } from '../../services/StageStorageService';
+import emoteStorageService from '../../services/EmoteStorageService';
 import { useDesktopWindowResize } from '../../hooks/useDesktopWindowResize';
 import { useDesktop } from '../../contexts/DesktopContext';
 import { useAndroid } from '../../contexts/AndroidContext';
@@ -303,12 +305,21 @@ const ChatContainer = ({
   
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [deletingMotionId, setDeletingMotionId] = useState<string | null>(null);
+  const [deletingStageId, setDeletingStageId] = useState<string | null>(null);
+  const [deletingEmoteId, setDeletingEmoteId] = useState<string | null>(null);
+  const [deletingEmoteCategory, setDeletingEmoteCategory] = useState<string | null>(null);
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
   const [deletingLLMModel, setDeletingLLMModel] = useState<string | null>(null);
+  const [settingsErrorMessage, setSettingsErrorMessage] = useState<string | null>(null);
+  const [pendingSettingsConfirmAction, setPendingSettingsConfirmAction] = useState<(() => Promise<void> | void) | null>(null);
   const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] = useState(false);
   const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] = useState(false);
+  const [isDeleteStageDialogClosing, setIsDeleteStageDialogClosing] = useState(false);
+  const [isDeleteEmoteDialogClosing, setIsDeleteEmoteDialogClosing] = useState(false);
   const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] = useState(false);
   const [isDeleteLLMModelDialogClosing, setIsDeleteLLMModelDialogClosing] = useState(false);
+  const [isSettingsConfirmDialogClosing, setIsSettingsConfirmDialogClosing] = useState(false);
+  const [isSettingsErrorDialogClosing, setIsSettingsErrorDialogClosing] = useState(false);
   const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   
@@ -781,6 +792,83 @@ const ChatContainer = ({
     setDeletingMotionId(motionId);
   }, []);
 
+  const handleRequestDeleteStageDialog = useCallback((stageId: string) => {
+    setDeletingStageId(stageId);
+  }, []);
+
+  const handleDeleteStageConfirm = useCallback(async (stageId: string) => {
+    try {
+      await stageStorageService.deleteStage(stageId);
+      Logger.log('ChatContainer', 'Deleted stage:', stageId);
+
+      setIsDeleteStageDialogClosing(true);
+      setTimeout(() => {
+        setDeletingStageId(null);
+        setIsDeleteStageDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete stage:', error);
+      setSettingsErrorMessage('Failed to delete stage.');
+    }
+  }, []);
+
+  const handleDeleteStageCancel = useCallback(() => {
+    setIsDeleteStageDialogClosing(true);
+    setTimeout(() => {
+      setDeletingStageId(null);
+      setIsDeleteStageDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteEmoteDialog = useCallback((payload: { emoteId?: string; category?: string }) => {
+    setDeletingEmoteId(payload.emoteId || null);
+    setDeletingEmoteCategory(payload.category || null);
+  }, []);
+
+  const handleDeleteEmoteConfirm = useCallback(async () => {
+    try {
+      if (deletingEmoteCategory) {
+        const emotes = await emoteStorageService.getEmotesList();
+        const toDelete = emotes.filter((emote) => {
+          if (deletingEmoteCategory === 'all') {
+            return true;
+          }
+          const categories = Array.isArray(emote.categories) ? emote.categories : ['general'];
+          return categories.includes(deletingEmoteCategory);
+        });
+
+        await Promise.all(toDelete.map((emote) => emoteStorageService.deleteEmote(emote.id)));
+        Logger.log('ChatContainer', 'Deleted filtered emotes count:', toDelete.length);
+      } else if (deletingEmoteId) {
+        await emoteStorageService.deleteEmote(deletingEmoteId);
+        Logger.log('ChatContainer', 'Deleted emote:', deletingEmoteId);
+      } else {
+        return;
+      }
+
+      setIsDeleteEmoteDialogClosing(true);
+      setTimeout(() => {
+        setDeletingEmoteId(null);
+        setDeletingEmoteCategory(null);
+        setIsDeleteEmoteDialogClosing(false);
+        setSettingsRefreshTrigger(prev => prev + 1);
+      }, 200);
+    } catch (error) {
+      Logger.error('ChatContainer', 'Failed to delete emote(s):', error);
+      setSettingsErrorMessage('Failed to delete emote(s).');
+    }
+  }, [deletingEmoteCategory, deletingEmoteId]);
+
+  const handleDeleteEmoteCancel = useCallback(() => {
+    setIsDeleteEmoteDialogClosing(true);
+    setTimeout(() => {
+      setDeletingEmoteId(null);
+      setDeletingEmoteCategory(null);
+      setIsDeleteEmoteDialogClosing(false);
+    }, 200);
+  }, []);
+
   const handleDeleteMotionConfirm = useCallback(async (motionId: string) => {
     try {
       await motionStorageService.deleteMotion(motionId);
@@ -897,6 +985,44 @@ const ChatContainer = ({
     setTimeout(() => {
       setDeletingLLMModel(null);
       setIsDeleteLLMModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestResetSetupDialog = useCallback((onConfirm: () => Promise<void> | void) => {
+    setPendingSettingsConfirmAction(() => onConfirm);
+  }, []);
+
+  const handleSettingsConfirmCancel = useCallback(() => {
+    setIsSettingsConfirmDialogClosing(true);
+    setTimeout(() => {
+      setPendingSettingsConfirmAction(null);
+      setIsSettingsConfirmDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleSettingsConfirmConfirm = useCallback(async () => {
+    if (!pendingSettingsConfirmAction) {
+      return;
+    }
+
+    try {
+      setPendingSettingsConfirmAction(null);
+      await pendingSettingsConfirmAction();
+    } catch (error) {
+      Logger.error('ChatContainer', 'Settings confirm action failed:', error);
+      setSettingsErrorMessage('Action failed. Please try again.');
+    }
+  }, [pendingSettingsConfirmAction]);
+
+  const handleRequestSettingsErrorDialog = useCallback((message: string) => {
+    setSettingsErrorMessage(message);
+  }, []);
+
+  const handleSettingsErrorClose = useCallback(() => {
+    setIsSettingsErrorDialogClosing(true);
+    setTimeout(() => {
+      setSettingsErrorMessage(null);
+      setIsSettingsErrorDialogClosing(false);
     }, 200);
   }, []);
 
@@ -1652,8 +1778,12 @@ const ChatContainer = ({
             animationClass={isSettingsPanelClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
             onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
             onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+            onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
+            onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
             onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
             onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+            onRequestResetSetupDialog={handleRequestResetSetupDialog}
+            onRequestSettingsErrorDialog={handleRequestSettingsErrorDialog}
             refreshTrigger={settingsRefreshTrigger}
           />
         </div>
@@ -1748,6 +1878,46 @@ const ChatContainer = ({
         </div>
       )}
 
+      {/* Stage Delete Dialog - renders outside SettingsPanel */}
+      {deletingStageId && (
+        <div className="absolute inset-0 z-20">
+          <TypedDialog
+            type="delete"
+            title="Delete Stage?"
+            message="This will permanently delete this stage. This cannot be undone."
+            itemId={deletingStageId}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteStageDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteStageConfirm}
+            onCancel={handleDeleteStageCancel}
+          />
+        </div>
+      )}
+
+      {/* Emote Delete Dialog - renders outside SettingsPanel */}
+      {(deletingEmoteId || deletingEmoteCategory) && (
+        <div className="absolute inset-0 z-20">
+          <TypedDialog
+            type="delete"
+            title={deletingEmoteCategory ? 'Delete Emotes?' : 'Delete Emote?'}
+            message={deletingEmoteCategory
+              ? (deletingEmoteCategory === 'all'
+                ? 'Delete all emotes? This cannot be undone.'
+                : `Delete all emotes in category "${deletingEmoteCategory}"? This cannot be undone.`)
+              : 'This will permanently delete this emote. This cannot be undone.'}
+            itemId={deletingEmoteId || deletingEmoteCategory || 'emotes'}
+            isLightBackground={isLightBackground}
+            animationClass={isDeleteEmoteDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteEmoteConfirm}
+            onCancel={handleDeleteEmoteCancel}
+          />
+        </div>
+      )}
+
       {/* Voice Delete Dialog - renders outside SettingsPanel */}
       {deletingVoiceId && (
         <div className="absolute inset-0 z-20">
@@ -1780,6 +1950,41 @@ const ChatContainer = ({
             confirmStyle="error"
             onConfirm={handleDeleteLLMModelConfirm}
             onCancel={handleDeleteLLMModelCancel}
+          />
+        </div>
+      )}
+
+      {/* Settings Confirm Dialog - renders outside SettingsPanel */}
+      {pendingSettingsConfirmAction && (
+        <div className="absolute inset-0 z-20">
+          <TypedDialog
+            type="confirm"
+            title="Reset Setup Wizard?"
+            message="This will reset the setup wizard and take you back to the beginning."
+            itemId="settings-reset-setup"
+            isLightBackground={isLightBackground}
+            animationClass={isSettingsConfirmDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="Reset"
+            confirmStyle="error"
+            onConfirm={handleSettingsConfirmConfirm}
+            onCancel={handleSettingsConfirmCancel}
+          />
+        </div>
+      )}
+
+      {/* Settings Error Dialog - renders outside SettingsPanel */}
+      {settingsErrorMessage && (
+        <div className="absolute inset-0 z-20">
+          <TypedDialog
+            type="confirm"
+            title="Error"
+            message={settingsErrorMessage}
+            itemId="settings-error"
+            isLightBackground={isLightBackground}
+            animationClass={isSettingsErrorDialogClosing ? 'animate-fade-out' : 'animate-slide-up-fade-in'}
+            confirmLabel="OK"
+            onConfirm={handleSettingsErrorClose}
+            onCancel={handleSettingsErrorClose}
           />
         </div>
       )}

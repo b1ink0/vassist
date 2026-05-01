@@ -77,6 +77,7 @@ export interface UIConfig {
   emotePlayback: {
     showDurationBar: boolean;
     showTime: boolean;
+    autoPlayCategory: string;
   };
   position: {
     preset: string;
@@ -391,6 +392,7 @@ export const DefaultUIConfig: UIConfig = {
   emotePlayback: {
     showDurationBar: true,
     showTime: true,
+    autoPlayCategory: 'all',
   },
   
   position: {

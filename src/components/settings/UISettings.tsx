@@ -9,7 +9,6 @@ import { BackgroundThemeModes, PositionPresets } from '../../config/uiConfig';
 import ExtensionBridge from '../../utils/ExtensionBridge';
 import Toggle from '../common/Toggle';
 import ShortcutsConfig from '../common/ShortcutsConfig';
-import Dialog from '../common/Dialog';
 import { useSetup } from '../../contexts/SetupContext';
 import { useRef, useState, type ChangeEvent } from 'react';
 import Icon from '../icons/Icon';
@@ -21,6 +20,8 @@ import { Button, Select, Input, Card, SettingsRow } from '../ui';
 
 interface UISettingsProps {
   isLightBackground?: boolean;
+  onRequestResetSetupDialog?: (onConfirm: () => Promise<void> | void) => void;
+  onRequestSettingsErrorDialog?: (message: string) => void;
 }
 
 const DEFAULT_BACKUP_SELECTION: BackupSelection = {
@@ -37,7 +38,11 @@ const DEFAULT_BACKUP_SELECTION: BackupSelection = {
   otherFiles: true,
 };
 
-const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
+const UISettings = ({
+  isLightBackground = false,
+  onRequestResetSetupDialog,
+  onRequestSettingsErrorDialog,
+}: UISettingsProps) => {
   const {
     uiConfig,
     updateUIConfig,
@@ -45,9 +50,6 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
 
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);
-  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false);
-  const [showResetErrorDialog, setShowResetErrorDialog] = useState(false);
-  const [resetErrorDialogMessage, setResetErrorDialogMessage] = useState('');
   const [useSelectiveBackup, setUseSelectiveBackup] = useState(false);
   const [backupSelection, setBackupSelection] = useState<BackupSelection>(DEFAULT_BACKUP_SELECTION);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -62,13 +64,11 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
 
     try {
       setIsResetting(true);
-      setShowResetConfirmDialog(false);
       await resetSetup();
       window.location.reload();
     } catch (error) {
       Logger.error('other', 'Failed to reset setup:', error);
-      setResetErrorDialogMessage('Failed to reset setup. Please try again.');
-      setShowResetErrorDialog(true);
+      onRequestSettingsErrorDialog?.('Failed to reset setup. Please try again.');
     } finally {
       setIsResetting(false);
     }
@@ -174,7 +174,13 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
         <Button
           variant="default"
           className="w-full font-semibold"
-          onClick={() => setShowResetConfirmDialog(true)}
+          onClick={() => {
+            if (onRequestResetSetupDialog) {
+              onRequestResetSetupDialog(handleResetSetup);
+            } else {
+              void handleResetSetup();
+            }
+          }}
           disabled={isResetting}
         >
           <Icon name="refresh" size={16} />
@@ -495,30 +501,6 @@ const UISettings = ({ isLightBackground = false }: UISettingsProps) => {
         </SettingsRow>
       </div>
 
-      {showResetConfirmDialog && (
-        <Dialog
-          type="confirm"
-          title="Reset Setup Wizard?"
-          message="This will reset the setup wizard and take you back to the beginning."
-          confirmLabel="Reset"
-          confirmStyle="error"
-          isLightBackground={isLightBackground}
-          onConfirm={handleResetSetup}
-          onCancel={() => setShowResetConfirmDialog(false)}
-        />
-      )}
-
-      {showResetErrorDialog && (
-        <Dialog
-          type="confirm"
-          title="Reset Failed"
-          message={resetErrorDialogMessage}
-          confirmLabel="OK"
-          isLightBackground={isLightBackground}
-          onConfirm={() => setShowResetErrorDialog(false)}
-          onCancel={() => setShowResetErrorDialog(false)}
-        />
-      )}
     </div>
   );
 };

@@ -24,8 +24,12 @@ interface SettingsPanelProps {
   animationClass?: string;
   onRequestDeleteModelDialog?: (modelId: string) => void;
   onRequestDeleteMotionDialog?: (motionId: string) => void;
+  onRequestDeleteStageDialog?: (stageId: string) => void;
+  onRequestDeleteEmoteDialog?: (payload: { emoteId?: string; category?: string }) => void;
   onRequestDeleteVoiceDialog?: (voiceId: string) => void;
   onRequestDeleteLLMModel?: (modelName: string) => void;
+  onRequestResetSetupDialog?: (onConfirm: () => Promise<void> | void) => void;
+  onRequestSettingsErrorDialog?: (message: string) => void;
   refreshTrigger: number;
 }
 
@@ -50,8 +54,12 @@ const SettingsPanel = ({
   animationClass = '',
   onRequestDeleteModelDialog,
   onRequestDeleteMotionDialog,
+  onRequestDeleteStageDialog,
+  onRequestDeleteEmoteDialog,
   onRequestDeleteVoiceDialog,
   onRequestDeleteLLMModel,
+  onRequestResetSetupDialog,
+  onRequestSettingsErrorDialog,
   refreshTrigger
 }: SettingsPanelProps) => {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('ui');
@@ -235,14 +243,21 @@ const SettingsPanel = ({
           }}
         >
           <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
-            <UISettings isLightBackground={isLightBackground} />
+            <UISettings
+              isLightBackground={isLightBackground}
+              {...(onRequestResetSetupDialog ? { onRequestResetSetupDialog } : {})}
+              {...(onRequestSettingsErrorDialog ? { onRequestSettingsErrorDialog } : {})}
+            />
           </div>
 
           <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass">
             <ThreeDSettings
               isLightBackground={isLightBackground}
-              onRequestDeleteModelDialog={onRequestDeleteModelDialog}
-              onRequestDeleteMotionDialog={onRequestDeleteMotionDialog}
+              {...(onRequestDeleteModelDialog ? { onRequestDeleteModelDialog } : {})}
+              {...(onRequestDeleteMotionDialog ? { onRequestDeleteMotionDialog } : {})}
+              {...(onRequestDeleteStageDialog ? { onRequestDeleteStageDialog } : {})}
+              {...(onRequestDeleteEmoteDialog ? { onRequestDeleteEmoteDialog } : {})}
+              {...(onRequestSettingsErrorDialog ? { onRequestSettingsErrorDialog } : {})}
               refreshTrigger={refreshTrigger}
             />
           </div>

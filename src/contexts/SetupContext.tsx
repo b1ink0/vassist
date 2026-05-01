@@ -447,6 +447,7 @@ export function SetupProvider({ children }: SetupProviderProps) {
         emotePlayback: {
           showDurationBar: true,
           showTime: true,
+          autoPlayCategory: 'all',
         },
         enableChatHistory: true,
         enableVoiceInput: false,

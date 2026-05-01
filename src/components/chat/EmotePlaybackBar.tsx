@@ -202,7 +202,7 @@ const EmotePlaybackBar = ({
   return (
     <div
       style={panelStyle}
-      className="fixed z-[10020] transition-all duration-200"
+      className="fixed z-[10020]"
     >
       <div className="relative flex h-8 items-center">
       <div

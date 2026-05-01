@@ -24,6 +24,7 @@ interface StoredEmote extends UnknownRecord {
   audioData: Blob;
   motionData: Blob;
   cameraData: Blob | null;
+  categories: string[];
   isVisible: boolean;
   metadata: EmoteMetadata;
 }
@@ -38,6 +39,23 @@ interface NameValidationResult {
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null;
+
+const normalizeCategories = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return ['general'];
+  }
+
+  const categories = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+
+  if (categories.length === 0) {
+    return ['general'];
+  }
+
+  return Array.from(new Set(categories));
+};
 
 const normalizeMetadata = (metadata: unknown, audioSize = 0, motionSize = 0): EmoteMetadata => {
   const value = isRecord(metadata) ? metadata : {};
@@ -70,6 +88,7 @@ const normalizeEmote = (value: unknown): StoredEmote | null => {
     audioData: value.audioData,
     motionData: value.motionData,
     cameraData: value.cameraData instanceof Blob ? value.cameraData : null,
+    categories: normalizeCategories(value.categories),
     isVisible: value.isVisible !== false,
     metadata: normalizeMetadata(metadata, value.audioData.size, value.motionData.size),
   };
@@ -182,6 +201,7 @@ class EmoteStorageService {
         audioData: audioBlob,
         motionData: motionBlob,
         cameraData: cameraBlob, // null if not provided
+        categories: normalizeCategories(metadata.categories),
         isVisible: true,
         metadata: {
           originalAudioFileName: typeof metadata.originalAudioFileName === 'string' ? metadata.originalAudioFileName : 'unknown.mp3',
@@ -252,7 +272,7 @@ class EmoteStorageService {
    * Returns only IDs and metadata for fast listing
    * @returns {Promise<Array>} - Array of emote info without blob data
    */
-  async getEmotesList(): Promise<Array<{ id: string; name: string; isVisible: boolean; metadata: EmoteMetadata }>> {
+  async getEmotesList(): Promise<Array<{ id: string; name: string; categories: string[]; isVisible: boolean; metadata: EmoteMetadata }>> {
     try {
       const emotesMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
       const records = isRecord(emotesMetadata) ? emotesMetadata : {};
@@ -262,6 +282,7 @@ class EmoteStorageService {
         return {
           id,
           name: typeof entry.name === 'string' ? entry.name : 'Unknown Emote',
+          categories: normalizeCategories(entry.categories),
           isVisible: entry.isVisible !== false,
           metadata: normalizeMetadata(entry.metadata),
         };
@@ -339,6 +360,29 @@ class EmoteStorageService {
       return true;
     } catch (error) {
       Logger.error('EmoteStorage', 'Failed to toggle emote visibility:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update emote categories
+   * @param {string} emoteId - Emote ID
+   * @param {string[]} categories - Category list
+   */
+  async updateEmoteCategories(emoteId: string, categories: string[]): Promise<boolean> {
+    try {
+      const emote = await this.getEmote(emoteId);
+      if (!emote) {
+        throw new Error(`Emote ${emoteId} not found`);
+      }
+
+      emote.categories = normalizeCategories(categories);
+      await storageServiceProxy.fileSave(emoteId, emote, this.CATEGORY);
+
+      Logger.log('EmoteStorage', `Emote ${emoteId} categories updated: ${emote.categories.join(', ')}`);
+      return true;
+    } catch (error) {
+      Logger.error('EmoteStorage', 'Failed to update emote categories:', error);
       throw error;
     }
   }

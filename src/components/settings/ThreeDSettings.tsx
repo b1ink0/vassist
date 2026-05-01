@@ -4,7 +4,7 @@
  * Handles model loading, physics, animations, custom model/motion uploads
  */
 
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useApp } from '../../contexts/AppContext';
 import { useAnimation } from '../../contexts/AnimationContext';
@@ -12,7 +12,6 @@ import { PositionPresets, FPSLimitOptions, PhysicsEngineOptions, RenderQualityOp
 import { AnimationCategory, getDefaultAnimationsByCategory } from '../../config/animationConfig';
 import { cn } from '../../utils/cn';
 import Toggle from '../common/Toggle';
-import Dialog from '../common/Dialog';
 import Icon from '../icons/Icon';
 import { pmxConverterService } from '../../services/PMXConverterService';
 import { vmdConverterService } from '../../services/VMDConverterService';
@@ -82,6 +81,7 @@ interface MotionItem {
 interface EmoteItem {
   id: string;
   name: string;
+  categories?: string[];
   isVisible?: boolean;
   metadata?: {
     originalAudioFileName?: string;
@@ -174,6 +174,9 @@ interface ThreeDSettingsProps {
   isLightBackground: boolean;
   onRequestDeleteModelDialog?: ((modelId: string) => void) | undefined;
   onRequestDeleteMotionDialog?: ((motionId: string) => void) | undefined;
+  onRequestDeleteStageDialog?: ((stageId: string) => void) | undefined;
+  onRequestDeleteEmoteDialog?: ((payload: { emoteId?: string; category?: string }) => void) | undefined;
+  onRequestSettingsErrorDialog?: ((message: string) => void) | undefined;
   refreshTrigger: number;
 }
 
@@ -184,7 +187,15 @@ const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
-const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onRequestDeleteMotionDialog, refreshTrigger }: ThreeDSettingsProps) => {
+const ThreeDSettings = ({
+  isLightBackground,
+  onRequestDeleteModelDialog,
+  onRequestDeleteMotionDialog,
+  onRequestDeleteStageDialog,
+  onRequestDeleteEmoteDialog,
+  onRequestSettingsErrorDialog,
+  refreshTrigger,
+}: ThreeDSettingsProps) => {
   const {
     uiConfig,
     updateUIConfig,
@@ -255,7 +266,9 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   });
   const [editingEmoteId, setEditingEmoteId] = useState<string | null>(null);
   const [editingEmoteName, setEditingEmoteName] = useState('');
+  const [expandedEmoteSettings, setExpandedEmoteSettings] = useState<string | null>(null);
   const [emoteName, setEmoteName] = useState('');
+  const [emoteCategoriesInput, setEmoteCategoriesInput] = useState('general');
   const [selectedEmoteAudioFile, setSelectedEmoteAudioFile] = useState<File | null>(null);
   const [selectedEmoteMotionFile, setSelectedEmoteMotionFile] = useState<File | null>(null);
   const [selectedEmoteCameraFile, setSelectedEmoteCameraFile] = useState<File | null>(null);
@@ -272,13 +285,61 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   const [currentDefaultModelId, setCurrentDefaultModelId] = useState<string | null>(null);
   const portraitClippingSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Error dialog state
-  const [errorDialogMessage, setErrorDialogMessage] = useState('');
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [pendingDeleteStageId, setPendingDeleteStageId] = useState<string | null>(null);
-  const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
-  const [pendingDeleteEmoteId, setPendingDeleteEmoteId] = useState<string | null>(null);
-  const [showDeleteEmoteDialog, setShowDeleteEmoteDialog] = useState(false);
+  const [selectedEmoteFilterCategory, setSelectedEmoteFilterCategory] = useState('all');
+
+  const emitSettingsError = (message: string): void => {
+    if (onRequestSettingsErrorDialog) {
+      onRequestSettingsErrorDialog(message);
+      return;
+    }
+    console.error(message);
+  };
+
+  const emoteCategoryOptions = useMemo(() => {
+    const categorySet = new Set<string>();
+
+    emotes.forEach((emote) => {
+      const categories = Array.isArray(emote.categories) ? emote.categories : ['general'];
+      categories.forEach((category) => {
+        const normalized = typeof category === 'string' ? category.trim().toLowerCase() : '';
+        if (normalized) {
+          categorySet.add(normalized);
+        }
+      });
+    });
+
+    if (categorySet.size === 0) {
+      categorySet.add('general');
+    }
+
+    return [
+      { value: 'all', label: 'All' },
+      ...Array.from(categorySet)
+        .sort()
+        .map((category) => ({
+          value: category,
+          label: category.charAt(0).toUpperCase() + category.slice(1),
+        })),
+    ];
+  }, [emotes]);
+
+  const filteredEmotes = useMemo(() => {
+    if (selectedEmoteFilterCategory === 'all') {
+      return emotes;
+    }
+
+    return emotes.filter((emote) => {
+      const categories = Array.isArray(emote.categories) ? emote.categories : ['general'];
+      return categories.includes(selectedEmoteFilterCategory);
+    });
+  }, [emotes, selectedEmoteFilterCategory]);
+
+  useEffect(() => {
+    const selectedExists = emoteCategoryOptions.some((option) => option.value === selectedEmoteFilterCategory);
+    if (!selectedExists) {
+      setSelectedEmoteFilterCategory('all');
+    }
+  }, [emoteCategoryOptions, selectedEmoteFilterCategory]);
 
   useEffect(() => {
     loadModels();
@@ -592,22 +653,17 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   };
 
   const handleDeleteStage = async (stageId: string) => {
-    setPendingDeleteStageId(stageId);
-    setShowDeleteStageDialog(true);
-  };
-
-  const confirmDeleteStage = async () => {
-    if (!pendingDeleteStageId) return;
-
-    const stageId = pendingDeleteStageId;
-    setShowDeleteStageDialog(false);
-    setPendingDeleteStageId(null);
+    if (onRequestDeleteStageDialog) {
+      onRequestDeleteStageDialog(stageId);
+      return;
+    }
 
     try {
       await stageStorageService.deleteStage(stageId);
       await loadStages();
     } catch (error) {
       console.error('Failed to delete stage:', error);
+      emitSettingsError(getErrorMessage(error) || 'Failed to delete stage');
     }
   };
 
@@ -1052,6 +1108,11 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
         return;
       }
 
+      const parsedCategories = emoteCategoriesInput
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length > 0);
+
       setEmoteUploadState({ uploading: true, progress: 'Converting motion...', error: null });
 
       const bvmdData = await vmdConverterService.convertVMDToBVMD(motionFile);
@@ -1075,12 +1136,14 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           originalAudioFileName: audioFile.name,
           originalMotionFileName: motionFile.name,
           originalCameraFileName: cameraFile ? cameraFile.name : null,
-          audioMimeType: audioFile.type
+          audioMimeType: audioFile.type,
+          categories: parsedCategories.length > 0 ? parsedCategories : ['general'],
         }
       );
 
       setEmoteUploadState({ uploading: false, progress: '', error: null });
       setEmoteName('');
+      setEmoteCategoriesInput('general');
       setSelectedEmoteAudioFile(null);
       setSelectedEmoteMotionFile(null);
       setSelectedEmoteCameraFile(null);
@@ -1225,7 +1288,8 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               originalAudioFileName: audioFileName,
               originalMotionFileName: vmdFileName,
               originalCameraFileName: cameraFileName,
-              audioMimeType: audioFileObj.type
+              audioMimeType: audioFileObj.type,
+              categories: ['general'],
             }
           );
 
@@ -1272,25 +1336,41 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
   };
 
   const handleDeleteEmote = async (emoteId: string) => {
-    setPendingDeleteEmoteId(emoteId);
-    setShowDeleteEmoteDialog(true);
-  };
-
-  const confirmDeleteEmote = async () => {
-    if (!pendingDeleteEmoteId) return;
-
-    const emoteId = pendingDeleteEmoteId;
-    setShowDeleteEmoteDialog(false);
-    setPendingDeleteEmoteId(null);
+    if (onRequestDeleteEmoteDialog) {
+      onRequestDeleteEmoteDialog({ emoteId });
+      return;
+    }
 
     try {
       await emoteStorageService.deleteEmote(emoteId);
       await loadEmotes();
     } catch (error) {
       console.error('Failed to delete emote:', error);
-      setErrorDialogMessage(getErrorMessage(error) || 'Failed to delete emote');
-      setShowErrorDialog(true);
+      emitSettingsError(getErrorMessage(error) || 'Failed to delete emote');
     }
+  };
+
+  const handleDeleteFilteredEmotes = () => {
+    if (filteredEmotes.length === 0) {
+      return;
+    }
+
+    if (onRequestDeleteEmoteDialog) {
+      onRequestDeleteEmoteDialog({ category: selectedEmoteFilterCategory });
+      return;
+    }
+
+    Promise.all(filteredEmotes.map((emote) => emoteStorageService.deleteEmote(emote.id)))
+      .then(async () => {
+        setEditingEmoteId(null);
+        setEditingEmoteName('');
+        setExpandedEmoteSettings(null);
+        await loadEmotes();
+      })
+      .catch((error) => {
+        console.error('Failed to delete filtered emotes:', error);
+        emitSettingsError(getErrorMessage(error) || 'Failed to delete filtered emotes');
+      });
   };
 
   const handleEditEmote = (emoteId: string, currentName: string) => {
@@ -1306,8 +1386,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       await loadEmotes();
     } catch (error) {
       console.error('Failed to update emote name:', error);
-      setErrorDialogMessage(getErrorMessage(error) || 'Failed to update emote name');
-      setShowErrorDialog(true);
+      emitSettingsError(getErrorMessage(error) || 'Failed to update emote name');
     }
   };
 
@@ -1327,8 +1406,34 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       console.log(`Emote ${emoteId} visibility set to: ${isVisible}`);
     } catch (error) {
       console.error('Failed to toggle emote visibility:', error);
-      setErrorDialogMessage(getErrorMessage(error) || 'Failed to toggle emote visibility');
-      setShowErrorDialog(true);
+      emitSettingsError(getErrorMessage(error) || 'Failed to toggle emote visibility');
+    }
+  };
+
+  const handleToggleEmoteCategory = async (emoteId: string, category: string, checked: boolean) => {
+    try {
+      const emote = emotes.find((item) => item.id === emoteId);
+      if (!emote) {
+        return;
+      }
+
+      const currentCategories = Array.isArray(emote.categories) ? emote.categories : ['general'];
+      let nextCategories: string[];
+
+      if (checked) {
+        nextCategories = Array.from(new Set([...currentCategories, category]));
+      } else {
+        nextCategories = currentCategories.filter((item) => item !== category);
+        if (nextCategories.length === 0) {
+          nextCategories = ['general'];
+        }
+      }
+
+      await emoteStorageService.updateEmoteCategories(emoteId, nextCategories);
+      setEmotes((prev) => prev.map((item) => (item.id === emoteId ? { ...item, categories: nextCategories } : item)));
+    } catch (error) {
+      console.error('Failed to update emote categories:', error);
+      emitSettingsError(getErrorMessage(error) || 'Failed to update emote categories');
     }
   };
 
@@ -1389,8 +1494,7 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       console.log(`Motion ${motionId} category ${category} ${isEnabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Failed to toggle motion category:', error);
-      setErrorDialogMessage(getErrorMessage(error) || 'Failed to toggle motion category');
-      setShowErrorDialog(true);
+      emitSettingsError(getErrorMessage(error) || 'Failed to toggle motion category');
     }
   };
 
@@ -2614,6 +2718,18 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
               />
             </div>
 
+            <div className="space-y-1">
+              <label className="text-xs text-white/70">Categories (comma separated)</label>
+              <Input
+                type="text"
+                value={emoteCategoriesInput}
+                onChange={(e) => setEmoteCategoriesInput(e.target.value)}
+                placeholder="general, idle, talking"
+                disabled={emoteUploadState.uploading}
+                variant={isLightBackground ? 'dark' : 'default'}
+              />
+            </div>
+
             {/* Hidden File Inputs */}
             <input
               ref={emoteAudioFileInputRef}
@@ -2734,8 +2850,34 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
           {/* Emote List */}
           {emotes.length > 0 && (
             <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <Select
+                    value={selectedEmoteFilterCategory}
+                    onChange={(e) => setSelectedEmoteFilterCategory(e.target.value)}
+                    variant={isLightBackground ? 'dark' : 'default'}
+                    options={emoteCategoryOptions}
+                  />
+                </div>
+                <button
+                  onClick={handleDeleteFilteredEmotes}
+                  disabled={filteredEmotes.length === 0}
+                  className={cn(
+                    'h-9 w-9 rounded-full flex items-center justify-center transition-colors',
+                    'bg-white/5 border border-white/10 text-white/60',
+                    filteredEmotes.length > 0
+                      ? 'hover:bg-red-500/20 hover:text-red-300 hover:border-red-400/30'
+                      : 'opacity-40 cursor-not-allowed'
+                  )}
+                  title={selectedEmoteFilterCategory === 'all' ? 'Delete all emotes' : `Delete all ${selectedEmoteFilterCategory} emotes`}
+                  aria-label={selectedEmoteFilterCategory === 'all' ? 'Delete all emotes' : `Delete all ${selectedEmoteFilterCategory} emotes`}
+                >
+                  <Icon name="trash-2" size={16} />
+                </button>
+              </div>
+
               <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar scrollbar-glass">
-                {emotes.map((emote) => {
+                {filteredEmotes.map((emote) => {
                   const isEditing = editingEmoteId === emote.id;
                   return (
                     <div key={emote.id} className="relative rounded-lg bg-white/5 border border-white/10">
@@ -2790,6 +2932,13 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             ) : (
                               <>
                                 <button
+                                  onClick={() => setExpandedEmoteSettings(expandedEmoteSettings === emote.id ? null : emote.id)}
+                                  className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                  title="Configure categories"
+                                >
+                                  <Icon name={expandedEmoteSettings === emote.id ? 'chevron-down' : 'chevron-right'} size={16} />
+                                </button>
+                                <button
                                   onClick={() => handleEditEmote(emote.id, emote.name)}
                                   className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
                                   title="Edit name"
@@ -2814,9 +2963,35 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
                             )}
                           </div>
                         </div>
+
+                        {expandedEmoteSettings === emote.id && (
+                          <div className="px-3 pb-3 pt-0 space-y-2 border-t border-white/10">
+                            <p className="text-xs font-medium text-white/70 mb-1">Auto-play Categories</p>
+                            {[ 'general', ...Object.values(AnimationCategory) ].map((category) => {
+                              const categories = Array.isArray(emote.categories) ? emote.categories : ['general'];
+                              const checked = categories.includes(category);
+                              return (
+                                <div key={`${emote.id}-${category}`} className="flex items-center justify-between gap-2">
+                                  <span className="text-xs capitalize text-white/80">{category}</span>
+                                  <Toggle
+                                    checked={checked}
+                                    onChange={(nextChecked) => handleToggleEmoteCategory(emote.id, category, nextChecked)}
+                                    size="sm"
+                                    isLightBackground={isLightBackground}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                     </div>
                   );
                 })}
+                  {filteredEmotes.length === 0 && (
+                    <div className="rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-white/60 text-center">
+                      No emotes in this category
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -2824,52 +2999,6 @@ const ThreeDSettings = ({ isLightBackground, onRequestDeleteModelDialog, onReque
       </div>
       </div>
 
-      {/* Error Dialog */}
-      {showDeleteStageDialog && (
-        <Dialog
-          type="confirm"
-          title="Delete Stage"
-          message="Delete this stage? This action cannot be undone."
-          confirmLabel="Delete"
-          confirmStyle="error"
-          isLightBackground={isLightBackground}
-          onConfirm={confirmDeleteStage}
-          onCancel={() => {
-            setShowDeleteStageDialog(false);
-            setPendingDeleteStageId(null);
-          }}
-        />
-      )}
-
-      {showDeleteEmoteDialog && (
-        <Dialog
-          type="confirm"
-          title="Delete Emote"
-          message="Are you sure you want to delete this emote?"
-          confirmLabel="Delete"
-          confirmStyle="error"
-          isLightBackground={isLightBackground}
-          onConfirm={confirmDeleteEmote}
-          onCancel={() => {
-            setShowDeleteEmoteDialog(false);
-            setPendingDeleteEmoteId(null);
-          }}
-        />
-      )}
-
-      {showErrorDialog && (
-        <Dialog
-          type="confirm"
-          title="Error"
-          message={errorDialogMessage}
-          itemId="error"
-          confirmLabel="OK"
-          confirmStyle="primary"
-          isLightBackground={isLightBackground}
-          onConfirm={() => setShowErrorDialog(false)}
-          onCancel={() => setShowErrorDialog(false)}
-        />
-      )}
     </div>
   );
 };

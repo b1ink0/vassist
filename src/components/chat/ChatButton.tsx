@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -46,6 +47,7 @@ interface ChatButtonProps {
 interface EmoteListItem {
   id: string;
   name: string;
+  categories?: string[];
   isVisible: boolean;
   metadata: unknown;
 }
@@ -191,6 +193,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
   const [isEmotePaused, setIsEmotePaused] = useState(false);
   const [modelAnchorPos, setModelAnchorPos] = useState<PositionPixels | null>(null);
   const wasPausedBeforeSeekRef = useRef(false);
+  const autoPlaySyncSignatureRef = useRef('');
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
   const [models, setModels] = useState<StoredModelItem[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -1041,18 +1044,35 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
       if (isAutoPlayActive) {
         emotePlayerService.stopAutoPlay();
         setIsAutoPlayActive(false);
+        autoPlaySyncSignatureRef.current = '';
         Logger.log('ChatButton', 'Auto-play stopped');
       } else {
-        const emoteIds = emotes.map(e => e.id);
+        const autoPlayCategory = (uiConfig.emotePlayback?.autoPlayCategory || 'all').trim().toLowerCase();
+        const emoteIds = emotes
+          .filter((emote) => {
+            if (autoPlayCategory === 'all') {
+              return true;
+            }
+            return (emote.categories || []).includes(autoPlayCategory);
+          })
+          .map((e) => e.id);
+
+        if (emoteIds.length === 0) {
+          Logger.warn('ChatButton', `No emotes found for auto-play category: ${autoPlayCategory}`);
+          return;
+        }
+
+        autoPlaySyncSignatureRef.current = emoteIds.join('|');
         await emotePlayerService.startAutoPlay(emoteIds);
         setIsAutoPlayActive(true);
         setIsEmotePanelOpen(false);
         Logger.log('ChatButton', 'Auto-play started');
       }
     } catch (err) {
+      autoPlaySyncSignatureRef.current = '';
       Logger.error('ChatButton', 'Failed to toggle auto-play:', err);
     }
-  }, [isAutoPlayActive, emotes]);
+  }, [isAutoPlayActive, emotes, uiConfig.emotePlayback?.autoPlayCategory]);
 
   const handleEmoteSeek = useCallback((nextProgress: number) => {
     emotePlayerService.seekToProgress(nextProgress);
@@ -1176,12 +1196,80 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
     setForceUpdate(prev => prev + 1);
   }, [sceneRef]);
 
+  const selectedAutoPlayCategory = uiConfig.emotePlayback?.autoPlayCategory || 'all';
+  const autoPlayCategoryOptions = useMemo(() => {
+    const categorySet = new Set<string>();
+    emotes.forEach((emote) => {
+      (emote.categories || []).forEach((category) => {
+        if (typeof category === 'string' && category.trim()) {
+          categorySet.add(category.trim().toLowerCase());
+        }
+      });
+    });
+
+    if (categorySet.size === 0) {
+      categorySet.add('general');
+    }
+
+    return [
+      { value: 'all', label: 'All Categories' },
+      ...Array.from(categorySet).map((category) => ({
+        value: category,
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+      })),
+    ];
+  }, [emotes]);
+
+  const filteredEmotes = useMemo(() => {
+    const normalizedCategory = selectedAutoPlayCategory.trim().toLowerCase();
+    if (normalizedCategory === 'all') {
+      return emotes;
+    }
+
+    return emotes.filter((emote) => (emote.categories || []).includes(normalizedCategory));
+  }, [emotes, selectedAutoPlayCategory]);
+
+  const autoPlayEmoteIds = useMemo(() => filteredEmotes.map((emote) => emote.id), [filteredEmotes]);
+
+  useEffect(() => {
+    const hasSelectedCategory = autoPlayCategoryOptions.some((option) => option.value === selectedAutoPlayCategory);
+    if (!hasSelectedCategory) {
+      updateUIConfig('emotePlayback.autoPlayCategory', 'all');
+    }
+  }, [autoPlayCategoryOptions, selectedAutoPlayCategory, updateUIConfig]);
+
+  useEffect(() => {
+    if (!isAutoPlayActive) {
+      autoPlaySyncSignatureRef.current = '';
+      return;
+    }
+
+    if (autoPlayEmoteIds.length === 0) {
+      emotePlayerService.stopAutoPlay();
+      setIsAutoPlayActive(false);
+      autoPlaySyncSignatureRef.current = '';
+      Logger.warn('ChatButton', 'Auto-play stopped because selected category has no emotes');
+      return;
+    }
+
+    const nextSignature = autoPlayEmoteIds.join('|');
+    if (autoPlaySyncSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    autoPlaySyncSignatureRef.current = nextSignature;
+    emotePlayerService.startAutoPlay(autoPlayEmoteIds).catch((err) => {
+      autoPlaySyncSignatureRef.current = '';
+      Logger.error('ChatButton', 'Failed to resync auto-play queue after category change:', err);
+    });
+  }, [isAutoPlayActive, autoPlayEmoteIds]);
+
   if (!shouldRender) return null;
 
   const TOTAL_BUTTON_OFFSET = 224;
   
   const emotePanelWidth = 125;
-  const emotePanelHeight = Math.min(emotes.length > 0 ? (emotes.length + 1) * 43 : 43, 300);
+  const emotePanelHeight = Math.min(emotes.length > 0 ? (Math.max(filteredEmotes.length, 1) + 2) * 43 : 86, 300);
   const emotePanelGap = 8;
   const buttonWidth = 48;
 
@@ -1315,9 +1403,52 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
               </svg>
               <span className="truncate">Auto</span>
             </Button>
+
+            <div
+              style={{ scrollSnapAlign: 'center' }}
+              className={cn(
+                'glass-button relative h-[35px] min-h-[35px] w-[125px] mb-2 rounded-[17.5px] backdrop-blur-[10px]',
+                isLightBackground && 'glass-button-dark'
+              )}
+              title="Emote category"
+            >
+              <select
+                value={selectedAutoPlayCategory}
+                onChange={(e) => updateUIConfig('emotePlayback.autoPlayCategory', e.target.value)}
+                className={cn(
+                  'h-full w-full appearance-none bg-transparent border-none outline-none text-[15px] pl-3 pr-7',
+                  isLightBackground ? 'glass-text' : 'glass-text-black'
+                )}
+              >
+                {autoPlayCategoryOptions.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-gray-900">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                <Icon
+                  name="chevron-down"
+                  size={12}
+                  className={cn(isLightBackground ? 'glass-text' : 'glass-text-black')}
+                />
+              </span>
+            </div>
             
             {/* Emote list */}
-            {emotes.map((emote, index) => (
+            {filteredEmotes.length === 0 ? (
+              <div
+                style={{ scrollSnapAlign: 'center' }}
+                className={cn(
+                  'glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap',
+                  isLightBackground && 'glass-button-dark',
+                  'backdrop-blur-[10px] text-white/70 cursor-default pointer-events-none'
+                )}
+                title="No emotes in this category"
+              >
+                <span className="truncate">No emotes in category</span>
+              </div>
+            ) : filteredEmotes.map((emote) => (
               <Button
                 key={emote.id}
                 onClick={async () => {
