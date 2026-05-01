@@ -231,6 +231,8 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    selectedSystemPromptProfileId: 'default',
+    systemPromptProfiles: [],
   },
   
   openai: {
@@ -242,6 +244,8 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    selectedSystemPromptProfileId: 'default',
+    systemPromptProfiles: [],
     routing: {
       enabled: false,
       visionModel: {
@@ -264,6 +268,8 @@ export const DefaultAIConfig = {
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: 'default', // Personality type from PromptConfig.systemPrompts
     systemPrompt: '', // Custom system prompt (only used when systemPromptType is 'custom')
+    selectedSystemPromptProfileId: 'default',
+    systemPromptProfiles: [],
     routing: {
       enabled: false,
       visionModel: {
@@ -284,6 +290,8 @@ export const DefaultAIConfig = {
     maxTokens: 2048,
     systemPromptType: 'default',
     systemPrompt: '',
+    selectedSystemPromptProfileId: 'default',
+    systemPromptProfiles: [],
     routing: {
       enabled: false,
       visionModel: {
@@ -311,6 +319,8 @@ export const DefaultAIConfig = {
     threads: 4,
     systemPromptType: 'default',
     systemPrompt: '',
+    selectedSystemPromptProfileId: 'default',
+    systemPromptProfiles: [],
     routing: {
       enabled: false,
       visionModel: {

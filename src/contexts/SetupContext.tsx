@@ -345,6 +345,8 @@ export function SetupProvider({ children }: SetupProviderProps) {
           enableAudioSupport: setupState.setupData.llm?.chromeAi?.enableAudioSupport ?? true,
           systemPromptType: 'default',
           systemPrompt: '',
+          selectedSystemPromptProfileId: 'default',
+          systemPromptProfiles: [],
         },
         openai: {
           apiKey: setupState.setupData.llm?.openai?.apiKey || '',
@@ -355,6 +357,8 @@ export function SetupProvider({ children }: SetupProviderProps) {
           enableAudioSupport: true,
           systemPromptType: 'default',
           systemPrompt: '',
+          selectedSystemPromptProfileId: 'default',
+          systemPromptProfiles: [],
         },
         ollama: {
           endpoint: setupState.setupData.llm?.ollama?.endpoint || 'http://localhost:11434',
@@ -365,6 +369,8 @@ export function SetupProvider({ children }: SetupProviderProps) {
           enableAudioSupport: true,
           systemPromptType: 'default',
           systemPrompt: '',
+          selectedSystemPromptProfileId: 'default',
+          systemPromptProfiles: [],
         },
         aiFeatures: setupState.setupData.aiFeatures || {
           translator: { enabled: true, defaultTargetLanguage: 'en' },

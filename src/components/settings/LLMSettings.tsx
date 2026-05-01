@@ -76,8 +76,15 @@ interface ImageAudioToggleProps {
 interface SystemPromptSectionProps {
   providerKey: 'openai' | 'ollama' | 'android-local' | 'desktop-local' | 'chromeAi';
   isLightBackground: boolean;
-  updateAIConfig: (path: string, value: unknown) => void;
+  updateAIConfig: (path: string, value: unknown, options?: { debounceMs?: number }) => void;
   aiConfig: AIConfigShape;
+}
+
+interface SystemPromptProfile {
+  id: string;
+  name: string;
+  prompt: string;
+  isBuiltIn?: boolean;
 }
 
 interface LLMSettingsProps {
@@ -449,61 +456,228 @@ const AudioSupportToggle = ({ providerKey, updateAIConfig, aiConfig, additionalN
 };
 
 const SystemPromptSection = ({ providerKey, isLightBackground, updateAIConfig, aiConfig }: SystemPromptSectionProps) => {
-  const providerConfig = aiConfig[providerKey] || {};
-  const currentType = typeof providerConfig.systemPromptType === 'string' ? providerConfig.systemPromptType : 'default';
-  const currentPrompt = typeof providerConfig.systemPrompt === 'string' ? providerConfig.systemPrompt : '';
+  const providerConfig = (aiConfig[providerKey] || {}) as Record<string, unknown>;
   const systemPrompts = PromptConfig.systemPrompts;
-  const promptKey = (currentType in systemPrompts ? currentType : 'default') as keyof typeof systemPrompts;
+
+  const buildDefaultProfiles = (): SystemPromptProfile[] => (
+    Object.entries(systemPrompts).map(([key, value]) => ({
+      id: key,
+      name: value.name,
+      prompt: value.prompt,
+      isBuiltIn: key !== 'custom',
+    }))
+  );
+
+  const normalizeProfiles = React.useCallback((): { profiles: SystemPromptProfile[]; selectedId: string } => {
+    const rawProfiles = Array.isArray(providerConfig.systemPromptProfiles)
+      ? providerConfig.systemPromptProfiles
+      : [];
+
+    const parsedProfiles = rawProfiles
+      .map((profile) => {
+        if (!profile || typeof profile !== 'object') {
+          return null;
+        }
+        const raw = profile as Record<string, unknown>;
+        const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `profile_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const name = typeof raw.name === 'string' ? raw.name : 'Unnamed';
+        const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+        const isBuiltIn = typeof raw.isBuiltIn === 'boolean' ? raw.isBuiltIn : false;
+        return { id, name, prompt, isBuiltIn } as SystemPromptProfile;
+      })
+      .filter((profile) => profile !== null) as SystemPromptProfile[];
+
+    const mergedMap = new Map<string, SystemPromptProfile>();
+    buildDefaultProfiles().forEach((profile) => mergedMap.set(profile.id, profile));
+    parsedProfiles.forEach((profile) => mergedMap.set(profile.id, profile));
+
+    const profiles = Array.from(mergedMap.values());
+    const selectedId = typeof providerConfig.selectedSystemPromptProfileId === 'string'
+      ? providerConfig.selectedSystemPromptProfileId
+      : 'default';
+    const finalSelectedId = profiles.some((profile) => profile.id === selectedId)
+      ? selectedId
+      : (profiles[0]?.id || 'default');
+
+    return { profiles, selectedId: finalSelectedId };
+  }, [providerConfig, systemPrompts]);
+
+  const normalized = normalizeProfiles();
+  const profiles = normalized.profiles;
+  const selectedProfileId = normalized.selectedId;
+  const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) || profiles[0];
+  const [draftProfileName, setDraftProfileName] = React.useState(selectedProfile?.name || '');
+  const [draftProfilePrompt, setDraftProfilePrompt] = React.useState(selectedProfile?.prompt || '');
+
+  const persistProfiles = React.useCallback((nextProfiles: SystemPromptProfile[], nextSelectedId: string, options?: { debounceMs?: number }) => {
+    updateAIConfig(`${providerKey}.systemPromptProfiles`, nextProfiles, options);
+    updateAIConfig(`${providerKey}.selectedSystemPromptProfileId`, nextSelectedId, options);
+
+    const nextActive = nextProfiles.find((profile) => profile.id === nextSelectedId) || nextProfiles[0];
+    if (nextActive) {
+      updateAIConfig(`${providerKey}.systemPromptType`, nextActive.id, options);
+      updateAIConfig(`${providerKey}.systemPrompt`, nextActive.prompt, options);
+    }
+  }, [providerKey, updateAIConfig]);
+
+  const getProfilesWithDraftEdits = React.useCallback((): { nextProfiles: SystemPromptProfile[]; changed: boolean } => {
+    if (!selectedProfile) {
+      return { nextProfiles: profiles, changed: false };
+    }
+
+    let changed = false;
+    const nextProfiles = profiles.map((profile) => {
+      if (profile.id !== selectedProfile.id) {
+        return profile;
+      }
+
+      const nextName = draftProfileName.length > 0 ? draftProfileName : 'Unnamed';
+      const nextPrompt = draftProfilePrompt;
+      if (profile.name === nextName && profile.prompt === nextPrompt) {
+        return profile;
+      }
+
+      changed = true;
+      return { ...profile, name: nextName, prompt: nextPrompt };
+    });
+
+    return { nextProfiles, changed };
+  }, [draftProfileName, draftProfilePrompt, profiles, selectedProfile]);
+
+  const commitDraftEdits = React.useCallback((options?: { debounceMs?: number }) => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    const { nextProfiles, changed } = getProfilesWithDraftEdits();
+    if (changed) {
+      persistProfiles(nextProfiles, selectedProfile.id, options);
+    }
+  }, [getProfilesWithDraftEdits, persistProfiles, selectedProfile]);
+
+  React.useEffect(() => {
+    setDraftProfileName(selectedProfile?.name || '');
+    setDraftProfilePrompt(selectedProfile?.prompt || '');
+  }, [selectedProfile?.id, selectedProfile?.name, selectedProfile?.prompt]);
+
+  React.useEffect(() => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    if (draftProfileName === selectedProfile.name && draftProfilePrompt === selectedProfile.prompt) {
+      return;
+    }
+
+    commitDraftEdits({ debounceMs: 250 });
+  }, [commitDraftEdits, draftProfileName, draftProfilePrompt, selectedProfile]);
+
+  React.useEffect(() => {
+    const rawProfiles = Array.isArray(providerConfig.systemPromptProfiles) ? providerConfig.systemPromptProfiles : [];
+    const rawSelectedId = typeof providerConfig.selectedSystemPromptProfileId === 'string'
+      ? providerConfig.selectedSystemPromptProfileId
+      : '';
+
+    const needsSync = rawProfiles.length !== profiles.length || rawSelectedId !== selectedProfileId;
+    if (!needsSync) {
+      return;
+    }
+
+    persistProfiles(profiles, selectedProfileId);
+  }, [persistProfiles, profiles, providerConfig.selectedSystemPromptProfileId, providerConfig.systemPromptProfiles, selectedProfileId]);
+
+  const addProfile = (): void => {
+    const { nextProfiles: profilesWithDrafts } = getProfilesWithDraftEdits();
+    const timestamp = Date.now();
+    const nextProfile: SystemPromptProfile = {
+      id: `custom-${timestamp}`,
+      name: `Custom ${profilesWithDrafts.filter((profile) => profile.id.startsWith('custom-')).length + 1}`,
+      prompt: selectedProfile?.prompt || '',
+      isBuiltIn: false,
+    };
+    persistProfiles([...profilesWithDrafts, nextProfile], nextProfile.id);
+  };
+
+  const deleteCurrentProfile = (): void => {
+    if (!selectedProfile || profiles.length <= 1) {
+      return;
+    }
+    const { nextProfiles: profilesWithDrafts } = getProfilesWithDraftEdits();
+    const remaining = profilesWithDrafts.filter((profile) => profile.id !== selectedProfile.id);
+    const fallbackId = remaining[0]?.id || 'default';
+    persistProfiles(remaining, fallbackId);
+  };
+
+  const profileOptions = profiles.map((profile) => ({
+    value: profile.id,
+    label: profile.name,
+  }));
   
   return (
     <>
-      {/* System Prompt Personality */}
+      {/* System Prompt Profiles */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">System Prompt Personality</label>
-        <Select
-          value={currentType}
-          onChange={(e) => {
-            const newType = e.target.value;
-            updateAIConfig(`${providerKey}.systemPromptType`, newType);
-            if (newType !== 'custom') {
-              updateAIConfig(`${providerKey}.systemPrompt`, '');
-            }
-          }}
-          variant={isLightBackground ? 'dark' : 'default'}
-          options={Object.entries(PromptConfig.systemPrompts).map(([key, value]) => ({ value: key, label: value.name }))}
-        />
-        <p className="text-xs text-white/50">
-          Choose a personality for the AI assistant
-        </p>
+        <label className="block text-sm font-medium text-white/90">System Prompt Profile</label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <Select
+              value={selectedProfile?.id || 'default'}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                if (profiles.some((profile) => profile.id === nextId)) {
+                  const { nextProfiles } = getProfilesWithDraftEdits();
+                  persistProfiles(nextProfiles, nextId);
+                }
+              }}
+              variant={isLightBackground ? 'dark' : 'default'}
+              options={profileOptions}
+            />
+          </div>
+          <Button
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            title="Add profile"
+            onClick={addProfile}
+          >
+            <Icon name="add" size={16} />
+          </Button>
+          <Button
+            size="icon"
+            variant={isLightBackground ? 'dark' : 'default'}
+            title="Delete current profile"
+            onClick={deleteCurrentProfile}
+            disabled={profiles.length <= 1}
+          >
+            <Icon name="trash-2" size={16} />
+          </Button>
+        </div>
+        <p className="text-xs text-white/50">Create and manage multiple persistent prompt personalities.</p>
       </div>
 
-      {/* Custom System Prompt Editor */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          System Prompt
-          {currentType !== 'custom' && (
-            <span className="ml-2 text-xs text-white/50">(Read-only - Select "Custom" to edit)</span>
-          )}
-        </label>
+        <label className="block text-sm font-medium text-white/90">Profile Name</label>
+        <Input
+          value={draftProfileName}
+          onChange={(e) => setDraftProfileName(e.target.value)}
+          onBlur={() => commitDraftEdits()}
+          variant={isLightBackground ? 'dark' : 'default'}
+          placeholder="Profile name"
+          className="w-full"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-white/90">System Prompt</label>
         <textarea
-          value={
-            currentType === 'custom' 
-              ? currentPrompt 
-              : (systemPrompts[promptKey]?.prompt || '')
-          }
-          onChange={(e) => {
-            const newValue = e.target.value;
-            if (currentType !== 'custom') {
-              updateAIConfig(`${providerKey}.systemPromptType`, 'custom');
-            }
-            updateAIConfig(`${providerKey}.systemPrompt`, newValue);
-          }}
-          placeholder="Enter custom system prompt..."
+          value={draftProfilePrompt}
+          onChange={(e) => setDraftProfilePrompt(e.target.value)}
+          onBlur={() => commitDraftEdits()}
+          placeholder="Enter system prompt..."
           rows={4}
           className={cn('glass-input w-full resize-y', isLightBackground && 'glass-input-dark')}
         />
         <p className="text-xs text-white/50">
-          Instructions that define the AI's behavior and personality. Editing a preset will switch to "Custom" mode.
+          Profile changes persist. Switching profiles keeps each profile's own prompt text.
         </p>
       </div>
     </>

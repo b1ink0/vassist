@@ -920,19 +920,25 @@ const ChatController = ({
     
     const provider = typeof aiConfig.provider === 'string' ? aiConfig.provider : '';
     const providerKey = provider === 'chrome-ai' ? 'chromeAi' : provider;
-    const providerConfig = aiConfig[providerKey] as { systemPromptType?: string; systemPrompt?: string } | undefined;
+    const providerConfig = aiConfig[providerKey] as {
+      selectedSystemPromptProfileId?: string;
+      systemPromptProfiles?: Array<{ id?: string; prompt?: string }>;
+    } | undefined;
     
     if (!providerConfig) {
       return PromptConfig.systemPrompts.default.prompt;
     }
     
-    const promptType = providerConfig.systemPromptType || 'default';
-    
-    if (promptType === 'custom') {
-      return providerConfig.systemPrompt || PromptConfig.systemPrompts.default.prompt;
+    const profiles = Array.isArray(providerConfig.systemPromptProfiles) ? providerConfig.systemPromptProfiles : [];
+    const selectedProfileId = typeof providerConfig.selectedSystemPromptProfileId === 'string'
+      ? providerConfig.selectedSystemPromptProfileId
+      : '';
+    const selectedProfile = profiles.find((profile) => profile?.id === selectedProfileId);
+    if (typeof selectedProfile?.prompt === 'string' && selectedProfile.prompt.trim().length > 0) {
+      return selectedProfile.prompt;
     }
-    
-    return PromptConfig.systemPrompts[promptType as keyof typeof PromptConfig.systemPrompts]?.prompt || PromptConfig.systemPrompts.default.prompt;
+
+    return PromptConfig.systemPrompts.default.prompt;
   };
 
   /**

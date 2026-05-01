@@ -35,6 +35,7 @@ import { DefaultUIConfig, type UIConfig } from '../config/uiConfig';
 import Logger from '../services/LoggerService';
 import { useDesktop } from './DesktopContext';
 import { isDesktop } from '../utils/PlatformUtils';
+import { createDebouncedFunction, type DebouncedFunction } from '../utils/debounce';
 
 interface ChromeAiStatus {
   checking: boolean;
@@ -105,18 +106,27 @@ interface ChromeDownloadResult {
   details?: string;
 }
 
+interface ConfigUpdateOptions {
+  debounceMs?: number;
+}
+
+interface ConfigPathDebouncer {
+  delayMs: number;
+  debounced: DebouncedFunction<[unknown]>;
+}
+
 interface ConfigContextValue {
   isConfigLoading: boolean;
   uiConfig: UIConfig;
   uiConfigSaved: boolean;
   uiConfigError: string;
-  updateUIConfig: (path: string, value: unknown) => void;
+  updateUIConfig: (path: string, value: unknown, options?: ConfigUpdateOptions) => void;
   saveUIConfig: () => Promise<void>;
   aiConfig: AIConfig;
   aiConfigSaved: boolean;
   aiConfigError: string;
   aiTesting: boolean;
-  updateAIConfig: (path: string, value: unknown) => void;
+  updateAIConfig: (path: string, value: unknown, options?: ConfigUpdateOptions) => void;
   saveAIConfig: () => Promise<void>;
   testAIConnection: () => Promise<void>;
   clearAIConfigError: () => void;
@@ -129,7 +139,7 @@ interface ConfigContextValue {
   ttsConfigSaved: boolean;
   ttsConfigError: string;
   ttsTesting: boolean;
-  updateTTSConfig: (path: string, value: unknown) => void;
+  updateTTSConfig: (path: string, value: unknown, options?: ConfigUpdateOptions) => void;
   saveTTSConfig: () => Promise<void>;
   testTTSConnection: (customText?: string | null) => Promise<void>;
   setTtsConfigError: (message: string) => void;
@@ -138,7 +148,7 @@ interface ConfigContextValue {
   sttConfigSaved: boolean;
   sttConfigError: string;
   sttTesting: boolean;
-  updateSTTConfig: (path: string, value: unknown) => void;
+  updateSTTConfig: (path: string, value: unknown, options?: ConfigUpdateOptions) => void;
   saveSTTConfig: () => Promise<void>;
   testSTTRecording: (deviceId?: string | null) => Promise<void>;
   clearSTTConfigError: () => void;
@@ -207,6 +217,10 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   const ttsSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sttSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiUpdateDebouncersRef = useRef<Record<string, ConfigPathDebouncer>>({});
+  const ttsUpdateDebouncersRef = useRef<Record<string, ConfigPathDebouncer>>({});
+  const sttUpdateDebouncersRef = useRef<Record<string, ConfigPathDebouncer>>({});
+  const uiUpdateDebouncersRef = useRef<Record<string, ConfigPathDebouncer>>({});
 
   // UI Config
   const [uiConfig, setUiConfig] = useState<UIConfig>(DefaultUIConfig);
@@ -253,6 +267,53 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
     progress: 0,
     downloading: false,
   });
+
+  const scheduleConfigPathUpdate = useCallback(<T extends object>(
+    setState: React.Dispatch<React.SetStateAction<T>>,
+    debouncersRef: React.MutableRefObject<Record<string, ConfigPathDebouncer>>,
+    path: string,
+    value: unknown,
+    options?: ConfigUpdateOptions,
+  ) => {
+    const debounceMs = Math.max(0, options?.debounceMs ?? 0);
+    const existingDebouncer = debouncersRef.current[path];
+
+    if (debounceMs === 0) {
+      if (existingDebouncer) {
+        existingDebouncer.debounced.cancel();
+        delete debouncersRef.current[path];
+      }
+      setState((prev) => setConfigValueAtPath(prev, path, value));
+      return;
+    }
+
+    if (existingDebouncer && existingDebouncer.delayMs !== debounceMs) {
+      existingDebouncer.debounced.cancel();
+      delete debouncersRef.current[path];
+    }
+
+    if (!debouncersRef.current[path]) {
+      const debounced = createDebouncedFunction((nextValue: unknown) => {
+        setState((prev) => setConfigValueAtPath(prev, path, nextValue));
+      }, debounceMs);
+
+      debouncersRef.current[path] = {
+        delayMs: debounceMs,
+        debounced,
+      };
+    }
+
+    debouncersRef.current[path].debounced(value);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      [aiUpdateDebouncersRef, ttsUpdateDebouncersRef, sttUpdateDebouncersRef, uiUpdateDebouncersRef].forEach((debouncersRef) => {
+        Object.values(debouncersRef.current).forEach((item) => item.debounced.cancel());
+        debouncersRef.current = {};
+      });
+    };
+  }, []);
 
   const syncDesktopServerForProviders = useCallback(async (nextAiConfig: AIConfig, nextTtsConfig: TTSConfig, nextSttConfig: STTConfig) => {
     if (!isDesktop || !api?.server) {
@@ -592,9 +653,9 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   }, []);
 
   // UI Config handlers
-  const updateUIConfig = useCallback((path: string, value: unknown) => {
-    setUiConfig((prev) => setConfigValueAtPath(prev, path, value));
-  }, []);
+  const updateUIConfig = useCallback((path: string, value: unknown, options?: ConfigUpdateOptions) => {
+    scheduleConfigPathUpdate(setUiConfig, uiUpdateDebouncersRef, path, value, options);
+  }, [scheduleConfigPathUpdate]);
 
   const saveUIConfig = useCallback(async () => {
     try {
@@ -614,9 +675,9 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   }, [uiConfig]);
 
   // AI Config handlers
-  const updateAIConfig = useCallback((path: string, value: unknown) => {
-    setAiConfig((prev) => setConfigValueAtPath(prev, path, value));
-  }, []);
+  const updateAIConfig = useCallback((path: string, value: unknown, options?: ConfigUpdateOptions) => {
+    scheduleConfigPathUpdate(setAiConfig, aiUpdateDebouncersRef, path, value, options);
+  }, [scheduleConfigPathUpdate]);
 
   const saveAIConfig = useCallback(async () => {
     const validation = validateAIConfig(aiConfig);
@@ -686,9 +747,9 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   }, [aiConfig]);
 
   // TTS Config handlers
-  const updateTTSConfig = useCallback((path: string, value: unknown) => {
-    setTtsConfig((prev) => setConfigValueAtPath(prev, path, value));
-  }, []);
+  const updateTTSConfig = useCallback((path: string, value: unknown, options?: ConfigUpdateOptions) => {
+    scheduleConfigPathUpdate(setTtsConfig, ttsUpdateDebouncersRef, path, value, options);
+  }, [scheduleConfigPathUpdate]);
 
   const saveTTSConfig = useCallback(async () => {
     const validation = validateTTSConfig(ttsConfig);
@@ -875,9 +936,9 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
   }, [ttsConfig, initializeKokoro]);
 
   // STT Config handlers
-  const updateSTTConfig = useCallback((path: string, value: unknown) => {
-    setSttConfig((prev) => setConfigValueAtPath(prev, path, value));
-  }, []);
+  const updateSTTConfig = useCallback((path: string, value: unknown, options?: ConfigUpdateOptions) => {
+    scheduleConfigPathUpdate(setSttConfig, sttUpdateDebouncersRef, path, value, options);
+  }, [scheduleConfigPathUpdate]);
 
   const saveSTTConfig = useCallback(async () => {
     const validation = validateSTTConfig(sttConfig);
