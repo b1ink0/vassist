@@ -174,34 +174,35 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   
   // Screen share state (Desktop only)
   const [isScreenShareActive, setIsScreenShareActive] = useState(false);
+  const isDesktopInputWindow = isDesktop && isInputWindow;
 
   // IPC wrapper functions for input window
   const wrappedOnSend = useCallback((messageText: string, images: string[], audios: string[]) => {
-    if (isInputWindow) {
+    if (isDesktopInputWindow) {
       api?.ipc?.send('chatInput:send', { message: messageText, images, audios });
     } else {
       onSend?.(messageText, images, audios);
     }
-  }, [onSend, api]);
+  }, [onSend, api, isDesktopInputWindow]);
 
   const wrappedOnVoiceTranscription = useCallback((text: string, images: string[] | null) => {
-    if (isInputWindow) {
+    if (isDesktopInputWindow) {
       api?.ipc?.send('chatInput:voiceTranscription', { text, images });
     } else {
       onVoiceTranscription?.(text, images);
     }
-  }, [onVoiceTranscription, api]);
+  }, [onVoiceTranscription, api, isDesktopInputWindow]);
 
   const wrappedSetPendingDropData = useCallback((data: DropData | null) => {
-    if (isInputWindow) {
+    if (isDesktopInputWindow) {
       api?.ipc?.send('chatInput:setPendingDropData', data);
     } else {
       setPendingDropData(data as never);
     }
-  }, [setPendingDropData, api]);
+  }, [setPendingDropData, api, isDesktopInputWindow]);
 
   const wrappedOnClose = useCallback(() => {
-    if (isInputWindow) {
+    if (isDesktop && isInputWindow) {
       api?.ipc?.send('chatInput:close');
     } else {
       onClose?.();
@@ -227,7 +228,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   }, [effectiveIsVisible, shouldRender]);
 
   useEffect(() => {
-    if (!isInputWindow || !api?.ipc) return;
+    if (!isDesktopInputWindow || !api?.ipc) return;
 
     api.ipc.send('mic:requestState');
 
@@ -244,25 +245,28 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       MicrophoneService.setSelectedDevice(deviceId);
     });
 
-    // Listen for voice state changes from main window
-    const unsubscribeVoiceState = api.ipc.on('state:voiceState', (state: string) => {
-      Logger.log('ChatInput', 'Voice state received from main window:', state);
-      setVoiceState(state);
-    });
+    const unsubscribeVoiceState = isVoiceMode
+      ? api.ipc.on('state:voiceState', (state: string) => {
+          Logger.log('ChatInput', 'Voice state received from main window:', state);
+          setVoiceState(state);
+        })
+      : undefined;
 
-    const unsubscribeTranscription = api.ipc.on('voice:transcriptionReceived', (text: string) => {
-      Logger.log('ChatInput', 'Transcription received from main window:', text);
-      
-      const images = attachedImages.length > 0 
-        ? attachedImages.map(img => img.dataUrl) 
-        : [];
-      
-      Logger.log('ChatInput', 'Sending back to main window with images:', images.length);
-      
-      api.ipc?.send('chatInput:voiceTranscription', { text, images });
-      
-      setAttachedImages([]);
-    });
+    const unsubscribeTranscription = isVoiceMode
+      ? api.ipc.on('voice:transcriptionReceived', (text: string) => {
+          Logger.log('ChatInput', 'Transcription received from main window:', text);
+          
+          const images = attachedImages.length > 0 
+            ? attachedImages.map(img => img.dataUrl) 
+            : [];
+          
+          Logger.log('ChatInput', 'Sending back to main window with images:', images.length);
+          
+          api.ipc?.send('chatInput:voiceTranscription', { text, images });
+          
+          setAttachedImages([]);
+        })
+      : undefined;
 
     const unsubscribeSttTranscription = api.ipc.on('stt:transcriptionReceived', (text: string) => {
       if (typeof text !== 'string' || text.trim().length === 0) {
@@ -304,7 +308,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       unsubscribeSttTranscription?.();
       unsubscribeSttRecording?.();
     };
-  }, [api, attachedImages]);
+  }, [api, attachedImages, isVoiceMode, isDesktopInputWindow]);
 
   /**
    * Auto-resizes textarea based on content.
@@ -465,6 +469,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   }, []);
 
   useEffect(() => {
+    if (!isVoiceMode) {
+      return;
+    }
+
     const handleStateChange = (state: string) => {
       Logger.log('ChatInput', 'Voice state changed:', state);
       setVoiceState(state);
@@ -512,7 +520,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, onVoiceTranscription, attachedImages]);
+  }, [api, onVoiceTranscription, attachedImages, isVoiceMode]);
 
   // Initialize microphone service and subscribe to device changes
   useEffect(() => {
@@ -550,7 +558,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   useEffect(() => {
     Logger.log('ChatInput', 'Camera initialization useEffect triggered, isInputWindow:', isInputWindow);
     
-    if (isInputWindow) {
+    if (isDesktopInputWindow) {
       Logger.log('ChatInput', 'Input window: Setting up IPC listeners for camera state');
       let didReceiveIpcCameraState = false;
 
@@ -621,14 +629,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     initDevices();
 
     return unsubscribe;
-  }, [api]);
+  }, [api, isDesktopInputWindow]);
 
   // Initialize screen share service
   useEffect(() => {
     Logger.log('ChatInput', 'Screen share initialization useEffect triggered, isInputWindow:', isInputWindow);
     
     // Input window: Listen for state from main window via IPC
-    if (isInputWindow) {
+    if (isDesktopInputWindow) {
       Logger.log('ChatInput', 'Input window: Setting up IPC listener for screen share state');
       if (api?.ipc) {
         const unsubscribeScreenShare = api.ipc.on('state:screenShare', (data: ScreenShareStateLike) => {
@@ -667,11 +675,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     initScreenShare();
 
     return unsubscribe;
-  }, [api]);
+  }, [api, isDesktopInputWindow]);
 
   // Listen for camera control IPC messages
   useEffect(() => {
-    if (isInputWindow || !api?.ipc) {
+    if (!isDesktop || isInputWindow || !api?.ipc) {
       return;
     }
 
@@ -720,7 +728,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
           
           // Desktop input window: Send to main window via IPC (main window starts service)
           // Web/Extension: Start service directly
-          if (isInputWindow && api?.ipc) {
+          if (isDesktopInputWindow && api?.ipc) {
             api.ipc.send('chatInput:voiceMode', true);
           } else {
             await VoiceConversationService.start();
@@ -1202,7 +1210,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
         
         // Desktop input window: Send to main window via IPC (main window stops service)
         // Web/Extension: Stop service directly
-        if (isInputWindow && api?.ipc) {
+        if (isDesktopInputWindow && api?.ipc) {
           api.ipc.send('chatInput:voiceMode', false);
         } else {
           VoiceConversationService.stop();
@@ -1230,7 +1238,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
         
         // Desktop input window: Send to main window via IPC (main window starts service)
         // Web/Extension: Start service directly
-        if (isInputWindow && api?.ipc) {
+        if (isDesktopInputWindow && api?.ipc) {
           api.ipc.send('chatInput:voiceMode', true);
         } else {
           await VoiceConversationService.start();
@@ -1256,7 +1264,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     Logger.log('ChatInput', 'User interrupted');
     
     // In desktop input window, forward interrupt to main window via IPC
-    if (api?.ipc) {
+    if (isDesktopInputWindow && api?.ipc) {
       Logger.log('ChatInput', 'Forwarding interrupt to main window via IPC');
       api.ipc.send('voice:interrupt');
     }
@@ -1274,7 +1282,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     setShowMicSelect(false);
     
     // Sync selected mic across windows on desktop
-    if (api?.ipc) {
+    if (isDesktopInputWindow && api?.ipc) {
       api.ipc.send('state:selectedMicId', deviceId || null);
     }
   };
@@ -1292,7 +1300,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   const handleCameraSelect = async (deviceId: string | null) => {
     Logger.log('ChatInput', 'Camera selected:', deviceId);
     
-    if (isInputWindow && api?.ipc) {
+    if (isDesktopInputWindow && api?.ipc) {
       api.ipc.send('camera:selectDevice', deviceId || null);
     } else {
       await CameraService.setSelectedDevice(deviceId || null);
@@ -1314,7 +1322,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     try {
       Logger.log('ChatInput', 'Camera button clicked, isInputWindow:', isInputWindow, 'isCameraActive:', isCameraActive);
       
-      if (isInputWindow && api?.ipc) {
+      if (isDesktopInputWindow && api?.ipc) {
         Logger.log('ChatInput', 'Input window: Sending camera:toggle IPC to main window');
         api.ipc.send('camera:toggle');
       } else {
@@ -1339,7 +1347,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
       Logger.log('ChatInput', 'Screen share button clicked, isScreenShareActive:', isScreenShareActive);
       
       // Input window: Send IPC to main window using api from hook
-      if (isInputWindow && api?.ipc) {
+      if (isDesktopInputWindow && api?.ipc) {
         Logger.log('ChatInput', 'Input window: Sending screenShare:toggle IPC');
         api.ipc.send('screenShare:toggle');
         return;
@@ -1360,7 +1368,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
    * Handles microphone button click for voice recording.
    */
   const handleMicClick = async () => {
-    if (isInputWindow && api?.ipc) {
+    if (isDesktopInputWindow && api?.ipc) {
       setRecordingError('');
       setIsProcessingRecording(true);
       api.ipc.send('chatInput:micToggle');
@@ -1410,8 +1418,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   if (!shouldRender) return null;
 
   const getVoiceStateDisplay = () => {
-    Logger.log('ChatInput', 'Current voiceState:', voiceState, 'Expected LISTENING:', ConversationStates.LISTENING);
-    
     // Show interrupt button if in SPEAKING state OR if TTS audio is currently playing
     const isAudioPlaying = TTSServiceProxy.isCurrentlyPlaying();
     const showInterrupt = voiceState === ConversationStates.SPEAKING || isAudioPlaying;
@@ -1432,7 +1438,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     }
   };
 
-  const voiceStateDisplay = getVoiceStateDisplay();
+  const voiceStateDisplay = isVoiceMode
+    ? getVoiceStateDisplay()
+    : { icon: 'stop', label: 'Ready', class: 'idle', showInterrupt: false };
   const hasAttachments = attachedImages.length > 0 || attachedAudios.length > 0;
   const shouldFollowKeyboard = isAndroid && keyboardOffset > 0 && !isSettingsPanelOpen && !isHistoryPanelOpen;
 

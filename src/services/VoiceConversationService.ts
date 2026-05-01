@@ -11,6 +11,7 @@
 import { TTSServiceProxy, AIServiceProxy } from './proxies';
 import VoiceRecordingService from './VoiceRecordingService';
 import Logger from './LoggerService';
+import { isDesktop } from '../utils/PlatformUtils';
 
 
 
@@ -105,7 +106,7 @@ class VoiceConversationService {
           }
           
           // In desktop mode, also forward VAD speech detection to main window
-          if (typeof window !== 'undefined' && (window as any).api?.ipc) {
+          if (isDesktop && typeof window !== 'undefined' && (window as any).api?.ipc) {
             Logger.log('VoiceConversation', 'Forwarding VAD real speech detection to main window via IPC');
             (window as any).api.ipc.send('voice:vadSpeechDetected');
           }
