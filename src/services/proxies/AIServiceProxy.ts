@@ -21,6 +21,7 @@ interface AIServiceLike {
   abortRequest(): boolean;
   isGenerating(): boolean;
   testConnection(): Promise<boolean>;
+  listRemoteModels(config: { provider: 'openai' | 'ollama' | 'android-local' | 'desktop-local'; endpoint?: string; apiKey?: string }): Promise<{ models: string[]; error?: string }>;
   [method: string]: unknown;
 }
 
@@ -48,6 +49,8 @@ interface BridgeAIResponse {
   text?: string;
   message?: string;
   supported?: boolean;
+  models?: string[];
+  error?: string;
 }
 
 class AIServiceProxy extends ServiceProxy {
@@ -281,6 +284,28 @@ class AIServiceProxy extends ServiceProxy {
     } else {
       return await this.directService.testConnection();
     }
+  }
+
+  async listRemoteModels(config: { provider: 'openai' | 'ollama' | 'android-local' | 'desktop-local'; endpoint?: string; apiKey?: string }): Promise<{ models: string[]; error?: string }> {
+    if (this.isExtension) {
+      const bridge = await this.waitForBridge();
+      if (!bridge) {
+        throw new Error('AIServiceProxy: Bridge not available');
+      }
+
+      const response = await bridge.sendMessage(
+        MessageTypes.AI_LIST_REMOTE_MODELS,
+        { config },
+        { timeout: 30000 }
+      ) as BridgeAIResponse;
+
+      return {
+        models: Array.isArray(response.models) ? response.models : [],
+        ...(response.error ? { error: response.error } : {}),
+      };
+    }
+
+    return await this.directService.listRemoteModels(config);
   }
 
   /**

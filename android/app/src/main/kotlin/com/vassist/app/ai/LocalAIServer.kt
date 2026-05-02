@@ -82,6 +82,7 @@ class LocalAIServer(
     private var vitsService: VitsService? = null
     @Volatile
     private var llamaService: LlamaService? = null
+    private val llmModelManager by lazy { LLMModelManager(context) }
     
     // Coroutine mutexes for initialization (non-blocking)
     private val whisperMutex = Mutex()
@@ -318,27 +319,31 @@ class LocalAIServer(
      * GET /v1/models - List available models (OpenAI-compatible)
      */
     private fun handleListModels(): Response {
-        val models = JsonObject().apply {
-            add("data", gson.toJsonTree(listOf(
+        val installedLlmModels = llmModelManager.listModels().mapNotNull { model ->
+            (model["name"] as? String)?.takeIf { it.isNotBlank() }?.let { modelName ->
                 mapOf(
-                    "id" to "whisper-local",
-                    "object" to "model",
-                    "owned_by" to "local",
-                    "permission" to emptyList<String>()
-                ),
-                mapOf(
-                    "id" to "vits-local", 
-                    "object" to "model",
-                    "owned_by" to "local",
-                    "permission" to emptyList<String>()
-                ),
-                mapOf(
-                    "id" to "llama-local",
+                    "id" to modelName,
                     "object" to "model",
                     "owned_by" to "local",
                     "permission" to emptyList<String>()
                 )
-            )))
+            }
+        }.toMutableList()
+
+        val currentModelName = currentModelPath?.let { File(it).name }
+        if (currentModelName != null && installedLlmModels.none { it["id"] == currentModelName }) {
+            installedLlmModels.add(
+                mapOf(
+                    "id" to currentModelName,
+                    "object" to "model",
+                    "owned_by" to "local",
+                    "permission" to emptyList<String>()
+                )
+            )
+        }
+
+        val models = JsonObject().apply {
+            add("data", gson.toJsonTree(installedLlmModels))
             addProperty("object", "list")
         }
         return jsonResponse(models)

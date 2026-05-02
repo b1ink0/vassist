@@ -7,7 +7,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useAndroid } from '../../contexts/AndroidContext';
-import { STTProviders } from '../../config/aiConfig';
+import { STTProviders, type STTRemoteProviderProfile } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import OpenAISTTConfig from './stt/OpenAISTTConfig';
 import OpenAICompatibleSTTConfig from './stt/OpenAICompatibleSTTConfig';
@@ -15,7 +15,8 @@ import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
 import DesktopSTTConfig from './stt/DesktopSTTConfig';
 import WhisperModelDownloader from './stt/WhisperModelDownloader';
 import Toggle from '../common/Toggle';
-import { Button, Select, Card, SettingsRow } from '../ui';
+import { Icon } from '../icons';
+import { Button, Input, Select, Card, SettingsRow } from '../ui';
 
 interface STTSettingsProps {
   isLightBackground?: boolean;
@@ -36,6 +37,7 @@ interface ProviderRecord {
 const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSettingsProps) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [profileName, setProfileName] = useState('');
   
   const { api: androidAPI } = useAndroid();
   
@@ -49,6 +51,175 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
+  const remoteProfiles = Array.isArray(sttConfig.remoteProfiles) ? sttConfig.remoteProfiles : [];
+  const [selectedProfileId, setSelectedProfileId] = useState('');
+  const currentRemoteProvider = sttConfig.provider === STTProviders.OPENAI || sttConfig.provider === STTProviders.OPENAI_COMPATIBLE
+    ? sttConfig.provider
+    : null;
+  const currentProviderProfiles = currentRemoteProvider
+    ? remoteProfiles.filter((profile) => profile.provider === currentRemoteProvider)
+    : [];
+  const selectedProfile = currentProviderProfiles.find((profile) => profile.id === selectedProfileId) || null;
+  const compactActionVariant = isLightBackground ? 'dark' : 'ghost';
+
+  useEffect(() => {
+    if (selectedProfileId && !currentProviderProfiles.some((profile) => profile.id === selectedProfileId)) {
+      setSelectedProfileId('');
+    }
+  }, [currentProviderProfiles, selectedProfileId]);
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      if (!selectedProfileId) {
+        setProfileName('');
+      }
+      return;
+    }
+
+    setProfileName(selectedProfile.name);
+  }, [selectedProfile, selectedProfileId]);
+
+  const applyRemoteProfile = (profile: STTRemoteProviderProfile) => {
+    if (profile.provider === 'openai') {
+      updateSTTConfig('openai', {
+        ...sttConfig.openai,
+        apiKey: profile.apiKey || '',
+        model: profile.model,
+        language: profile.language || sttConfig.openai.language,
+        temperature: profile.temperature ?? sttConfig.openai.temperature,
+      });
+      return;
+    }
+
+    updateSTTConfig('openai-compatible', {
+      ...sttConfig['openai-compatible'],
+      endpoint: profile.endpoint || sttConfig['openai-compatible']?.endpoint || '',
+      apiKey: profile.apiKey || '',
+      model: profile.model,
+      language: profile.language || sttConfig['openai-compatible']?.language || 'auto',
+      temperature: profile.temperature ?? sttConfig['openai-compatible']?.temperature ?? 0,
+    });
+  };
+
+  const handleRemoteProfileSelection = (provider: STTRemoteProviderProfile['provider'], nextProfileId: string) => {
+    setSelectedProfileId(nextProfileId);
+
+    if (!nextProfileId) {
+      setProfileName('');
+      return;
+    }
+
+    const profile = remoteProfiles.find((entry) => entry.id === nextProfileId && entry.provider === provider);
+    if (!profile) {
+      return;
+    }
+
+    setProfileName(profile.name);
+    applyRemoteProfile(profile);
+  };
+
+  const saveCurrentRemoteProfile = (provider: STTRemoteProviderProfile['provider']) => {
+    const nextProfileId = selectedProfile?.id || `stt-remote-${Date.now()}`;
+    const defaultName = `Saved Backend ${currentProviderProfiles.length + (selectedProfile ? 0 : 1)}`;
+    const nextProfile: STTRemoteProviderProfile = provider === STTProviders.OPENAI
+      ? {
+          id: nextProfileId,
+          name: profileName.trim() || selectedProfile?.name || defaultName,
+          provider: 'openai',
+          apiKey: sttConfig.openai.apiKey,
+          model: sttConfig.openai.model,
+          language: sttConfig.openai.language,
+          temperature: sttConfig.openai.temperature,
+        }
+      : {
+          id: nextProfileId,
+          name: profileName.trim() || selectedProfile?.name || defaultName,
+          provider: 'openai-compatible',
+          endpoint: sttConfig['openai-compatible']?.endpoint,
+          apiKey: sttConfig['openai-compatible']?.apiKey,
+          model: sttConfig['openai-compatible']?.model || '',
+          language: sttConfig['openai-compatible']?.language,
+          temperature: sttConfig['openai-compatible']?.temperature,
+        };
+
+    updateSTTConfig(
+      'remoteProfiles',
+      selectedProfile
+        ? remoteProfiles.map((profile) => (profile.id === selectedProfile.id ? nextProfile : profile))
+        : [...remoteProfiles, nextProfile]
+    );
+    setSelectedProfileId(nextProfile.id);
+    setProfileName(nextProfile.name);
+  };
+
+  const startNewRemoteProfile = () => {
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  const deleteRemoteProfile = () => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    updateSTTConfig('remoteProfiles', remoteProfiles.filter((profile) => profile.id !== selectedProfile.id));
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  const renderRemoteProfileBar = (provider: STTRemoteProviderProfile['provider']) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-white/90">Saved Backends</label>
+      <Input
+        type="text"
+        value={profileName}
+        onChange={(event) => setProfileName(event.target.value)}
+        placeholder="Backend name"
+        variant={isLightBackground ? 'dark' : 'default'}
+        size="xs"
+      />
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+        <Select
+          value={selectedProfileId}
+          onChange={(event) => handleRemoteProfileSelection(provider, event.target.value)}
+          variant={isLightBackground ? 'dark' : 'default'}
+          className="min-h-[32px]"
+          options={[
+            { value: '', label: currentProviderProfiles.length === 0 ? 'No saved backends yet' : 'Select a saved backend' },
+            ...currentProviderProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
+          ]}
+        />
+        <Button
+          variant={compactActionVariant}
+          size="icon"
+          onClick={startNewRemoteProfile}
+          title="Create a new saved backend"
+          aria-label="Create a new saved backend"
+        >
+          <Icon name="add" size={14} />
+        </Button>
+        <Button
+          variant={isLightBackground ? 'dark' : 'default'}
+          size="icon"
+          onClick={() => saveCurrentRemoteProfile(provider)}
+          title="Save current STT backend"
+          aria-label="Save current STT backend"
+        >
+          <Icon name="save" size={14} />
+        </Button>
+        <Button
+          variant="error"
+          size="icon"
+          onClick={deleteRemoteProfile}
+          disabled={!selectedProfile}
+          title="Delete selected STT backend"
+          aria-label="Delete selected STT backend"
+        >
+          <Icon name="delete" size={14} />
+        </Button>
+      </div>
+    </div>
+  );
   // Load available microphones (desktop mode only)
   useEffect(() => {
     if (!isDesktop || sttConfig.provider !== STTProviders.DESKTOP_LOCAL) return;
@@ -176,20 +347,26 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
 
           {/* OpenAI Whisper Configuration */}
           {sttConfig.provider === STTProviders.OPENAI && (
-            <OpenAISTTConfig
-              config={sttConfig.openai || {}}
-              onChange={(field: string, value: string) => updateSTTConfig(`openai.${field}`, value)}
-              isLightBackground={isLightBackground}
-            />
+            <>
+              {renderRemoteProfileBar('openai')}
+              <OpenAISTTConfig
+                config={sttConfig.openai || {}}
+                onChange={(field: string, value: string) => updateSTTConfig(`openai.${field}`, value)}
+                isLightBackground={isLightBackground}
+              />
+            </>
           )}
 
           {/* OpenAI-Compatible STT Configuration */}
           {sttConfig.provider === STTProviders.OPENAI_COMPATIBLE && (
-            <OpenAICompatibleSTTConfig
-              config={sttConfig['openai-compatible'] || {}}
-              onChange={(field: string, value: string) => updateSTTConfig(`openai-compatible.${field}`, value)}
-              isLightBackground={isLightBackground}
-            />
+            <>
+              {renderRemoteProfileBar('openai-compatible')}
+              <OpenAICompatibleSTTConfig
+                config={sttConfig['openai-compatible'] || {}}
+                onChange={(field: string, value: string) => updateSTTConfig(`openai-compatible.${field}`, value)}
+                isLightBackground={isLightBackground}
+              />
+            </>
           )}
 
           {/* Chrome AI Multimodal STT Configuration */}

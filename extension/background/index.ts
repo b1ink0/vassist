@@ -638,6 +638,11 @@ async function registerHandlers() {
     return { success };
   });
 
+  backgroundBridge.registerHandler(MessageTypes.AI_LIST_REMOTE_MODELS, async (message) => {
+    const config = asMessageData(message.data.config) as { provider: 'openai' | 'ollama' | 'android-local' | 'desktop-local'; endpoint?: string; apiKey?: string };
+    return await aiService.listRemoteModels(config);
+  });
+
   // Chrome AI Validator handlers
   backgroundBridge.registerHandler(MessageTypes.CHROME_AI_CHECK_AVAILABILITY, async () => {
     const result = await ChromeAIValidator.checkAvailability();

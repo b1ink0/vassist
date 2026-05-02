@@ -14,9 +14,16 @@ import { isExtension } from '../utils/PlatformUtils';
 
 type AIMessage = Record<string, any>;
 type SendResult = { success: boolean; response: string | null; cancelled: boolean; error: Error | null };
+type RemoteModelListConfig = {
+  provider: 'openai' | 'ollama' | 'android-local' | 'desktop-local';
+  endpoint?: string;
+  apiKey?: string;
+};
+type RemoteModelListResult = { models: string[]; error?: string };
 type AIState = {
   client: any;
   config: any;
+  fullConfig: any;
   provider: string | null;
   abortController: AbortController | null;
   chromeAISession: any;
@@ -61,6 +68,7 @@ class AIService {
       this.tabStates.set(tabId, {
         client: null,
         config: null,
+        fullConfig: null,
         provider: null,
         abortController: null,
         chromeAISession: null,
@@ -68,6 +76,150 @@ class AIService {
       });
       Logger.log('AIService', `Tab ${tabId} initialized`);
     }
+  }
+
+  _normalizeEndpoint(endpoint: string | undefined, fallback: string): string {
+    let resolved = (endpoint || fallback).trim() || fallback;
+    if (!resolved.endsWith('/v1')) {
+      resolved = resolved.replace(/\/$/, '') + '/v1';
+    }
+    return resolved;
+  }
+
+  _resolveRemoteModelListUrl(config: RemoteModelListConfig): string {
+    if (config.provider === 'openai') {
+      return 'https://api.openai.com/v1/models';
+    }
+
+    if (config.provider === 'android-local') {
+      return `${this._normalizeEndpoint(config.endpoint, 'http://127.0.0.1:8765')}/models`;
+    }
+
+    if (config.provider === 'desktop-local') {
+      return `${this._normalizeEndpoint(config.endpoint, 'http://127.0.0.1:11438')}/models`;
+    }
+
+    return `${this._normalizeEndpoint(config.endpoint, 'http://localhost:11434')}/models`;
+  }
+
+  _buildProviderRuntime(provider: string, providerConfig: any) {
+    if (provider === AIProviders.OPENAI || provider === 'openai') {
+      return {
+        client: new OpenAI({
+          apiKey: providerConfig.apiKey,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
+        }),
+        config: {
+          model: providerConfig.model,
+          temperature: providerConfig.temperature,
+          maxTokens: providerConfig.maxTokens,
+          enableImageSupport: providerConfig.enableImageSupport !== false,
+          enableAudioSupport: providerConfig.enableAudioSupport !== false,
+          routing: providerConfig.routing || { enabled: false },
+        },
+      };
+    }
+
+    if (provider === AIProviders.OLLAMA || provider === 'ollama') {
+      const endpoint = this._normalizeEndpoint(providerConfig.endpoint, 'http://localhost:11434');
+      return {
+        client: new OpenAI({
+          apiKey: providerConfig.apiKey || 'ollama',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: !this.isExtensionMode,
+        }),
+        config: {
+          model: providerConfig.model,
+          temperature: providerConfig.temperature,
+          maxTokens: providerConfig.maxTokens,
+          enableImageSupport: providerConfig.enableImageSupport !== false,
+          enableAudioSupport: providerConfig.enableAudioSupport !== false,
+          routing: providerConfig.routing || { enabled: false },
+        },
+      };
+    }
+
+    if (provider === AIProviders.ANDROID_LOCAL || provider === 'android-local') {
+      const endpoint = this._normalizeEndpoint(providerConfig.endpoint, 'http://127.0.0.1:8765');
+      return {
+        client: new OpenAI({
+          apiKey: 'android-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        }),
+        config: {
+          model: providerConfig.model || 'qwen3-local',
+          temperature: providerConfig.temperature || 0.7,
+          maxTokens: providerConfig.maxTokens || 2048,
+          enableImageSupport: false,
+          routing: providerConfig.routing || { enabled: false },
+          enableAudioSupport: false,
+        },
+      };
+    }
+
+    if (provider === AIProviders.DESKTOP_LOCAL || provider === 'desktop-local') {
+      const endpoint = this._normalizeEndpoint(providerConfig.endpoint, 'http://127.0.0.1:11438');
+      return {
+        client: new OpenAI({
+          apiKey: 'desktop-local',
+          baseURL: endpoint,
+          dangerouslyAllowBrowser: true,
+        }),
+        config: {
+          model: providerConfig.model || 'qwen3:0.6b',
+          temperature: providerConfig.temperature || 0.7,
+          maxTokens: providerConfig.maxTokens || 2048,
+          customModelsPath: providerConfig.customModelsPath || null,
+          enableImageSupport: false,
+          routing: providerConfig.routing || { enabled: false },
+          enableAudioSupport: false,
+        },
+      };
+    }
+
+    throw new Error(`Unknown provider: ${provider}`);
+  }
+
+  _resolveRoutingTarget(modelConfig: any, fullConfig: any, provider: string | null) {
+    if (!modelConfig || modelConfig.useSameAsMain) {
+      return { modelOverride: null, providerOverride: null, configOverride: null, clientOverride: null };
+    }
+
+    const currentProviderModelOverride = (provider === 'openai' || provider === 'ollama')
+      ? (modelConfig.modelName || null)
+      : ((provider === 'android-local' || provider === 'desktop-local') ? (modelConfig.selectedModel || null) : null);
+
+    const profileId = typeof modelConfig.profileId === 'string' ? modelConfig.profileId.trim() : '';
+    if (!profileId) {
+      return {
+        modelOverride: currentProviderModelOverride,
+        providerOverride: null,
+        configOverride: null,
+        clientOverride: null,
+      };
+    }
+
+    const profiles = Array.isArray(fullConfig?.remoteProfiles) ? fullConfig.remoteProfiles : [];
+    const profile = profiles.find((entry: any) => entry && entry.id === profileId);
+
+    if (!profile) {
+      Logger.warn('AIService', `Routing profile not found: ${profileId}`);
+      return {
+        modelOverride: currentProviderModelOverride,
+        providerOverride: null,
+        configOverride: null,
+        clientOverride: null,
+      };
+    }
+
+    const runtime = this._buildProviderRuntime(profile.provider, profile);
+    return {
+      modelOverride: modelConfig.modelName || runtime.config.model || null,
+      providerOverride: profile.provider,
+      configOverride: { ...runtime.config, routing: { enabled: false } },
+      clientOverride: runtime.client,
+    };
   }
 
   /**
@@ -164,19 +316,9 @@ class AIService {
       }
       else if (provider === AIProviders.OPENAI || provider === 'openai') {
         const openaiConfig = config.openai || config;
-        state.client = new OpenAI({
-          apiKey: openaiConfig.apiKey,
-          dangerouslyAllowBrowser: !this.isExtensionMode,
-        });
-        
-        state.config = {
-          model: openaiConfig.model,
-          temperature: openaiConfig.temperature,
-          maxTokens: openaiConfig.maxTokens,
-          enableImageSupport: openaiConfig.enableImageSupport !== false,
-          enableAudioSupport: openaiConfig.enableAudioSupport !== false,
-          routing: openaiConfig.routing || { enabled: false },
-        };
+        const runtime = this._buildProviderRuntime(provider, openaiConfig);
+        state.client = runtime.client;
+        state.config = runtime.config;
         
         Logger.log('other', `${logPrefix} - OpenAI configured:`, {
           model: state.config.model,
@@ -186,27 +328,9 @@ class AIService {
       } 
       else if (provider === AIProviders.OLLAMA || provider === 'ollama') {
         const ollamaConfig = config.ollama || config;
-        let endpoint = ollamaConfig.endpoint || 'http://localhost:11434';
-        
-        // Only append /v1 if not already present
-        if (!endpoint.endsWith('/v1')) {
-          endpoint = endpoint.replace(/\/$/, '') + '/v1';
-        }
-        
-        state.client = new OpenAI({
-          apiKey: 'ollama',
-          baseURL: endpoint,
-          dangerouslyAllowBrowser: !this.isExtensionMode,
-        });
-        
-        state.config = {
-          model: ollamaConfig.model,
-          temperature: ollamaConfig.temperature,
-          maxTokens: ollamaConfig.maxTokens,
-          enableImageSupport: ollamaConfig.enableImageSupport !== false,
-          enableAudioSupport: ollamaConfig.enableAudioSupport !== false,
-          routing: ollamaConfig.routing || { enabled: false },
-        };
+        const runtime = this._buildProviderRuntime(provider, ollamaConfig);
+        state.client = runtime.client;
+        state.config = runtime.config;
         
         Logger.log('other', `${logPrefix} - Ollama configured:`, {
           endpoint: ollamaConfig.endpoint,
@@ -215,58 +339,23 @@ class AIService {
       }
       else if (provider === AIProviders.ANDROID_LOCAL || provider === 'android-local') {
         const androidConfig = config['android-local'] || {};
-        let endpoint = androidConfig.endpoint || 'http://127.0.0.1:8765';
-        
-        if (!endpoint.endsWith('/v1')) {
-          endpoint = endpoint.replace(/\/$/, '') + '/v1';
-        }
-        
-        state.client = new OpenAI({
-          apiKey: 'android-local',
-          baseURL: endpoint,
-          dangerouslyAllowBrowser: true,
-        });
-        
-        state.config = {
-          model: androidConfig.model || 'qwen3-local',
-          temperature: androidConfig.temperature || 0.7,
-          maxTokens: androidConfig.maxTokens || 2048,
-          enableImageSupport: false,
-          routing: androidConfig.routing || { enabled: false },
-          enableAudioSupport: false,
-        };
+        const runtime = this._buildProviderRuntime(provider, androidConfig);
+        state.client = runtime.client;
+        state.config = runtime.config;
         
         Logger.log('other', `${logPrefix} - Android local LLM configured:`, {
-          endpoint: endpoint,
+          endpoint: this._normalizeEndpoint(androidConfig.endpoint, 'http://127.0.0.1:8765'),
           model: state.config.model,
         });
       }
       else if (provider === AIProviders.DESKTOP_LOCAL || provider === 'desktop-local') {
         const desktopConfig = config['desktop-local'] || {};
-        let endpoint = desktopConfig.endpoint || 'http://127.0.0.1:11438';
-        
-        if (!endpoint.endsWith('/v1')) {
-          endpoint = endpoint.replace(/\/$/, '') + '/v1';
-        }
-        
-        state.client = new OpenAI({
-          apiKey: 'desktop-local',
-          baseURL: endpoint,
-          dangerouslyAllowBrowser: true,
-        });
-        
-        state.config = {
-          model: desktopConfig.model || 'qwen3:0.6b',
-          temperature: desktopConfig.temperature || 0.7,
-          maxTokens: desktopConfig.maxTokens || 2048,
-          customModelsPath: desktopConfig.customModelsPath || null,
-          enableImageSupport: false,
-          routing: desktopConfig.routing || { enabled: false },
-          enableAudioSupport: false,
-        };
+        const runtime = this._buildProviderRuntime(provider, desktopConfig);
+        state.client = runtime.client;
+        state.config = runtime.config;
         
         Logger.log('other', `${logPrefix} - Desktop local LLM configured:`, {
-          endpoint: endpoint,
+          endpoint: this._normalizeEndpoint(desktopConfig.endpoint, 'http://127.0.0.1:11438'),
           model: state.config.model,
         });
       } else {
@@ -274,12 +363,14 @@ class AIService {
       }
       
       state.provider = provider;
+      state.fullConfig = config;
       return true;
       
     } catch (error) {
       Logger.error('other', `${logPrefix} - Configuration failed:`, error);
       state.client = null;
       state.config = null;
+      state.fullConfig = null;
       state.provider = null;
       throw error;
     }
@@ -633,11 +724,15 @@ class AIService {
         }
       ];
 
-      const routerModelName = this._getModelOverride(config.routing.routerModel, state.provider);
+      const routerTarget = this._resolveRoutingTarget(config.routing.routerModel, state.fullConfig, state.provider);
 
       const routerResult = await this.sendMessage(routerMessages, null, tabId, { 
-        modelOverride: routerModelName,
-        useUtilitySession: true 
+        modelOverride: routerTarget.modelOverride,
+        providerOverride: routerTarget.providerOverride,
+        configOverride: routerTarget.configOverride,
+        clientOverride: routerTarget.clientOverride,
+        useUtilitySession: true,
+        disableRouting: true,
       });
       
       if (!routerResult.success) {
@@ -777,7 +872,7 @@ class AIService {
         ];
 
         // Get vision model config
-        const visionModelName = this._getModelOverride(config.routing.visionModel, state.provider);
+        const visionTarget = this._resolveRoutingTarget(config.routing.visionModel, state.fullConfig, state.provider);
         
         let visionResult = null;
         const maxRetries = 2;
@@ -786,8 +881,12 @@ class AIService {
           Logger.log('other', `${logPrefix} - Vision analysis attempt ${attempt}/${maxRetries}`);
           
           visionResult = await this.sendMessage(visionMessages, null, tabId, {
-            modelOverride: visionModelName,
-            useUtilitySession: true 
+            modelOverride: visionTarget.modelOverride,
+            providerOverride: visionTarget.providerOverride,
+            configOverride: visionTarget.configOverride,
+            clientOverride: visionTarget.clientOverride,
+            useUtilitySession: true,
+            disableRouting: true,
           });
           
           if (visionResult.success) {
@@ -891,22 +990,6 @@ class AIService {
    * @param {string} provider - Provider name
    * @returns {string|null} Model name or null
    */
-  _getModelOverride(modelConfig: any, provider: string | null): string | null {
-    if (!modelConfig || modelConfig.useSameAsMain) {
-      return null;
-    }
-
-    if (provider === 'openai' || provider === 'ollama') {
-      return modelConfig.modelName || null;
-    }
-
-    if (provider === 'android-local' || provider === 'desktop-local') {
-      return modelConfig.selectedModel || null;
-    }
-
-    return null;
-  }
-
   /**
    * Send message with streaming support
    * 
@@ -924,10 +1007,19 @@ class AIService {
     }
 
     const logPrefix = this.isExtensionMode ? `[AIService] Tab ${tabId}` : '[AIService]';
+    const requestProvider = options.providerOverride || state.provider;
+    const requestConfig = options.configOverride || state.config;
+    const requestClient = options.clientOverride || state.client;
+    const requestState = {
+      ...state,
+      provider: requestProvider,
+      config: requestConfig,
+      client: requestClient,
+    };
 
     // Check if routing should be applied (only if not already in a routing sub-call and not explicitly disabled)
-    if (!options.modelOverride && !options.useUtilitySession && !options.disableRouting && this._shouldApplyRouting(state.config)) {
-      return await this._applyRouting(messages, onStream, tabId, state.config);
+    if (!options.modelOverride && !options.useUtilitySession && !options.disableRouting && this._shouldApplyRouting(requestConfig)) {
+      return await this._applyRouting(messages, onStream, tabId, requestConfig);
     }
     
     // Check if any message contains images or audios
@@ -937,7 +1029,8 @@ class AIService {
     
     Logger.log('other', `${logPrefix} - Sending message to ${state.provider}:`, {
       messageCount: messages.length,
-      model: options.modelOverride || state.config.model || 'chrome-ai',
+      provider: requestProvider,
+      model: options.modelOverride || requestConfig.model || 'chrome-ai',
       hasImages,
       hasAudios,
       useUtilitySession: options.useUtilitySession || false,
@@ -946,12 +1039,12 @@ class AIService {
 
     // Format messages for multi-modal if needed
     const formattedMessages = hasAttachments 
-      ? await this._formatMultiModalMessages(messages, state.provider)
+      ? await this._formatMultiModalMessages(messages, requestProvider)
       : messages;
 
     // Chrome AI implementation
-    if (state.provider === AIProviders.CHROME_AI || state.provider === 'chrome-ai') {
-      return await this._sendMessageChromeAI(state, formattedMessages, onStream, logPrefix, options.useUtilitySession);
+    if (requestProvider === AIProviders.CHROME_AI || requestProvider === 'chrome-ai') {
+      return await this._sendMessageChromeAI(requestState, formattedMessages, onStream, logPrefix, options.useUtilitySession);
     }
 
     // Create new abort controller for this request
@@ -959,14 +1052,14 @@ class AIService {
 
     try {
       // Prepare request body
-      const requestBody = this._prepareRequestBody(state, formattedMessages);
+      const requestBody = this._prepareRequestBody(requestState, formattedMessages);
       
       if (options.modelOverride) {
         requestBody.model = options.modelOverride;
       }
       
       // Create streaming request with abort signal
-      const stream = await state.client.chat.completions.create(requestBody, {
+      const stream = await requestClient.chat.completions.create(requestBody, {
         signal: state.abortController.signal
       });
 
@@ -1248,6 +1341,41 @@ class AIService {
     } catch (error) {
       Logger.error('other', `${logPrefix} - Connection test failed:`, error);
       throw error;
+    }
+  }
+
+  async listRemoteModels(config: RemoteModelListConfig): Promise<RemoteModelListResult> {
+    const url = this._resolveRemoteModelListUrl(config);
+
+    if (config.provider === 'openai' && !config.apiKey?.trim()) {
+      return { models: [], error: 'Add an API key to list OpenAI models.' };
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          ...(config.apiKey?.trim() ? { Authorization: `Bearer ${config.apiKey.trim()}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        return { models: [], error: `Model listing failed (${response.status})` };
+      }
+
+      const payload = await response.json() as { data?: Array<{ id?: string | null }> };
+      const models = Array.isArray(payload.data)
+        ? payload.data
+            .map((entry) => (typeof entry?.id === 'string' ? entry.id.trim() : ''))
+            .filter((entry) => entry.length > 0)
+            .sort((left, right) => left.localeCompare(right))
+        : [];
+
+      return { models };
+    } catch (error) {
+      return {
+        models: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 }

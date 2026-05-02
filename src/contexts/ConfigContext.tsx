@@ -197,6 +197,160 @@ const setConfigValueAtPath = <T extends object>(config: T, path: string, value: 
   return updated as T;
 };
 
+const normalizeAIConfig = (savedConfig: Partial<AIConfig> | null | undefined): AIConfig => ({
+  ...DefaultAIConfig,
+  ...(savedConfig ?? {}),
+  remoteProfiles: Array.isArray(savedConfig?.remoteProfiles) ? savedConfig.remoteProfiles : DefaultAIConfig.remoteProfiles,
+  chromeAi: {
+    ...DefaultAIConfig.chromeAi,
+    ...(savedConfig?.chromeAi ?? {}),
+  },
+  openai: {
+    ...DefaultAIConfig.openai,
+    ...(savedConfig?.openai ?? {}),
+    routing: {
+      ...DefaultAIConfig.openai.routing,
+      ...(savedConfig?.openai?.routing ?? {}),
+      visionModel: {
+        ...DefaultAIConfig.openai.routing.visionModel,
+        ...(savedConfig?.openai?.routing?.visionModel ?? {}),
+      },
+      routerModel: {
+        ...DefaultAIConfig.openai.routing.routerModel,
+        ...(savedConfig?.openai?.routing?.routerModel ?? {}),
+      },
+    },
+  },
+  ollama: {
+    ...DefaultAIConfig.ollama,
+    ...(savedConfig?.ollama ?? {}),
+    routing: {
+      ...DefaultAIConfig.ollama.routing,
+      ...(savedConfig?.ollama?.routing ?? {}),
+      visionModel: {
+        ...DefaultAIConfig.ollama.routing.visionModel,
+        ...(savedConfig?.ollama?.routing?.visionModel ?? {}),
+      },
+      routerModel: {
+        ...DefaultAIConfig.ollama.routing.routerModel,
+        ...(savedConfig?.ollama?.routing?.routerModel ?? {}),
+      },
+    },
+  },
+  'android-local': {
+    ...DefaultAIConfig['android-local'],
+    ...(savedConfig?.['android-local'] ?? {}),
+    routing: {
+      ...DefaultAIConfig['android-local'].routing,
+      ...(savedConfig?.['android-local']?.routing ?? {}),
+      visionModel: {
+        ...DefaultAIConfig['android-local'].routing.visionModel,
+        ...(savedConfig?.['android-local']?.routing?.visionModel ?? {}),
+      },
+      routerModel: {
+        ...DefaultAIConfig['android-local'].routing.routerModel,
+        ...(savedConfig?.['android-local']?.routing?.routerModel ?? {}),
+      },
+    },
+  },
+  'desktop-local': {
+    ...DefaultAIConfig['desktop-local'],
+    ...(savedConfig?.['desktop-local'] ?? {}),
+    routing: {
+      ...DefaultAIConfig['desktop-local'].routing,
+      ...(savedConfig?.['desktop-local']?.routing ?? {}),
+      visionModel: {
+        ...DefaultAIConfig['desktop-local'].routing.visionModel,
+        ...(savedConfig?.['desktop-local']?.routing?.visionModel ?? {}),
+      },
+      routerModel: {
+        ...DefaultAIConfig['desktop-local'].routing.routerModel,
+        ...(savedConfig?.['desktop-local']?.routing?.routerModel ?? {}),
+      },
+    },
+  },
+  aiFeatures: {
+    ...DefaultAIConfig.aiFeatures,
+    ...(savedConfig?.aiFeatures ?? {}),
+    translator: {
+      ...DefaultAIConfig.aiFeatures.translator,
+      ...(savedConfig?.aiFeatures?.translator ?? {}),
+    },
+    languageDetector: {
+      ...DefaultAIConfig.aiFeatures.languageDetector,
+      ...(savedConfig?.aiFeatures?.languageDetector ?? {}),
+    },
+    summarizer: {
+      ...DefaultAIConfig.aiFeatures.summarizer,
+      ...(savedConfig?.aiFeatures?.summarizer ?? {}),
+    },
+    rewriter: {
+      ...DefaultAIConfig.aiFeatures.rewriter,
+      ...(savedConfig?.aiFeatures?.rewriter ?? {}),
+    },
+    writer: {
+      ...DefaultAIConfig.aiFeatures.writer,
+      ...(savedConfig?.aiFeatures?.writer ?? {}),
+    },
+  },
+});
+
+const normalizeTTSConfig = (savedConfig: Partial<TTSConfig> | null | undefined): TTSConfig => ({
+  ...DefaultTTSConfig,
+  ...(savedConfig ?? {}),
+  remoteProfiles: Array.isArray(savedConfig?.remoteProfiles) ? savedConfig.remoteProfiles : DefaultTTSConfig.remoteProfiles,
+  kokoro: {
+    ...DefaultTTSConfig.kokoro,
+    ...(savedConfig?.kokoro ?? {}),
+  },
+  openai: {
+    ...DefaultTTSConfig.openai,
+    ...(savedConfig?.openai ?? {}),
+  },
+  'openai-compatible': {
+    ...DefaultTTSConfig['openai-compatible'],
+    ...(savedConfig?.['openai-compatible'] ?? {}),
+  },
+  'android-local': {
+    ...DefaultTTSConfig['android-local'],
+    ...(savedConfig?.['android-local'] ?? {}),
+  },
+  'desktop-local': {
+    ...DefaultTTSConfig['desktop-local'],
+    ...(savedConfig?.['desktop-local'] ?? {}),
+  },
+  'gptsovits-remote': {
+    ...DefaultTTSConfig['gptsovits-remote'],
+    ...(savedConfig?.['gptsovits-remote'] ?? {}),
+  },
+});
+
+const normalizeSTTConfig = (savedConfig: Partial<STTConfig> | null | undefined): STTConfig => ({
+  ...DefaultSTTConfig,
+  ...(savedConfig ?? {}),
+  remoteProfiles: Array.isArray(savedConfig?.remoteProfiles) ? savedConfig.remoteProfiles : DefaultSTTConfig.remoteProfiles,
+  'chrome-ai-multimodal': {
+    ...DefaultSTTConfig['chrome-ai-multimodal'],
+    ...(savedConfig?.['chrome-ai-multimodal'] ?? {}),
+  },
+  openai: {
+    ...DefaultSTTConfig.openai,
+    ...(savedConfig?.openai ?? {}),
+  },
+  'openai-compatible': {
+    ...DefaultSTTConfig['openai-compatible'],
+    ...(savedConfig?.['openai-compatible'] ?? {}),
+  },
+  'android-local': {
+    ...DefaultSTTConfig['android-local'],
+    ...(savedConfig?.['android-local'] ?? {}),
+  },
+  'desktop-local': {
+    ...DefaultSTTConfig['desktop-local'],
+    ...(savedConfig?.['desktop-local'] ?? {}),
+  },
+});
+
 const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 export const useConfig = (): ConfigContextValue => {
@@ -395,7 +549,7 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
         Logger.log('ConfigContext', 'UI config loaded:', mergedUiConfig);
 
         // Load AI config
-        savedAiConfig = ((await StorageServiceProxy.configLoad('aiConfig')) as AIConfig | null) ?? DefaultAIConfig;
+        savedAiConfig = normalizeAIConfig((await StorageServiceProxy.configLoad('aiConfig')) as Partial<AIConfig> | null);
         setAiConfig(savedAiConfig);
         try {
           if (savedAiConfig.provider) {
@@ -431,7 +585,7 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
         }
 
         // Load TTS config
-        savedTtsConfig = ((await StorageServiceProxy.configLoad('ttsConfig')) as TTSConfig | null) ?? DefaultTTSConfig;
+        savedTtsConfig = normalizeTTSConfig((await StorageServiceProxy.configLoad('ttsConfig')) as Partial<TTSConfig> | null);
         
         Logger.log('ConfigContext', 'TTS config loaded from storage');
         setTtsConfig(savedTtsConfig);
@@ -443,7 +597,7 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
         }
 
         // Load STT config
-        savedSttConfig = ((await StorageServiceProxy.configLoad('sttConfig')) as STTConfig | null) ?? DefaultSTTConfig;
+        savedSttConfig = normalizeSTTConfig((await StorageServiceProxy.configLoad('sttConfig')) as Partial<STTConfig> | null);
         setSttConfig(savedSttConfig);
         try {
           STTServiceProxy.configure(savedSttConfig);

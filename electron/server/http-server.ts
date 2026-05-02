@@ -209,16 +209,51 @@ export class LocalAIServer {
     });
 
     this.app.get('/v1/models', (_req: Request, res: Response) => {
+      const models = this.listAvailableLlmModels();
       res.json({
         object: 'list',
-        data: this.llamaModel ? [{
-          id: path.basename(this.config.llm.modelPath ?? 'local-model.gguf'),
+        data: models.map((modelId) => ({
+          id: modelId,
           object: 'model',
           created: Date.now(),
           owned_by: 'local'
-        }] : []
+        }))
       });
     });
+  }
+
+  listAvailableLlmModels(): string[] {
+    const modelIds = new Set<string>();
+    const candidateDirs = [
+      this.config.llm.defaultModelsDir,
+      this.config.llm.modelPath ? path.dirname(this.config.llm.modelPath) : null,
+    ].filter((dirPath): dirPath is string => Boolean(dirPath));
+
+    for (const dirPath of candidateDirs) {
+      if (!fs.existsSync(dirPath)) {
+        continue;
+      }
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) {
+          continue;
+        }
+        if (!entry.name.toLowerCase().endsWith('.gguf')) {
+          continue;
+        }
+        if (entry.name.toLowerCase().startsWith('mmproj-')) {
+          continue;
+        }
+        modelIds.add(entry.name);
+      }
+    }
+
+    if (this.config.llm.modelPath) {
+      modelIds.add(path.basename(this.config.llm.modelPath));
+    }
+
+    return Array.from(modelIds).sort((left, right) => left.localeCompare(right));
   }
 
   getClientIp(req: Request): string {

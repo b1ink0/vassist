@@ -4,6 +4,7 @@
  */
 
 import { Input, Select } from '../../ui';
+import RemoteModelPicker from '../shared/RemoteModelPicker';
 
 interface OpenAICompatibleSTTConfigShape {
   endpoint?: string;
@@ -46,9 +47,6 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
           placeholder="http://localhost:8000"
           variant={isLightBackground ? 'dark' : 'default'}
         />
-        <p className="text-xs text-white/50">
-          Base URL (will append /v1/audio/transcriptions)
-        </p>
       </div>
 
       {/* API Key (Optional) */}
@@ -61,24 +59,20 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
           placeholder="Leave empty if not required"
           variant={isLightBackground ? 'dark' : 'default'}
         />
-        <p className="text-xs text-white/50">
-          Required only if your endpoint requires authentication
-        </p>
       </div>
 
       {/* Model */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Model</label>
-        <Input
-          type="text"
+        <RemoteModelPicker
           value={config.model || ''}
-          onChange={(e) => handleFieldChange('model', e.target.value)}
+          onChange={(value) => handleFieldChange('model', value)}
+          provider="ollama"
+          endpoint={config.endpoint || ''}
+          apiKey={config.apiKey || ''}
           placeholder="whisper"
-          variant={isLightBackground ? 'dark' : 'default'}
+          isLightBackground={isLightBackground}
         />
-        <p className="text-xs text-white/50">
-          Model name to use (e.g., whisper, faster-whisper)
-        </p>
       </div>
 
       {/* Language */}
@@ -101,16 +95,6 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
             { value: 'ko', label: 'Korean' },
           ]}
         />
-        <p className="text-xs text-white/50">
-          Default language hint for transcription requests. Use Auto-detect for mixed-language audio.
-        </p>
-      </div>
-
-      {/* Info */}
-      <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-        <p className="text-xs text-purple-300">
-          <span className="font-semibold">OpenAI-Compatible STT</span> - Connect to self-hosted or third-party STT services using OpenAI's API format
-        </p>
       </div>
     </div>
   );

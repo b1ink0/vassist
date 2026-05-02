@@ -4,16 +4,17 @@
  * Handles Text-to-Speech provider selection and configuration
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '../icons';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useAndroid } from '../../contexts/AndroidContext';
-import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice, GPTSoVITSLanguages } from '../../config/aiConfig';
+import { TTSProviders, OpenAIVoices, KokoroVoices, KokoroQuantization, KokoroDevice, GPTSoVITSLanguages, type TTSRemoteProviderProfile } from '../../config/aiConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import TTSServiceProxy from '../../services/proxies/TTSServiceProxy';
 import KokoroTTSConfig from './tts/KokoroTTSConfig';
 import GPTSoVITSConfig from './tts/GPTSoVITSConfig';
 import VitsModelDownloader from './tts/VitsModelDownloader';
+import RemoteModelPicker from './shared/RemoteModelPicker';
 import Toggle from '../common/Toggle';
 import Logger from '../../services/LoggerService';
 import { Button, Input, Select, Card, SettingsRow } from '../ui';
@@ -33,6 +34,7 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
   const [cacheSize, setCacheSize] = useState<KokoroCacheSize | null>(null);
   const [testText, setTestText] = useState('Hello, this is a test of the text to speech system.');
   const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
+  const [profileName, setProfileName] = useState('');
   
   const { api: androidAPI } = useAndroid();
   
@@ -47,6 +49,201 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
     checkKokoroStatus,
     initializeKokoro,
   } = useConfig();
+  const remoteProfiles = Array.isArray(ttsConfig.remoteProfiles) ? ttsConfig.remoteProfiles : [];
+  const [selectedProfileId, setSelectedProfileId] = useState('');
+  const currentRemoteProvider = ttsConfig.provider === TTSProviders.OPENAI || ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE || ttsConfig.provider === TTSProviders.GPTSOVITS_REMOTE
+    ? ttsConfig.provider
+    : null;
+  const currentProviderProfiles = currentRemoteProvider
+    ? remoteProfiles.filter((profile) => profile.provider === currentRemoteProvider)
+    : [];
+  const selectedProfile = currentProviderProfiles.find((profile) => profile.id === selectedProfileId) || null;
+  const compactActionVariant = isLightBackground ? 'dark' : 'ghost';
+
+  useEffect(() => {
+    if (selectedProfileId && !currentProviderProfiles.some((profile) => profile.id === selectedProfileId)) {
+      setSelectedProfileId('');
+    }
+  }, [currentProviderProfiles, selectedProfileId]);
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      if (!selectedProfileId) {
+        setProfileName('');
+      }
+      return;
+    }
+
+    setProfileName(selectedProfile.name);
+  }, [selectedProfile, selectedProfileId]);
+
+  const applyRemoteProfile = (profile: TTSRemoteProviderProfile) => {
+    if (profile.provider === 'openai') {
+      updateTTSConfig('openai', {
+        ...ttsConfig.openai,
+        apiKey: profile.apiKey || '',
+        model: profile.model,
+        voice: profile.voice || ttsConfig.openai.voice,
+        speed: profile.speed ?? ttsConfig.openai.speed,
+      });
+      return;
+    }
+
+    if (profile.provider === 'openai-compatible') {
+      updateTTSConfig('openai-compatible', {
+        ...ttsConfig['openai-compatible'],
+        endpoint: profile.endpoint || ttsConfig['openai-compatible']?.endpoint || '',
+        apiKey: profile.apiKey || '',
+        model: profile.model,
+        voice: profile.voice || ttsConfig['openai-compatible']?.voice || '',
+        speed: profile.speed ?? ttsConfig['openai-compatible']?.speed ?? 1,
+      });
+      return;
+    }
+
+    updateTTSConfig('gptsovits-remote', {
+      ...ttsConfig['gptsovits-remote'],
+      endpoint: profile.endpoint || ttsConfig['gptsovits-remote']?.endpoint || '',
+      model: profile.model,
+      speed: profile.speed ?? ttsConfig['gptsovits-remote']?.speed ?? 1,
+    });
+  };
+
+  const handleRemoteProfileSelection = (provider: TTSRemoteProviderProfile['provider'], nextProfileId: string) => {
+    setSelectedProfileId(nextProfileId);
+
+    if (!nextProfileId) {
+      setProfileName('');
+      return;
+    }
+
+    const profile = remoteProfiles.find((entry) => entry.id === nextProfileId && entry.provider === provider);
+    if (!profile) {
+      return;
+    }
+
+    setProfileName(profile.name);
+    applyRemoteProfile(profile);
+  };
+
+  const saveCurrentRemoteProfile = (provider: TTSRemoteProviderProfile['provider']) => {
+    const nextProfileId = selectedProfile?.id || `tts-remote-${Date.now()}`;
+    const defaultName = `Saved Backend ${currentProviderProfiles.length + (selectedProfile ? 0 : 1)}`;
+    let nextProfile: TTSRemoteProviderProfile | null = null;
+    if (provider === TTSProviders.OPENAI) {
+      nextProfile = {
+        id: nextProfileId,
+        name: profileName.trim() || selectedProfile?.name || defaultName,
+        provider: 'openai',
+        apiKey: ttsConfig.openai.apiKey,
+        model: ttsConfig.openai.model,
+        voice: ttsConfig.openai.voice,
+        speed: ttsConfig.openai.speed,
+      };
+    } else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
+      nextProfile = {
+        id: nextProfileId,
+        name: profileName.trim() || selectedProfile?.name || defaultName,
+        provider: 'openai-compatible',
+        endpoint: ttsConfig['openai-compatible']?.endpoint,
+        apiKey: ttsConfig['openai-compatible']?.apiKey,
+        model: ttsConfig['openai-compatible']?.model || '',
+        voice: ttsConfig['openai-compatible']?.voice,
+        speed: ttsConfig['openai-compatible']?.speed,
+      };
+    } else if (provider === TTSProviders.GPTSOVITS_REMOTE) {
+      nextProfile = {
+        id: nextProfileId,
+        name: profileName.trim() || selectedProfile?.name || defaultName,
+        provider: 'gptsovits-remote',
+        endpoint: ttsConfig['gptsovits-remote']?.endpoint,
+        model: ttsConfig['gptsovits-remote']?.model || '',
+        speed: ttsConfig['gptsovits-remote']?.speed,
+      };
+    }
+
+    if (!nextProfile) {
+      return;
+    }
+
+    updateTTSConfig(
+      'remoteProfiles',
+      selectedProfile
+        ? remoteProfiles.map((profile) => (profile.id === selectedProfile.id ? nextProfile : profile))
+        : [...remoteProfiles, nextProfile]
+    );
+    setSelectedProfileId(nextProfile.id);
+    setProfileName(nextProfile.name);
+  };
+
+  const startNewRemoteProfile = () => {
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  const deleteRemoteProfile = () => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    updateTTSConfig('remoteProfiles', remoteProfiles.filter((profile) => profile.id !== selectedProfile.id));
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  const renderRemoteProfileBar = (provider: TTSRemoteProviderProfile['provider']) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-white/90">Saved Backends</label>
+      <Input
+        type="text"
+        value={profileName}
+        onChange={(event) => setProfileName(event.target.value)}
+        placeholder="Backend name"
+        variant={isLightBackground ? 'dark' : 'default'}
+        size="xs"
+      />
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+        <Select
+          value={selectedProfileId}
+          onChange={(event) => handleRemoteProfileSelection(provider, event.target.value)}
+          variant={isLightBackground ? 'dark' : 'default'}
+          className="min-h-[32px]"
+          options={[
+            { value: '', label: currentProviderProfiles.length === 0 ? 'No saved backends yet' : 'Select a saved backend' },
+            ...currentProviderProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
+          ]}
+        />
+        <Button
+          variant={compactActionVariant}
+          size="icon"
+          onClick={startNewRemoteProfile}
+          title="Create a new saved backend"
+          aria-label="Create a new saved backend"
+        >
+          <Icon name="add" size={14} />
+        </Button>
+        <Button
+          variant={isLightBackground ? 'dark' : 'default'}
+          size="icon"
+          title="Save current TTS backend"
+          aria-label="Save current TTS backend"
+          onClick={() => saveCurrentRemoteProfile(provider)}
+        >
+          <Icon name="save" size={14} />
+        </Button>
+        <Button
+          variant="error"
+          size="icon"
+          onClick={deleteRemoteProfile}
+          disabled={!selectedProfile}
+          title="Delete selected TTS backend"
+          aria-label="Delete selected TTS backend"
+        >
+          <Icon name="delete" size={14} />
+        </Button>
+      </div>
+    </div>
+  );
 
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
@@ -162,6 +359,7 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
           {/* GPTSoVITS Remote TTS Configuration */}
           {ttsConfig.provider === TTSProviders.GPTSOVITS_REMOTE && (
             <>
+              {renderRemoteProfileBar('gptsovits-remote')}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Server URL</label>
                 <Input
@@ -171,9 +369,6 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
                   placeholder="http://localhost:11438"
                   variant={isLightBackground ? 'dark' : 'default'}
                 />
-                <p className="text-xs text-white/50">
-                  URL of your remote GPT-SoVITS server (will append /v1)
-                </p>
               </div>
               
               {/* Voice Cloning Configuration - Reuse GPTSoVITSConfig */}
@@ -273,6 +468,7 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
           {/* OpenAI TTS Configuration */}
           {ttsConfig.provider === TTSProviders.OPENAI && (
             <>
+              {renderRemoteProfileBar('openai')}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">API Key</label>
                 <Input
@@ -285,14 +481,13 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Model</label>
-                <Select
+                <RemoteModelPicker
                   value={ttsConfig.openai.model}
-                  onChange={(e) => updateTTSConfig('openai.model', e.target.value)}
-                  variant={isLightBackground ? 'dark' : 'default'}
-                  options={[
-                    { value: 'tts-1', label: 'tts-1 (Standard)' },
-                    { value: 'tts-1-hd', label: 'tts-1-hd (HD)' },
-                  ]}
+                  onChange={(value) => updateTTSConfig('openai.model', value)}
+                  provider="openai"
+                  apiKey={ttsConfig.openai.apiKey}
+                  placeholder="tts-1"
+                  isLightBackground={isLightBackground}
                 />
               </div>
               <div className="space-y-2">
@@ -310,12 +505,10 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
           {/* OpenAI-Compatible TTS Configuration */}
           {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
             <>
+              {renderRemoteProfileBar('openai-compatible')}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
                 <Input type="text" value={ttsConfig['openai-compatible']?.endpoint ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.endpoint', e.target.value)} placeholder="http://localhost:8000" variant={isLightBackground ? 'dark' : 'default'} />
-                <p className="text-xs text-white/50">
-                  Base URL (will append /v1/audio/speech)
-                </p>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
@@ -323,7 +516,7 @@ const TTSSettings = ({ isLightBackground = false, onRequestDeleteVoiceDialog, re
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Model</label>
-                <Input type="text" value={ttsConfig['openai-compatible']?.model ?? ''} onChange={(e) => updateTTSConfig('openai-compatible.model', e.target.value)} placeholder="tts" variant={isLightBackground ? 'dark' : 'default'} />
+                <RemoteModelPicker value={ttsConfig['openai-compatible']?.model ?? ''} onChange={(value) => updateTTSConfig('openai-compatible.model', value)} provider="ollama" endpoint={ttsConfig['openai-compatible']?.endpoint ?? ''} apiKey={ttsConfig['openai-compatible']?.apiKey ?? ''} placeholder="tts" isLightBackground={isLightBackground} />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">Voice</label>

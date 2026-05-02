@@ -217,11 +217,69 @@ export const TranslationLanguages = [
   { code: 'hu', name: 'Hungarian' },
 ];
 
+export type AIRemoteProfileProvider = 'openai' | 'ollama' | 'android-local' | 'desktop-local';
+
+export interface AIRemoteProviderProfile {
+  id: string;
+  name: string;
+  provider: AIRemoteProfileProvider;
+  endpoint?: string;
+  apiKey?: string;
+  model: string;
+  customModelsPath?: string | null;
+  shareOnNetwork?: boolean;
+  serverPort?: number;
+  backend?: string;
+  temperature?: number;
+  maxTokens?: number;
+  contextSize?: number;
+  gpuLayers?: number;
+  threads?: number;
+  enableImageSupport?: boolean;
+  enableAudioSupport?: boolean;
+}
+
+export interface AIRoutingModelConfig {
+  useSameAsMain?: boolean;
+  modelName?: string;
+  selectedModel?: string;
+  profileId?: string;
+}
+
+export interface AIRoutingConfig {
+  enabled?: boolean;
+  visionModel?: AIRoutingModelConfig;
+  routerModel?: AIRoutingModelConfig;
+}
+
+export interface TTSRemoteProviderProfile {
+  id: string;
+  name: string;
+  provider: 'openai' | 'openai-compatible' | 'gptsovits-remote';
+  endpoint?: string;
+  apiKey?: string;
+  model: string;
+  voice?: string;
+  speed?: number;
+}
+
+export interface STTRemoteProviderProfile {
+  id: string;
+  name: string;
+  provider: 'openai' | 'openai-compatible';
+  endpoint?: string;
+  apiKey?: string;
+  model: string;
+  language?: string;
+  temperature?: number;
+}
+
 /**
  * Default AI Configuration
  */
 export const DefaultAIConfig = {
   provider: isAndroidMode ? AIProviders.ANDROID_LOCAL : (isDesktopMode ? AIProviders.DESKTOP_LOCAL : AIProviders.CHROME_AI),
+  remoteProfiles: [] as AIRemoteProviderProfile[],
   
   chromeAi: {
     temperature: 1.0,
@@ -251,12 +309,14 @@ export const DefaultAIConfig = {
       visionModel: {
         useSameAsMain: true,
         modelName: '',
+        profileId: '',
       },
       routerModel: {
         useSameAsMain: true,
         modelName: '',
+        profileId: '',
       },
-    },
+    } as AIRoutingConfig,
   },
   
   ollama: {
@@ -275,12 +335,14 @@ export const DefaultAIConfig = {
       visionModel: {
         useSameAsMain: true,
         modelName: '',
+        profileId: '',
       },
       routerModel: {
         useSameAsMain: true,
         modelName: '',
+        profileId: '',
       },
-    },
+    } as AIRoutingConfig,
   },
   
   'android-local': {
@@ -297,12 +359,14 @@ export const DefaultAIConfig = {
       visionModel: {
         useSameAsMain: true,
         selectedModel: '',
+        profileId: '',
       },
       routerModel: {
         useSameAsMain: true,
         selectedModel: '',
+        profileId: '',
       },
-    },
+    } as AIRoutingConfig,
   },
   
   'desktop-local': {
@@ -326,12 +390,14 @@ export const DefaultAIConfig = {
       visionModel: {
         useSameAsMain: true,
         selectedModel: '',
+        profileId: '',
       },
       routerModel: {
         useSameAsMain: true,
         selectedModel: '',
+        profileId: '',
       },
-    },
+    } as AIRoutingConfig,
   },
   
   systemPrompt: 'You are a helpful virtual assistant. Be concise and friendly.',
@@ -373,6 +439,7 @@ export const DefaultAIConfig = {
  */
 export const DefaultTTSConfig = {
   enabled: false,
+  remoteProfiles: [] as TTSRemoteProviderProfile[],
   
   provider: isAndroidMode ? TTSProviders.ANDROID_LOCAL : (isDesktopMode ? TTSProviders.DESKTOP_LOCAL : TTSProviders.KOKORO),
   
@@ -449,6 +516,7 @@ export const DefaultTTSConfig = {
  */
 export const DefaultSTTConfig = {
   enabled: false,
+  remoteProfiles: [] as STTRemoteProviderProfile[],
   provider: isAndroidMode ? STTProviders.ANDROID_LOCAL : (isDesktopMode ? STTProviders.DESKTOP_LOCAL : STTProviders.CHROME_AI_MULTIMODAL),
   
   'chrome-ai-multimodal': {
@@ -741,7 +809,7 @@ export function getProviderDisplayName(provider: string): string {
     case AIProviders.OPENAI:
       return 'OpenAI';
     case AIProviders.OLLAMA:
-      return 'Ollama (Local)';
+      return 'OpenAI-Compatible / Ollama';
     default:
       return provider;
   }

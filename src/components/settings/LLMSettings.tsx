@@ -4,10 +4,10 @@
  * Handles provider selection and configuration for OpenAI, Ollama, and Chrome AI
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as React from 'react';
 import { useConfig } from '../../contexts/ConfigContext';
-import { AIProviders, DefaultAIConfig } from '../../config/aiConfig';
+import { AIProviders, DefaultAIConfig, type AIRemoteProviderProfile } from '../../config/aiConfig';
 import { PromptConfig } from '../../config/promptConfig';
 import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
 import { useAndroid } from '../../contexts/AndroidContext';
@@ -15,16 +15,18 @@ import { useDesktop } from '../../contexts/DesktopContext';
 import DesktopLLMConfig from './llm/DesktopLLMConfig';
 import LocalLLMModelManager from './llm/LocalLLMModelManager';
 import { getLLMModelStorage } from '../../services/LLMModelStorageService';
+import RemoteModelPicker from './shared/RemoteModelPicker';
 import Toggle from '../common/Toggle';
 import StatusMessage from '../common/StatusMessage';
 import { Icon } from '../icons';
 import { cn } from '../../utils/cn';
-import { Button, Input, Select, Card, SettingsRow } from '../ui';
+import { Button, Input, Select, Card, SettingsRow, TabBar } from '../ui';
 
 interface RoutingModelConfig {
   useSameAsMain?: boolean;
   modelName?: string;
   selectedModel?: string;
+  profileId?: string;
 }
 
 interface RoutingConfig {
@@ -50,18 +52,23 @@ interface StorageServiceLike {
 }
 
 interface ModelConfigRemoteProps {
-  providerKey: 'openai' | 'ollama';
+  providerKey: 'openai' | 'ollama' | 'android-local' | 'desktop-local';
   routing: RoutingConfig | undefined;
+  profiles: AIRemoteProviderProfile[];
+  endpoint?: string | undefined;
+  apiKey?: string | undefined;
   onChange: (field: string, value: unknown) => void;
   isLightBackground: boolean;
 }
 
 interface ModelConfigLocalProps {
   routing: RoutingConfig | undefined;
+  profiles: AIRemoteProviderProfile[];
   onChange: (field: string, value: unknown) => void;
   storageService: StorageServiceLike | null;
   refreshTrigger: unknown;
   customModelsPath: string | null;
+  isLightBackground: boolean;
 }
 
 type AIConfigShape = typeof DefaultAIConfig;
@@ -93,6 +100,18 @@ interface LLMSettingsProps {
   onRequestDeleteLLMModel?: ((modelName: string) => void) | undefined;
   refreshTrigger?: unknown;
 }
+
+type LLMSubTabId = 'provider' | 'routing' | 'profiles';
+
+const PROVIDER_LABELS: Record<string, string> = {
+  [AIProviders.OPENAI]: 'OpenAI',
+  [AIProviders.OLLAMA]: 'OpenAI-Compatible / Ollama',
+  [AIProviders.DESKTOP_LOCAL]: 'Desktop Local',
+  [AIProviders.ANDROID_LOCAL]: 'Android Local',
+  [AIProviders.CHROME_AI]: 'Chrome Built-in AI',
+};
+
+const getRemoteProfileOptionLabel = (profile: AIRemoteProviderProfile) => profile.name;
 
 interface DesktopLlmBridge {
   listModels: (customPath?: string | null) => Promise<unknown>;
@@ -128,7 +147,254 @@ const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
     && typeof record.onBackendInstallProgress === 'function';
 };
 
-const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }: ModelConfigRemoteProps) => {
+const RemoteProfileManager = ({ aiConfig, updateAIConfig, isLightBackground, provider }: {
+  aiConfig: AIConfigShape;
+  updateAIConfig: (path: string, value: unknown) => void;
+  isLightBackground: boolean;
+  provider: AIRemoteProviderProfile['provider'];
+}) => {
+  const allProfiles = Array.isArray(aiConfig.remoteProfiles) ? aiConfig.remoteProfiles : [];
+  const profiles = allProfiles.filter((profile) => profile.provider === provider);
+  const [profileName, setProfileName] = React.useState('');
+  const [selectedProfileId, setSelectedProfileId] = React.useState('');
+  const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) || null;
+  const actionVariant = isLightBackground ? 'dark' : 'ghost';
+
+  React.useEffect(() => {
+    if (selectedProfileId && !profiles.some((profile) => profile.id === selectedProfileId)) {
+      setSelectedProfileId('');
+    }
+  }, [profiles, selectedProfileId]);
+
+  React.useEffect(() => {
+    if (!selectedProfile) {
+      if (!selectedProfileId) {
+        setProfileName('');
+      }
+      return;
+    }
+
+    setProfileName(selectedProfile.name);
+  }, [selectedProfile, selectedProfileId]);
+
+  const applyProfileToProvider = (profile: AIRemoteProviderProfile) => {
+    if (profile.provider === AIProviders.OPENAI) {
+      updateAIConfig('openai', {
+        ...aiConfig.openai,
+        apiKey: profile.apiKey || '',
+        model: profile.model,
+        temperature: profile.temperature ?? aiConfig.openai.temperature,
+        maxTokens: profile.maxTokens ?? aiConfig.openai.maxTokens,
+        enableImageSupport: profile.enableImageSupport !== false,
+        enableAudioSupport: profile.enableAudioSupport !== false,
+      });
+      return;
+    }
+
+    if (profile.provider === AIProviders.ANDROID_LOCAL) {
+      updateAIConfig('android-local', {
+        ...aiConfig['android-local'],
+        endpoint: profile.endpoint || aiConfig['android-local'].endpoint,
+        model: profile.model,
+        temperature: profile.temperature ?? aiConfig['android-local'].temperature,
+        maxTokens: profile.maxTokens ?? aiConfig['android-local'].maxTokens,
+      });
+      return;
+    }
+
+    if (profile.provider === AIProviders.DESKTOP_LOCAL) {
+      updateAIConfig('desktop-local', {
+        ...aiConfig['desktop-local'],
+        endpoint: profile.endpoint || aiConfig['desktop-local'].endpoint,
+        model: profile.model,
+        customModelsPath: profile.customModelsPath ?? aiConfig['desktop-local'].customModelsPath,
+        shareOnNetwork: profile.shareOnNetwork ?? aiConfig['desktop-local'].shareOnNetwork,
+        serverPort: profile.serverPort ?? aiConfig['desktop-local'].serverPort,
+        backend: profile.backend ?? aiConfig['desktop-local'].backend,
+        temperature: profile.temperature ?? aiConfig['desktop-local'].temperature,
+        maxTokens: profile.maxTokens ?? aiConfig['desktop-local'].maxTokens,
+        contextSize: profile.contextSize ?? aiConfig['desktop-local'].contextSize,
+        gpuLayers: profile.gpuLayers ?? aiConfig['desktop-local'].gpuLayers,
+        threads: profile.threads ?? aiConfig['desktop-local'].threads,
+      });
+      return;
+    }
+
+    updateAIConfig('ollama', {
+      ...aiConfig.ollama,
+      endpoint: profile.endpoint || aiConfig.ollama.endpoint,
+      model: profile.model,
+      temperature: profile.temperature ?? aiConfig.ollama.temperature,
+      maxTokens: profile.maxTokens ?? aiConfig.ollama.maxTokens,
+      enableImageSupport: profile.enableImageSupport !== false,
+      enableAudioSupport: profile.enableAudioSupport !== false,
+    });
+  };
+
+  const handleProfileChange = (nextProfileId: string) => {
+    setSelectedProfileId(nextProfileId);
+
+    if (!nextProfileId) {
+      setProfileName('');
+      return;
+    }
+
+    const profile = profiles.find((entry) => entry.id === nextProfileId);
+    if (!profile) {
+      return;
+    }
+
+    setProfileName(profile.name);
+    applyProfileToProvider(profile);
+  };
+
+  const saveCurrentProvider = () => {
+    const nextProfileId = selectedProfile?.id || `remote-${Date.now()}`;
+    const defaultName = `Saved Backend ${profiles.length + (selectedProfile ? 0 : 1)}`;
+    let nextProfile: AIRemoteProviderProfile;
+
+    if (provider === AIProviders.OPENAI) {
+      nextProfile = {
+          id: nextProfileId,
+          name: profileName.trim() || selectedProfile?.name || defaultName,
+          provider: 'openai',
+          apiKey: aiConfig.openai.apiKey,
+          model: aiConfig.openai.model || '',
+          temperature: aiConfig.openai.temperature,
+          maxTokens: aiConfig.openai.maxTokens,
+          enableImageSupport: aiConfig.openai.enableImageSupport !== false,
+          enableAudioSupport: aiConfig.openai.enableAudioSupport !== false,
+        };
+    } else if (provider === AIProviders.ANDROID_LOCAL) {
+      nextProfile = {
+        id: nextProfileId,
+        name: profileName.trim() || selectedProfile?.name || defaultName,
+        provider: 'android-local',
+        endpoint: aiConfig['android-local'].endpoint,
+        model: aiConfig['android-local'].model || '',
+        temperature: aiConfig['android-local'].temperature,
+        maxTokens: aiConfig['android-local'].maxTokens,
+        enableImageSupport: false,
+        enableAudioSupport: false,
+      };
+    } else if (provider === AIProviders.DESKTOP_LOCAL) {
+      nextProfile = {
+        id: nextProfileId,
+        name: profileName.trim() || selectedProfile?.name || defaultName,
+        provider: 'desktop-local',
+        endpoint: aiConfig['desktop-local'].endpoint,
+        model: aiConfig['desktop-local'].model || '',
+        customModelsPath: aiConfig['desktop-local'].customModelsPath ?? null,
+        shareOnNetwork: aiConfig['desktop-local'].shareOnNetwork === true,
+        serverPort: aiConfig['desktop-local'].serverPort,
+        backend: aiConfig['desktop-local'].backend,
+        temperature: aiConfig['desktop-local'].temperature,
+        maxTokens: aiConfig['desktop-local'].maxTokens,
+        contextSize: aiConfig['desktop-local'].contextSize,
+        gpuLayers: aiConfig['desktop-local'].gpuLayers,
+        threads: aiConfig['desktop-local'].threads,
+        enableImageSupport: false,
+        enableAudioSupport: false,
+      };
+    } else {
+      nextProfile = {
+          id: nextProfileId,
+          name: profileName.trim() || selectedProfile?.name || defaultName,
+          provider: 'ollama',
+          endpoint: aiConfig.ollama.endpoint,
+          apiKey: '',
+          model: aiConfig.ollama.model || '',
+          temperature: aiConfig.ollama.temperature,
+          maxTokens: aiConfig.ollama.maxTokens,
+          enableImageSupport: aiConfig.ollama.enableImageSupport !== false,
+          enableAudioSupport: aiConfig.ollama.enableAudioSupport !== false,
+        };
+    }
+
+    updateAIConfig(
+      'remoteProfiles',
+      selectedProfile
+        ? allProfiles.map((profile) => (profile.id === selectedProfile.id ? nextProfile : profile))
+        : [...allProfiles, nextProfile]
+    );
+    setSelectedProfileId(nextProfile.id);
+    setProfileName(nextProfile.name);
+  };
+
+  const startNewProfile = () => {
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  const deleteProfile = () => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    updateAIConfig('remoteProfiles', allProfiles.filter((profile) => profile.id !== selectedProfile.id));
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-white/90">Saved Backends</label>
+        <Input
+          type="text"
+          value={profileName}
+          onChange={(event) => setProfileName(event.target.value)}
+          placeholder="Backend name"
+          variant={isLightBackground ? 'dark' : 'default'}
+          size="xs"
+        />
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+        <Select
+          value={selectedProfileId}
+          onChange={(event) => handleProfileChange(event.target.value)}
+          variant={isLightBackground ? 'dark' : 'default'}
+          className="min-h-[32px]"
+          options={[
+            { value: '', label: profiles.length === 0 ? 'No saved backends yet' : 'Select a saved backend' },
+            ...profiles.map((profile) => ({ value: profile.id, label: getRemoteProfileOptionLabel(profile) })),
+          ]}
+        />
+        <Button
+          type="button"
+          size="icon"
+          variant={actionVariant}
+          onClick={startNewProfile}
+          title="Create a new saved backend"
+          aria-label="Create a new saved backend"
+        >
+          <Icon name="add" size={14} />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant={isLightBackground ? 'dark' : 'default'}
+          onClick={saveCurrentProvider}
+          title="Save current backend"
+          aria-label="Save current backend"
+        >
+          <Icon name="save" size={14} />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="error"
+          onClick={deleteProfile}
+          disabled={!selectedProfile}
+          title="Delete selected backend"
+          aria-label="Delete selected backend"
+        >
+          <Icon name="delete" size={14} />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const ModelConfigRemote = ({ providerKey, routing, profiles = [], endpoint, apiKey, onChange, isLightBackground }: ModelConfigRemoteProps) => {
   const examples = providerKey === 'openai' ? {
     vision: 'gpt-4-vision-preview',
     router: 'gpt-3.5-turbo'
@@ -136,6 +402,14 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
     vision: 'llava:7b',
     router: 'llama3.2:1b'
   };
+
+  const profileOptions = [
+    { value: '', label: 'Use current provider connection' },
+    ...profiles.map((profile) => ({ value: profile.id, label: getRemoteProfileOptionLabel(profile) })),
+  ];
+
+  const visionProfile = profiles.find((profile) => profile.id === routing?.visionModel?.profileId);
+  const routerProfile = profiles.find((profile) => profile.id === routing?.routerModel?.profileId);
 
   return (
     <div className="space-y-3">
@@ -169,17 +443,29 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
               </div>
             </div>
             {routing?.visionModel?.useSameAsMain === false && (
-                <Input
-                  type="text"
-                  value={routing?.visionModel?.modelName || ''}
-                  onChange={(e) => onChange('routing', { 
-                    ...routing, 
-                    visionModel: { ...routing?.visionModel, modelName: e.target.value }
+              <div className="space-y-2">
+                <Select
+                  value={routing?.visionModel?.profileId || ''}
+                  onChange={(event) => onChange('routing', {
+                    ...routing,
+                    visionModel: { ...routing?.visionModel, profileId: event.target.value },
                   })}
-                  placeholder={`e.g., ${examples.vision}`}
                   variant={isLightBackground ? 'dark' : 'default'}
-                  size="xs"
+                  options={profileOptions}
                 />
+                <RemoteModelPicker
+                  value={routing?.visionModel?.modelName || ''}
+                  onChange={(value) => onChange('routing', {
+                    ...routing,
+                    visionModel: { ...routing?.visionModel, modelName: value },
+                  })}
+                  provider={visionProfile?.provider || providerKey}
+                  endpoint={visionProfile?.endpoint || endpoint}
+                  apiKey={visionProfile?.apiKey || apiKey}
+                  placeholder={visionProfile?.model || examples.vision}
+                  isLightBackground={isLightBackground}
+                />
+              </div>
             )}
           </div>
 
@@ -199,17 +485,29 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
               </div>
             </div>
             {routing?.routerModel?.useSameAsMain === false && (
-                <Input
-                  type="text"
-                  value={routing?.routerModel?.modelName || ''}
-                  onChange={(e) => onChange('routing', { 
-                    ...routing, 
-                    routerModel: { ...routing?.routerModel, modelName: e.target.value }
+              <div className="space-y-2">
+                <Select
+                  value={routing?.routerModel?.profileId || ''}
+                  onChange={(event) => onChange('routing', {
+                    ...routing,
+                    routerModel: { ...routing?.routerModel, profileId: event.target.value },
                   })}
-                  placeholder={`e.g., ${examples.router}`}
                   variant={isLightBackground ? 'dark' : 'default'}
-                  size="xs"
+                  options={profileOptions}
                 />
+                <RemoteModelPicker
+                  value={routing?.routerModel?.modelName || ''}
+                  onChange={(value) => onChange('routing', {
+                    ...routing,
+                    routerModel: { ...routing?.routerModel, modelName: value },
+                  })}
+                  provider={routerProfile?.provider || providerKey}
+                  endpoint={routerProfile?.endpoint || endpoint}
+                  apiKey={routerProfile?.apiKey || apiKey}
+                  placeholder={routerProfile?.model || examples.router}
+                  isLightBackground={isLightBackground}
+                />
+              </div>
             )}
           </div>
         </>
@@ -218,9 +516,15 @@ const ModelConfigRemote = ({ providerKey, routing, onChange, isLightBackground }
   );
 };
 
-const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, customModelsPath }: ModelConfigLocalProps) => {
+const ModelConfigLocal = ({ routing, profiles = [], onChange, storageService, refreshTrigger, customModelsPath, isLightBackground }: ModelConfigLocalProps) => {
   const [models, setModels] = React.useState<LocalModelEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const profileOptions = [
+    { value: '', label: 'Use local models on this device' },
+    ...profiles.map((profile) => ({ value: profile.id, label: getRemoteProfileOptionLabel(profile) })),
+  ];
+  const visionProfile = profiles.find((profile) => profile.id === routing?.visionModel?.profileId);
+  const routerProfile = profiles.find((profile) => profile.id === routing?.routerModel?.profileId);
 
   React.useEffect(() => {
     const loadModels = async () => {
@@ -281,6 +585,32 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
             </div>
             {routing?.visionModel?.useSameAsMain === false && (
               <>
+                <Select
+                  value={routing?.visionModel?.profileId || ''}
+                  onChange={(event) => onChange('routing', {
+                    ...routing,
+                    visionModel: { ...routing?.visionModel, profileId: event.target.value },
+                  })}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={profileOptions}
+                />
+                {visionProfile ? (
+                  <div className="space-y-2">
+                    <RemoteModelPicker
+                      value={routing?.visionModel?.modelName || ''}
+                      onChange={(value) => onChange('routing', {
+                        ...routing,
+                        visionModel: { ...routing?.visionModel, modelName: value },
+                      })}
+                      provider={visionProfile.provider}
+                      endpoint={visionProfile.endpoint}
+                      apiKey={visionProfile.apiKey}
+                      placeholder={visionProfile.model || 'Remote model'}
+                      isLightBackground={isLightBackground}
+                    />
+                  </div>
+                ) : (
+                  <>
                 {loading ? (
                   <div className="text-xs text-white/50 py-2">Loading models...</div>
                 ) : models.length === 0 ? (
@@ -332,6 +662,8 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
                     ))}
                   </div>
                 )}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -353,6 +685,32 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
             </div>
             {routing?.routerModel?.useSameAsMain === false && (
               <>
+                <Select
+                  value={routing?.routerModel?.profileId || ''}
+                  onChange={(event) => onChange('routing', {
+                    ...routing,
+                    routerModel: { ...routing?.routerModel, profileId: event.target.value },
+                  })}
+                  variant={isLightBackground ? 'dark' : 'default'}
+                  options={profileOptions}
+                />
+                {routerProfile ? (
+                  <div className="space-y-2">
+                    <RemoteModelPicker
+                      value={routing?.routerModel?.modelName || ''}
+                      onChange={(value) => onChange('routing', {
+                        ...routing,
+                        routerModel: { ...routing?.routerModel, modelName: value },
+                      })}
+                      provider={routerProfile.provider}
+                      endpoint={routerProfile.endpoint}
+                      apiKey={routerProfile.apiKey}
+                      placeholder={routerProfile.model || 'Remote model'}
+                      isLightBackground={isLightBackground}
+                    />
+                  </div>
+                ) : (
+                  <>
                 {loading ? (
                   <div className="text-xs text-white/50 py-2">Loading models...</div>
                 ) : models.length === 0 ? (
@@ -403,6 +761,8 @@ const ModelConfigLocal = ({ routing, onChange, storageService, refreshTrigger, c
                       </div>
                     ))}
                   </div>
+                )}
+                  </>
                 )}
               </>
             )}
@@ -765,57 +1125,73 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
     return otherProviders;
   }, []);
 
-  return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">LLM Configuration</h3>
+  const llmSubTabOrder: LLMSubTabId[] = ['provider', 'routing', 'profiles'];
+  const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>('provider');
+  const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({ left: 0, width: 0 });
+  const subTabsRef = useRef<Record<LLMSubTabId, HTMLButtonElement | null>>({
+    provider: null,
+    routing: null,
+    profiles: null,
+  });
 
+  useEffect(() => {
+    const activeTabElement = subTabsRef.current[activeSubTab];
+    if (!activeTabElement) {
+      return;
+    }
+
+    const { offsetLeft, offsetWidth } = activeTabElement;
+    setSubTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
+  }, [activeSubTab]);
+
+  const renderProviderSettings = () => (
+    <>
       {isDesktop && (
-          <Card variant="default">
-            <div className="text-sm font-medium text-white/90">Shared Local API Server (LLM/TTS/STT)</div>
+        <Card variant="default">
+          <div className="text-sm font-medium text-white/90">Shared Local API Server (LLM/TTS/STT)</div>
 
-            <SettingsRow
-              className="mt-2"
-              label="Share On Local Network"
-              description="When enabled, binds to LAN so other devices can use your hosted server."
-            >
-              <Toggle
-                id="desktop-local-share-network"
-                checked={aiConfig['desktop-local']?.shareOnNetwork === true}
-                onChange={(checked) => updateAIConfig('desktop-local.shareOnNetwork', checked)}
-              />
-            </SettingsRow>
+          <SettingsRow
+            className="mt-2"
+            label="Share On Local Network"
+            description="When enabled, binds to LAN so other devices can use your hosted server."
+          >
+            <Toggle
+              id="desktop-local-share-network"
+              checked={aiConfig['desktop-local']?.shareOnNetwork === true}
+              onChange={(checked) => updateAIConfig('desktop-local.shareOnNetwork', checked)}
+            />
+          </SettingsRow>
 
-            <div className="space-y-2 mt-2">
-              <label className="block text-sm font-medium text-white/90">Shared Server Port</label>
-              <Input
-                type="number"
-                min="1"
-                max="65535"
-                step="1"
-                value={desktopServerPort}
-                onChange={(e) => {
-                  const nextPort = Number.parseInt(e.target.value, 10);
-                  if (Number.isInteger(nextPort)) {
-                    updateAIConfig('desktop-local.serverPort', nextPort);
-                  }
-                }}
-                variant={isLightBackground ? 'dark' : 'default'}
-              />
-              {!isDesktopServerPortValid && (
-                <p className="text-xs text-red-300">Port must be between 1 and 65535.</p>
-              )}
-            </div>
-          </Card>
+          <div className="space-y-2 mt-2">
+            <label className="block text-sm font-medium text-white/90">Shared Server Port</label>
+            <Input
+              type="number"
+              min="1"
+              max="65535"
+              step="1"
+              value={desktopServerPort}
+              onChange={(e) => {
+                const nextPort = Number.parseInt(e.target.value, 10);
+                if (Number.isInteger(nextPort)) {
+                  updateAIConfig('desktop-local.serverPort', nextPort);
+                }
+              }}
+              variant={isLightBackground ? 'dark' : 'default'}
+            />
+            {!isDesktopServerPortValid && (
+              <p className="text-xs text-red-300">Port must be between 1 and 65535.</p>
+            )}
+          </div>
+        </Card>
       )}
-      
-      {/* Provider Selection */}
+
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Provider</label>
         <Select
           value={aiConfig.provider}
           onChange={(e) => updateAIConfig('provider', e.target.value)}
           variant={isLightBackground ? 'dark' : 'default'}
-          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: key }))}
+          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: PROVIDER_LABELS[value] || key }))}
         />
       </div>
 
@@ -827,9 +1203,9 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
         </div>
       )}
 
-      {/* OpenAI Configuration */}
       {aiConfig.provider === AIProviders.OPENAI && (
         <>
+          <RemoteProfileManager aiConfig={aiConfig} updateAIConfig={updateAIConfig} isLightBackground={isLightBackground} provider="openai" />
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">API Key</label>
             <Input
@@ -843,36 +1219,23 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Model</label>
-            <Input
-              type="text"
+            <RemoteModelPicker
               value={aiConfig.openai.model}
-              onChange={(e) => updateAIConfig('openai.model', e.target.value)}
+              onChange={(value) => updateAIConfig('openai.model', value)}
+              provider="openai"
               placeholder="gpt-4o"
-              variant={isLightBackground ? 'dark' : 'default'}
-              className="w-full"
-            />
-          </div>
-
-          <ImageSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          <AudioSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          <SystemPromptSection providerKey="openai" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          
-          {/* Model Routing */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
-            <ModelConfigRemote
-              providerKey="openai"
-              routing={aiConfig.openai?.routing}
-              onChange={(field: string, value: unknown) => updateAIConfig(`openai.${field}`, value)}
+              apiKey={aiConfig.openai.apiKey}
               isLightBackground={isLightBackground}
             />
           </div>
+          <ImageSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
+          <AudioSupportToggle providerKey="openai" aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
         </>
       )}
 
-      {/* Ollama Configuration */}
       {aiConfig.provider === AIProviders.OLLAMA && (
         <>
+          <RemoteProfileManager aiConfig={aiConfig} updateAIConfig={updateAIConfig} isLightBackground={isLightBackground} provider="ollama" />
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
             <Input
@@ -883,51 +1246,31 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               variant={isLightBackground ? 'dark' : 'default'}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              URL of your local Ollama server
-            </p>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Model</label>
-            <Input
-              type="text"
+            <RemoteModelPicker
               value={aiConfig.ollama?.model ?? ''}
-              onChange={(e) => updateAIConfig('ollama.model', e.target.value)}
+              onChange={(value) => updateAIConfig('ollama.model', value)}
+              provider="ollama"
+              endpoint={aiConfig.ollama?.endpoint}
               placeholder="llama2"
-              variant={isLightBackground ? 'dark' : 'default'}
-              className="w-full"
-            />
-            <p className="text-xs text-white/50">
-              Model name (e.g., llama2, mistral, codellama)
-            </p>
-          </div>
-
-          <ImageSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
-          <AudioSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
-          <SystemPromptSection providerKey="ollama" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          
-          {/* Model Routing */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
-            <ModelConfigRemote
-              providerKey="ollama"
-              routing={aiConfig.ollama?.routing}
-              onChange={(field: string, value: unknown) => updateAIConfig(`ollama.${field}`, value)}
               isLightBackground={isLightBackground}
             />
           </div>
+          <ImageSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
+          <AudioSupportToggle providerKey="ollama" aiConfig={aiConfig} updateAIConfig={updateAIConfig} additionalNote="Requires multi-modal capable model." />
         </>
       )}
 
-      {/* Android Local LLM Configuration */}
       {aiConfig.provider === AIProviders.ANDROID_LOCAL && isAndroid && (
         <>
-          {/* Info Banner */}
           <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <p className="text-xs text-green-300">
               <span className="font-semibold">Android Local LLM</span> - On-device AI using llama.cpp. Download and manage GGUF models below.
             </p>
           </div>
+          <RemoteProfileManager aiConfig={aiConfig} updateAIConfig={updateAIConfig} isLightBackground={isLightBackground} provider="android-local" />
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Endpoint URL</label>
@@ -939,12 +1282,8 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               variant={isLightBackground ? 'dark' : 'default'}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              Local HTTP server on Android device
-            </p>
           </div>
 
-          {/* Model Management UI */}
           <LocalLLMModelManager
             storageService={getLLMModelStorage(androidAPI)}
             selectedModel={aiConfig['android-local']?.model || null}
@@ -957,7 +1296,6 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
             supportsCustomFolder={false}
           />
 
-          {/* Temperature Slider */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">
               Temperature: {aiConfig['android-local']?.temperature || 0.7}
@@ -971,12 +1309,8 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               onChange={(e) => updateAIConfig('android-local.temperature', parseFloat(e.target.value))}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              Controls randomness (0 = deterministic, 2 = very creative)
-            </p>
           </div>
 
-          {/* Max Tokens */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">
               Max Tokens: {aiConfig['android-local']?.maxTokens || 2048}
@@ -990,30 +1324,13 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               onChange={(e) => updateAIConfig('android-local.maxTokens', parseInt(e.target.value))}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              Maximum response length (higher = slower)
-            </p>
-          </div>
-
-          <SystemPromptSection providerKey="android-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          
-          {/* Model Routing */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
-            <ModelConfigLocal
-              routing={aiConfig['android-local']?.routing}
-              onChange={(field, value) => updateAIConfig(`android-local.${field}`, value)}
-              storageService={getLLMModelStorage(androidAPI)}
-              refreshTrigger={refreshTrigger}
-              customModelsPath={null}
-            />
           </div>
         </>
       )}
 
-      {/* Desktop Local LLM Configuration */}
       {aiConfig.provider === AIProviders.DESKTOP_LOCAL && isDesktop && (
         <>
+          <RemoteProfileManager aiConfig={aiConfig} updateAIConfig={updateAIConfig} isLightBackground={isLightBackground} provider="desktop-local" />
           <DesktopLLMConfig
             config={aiConfig['desktop-local'] || {}}
             onChange={(updates: Record<string, unknown>) => {
@@ -1025,33 +1342,18 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
             isLightBackground={isLightBackground}
             {...(onRequestDeleteLLMModel ? { onRequestDeleteModel: onRequestDeleteLLMModel } : {})}
             {...(typeof refreshTrigger !== 'undefined' ? { refreshTrigger } : {})}
-          />          <SystemPromptSection providerKey="desktop-local" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-          
-          {/* Model Routing */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
-            <ModelConfigLocal
-              routing={aiConfig['desktop-local']?.routing}
-              onChange={(field, value) => updateAIConfig(`desktop-local.${field}`, value)}
-              storageService={desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null}
-              refreshTrigger={refreshTrigger}
-              customModelsPath={aiConfig['desktop-local']?.customModelsPath ?? null}
-            />
-          </div>
+          />
         </>
       )}
 
-      {/* Chrome AI Configuration */}
       {aiConfig.provider === AIProviders.CHROME_AI && (
         <>
-          {/* Info Banner */}
           <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
             <p className="text-xs text-blue-300">
               <span className="font-semibold">Chrome Built-in AI (Gemini Nano)</span> - On-device AI running locally
             </p>
           </div>
 
-          {/* Availability Status */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Status</label>
             <div className="p-3 rounded-lg bg-white/5 border border-white/10">
@@ -1062,22 +1364,21 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
                 </div>
               ) : chromeAiStatus.state ? (
                 <>
-                  <StatusMessage 
+                  <StatusMessage
                     message={chromeAiStatus.message}
                     isLightBackground={isLightBackground}
                     className="mb-2"
                   />
                   <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
-                  
-                  {/* Download Progress */}
+
                   {chromeAiStatus.downloading && (
                     <div className="mt-3 space-y-2">
                       <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
                         <p className="text-xs text-yellow-300">
                           Download in progress. For real-time progress, visit{' '}
-                          <a 
-                            href="chrome://on-device-internals/" 
-                            target="_blank" 
+                          <a
+                            href="chrome://on-device-internals/"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="underline hover:text-yellow-200"
                           >
@@ -1087,8 +1388,7 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
                       </div>
                     </div>
                   )}
-                  
-                  {/* Download Button */}
+
                   {(chromeAiStatus.state === 'downloadable' || chromeAiStatus.state === 'after-download') && !chromeAiStatus.downloading && (
                     <Button
                       onClick={startChromeAIDownload}
@@ -1099,8 +1399,7 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
                       Start Model Download
                     </Button>
                   )}
-                  
-                  {/* Refresh Status Button */}
+
                   <button
                     onClick={checkChromeAIAvailability}
                     className="mt-2 text-xs text-blue-400 hover:text-blue-300"
@@ -1121,7 +1420,6 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
             </div>
           </div>
 
-          {/* Temperature Slider */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">
               Temperature: {aiConfig.chromeAi?.temperature || 1.0}
@@ -1135,12 +1433,8 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               onChange={(e) => updateAIConfig('chromeAi.temperature', parseFloat(e.target.value))}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              Controls randomness (0 = deterministic, 2 = very creative)
-            </p>
           </div>
 
-          {/* Top-K Slider */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">
               Top-K: {aiConfig.chromeAi?.topK || 3}
@@ -1154,12 +1448,8 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
               onChange={(e) => updateAIConfig('chromeAi.topK', parseInt(e.target.value))}
               className="w-full"
             />
-            <p className="text-xs text-white/50">
-              Limits token choices for more focused responses
-            </p>
           </div>
 
-          {/* Output Language */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Output Language</label>
             <Select
@@ -1172,19 +1462,12 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
                 { value: 'ja', label: 'Japanese (ja)' },
               ]}
             />
-            <p className="text-xs text-white/50">
-              Specifies the output language for optimal quality and safety
-            </p>
           </div>
 
-          {/* Image Support */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
               <label htmlFor="chrome-ai-image-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
                 Enable Image Support (Multi-modal)
-                <p className="text-xs text-white/50 mt-0.5">
-                  Allows sending images with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
-                </p>
               </label>
               <Toggle
                 id="chrome-ai-image-support"
@@ -1194,14 +1477,10 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
             </div>
           </div>
 
-          {/* Audio Support */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
               <label htmlFor="chrome-ai-audio-support" className="text-sm font-medium text-white/90 cursor-pointer flex-1">
                 Enable Audio Support (Multi-modal)
-                <p className="text-xs text-white/50 mt-0.5">
-                  Allows sending audio files with text prompts. Enabled by default. Changing this setting will automatically clear the current chat session when you click "Save Settings".
-                </p>
               </label>
               <Toggle
                 id="chrome-ai-audio-support"
@@ -1211,10 +1490,6 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
             </div>
           </div>
 
-          {/* System Prompt */}
-          <SystemPromptSection providerKey="chromeAi" isLightBackground={isLightBackground} aiConfig={aiConfig} updateAIConfig={updateAIConfig} />
-
-          {/* Required Flags */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">Required Chrome Flags</label>
             <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-2 text-xs">
@@ -1244,7 +1519,6 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
         </>
       )}
 
-      {/* Actions */}
       <div className="flex items-center gap-3 pt-4">
         <Button
           onClick={testAIConnection}
@@ -1253,6 +1527,140 @@ const LLMSettings = ({ isLightBackground = false, hasChromeAI = false, onRequest
         >
           Test Connection
         </Button>
+      </div>
+    </>
+  );
+
+  const renderRoutingSettings = () => {
+    if (aiConfig.provider === AIProviders.OPENAI) {
+      return (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+          <ModelConfigRemote
+            providerKey="openai"
+            routing={aiConfig.openai?.routing}
+            profiles={aiConfig.remoteProfiles}
+            apiKey={aiConfig.openai.apiKey}
+            onChange={(field: string, value: unknown) => updateAIConfig(`openai.${field}`, value)}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+      );
+    }
+
+    if (aiConfig.provider === AIProviders.OLLAMA) {
+      return (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+          <ModelConfigRemote
+            providerKey="ollama"
+            routing={aiConfig.ollama?.routing}
+            profiles={aiConfig.remoteProfiles}
+            endpoint={aiConfig.ollama?.endpoint}
+            onChange={(field: string, value: unknown) => updateAIConfig(`ollama.${field}`, value)}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+      );
+    }
+
+    if (aiConfig.provider === AIProviders.ANDROID_LOCAL && isAndroid) {
+      return (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+          <ModelConfigLocal
+            routing={aiConfig['android-local']?.routing}
+            profiles={aiConfig.remoteProfiles}
+            onChange={(field, value) => updateAIConfig(`android-local.${field}`, value)}
+            storageService={getLLMModelStorage(androidAPI)}
+            refreshTrigger={refreshTrigger}
+            customModelsPath={null}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+      );
+    }
+
+    if (aiConfig.provider === AIProviders.DESKTOP_LOCAL && isDesktop) {
+      return (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/90 mb-3">Model Routing</h4>
+          <ModelConfigLocal
+            routing={aiConfig['desktop-local']?.routing}
+            profiles={aiConfig.remoteProfiles}
+            onChange={(field, value) => updateAIConfig(`desktop-local.${field}`, value)}
+            storageService={desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null}
+            refreshTrigger={refreshTrigger}
+            customModelsPath={aiConfig['desktop-local']?.customModelsPath ?? null}
+            isLightBackground={isLightBackground}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/70">
+        Routing is not available for this provider yet.
+      </div>
+    );
+  };
+
+  const renderProfileSettings = () => {
+    const providerKey = aiConfig.provider === AIProviders.CHROME_AI
+      ? 'chromeAi'
+      : aiConfig.provider;
+
+    return (
+      <SystemPromptSection
+        providerKey={providerKey as SystemPromptSectionProps['providerKey']}
+        isLightBackground={isLightBackground}
+        aiConfig={aiConfig}
+        updateAIConfig={updateAIConfig}
+      />
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="relative">
+        <div
+          className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
+          style={{
+            left: `${subTabIndicatorStyle.left}px`,
+            width: `${subTabIndicatorStyle.width}px`,
+          }}
+        />
+        <TabBar
+          tabs={[
+            { id: 'provider', label: 'Provider' },
+            { id: 'routing', label: 'Routing' },
+            { id: 'profiles', label: 'Profiles' },
+          ]}
+          size="compact"
+          activeTab={activeSubTab}
+          onTabChange={(tabId) => setActiveSubTab(tabId as LLMSubTabId)}
+          tabsRef={subTabsRef}
+        />
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <div
+          className="flex flex-nowrap transition-transform duration-300 ease-out"
+          style={{
+            transform: `translateX(-${llmSubTabOrder.indexOf(activeSubTab) * 100}%)`,
+            height: '100%',
+          }}
+        >
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
+            {renderProviderSettings()}
+          </div>
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
+            {renderRoutingSettings()}
+          </div>
+          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
+            {renderProfileSettings()}
+          </div>
+        </div>
       </div>
     </div>
   );

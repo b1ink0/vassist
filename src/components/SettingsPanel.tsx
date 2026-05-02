@@ -262,7 +262,7 @@ const SettingsPanel = ({
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
+          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass">
             <LLMSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
