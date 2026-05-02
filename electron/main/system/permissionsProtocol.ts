@@ -93,7 +93,7 @@ export function setupDesktopPermissions({ session, desktopCapturer, BrowserWindo
         frame: false,
         backgroundColor: '#1a1a1a',
         webPreferences: {
-          preload: path.join(__dirname, 'preload.mjs'),
+          preload: path.join(__dirname, 'preload.cjs'),
           nodeIntegration: false,
           contextIsolation: true,
           sandbox: false,

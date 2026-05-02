@@ -201,25 +201,7 @@ const ModelDownloader = ({
         >
           {downloading ? (
             <>
-              <svg
-                className="animate-spin"
-                width="12"
-                height="12"
-                viewBox="0 0 32 32"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <circle
-                  cx="16"
-                  cy="16"
-                  r="14"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray="70 20"
-                  className="text-white opacity-90"
-                />
-              </svg>
+              <Icon name="loading-2" size={12} className="animate-spin" />
               <span>Downloading...</span>
             </>
           ) : (

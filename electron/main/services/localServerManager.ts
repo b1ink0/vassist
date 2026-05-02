@@ -161,12 +161,22 @@ export function createLocalServerManager({
       };
 
       if (config.model) {
-        const llmPath = path.join(getModelsDir(config.customModelsPath), config.model);
+        const modelsDir = getModelsDir(config.customModelsPath);
+        const llmPath = path.join(modelsDir, config.model);
         if (fs.existsSync(llmPath)) {
           serverConfig.llm.modelPath = llmPath;
           console.log('[Server] LLM model:', config.model);
         } else {
           console.warn('[Server] Model not found:', config.model);
+          const requestedBaseName = String(config.model).toLowerCase().split(':')[0] || '';
+          const availableModels = fs.readdirSync(modelsDir)
+            .filter((entry) => entry.toLowerCase().endsWith('.gguf') && !entry.toLowerCase().startsWith('mmproj-'))
+            .sort((left, right) => left.localeCompare(right));
+          const fallbackModel = availableModels.find((entry) => entry.toLowerCase().includes(requestedBaseName)) || availableModels[0];
+          if (fallbackModel) {
+            serverConfig.llm.modelPath = path.join(modelsDir, fallbackModel);
+            console.log('[Server] Falling back to available model:', fallbackModel);
+          }
         }
       }
 

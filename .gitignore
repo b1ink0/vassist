@@ -26,7 +26,7 @@ release
 *.sln
 *.sw?
 *.tsbuildinfo
-.tmp*/
+
 
 docs
 *.patch
@@ -42,6 +42,7 @@ private_test
 *.tgz
 *.tar.gz
 *.whl
+*.tmp*
 electron/server/gpt-sovits/python*/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/
@@ -51,3 +52,4 @@ electron/server/gpt-sovits/env/
 electron/server/gpt-sovits/models/
 electron/server/models/
 electron/server/whisper-stt/models/
+models/whisper

@@ -190,6 +190,46 @@ class LocalAIBridge(
         }
     }
 
+    @JavascriptInterface
+    fun searchOllamaModels(query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.searchOllamaModels(query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "searchOllamaModels failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.listOllamaModelTags(modelId, query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "listOllamaModelTags failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun searchHuggingFaceModels(query: String, cursor: String, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.searchHuggingFaceModels(query, cursor, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "searchHuggingFaceModels failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.listHuggingFaceFiles(repoId, query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "listHuggingFaceFiles failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
     /**
      * Download model from URL (async)
      * Use downloadProgress callback to track progress

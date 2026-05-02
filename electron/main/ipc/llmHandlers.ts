@@ -37,11 +37,98 @@ type HuggingFaceTreeEntry = {
   path?: string;
 };
 
+type HuggingFaceSearchEntry = {
+  id?: string;
+  downloads?: number;
+  likes?: number;
+  pipeline_tag?: string;
+  createdAt?: string;
+  tags?: string[];
+};
+
+type CatalogItem = {
+  id: string;
+  label: string;
+  value: string;
+  description?: string;
+  secondaryLabel?: string;
+  downloads?: number;
+  likes?: number;
+};
+
+type CatalogResult = {
+  success: boolean;
+  items: CatalogItem[];
+  nextCursor?: string | null;
+  total?: number;
+  error?: string;
+};
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
   return String(error);
+}
+
+function encodeRepoId(repoId: string): string {
+  return repoId.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+function encodePathSegments(filePath: string): string {
+  return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+function parseNextCursor(linkHeader: string | null): string | null {
+  if (!linkHeader) {
+    return null;
+  }
+
+  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/i);
+  if (!nextMatch?.[1]) {
+    return null;
+  }
+
+  try {
+    const nextUrl = new URL(nextMatch[1]);
+    return nextUrl.searchParams.get('cursor');
+  } catch {
+    return null;
+  }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function paginateItems(items: CatalogItem[], page: number, pageSize: number): CatalogResult {
+  const normalizedPage = Math.max(1, Number(page) || 1);
+  const normalizedPageSize = Math.max(1, Math.min(50, Number(pageSize) || 20));
+  const start = (normalizedPage - 1) * normalizedPageSize;
+  const pageItems = items.slice(start, start + normalizedPageSize);
+  const hasNext = start + normalizedPageSize < items.length;
+
+  return {
+    success: true,
+    items: pageItems,
+    total: items.length,
+    nextCursor: hasNext ? String(normalizedPage + 1) : null,
+  };
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'VAssist/1.0',
+      'Accept': 'text/html,application/json;q=0.9,*/*;q=0.8',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  return await response.text();
 }
 
 export function createGetModelsDir({ app, fs, path, baseDir }: ModelDirDeps) {
@@ -87,6 +174,183 @@ export function createGetModelsDir({ app, fs, path, baseDir }: ModelDirDeps) {
 }
 
 export function registerLLMHandlers({ ipcMain, fs, path, require, getModelsDir, llmBackendManager }: LLMHandlersDeps) {
+  ipcMain.handle('llm:search-ollama-models', async (_event: IpcMainInvokeEvent, query = '', page = 1, pageSize = 20) => {
+    try {
+      const html = await fetchText('https://ollama.com/library');
+      const matches = [...html.matchAll(/\/library\/([a-z0-9._-]+)/gi)];
+      const seen = new Set<string>();
+      const filtered = matches
+        .map((match) => match[1]?.trim().toLowerCase())
+        .filter((slug): slug is string => Boolean(slug))
+        .filter((slug) => {
+          if (seen.has(slug)) {
+            return false;
+          }
+          seen.add(slug);
+          return true;
+        })
+        .filter((slug) => {
+          const normalizedQuery = String(query || '').trim().toLowerCase();
+          return !normalizedQuery || slug.includes(normalizedQuery);
+        })
+        .sort((left, right) => left.localeCompare(right))
+        .map((slug) => ({
+          id: slug,
+          label: slug,
+          value: slug,
+          secondaryLabel: 'Ollama library',
+        }));
+
+      return paginateItems(filtered, page, pageSize);
+    } catch (error) {
+      return { success: false, items: [], error: getErrorMessage(error) } satisfies CatalogResult;
+    }
+  });
+
+  ipcMain.handle('llm:list-ollama-model-tags', async (_event: IpcMainInvokeEvent, modelId: string, query = '', page = 1, pageSize = 20) => {
+    try {
+      const normalizedModelId = String(modelId || '').trim().toLowerCase();
+      if (!normalizedModelId) {
+        return { success: true, items: [], total: 0, nextCursor: null } satisfies CatalogResult;
+      }
+
+      const html = await fetchText(`https://ollama.com/library/${encodeURIComponent(normalizedModelId)}`);
+      const tagPattern = new RegExp(`${escapeRegex(normalizedModelId)}:([a-z0-9._-]+)`, 'gi');
+      const tagMatches = [...html.matchAll(tagPattern)];
+      const seen = new Set<string>();
+      const normalizedQuery = String(query || '').trim().toLowerCase();
+      const items = tagMatches
+        .map((match) => match[1]?.trim().toLowerCase())
+        .filter((tag): tag is string => Boolean(tag))
+        .filter((tag) => {
+          const fullValue = `${normalizedModelId}:${tag}`;
+          if (seen.has(fullValue)) {
+            return false;
+          }
+          seen.add(fullValue);
+          return !normalizedQuery || fullValue.includes(normalizedQuery) || tag.includes(normalizedQuery);
+        })
+        .map((tag) => ({
+          id: `${normalizedModelId}:${tag}`,
+          label: `${normalizedModelId}:${tag}`,
+          value: `${normalizedModelId}:${tag}`,
+          secondaryLabel: tag === 'latest' ? 'Default tag' : 'Variant',
+        }));
+
+      if (!items.length) {
+        items.push({
+          id: `${normalizedModelId}:latest`,
+          label: `${normalizedModelId}:latest`,
+          value: `${normalizedModelId}:latest`,
+          secondaryLabel: 'Default tag',
+        });
+      }
+
+      return paginateItems(items, page, pageSize);
+    } catch (error) {
+      return { success: false, items: [], error: getErrorMessage(error) } satisfies CatalogResult;
+    }
+  });
+
+  ipcMain.handle('llm:search-huggingface-models', async (_event: IpcMainInvokeEvent, query = '', cursor = '', pageSize = 20) => {
+    try {
+      const params = new URLSearchParams();
+      if (String(query || '').trim()) {
+        params.set('search', String(query).trim());
+      }
+      params.set('filter', 'gguf');
+      params.set('limit', String(Math.max(1, Math.min(50, Number(pageSize) || 20))));
+      params.set('sort', 'trendingScore');
+      if (String(cursor || '').trim()) {
+        params.set('cursor', String(cursor).trim());
+      }
+
+      const response = await fetch(`https://huggingface.co/api/models?${params.toString()}`, {
+        headers: {
+          'User-Agent': 'VAssist/1.0',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Hugging Face request failed: ${response.status}`);
+      }
+
+      const payload = await response.json() as HuggingFaceSearchEntry[];
+      const items = payload
+        .filter((entry) => typeof entry.id === 'string' && entry.id.length > 0)
+        .map((entry) => {
+          const description = [
+            typeof entry.downloads === 'number' ? `${entry.downloads.toLocaleString()} downloads` : null,
+            typeof entry.likes === 'number' ? `${entry.likes.toLocaleString()} likes` : null,
+            entry.pipeline_tag || null,
+          ].filter(Boolean).join(' • ');
+
+          return {
+            id: entry.id as string,
+            label: entry.id as string,
+            value: entry.id as string,
+            ...(description ? { description } : {}),
+            secondaryLabel: Array.isArray(entry.tags) && entry.tags.includes('gguf') ? 'GGUF' : 'Model repo',
+            ...(typeof entry.downloads === 'number' ? { downloads: entry.downloads } : {}),
+            ...(typeof entry.likes === 'number' ? { likes: entry.likes } : {}),
+          } satisfies CatalogItem;
+        });
+
+      const totalHeader = response.headers.get('X-Total-Count');
+      const total = typeof totalHeader === 'string' ? Number(totalHeader) || null : null;
+
+      return {
+        success: true,
+        items,
+        nextCursor: parseNextCursor(response.headers.get('Link')),
+        ...(typeof total === 'number' ? { total } : {}),
+      } satisfies CatalogResult;
+    } catch (error) {
+      return { success: false, items: [], error: getErrorMessage(error) } satisfies CatalogResult;
+    }
+  });
+
+  ipcMain.handle('llm:list-huggingface-files', async (_event: IpcMainInvokeEvent, repoId: string, query = '', page = 1, pageSize = 20) => {
+    try {
+      const normalizedRepoId = String(repoId || '').trim();
+      if (!normalizedRepoId) {
+        return { success: true, items: [], total: 0, nextCursor: null } satisfies CatalogResult;
+      }
+
+      const response = await fetch(`https://huggingface.co/api/models/${encodeRepoId(normalizedRepoId)}`, {
+        headers: {
+          'User-Agent': 'VAssist/1.0',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Hugging Face file listing failed: ${response.status}`);
+      }
+
+      const payload = await response.json() as { sha?: string; siblings?: Array<{ rfilename?: string }> };
+      const revision = typeof payload.sha === 'string' && payload.sha.length > 0 ? payload.sha : 'main';
+      const normalizedQuery = String(query || '').trim().toLowerCase();
+      const items = (Array.isArray(payload.siblings) ? payload.siblings : [])
+        .map((entry) => entry?.rfilename)
+        .filter((filePath): filePath is string => typeof filePath === 'string' && filePath.toLowerCase().endsWith('.gguf') && !/\/mmproj.*\.gguf$/i.test(filePath) && !/^mmproj.*\.gguf$/i.test(filePath))
+        .filter((filePath) => !normalizedQuery || filePath.toLowerCase().includes(normalizedQuery))
+        .sort((left, right) => left.localeCompare(right))
+        .map((filePath) => ({
+          id: filePath,
+          label: filePath.split('/').pop() || filePath,
+          value: `https://huggingface.co/${normalizedRepoId}/resolve/${revision}/${encodePathSegments(filePath)}?download=true`,
+          secondaryLabel: filePath,
+          description: normalizedRepoId,
+        }));
+
+      return paginateItems(items, page, pageSize);
+    } catch (error) {
+      return { success: false, items: [], error: getErrorMessage(error) } satisfies CatalogResult;
+    }
+  });
+
   // List models in models directory
   ipcMain.handle('llm:list-models', async (_event: IpcMainInvokeEvent, customPath: string | null = null) => {
     try {

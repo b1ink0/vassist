@@ -4,7 +4,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, screen, Tray, Menu, globalShortcut, protocol, session, desktopCapturer, nativeImage } from 'electron';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
@@ -83,9 +83,7 @@ const pythonServerManager = createPythonServerManager({
   fs,
   path,
   spawn,
-  pathToFileURL,
   processEnv: process.env,
-  serverBasePath,
   ensureRuntimeServerScripts: runtimePaths.ensureRuntimeServerScripts,
   getRuntimeServerBasePath: runtimePaths.getRuntimeServerBasePath,
   getGPTSoVITSDataDir: runtimePaths.getGPTSoVITSDataDir,

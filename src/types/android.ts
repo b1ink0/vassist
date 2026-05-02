@@ -16,6 +16,10 @@ export interface AndroidAPI {
   deleteLLMModel?: (filename: string) => string;
   importLLMModel?: () => string;
   getLLMModelsDirectory?: () => string;
+  searchOllamaModels?: (query: string, page?: number, pageSize?: number) => string;
+  listOllamaModelTags?: (modelId: string, query?: string, page?: number, pageSize?: number) => string;
+  searchHuggingFaceModels?: (query: string, cursor?: string, pageSize?: number) => string;
+  listHuggingFaceFiles?: (repoId: string, query?: string, page?: number, pageSize?: number) => string;
 
   getSTTTTSStatus?: () => string;
   downloadWhisperModel?: () => string;

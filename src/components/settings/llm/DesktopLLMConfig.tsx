@@ -4,7 +4,7 @@ import { useDesktop } from '../../../contexts/DesktopContext';
 import { isDesktop } from '../../../utils/PlatformUtils';
 import { Button, Select, Input } from '../../ui';
 import LocalLLMModelManager from './LocalLLMModelManager';
-import { getLLMModelStorage } from '../../../services/LLMModelStorageService';
+import { getLLMModelStorage, type DiscoveryResult } from '../../../services/LLMModelStorageService';
 
 interface DesktopLLMConfigShape {
   endpoint?: string;
@@ -131,27 +131,51 @@ const DesktopLLMConfig = ({
   };
 
   const desktopLlmBridge = isDesktopLlmBridge(api?.llm) ? api.llm : null;
-  const desktopLlmApi = desktopLlmBridge ? {
-    listModels: (customPath?: string | null) => desktopLlmBridge.listModels(customPath) as Promise<{ success: boolean; models?: ModelEntry[] }>,
-    pullModel: (modelName: string, customPath?: string | null) => desktopLlmBridge.pullModel(modelName, customPath) as Promise<{ success: boolean; error?: string }>,
-    downloadModel: (url: string, customPath?: string | null) => desktopLlmBridge.downloadModel(url, customPath) as Promise<{ success: boolean; error?: string }>,
-    deleteModel: (filename: string, customPath?: string | null) => desktopLlmBridge.deleteModel(filename, customPath) as Promise<{ success: boolean; error?: string }>,
-    chooseModelFile: () => desktopLlmBridge.chooseModelFile() as Promise<{ canceled?: boolean; path?: string }>,
-    importModel: (filePath: string, customPath?: string | null) => desktopLlmBridge.importModel(filePath, customPath) as Promise<{ success: boolean; error?: string }>,
-    chooseModelsFolder: () => desktopLlmBridge.chooseModelsFolder() as Promise<{ success: boolean; error?: string; path?: string }>,
-    onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => {
-      const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
-      return () => unsubscribe?.();
-    },
-    getBackendStatus: (backend = 'auto') => desktopLlmBridge.getBackendStatus(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
-    installBackend: (backend: string) => desktopLlmBridge.installBackend(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
-    cancelBackendInstall: () => desktopLlmBridge.cancelBackendInstall() as Promise<{ success: boolean } & Record<string, unknown>>,
-    onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => {
-      const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
-      return () => unsubscribe?.();
-    },
-  } : null;
-  const storageService = isDesktop && desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null;
+  const desktopLlmApi = useMemo(() => {
+    if (!desktopLlmBridge) {
+      return null;
+    }
+
+    const unsupportedDiscovery = async (): Promise<DiscoveryResult> => ({
+      success: false,
+      items: [],
+      error: 'Desktop model discovery is unavailable. Restart the desktop app to reload preload APIs.',
+    });
+
+    return {
+      listModels: (customPath?: string | null) => desktopLlmBridge.listModels(customPath) as Promise<{ success: boolean; models?: ModelEntry[] }>,
+      pullModel: (modelName: string, customPath?: string | null) => desktopLlmBridge.pullModel(modelName, customPath) as Promise<{ success: boolean; error?: string }>,
+      downloadModel: (url: string, customPath?: string | null) => desktopLlmBridge.downloadModel(url, customPath) as Promise<{ success: boolean; error?: string }>,
+      searchOllamaModels: (query: string, page = 1, pageSize = 20) => desktopLlmBridge.searchOllamaModels
+        ? desktopLlmBridge.searchOllamaModels(query, page, pageSize) as Promise<DiscoveryResult>
+        : unsupportedDiscovery(),
+      listOllamaModelTags: (modelId: string, query = '', page = 1, pageSize = 20) => desktopLlmBridge.listOllamaModelTags
+        ? desktopLlmBridge.listOllamaModelTags(modelId, query, page, pageSize) as Promise<DiscoveryResult>
+        : unsupportedDiscovery(),
+      searchHuggingFaceModels: (query: string, cursor = '', pageSize = 20) => desktopLlmBridge.searchHuggingFaceModels
+        ? desktopLlmBridge.searchHuggingFaceModels(query, cursor, pageSize) as Promise<DiscoveryResult>
+        : unsupportedDiscovery(),
+      listHuggingFaceFiles: (repoId: string, query = '', page = 1, pageSize = 20) => desktopLlmBridge.listHuggingFaceFiles
+        ? desktopLlmBridge.listHuggingFaceFiles(repoId, query, page, pageSize) as Promise<DiscoveryResult>
+        : unsupportedDiscovery(),
+      deleteModel: (filename: string, customPath?: string | null) => desktopLlmBridge.deleteModel(filename, customPath) as Promise<{ success: boolean; error?: string }>,
+      chooseModelFile: () => desktopLlmBridge.chooseModelFile() as Promise<{ canceled?: boolean; path?: string }>,
+      importModel: (filePath: string, customPath?: string | null) => desktopLlmBridge.importModel(filePath, customPath) as Promise<{ success: boolean; error?: string }>,
+      chooseModelsFolder: () => desktopLlmBridge.chooseModelsFolder() as Promise<{ success: boolean; error?: string; path?: string }>,
+      onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => {
+        const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
+        return () => unsubscribe?.();
+      },
+      getBackendStatus: (backend = 'auto') => desktopLlmBridge.getBackendStatus(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+      installBackend: (backend: string) => desktopLlmBridge.installBackend(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
+      cancelBackendInstall: () => desktopLlmBridge.cancelBackendInstall() as Promise<{ success: boolean } & Record<string, unknown>>,
+      onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => {
+        const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
+        return () => unsubscribe?.();
+      },
+    };
+  }, [desktopLlmBridge]);
+  const storageService = useMemo(() => (isDesktop && desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null), [desktopLlmApi]);
   const selectedBackend = config.backend || 'auto';
   const backendProgressBytes = useMemo(() => {
     if (!backendProgress) return null;

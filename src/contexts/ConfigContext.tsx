@@ -1126,11 +1126,10 @@ export const ConfigProvider = ({ children }: ConfigProviderProps) => {
     setSttTesting(true);
     
     try {
-      STTServiceProxy.configure(sttConfig);
+      await STTServiceProxy.configure(sttConfig);
       setSttConfigError('🎤 Recording for 3 seconds... Speak now!');
-      
-      const testRecordingWithDevice = STTServiceProxy.testRecording as unknown as (durationSeconds: number, selectedDeviceId?: string | null) => Promise<string>;
-      const transcription = await testRecordingWithDevice(3, deviceId);
+
+      const transcription = await STTServiceProxy.testRecording(3, deviceId);
       
       setSttConfigError(`✅ Transcription: "${transcription}"`);
       setTimeout(() => setSttConfigError(''), 5000);

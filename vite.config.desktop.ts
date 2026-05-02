@@ -144,6 +144,10 @@ export default defineConfig(({ mode }) => {
               minify: isProduction ? 'esbuild' : false,
               sourcemap: !isProduction,
               rollupOptions: {
+                output: {
+                  format: 'cjs',
+                  entryFileNames: 'preload.cjs',
+                },
                 external: [
                   'electron',
                   'node-llama-cpp',

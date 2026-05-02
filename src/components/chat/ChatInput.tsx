@@ -12,7 +12,7 @@ import { useDesktopWindowResize } from '../../hooks/useDesktopWindowResize';
 import { useApp } from '../../contexts/AppContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import { Icon } from '../icons';
-import { Button } from '../ui';
+import { Button, Select } from '../ui';
 import Logger from '../../services/LoggerService';
 import { isAndroid, isDesktop, isExtension, isInputWindow } from '../../utils/PlatformUtils';
 import { useDesktop } from '../../contexts/DesktopContext';
@@ -164,13 +164,25 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   // Microphone selection state
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
-  const [showMicSelect, setShowMicSelect] = useState(false);
 
   // Camera selection state
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
-  const [showCameraSelect, setShowCameraSelect] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const micDeviceOptions = [
+    { value: '', label: 'Default Microphone' },
+    ...micDevices.map((device) => ({
+      value: device.deviceId,
+      label: device.label || `Microphone ${device.deviceId.substring(0, 8)}...`,
+    })),
+  ];
+  const cameraDeviceOptions = [
+    { value: '', label: 'Default Camera' },
+    ...cameraDevices.map((device, index) => ({
+      value: device.deviceId || '',
+      label: device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`),
+    })),
+  ];
   
   // Screen share state (Desktop only)
   const [isScreenShareActive, setIsScreenShareActive] = useState(false);
@@ -1279,19 +1291,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
   const handleMicSelect = (deviceId: string | null) => {
     Logger.log('ChatInput', 'Microphone selected:', deviceId);
     MicrophoneService.setSelectedDevice(deviceId || null);
-    setShowMicSelect(false);
     
     // Sync selected mic across windows on desktop
     if (isDesktopInputWindow && api?.ipc) {
       api.ipc.send('state:selectedMicId', deviceId || null);
     }
-  };
-
-  /**
-   * Toggles microphone selection dropdown
-   */
-  const handleMicSelectToggle = () => {
-    setShowMicSelect(!showMicSelect);
   };
 
   /**
@@ -1305,14 +1309,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
     } else {
       await CameraService.setSelectedDevice(deviceId || null);
     }
-    setShowCameraSelect(false);
-  };
-
-  /**
-   * Toggles camera selection dropdown
-   */
-  const handleCameraSelectToggle = () => {
-    setShowCameraSelect(!showCameraSelect);
   };
 
   /**
@@ -1612,44 +1608,28 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
                         <Icon name="camera" size={16} className={isCameraActive ? 'animate-pulse' : (isLightBackground ? 'glass-text' : 'glass-text-black')} />
                       </Button>
                       
-                      <Button
-                        type="button"
-                        onClick={handleCameraSelectToggle}
+                      <Select
+                        value={selectedCameraId || ''}
+                        onChange={(event) => {
+                          void handleCameraSelect(event.target.value || null);
+                        }}
                         variant={isLightBackground ? 'dark' : 'default'}
-                        size="sm"
-                        className="px-1"
-                        title="Select Camera"
-                      >
-                        <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
-                      </Button>
-                      
-                      {showCameraSelect && (
-                        <select
-                          value={selectedCameraId || ''}
-                          onChange={(e) => handleCameraSelect(e.target.value)}
-                          onBlur={() => setShowCameraSelect(false)}
-                          autoFocus
-                          className={cn('absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md', !isLightBackground ? 'bg-white/90 text-black border-white/20' : 'bg-black/90 text-white border-white/10', 'border shadow-2xl')}
-                          style={{
-                            backdropFilter: 'blur(20px)',
-                            WebkitBackdropFilter: 'blur(20px)',
-                          }}
-                          size={Math.min(cameraDevices.length + 1, 5)}
-                        >
-                          <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
-                            Default Camera
-                          </option>
-                          {cameraDevices.map((device, index) => (
-                            <option 
-                              key={device.deviceId || index} 
-                              value={device.deviceId || ''}
-                              className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
-                            >
-                              {device.label || (device.deviceId ? `Camera ${device.deviceId.substring(0, 8)}...` : `Camera ${index + 1}`)}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                        options={cameraDeviceOptions}
+                        side="top"
+                        align="end"
+                        listClassName="min-w-[250px]"
+                        trigger={
+                          <Button
+                            type="button"
+                            variant={isLightBackground ? 'dark' : 'default'}
+                            size="sm"
+                            className="px-1"
+                            title="Select Camera"
+                          >
+                            <Icon name="chevron-down" size={14} className={isLightBackground ? 'glass-text' : 'glass-text-black'} />
+                          </Button>
+                        }
+                      />
                     </div>
                   )}
                   
@@ -1756,43 +1736,25 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({
                     </button>
                     
                     {/* Microphone selection */}
-                    <button
-                      type="button"
-                      onClick={handleMicSelectToggle}
+                    <Select
+                      value={selectedMicId || ''}
+                      onChange={(event) => handleMicSelect(event.target.value || null)}
+                      variant={isLightBackground ? 'dark' : 'default'}
+                      options={micDeviceOptions}
                       disabled={isRecording || isProcessingRecording}
-                      className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm', (isRecording || isProcessingRecording) ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black')}
-                      title="Select Microphone"
-                    >
-                      <Icon name="chevron-down" size={18} />
-                    </button>
-                    
-                    {showMicSelect && (
-                      <select
-                        value={selectedMicId || ''}
-                        onChange={(e) => handleMicSelect(e.target.value)}
-                        onBlur={() => setShowMicSelect(false)}
-                        autoFocus
-                        className={cn('absolute bottom-12 right-0 p-2 rounded-xl text-sm min-w-[250px] backdrop-blur-md', !isLightBackground ? 'bg-white/90 text-black border-white/20' : 'bg-black/90 text-white border-white/10', 'border shadow-2xl')}
-                        style={{
-                          backdropFilter: 'blur(20px)',
-                          WebkitBackdropFilter: 'blur(20px)',
-                        }}
-                        size={Math.min(micDevices.length + 1, 5)}
-                      >
-                        <option value="" className={!isLightBackground ? 'bg-white text-black' : 'bg-gray-900 text-white'}>
-                          Default Microphone
-                        </option>
-                        {micDevices.map((device) => (
-                          <option 
-                            key={device.deviceId} 
-                            value={device.deviceId}
-                            className={!isLightBackground ? 'bg-white text-black hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'}
-                          >
-                            {device.label || `Microphone ${device.deviceId.substring(0, 8)}...`}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                      side="top"
+                      align="end"
+                      listClassName="min-w-[250px]"
+                      trigger={
+                        <button
+                          type="button"
+                          className={cn('p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm', (isRecording || isProcessingRecording) ? 'opacity-50 cursor-not-allowed' : isLightBackground ? 'glass-text' : 'glass-text-black')}
+                          title="Select Microphone"
+                        >
+                          <Icon name="chevron-down" size={18} />
+                        </button>
+                      }
+                    />
                     
                     <button
                       type="button"

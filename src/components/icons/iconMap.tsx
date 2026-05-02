@@ -6,6 +6,7 @@
 import * as HeroIconsSolid from '@heroicons/react/24/solid';
 import * as HeroIconsOutline from '@heroicons/react/24/outline';
 import { FaGithub } from 'react-icons/fa';
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
 
 export const iconMap = {
   'close': HeroIconsSolid.XMarkIcon,
@@ -33,6 +34,7 @@ export const iconMap = {
   'zoomIn': HeroIconsSolid.MagnifyingGlassPlusIcon,
   'zoomOut': HeroIconsSolid.MagnifyingGlassMinusIcon,
   'loading': HeroIconsOutline.ArrowPathIcon,
+  'loading-2': AiOutlineLoading3Quarters,
   'success': HeroIconsSolid.CheckCircleIcon,
   'error-status': HeroIconsSolid.XCircleIcon,
   'warning': HeroIconsSolid.ExclamationTriangleIcon,

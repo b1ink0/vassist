@@ -1,14 +1,19 @@
 package com.vassist.app.ai
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.net.URL
 
 /**
@@ -40,6 +45,18 @@ class LLMModelManager(private val context: Context) {
         private const val TAG = "LLMModelManager"
         private const val MODELS_DIR = "models/llm"
     }
+
+    private val gson = Gson()
+
+    data class CatalogItem(
+        val id: String,
+        val label: String,
+        val value: String,
+        val description: String? = null,
+        val secondaryLabel: String? = null,
+        val downloads: Long? = null,
+        val likes: Long? = null
+    )
     
     /**
      * Progress callback for downloads
@@ -84,6 +101,236 @@ class LLMModelManager(private val context: Context) {
         
         Log.i(TAG, "Found ${models.size} models in ${modelsDir.absolutePath}")
         return models
+    }
+
+    private fun paginateItems(items: List<CatalogItem>, page: Int, pageSize: Int): Map<String, Any> {
+        val normalizedPage = page.coerceAtLeast(1)
+        val normalizedPageSize = pageSize.coerceIn(1, 50)
+        val startIndex = (normalizedPage - 1) * normalizedPageSize
+        val endIndex = (startIndex + normalizedPageSize).coerceAtMost(items.size)
+        val pageItems = if (startIndex >= items.size) emptyList() else items.subList(startIndex, endIndex)
+        val nextCursor = if (endIndex < items.size) (normalizedPage + 1).toString() else null
+
+        return mapOf(
+            "success" to true,
+            "items" to pageItems,
+            "total" to items.size,
+            "nextCursor" to nextCursor
+        )
+    }
+
+    private fun createConnection(url: String, accept: String = "application/json"): HttpURLConnection {
+        return (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            setRequestProperty("User-Agent", "VAssist/1.0")
+            setRequestProperty("Accept", accept)
+            connectTimeout = 30000
+            readTimeout = 30000
+        }
+    }
+
+    private fun parseNextCursor(linkHeader: String?): String? {
+        if (linkHeader.isNullOrBlank()) {
+            return null
+        }
+        val nextMatch = Regex("<([^>]+)>;\\s*rel=\"next\"", RegexOption.IGNORE_CASE).find(linkHeader)
+            ?: return null
+        val nextUrl = nextMatch.groupValues.getOrNull(1).orEmpty()
+        if (nextUrl.isBlank()) {
+            return null
+        }
+
+        return try {
+            Regex("[?&]cursor=([^&>]+)").find(nextUrl)?.groupValues?.getOrNull(1)?.let {
+                URLDecoder.decode(it, Charsets.UTF_8.name())
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun encodeRepoId(repoId: String): String {
+        return repoId.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
+        }
+    }
+
+    private fun encodePathSegments(filePath: String): String {
+        return filePath.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
+        }
+    }
+
+    suspend fun searchOllamaModels(query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            val connection = createConnection("https://ollama.com/library", "text/html")
+            val html = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val normalizedQuery = query.trim().lowercase()
+            val seen = linkedSetOf<String>()
+            val regex = Regex("/library/([a-z0-9._-]+)", RegexOption.IGNORE_CASE)
+            regex.findAll(html).forEach { match ->
+                val slug = match.groupValues.getOrNull(1)?.trim()?.lowercase().orEmpty()
+                if (slug.isNotBlank()) {
+                    seen.add(slug)
+                }
+            }
+
+            val items = seen
+                .filter { normalizedQuery.isBlank() || it.contains(normalizedQuery) }
+                .sorted()
+                .map { slug ->
+                    CatalogItem(
+                        id = slug,
+                        label = slug,
+                        value = slug,
+                        secondaryLabel = "Ollama library"
+                    )
+                }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "searchOllamaModels failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            val normalizedModelId = modelId.trim().lowercase()
+            if (normalizedModelId.isBlank()) {
+                return@withContext mapOf("success" to true, "items" to emptyList<CatalogItem>(), "total" to 0, "nextCursor" to null)
+            }
+
+            val connection = createConnection("https://ollama.com/library/${URLEncoder.encode(normalizedModelId, Charsets.UTF_8.name()).replace("+", "%20")}", "text/html")
+            val html = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val normalizedQuery = query.trim().lowercase()
+            val seen = linkedSetOf<String>()
+            val tagRegex = Regex("${Regex.escape(normalizedModelId)}:([a-z0-9._-]+)", RegexOption.IGNORE_CASE)
+            tagRegex.findAll(html).forEach { match ->
+                val tag = match.groupValues.getOrNull(1)?.trim()?.lowercase().orEmpty()
+                if (tag.isNotBlank()) {
+                    val value = "$normalizedModelId:$tag"
+                    if (normalizedQuery.isBlank() || value.contains(normalizedQuery) || tag.contains(normalizedQuery)) {
+                        seen.add(value)
+                    }
+                }
+            }
+
+            val values = if (seen.isEmpty()) listOf("$normalizedModelId:latest") else seen.toList()
+            val items = values.map { value ->
+                CatalogItem(
+                    id = value,
+                    label = value,
+                    value = value,
+                    secondaryLabel = if (value.endsWith(":latest")) "Default tag" else "Variant"
+                )
+            }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "listOllamaModelTags failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun searchHuggingFaceModels(query: String, cursor: String?, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
+                .appendQueryParameter("filter", "gguf")
+                .appendQueryParameter("limit", pageSize.coerceIn(1, 50).toString())
+                .appendQueryParameter("sort", "trendingScore")
+
+            if (query.trim().isNotBlank()) {
+                uriBuilder.appendQueryParameter("search", query.trim())
+            }
+            if (!cursor.isNullOrBlank()) {
+                uriBuilder.appendQueryParameter("cursor", cursor)
+            }
+
+            val connection = createConnection(uriBuilder.build().toString())
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val linkHeader = connection.getHeaderField("Link")
+            val totalHeader = connection.getHeaderField("X-Total-Count")
+            connection.disconnect()
+
+            val payload = gson.fromJson(body, JsonArray::class.java)
+            val items = payload.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val repoId = obj.get("id")?.asString ?: return@mapNotNull null
+                val downloads = obj.get("downloads")?.takeIf { !it.isJsonNull }?.asLong
+                val likes = obj.get("likes")?.takeIf { !it.isJsonNull }?.asLong
+                val pipelineTag = obj.get("pipeline_tag")?.takeIf { !it.isJsonNull }?.asString
+                val descriptionParts = listOfNotNull(
+                    downloads?.let { "${String.format("%,d", it)} downloads" },
+                    likes?.let { "${String.format("%,d", it)} likes" },
+                    pipelineTag
+                )
+
+                CatalogItem(
+                    id = repoId,
+                    label = repoId,
+                    value = repoId,
+                    description = descriptionParts.joinToString(" • ").ifBlank { null },
+                    secondaryLabel = "GGUF",
+                    downloads = downloads,
+                    likes = likes
+                )
+            }
+
+            mapOf(
+                "success" to true,
+                "items" to items,
+                "nextCursor" to parseNextCursor(linkHeader),
+                "total" to totalHeader?.toIntOrNull()
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "searchHuggingFaceModels failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            val normalizedRepoId = repoId.trim()
+            if (normalizedRepoId.isBlank()) {
+                return@withContext mapOf("success" to true, "items" to emptyList<CatalogItem>(), "total" to 0, "nextCursor" to null)
+            }
+
+            val connection = createConnection("https://huggingface.co/api/models/${encodeRepoId(normalizedRepoId)}")
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val payload = gson.fromJson(body, JsonObject::class.java)
+            val revision = payload.get("sha")?.takeIf { !it.isJsonNull }?.asString ?: "main"
+            val siblings = payload.getAsJsonArray("siblings") ?: JsonArray()
+            val normalizedQuery = query.trim().lowercase()
+
+            val items = siblings.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val filePath = obj.get("rfilename")?.takeIf { !it.isJsonNull }?.asString ?: return@mapNotNull null
+                val lowerFilePath = filePath.lowercase()
+                if (!lowerFilePath.endsWith(".gguf") || lowerFilePath.contains("mmproj") || (normalizedQuery.isNotBlank() && !lowerFilePath.contains(normalizedQuery))) {
+                    return@mapNotNull null
+                }
+
+                CatalogItem(
+                    id = filePath,
+                    label = filePath.substringAfterLast('/'),
+                    value = "https://huggingface.co/$normalizedRepoId/resolve/$revision/${encodePathSegments(filePath)}?download=true",
+                    description = normalizedRepoId,
+                    secondaryLabel = filePath
+                )
+            }.sortedBy { it.secondaryLabel ?: it.label }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "listHuggingFaceFiles failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
     }
     
     /**

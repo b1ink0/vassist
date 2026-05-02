@@ -5,8 +5,9 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import PythonBootstrap from '../gpt-sovits/bootstrap';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -223,12 +224,7 @@ class WhisperSetupRunner {
   async bootstrap() {
     this.log({ type: 'info', message: '\n=== PHASE 1: PYTHON BOOTSTRAP ===\n' });
 
-    const bootstrapModulePath = path.join(path.dirname(SCRIPT_DIR), 'gpt-sovits', 'bootstrap.js');
-    const bootstrapModule = await import(pathToFileURL(bootstrapModulePath).href) as {
-      default: new (logCallback: (message: string) => void) => { run: () => Promise<void> };
-    };
-
-    const bootstrap = new bootstrapModule.default((message: string) => {
+    const bootstrap = new PythonBootstrap((message: string) => {
       this.log({ type: 'stdout', message: `${message}\n` });
     });
 

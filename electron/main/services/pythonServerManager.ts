@@ -2,7 +2,8 @@ import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from 'c
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
 import type * as fsType from 'fs';
 import type * as pathType from 'path';
-import type { pathToFileURL as pathToFileURLType } from 'url';
+import GPTSoVITSSetupRunner from '../../server/gpt-sovits/setup-runner';
+import WhisperSetupRunnerClass from '../../server/whisper-stt/setup-runner';
 
 type SetupLog = Record<string, unknown>;
 
@@ -11,8 +12,6 @@ type SetupRunnerLike = {
   cancel: () => void;
   getStatus: () => Record<string, unknown>;
 };
-
-type SetupRunnerCtor = new () => SetupRunnerLike;
 
 type LocalServerManagerLike = {
   restartIfRunning: () => Promise<void>;
@@ -23,9 +22,7 @@ type PythonServerManagerDeps = {
   fs: typeof fsType;
   path: typeof pathType;
   spawn: (command: string, args: readonly string[], options: SpawnOptionsWithoutStdio) => ChildProcessWithoutNullStreams;
-  pathToFileURL: typeof pathToFileURLType;
   processEnv: NodeJS.ProcessEnv;
-  serverBasePath: string;
   ensureRuntimeServerScripts: () => void;
   getRuntimeServerBasePath: () => string;
   getGPTSoVITSDataDir: () => string;
@@ -42,9 +39,7 @@ export function createPythonServerManager({
   fs,
   path,
   spawn,
-  pathToFileURL,
   processEnv,
-  serverBasePath,
   ensureRuntimeServerScripts,
   getRuntimeServerBasePath,
   getGPTSoVITSDataDir,
@@ -231,9 +226,6 @@ export function createPythonServerManager({
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
-      const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
-      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
-
       if (setupRunner) {
         throw new Error('Setup already running');
       }
@@ -242,7 +234,7 @@ export function createPythonServerManager({
 
       console.log('[GPT-SoVITS] Starting setup...');
       console.log('[GPT-SoVITS] Selected PyTorch backend:', selectedBackend);
-      setupRunner = new SetupRunner();
+      setupRunner = new GPTSoVITSSetupRunner();
 
       setupRunner.run((log: SetupLog) => {
         event.sender.send('gptsovits:setup:log', log);
@@ -290,10 +282,7 @@ export function createPythonServerManager({
       fs.mkdirSync(whisperSetupDir, { recursive: true });
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
-
-      const setupRunnerPath = path.join(serverBasePath, 'gpt-sovits', 'setup-runner.js');
-      const { default: SetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
-      const runner = new SetupRunner();
+      const runner = new GPTSoVITSSetupRunner();
 
       try {
         const status = runner.getStatus();
@@ -321,9 +310,6 @@ export function createPythonServerManager({
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
 
-      const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
-      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
-
       if (whisperSetupRunner) {
         throw new Error('Whisper setup already running');
       }
@@ -333,7 +319,7 @@ export function createPythonServerManager({
       }
 
       console.log('[Whisper] Starting setup...');
-      whisperSetupRunner = new WhisperSetupRunner();
+  whisperSetupRunner = new WhisperSetupRunnerClass();
 
       whisperSetupRunner.run((log: SetupLog) => {
         event.sender.send('whisper:setup:log', log);
@@ -380,10 +366,7 @@ export function createPythonServerManager({
       fs.mkdirSync(whisperSetupDir, { recursive: true });
       process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
       process.env.WHISPER_SETUP_DIR = whisperSetupDir;
-
-      const setupRunnerPath = path.join(serverBasePath, 'whisper-stt', 'setup-runner.js');
-      const { default: WhisperSetupRunner } = await import(pathToFileURL(setupRunnerPath).href) as { default: SetupRunnerCtor };
-      const runner = new WhisperSetupRunner();
+      const runner = new WhisperSetupRunnerClass();
 
       try {
         const status = runner.getStatus();

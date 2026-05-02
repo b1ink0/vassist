@@ -27,10 +27,30 @@ interface DownloadProgress {
   status: string;
 }
 
+export interface DiscoveryItem {
+  id: string;
+  label: string;
+  value: string;
+  description?: string;
+  secondaryLabel?: string;
+  downloads?: number;
+  likes?: number;
+}
+
+export interface DiscoveryResult extends OperationResult {
+  items: DiscoveryItem[];
+  nextCursor?: string | null;
+  total?: number;
+}
+
 interface DesktopLLMApi {
   listModels: (customPath?: string | null) => Promise<OperationResult & { models?: ModelInfo[] }>;
   pullModel: (modelName: string, customPath?: string | null) => Promise<OperationResult>;
   downloadModel: (url: string, customPath?: string | null) => Promise<OperationResult>;
+  searchOllamaModels: (query: string, page?: number, pageSize?: number) => Promise<DiscoveryResult>;
+  listOllamaModelTags: (modelId: string, query?: string, page?: number, pageSize?: number) => Promise<DiscoveryResult>;
+  searchHuggingFaceModels: (query: string, cursor?: string, pageSize?: number) => Promise<DiscoveryResult>;
+  listHuggingFaceFiles: (repoId: string, query?: string, page?: number, pageSize?: number) => Promise<DiscoveryResult>;
   deleteModel: (filename: string, customPath?: string | null) => Promise<OperationResult>;
   chooseModelFile: () => Promise<{ canceled?: boolean; path?: string }>;
   importModel: (filePath: string, customPath?: string | null) => Promise<OperationResult>;
@@ -46,6 +66,10 @@ interface AndroidAIApi {
   listLLMModels?: () => string;
   pullLLMModel?: (modelName: string) => string;
   downloadLLMModel?: (url: string) => string;
+  searchOllamaModels?: (query: string, page?: number, pageSize?: number) => string;
+  listOllamaModelTags?: (modelId: string, query?: string, page?: number, pageSize?: number) => string;
+  searchHuggingFaceModels?: (query: string, cursor?: string, pageSize?: number) => string;
+  listHuggingFaceFiles?: (repoId: string, query?: string, page?: number, pageSize?: number) => string;
   deleteLLMModel?: (filename: string) => string;
   importLLMModel?: () => string;
   getLLMModelsDirectory?: () => string;
@@ -121,6 +145,36 @@ class LLMModelStorageBase {
     void url;
     void customPath;
     throw new Error('downloadFromUrl() not implemented');
+  }
+
+  async searchOllamaModels(query: string, page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    void query;
+    void page;
+    void pageSize;
+    throw new Error('searchOllamaModels() not implemented');
+  }
+
+  async listOllamaModelTags(modelId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    void modelId;
+    void query;
+    void page;
+    void pageSize;
+    throw new Error('listOllamaModelTags() not implemented');
+  }
+
+  async searchHuggingFaceModels(query: string, cursor = '', pageSize = 20): Promise<DiscoveryResult> {
+    void query;
+    void cursor;
+    void pageSize;
+    throw new Error('searchHuggingFaceModels() not implemented');
+  }
+
+  async listHuggingFaceFiles(repoId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    void repoId;
+    void query;
+    void page;
+    void pageSize;
+    throw new Error('listHuggingFaceFiles() not implemented');
   }
 
   /**
@@ -211,6 +265,22 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
 
   async downloadFromUrl(url: string, customPath: string | null = null): Promise<OperationResult> {
     return await this.api.downloadModel(url, customPath);
+  }
+
+  async searchOllamaModels(query: string, page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    return await this.api.searchOllamaModels(query, page, pageSize);
+  }
+
+  async listOllamaModelTags(modelId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    return await this.api.listOllamaModelTags(modelId, query, page, pageSize);
+  }
+
+  async searchHuggingFaceModels(query: string, cursor = '', pageSize = 20): Promise<DiscoveryResult> {
+    return await this.api.searchHuggingFaceModels(query, cursor, pageSize);
+  }
+
+  async listHuggingFaceFiles(repoId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    return await this.api.listHuggingFaceFiles(repoId, query, page, pageSize);
   }
 
   async deleteModel(filename: string, customPath: string | null = null): Promise<OperationResult> {
@@ -393,6 +463,78 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
         reject(error instanceof Error ? error : new Error(toErrorMessage(error)));
       }
     });
+  }
+
+  async searchOllamaModels(query: string, page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    try {
+      if (!this.api?.searchOllamaModels) {
+        return { success: false, items: [], error: 'AndroidAI interface not available' };
+      }
+
+      const resultJson = this.api.searchOllamaModels(query, page, pageSize);
+      const result = parseJsonRecord<DiscoveryResult>(resultJson);
+      return {
+        ...result,
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+    } catch (error) {
+      console.error('[Android LLM Storage] searchOllamaModels error:', error);
+      return { success: false, items: [], error: toErrorMessage(error) };
+    }
+  }
+
+  async listOllamaModelTags(modelId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    try {
+      if (!this.api?.listOllamaModelTags) {
+        return { success: false, items: [], error: 'AndroidAI interface not available' };
+      }
+
+      const resultJson = this.api.listOllamaModelTags(modelId, query, page, pageSize);
+      const result = parseJsonRecord<DiscoveryResult>(resultJson);
+      return {
+        ...result,
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+    } catch (error) {
+      console.error('[Android LLM Storage] listOllamaModelTags error:', error);
+      return { success: false, items: [], error: toErrorMessage(error) };
+    }
+  }
+
+  async searchHuggingFaceModels(query: string, cursor = '', pageSize = 20): Promise<DiscoveryResult> {
+    try {
+      if (!this.api?.searchHuggingFaceModels) {
+        return { success: false, items: [], error: 'AndroidAI interface not available' };
+      }
+
+      const resultJson = this.api.searchHuggingFaceModels(query, cursor, pageSize);
+      const result = parseJsonRecord<DiscoveryResult>(resultJson);
+      return {
+        ...result,
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+    } catch (error) {
+      console.error('[Android LLM Storage] searchHuggingFaceModels error:', error);
+      return { success: false, items: [], error: toErrorMessage(error) };
+    }
+  }
+
+  async listHuggingFaceFiles(repoId: string, query = '', page = 1, pageSize = 20): Promise<DiscoveryResult> {
+    try {
+      if (!this.api?.listHuggingFaceFiles) {
+        return { success: false, items: [], error: 'AndroidAI interface not available' };
+      }
+
+      const resultJson = this.api.listHuggingFaceFiles(repoId, query, page, pageSize);
+      const result = parseJsonRecord<DiscoveryResult>(resultJson);
+      return {
+        ...result,
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+    } catch (error) {
+      console.error('[Android LLM Storage] listHuggingFaceFiles error:', error);
+      return { success: false, items: [], error: toErrorMessage(error) };
+    }
   }
 
   async deleteModel(filename: string, customPath: string | null = null): Promise<OperationResult> {

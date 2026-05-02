@@ -1388,19 +1388,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
               className={cn('flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]', isAutoPlayActive && 'ring-2 ring-white/50')}
               title={isAutoPlayActive ? 'Stop auto-play' : 'Start auto-play'}
             >
-              <svg 
-                width="14" 
-                height="14" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-                className={isAutoPlayActive ? 'animate-[spin_2s_linear_infinite]' : ''}
-              >
-                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-              </svg>
+              <Icon name="refresh" size={14} className={cn(isAutoPlayActive && 'animate-[spin_2s_linear_infinite]')} />
               <span className="truncate">Auto</span>
             </Button>
 
@@ -1470,19 +1458,7 @@ const ChatButton = ({ onClick, isVisible = true, modelDisabled = false, isChatOp
                 title={emote.name}
               >
                 {currentPlayingEmoteId === emote.id && (
-                  <svg 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round"
-                    className="animate-[spin_2s_linear_infinite] flex-shrink-0"
-                  >
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                  </svg>
+                  <Icon name="refresh" size={14} className="animate-[spin_2s_linear_infinite] flex-shrink-0" />
                 )}
                 <span className="truncate">{emote.name}</span>
               </Button>

@@ -26,6 +26,10 @@ export interface ElectronServerAPI {
 
 export interface ElectronLLMAPI {
   getBackendStatus?: (backend: string) => Promise<{ success?: boolean; selectedInstalled?: boolean } | unknown>;
+  searchOllamaModels?: (query: string, page?: number, pageSize?: number) => Promise<unknown>;
+  listOllamaModelTags?: (modelId: string, query?: string, page?: number, pageSize?: number) => Promise<unknown>;
+  searchHuggingFaceModels?: (query: string, cursor?: string, pageSize?: number) => Promise<unknown>;
+  listHuggingFaceFiles?: (repoId: string, query?: string, page?: number, pageSize?: number) => Promise<unknown>;
   [method: string]: ((...args: unknown[]) => Promise<unknown>) | undefined;
 }
 
