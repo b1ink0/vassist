@@ -6,41 +6,49 @@
 export const PromptConfig = {
   systemPrompts: {
     default: {
-      name: 'Default',
-      prompt: 'You are a helpful virtual assistant. Be concise and friendly.',
+      name: "Default",
+      prompt: "You are a helpful virtual assistant. Be concise and friendly.",
     },
     professional: {
-      name: 'Professional',
-      prompt: 'You are a professional virtual assistant. Provide accurate, well-structured responses with a formal tone. Be clear, concise, and maintain professionalism in all interactions.',
+      name: "Professional",
+      prompt:
+        "You are a professional virtual assistant. Provide accurate, well-structured responses with a formal tone. Be clear, concise, and maintain professionalism in all interactions.",
     },
     friendly: {
-      name: 'Friendly',
-      prompt: 'You are a friendly and casual virtual assistant. Be warm, approachable, and conversational. Use simple language and maintain a positive, helpful attitude.',
+      name: "Friendly",
+      prompt:
+        "You are a friendly and casual virtual assistant. Be warm, approachable, and conversational. Use simple language and maintain a positive, helpful attitude.",
     },
     technical: {
-      name: 'Technical Expert',
-      prompt: 'You are a technical expert assistant. Provide detailed, accurate technical information. Use precise terminology and explain complex concepts clearly. Include code examples and best practices when relevant.',
+      name: "Technical Expert",
+      prompt:
+        "You are a technical expert assistant. Provide detailed, accurate technical information. Use precise terminology and explain complex concepts clearly. Include code examples and best practices when relevant.",
     },
     creative: {
-      name: 'Creative',
-      prompt: 'You are a creative assistant. Help with brainstorming, creative writing, and artistic endeavors. Be imaginative, expressive, and encourage creative thinking.',
+      name: "Creative",
+      prompt:
+        "You are a creative assistant. Help with brainstorming, creative writing, and artistic endeavors. Be imaginative, expressive, and encourage creative thinking.",
     },
     concise: {
-      name: 'Concise',
-      prompt: 'You are a concise virtual assistant. Provide brief, to-the-point responses. Eliminate unnecessary information and focus on essential details only.',
+      name: "Concise",
+      prompt:
+        "You are a concise virtual assistant. Provide brief, to-the-point responses. Eliminate unnecessary information and focus on essential details only.",
     },
     teacher: {
-      name: 'Teacher',
-      prompt: 'You are an educational assistant. Explain concepts clearly with examples and analogies. Break down complex topics into understandable parts. Encourage learning and understanding.',
+      name: "Teacher",
+      prompt:
+        "You are an educational assistant. Explain concepts clearly with examples and analogies. Break down complex topics into understandable parts. Encourage learning and understanding.",
     },
     custom: {
-      name: 'Custom',
-      prompt: '',
+      name: "Custom",
+      prompt: "",
     },
   },
 
   dictionary: {
-    define: (word: string) => `Provide a concise dictionary definition for the word: "${word}"
+    define: (
+      word: string,
+    ) => `Provide a concise dictionary definition for the word: "${word}"
 
 Include:
 1. Part of speech (noun, verb, adjective, etc.)
@@ -85,7 +93,9 @@ Antonyms for "${word}":
 • antonym3
 ...`,
 
-    pronunciation: (word: string) => `Provide pronunciation guide for the word: "${word}"
+    pronunciation: (
+      word: string,
+    ) => `Provide pronunciation guide for the word: "${word}"
 
 Include:
 1. IPA (International Phonetic Alphabet) notation
@@ -106,7 +116,9 @@ IPA: /prəˌnʌnsiˈeɪʃən/
 Phonetic: (pruh-nun-see-AY-shun)
 Syllables: pro-nun-ci-a-tion`,
 
-    examples: (word: string) => `Provide 4-5 example sentences using the word: "${word}"
+    examples: (
+      word: string,
+    ) => `Provide 4-5 example sentences using the word: "${word}"
 
 Requirements:
 - Show diverse contexts and common usage patterns
@@ -131,72 +143,100 @@ Usage Examples for "${word}":
   // Supports length: 'as-is', 'shorter', 'longer'
   rewriter: {
     // More formal tone
-    moreFormal: (text: string) => `Rewrite the following text in a more formal, professional tone. Return ONLY the rewritten text with no explanations:
+    moreFormal: (
+      text: string,
+    ) => `Rewrite the following text in a more formal, professional tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // More casual tone
-    moreCasual: (text: string) => `Rewrite the following text in a more casual, conversational tone. Return ONLY the rewritten text with no explanations:
+    moreCasual: (
+      text: string,
+    ) => `Rewrite the following text in a more casual, conversational tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Make shorter
-    shorter: (text: string) => `Rewrite the following text to be shorter while preserving key information. Return ONLY the rewritten text with no explanations:
+    shorter: (
+      text: string,
+    ) => `Rewrite the following text to be shorter while preserving key information. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Make longer
-    longer: (text: string) => `Rewrite the following text to be longer with more detail and elaboration. Return ONLY the rewritten text with no explanations:
+    longer: (
+      text: string,
+    ) => `Rewrite the following text to be longer with more detail and elaboration. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Plain text format
-    plainText: (text: string) => `Rewrite the following text using plain text only, no markdown. Return ONLY the rewritten text with no explanations:
+    plainText: (
+      text: string,
+    ) => `Rewrite the following text using plain text only, no markdown. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Markdown format
-    markdown: (text: string) => `Rewrite the following text using markdown formatting. Return ONLY the rewritten text with no explanations:
+    markdown: (
+      text: string,
+    ) => `Rewrite the following text using markdown formatting. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Fix grammar (useful rewrite action)
-    grammar: (text: string) => `Rewrite the following text to fix grammar errors. Return ONLY the corrected text with no explanations:
+    grammar: (
+      text: string,
+    ) => `Rewrite the following text to fix grammar errors. Return ONLY the corrected text with no explanations:
 
 ${text}`,
 
     // Fix spelling (useful rewrite action)
-    spelling: (text: string) => `Rewrite the following text to fix spelling errors. Return ONLY the corrected text with no explanations:
+    spelling: (
+      text: string,
+    ) => `Rewrite the following text to fix spelling errors. Return ONLY the corrected text with no explanations:
 
 ${text}`,
 
     // Improve clarity
-    clarity: (text: string) => `Rewrite the following text to improve clarity. Return ONLY the improved text with no explanations:
+    clarity: (
+      text: string,
+    ) => `Rewrite the following text to improve clarity. Return ONLY the improved text with no explanations:
 
 ${text}`,
 
     // Professional tone
-    professional: (text: string) => `Rewrite the following text in a professional, business-appropriate tone. Return ONLY the rewritten text with no explanations:
+    professional: (
+      text: string,
+    ) => `Rewrite the following text in a professional, business-appropriate tone. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Formal style
-    formal: (text: string) => `Rewrite the following text in a formal, academic style. Return ONLY the rewritten text with no explanations:
+    formal: (
+      text: string,
+    ) => `Rewrite the following text in a formal, academic style. Return ONLY the rewritten text with no explanations:
 
 ${text}`,
 
     // Simplify
-    simplify: (text: string) => `Rewrite the following text to be simpler and easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
+    simplify: (
+      text: string,
+    ) => `Rewrite the following text to be simpler and easier to understand. Use simpler words and shorter sentences. Return ONLY the simplified text with no explanations:
 
 ${text}`,
 
     // Expand
-    expand: (text: string) => `Rewrite the following text to be more detailed and comprehensive. Return ONLY the expanded text with no explanations:
+    expand: (
+      text: string,
+    ) => `Rewrite the following text to be more detailed and comprehensive. Return ONLY the expanded text with no explanations:
 
 ${text}`,
 
     // Make concise
-    concise: (text: string) => `Rewrite the following text to be more concise while preserving meaning. Return ONLY the concise version with no explanations:
+    concise: (
+      text: string,
+    ) => `Rewrite the following text to be more concise while preserving meaning. Return ONLY the concise version with no explanations:
 
 ${text}`,
   },
@@ -204,46 +244,56 @@ ${text}`,
   writer: {
     write: (prompt: string) => `${prompt}`,
 
-    formal: (prompt: string) => `Write in a formal, professional tone:\n\n${prompt}`,
+    formal: (prompt: string) =>
+      `Write in a formal, professional tone:\n\n${prompt}`,
 
-    neutral: (prompt: string) => `Write in a neutral, balanced tone:\n\n${prompt}`,
+    neutral: (prompt: string) =>
+      `Write in a neutral, balanced tone:\n\n${prompt}`,
 
-    casual: (prompt: string) => `Write in a casual, conversational tone:\n\n${prompt}`,
+    casual: (prompt: string) =>
+      `Write in a casual, conversational tone:\n\n${prompt}`,
 
-    short: (prompt: string) => `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
+    short: (prompt: string) =>
+      `Write a brief, concise response (1-2 paragraphs):\n\n${prompt}`,
 
-    medium: (prompt: string) => `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
+    medium: (prompt: string) =>
+      `Write a moderate length response (2-3 paragraphs):\n\n${prompt}`,
 
-    long: (prompt: string) => `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
+    long: (prompt: string) =>
+      `Write a detailed, comprehensive response (4+ paragraphs):\n\n${prompt}`,
 
-    plainText: (prompt: string) => `Write using plain text only, no markdown:\n\n${prompt}`,
+    plainText: (prompt: string) =>
+      `Write using plain text only, no markdown:\n\n${prompt}`,
 
-    markdown: (prompt: string) => `Write using markdown formatting:\n\n${prompt}`,
+    markdown: (prompt: string) =>
+      `Write using markdown formatting:\n\n${prompt}`,
   },
 
   image: {
-    describe: (imageCount: number) => 
+    describe: (imageCount: number) =>
       imageCount === 1
-        ? 'Describe this image in detail.'
+        ? "Describe this image in detail."
         : `Describe these ${imageCount} images in detail.`,
 
     extractText: (imageCount: number) =>
       imageCount === 1
-        ? 'Extract and return all text visible in this image. Format it clearly and preserve the structure.'
+        ? "Extract and return all text visible in this image. Format it clearly and preserve the structure."
         : `Extract and return all text visible in these ${imageCount} images. Format it clearly and preserve the structure for each image.`,
 
     identifyObjects: (imageCount: number) =>
       imageCount === 1
-        ? 'Identify and list all objects visible in this image.'
+        ? "Identify and list all objects visible in this image."
         : `Identify and list all objects visible in these ${imageCount} images.`,
   },
 
   audio: {
-    transcribe: 'Transcribe this audio accurately. Return only the transcription.',
-    
-    summarize: 'Listen to this audio and provide a concise summary of its content.',
-    
-    translate: (targetLanguage: string) => 
+    transcribe:
+      "Transcribe this audio accurately. Return only the transcription.",
+
+    summarize:
+      "Listen to this audio and provide a concise summary of its content.",
+
+    translate: (targetLanguage: string) =>
       `Transcribe this audio and translate it to ${targetLanguage}. Provide both the original transcription and the translation.`,
   },
 
@@ -322,7 +372,9 @@ User: "Tell me about yourself"
 
 Remember: Output ONLY the JSON object.`,
 
-    analyzeQuery: (userQuery: string) => `Analyze this user query and determine what webpage context is needed. Respond with ONLY valid JSON (no markdown, no explanation):
+    analyzeQuery: (
+      userQuery: string,
+    ) => `Analyze this user query and determine what webpage context is needed. Respond with ONLY valid JSON (no markdown, no explanation):
 
 Query: "${userQuery}"
 
@@ -429,7 +481,9 @@ Remember: Output ONLY the JSON object. Be smart about when vision is truly neede
 
 /no_think`,
 
-    generateVisionPrompt: (userQuery: string) => `Analyze this user query and decide if vision is needed. Respond with ONLY valid JSON (no markdown, no explanation):
+    generateVisionPrompt: (
+      userQuery: string,
+    ) => `Analyze this user query and decide if vision is needed. Respond with ONLY valid JSON (no markdown, no explanation):
 
 User query: "${userQuery}"
 

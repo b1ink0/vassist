@@ -3,11 +3,11 @@
  * Handles delete confirmations (chat, model, motion) and edit operations.
  */
 
-import { useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { cn } from '../../utils/cn';
-import { Button } from '../ui';
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { cn } from "../../utils/cn";
+import { Button } from "../ui";
 
-type DialogType = 'delete' | 'edit' | 'confirm' | 'input';
+type DialogType = "delete" | "edit" | "confirm" | "input";
 
 interface DialogProps {
   type?: DialogType;
@@ -20,7 +20,7 @@ interface DialogProps {
   isLightBackground?: boolean;
   animationClass?: string;
   confirmLabel?: string;
-  confirmStyle?: 'primary' | 'error';
+  confirmStyle?: "primary" | "error";
   cancelLabel?: string;
   onConfirm: (itemId?: string, value?: string) => Promise<void> | void;
   onCancel: () => void;
@@ -30,12 +30,12 @@ const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
   }
-  return 'An error occurred';
+  return "An error occurred";
 };
 
 /**
  * Unified dialog component for various modal interactions.
- * 
+ *
  * @component
  * @param {Object} props - Component props
  * @param {'delete'|'edit'|'confirm'|'input'} props.type - Type of dialog
@@ -55,38 +55,38 @@ const getErrorMessage = (error: unknown): string => {
  * @returns {JSX.Element} Dialog component
  */
 const Dialog = ({
-  type = 'confirm',
+  type = "confirm",
   title,
   message,
   itemId,
-  initialValue = '',
-  inputPlaceholder = '',
+  initialValue = "",
+  inputPlaceholder = "",
   inputMaxLength = 100,
   isLightBackground = false,
-  animationClass = '',
-  confirmLabel = 'Confirm',
-  confirmStyle = 'primary',
-  cancelLabel = 'Cancel',
+  animationClass = "",
+  confirmLabel = "Confirm",
+  confirmStyle = "primary",
+  cancelLabel = "Cancel",
   onConfirm,
   onCancel,
 }: DialogProps) => {
   const [inputValue, setInputValue] = useState(initialValue);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
 
   /**
    * Handles confirm button click.
    */
   const handleConfirm = async () => {
     // Validate input for edit/input types
-    if ((type === 'edit' || type === 'input') && !inputValue.trim()) {
+    if ((type === "edit" || type === "input") && !inputValue.trim()) {
       return;
     }
 
     setIsProcessing(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
-      if (type === 'edit' || type === 'input') {
+      if (type === "edit" || type === "input") {
         await onConfirm(itemId, inputValue);
       } else {
         await onConfirm(itemId);
@@ -115,38 +115,36 @@ const Dialog = ({
     e.stopPropagation();
   };
 
-  const isErrorConfirm = confirmStyle === 'error';
+  const isErrorConfirm = confirmStyle === "error";
 
   return (
-    <div 
-      className={cn('absolute inset-0 flex items-center justify-center z-50 p-6 bg-black/50', animationClass)}
+    <div
+      className={cn(
+        "absolute inset-0 flex items-center justify-center z-50 p-6 bg-black/50",
+        animationClass,
+      )}
       onClick={handleBackdropClick}
     >
-      <div 
-        className={cn('relative p-6 rounded-2xl w-full max-w-sm glass-container', isLightBackground && 'glass-container-dark')}
+      <div
+        className={cn(
+          "relative p-6 rounded-2xl w-full max-w-sm glass-container",
+          isLightBackground && "glass-container-dark",
+        )}
         onClick={handleDialogClick}
       >
-        <h3 className="text-lg font-semibold mb-2 text-white">
-          {title}
-        </h3>
-        
-        {message && (
-          <p className="text-sm mb-6 text-white/80">
-            {message}
-          </p>
-        )}
+        <h3 className="text-lg font-semibold mb-2 text-white">{title}</h3>
+
+        {message && <p className="text-sm mb-6 text-white/80">{message}</p>}
 
         {/* Error message */}
         {errorMessage && (
           <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30">
-            <p className="text-sm text-red-200">
-              {errorMessage}
-            </p>
+            <p className="text-sm text-red-200">{errorMessage}</p>
           </div>
         )}
 
         {/* Input field for edit/input types */}
-        {(type === 'edit' || type === 'input') && (
+        {(type === "edit" || type === "input") && (
           <input
             type="text"
             value={inputValue}
@@ -157,8 +155,8 @@ const Dialog = ({
             autoFocus
             disabled={isProcessing}
             onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === 'Enter') handleConfirm();
-              if (e.key === 'Escape') onCancel();
+              if (e.key === "Enter") handleConfirm();
+              if (e.key === "Escape") onCancel();
             }}
           />
         )}
@@ -168,18 +166,23 @@ const Dialog = ({
           <Button
             onClick={onCancel}
             disabled={isProcessing}
-            variant={isLightBackground ? 'dark' : 'default'}
+            variant={isLightBackground ? "dark" : "default"}
             className="px-2 md:px-4 py-2 rounded-lg text-sm"
           >
             {cancelLabel}
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isProcessing || ((type === 'edit' || type === 'input') && !inputValue.trim())}
-            variant={isErrorConfirm ? 'error' : (isLightBackground ? 'dark' : 'default')}
+            disabled={
+              isProcessing ||
+              ((type === "edit" || type === "input") && !inputValue.trim())
+            }
+            variant={
+              isErrorConfirm ? "error" : isLightBackground ? "dark" : "default"
+            }
             className="px-2 md:px-4 py-2 rounded-lg text-sm font-medium"
           >
-            {isProcessing ? 'Processing...' : confirmLabel}
+            {isProcessing ? "Processing..." : confirmLabel}
           </Button>
         </div>
       </div>

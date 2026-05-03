@@ -1,13 +1,13 @@
 /**
  * DocumentInteractionService - Intelligent page context extraction
- * 
+ *
  * Analyzes user queries and automatically extracts relevant context from the page
  * to enhance AI responses without user intervention.
  * Works with ANY AI provider (Chrome AI, OpenAI, Ollama, etc.)
  */
 
-import Logger from './LoggerService';
-import { PromptConfig } from '../config/promptConfig';
+import Logger from "./LoggerService";
+import { PromptConfig } from "../config/promptConfig";
 
 type QueryAnalysis = {
   needsContext: boolean;
@@ -27,7 +27,7 @@ type AIResult = {
 type AISendMessage = (
   messages: Array<{ role: string; content: string }>,
   session?: unknown,
-  options?: Record<string, unknown>
+  options?: Record<string, unknown>,
 ) => Promise<AIResult>;
 
 class DocumentInteractionService {
@@ -48,91 +48,136 @@ class DocumentInteractionService {
    * @param {number} retryCount - Number of retries attempted (internal)
    * @returns {Promise<Object|null>} Analysis result or null
    */
-  async analyzeQuery(userQuery: string, aiServiceSendMessage: AISendMessage, abortSignal: AbortSignal | null = null, retryCount = 0): Promise<QueryAnalysis | null> {
-    const logPrefix = '[DocumentInteractionService]';
+  async analyzeQuery(
+    userQuery: string,
+    aiServiceSendMessage: AISendMessage,
+    abortSignal: AbortSignal | null = null,
+    retryCount = 0,
+  ): Promise<QueryAnalysis | null> {
+    const logPrefix = "[DocumentInteractionService]";
     const maxRetries = 2; // Allow up to 2 retries
-    
+
     if (abortSignal?.aborted) {
-      Logger.log('other', `${logPrefix} Analysis aborted before starting`);
+      Logger.log("other", `${logPrefix} Analysis aborted before starting`);
       return null;
     }
-    
+
     try {
-      Logger.log('other', `${logPrefix} Analyzing query:`, userQuery.substring(0, 50));
+      Logger.log(
+        "other",
+        `${logPrefix} Analyzing query:`,
+        userQuery.substring(0, 50),
+      );
 
       const messages = [
-        { role: 'system', content: PromptConfig.documentInteraction.analyzerSystemPrompt },
-        { role: 'user', content: PromptConfig.documentInteraction.analyzeQuery(userQuery) }
+        {
+          role: "system",
+          content: PromptConfig.documentInteraction.analyzerSystemPrompt,
+        },
+        {
+          role: "user",
+          content: PromptConfig.documentInteraction.analyzeQuery(userQuery),
+        },
       ];
-      
+
       // Use utility session for analysis (separate from main chat) - NON-STREAMING
       const result = await aiServiceSendMessage(messages, null, {
         useUtilitySession: true,
-        streaming: false 
+        streaming: false,
       });
-      
+
       if (abortSignal?.aborted) {
-        Logger.log('other', `${logPrefix} Analysis aborted after AI call`);
+        Logger.log("other", `${logPrefix} Analysis aborted after AI call`);
         return null;
       }
-      
+
       if (!result.success || !result.response) {
         if (result.cancelled) {
-          Logger.log('other', `${logPrefix} Analysis cancelled by abort`);
+          Logger.log("other", `${logPrefix} Analysis cancelled by abort`);
           return null;
         }
-        
+
         // Don't log as error if it's just not configured (normal during initialization)
-        const resultErrorMessage = typeof result.error === 'string'
-          ? result.error
-          : result.error?.message;
-        if (resultErrorMessage?.includes('not configured')) {
-          Logger.log('other', `${logPrefix} AI not configured yet, skipping analysis`);
+        const resultErrorMessage =
+          typeof result.error === "string"
+            ? result.error
+            : result.error?.message;
+        if (resultErrorMessage?.includes("not configured")) {
+          Logger.log(
+            "other",
+            `${logPrefix} AI not configured yet, skipping analysis`,
+          );
         } else {
-          Logger.warn('other', `${logPrefix} Analysis failed:`, result.error);
+          Logger.warn("other", `${logPrefix} Analysis failed:`, result.error);
         }
         return null;
       }
-      
+
       // Parse the JSON response with error handling
       const analysis = this._parseAnalysisResponse(result.response);
-      
+
       if (abortSignal?.aborted) {
-        Logger.log('other', `${logPrefix} Analysis aborted after parsing`);
+        Logger.log("other", `${logPrefix} Analysis aborted after parsing`);
         return null;
       }
-      
+
       if (!analysis) {
         // Parsing failed - retry if we haven't exhausted retries
         if (retryCount < maxRetries) {
-          Logger.warn('other', `${logPrefix} Parsing failed, retrying (${retryCount + 1}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay before retry
-          return this.analyzeQuery(userQuery, aiServiceSendMessage, abortSignal, retryCount + 1);
+          Logger.warn(
+            "other",
+            `${logPrefix} Parsing failed, retrying (${retryCount + 1}/${maxRetries})...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500)); // Brief delay before retry
+          return this.analyzeQuery(
+            userQuery,
+            aiServiceSendMessage,
+            abortSignal,
+            retryCount + 1,
+          );
         }
-        
-        Logger.error('other', `${logPrefix} Failed to parse analysis after ${maxRetries} retries`);
+
+        Logger.error(
+          "other",
+          `${logPrefix} Failed to parse analysis after ${maxRetries} retries`,
+        );
         return null;
       }
-      
+
       this.lastAnalysis = analysis;
-      Logger.log('other', `${logPrefix} Analysis result:`, analysis);
+      Logger.log("other", `${logPrefix} Analysis result:`, analysis);
       return analysis;
-      
     } catch (error) {
       if (abortSignal?.aborted) {
-        Logger.log('other', `${logPrefix} Analysis aborted (caught in exception)`);
+        Logger.log(
+          "other",
+          `${logPrefix} Analysis aborted (caught in exception)`,
+        );
         return null;
       }
-      
+
       // On error, retry if we haven't exhausted retries
       if (retryCount < maxRetries) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        Logger.warn('other', `${logPrefix} Analysis error, retrying (${retryCount + 1}/${maxRetries}): ${errorMessage}`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return this.analyzeQuery(userQuery, aiServiceSendMessage, abortSignal, retryCount + 1);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        Logger.warn(
+          "other",
+          `${logPrefix} Analysis error, retrying (${retryCount + 1}/${maxRetries}): ${errorMessage}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return this.analyzeQuery(
+          userQuery,
+          aiServiceSendMessage,
+          abortSignal,
+          retryCount + 1,
+        );
       }
-      
-      Logger.error('other', `${logPrefix} Analysis failed after ${maxRetries} retries:`, error);
+
+      Logger.error(
+        "other",
+        `${logPrefix} Analysis failed after ${maxRetries} retries:`,
+        error,
+      );
       return null;
     }
   }
@@ -145,42 +190,53 @@ class DocumentInteractionService {
    * @returns {Object|null} Parsed analysis or null if invalid
    */
   _parseAnalysisResponse(response: string): QueryAnalysis | null {
-    const logPrefix = '[DocumentInteractionService]';
-    
+    const logPrefix = "[DocumentInteractionService]";
+
     try {
       // Trim whitespace and remove excessive newlines
-      let jsonStr = response.trim().replace(/\n\s*\n/g, '\n');
-      
+      let jsonStr = response.trim().replace(/\n\s*\n/g, "\n");
+
       // Remove markdown code blocks if present
-      if (jsonStr.includes('```')) {
-        jsonStr = jsonStr.replace(/```json?\n?/gi, '').replace(/```\n?$/g, '');
+      if (jsonStr.includes("```")) {
+        jsonStr = jsonStr.replace(/```json?\n?/gi, "").replace(/```\n?$/g, "");
         jsonStr = jsonStr.trim();
       }
-      
+
       // Remove any leading/trailing text before/after JSON object
       const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         jsonStr = jsonMatch[0];
       }
-      
+
       // Try to fix common JSON issues
       jsonStr = this._sanitizeJSON(jsonStr);
-      
+
       // Parse JSON
       const analysis = JSON.parse(jsonStr);
-      
+
       // Validate structure
       if (!this._validateAnalysis(analysis)) {
-        Logger.error('other', `${logPrefix} Invalid analysis structure:`, analysis);
+        Logger.error(
+          "other",
+          `${logPrefix} Invalid analysis structure:`,
+          analysis,
+        );
         return null;
       }
-      
+
       return analysis;
-      
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error('other', `${logPrefix} JSON parsing failed: ${errorMessage}`);
-      Logger.error('other', `${logPrefix} Raw response:`, response.substring(0, 200));
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      Logger.error(
+        "other",
+        `${logPrefix} JSON parsing failed: ${errorMessage}`,
+      );
+      Logger.error(
+        "other",
+        `${logPrefix} Raw response:`,
+        response.substring(0, 200),
+      );
       return null;
     }
   }
@@ -190,16 +246,15 @@ class DocumentInteractionService {
    * @private
    */
   _sanitizeJSON(jsonStr: string): string {
-    // Remove control characters (eslint-disable-next-line)
-    // eslint-disable-next-line no-control-regex
-    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, '');
-    
+    // Remove control characters.
+    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, "");
+
     // Fix unescaped quotes in strings (basic attempt)
     // This is tricky and not perfect, but helps with common cases
-    
+
     // Remove trailing commas before closing braces/brackets
-    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-    
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, "$1");
+
     return jsonStr;
   }
 
@@ -208,32 +263,41 @@ class DocumentInteractionService {
    * @private
    */
   _validateAnalysis(analysis: unknown): analysis is QueryAnalysis {
-    if (!analysis || typeof analysis !== 'object') {
+    if (!analysis || typeof analysis !== "object") {
       return false;
     }
     const parsed = analysis as QueryAnalysis;
-    
+
     // Required fields
-    if (typeof parsed.needsContext !== 'boolean') {
+    if (typeof parsed.needsContext !== "boolean") {
       return false;
     }
-    
+
     // contextType must be one of the valid values
-    const validTypes = ['text', 'links', 'forms', 'images', 'tables', 'code', 'all', 'none'];
+    const validTypes = [
+      "text",
+      "links",
+      "forms",
+      "images",
+      "tables",
+      "code",
+      "all",
+      "none",
+    ];
     if (!validTypes.includes(parsed.contextType)) {
       return false;
     }
-    
+
     // selector must be a string (can be empty)
-    if (typeof parsed.selector !== 'string') {
+    if (typeof parsed.selector !== "string") {
       return false;
     }
-    
+
     // reason must be a string
-    if (typeof parsed.reason !== 'string') {
+    if (typeof parsed.reason !== "string") {
       return false;
     }
-    
+
     return true;
   }
 
@@ -243,54 +307,56 @@ class DocumentInteractionService {
    * @returns {string|null} Extracted context or null
    */
   extractContext(analysis: QueryAnalysis | null): string | null {
-    const logPrefix = '[DocumentInteractionService]';
-    
+    const logPrefix = "[DocumentInteractionService]";
+
     if (!analysis || !analysis.needsContext) {
       return null;
     }
 
     try {
       const { contextType, selector } = analysis;
-      Logger.log('other', `${logPrefix} Extracting context: ${contextType}`);
+      Logger.log("other", `${logPrefix} Extracting context: ${contextType}`);
 
-      let context = '';
+      let context = "";
 
       switch (contextType) {
-        case 'text':
+        case "text":
           context = this._extractText(selector);
           break;
-        case 'links':
+        case "links":
           context = this._extractLinks(selector);
           break;
-        case 'forms':
+        case "forms":
           context = this._extractForms(selector);
           break;
-        case 'images':
+        case "images":
           context = this._extractImages(selector);
           break;
-        case 'tables':
+        case "tables":
           context = this._extractTables(selector);
           break;
-        case 'code':
+        case "code":
           context = this._extractCode(selector);
           break;
-        case 'all':
+        case "all":
           context = this._extractAll();
           break;
         default:
-          context = this._extractText(selector || 'main, article, body');
+          context = this._extractText(selector || "main, article, body");
       }
 
       // Limit context size (max 4000 chars)
       if (context.length > 4000) {
-        context = context.substring(0, 4000) + '\n... (truncated for brevity)';
+        context = context.substring(0, 4000) + "\n... (truncated for brevity)";
       }
 
-      Logger.log('other', `${logPrefix} Extracted ${context.length} characters of context`);
+      Logger.log(
+        "other",
+        `${logPrefix} Extracted ${context.length} characters of context`,
+      );
       return context;
-
     } catch (error) {
-      Logger.error('other', `${logPrefix} Context extraction failed:`, error);
+      Logger.error("other", `${logPrefix} Context extraction failed:`, error);
       return null;
     }
   }
@@ -302,43 +368,60 @@ class DocumentInteractionService {
    * @param {AbortSignal} abortSignal - Abort signal to cancel the operation
    * @returns {Promise<string|null>} Extracted context or null
    */
-  async getContextForQuery(userQuery: string, aiServiceSendMessage: AISendMessage, abortSignal: AbortSignal | null = null): Promise<string | null> {
-    const logPrefix = '[DocumentInteractionService]';
-    
+  async getContextForQuery(
+    userQuery: string,
+    aiServiceSendMessage: AISendMessage,
+    abortSignal: AbortSignal | null = null,
+  ): Promise<string | null> {
+    const logPrefix = "[DocumentInteractionService]";
+
     if (abortSignal?.aborted) {
-      Logger.log('other', `${logPrefix} getContextForQuery aborted before starting`);
+      Logger.log(
+        "other",
+        `${logPrefix} getContextForQuery aborted before starting`,
+      );
       return null;
     }
-    
+
     try {
       // Analyze what context is needed
-      const analysis = await this.analyzeQuery(userQuery, aiServiceSendMessage, abortSignal);
-      
+      const analysis = await this.analyzeQuery(
+        userQuery,
+        aiServiceSendMessage,
+        abortSignal,
+      );
+
       if (abortSignal?.aborted) {
-        Logger.log('other', `${logPrefix} getContextForQuery aborted after analysis`);
+        Logger.log(
+          "other",
+          `${logPrefix} getContextForQuery aborted after analysis`,
+        );
         return null;
       }
-      
+
       if (!analysis || !analysis.needsContext) {
-        Logger.log('other', `${logPrefix} No context needed for query`);
+        Logger.log("other", `${logPrefix} No context needed for query`);
         return null;
       }
 
       // Extract the context
       const context = this.extractContext(analysis);
-      
+
       if (abortSignal?.aborted) {
-        Logger.log('other', `${logPrefix} getContextForQuery aborted after extraction`);
+        Logger.log(
+          "other",
+          `${logPrefix} getContextForQuery aborted after extraction`,
+        );
         return null;
       }
-      
+
       if (context) {
         return `[Page Context - ${analysis.reason}]\n${context}\n\n[IMPORTANT: Format your response using proper markdown syntax with **bold**, *italic*, code in backticks, headers (#), lists (- or 1.), links, code blocks, etc.]\n\n`;
       }
 
       return null;
     } catch (error) {
-      Logger.error('other', `${logPrefix} Failed to get context:`, error);
+      Logger.error("other", `${logPrefix} Failed to get context:`, error);
       return null;
     }
   }
@@ -351,44 +434,51 @@ class DocumentInteractionService {
     try {
       // Try the provided selector first
       let elements = selector ? document.querySelectorAll(selector) : [];
-      
+
       // Comprehensive fallback chain if selector doesn't match
       if (elements.length === 0) {
         const fallbacks = [
-          'main',
-          'article',
+          "main",
+          "article",
           '[role="main"]',
-          '.content',
-          '.main-content',
-          '.post-content',
-          '.article-content',
-          '#content',
-          '#main',
-          'body'
+          ".content",
+          ".main-content",
+          ".post-content",
+          ".article-content",
+          "#content",
+          "#main",
+          "body",
         ];
-        
+
         for (const fallback of fallbacks) {
           elements = document.querySelectorAll(fallback);
           if (elements.length > 0) {
-            Logger.log('other', `[DocumentInteractionService] Fallback to ${fallback} selector`);
+            Logger.log(
+              "other",
+              `[DocumentInteractionService] Fallback to ${fallback} selector`,
+            );
             break;
           }
         }
       }
-      
+
       if (elements.length === 0) {
-        return 'No text content found on the page.';
+        return "No text content found on the page.";
       }
 
       const texts = Array.from(elements)
-        .map(el => el.textContent.trim())
-        .filter(text => text.length > 0)
+        .map((el) => el.textContent.trim())
+        .filter((text) => text.length > 0)
         .slice(0, 50);
 
-      return `Page Text Content:\n${texts.join('\n\n')}`;
+      return `Page Text Content:\n${texts.join("\n\n")}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Text extraction error:', error);
-      return 'Error extracting text content.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Text extraction error:",
+        error,
+      );
+      return "Error extracting text content.";
     }
   }
 
@@ -399,38 +489,52 @@ class DocumentInteractionService {
   _extractLinks(selector: string): string {
     try {
       let links = selector ? document.querySelectorAll(selector) : [];
-      
+
       // Fallback to common link selectors
       if (links.length === 0) {
-        const fallbacks = ['a[href]', 'nav a', 'header a', '.navigation a', '.menu a', 'a'];
+        const fallbacks = [
+          "a[href]",
+          "nav a",
+          "header a",
+          ".navigation a",
+          ".menu a",
+          "a",
+        ];
         for (const fallback of fallbacks) {
           links = document.querySelectorAll(fallback);
           if (links.length > 0) {
-            Logger.log('other', `[DocumentInteractionService] Fallback to ${fallback} selector`);
+            Logger.log(
+              "other",
+              `[DocumentInteractionService] Fallback to ${fallback} selector`,
+            );
             break;
           }
         }
       }
-      
+
       if (links.length === 0) {
-        return 'No links found on the page.';
+        return "No links found on the page.";
       }
 
       const linkInfo = (Array.from(links) as Array<HTMLAnchorElement>)
-        .filter(link => link.href) // Only links with href
+        .filter((link) => link.href) // Only links with href
         .slice(0, 50)
         .map((link, i) => {
-          const text = link.textContent.trim() || 'No text';
+          const text = link.textContent.trim() || "No text";
           const href = link.href;
-          const title = link.title ? ` (${link.title})` : '';
+          const title = link.title ? ` (${link.title})` : "";
           return `${i + 1}. "${text}"${title} -> ${href}`;
         })
-        .join('\n');
+        .join("\n");
 
       return `Page Links (${links.length} total):\n${linkInfo}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Link extraction error:', error);
-      return 'Error extracting links.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Link extraction error:",
+        error,
+      );
+      return "Error extracting links.";
     }
   }
 
@@ -441,55 +545,77 @@ class DocumentInteractionService {
   _extractForms(selector: string): string {
     try {
       let elements = selector ? document.querySelectorAll(selector) : [];
-      
+
       // Fallback to common form selectors
       if (elements.length === 0) {
-        elements = document.querySelectorAll('form, input, textarea, select, button[type="submit"]');
+        elements = document.querySelectorAll(
+          'form, input, textarea, select, button[type="submit"]',
+        );
       }
-      
+
       if (elements.length === 0) {
-        return 'No forms or input fields found on the page.';
+        return "No forms or input fields found on the page.";
       }
 
       const formInfo = [];
-      const forms = document.querySelectorAll('form');
-      
+      const forms = document.querySelectorAll("form");
+
       forms.forEach((form, i) => {
-        const inputs = form.querySelectorAll('input, textarea, select');
+        const inputs = form.querySelectorAll("input, textarea, select");
         const buttons = form.querySelectorAll('button, input[type="submit"]');
-        
+
         formInfo.push(`Form ${i + 1}:`);
-        
-        (Array.from(inputs) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).forEach(input => {
+
+        (
+          Array.from(inputs) as Array<
+            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          >
+        ).forEach((input) => {
           const type = input.type || input.tagName.toLowerCase();
-          const name = input.name || input.id || 'unnamed';
-          const placeholder = 'placeholder' in input ? input.placeholder : '';
-          const label = input.labels?.[0]?.textContent?.trim() || placeholder || '';
-          formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ''}`);
+          const name = input.name || input.id || "unnamed";
+          const placeholder = "placeholder" in input ? input.placeholder : "";
+          const label =
+            input.labels?.[0]?.textContent?.trim() || placeholder || "";
+          formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ""}`);
         });
-        
-        (Array.from(buttons) as Array<HTMLButtonElement | HTMLInputElement>).forEach(btn => {
-          formInfo.push(`  - Button: "${btn.textContent.trim() || btn.value || 'Submit'}"`);
+
+        (
+          Array.from(buttons) as Array<HTMLButtonElement | HTMLInputElement>
+        ).forEach((btn) => {
+          formInfo.push(
+            `  - Button: "${btn.textContent.trim() || btn.value || "Submit"}"`,
+          );
         });
       });
 
       // Also list standalone inputs not in forms
-      const standaloneInputs = document.querySelectorAll('input:not(form input), textarea:not(form textarea), select:not(form select)');
+      const standaloneInputs = document.querySelectorAll(
+        "input:not(form input), textarea:not(form textarea), select:not(form select)",
+      );
       if (standaloneInputs.length > 0) {
-        formInfo.push('\nStandalone Input Fields:');
-        (Array.from(standaloneInputs).slice(0, 20) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).forEach(input => {
+        formInfo.push("\nStandalone Input Fields:");
+        (
+          Array.from(standaloneInputs).slice(0, 20) as Array<
+            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          >
+        ).forEach((input) => {
           const type = input.type || input.tagName.toLowerCase();
-          const name = input.name || input.id || 'unnamed';
-          const placeholder = 'placeholder' in input ? input.placeholder : '';
-          const label = input.labels?.[0]?.textContent?.trim() || placeholder || '';
-          formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ''}`);
+          const name = input.name || input.id || "unnamed";
+          const placeholder = "placeholder" in input ? input.placeholder : "";
+          const label =
+            input.labels?.[0]?.textContent?.trim() || placeholder || "";
+          formInfo.push(`  - ${type}: "${name}" ${label ? `(${label})` : ""}`);
         });
       }
 
-      return `Page Forms and Input Fields:\n${formInfo.join('\n')}`;
+      return `Page Forms and Input Fields:\n${formInfo.join("\n")}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Form extraction error:', error);
-      return 'Error extracting form information.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Form extraction error:",
+        error,
+      );
+      return "Error extracting form information.";
     }
   }
 
@@ -500,32 +626,41 @@ class DocumentInteractionService {
   _extractImages(selector: string): string {
     try {
       let images = selector ? document.querySelectorAll(selector) : [];
-      
+
       // Fallback to common image selectors
       if (images.length === 0) {
-        images = document.querySelectorAll('img[src], picture img, figure img, img');
+        images = document.querySelectorAll(
+          "img[src], picture img, figure img, img",
+        );
       }
-      
+
       if (images.length === 0) {
-        return 'No images found on the page.';
+        return "No images found on the page.";
       }
 
       const imageInfo = (Array.from(images) as Array<HTMLImageElement>)
-        .filter(img => img.src)
+        .filter((img) => img.src)
         .slice(0, 30)
         .map((img, i) => {
-          const alt = img.alt || 'No alt text';
+          const alt = img.alt || "No alt text";
           const src = img.src;
-          const title = img.title ? ` (${img.title})` : '';
-          const dimensions = img.naturalWidth && img.naturalHeight ? ` [${img.naturalWidth}x${img.naturalHeight}]` : '';
+          const title = img.title ? ` (${img.title})` : "";
+          const dimensions =
+            img.naturalWidth && img.naturalHeight
+              ? ` [${img.naturalWidth}x${img.naturalHeight}]`
+              : "";
           return `${i + 1}. "${alt}"${title}${dimensions}\n   URL: ${src}`;
         })
-        .join('\n');
+        .join("\n");
 
       return `Page Images (${images.length} total):\n${imageInfo}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Image extraction error:', error);
-      return 'Error extracting image information.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Image extraction error:",
+        error,
+      );
+      return "Error extracting image information.";
     }
   }
 
@@ -535,51 +670,72 @@ class DocumentInteractionService {
    */
   _extractTables(selector: string): string {
     try {
-      let tables = selector ? document.querySelectorAll(selector) : document.querySelectorAll('table');
-      
+      const tables = selector
+        ? document.querySelectorAll(selector)
+        : document.querySelectorAll("table");
+
       if (tables.length === 0) {
-        return 'No tables found on the page.';
+        return "No tables found on the page.";
       }
 
       const tableInfo = [];
-      
-      (Array.from(tables).slice(0, 5) as Array<HTMLTableElement>).forEach((table, i) => {
-        tableInfo.push(`\nTable ${i + 1}:`);
-        
-        // Extract headers
-        const headers = (Array.from(table.querySelectorAll('th')) as Array<HTMLTableCellElement>)
-          .map(th => th.textContent.trim())
-          .filter(text => text.length > 0);
-        
-        if (headers.length > 0) {
-          tableInfo.push(`Headers: ${headers.join(' | ')}`);
-        }
-        
-        // Extract first few rows
-        const rows = (Array.from(table.querySelectorAll('tr')).slice(0, 10) as Array<HTMLTableRowElement>);
-        rows.forEach((row, ri) => {
-          const cells = (Array.from(row.querySelectorAll('td')) as Array<HTMLTableCellElement>)
-            .map(td => td.textContent.trim())
-            .filter(text => text.length > 0);
-          
-          if (cells.length > 0) {
-            tableInfo.push(`Row ${ri + 1}: ${cells.join(' | ')}`);
+
+      (Array.from(tables).slice(0, 5) as Array<HTMLTableElement>).forEach(
+        (table, i) => {
+          tableInfo.push(`\nTable ${i + 1}:`);
+
+          // Extract headers
+          const headers = (
+            Array.from(
+              table.querySelectorAll("th"),
+            ) as Array<HTMLTableCellElement>
+          )
+            .map((th) => th.textContent.trim())
+            .filter((text) => text.length > 0);
+
+          if (headers.length > 0) {
+            tableInfo.push(`Headers: ${headers.join(" | ")}`);
           }
-        });
-        
-        if (table.querySelectorAll('tr').length > 10) {
-          tableInfo.push(`... (${table.querySelectorAll('tr').length - 10} more rows)`);
-        }
-      });
+
+          // Extract first few rows
+          const rows = Array.from(table.querySelectorAll("tr")).slice(
+            0,
+            10,
+          ) as Array<HTMLTableRowElement>;
+          rows.forEach((row, ri) => {
+            const cells = (
+              Array.from(
+                row.querySelectorAll("td"),
+              ) as Array<HTMLTableCellElement>
+            )
+              .map((td) => td.textContent.trim())
+              .filter((text) => text.length > 0);
+
+            if (cells.length > 0) {
+              tableInfo.push(`Row ${ri + 1}: ${cells.join(" | ")}`);
+            }
+          });
+
+          if (table.querySelectorAll("tr").length > 10) {
+            tableInfo.push(
+              `... (${table.querySelectorAll("tr").length - 10} more rows)`,
+            );
+          }
+        },
+      );
 
       if (tables.length > 5) {
         tableInfo.push(`\n... (${tables.length - 5} more tables not shown)`);
       }
 
-      return `Page Tables:\n${tableInfo.join('\n')}`;
+      return `Page Tables:\n${tableInfo.join("\n")}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Table extraction error:', error);
-      return 'Error extracting table data.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Table extraction error:",
+        error,
+      );
+      return "Error extracting table data.";
     }
   }
 
@@ -590,38 +746,50 @@ class DocumentInteractionService {
   _extractCode(selector: string): string {
     try {
       let codeBlocks = selector ? document.querySelectorAll(selector) : [];
-      
+
       // Fallback to common code selectors
       if (codeBlocks.length === 0) {
-        codeBlocks = document.querySelectorAll('pre code, .code-block, .highlight, pre, code');
+        codeBlocks = document.querySelectorAll(
+          "pre code, .code-block, .highlight, pre, code",
+        );
       }
-      
+
       if (codeBlocks.length === 0) {
-        return 'No code blocks found on the page.';
+        return "No code blocks found on the page.";
       }
 
       const codeInfo = [];
-      
-      (Array.from(codeBlocks).slice(0, 20) as Array<HTMLElement>).forEach((block, i) => {
-        const code = block.textContent.trim();
-        const language = block.className.match(/language-(\w+)/)?.[1] || 
-                        block.className.match(/lang-(\w+)/)?.[1] || 
-                        'unknown';
-        
-        if (code.length > 0) {
-          const preview = code.length > 200 ? code.substring(0, 200) + '...' : code;
-          codeInfo.push(`\nCode Block ${i + 1} (${language}):\n${preview}`);
-        }
-      });
+
+      (Array.from(codeBlocks).slice(0, 20) as Array<HTMLElement>).forEach(
+        (block, i) => {
+          const code = block.textContent.trim();
+          const language =
+            block.className.match(/language-(\w+)/)?.[1] ||
+            block.className.match(/lang-(\w+)/)?.[1] ||
+            "unknown";
+
+          if (code.length > 0) {
+            const preview =
+              code.length > 200 ? code.substring(0, 200) + "..." : code;
+            codeInfo.push(`\nCode Block ${i + 1} (${language}):\n${preview}`);
+          }
+        },
+      );
 
       if (codeBlocks.length > 20) {
-        codeInfo.push(`\n... (${codeBlocks.length - 20} more code blocks not shown)`);
+        codeInfo.push(
+          `\n... (${codeBlocks.length - 20} more code blocks not shown)`,
+        );
       }
 
-      return `Page Code Blocks (${codeBlocks.length} total):${codeInfo.join('\n')}`;
+      return `Page Code Blocks (${codeBlocks.length} total):${codeInfo.join("\n")}`;
     } catch (error) {
-      Logger.error('DocumentInteractionService', 'Code extraction error:', error);
-      return 'Error extracting code blocks.';
+      Logger.error(
+        "DocumentInteractionService",
+        "Code extraction error:",
+        error,
+      );
+      return "Error extracting code blocks.";
     }
   }
 
@@ -631,25 +799,31 @@ class DocumentInteractionService {
    */
   _extractAll(): string {
     const parts = [];
-    
+
     // Basic page info
     parts.push(`=== PAGE INFORMATION ===`);
     parts.push(`Title: ${document.title}`);
     parts.push(`URL: ${window.location.href}`);
-    
+
     // Main headings
-    const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
+    const headings = Array.from(document.querySelectorAll("h1, h2, h3"))
       .slice(0, 15)
-      .map(h => `${h.tagName}: ${h.textContent.trim()}`)
-      .join('\n');
+      .map((h) => `${h.tagName}: ${h.textContent.trim()}`)
+      .join("\n");
     if (headings) {
       parts.push(`\n=== HEADINGS ===\n${headings}`);
     }
-    
+
     // Main content (prioritize semantic elements)
-    const contentSelectors = ['main', 'article', '[role="main"]', '.content', '.main-content'];
+    const contentSelectors = [
+      "main",
+      "article",
+      '[role="main"]',
+      ".content",
+      ".main-content",
+    ];
     let mainContent = null;
-    
+
     for (const sel of contentSelectors) {
       const element = document.querySelector(sel);
       if (element) {
@@ -658,56 +832,75 @@ class DocumentInteractionService {
         break;
       }
     }
-    
+
     // Navigation links
-    const navLinks = (Array.from(document.querySelectorAll('nav a, header a, .navigation a')) as Array<HTMLAnchorElement>)
+    const navLinks = (
+      Array.from(
+        document.querySelectorAll("nav a, header a, .navigation a"),
+      ) as Array<HTMLAnchorElement>
+    )
       .slice(0, 15)
-      .map(a => `- ${a.textContent.trim()} (${a.href})`)
-      .join('\n');
+      .map((a) => `- ${a.textContent.trim()} (${a.href})`)
+      .join("\n");
     if (navLinks) {
       parts.push(`\n=== NAVIGATION ===\n${navLinks}`);
     }
-    
+
     // Forms
-    const forms = document.querySelectorAll('form');
+    const forms = document.querySelectorAll("form");
     if (forms.length > 0) {
       parts.push(`\n=== FORMS ===\nFound ${forms.length} form(s) on the page`);
-      (Array.from(forms).slice(0, 3) as Array<HTMLFormElement>).forEach((form, i) => {
-        const inputs = form.querySelectorAll('input, textarea, select');
-        const inputList = (Array.from(inputs).slice(0, 5) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>).map(inp =>
-          `${inp.type || inp.tagName.toLowerCase()}: ${inp.name || inp.id || 'unnamed'}`
-        ).join(', ');
-        if (inputList) {
-          parts.push(`Form ${i + 1}: ${inputList}`);
-        }
-      });
+      (Array.from(forms).slice(0, 3) as Array<HTMLFormElement>).forEach(
+        (form, i) => {
+          const inputs = form.querySelectorAll("input, textarea, select");
+          const inputList = (
+            Array.from(inputs).slice(0, 5) as Array<
+              HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+            >
+          )
+            .map(
+              (inp) =>
+                `${inp.type || inp.tagName.toLowerCase()}: ${inp.name || inp.id || "unnamed"}`,
+            )
+            .join(", ");
+          if (inputList) {
+            parts.push(`Form ${i + 1}: ${inputList}`);
+          }
+        },
+      );
     }
-    
+
     // Images
-    const images = document.querySelectorAll('img[src]');
+    const images = document.querySelectorAll("img[src]");
     if (images.length > 0) {
       parts.push(`\n=== IMAGES ===\nFound ${images.length} image(s)`);
-      const imageList = (Array.from(images).slice(0, 10) as Array<HTMLImageElement>).map((img, i) =>
-        `${i + 1}. ${img.alt || 'No alt'}`
-      ).join('\n');
+      const imageList = (
+        Array.from(images).slice(0, 10) as Array<HTMLImageElement>
+      )
+        .map((img, i) => `${i + 1}. ${img.alt || "No alt"}`)
+        .join("\n");
       if (imageList) {
         parts.push(imageList);
       }
     }
-    
+
     // Tables
-    const tables = document.querySelectorAll('table');
+    const tables = document.querySelectorAll("table");
     if (tables.length > 0) {
-      parts.push(`\n=== TABLES ===\nFound ${tables.length} table(s) on the page`);
+      parts.push(
+        `\n=== TABLES ===\nFound ${tables.length} table(s) on the page`,
+      );
     }
-    
+
     // Code blocks
-    const codeBlocks = document.querySelectorAll('pre code, .code-block, pre');
+    const codeBlocks = document.querySelectorAll("pre code, .code-block, pre");
     if (codeBlocks.length > 0) {
-      parts.push(`\n=== CODE BLOCKS ===\nFound ${codeBlocks.length} code block(s)`);
+      parts.push(
+        `\n=== CODE BLOCKS ===\nFound ${codeBlocks.length} code block(s)`,
+      );
     }
-    
-    return parts.join('\n');
+
+    return parts.join("\n");
   }
 }
 

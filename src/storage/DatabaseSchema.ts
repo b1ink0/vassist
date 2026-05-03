@@ -1,17 +1,17 @@
 /**
  * Unified Database Schema
- * 
+ *
  * Centralized Dexie IndexedDB schema for both dev and extension modes.
  * All storage goes through this unified interface.
  */
 
-import Dexie from 'dexie';
+import Dexie from "dexie";
 
 export type StorageStats = Record<string, number>;
 
 class VassistDatabase extends Dexie {
   constructor() {
-    super('VassistDB');
+    super("VassistDB");
 
     // Define database schema
     // Version 1: Initial schema with core storage tables
@@ -19,38 +19,37 @@ class VassistDatabase extends Dexie {
       // Config table: Stores configuration and settings
       // Primary key: key (unique config key)
       // Indexes: updatedAt (for sorting/filtering by modification time)
-      config: 'key, updatedAt',
+      config: "key, updatedAt",
 
       // Settings table: Stores user preferences and UI settings
       // Similar structure but separate from config for organization
-      settings: 'key, updatedAt',
+      settings: "key, updatedAt",
 
       // Cache table: Temporary data and cache entries with TTL
       // Primary key: key
       // Indexes: updatedAt, expiresAt (for automatic cleanup)
-      cache: 'key, expiresAt, updatedAt',
+      cache: "key, expiresAt, updatedAt",
 
       // Chat table: Stores chat history and messages
       // Primary key: chatId (unique per chat session)
       // Indexes: createdAt, updatedAt (for chronological access)
-      chat: 'chatId, createdAt, updatedAt',
+      chat: "chatId, createdAt, updatedAt",
 
       // Files table: Extensible for future file storage
       // Primary key: fileId
       // Indexes: fileName, createdAt, category (for organization)
-      files: 'fileId, fileName, createdAt, category',
+      files: "fileId, fileName, createdAt, category",
 
       // Sessions table: For tracking user sessions across tabs/contexts
       // Primary key: sessionId
       // Indexes: createdAt, lastActivity
-      sessions: 'sessionId, createdAt, lastActivity',
+      sessions: "sessionId, createdAt, lastActivity",
 
       // Data table: General purpose key-value storage for any feature data
       // Primary key: key
       // Indexes: category (for grouping related data)
-      data: 'key, category, updatedAt',
+      data: "key, category, updatedAt",
     });
-
   }
 
   /**

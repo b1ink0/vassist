@@ -3,17 +3,21 @@
  * Simple enable/disable toggles for all AI features
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSetup } from '../../../contexts/SetupContext';
-import { Icon } from '../../icons';
-import Toggle from '../../common/Toggle';
-import ShortcutsConfig from '../../common/ShortcutsConfig';
-import Logger from '../../../services/LoggerService';
-import { Card } from '../../ui';
-import { cn } from '../../../utils/cn';
-import { isAndroid } from '../../../utils/PlatformUtils';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSetup } from "../../../contexts/SetupContext";
+import { Icon } from "../../icons";
+import Toggle from "../../common/Toggle";
+import ShortcutsConfig from "../../common/ShortcutsConfig";
+import Logger from "../../../services/LoggerService";
+import { Card } from "../../ui";
+import { isAndroid } from "../../../utils/PlatformUtils";
 
-type FeatureKey = 'translator' | 'languageDetector' | 'summarizer' | 'rewriter' | 'writer';
+type FeatureKey =
+  | "translator"
+  | "languageDetector"
+  | "summarizer"
+  | "rewriter"
+  | "writer";
 
 interface FeatureState {
   translator: { enabled: boolean };
@@ -49,9 +53,9 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
   });
   const [shortcuts, setShortcuts] = useState<ShortcutState>({
     enabled: false,
-    openChat: '',
-    toggleMode: '',
-    toggleVisibility: '',
+    openChat: "",
+    toggleMode: "",
+    toggleVisibility: "",
   });
 
   // Load existing setup data on mount
@@ -60,12 +64,12 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
     if (aiFeatures) {
       setFeatures(aiFeatures);
     }
-    
+
     const uiShortcuts = setupData?.ui?.shortcuts;
     if (uiShortcuts) {
       setShortcuts(uiShortcuts);
     }
-    
+
     // Mark initial load complete
     if (initialLoadRef.current) {
       initialLoadRef.current = false;
@@ -76,57 +80,60 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
   // Save data whenever features change (but skip initial load)
   useEffect(() => {
     if (initialLoadRef.current) return;
-    
-    Logger.log('AIFeaturesOverviewStep', 'Saving AI features config');
+
+    Logger.log("AIFeaturesOverviewStep", "Saving AI features config");
     updateSetupData({ aiFeatures: features });
   }, [features, updateSetupData]);
-  
-  const handleShortcutsChange = useCallback((newShortcuts: ShortcutState) => {
-    setShortcuts(newShortcuts);
-    
-    if (!initialLoadRef.current) {
-      Logger.log('AIFeaturesOverviewStep', 'Saving shortcuts config');
-      updateSetupData('ui.shortcuts', newShortcuts);
-    }
-  }, [updateSetupData]);
+
+  const handleShortcutsChange = useCallback(
+    (newShortcuts: ShortcutState) => {
+      setShortcuts(newShortcuts);
+
+      if (!initialLoadRef.current) {
+        Logger.log("AIFeaturesOverviewStep", "Saving shortcuts config");
+        updateSetupData("ui.shortcuts", newShortcuts);
+      }
+    },
+    [updateSetupData],
+  );
 
   const handleToggle = (featureKey: FeatureKey) => {
-    setFeatures(prev => ({
+    setFeatures((prev) => ({
       ...prev,
-      [featureKey]: { enabled: !prev[featureKey]?.enabled }
+      [featureKey]: { enabled: !prev[featureKey]?.enabled },
     }));
   };
 
   const featureList: FeatureItem[] = [
     {
-      key: 'translator',
-      icon: 'language',
-      name: 'Translation',
-      description: '27 languages supported - translate text on the fly'
+      key: "translator",
+      icon: "language",
+      name: "Translation",
+      description: "27 languages supported - translate text on the fly",
     },
     {
-      key: 'languageDetector',
-      icon: 'ai',
-      name: 'Language Detection',
-      description: 'Automatically detect the language of any text'
+      key: "languageDetector",
+      icon: "ai",
+      name: "Language Detection",
+      description: "Automatically detect the language of any text",
     },
     {
-      key: 'summarizer',
-      icon: 'file-text',
-      name: 'Summarization',
-      description: 'Get quick summaries of long texts or articles'
+      key: "summarizer",
+      icon: "file-text",
+      name: "Summarization",
+      description: "Get quick summaries of long texts or articles",
     },
     {
-      key: 'rewriter',
-      icon: 'edit',
-      name: 'Rewriter',
-      description: 'Rephrase and improve text with different tones and styles'
+      key: "rewriter",
+      icon: "edit",
+      name: "Rewriter",
+      description: "Rephrase and improve text with different tones and styles",
     },
     {
-      key: 'writer',
-      icon: 'write',
-      name: 'Writer',
-      description: 'Generate new content based on prompts and context'
+      key: "writer",
+      icon: "write",
+      name: "Writer",
+      description: "Generate new content based on prompts and context",
     },
   ];
 
@@ -144,9 +151,15 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
       {/* Info Banner */}
       <Card variant="elevated">
         <div className="flex items-start gap-2">
-          <Icon name="info" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+          <Icon
+            name="info"
+            size={18}
+            className="text-white/80 flex-shrink-0 mt-0.5"
+          />
           <p className="text-xs text-white/70">
-            All features are <span className="font-semibold">enabled by default</span>. You can customize these settings later in the Settings panel.
+            All features are{" "}
+            <span className="font-semibold">enabled by default</span>. You can
+            customize these settings later in the Settings panel.
           </p>
         </div>
       </Card>
@@ -164,7 +177,9 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
                   <Icon name={feature.icon} size={16} className="text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-white mb-0.5">{feature.name}</h3>
+                  <h3 className="text-sm font-semibold text-white mb-0.5">
+                    {feature.name}
+                  </h3>
                   <p className="text-xs text-white/70">{feature.description}</p>
                 </div>
               </div>
@@ -182,11 +197,19 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
       {/* Summary */}
       <Card variant="elevated" className="mt-4">
         <div className="flex items-start gap-2">
-          <Icon name="check-circle" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+          <Icon
+            name="check-circle"
+            size={18}
+            className="text-white/80 flex-shrink-0 mt-0.5"
+          />
           <div className="text-xs text-white/80">
             <p className="font-semibold mb-1">Ready to Go!</p>
             <p className="text-white/70">
-              {Object.values(features).filter((f) => f?.enabled !== false).length} of {featureList.length} features enabled
+              {
+                Object.values(features).filter((f) => f?.enabled !== false)
+                  .length
+              }{" "}
+              of {featureList.length} features enabled
             </p>
           </div>
         </div>
@@ -210,21 +233,27 @@ const AIFeaturesOverviewStep = ({ isLightBackground = false }) => {
               onShortcutsChange={handleShortcutsChange}
               isLightBackground={isLightBackground}
             />
-          </Card> 
+          </Card>
         </div>
-        ) : null 
-      }
+      ) : null}
 
       {/* Documentation Link - Final Step */}
       <Card variant="elevated" padding="none" className="mt-8 p-2 md:p-4">
         <div className="flex items-start gap-3">
-          <Icon name="book" size={20} className="text-white/80 flex-shrink-0 mt-0.5" />
+          <Icon
+            name="book"
+            size={20}
+            className="text-white/80 flex-shrink-0 mt-0.5"
+          />
           <div className="flex-1">
-            <h4 className="text-sm font-semibold text-white mb-2">Learn More</h4>
+            <h4 className="text-sm font-semibold text-white mb-2">
+              Learn More
+            </h4>
             <p className="text-xs text-white/70 mb-3">
-              Check out our comprehensive documentation to explore all features, tips, and advanced configurations.
+              Check out our comprehensive documentation to explore all features,
+              tips, and advanced configurations.
             </p>
-            <a 
+            <a
               href="https://b1ink0.github.io/vassist/docs/intro"
               target="_blank"
               rel="noopener noreferrer"

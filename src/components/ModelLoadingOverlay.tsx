@@ -2,12 +2,12 @@
  * @fileoverview Loading overlay component for 3D model loading states.
  */
 
-import { useApp } from '../contexts/AppContext';
-import LoadingIndicator from './common/LoadingIndicator';
+import { useApp } from "../contexts/AppContext";
+import LoadingIndicator from "./common/LoadingIndicator";
 
 /**
  * Loading overlay displayed over model position during loading states.
- * 
+ *
  * @returns {JSX.Element|null}
  */
 const ModelLoadingOverlay = () => {
@@ -20,31 +20,31 @@ const ModelLoadingOverlay = () => {
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         left: `${modelOverlayPos.x}px`,
         top: `${modelOverlayPos.y}px`,
         width: `${modelOverlayPos.width}px`,
         height: `${modelOverlayPos.height}px`,
         zIndex: 10000,
-        borderRadius: '24px',
-        pointerEvents: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
+        borderRadius: "24px",
+        pointerEvents: "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
       <div
         style={{
-          position: 'absolute',
+          position: "absolute",
           inset: 0,
-          borderRadius: '24px',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          backgroundColor: 'rgba(0, 0, 0, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          pointerEvents: 'none'
+          borderRadius: "24px",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          backgroundColor: "rgba(0, 0, 0, 0.1)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
         }}
       >
         <LoadingIndicator isVisible={true} centered={true} />

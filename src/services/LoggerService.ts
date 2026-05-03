@@ -1,6 +1,6 @@
 /**
  * Logger Service Singleton
- * 
+ *
  * Centralized logging service with:
  * - Colored console output by category
  * - Category-based enable/disable toggles
@@ -9,10 +9,13 @@
  */
 
 // Conditional imports based on environment
-let StorageServiceProxy: { configLoad: (key: string, fallback: unknown) => Promise<unknown> } | null = null;
+let StorageServiceProxy: {
+  configLoad: (key: string, fallback: unknown) => Promise<unknown>;
+} | null = null;
 
 // Check environment at module load time
-const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
+const isServiceWorker =
+  typeof window === "undefined" && typeof self !== "undefined";
 
 type LoggerCategoryConfig = { enabled: boolean; color: string };
 
@@ -31,10 +34,10 @@ class LoggerService {
 
     this.enabled = false; // Master switch - OFF by default
     this.categories = new Map(); // category -> { enabled: boolean, color: string }
-    this.defaultColor = '#888888';
+    this.defaultColor = "#888888";
     this.initialized = false;
     this.initPromise = null;
-    
+
     LoggerService.instance = this;
   }
 
@@ -42,7 +45,11 @@ class LoggerService {
    * Initialize logger with saved preferences from storage
    * @param {Object} storage - Optional storage instance (for service worker to avoid import issues)
    */
-  async init(storage: { config: { load: (key: string, fallback: unknown) => Promise<unknown> } } | null = null): Promise<void> {
+  async init(
+    storage: {
+      config: { load: (key: string, fallback: unknown) => Promise<unknown> };
+    } | null = null,
+  ): Promise<void> {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
@@ -50,58 +57,79 @@ class LoggerService {
       try {
         if (isServiceWorker && storage) {
           // Service worker - use provided storage instance
-          this.enabled = (await storage.config.load('loggerEnabled', false)) === true;
-          const savedCategories = await storage.config.load('loggerCategories', {});
-          
-          Object.entries(savedCategories as Record<string, any>).forEach(([category, config]) => {
-            if (this.categories.has(category)) {
-              const existing = this.categories.get(category);
-              if (existing) {
-                existing.enabled = config.enabled === true;
-                if (typeof config.color === 'string') existing.color = config.color;
-              }
-            } else {
-              this.categories.set(category, {
-                enabled: config.enabled === true,
-                color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
-              });
-            }
-          });
-        } else if (!isServiceWorker) {
-          // Main world - use StorageServiceProxy
-          try {
-            if (!StorageServiceProxy) {
-              const module = await import('./proxies/StorageServiceProxy');
-              StorageServiceProxy = module.default;
-            }
-            
-            this.enabled = (await StorageServiceProxy.configLoad('loggerEnabled', false)) === true;
-            const savedCategories = await StorageServiceProxy.configLoad('loggerCategories', {});
-            
-            Object.entries(savedCategories as Record<string, any>).forEach(([category, config]) => {
+          this.enabled =
+            (await storage.config.load("loggerEnabled", false)) === true;
+          const savedCategories = await storage.config.load(
+            "loggerCategories",
+            {},
+          );
+
+          Object.entries(savedCategories as Record<string, any>).forEach(
+            ([category, config]) => {
               if (this.categories.has(category)) {
                 const existing = this.categories.get(category);
                 if (existing) {
                   existing.enabled = config.enabled === true;
-                  if (typeof config.color === 'string') existing.color = config.color;
+                  if (typeof config.color === "string")
+                    existing.color = config.color;
                 }
               } else {
                 this.categories.set(category, {
                   enabled: config.enabled === true,
-                  color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
+                  color:
+                    typeof config.color === "string"
+                      ? config.color
+                      : this.getColorForCategory(category),
                 });
               }
-            });
+            },
+          );
+        } else if (!isServiceWorker) {
+          // Main world - use StorageServiceProxy
+          try {
+            if (!StorageServiceProxy) {
+              const module = await import("./proxies/StorageServiceProxy");
+              StorageServiceProxy = module.default;
+            }
+
+            this.enabled =
+              (await StorageServiceProxy.configLoad("loggerEnabled", false)) ===
+              true;
+            const savedCategories = await StorageServiceProxy.configLoad(
+              "loggerCategories",
+              {},
+            );
+
+            Object.entries(savedCategories as Record<string, any>).forEach(
+              ([category, config]) => {
+                if (this.categories.has(category)) {
+                  const existing = this.categories.get(category);
+                  if (existing) {
+                    existing.enabled = config.enabled === true;
+                    if (typeof config.color === "string")
+                      existing.color = config.color;
+                  }
+                } else {
+                  this.categories.set(category, {
+                    enabled: config.enabled === true,
+                    color:
+                      typeof config.color === "string"
+                        ? config.color
+                        : this.getColorForCategory(category),
+                  });
+                }
+              },
+            );
           } catch {
             // Bridge not ready yet, that's fine - use defaults
-            console.log('Logger: Storage not ready yet, using defaults');
+            console.log("Logger: Storage not ready yet, using defaults");
           }
         }
-        
+
         this.initialized = true;
-        console.log('Logger: Initialized from storage, enabled:', this.enabled);
+        console.log("Logger: Initialized from storage, enabled:", this.enabled);
       } catch (error) {
-        console.error('Failed to initialize Logger:', error);
+        console.error("Failed to initialize Logger:", error);
         this.initialized = true; // Continue with defaults
       }
     })();
@@ -114,35 +142,45 @@ class LoggerService {
    * @param {boolean} enabled - Master enable/disable
    * @param {Object} categories - Category configuration {categoryName: {enabled: boolean, color: string}}
    */
-  applyConfig(enabled: boolean, categories: Record<string, Partial<LoggerCategoryConfig>> = {}): void {
+  applyConfig(
+    enabled: boolean,
+    categories: Record<string, Partial<LoggerCategoryConfig>> = {},
+  ): void {
     this.enabled = enabled;
-    
+
     Object.entries(categories).forEach(([category, config]) => {
       if (this.categories.has(category)) {
         const existing = this.categories.get(category);
         if (existing) {
           existing.enabled = config.enabled === true;
-          if (typeof config.color === 'string') existing.color = config.color;
+          if (typeof config.color === "string") existing.color = config.color;
         }
       } else {
         this.categories.set(category, {
           enabled: config.enabled === true,
-          color: typeof config.color === 'string' ? config.color : this.getColorForCategory(category),
+          color:
+            typeof config.color === "string"
+              ? config.color
+              : this.getColorForCategory(category),
         });
       }
     });
-    
-    console.log('Logger: Config applied, enabled:', this.enabled);
+
+    console.log("Logger: Config applied, enabled:", this.enabled);
   }
 
   /**
    * Register a category with default settings
    */
-  registerCategory(category: string, color: string | null = null, enabled = false): void {
+  registerCategory(
+    category: string,
+    color: string | null = null,
+    enabled = false,
+  ): void {
     if (!this.categories.has(category)) {
       this.categories.set(category, {
         enabled,
-        color: color || this.getColorForCategory(category)
+        color: color || this.getColorForCategory(category),
       });
     }
   }
@@ -152,32 +190,32 @@ class LoggerService {
    */
   getColorForCategory(category: string): string {
     const colors = [
-      '#FF6B6B', // Red
-      '#4ECDC4', // Teal
-      '#45B7D1', // Blue
-      '#FFA07A', // Salmon
-      '#98D8C8', // Mint
-      '#F7DC6F', // Yellow
-      '#BB8FCE', // Purple
-      '#85C1E2', // Sky Blue
-      '#F8B195', // Peach
-      '#C06C84', // Mauve
-      '#6C5CE7', // Indigo
-      '#00B894', // Green
-      '#FDCB6E', // Mustard
-      '#E17055', // Orange
-      '#74B9FF', // Light Blue
-      '#A29BFE', // Lavender
-      '#55EFC4', // Aqua
-      '#FF7675', // Pink
-      '#FD79A8', // Rose
-      '#FFEAA7'  // Cream
+      "#FF6B6B", // Red
+      "#4ECDC4", // Teal
+      "#45B7D1", // Blue
+      "#FFA07A", // Salmon
+      "#98D8C8", // Mint
+      "#F7DC6F", // Yellow
+      "#BB8FCE", // Purple
+      "#85C1E2", // Sky Blue
+      "#F8B195", // Peach
+      "#C06C84", // Mauve
+      "#6C5CE7", // Indigo
+      "#00B894", // Green
+      "#FDCB6E", // Mustard
+      "#E17055", // Orange
+      "#74B9FF", // Light Blue
+      "#A29BFE", // Lavender
+      "#55EFC4", // Aqua
+      "#FF7675", // Pink
+      "#FD79A8", // Rose
+      "#FFEAA7", // Cream
     ];
 
     // Simple hash function
     let hash = 0;
     for (let i = 0; i < category.length; i++) {
-      hash = ((hash << 5) - hash) + category.charCodeAt(i);
+      hash = (hash << 5) - hash + category.charCodeAt(i);
       hash = hash & hash; // Convert to 32bit integer
     }
 
@@ -190,17 +228,20 @@ class LoggerService {
   async setEnabled(enabled: boolean): Promise<void> {
     this.enabled = enabled;
     try {
-      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-      
+      const isServiceWorker =
+        typeof window === "undefined" && typeof self !== "undefined";
+
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager');
-        await storageManager.config.save('loggerEnabled', enabled);
+        const { default: storageManager } =
+          await import("../storage/StorageManager");
+        await storageManager.config.save("loggerEnabled", enabled);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
-        await StorageServiceProxy.configSave('loggerEnabled', enabled);
+        const { default: StorageServiceProxy } =
+          await import("./proxies/StorageServiceProxy");
+        await StorageServiceProxy.configSave("loggerEnabled", enabled);
       }
     } catch (error) {
-      console.error('Failed to save logger enabled state:', error);
+      console.error("Failed to save logger enabled state:", error);
     }
   }
 
@@ -220,7 +261,7 @@ class LoggerService {
     try {
       await this.saveCategories();
     } catch (error) {
-      console.error('Failed to save category state:', error);
+      console.error("Failed to save category state:", error);
     }
   }
 
@@ -234,25 +275,36 @@ class LoggerService {
     });
 
     try {
-      const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-      
+      const isServiceWorker =
+        typeof window === "undefined" && typeof self !== "undefined";
+
       if (isServiceWorker) {
-        const { default: storageManager } = await import('../storage/StorageManager');
-        await storageManager.config.save('loggerCategories', categoriesObj);
+        const { default: storageManager } =
+          await import("../storage/StorageManager");
+        await storageManager.config.save("loggerCategories", categoriesObj);
       } else {
-        const { default: StorageServiceProxy } = await import('./proxies/StorageServiceProxy');
-        await StorageServiceProxy.configSave('loggerCategories', categoriesObj);
+        const { default: StorageServiceProxy } =
+          await import("./proxies/StorageServiceProxy");
+        await StorageServiceProxy.configSave("loggerCategories", categoriesObj);
       }
     } catch (error) {
-      console.error('Failed to save logger categories:', error);
+      console.error("Failed to save logger categories:", error);
     }
   }
 
   /**
    * Get all categories
    */
-  getCategories(): Array<{ category: string; enabled: boolean; color: string }> {
-    const categories: Array<{ category: string; enabled: boolean; color: string }> = [];
+  getCategories(): Array<{
+    category: string;
+    enabled: boolean;
+    color: string;
+  }> {
+    const categories: Array<{
+      category: string;
+      enabled: boolean;
+      color: string;
+    }> = [];
     this.categories.forEach((config, category) => {
       categories.push({ category, ...config });
     });
@@ -266,12 +318,13 @@ class LoggerService {
   shouldLog(category: string): boolean {
     // In service workers, init() must be called manually AFTER imports
     // Don't auto-init here to avoid preload issues
-    const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-    
+    const isServiceWorker =
+      typeof window === "undefined" && typeof self !== "undefined";
+
     if (!this.initialized && !isServiceWorker) {
       this.init().catch(() => {}); // Fire and forget in main world only
     }
-    
+
     if (!this.enabled) return false;
     if (!this.categories.has(category)) {
       this.registerCategory(category);
@@ -291,7 +344,7 @@ class LoggerService {
     console.log(
       `%c[${category}]`,
       `color: ${color}; font-weight: bold;`,
-      ...args
+      ...args,
     );
   }
 
@@ -307,7 +360,7 @@ class LoggerService {
     console.warn(
       `%c[${category}]`,
       `color: ${color}; font-weight: bold;`,
-      ...args
+      ...args,
     );
   }
 
@@ -323,7 +376,7 @@ class LoggerService {
     console.error(
       `%c[${category}]`,
       `color: ${color}; font-weight: bold;`,
-      ...args
+      ...args,
     );
   }
 
@@ -360,37 +413,108 @@ const Logger = new LoggerService();
 
 // Pre-register all known categories with unique colors (all disabled by default)
 const knownCategories = [
-  'AIFeaturesOverviewStep', 'AIService', 'AIServiceProxy', 'AIToolbar', 'AIToolbar-Panel', 'AIToolbar-Toolbar',
-  'AnimationConfig', 'AnimationManager', 'AppContent', 'AppContext', 'AssistantState.BUSY', 'AssistantState.CELEBRATING',
-  'AssistantState.COMPOSITE', 'AssistantState.IDLE', 'AssistantState.INTRO', 'AssistantState.SPEAKING', 'AssistantState.SPEAKING_HOLD',
-  'AudioWorkerClient', 'BabylonScene', 'Background', 'BackgroundBridge', 'BackgroundDetector', 'BVMDCore',
-  'CanvasInteractionManager', 'ChatBubble', 'ChatButton', 'ChatContainer', 'ChatController', 'ChatHistoryPanel',
-  'ChatHistoryService', 'ChatInput', 'ChatMessage', 'ChatService', 'ChromeAISTTConfig', 'ChromeAIValidator',
-  'ConfigContext', 'Content', 'ControlPanel', 'DebugOverlay', 'DragDropService', 'Extension', 'ExtensionBridge',
-  'KokoroTTSCore', 'LanguageDetectorService', 'LLMProviderStep', 'MediaExtractionService', 'MmdModelScene',
-  'Offscreen', 'OffscreenManager', 'OffscreenWorker', 'PositionManager', 'ResourceLoader', 'RewriterService',
-  'RewriterServiceProxy', 'SceneConfig', 'SettingsPanel', 'SetupContext', 'SetupWizard', 'SharedAudioWorker',
-  'StorageAdapter', 'StorageServiceProxy', 'STTService', 'STTServiceProxy', 'SummarizerService', 'SummarizerServiceProxy',
-  'TabManager', 'TranslatorService', 'TranslatorServiceProxy', 'TTSProviderStep', 'TTSService', 'TTSServiceProxy',
-  'UnifiedStorageManager', 'UtilService', 'VassistDatabase', 'VirtualAssistant', 'VMDGenCore', 'VoiceConversation',
-  'VoiceRecording', 'WriterService', 'WriterServiceProxy', 'Extension Content', 'Content Script IIFE',
-  'wrap-content', 'copy-assets', 'other' // Catch-all category for uncategorized logs
+  "AIFeaturesOverviewStep",
+  "AIService",
+  "AIServiceProxy",
+  "AIToolbar",
+  "AIToolbar-Panel",
+  "AIToolbar-Toolbar",
+  "AnimationConfig",
+  "AnimationManager",
+  "AppContent",
+  "AppContext",
+  "AssistantState.BUSY",
+  "AssistantState.CELEBRATING",
+  "AssistantState.COMPOSITE",
+  "AssistantState.IDLE",
+  "AssistantState.INTRO",
+  "AssistantState.SPEAKING",
+  "AssistantState.SPEAKING_HOLD",
+  "AudioWorkerClient",
+  "BabylonScene",
+  "Background",
+  "BackgroundBridge",
+  "BackgroundDetector",
+  "BVMDCore",
+  "CanvasInteractionManager",
+  "ChatBubble",
+  "ChatButton",
+  "ChatContainer",
+  "ChatController",
+  "ChatHistoryPanel",
+  "ChatHistoryService",
+  "ChatInput",
+  "ChatMessage",
+  "ChatService",
+  "ChromeAISTTConfig",
+  "ChromeAIValidator",
+  "ConfigContext",
+  "Content",
+  "ControlPanel",
+  "DebugOverlay",
+  "DragDropService",
+  "Extension",
+  "ExtensionBridge",
+  "KokoroTTSCore",
+  "LanguageDetectorService",
+  "LLMProviderStep",
+  "MediaExtractionService",
+  "MmdModelScene",
+  "Offscreen",
+  "OffscreenManager",
+  "OffscreenWorker",
+  "PositionManager",
+  "ResourceLoader",
+  "RewriterService",
+  "RewriterServiceProxy",
+  "SceneConfig",
+  "SettingsPanel",
+  "SetupContext",
+  "SetupWizard",
+  "SharedAudioWorker",
+  "StorageAdapter",
+  "StorageServiceProxy",
+  "STTService",
+  "STTServiceProxy",
+  "SummarizerService",
+  "SummarizerServiceProxy",
+  "TabManager",
+  "TranslatorService",
+  "TranslatorServiceProxy",
+  "TTSProviderStep",
+  "TTSService",
+  "TTSServiceProxy",
+  "UnifiedStorageManager",
+  "UtilService",
+  "VassistDatabase",
+  "VirtualAssistant",
+  "VMDGenCore",
+  "VoiceConversation",
+  "VoiceRecording",
+  "WriterService",
+  "WriterServiceProxy",
+  "Extension Content",
+  "Content Script IIFE",
+  "wrap-content",
+  "copy-assets",
+  "other", // Catch-all category for uncategorized logs
 ];
 
 // Register categories safely
-if (Logger && typeof Logger.registerCategory === 'function') {
-  knownCategories.forEach(category => {
+if (Logger && typeof Logger.registerCategory === "function") {
+  knownCategories.forEach((category) => {
     Logger.registerCategory(category, null, false); // false = disabled by default
   });
 }
 
 // Auto-initialize Logger asynchronously (skip in service workers)
-if (Logger && typeof Logger.init === 'function') {
-  const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-  
+if (Logger && typeof Logger.init === "function") {
+  const isServiceWorker =
+    typeof window === "undefined" && typeof self !== "undefined";
+
   if (!isServiceWorker) {
-    Logger.init().catch(error => {
-      console.warn('Logger initialization failed, using defaults:', error);
+    Logger.init().catch((error) => {
+      console.warn("Logger initialization failed, using defaults:", error);
     });
   }
   // Service workers will initialize manually when needed

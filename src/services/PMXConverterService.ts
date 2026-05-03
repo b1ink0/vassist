@@ -1,13 +1,13 @@
 /**
  * PMX Converter Service
- * 
+ *
  * Handles PMX model file processing, validation, conversion to BPMX, and storage.
  * All PMX-related business logic in one place.
  */
 
-import { zipExtractor } from '../utils/ZipExtractor';
-import { modelStorageService } from './ModelStorageService';
-import Logger from './LoggerService';
+import { zipExtractor } from "../utils/ZipExtractor";
+import { modelStorageService } from "./ModelStorageService";
+import Logger from "./LoggerService";
 
 class PMXConverterService {
   /**
@@ -20,22 +20,22 @@ class PMXConverterService {
     const meshParts: any[] = [];
 
     if (!mmdMesh || !mmdMesh.metadata) {
-      Logger.warn('PMXConverter', 'No mesh metadata available');
+      Logger.warn("PMXConverter", "No mesh metadata available");
       return { textures, meshParts };
     }
 
     const processedTextureIds = new Set();
 
     const materials: any[] = [];
-    
+
     if (mmdMesh.metadata.materials) {
       materials.push(...mmdMesh.metadata.materials);
     }
-    
+
     if (mmdMesh.material && !materials.includes(mmdMesh.material)) {
       materials.push(mmdMesh.material);
     }
-    
+
     if (mmdMesh.subMeshes) {
       mmdMesh.subMeshes.forEach((subMesh: any) => {
         if (subMesh.getMaterial && subMesh.getMaterial()) {
@@ -55,16 +55,17 @@ class PMXConverterService {
         if (!processedTextureIds.has(texId)) {
           textures.push({
             id: texId,
-            name: `${material.name || 'Material ' + matIndex} - Diffuse`,
-            url: material.diffuseTexture.url || material.diffuseTexture.name || '',
-            type: 'diffuse',
+            name: `${material.name || "Material " + matIndex} - Diffuse`,
+            url:
+              material.diffuseTexture.url || material.diffuseTexture.name || "",
+            type: "diffuse",
             isActive: true,
             materialIndex: matIndex,
             textureInfo: {
               url: material.diffuseTexture.url,
               name: material.diffuseTexture.name,
-              hasAlpha: material.diffuseTexture.hasAlpha
-            }
+              hasAlpha: material.diffuseTexture.hasAlpha,
+            },
           });
           processedTextureIds.add(texId);
         }
@@ -75,15 +76,16 @@ class PMXConverterService {
         if (!processedTextureIds.has(texId)) {
           textures.push({
             id: texId,
-            name: `${material.name || 'Material ' + matIndex} - Sphere`,
-            url: material.sphereTexture.url || material.sphereTexture.name || '',
-            type: 'sphere',
+            name: `${material.name || "Material " + matIndex} - Sphere`,
+            url:
+              material.sphereTexture.url || material.sphereTexture.name || "",
+            type: "sphere",
             isActive: true,
             materialIndex: matIndex,
             textureInfo: {
               url: material.sphereTexture.url,
-              name: material.sphereTexture.name
-            }
+              name: material.sphereTexture.name,
+            },
           });
           processedTextureIds.add(texId);
         }
@@ -94,15 +96,15 @@ class PMXConverterService {
         if (!processedTextureIds.has(texId)) {
           textures.push({
             id: texId,
-            name: `${material.name || 'Material ' + matIndex} - Toon`,
-            url: material.toonTexture.url || material.toonTexture.name || '',
-            type: 'toon',
+            name: `${material.name || "Material " + matIndex} - Toon`,
+            url: material.toonTexture.url || material.toonTexture.name || "",
+            type: "toon",
             isActive: true,
             materialIndex: matIndex,
             textureInfo: {
               url: material.toonTexture.url,
-              name: material.toonTexture.name
-            }
+              name: material.toonTexture.name,
+            },
           });
           processedTextureIds.add(texId);
         }
@@ -115,25 +117,40 @@ class PMXConverterService {
         if (!mesh) return;
 
         const meshName = mesh.name || `Mesh ${meshIndex}`;
-        
-        let meshType = 'other';
+
+        let meshType = "other";
         const nameLower = meshName.toLowerCase();
-        
-        if (nameLower.includes('hair') || nameLower.includes('髪')) meshType = 'hair';
-        else if (nameLower.includes('face') || nameLower.includes('顔')) meshType = 'face';
-        else if (nameLower.includes('body') || nameLower.includes('体')) meshType = 'body';
-        else if (nameLower.includes('cloth') || nameLower.includes('服')) meshType = 'clothing';
-        else if (nameLower.includes('eye') || nameLower.includes('目')) meshType = 'eyes';
-        else if (nameLower.includes('hand') || nameLower.includes('手')) meshType = 'hands';
-        else if (nameLower.includes('foot') || nameLower.includes('feet') || nameLower.includes('足')) meshType = 'feet';
-        else if (nameLower.includes('accessory') || nameLower.includes('アクセサリ')) meshType = 'accessory';
+
+        if (nameLower.includes("hair") || nameLower.includes("髪"))
+          meshType = "hair";
+        else if (nameLower.includes("face") || nameLower.includes("顔"))
+          meshType = "face";
+        else if (nameLower.includes("body") || nameLower.includes("体"))
+          meshType = "body";
+        else if (nameLower.includes("cloth") || nameLower.includes("服"))
+          meshType = "clothing";
+        else if (nameLower.includes("eye") || nameLower.includes("目"))
+          meshType = "eyes";
+        else if (nameLower.includes("hand") || nameLower.includes("手"))
+          meshType = "hands";
+        else if (
+          nameLower.includes("foot") ||
+          nameLower.includes("feet") ||
+          nameLower.includes("足")
+        )
+          meshType = "feet";
+        else if (
+          nameLower.includes("accessory") ||
+          nameLower.includes("アクセサリ")
+        )
+          meshType = "accessory";
 
         meshParts.push({
           id: `mesh_${meshIndex}`,
           name: meshName,
           type: meshType,
           isVisible: true,
-          meshIndex: meshIndex
+          meshIndex: meshIndex,
         });
 
         // Add submeshes if available
@@ -142,18 +159,21 @@ class PMXConverterService {
             meshParts.push({
               id: `submesh_${meshIndex}_${subIndex}`,
               name: `${meshName} - Part ${subIndex + 1}`,
-              type: 'submesh',
+              type: "submesh",
               isVisible: true,
               meshIndex: meshIndex,
-              subMeshIndex: subIndex
+              subMeshIndex: subIndex,
             });
           });
         }
       });
     }
 
-    Logger.log('PMXConverter', `Extracted ${textures.length} textures and ${meshParts.length} mesh parts`);
-    
+    Logger.log(
+      "PMXConverter",
+      `Extracted ${textures.length} textures and ${meshParts.length} mesh parts`,
+    );
+
     return { textures, meshParts };
   }
 
@@ -165,88 +185,105 @@ class PMXConverterService {
    * @param {Object} options - Conversion options
    * @returns {Promise<ArrayBuffer>} BPMX data
    */
-  async convertPMXToBPMX(pmxFile: File, referenceFiles: File[], scene: any, options: any = {}): Promise<{ bpmxData: ArrayBuffer; modelMetadata: { textures: any[]; meshParts: any[] } }> {
+  async convertPMXToBPMX(
+    pmxFile: File,
+    referenceFiles: File[],
+    scene: any,
+    options: any = {},
+  ): Promise<{
+    bpmxData: ArrayBuffer;
+    modelMetadata: { textures: any[]; meshParts: any[] };
+  }> {
     try {
-      Logger.log('PMXConverter', `Converting PMX to BPMX: ${pmxFile.name}`);
-      
+      Logger.log("PMXConverter", `Converting PMX to BPMX: ${pmxFile.name}`);
+
       if (!scene) {
-        throw new Error('Scene is required for PMX to BPMX conversion');
+        throw new Error("Scene is required for PMX to BPMX conversion");
       }
 
-      const { LoadAssetContainerAsync } = await import('@babylonjs/core/Loading/sceneLoader');
-      const { BpmxConverter } = await import('babylon-mmd/esm/Loader/Optimized/bpmxConverter');
-      const { MmdStandardMaterialBuilder } = await import('babylon-mmd/esm/Loader/mmdStandardMaterialBuilder');
-      
-      await import('babylon-mmd/esm/Loader/pmxLoader');
-      
-      Logger.log('PMXConverter', 'Setting up material builder with texture preservation...');
-      
+      const { LoadAssetContainerAsync } =
+        await import("@babylonjs/core/Loading/sceneLoader");
+      const { BpmxConverter } =
+        await import("babylon-mmd/esm/Loader/Optimized/bpmxConverter");
+      const { MmdStandardMaterialBuilder } =
+        await import("babylon-mmd/esm/Loader/mmdStandardMaterialBuilder");
+
+      await import("babylon-mmd/esm/Loader/pmxLoader");
+
+      Logger.log(
+        "PMXConverter",
+        "Setting up material builder with texture preservation...",
+      );
+
       const materialBuilder = new MmdStandardMaterialBuilder();
-      materialBuilder.deleteTextureBufferAfterLoad = false; 
-      
-      Logger.log('PMXConverter', 'Loading PMX model into scene...');
-      
+      materialBuilder.deleteTextureBufferAfterLoad = false;
+
+      Logger.log("PMXConverter", "Loading PMX model into scene...");
+
       const {
         buildSkeleton = true,
         buildMorph = true,
-        preserveSerializationData = true
+        preserveSerializationData = true,
       } = options;
-      
+
       const fileRelativePath = pmxFile.webkitRelativePath || pmxFile.name;
       const rootUrl = fileRelativePath.includes("/")
         ? fileRelativePath.substring(0, fileRelativePath.lastIndexOf("/") + 1)
         : "";
-      
-      Logger.log('PMXConverter', 'PMX file path:', fileRelativePath);
-      Logger.log('PMXConverter', 'Root URL:', rootUrl);
-      Logger.log('PMXConverter', 'Reference files count:', referenceFiles.length);
-      
-      const assetContainer = await LoadAssetContainerAsync(
-        pmxFile,
-        scene,
-        {
-          rootUrl: rootUrl,
-          pluginOptions: {
-            mmdmodel: {
-              materialBuilder: materialBuilder,
-              buildMorph,
-              preserveSerializationData,
-              loggingEnabled: true,
-              referenceFiles
-            }
-          }
-        }
+
+      Logger.log("PMXConverter", "PMX file path:", fileRelativePath);
+      Logger.log("PMXConverter", "Root URL:", rootUrl);
+      Logger.log(
+        "PMXConverter",
+        "Reference files count:",
+        referenceFiles.length,
       );
-      
+
+      const assetContainer = await LoadAssetContainerAsync(pmxFile, scene, {
+        rootUrl: rootUrl,
+        pluginOptions: {
+          mmdmodel: {
+            materialBuilder: materialBuilder,
+            buildMorph,
+            preserveSerializationData,
+            loggingEnabled: true,
+            referenceFiles,
+          },
+        },
+      });
+
       const mmdMesh = assetContainer.meshes[0];
-      
+
       if (!mmdMesh) {
-        throw new Error('Failed to load PMX model - no mesh found');
+        throw new Error("Failed to load PMX model - no mesh found");
       }
-      
-      Logger.log('PMXConverter', 'PMX loaded, extracting metadata...');
-      
+
+      Logger.log("PMXConverter", "PMX loaded, extracting metadata...");
+
       const modelMetadata = this.extractModelMetadata(mmdMesh);
-      
-      Logger.log('PMXConverter', 'Converting to BPMX...');
-      
+
+      Logger.log("PMXConverter", "Converting to BPMX...");
+
       const bpmxConverter = new BpmxConverter();
       bpmxConverter.loggingEnabled = true;
-      
+
       const bpmxArrayBuffer = bpmxConverter.convert(mmdMesh as any, {
         includeSkinningData: buildSkeleton,
-        includeMorphData: buildMorph
+        includeMorphData: buildMorph,
       });
-      
-      Logger.log('PMXConverter', `BPMX created (${bpmxArrayBuffer.byteLength} bytes)`);
-      
+
+      Logger.log(
+        "PMXConverter",
+        `BPMX created (${bpmxArrayBuffer.byteLength} bytes)`,
+      );
+
       assetContainer.dispose();
-      
+
       return { bpmxData: bpmxArrayBuffer, modelMetadata };
-      
     } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      Logger.error('PMXConverter', 'Conversion failed:', normalized);
+      const normalized =
+        error instanceof Error ? error : new Error(String(error));
+      Logger.error("PMXConverter", "Conversion failed:", normalized);
       throw new Error(`Failed to convert PMX to BPMX: ${normalized.message}`);
     }
   }
@@ -258,17 +295,17 @@ class PMXConverterService {
    */
   async createConversionScene(): Promise<any | null> {
     try {
-      const { Scene } = await import('@babylonjs/core/scene');
-      const { NullEngine } = await import('@babylonjs/core/Engines/nullEngine');
-      
-      Logger.log('PMXConverter', 'Creating NullEngine for conversion...');
+      const { Scene } = await import("@babylonjs/core/scene");
+      const { NullEngine } = await import("@babylonjs/core/Engines/nullEngine");
+
+      Logger.log("PMXConverter", "Creating NullEngine for conversion...");
       const engine = new NullEngine();
       const scene = new Scene(engine);
-      
-      Logger.log('PMXConverter', 'Conversion scene created successfully');
+
+      Logger.log("PMXConverter", "Conversion scene created successfully");
       return scene;
     } catch (error) {
-      Logger.error('PMXConverter', 'Failed to create conversion scene:', error);
+      Logger.error("PMXConverter", "Failed to create conversion scene:", error);
       return null;
     }
   }
@@ -280,14 +317,26 @@ class PMXConverterService {
    * @param {Object} options - Conversion options
    * @returns {Promise<{bpmxData: ArrayBuffer, modelMetadata: Object}>} BPMX data and extracted metadata
    */
-  async convertWithAutoScene(pmxFile: File, referenceFiles: File[], options: any = {}): Promise<{ bpmxData: ArrayBuffer; modelMetadata: { textures: any[]; meshParts: any[] } }> {
+  async convertWithAutoScene(
+    pmxFile: File,
+    referenceFiles: File[],
+    options: any = {},
+  ): Promise<{
+    bpmxData: ArrayBuffer;
+    modelMetadata: { textures: any[]; meshParts: any[] };
+  }> {
     const scene = await this.createConversionScene();
     if (!scene) {
-      throw new Error('Failed to create conversion scene');
+      throw new Error("Failed to create conversion scene");
     }
-    
+
     try {
-      return await this.convertPMXToBPMX(pmxFile, referenceFiles, scene, options);
+      return await this.convertPMXToBPMX(
+        pmxFile,
+        referenceFiles,
+        scene,
+        options,
+      );
     } finally {
       // Clean up scene
       if (scene.getEngine()) {
@@ -302,30 +351,34 @@ class PMXConverterService {
    * @param {Map<string, ArrayBuffer>} files - Extracted files
    * @returns {{data: ArrayBuffer, filename: string}|null} Largest PMX file or null
    */
-  findMainPMXFile(files: Map<string, ArrayBuffer>): { data: ArrayBuffer; filename: string } | null {
+  findMainPMXFile(
+    files: Map<string, ArrayBuffer>,
+  ): { data: ArrayBuffer; filename: string } | null {
     try {
       let largestPmx = null;
       let largestSize = 0;
-      
+
       for (const [filename, data] of files.entries()) {
-        if (filename.toLowerCase().endsWith('.pmx')) {
+        if (filename.toLowerCase().endsWith(".pmx")) {
           if (data.byteLength > largestSize) {
             largestSize = data.byteLength;
             largestPmx = { data, filename };
           }
         }
       }
-      
+
       if (largestPmx) {
-        Logger.log('PMXConverter', `Found main PMX: ${largestPmx.filename} (${largestSize} bytes)`);
+        Logger.log(
+          "PMXConverter",
+          `Found main PMX: ${largestPmx.filename} (${largestSize} bytes)`,
+        );
       } else {
-        Logger.warn('PMXConverter', 'No PMX file found');
+        Logger.warn("PMXConverter", "No PMX file found");
       }
-      
+
       return largestPmx;
-      
     } catch (error) {
-      Logger.error('PMXConverter', 'Error finding PMX file:', error);
+      Logger.error("PMXConverter", "Error finding PMX file:", error);
       return null;
     }
   }
@@ -335,57 +388,71 @@ class PMXConverterService {
    * @param {Map<string, ArrayBuffer>} files - Extracted files
    * @returns {{isValid: boolean, pmxCount: number, textureCount: number, totalFiles: number, errors: string[]}}
    */
-  validateModelZip(files: Map<string, ArrayBuffer>): { isValid: boolean; pmxCount: number; textureCount: number; totalFiles: number; errors: string[] } {
+  validateModelZip(files: Map<string, ArrayBuffer>): {
+    isValid: boolean;
+    pmxCount: number;
+    textureCount: number;
+    totalFiles: number;
+    errors: string[];
+  } {
     const errors: string[] = [];
     let pmxCount = 0;
     let textureCount = 0;
-    
+
     try {
       for (const [filename] of files.entries()) {
         const lower = filename.toLowerCase();
-        
-        if (lower.endsWith('.pmx')) {
+
+        if (lower.endsWith(".pmx")) {
           pmxCount++;
-        } else if (lower.endsWith('.png') || lower.endsWith('.jpg') || 
-                   lower.endsWith('.jpeg') || lower.endsWith('.bmp') || 
-                   lower.endsWith('.tga') || lower.endsWith('.dds')) {
+        } else if (
+          lower.endsWith(".png") ||
+          lower.endsWith(".jpg") ||
+          lower.endsWith(".jpeg") ||
+          lower.endsWith(".bmp") ||
+          lower.endsWith(".tga") ||
+          lower.endsWith(".dds")
+        ) {
           textureCount++;
         }
       }
-      
+
       if (pmxCount === 0) {
-        errors.push('No PMX file found in ZIP archive');
+        errors.push("No PMX file found in ZIP archive");
       }
-      
+
       if (files.size === 0) {
-        errors.push('ZIP archive is empty');
+        errors.push("ZIP archive is empty");
       }
-      
+
       const isValid = pmxCount > 0 && errors.length === 0;
-      
-      Logger.log('PMXConverter', `Validation: ${isValid ? 'PASS' : 'FAIL'} - PMX: ${pmxCount}, Textures: ${textureCount}`);
-      
+
+      Logger.log(
+        "PMXConverter",
+        `Validation: ${isValid ? "PASS" : "FAIL"} - PMX: ${pmxCount}, Textures: ${textureCount}`,
+      );
+
       if (errors.length > 0) {
-        errors.forEach(err => Logger.warn('PMXConverter', `  ✗ ${err}`));
+        errors.forEach((err) => Logger.warn("PMXConverter", `  ✗ ${err}`));
       }
-      
+
       return {
         isValid,
         pmxCount,
         textureCount,
         totalFiles: files.size,
-        errors
+        errors,
       };
-      
     } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      Logger.error('PMXConverter', 'Validation error:', error);
+      const normalized =
+        error instanceof Error ? error : new Error(String(error));
+      Logger.error("PMXConverter", "Validation error:", error);
       return {
         isValid: false,
         pmxCount: 0,
         textureCount: 0,
         totalFiles: files.size,
-        errors: ['Validation failed: ' + normalized.message]
+        errors: ["Validation failed: " + normalized.message],
       };
     }
   }
@@ -397,14 +464,17 @@ class PMXConverterService {
    * @param {Function} progressCallback - Optional progress callback (step, message)
    * @returns {Promise<string[]>} Array of model IDs
    */
-  async processBulkModelUpload(zipFile: File | Blob, progressCallback: ((step: string, message: string) => void) | null = null): Promise<string[]> {
+  async processBulkModelUpload(
+    zipFile: File | Blob,
+    progressCallback: ((step: string, message: string) => void) | null = null,
+  ): Promise<string[]> {
     try {
       const reportProgress = (step: string, message: string) => {
-        Logger.log('PMXConverter', `[BULK ${step}] ${message}`);
+        Logger.log("PMXConverter", `[BULK ${step}] ${message}`);
         if (progressCallback) progressCallback(step, message);
       };
 
-      reportProgress('extract', 'Extracting main ZIP archive...');
+      reportProgress("extract", "Extracting main ZIP archive...");
       const filesMap = await zipExtractor.extract(zipFile);
 
       // Extract nested ZIPs
@@ -416,11 +486,14 @@ class PMXConverterService {
       }
 
       if (nestedZips.length === 0) {
-        throw new Error('No ZIP files found in bulk import archive');
+        throw new Error("No ZIP files found in bulk import archive");
       }
 
-      Logger.log('PMXConverter', `Found ${nestedZips.length} model ZIPs to process`);
-      reportProgress('process', `Processing ${nestedZips.length} models...`);
+      Logger.log(
+        "PMXConverter",
+        `Found ${nestedZips.length} model ZIPs to process`,
+      );
+      reportProgress("process", `Processing ${nestedZips.length} models...`);
 
       const modelIds: string[] = [];
       let successCount = 0;
@@ -433,40 +506,61 @@ class PMXConverterService {
           continue;
         }
         const { filename, data } = currentZip;
-        const modelName = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9\s-_]/g, '');
-        
+        const modelName = filename
+          .replace(/\.zip$/i, "")
+          .replace(/[^a-zA-Z0-9\s-_]/g, "");
+
         try {
-          reportProgress('convert', `[${i + 1}/${nestedZips.length}] Processing ${filename}...`);
-          
-          const zipBlob = new Blob([data], { type: 'application/zip' });
+          reportProgress(
+            "convert",
+            `[${i + 1}/${nestedZips.length}] Processing ${filename}...`,
+          );
+
+          const zipBlob = new Blob([data], { type: "application/zip" });
           // Pass skipBulkCheck=true to prevent infinite recursion
-          const modelId = await this.processModelUpload(zipBlob, modelName, (step: string, msg: string) => {
-            if (progressCallback) {
-              progressCallback(step, `[${i + 1}/${nestedZips.length}] ${msg}`);
-            }
-          }, true);
-          
+          const modelId = await this.processModelUpload(
+            zipBlob,
+            modelName,
+            (step: string, msg: string) => {
+              if (progressCallback) {
+                progressCallback(
+                  step,
+                  `[${i + 1}/${nestedZips.length}] ${msg}`,
+                );
+              }
+            },
+            true,
+          );
+
           if (Array.isArray(modelId)) {
             modelIds.push(...modelId);
           } else {
             modelIds.push(modelId);
           }
           successCount++;
-          Logger.log('PMXConverter', `✓ Model ${i + 1}/${nestedZips.length} completed: ${modelName}`);
-          
+          Logger.log(
+            "PMXConverter",
+            `✓ Model ${i + 1}/${nestedZips.length} completed: ${modelName}`,
+          );
         } catch (error) {
           failCount++;
-          Logger.error('PMXConverter', `✗ Failed to process ${filename}:`, error);
+          Logger.error(
+            "PMXConverter",
+            `✗ Failed to process ${filename}:`,
+            error,
+          );
           // Continue processing other models even if one fails
         }
       }
 
-      reportProgress('complete', `Bulk import complete: ${successCount} succeeded, ${failCount} failed`);
+      reportProgress(
+        "complete",
+        `Bulk import complete: ${successCount} succeeded, ${failCount} failed`,
+      );
       return modelIds;
-
     } catch (error) {
-      Logger.error('PMXConverter', 'Bulk upload failed:', error);
-      throw (error instanceof Error ? error : new Error(String(error)));
+      Logger.error("PMXConverter", "Bulk upload failed:", error);
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -480,73 +574,103 @@ class PMXConverterService {
    * @param {boolean} skipBulkCheck - Skip bulk import detection (used for nested processing)
    * @returns {Promise<string|string[]>} Model ID or array of IDs for bulk import
    */
-  async processModelUpload(zipFile: File | Blob, modelName: string, progressCallback: ((step: string, message: string) => void) | null = null, skipBulkCheck = false): Promise<string | string[]> {
+  async processModelUpload(
+    zipFile: File | Blob,
+    modelName: string,
+    progressCallback: ((step: string, message: string) => void) | null = null,
+    skipBulkCheck = false,
+  ): Promise<string | string[]> {
     try {
       const reportProgress = (step: string, message: string) => {
-        Logger.log('PMXConverter', `[${step}] ${message}`);
+        Logger.log("PMXConverter", `[${step}] ${message}`);
         if (progressCallback) progressCallback(step, message);
       };
-      
-      reportProgress('extract', 'Extracting ZIP archive...');
-      
+
+      reportProgress("extract", "Extracting ZIP archive...");
+
       const filesMap = await zipExtractor.extract(zipFile);
-      
+
       // Check if this is a bulk import (skip if this is already a nested ZIP being processed)
       if (!skipBulkCheck) {
         const allFiles = Array.from(filesMap.entries());
-        const zipFiles = allFiles.filter(([filename, data]) => zipExtractor.isZipFile(data));
-        const nonZipFiles = allFiles.filter(([filename, data]) => !zipExtractor.isZipFile(data));
-        
+        const zipFiles = allFiles.filter(([, data]) =>
+          zipExtractor.isZipFile(data),
+        );
+        const nonZipFiles = allFiles.filter(
+          ([, data]) => !zipExtractor.isZipFile(data),
+        );
+
         // If ALL files are ZIPs, treat as bulk import
         if (zipFiles.length > 0 && nonZipFiles.length === 0) {
-          Logger.log('PMXConverter', `Detected bulk import: ${zipFiles.length} nested ZIPs`);
-          reportProgress('bulk', `Detected ${zipFiles.length} models for bulk import`);
+          Logger.log(
+            "PMXConverter",
+            `Detected bulk import: ${zipFiles.length} nested ZIPs`,
+          );
+          reportProgress(
+            "bulk",
+            `Detected ${zipFiles.length} models for bulk import`,
+          );
           return await this.processBulkModelUpload(zipFile, progressCallback);
         }
-        
+
         // Check if there's a PMX file directly
-        const hasPMX = Array.from(filesMap.keys()).some((f: string) => f.toLowerCase().endsWith('.pmx'));
-        
+        const hasPMX = Array.from(filesMap.keys()).some((f: string) =>
+          f.toLowerCase().endsWith(".pmx"),
+        );
+
         // If no PMX found but there are ZIP files, try processing each ZIP
         if (!hasPMX && zipFiles.length > 0) {
-          Logger.log('PMXConverter', `No PMX in main ZIP, but found ${zipFiles.length} nested ZIPs. Attempting bulk import...`);
-          reportProgress('bulk', `No direct PMX found, trying ${zipFiles.length} nested ZIPs`);
+          Logger.log(
+            "PMXConverter",
+            `No PMX in main ZIP, but found ${zipFiles.length} nested ZIPs. Attempting bulk import...`,
+          );
+          reportProgress(
+            "bulk",
+            `No direct PMX found, trying ${zipFiles.length} nested ZIPs`,
+          );
           return await this.processBulkModelUpload(zipFile, progressCallback);
         }
       }
-      
+
       // Normal single model processing
-      reportProgress('validate', 'Validating contents...');
-      
+      reportProgress("validate", "Validating contents...");
+
       const validation = this.validateModelZip(filesMap);
       if (!validation.isValid) {
-        throw new Error(validation.errors.join(', '));
+        throw new Error(validation.errors.join(", "));
       }
-      
-      reportProgress('find', 'Finding main PMX file...');
-      
+
+      reportProgress("find", "Finding main PMX file...");
+
       const pmxFileInfo = this.findMainPMXFile(filesMap);
       if (!pmxFileInfo) {
-        throw new Error('No PMX file found in ZIP');
+        throw new Error("No PMX file found in ZIP");
       }
-      
+
       const referenceFiles = [];
       for (const [filename, data] of filesMap.entries()) {
-        const file = new File([data], filename.split('/').pop() || filename, { type: 'application/octet-stream' });
-        Object.defineProperty(file, 'webkitRelativePath', {
+        const file = new File([data], filename.split("/").pop() || filename, {
+          type: "application/octet-stream",
+        });
+        Object.defineProperty(file, "webkitRelativePath", {
           value: filename,
-          writable: false
+          writable: false,
         });
         referenceFiles.push(file);
       }
-      
-      const pmxFile = referenceFiles.find((f: any) => f.webkitRelativePath === pmxFileInfo.filename);
+
+      const pmxFile = referenceFiles.find(
+        (f: any) => f.webkitRelativePath === pmxFileInfo.filename,
+      );
       if (!pmxFile) {
-        throw new Error('Failed to create PMX file object');
+        throw new Error("Failed to create PMX file object");
       }
-      
-      reportProgress('convert', `Converting ${pmxFileInfo.filename} to BPMX...`);
-      
+
+      reportProgress(
+        "convert",
+        `Converting ${pmxFileInfo.filename} to BPMX...`,
+      );
+
       // Convert PMX to BPMX with reference files - now returns { bpmxData, modelMetadata }
       const { bpmxData, modelMetadata } = await this.convertWithAutoScene(
         pmxFile,
@@ -554,42 +678,49 @@ class PMXConverterService {
         {
           buildSkeleton: true,
           buildMorph: true,
-          preserveSerializationData: true
-        }
+          preserveSerializationData: true,
+        },
       );
-      
-      reportProgress('save', 'Saving to storage...');
-      
+
+      reportProgress("save", "Saving to storage...");
+
       const modelId = await modelStorageService.saveModel(
-        null, 
+        null,
         modelName,
         bpmxData,
         {
           originalFileName: pmxFileInfo.filename,
-          zipFileName: 'name' in zipFile ? zipFile.name : 'unknown.zip',
+          zipFileName: "name" in zipFile ? zipFile.name : "unknown.zip",
           pmxCount: validation.pmxCount,
           textureCount: validation.textureCount,
           totalFiles: validation.totalFiles,
           conversionInfo: {
             originalSize: pmxFileInfo.data.byteLength,
             bpmxSize: bpmxData.byteLength,
-            compressionRatio: (bpmxData.byteLength / pmxFileInfo.data.byteLength).toFixed(2)
+            compressionRatio: (
+              bpmxData.byteLength / pmxFileInfo.data.byteLength
+            ).toFixed(2),
           },
           textures: modelMetadata.textures,
-          meshParts: modelMetadata.meshParts
-        }
+          meshParts: modelMetadata.meshParts,
+        },
       );
-      
-      reportProgress('complete', `Model saved: ${modelName}`);
-      
-      Logger.log('PMXConverter', `✓ Upload complete: ${modelId}`);
-      Logger.log('PMXConverter', `  - Textures: ${modelMetadata.textures.length}`);
-      Logger.log('PMXConverter', `  - Mesh Parts: ${modelMetadata.meshParts.length}`);
+
+      reportProgress("complete", `Model saved: ${modelName}`);
+
+      Logger.log("PMXConverter", `✓ Upload complete: ${modelId}`);
+      Logger.log(
+        "PMXConverter",
+        `  - Textures: ${modelMetadata.textures.length}`,
+      );
+      Logger.log(
+        "PMXConverter",
+        `  - Mesh Parts: ${modelMetadata.meshParts.length}`,
+      );
       return modelId;
-      
     } catch (error) {
-      Logger.error('PMXConverter', 'Upload failed:', error);
-      throw (error instanceof Error ? error : new Error(String(error)));
+      Logger.error("PMXConverter", "Upload failed:", error);
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -599,47 +730,58 @@ class PMXConverterService {
    * @param {File|Blob} zipFile - ZIP file to validate
    * @returns {Promise<{isValid: boolean, errors: string[]}>}
    */
-  async quickValidate(zipFile: File | Blob): Promise<{ isValid: boolean; errors: string[]; fileCount?: number; totalSize?: number; hasPMX?: boolean; hasZIP?: boolean }> {
+  async quickValidate(zipFile: File | Blob): Promise<{
+    isValid: boolean;
+    errors: string[];
+    fileCount?: number;
+    totalSize?: number;
+    hasPMX?: boolean;
+    hasZIP?: boolean;
+  }> {
     try {
       const isValidZip = await zipExtractor.isValid(zipFile);
       if (!isValidZip) {
         return {
           isValid: false,
-          errors: ['Invalid or corrupted ZIP file']
+          errors: ["Invalid or corrupted ZIP file"],
         };
       }
-      
+
       const info = await zipExtractor.getInfo(zipFile);
-      
+
       const errors = [];
-      
+
       if (info.fileCount === 0) {
-        errors.push('ZIP archive is empty');
+        errors.push("ZIP archive is empty");
       }
-      
-      const hasPMX = info.fileList.some((f: string) => f.toLowerCase().endsWith('.pmx'));
-      const hasZIP = info.fileList.some((f: string) => f.toLowerCase().endsWith('.zip'));
-      
+
+      const hasPMX = info.fileList.some((f: string) =>
+        f.toLowerCase().endsWith(".pmx"),
+      );
+      const hasZIP = info.fileList.some((f: string) =>
+        f.toLowerCase().endsWith(".zip"),
+      );
+
       // Valid if it has PMX files OR ZIP files (for bulk import)
       if (!hasPMX && !hasZIP) {
-        errors.push('No PMX or ZIP files found in archive');
+        errors.push("No PMX or ZIP files found in archive");
       }
-      
+
       return {
         isValid: errors.length === 0,
         errors,
         fileCount: info.fileCount,
         totalSize: info.totalSize,
         hasPMX,
-        hasZIP
+        hasZIP,
       };
-      
     } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      Logger.error('PMXConverter', 'Quick validation failed:', error);
+      const normalized =
+        error instanceof Error ? error : new Error(String(error));
+      Logger.error("PMXConverter", "Quick validation failed:", error);
       return {
         isValid: false,
-        errors: [normalized.message]
+        errors: [normalized.message],
       };
     }
   }

@@ -14,19 +14,19 @@ interface VMDBoneFrame {
 }
 
 const VOWEL_SHIFT_JIS_MAP: ShiftJisMap = {
-  'あ': [0x82, 0xA0],
-  'い': [0x82, 0xA2],
-  'う': [0x82, 0xA4],
-  'え': [0x82, 0xA6],
-  'お': [0x82, 0xA8],
+  あ: [0x82, 0xa0],
+  い: [0x82, 0xa2],
+  う: [0x82, 0xa4],
+  え: [0x82, 0xa6],
+  お: [0x82, 0xa8],
 };
 
 const SHIFT_JIS_TO_CHAR: Record<string, string> = {
-  '0x82A0': 'あ',
-  '0x82A2': 'い',
-  '0x82A4': 'う',
-  '0x82A6': 'え',
-  '0x82A8': 'お',
+  "0x82A0": "あ",
+  "0x82A2": "い",
+  "0x82A4": "う",
+  "0x82A6": "え",
+  "0x82A8": "お",
 };
 
 export class VMDMorphFrame {
@@ -79,12 +79,12 @@ export class VMDFile {
   lightFrames: Uint8Array[];
   shadowFrames: Uint8Array[];
 
-  constructor(modelName = 'Model') {
+  constructor(modelName = "Model") {
     this.modelName = modelName;
     this.header = new Uint8Array([
-      0x56, 0x6F, 0x63, 0x61, 0x6C, 0x6F, 0x69, 0x64, 0x20, 0x4D,
-      0x6F, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x44, 0x61, 0x74, 0x61,
-      0x20, 0x30, 0x30, 0x30, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x56, 0x6f, 0x63, 0x61, 0x6c, 0x6f, 0x69, 0x64, 0x20, 0x4d, 0x6f, 0x74,
+      0x69, 0x6f, 0x6e, 0x20, 0x44, 0x61, 0x74, 0x61, 0x20, 0x30, 0x30, 0x30,
+      0x32, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]);
     this.boneFrames = [];
     this.morphFrames = [];
@@ -255,13 +255,13 @@ export class VMDFile {
   }
 
   private decodeShiftJIS(bytes: Uint8Array): string {
-    let result = '';
+    let result = "";
     let i = 0;
     while (i < bytes.length && bytes[i] !== 0) {
       const currentByte = bytes[i] ?? 0;
       if (currentByte === 0x82 && i + 1 < bytes.length) {
         const nextByte = bytes[i + 1] ?? 0;
-        const key = `0x82${nextByte.toString(16).toUpperCase().padStart(2, '0')}`;
+        const key = `0x82${nextByte.toString(16).toUpperCase().padStart(2, "0")}`;
         if (SHIFT_JIS_TO_CHAR[key]) {
           result += SHIFT_JIS_TO_CHAR[key];
           i += 2;
@@ -271,7 +271,7 @@ export class VMDFile {
       result += String.fromCharCode(currentByte);
       i++;
     }
-    return result.replace(/\0/g, '');
+    return result.replace(/\0/g, "");
   }
 
   private encodeShiftJIS(str: string): Uint8Array {

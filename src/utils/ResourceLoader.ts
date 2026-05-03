@@ -4,8 +4,8 @@
  * Uses chrome-extension:// URLs in extension mode, relative paths in dev mode
  */
 
-import Logger from '../services/LoggerService';
-import { isDesktop, isProduction } from './PlatformUtils';
+import Logger from "../services/LoggerService";
+import { isDesktop, isProduction } from "./PlatformUtils";
 
 class ResourceLoader {
   private isExtension: boolean;
@@ -22,7 +22,7 @@ class ResourceLoader {
     // Check if the current script was loaded from a chrome-extension:// URL
     // When running as extension, import.meta.url will be chrome-extension://...
     // In dev mode with Vite, it will be http://localhost:5173/...
-    const isExtension = import.meta.url.startsWith('chrome-extension://');
+    const isExtension = import.meta.url.startsWith("chrome-extension://");
     return isExtension;
   }
 
@@ -32,7 +32,10 @@ class ResourceLoader {
    */
   setMode(isExtension: boolean): void {
     this.isExtension = isExtension;
-    Logger.log('ResourceLoader', `Mode set to: ${this.isExtension ? 'Extension' : 'Development'}`);
+    Logger.log(
+      "ResourceLoader",
+      `Mode set to: ${this.isExtension ? "Extension" : "Development"}`,
+    );
   }
 
   /**
@@ -50,13 +53,16 @@ class ResourceLoader {
     // Extension mode - request URL from content script via ExtensionBridge
     // Content script has access to chrome.runtime.getURL, we don't
     // Import here to avoid circular dependency
-    void import('./ExtensionBridge').then(({ extensionBridge }) => {
+    void import("./ExtensionBridge").then(({ extensionBridge }) => {
       return extensionBridge.getResourceURL(path);
     });
-    
+
     // For now, return a promise that will resolve to the URL
     // This makes the function async in extension mode
-    Logger.warn('ResourceLoader', 'getURL in extension mode - this should use async getURLAsync instead');
+    Logger.warn(
+      "ResourceLoader",
+      "getURL in extension mode - this should use async getURLAsync instead",
+    );
     return `/${path}`; // Temporary fallback
   }
 
@@ -67,21 +73,21 @@ class ResourceLoader {
    */
   async getURLAsync(path: string): Promise<string> {
     if (!this.isExtension) {
-      if (path.startsWith('blob:') || path.includes('://')) {
+      if (path.startsWith("blob:") || path.includes("://")) {
         return path;
       }
       if (isDesktop && isProduction) {
-        if (path.startsWith('res/')) {
+        if (path.startsWith("res/")) {
           return `../${path}`;
         }
-        return path.startsWith('/') ? path.substring(1) : path;
+        return path.startsWith("/") ? path.substring(1) : path;
       } else {
-        return path.startsWith('/') ? path : `/${path}`;
+        return path.startsWith("/") ? path : `/${path}`;
       }
     }
 
     // Extension mode - request URL from content script via ExtensionBridge
-    const { extensionBridge } = await import('./ExtensionBridge');
+    const { extensionBridge } = await import("./ExtensionBridge");
     return extensionBridge.getResourceURL(path);
   }
 
@@ -138,11 +144,13 @@ class ResourceLoader {
   async loadJSON<T = Record<string, unknown>>(path: string): Promise<T> {
     const url = this.getURL(path);
     const response = await fetch(url);
-    
+
     if (!response.ok) {
-      throw new Error(`Failed to load JSON from ${url}: ${response.statusText}`);
+      throw new Error(
+        `Failed to load JSON from ${url}: ${response.statusText}`,
+      );
     }
-    
+
     return response.json() as Promise<T>;
   }
 
@@ -154,11 +162,13 @@ class ResourceLoader {
   async loadText(path: string): Promise<string> {
     const url = this.getURL(path);
     const response = await fetch(url);
-    
+
     if (!response.ok) {
-      throw new Error(`Failed to load text from ${url}: ${response.statusText}`);
+      throw new Error(
+        `Failed to load text from ${url}: ${response.statusText}`,
+      );
     }
-    
+
     return response.text();
   }
 
@@ -170,11 +180,13 @@ class ResourceLoader {
   async loadBinary(path: string): Promise<ArrayBuffer> {
     const url = this.getURL(path);
     const response = await fetch(url);
-    
+
     if (!response.ok) {
-      throw new Error(`Failed to load binary from ${url}: ${response.statusText}`);
+      throw new Error(
+        `Failed to load binary from ${url}: ${response.statusText}`,
+      );
     }
-    
+
     return response.arrayBuffer();
   }
 

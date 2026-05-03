@@ -2,11 +2,14 @@
  * @fileoverview Emote Player Service
  */
 
-import emoteStorageService from './EmoteStorageService';
-import Logger from './LoggerService';
+import emoteStorageService from "./EmoteStorageService";
+import Logger from "./LoggerService";
 
 interface AnimationManagerLike {
-  queueSimpleAnimation: (config: Record<string, unknown>, force?: boolean) => void;
+  queueSimpleAnimation: (
+    config: Record<string, unknown>,
+    force?: boolean,
+  ) => void;
   seekToProgress?: (progress: number) => void;
   pause?: () => void;
   resume?: () => void;
@@ -71,7 +74,8 @@ class EmotePlayerService {
   }
 
   private getAnimationDurationSeconds(): number {
-    const durationFrames = this.animationManagerRef?.getCurrentAnimationDurationFrames?.() ?? 0;
+    const durationFrames =
+      this.animationManagerRef?.getCurrentAnimationDurationFrames?.() ?? 0;
     if (!Number.isFinite(durationFrames) || durationFrames <= 0) {
       return 0;
     }
@@ -84,15 +88,23 @@ class EmotePlayerService {
       return 0;
     }
 
-    const progress = this.animationManagerRef?.getCurrentAnimationProgress?.() ?? 0;
+    const progress =
+      this.animationManagerRef?.getCurrentAnimationProgress?.() ?? 0;
     if (!Number.isFinite(progress)) {
       return 0;
     }
 
-    return Math.max(0, Math.min(animDuration, animDuration * Math.max(0, Math.min(1, progress))));
+    return Math.max(
+      0,
+      Math.min(animDuration, animDuration * Math.max(0, Math.min(1, progress))),
+    );
   }
 
-  private finalizePlayback(audioUrl: string, motionUrl: string, cameraUrl: string | null): void {
+  private finalizePlayback(
+    audioUrl: string,
+    motionUrl: string,
+    cameraUrl: string | null,
+  ): void {
     this.clearDelayedFinalizeTimeout();
     this.cleanup(audioUrl, motionUrl, cameraUrl);
 
@@ -109,7 +121,7 @@ class EmotePlayerService {
    */
   setAnimationManager(manager: AnimationManagerLike): void {
     this.animationManagerRef = manager;
-    Logger.log('EmotePlayer', 'Animation manager connected');
+    Logger.log("EmotePlayer", "Animation manager connected");
   }
 
   /**
@@ -120,35 +132,52 @@ class EmotePlayerService {
   async playEmote(emoteId: string): Promise<void> {
     try {
       if (this.isPlaying) {
-        Logger.warn('EmotePlayer', 'Already playing an emote, stopping current');
+        Logger.warn(
+          "EmotePlayer",
+          "Already playing an emote, stopping current",
+        );
         this.stopEmote();
       }
 
       if (!this.animationManagerRef) {
-        throw new Error('Animation manager not set. Call setAnimationManager() first.');
+        throw new Error(
+          "Animation manager not set. Call setAnimationManager() first.",
+        );
       }
 
-      Logger.log('EmotePlayer', `Playing emote: ${emoteId}`);
+      Logger.log("EmotePlayer", `Playing emote: ${emoteId}`);
 
       const emote = await emoteStorageService.getEmote(emoteId);
       if (!emote) {
         throw new Error(`Emote ${emoteId} not found`);
       }
 
-      const audioBlob = this.toBlob(emote.audioData, emote.metadata?.audioMimeType || 'audio/mpeg');
-      const motionBlob = this.toBlob(emote.motionData, 'application/octet-stream');
+      const audioBlob = this.toBlob(
+        emote.audioData,
+        emote.metadata?.audioMimeType || "audio/mpeg",
+      );
+      const motionBlob = this.toBlob(
+        emote.motionData,
+        "application/octet-stream",
+      );
       const audioUrl = URL.createObjectURL(audioBlob);
       const motionUrl = URL.createObjectURL(motionBlob);
       this.currentAudioUrl = audioUrl;
       this.currentMotionUrl = motionUrl;
-      
+
       // Create camera animation URL if camera data exists (optional)
       let cameraUrl: string | null = null;
       if (emote.cameraData) {
-        const cameraBlob = this.toBlob(emote.cameraData, 'application/octet-stream');
+        const cameraBlob = this.toBlob(
+          emote.cameraData,
+          "application/octet-stream",
+        );
         cameraUrl = URL.createObjectURL(cameraBlob);
         this.currentCameraUrl = cameraUrl;
-        Logger.log('EmotePlayer', `Camera animation loaded for emote: ${emote.name}`);
+        Logger.log(
+          "EmotePlayer",
+          `Camera animation loaded for emote: ${emote.name}`,
+        );
       }
 
       const audio = new Audio(audioUrl);
@@ -158,14 +187,17 @@ class EmotePlayerService {
       const animationManager = this.animationManagerRef;
       let animationQueued = false;
 
-      audio.addEventListener('play', () => {
+      audio.addEventListener("play", () => {
         if (animationQueued) {
           return;
         }
         animationQueued = true;
 
-        Logger.log('EmotePlayer', `Audio playing, triggering animation for emote: ${emote.name}`);
-        
+        Logger.log(
+          "EmotePlayer",
+          `Audio playing, triggering animation for emote: ${emote.name}`,
+        );
+
         // Trigger animation when audio starts playing
         const emoteAnimConfig = {
           id: emoteId,
@@ -183,8 +215,8 @@ class EmotePlayerService {
         animationManager?.queueSimpleAnimation(emoteAnimConfig, true);
       });
 
-      audio.addEventListener('ended', () => {
-        Logger.log('EmotePlayer', 'Emote audio ended');
+      audio.addEventListener("ended", () => {
+        Logger.log("EmotePlayer", "Emote audio ended");
 
         const audioDuration = this.getAudioDuration();
         const animationDuration = this.getAnimationDurationSeconds();
@@ -201,16 +233,15 @@ class EmotePlayerService {
         this.finalizePlayback(audioUrl, motionUrl, cameraUrl);
       });
 
-      audio.addEventListener('error', (error) => {
-        Logger.error('EmotePlayer', 'Audio playback error:', error);
-        
+      audio.addEventListener("error", (error) => {
+        Logger.error("EmotePlayer", "Audio playback error:", error);
+
         this.cleanup(audioUrl, motionUrl, cameraUrl);
       });
 
       await audio.play();
-
     } catch (error) {
-      Logger.error('EmotePlayer', 'Failed to play emote:', error);
+      Logger.error("EmotePlayer", "Failed to play emote:", error);
       this.isPlaying = false;
       throw error;
     }
@@ -223,7 +254,10 @@ class EmotePlayerService {
    * @param {string} fallbackType
    * @returns {Blob}
    */
-  toBlob(value: Blob | ArrayBuffer | Uint8Array | number[] | BinaryLikeObject, fallbackType = 'application/octet-stream'): Blob {
+  toBlob(
+    value: Blob | ArrayBuffer | Uint8Array | number[] | BinaryLikeObject,
+    fallbackType = "application/octet-stream",
+  ): Blob {
     if (value instanceof Blob) {
       return value;
     }
@@ -242,14 +276,20 @@ class EmotePlayerService {
       return new Blob([new Uint8Array(value)], { type: fallbackType });
     }
 
-    if (value && typeof value === 'object' && Array.isArray((value as BinaryLikeObject).data)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      Array.isArray((value as BinaryLikeObject).data)
+    ) {
       const payload = value as BinaryLikeObject;
       const nestedType = payload.type || payload.mimeType || fallbackType;
-        const copied = new Uint8Array(payload.data as number[]);
+      const copied = new Uint8Array(payload.data as number[]);
       return new Blob([copied.buffer], { type: nestedType });
     }
 
-    throw new Error('Invalid emote media payload: expected Blob, ArrayBuffer, Uint8Array, or byte array');
+    throw new Error(
+      "Invalid emote media payload: expected Blob, ArrayBuffer, Uint8Array, or byte array",
+    );
   }
 
   /**
@@ -262,11 +302,11 @@ class EmotePlayerService {
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
-    
+
     this.currentEmoteId = null;
     this.cleanup();
     this.isPlaying = false;
-    Logger.log('EmotePlayer', 'Emote stopped');
+    Logger.log("EmotePlayer", "Emote stopped");
   }
 
   /**
@@ -275,7 +315,11 @@ class EmotePlayerService {
    * @param {string} motionUrl - Motion blob URL to revoke
    * @param {string} cameraUrl - Optional camera blob URL to revoke
    */
-  cleanup(audioUrl: string | null = null, motionUrl: string | null = null, cameraUrl: string | null = null): void {
+  cleanup(
+    audioUrl: string | null = null,
+    motionUrl: string | null = null,
+    cameraUrl: string | null = null,
+  ): void {
     this.clearDelayedFinalizeTimeout();
     const finalAudioUrl = audioUrl ?? this.currentAudioUrl;
     const finalMotionUrl = motionUrl ?? this.currentMotionUrl;
@@ -363,9 +407,10 @@ class EmotePlayerService {
     }
 
     const animationDuration = this.getAnimationDurationSeconds();
-    const animationProgress = animationDuration > 0
-      ? Math.max(0, Math.min(1, targetTime / animationDuration))
-      : clampedProgress;
+    const animationProgress =
+      animationDuration > 0
+        ? Math.max(0, Math.min(1, targetTime / animationDuration))
+        : clampedProgress;
 
     this.animationManagerRef?.seekToProgress?.(animationProgress);
   }
@@ -390,7 +435,7 @@ class EmotePlayerService {
     }
     this.animationManagerRef?.resume?.();
     this.currentAudio.play().catch((error) => {
-      Logger.warn('EmotePlayer', 'Resume playback blocked:', error);
+      Logger.warn("EmotePlayer", "Resume playback blocked:", error);
     });
   }
 
@@ -441,12 +486,15 @@ class EmotePlayerService {
    */
   async startAutoPlay(emoteIds: string[]): Promise<void> {
     if (!emoteIds || emoteIds.length === 0) {
-      Logger.warn('EmotePlayer', 'No emotes to auto-play');
+      Logger.warn("EmotePlayer", "No emotes to auto-play");
       return;
     }
 
-    Logger.log('EmotePlayer', `Starting auto-play with ${emoteIds.length} emotes`);
-    
+    Logger.log(
+      "EmotePlayer",
+      `Starting auto-play with ${emoteIds.length} emotes`,
+    );
+
     this.autoPlayActive = true;
     this.shuffledQueue = this.shuffleArray(emoteIds);
     this.playedEmotes.clear();
@@ -459,8 +507,8 @@ class EmotePlayerService {
    * Stop auto-play mode
    */
   stopAutoPlay(): void {
-    Logger.log('EmotePlayer', 'Stopping auto-play');
-    
+    Logger.log("EmotePlayer", "Stopping auto-play");
+
     this.autoPlayActive = false;
     this.shuffledQueue = [];
     this.playedEmotes.clear();
@@ -476,8 +524,8 @@ class EmotePlayerService {
     }
 
     if (this.shuffledQueue.length === 0) {
-      Logger.log('EmotePlayer', 'All emotes played, reshuffling...');
-      
+      Logger.log("EmotePlayer", "All emotes played, reshuffling...");
+
       // Get all emote IDs from played set and reshuffle
       const allEmoteIds = Array.from(this.playedEmotes);
       this.shuffledQueue = this.shuffleArray(allEmoteIds);
@@ -485,7 +533,7 @@ class EmotePlayerService {
     }
 
     if (this.shuffledQueue.length === 0) {
-      Logger.warn('EmotePlayer', 'No emotes in queue');
+      Logger.warn("EmotePlayer", "No emotes in queue");
       this.stopAutoPlay();
       return;
     }
@@ -499,8 +547,12 @@ class EmotePlayerService {
     try {
       await this.playEmote(nextEmoteId);
     } catch (error) {
-      Logger.error('EmotePlayer', 'Error playing emote in auto-play, skipping:', error);
-      
+      Logger.error(
+        "EmotePlayer",
+        "Error playing emote in auto-play, skipping:",
+        error,
+      );
+
       // If error, continue to next emote after delay
       if (this.autoPlayActive) {
         setTimeout(() => {

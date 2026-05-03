@@ -1,23 +1,23 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const isProduction = mode === 'production';
+  const isProduction = mode === "production";
 
   return {
     plugins: [
       react({
         babel: {
-          plugins: [['babel-plugin-react-compiler']],
+          plugins: [["babel-plugin-react-compiler"]],
         },
       }),
       tailwindcss(),
-      vadAssetsPlugin('dist'),
+      vadAssetsPlugin("dist"),
     ],
-    publicDir: 'public',
+    publicDir: "public",
     define: {
       // Build-time constants for mode detection
       __EXTENSION_MODE__: JSON.stringify(false),
@@ -29,46 +29,46 @@ export default defineConfig(({ mode }) => {
     server: {
       headers: {
         // Required for SharedArrayBuffer support in babylon-mmd bullet physics
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
       },
       watch: {
         ignored: [
-          '**/electron/server/**',
-          '**/android/**',
-          '**/dist-android/**',
-          '**/dist-desktop/**',
-          '**/dist-extension/**',
-          '**/release/**',
+          "**/electron/server/**",
+          "**/android/**",
+          "**/dist-android/**",
+          "**/dist-desktop/**",
+          "**/dist-extension/**",
+          "**/release/**",
         ],
       },
       warmup: {
         clientFiles: [
-          './src/main.tsx',
-          './src/App.jsx',
-          './src/components/**/*.jsx',
-          './src/services/**/*.js',
-          './src/hooks/**/*.js',
+          "./src/main.tsx",
+          "./src/App.jsx",
+          "./src/components/**/*.jsx",
+          "./src/services/**/*.js",
+          "./src/hooks/**/*.js",
         ],
       },
       fs: {
         deny: [
-          '**/electron/server/**',
-          '**/.git/**',
-          '**/node_modules/**/.git/**',
+          "**/electron/server/**",
+          "**/.git/**",
+          "**/node_modules/**/.git/**",
         ],
       },
     },
     preview: {
       headers: {
         // Required for SharedArrayBuffer support in babylon-mmd bullet physics
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
       },
     },
     build: {
       sourcemap: !isProduction,
-      minify: isProduction ? 'esbuild' : false,
+      minify: isProduction ? "esbuild" : false,
       rollupOptions: {
         output: {
           manualChunks: () => null,
@@ -77,25 +77,21 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 50000,
     },
     worker: {
-      format: 'es', // Use ES modules for workers
+      format: "es", // Use ES modules for workers
       plugins: () => [],
     },
-    assetsInclude: ['**/*.wasm'],
+    assetsInclude: ["**/*.wasm"],
     optimizeDeps: {
-      entries: ['index.html'],
+      entries: ["index.html"],
       include: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        '@ricky0123/vad-web',
-        'onnxruntime-web',
-        'onnxruntime-web/wasm',
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@ricky0123/vad-web",
+        "onnxruntime-web",
+        "onnxruntime-web/wasm",
       ],
-      exclude: [
-        '@babylonjs/havok',
-        '@huggingface/transformers',
-        'kokoro-js',
-      ],
+      exclude: ["@babylonjs/havok", "@huggingface/transformers", "kokoro-js"],
     },
   };
 });

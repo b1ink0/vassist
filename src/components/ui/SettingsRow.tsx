@@ -1,6 +1,6 @@
-import { cn } from '../../utils/cn';
+import { cn } from "../../utils/cn";
 
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 interface SettingsRowProps {
   label: string;
@@ -12,8 +12,13 @@ interface SettingsRowProps {
 /**
  * Shared settings row with label/description and right-side control slot.
  */
-const SettingsRow = ({ label, description, className, children }: SettingsRowProps) => (
-  <div className={cn('flex items-center justify-between gap-3', className)}>
+const SettingsRow = ({
+  label,
+  description,
+  className,
+  children,
+}: SettingsRowProps) => (
+  <div className={cn("flex items-center justify-between gap-3", className)}>
     <div className="flex-1 min-w-0">
       <span className="text-sm text-white font-medium">{label}</span>
       {description && (

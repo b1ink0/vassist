@@ -6,11 +6,7 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vite/client"]
   },
-  "include": [
-    "electron",
-    "src/types",
-    "src/env.d.ts"
-  ],
+  "include": ["electron", "src/types", "src/env.d.ts"],
   "exclude": [
     "dist",
     "dist-desktop",

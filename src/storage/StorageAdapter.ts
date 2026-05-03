@@ -6,9 +6,16 @@
  * Handles automatic timestamp management and basic validation.
  */
 
-import { db, type StorageStats } from './DatabaseSchema';
+import { db, type StorageStats } from "./DatabaseSchema";
 
-export type StorageTableName = 'config' | 'settings' | 'cache' | 'chat' | 'files' | 'sessions' | 'data';
+export type StorageTableName =
+  | "config"
+  | "settings"
+  | "cache"
+  | "chat"
+  | "files"
+  | "sessions"
+  | "data";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -24,16 +31,19 @@ export class StorageAdapter {
   /**
    * Get a value from storage
    */
-  async get<T = unknown>(table: StorageTableName, key: string): Promise<T | JsonRecord | undefined> {
-    const record = await db.table(table).get(key) as JsonRecord | undefined;
+  async get<T = unknown>(
+    table: StorageTableName,
+    key: string,
+  ): Promise<T | JsonRecord | undefined> {
+    const record = (await db.table(table).get(key)) as JsonRecord | undefined;
 
     // Chat table stores the full chat object, not wrapped in 'value'
-    if (table === 'chat') {
+    if (table === "chat") {
       return record;
     }
 
     // Files table stores data in 'value' field
-    if (table === 'files') {
+    if (table === "files") {
       return record?.value as T | undefined;
     }
 
@@ -44,30 +54,41 @@ export class StorageAdapter {
   /**
    * Get full record with metadata
    */
-  async getRecord(table: StorageTableName, key: string): Promise<JsonRecord | undefined> {
-    return await db.table(table).get(key) as JsonRecord | undefined;
+  async getRecord(
+    table: StorageTableName,
+    key: string,
+  ): Promise<JsonRecord | undefined> {
+    return (await db.table(table).get(key)) as JsonRecord | undefined;
   }
 
   /**
    * Set a value in storage
    */
-  async set<T>(table: StorageTableName, key: string, value: T, metadata: StorageMetadata = {}): Promise<boolean> {
+  async set<T>(
+    table: StorageTableName,
+    key: string,
+    value: T,
+    metadata: StorageMetadata = {},
+  ): Promise<boolean> {
     let record: JsonRecord;
 
     // Different tables have different primary key field names
-    if (table === 'chat') {
+    if (table === "chat") {
       // Chat table stores the full chat object directly, no 'value' wrapper
       record = {
         ...(value as JsonRecord), // Chat data should have chatId, title, messages, etc.
         chatId: key, // Ensure chatId is set as primary key
         updatedAt: new Date().toISOString(),
       };
-    } else if (table === 'files') {
+    } else if (table === "files") {
       // Files table uses fileId as primary key
       record = {
         fileId: key,
         value,
-        createdAt: typeof metadata.createdAt === 'string' ? metadata.createdAt : new Date().toISOString(),
+        createdAt:
+          typeof metadata.createdAt === "string"
+            ? metadata.createdAt
+            : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...metadata,
       };
@@ -76,7 +97,10 @@ export class StorageAdapter {
       record = {
         key,
         value,
-        createdAt: typeof metadata.createdAt === 'string' ? metadata.createdAt : new Date().toISOString(),
+        createdAt:
+          typeof metadata.createdAt === "string"
+            ? metadata.createdAt
+            : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...metadata,
       };
@@ -98,25 +122,30 @@ export class StorageAdapter {
    * Check if a key exists
    */
   async exists(table: StorageTableName, key: string): Promise<boolean> {
-    if (table === 'chat') {
-      const record = await db.table(table).where('chatId').equals(key).first();
+    if (table === "chat") {
+      const record = await db.table(table).where("chatId").equals(key).first();
       return !!record;
     }
 
-    if (table === 'files') {
-      const record = await db.table(table).where('fileId').equals(key).first();
+    if (table === "files") {
+      const record = await db.table(table).where("fileId").equals(key).first();
       return !!record;
     }
 
-    const record = await db.table(table).where('key').equals(key).first();
+    const record = await db.table(table).where("key").equals(key).first();
     return !!record;
   }
 
   /**
    * Get multiple values
    */
-  async getMultiple<T = unknown>(table: StorageTableName, keys: string[]): Promise<Record<string, T | undefined>> {
-    const records = await db.table(table).bulkGet(keys) as Array<JsonRecord | undefined>;
+  async getMultiple<T = unknown>(
+    table: StorageTableName,
+    keys: string[],
+  ): Promise<Record<string, T | undefined>> {
+    const records = (await db.table(table).bulkGet(keys)) as Array<
+      JsonRecord | undefined
+    >;
     const result: Record<string, T | undefined> = {};
     records.forEach((record, index) => {
       const resultKey = keys[index];
@@ -130,7 +159,10 @@ export class StorageAdapter {
   /**
    * Set multiple values at once
    */
-  async setMultiple<T>(table: StorageTableName, items: Record<string, T>): Promise<boolean> {
+  async setMultiple<T>(
+    table: StorageTableName,
+    items: Record<string, T>,
+  ): Promise<boolean> {
     const now = new Date().toISOString();
     const records = Object.entries(items).map(([key, value]) => ({
       key,
@@ -154,17 +186,20 @@ export class StorageAdapter {
   /**
    * Query records by filter
    */
-  async query(table: StorageTableName, filter: JsonRecord): Promise<JsonRecord[]> {
+  async query(
+    table: StorageTableName,
+    filter: JsonRecord,
+  ): Promise<JsonRecord[]> {
     const query = db.table(table);
 
     // Build query based on filter
-    if (typeof filter.key === 'string') {
+    if (typeof filter.key === "string") {
       const record = await this.getRecord(table, filter.key);
       return record ? [record] : [];
     }
 
     // For other filters, we need to scan the table
-    const allRecords = await query.toArray() as JsonRecord[];
+    const allRecords = (await query.toArray()) as JsonRecord[];
     return allRecords.filter((record) => {
       return Object.entries(filter).every(([key, value]) => {
         return record[key] === value;
@@ -176,7 +211,7 @@ export class StorageAdapter {
    * Get all records from a table
    */
   async getAll(table: StorageTableName): Promise<JsonRecord[]> {
-    return await db.table(table).toArray() as JsonRecord[];
+    return (await db.table(table).toArray()) as JsonRecord[];
   }
 
   /**
@@ -191,14 +226,15 @@ export class StorageAdapter {
    */
   async cleanupExpiredCache(): Promise<number> {
     const now = new Date().toISOString();
-    const expired = await db.table('cache')
-      .where('expiresAt')
+    const expired = (await db
+      .table("cache")
+      .where("expiresAt")
       .below(now)
-      .toArray() as CacheRecord[];
+      .toArray()) as CacheRecord[];
 
     const count = expired.length;
     if (count > 0) {
-      await db.table('cache').bulkDelete(expired.map((r) => r.key));
+      await db.table("cache").bulkDelete(expired.map((r) => r.key));
     }
     return count;
   }
@@ -215,7 +251,7 @@ export class StorageAdapter {
    */
   async isDatabaseReady(): Promise<boolean> {
     try {
-      await db.table('config').count();
+      await db.table("config").count();
       return true;
     } catch {
       return false;

@@ -3,8 +3,8 @@
  * Shared between Settings and Setup Wizard
  */
 
-import { Input, Select } from '../../ui';
-import RemoteModelPicker from '../shared/RemoteModelPicker';
+import { Input, Select } from "../../ui";
+import RemoteModelPicker from "../shared/RemoteModelPicker";
 
 interface OpenAICompatibleSTTConfigShape {
   endpoint?: string;
@@ -13,7 +13,9 @@ interface OpenAICompatibleSTTConfigShape {
   language?: string;
 }
 
-type OpenAICompatibleOnChange = ((field: string, value: string) => void) | ((updates: OpenAICompatibleSTTConfigShape) => void);
+type OpenAICompatibleOnChange =
+  | ((field: string, value: string) => void)
+  | ((updates: OpenAICompatibleSTTConfigShape) => void);
 
 interface OpenAICompatibleSTTConfigProps {
   config: OpenAICompatibleSTTConfigShape;
@@ -21,14 +23,21 @@ interface OpenAICompatibleSTTConfigProps {
   isLightBackground?: boolean;
 }
 
-const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false }: OpenAICompatibleSTTConfigProps) => {
-  const handleFieldChange = (field: keyof OpenAICompatibleSTTConfigShape, value: string) => {
+const OpenAICompatibleSTTConfig = ({
+  config,
+  onChange,
+  isLightBackground = false,
+}: OpenAICompatibleSTTConfigProps) => {
+  const handleFieldChange = (
+    field: keyof OpenAICompatibleSTTConfigShape,
+    value: string,
+  ) => {
     if (onChange.length === 2) {
       (onChange as (field: string, value: string) => void)(field, value);
     } else {
       (onChange as (updates: OpenAICompatibleSTTConfigShape) => void)({
         ...config,
-        [field]: value
+        [field]: value,
       });
     }
   };
@@ -42,22 +51,24 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
         </label>
         <Input
           type="text"
-          value={config.endpoint || ''}
-          onChange={(e) => handleFieldChange('endpoint', e.target.value)}
+          value={config.endpoint || ""}
+          onChange={(e) => handleFieldChange("endpoint", e.target.value)}
           placeholder="http://localhost:8000"
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
         />
       </div>
 
       {/* API Key (Optional) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">API Key (Optional)</label>
+        <label className="block text-sm font-medium text-white/90">
+          API Key (Optional)
+        </label>
         <Input
           type="password"
-          value={config.apiKey || ''}
-          onChange={(e) => handleFieldChange('apiKey', e.target.value)}
+          value={config.apiKey || ""}
+          onChange={(e) => handleFieldChange("apiKey", e.target.value)}
           placeholder="Leave empty if not required"
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
         />
       </div>
 
@@ -65,11 +76,11 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
       <div className="space-y-2">
         <label className="block text-sm font-medium text-white/90">Model</label>
         <RemoteModelPicker
-          value={config.model || ''}
-          onChange={(value) => handleFieldChange('model', value)}
+          value={config.model || ""}
+          onChange={(value) => handleFieldChange("model", value)}
           provider="ollama"
-          endpoint={config.endpoint || ''}
-          apiKey={config.apiKey || ''}
+          endpoint={config.endpoint || ""}
+          apiKey={config.apiKey || ""}
           placeholder="whisper"
           isLightBackground={isLightBackground}
         />
@@ -77,22 +88,24 @@ const OpenAICompatibleSTTConfig = ({ config, onChange, isLightBackground = false
 
       {/* Language */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Language</label>
+        <label className="block text-sm font-medium text-white/90">
+          Language
+        </label>
         <Select
-          value={config.language || 'auto'}
-          onChange={(e) => handleFieldChange('language', e.target.value)}
-          variant={isLightBackground ? 'dark' : 'default'}
+          value={config.language || "auto"}
+          onChange={(e) => handleFieldChange("language", e.target.value)}
+          variant={isLightBackground ? "dark" : "default"}
           options={[
-            { value: 'auto', label: 'Auto-detect' },
-            { value: 'en', label: 'English' },
-            { value: 'es', label: 'Spanish' },
-            { value: 'fr', label: 'French' },
-            { value: 'de', label: 'German' },
-            { value: 'it', label: 'Italian' },
-            { value: 'pt', label: 'Portuguese' },
-            { value: 'zh', label: 'Chinese' },
-            { value: 'ja', label: 'Japanese' },
-            { value: 'ko', label: 'Korean' },
+            { value: "auto", label: "Auto-detect" },
+            { value: "en", label: "English" },
+            { value: "es", label: "Spanish" },
+            { value: "fr", label: "French" },
+            { value: "de", label: "German" },
+            { value: "it", label: "Italian" },
+            { value: "pt", label: "Portuguese" },
+            { value: "zh", label: "Chinese" },
+            { value: "ja", label: "Japanese" },
+            { value: "ko", label: "Korean" },
           ]}
         />
       </div>

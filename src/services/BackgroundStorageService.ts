@@ -2,8 +2,8 @@
  * Background Storage Service
  */
 
-import storageManager from '../storage';
-import Logger from './LoggerService';
+import storageManager from "../storage";
+import Logger from "./LoggerService";
 
 type BackgroundData = {
   name: string;
@@ -24,9 +24,9 @@ class BackgroundStorageService {
   private ALLOWED_TYPES: string[];
 
   constructor() {
-    this.CATEGORY = 'background';
+    this.CATEGORY = "background";
     this.MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max
-    this.ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    this.ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   }
 
   /**
@@ -41,15 +41,18 @@ class BackgroundStorageService {
    */
   validateImage(file: File | null): { valid: boolean; error?: string } {
     if (!file) {
-      return { valid: false, error: 'No file provided' };
+      return { valid: false, error: "No file provided" };
     }
 
     if (!this.ALLOWED_TYPES.includes(file.type)) {
-      return { valid: false, error: 'Invalid file type. Allowed: JPEG, PNG, WebP, GIF' };
+      return {
+        valid: false,
+        error: "Invalid file type. Allowed: JPEG, PNG, WebP, GIF",
+      };
     }
 
     if (file.size > this.MAX_FILE_SIZE) {
-      return { valid: false, error: 'File too large. Maximum size: 10MB' };
+      return { valid: false, error: "File too large. Maximum size: 10MB" };
     }
 
     return { valid: true };
@@ -61,7 +64,10 @@ class BackgroundStorageService {
    * @param {string} name - Optional name for the background
    * @returns {Promise<string>} Background ID
    */
-  async saveBackground(file: File, name: string | null = null): Promise<string> {
+  async saveBackground(
+    file: File,
+    name: string | null = null,
+  ): Promise<string> {
     try {
       const validation = this.validateImage(file);
       if (!validation.valid) {
@@ -69,10 +75,12 @@ class BackgroundStorageService {
       }
 
       const id = this.generateId();
-      const displayName = name || file.name.replace(/\.[^/.]+$/, '');
+      const displayName = name || file.name.replace(/\.[^/.]+$/, "");
 
       // Read file as blob
-      const imageBlob = new Blob([await file.arrayBuffer()], { type: file.type });
+      const imageBlob = new Blob([await file.arrayBuffer()], {
+        type: file.type,
+      });
 
       const data = {
         name: displayName,
@@ -82,16 +90,19 @@ class BackgroundStorageService {
         metadata: {
           originalFileName: file.name,
           fileSize: file.size,
-          uploadedAt: Date.now()
-        }
+          uploadedAt: Date.now(),
+        },
       };
 
       await storageManager.files.save(id, data, this.CATEGORY);
 
-      Logger.log('BackgroundStorage', `Background saved: ${id} (${displayName})`);
+      Logger.log(
+        "BackgroundStorage",
+        `Background saved: ${id} (${displayName})`,
+      );
       return id;
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to save background:', error);
+      Logger.error("BackgroundStorage", "Failed to save background:", error);
       throw error;
     }
   }
@@ -100,24 +111,46 @@ class BackgroundStorageService {
    * Get all backgrounds
    * @returns {Promise<Array>} List of backgrounds with metadata
    */
-  async getBackgroundsList(): Promise<Array<{ id: string; name: string; isActive: boolean; mimeType: string | undefined; metadata: Record<string, unknown>; previewUrl: string | null }>> {
+  async getBackgroundsList(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      isActive: boolean;
+      mimeType: string | undefined;
+      metadata: Record<string, unknown>;
+      previewUrl: string | null;
+    }>
+  > {
     try {
-      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
-      
-      const backgrounds = Object.entries(backgroundsObj).map(([fileId, data]) => ({
-        id: fileId,
-        name: data?.name || 'Unnamed',
-        isActive: data?.isActive || false,
-        mimeType: data?.mimeType,
-        metadata: data?.metadata || {},
-        // Create object URL for preview
-        previewUrl: data?.imageData ? URL.createObjectURL(data.imageData) : null
-      }));
+      const backgroundsObj = (await storageManager.files.getByCategory(
+        this.CATEGORY,
+      )) as Record<string, Partial<BackgroundData>>;
 
-      Logger.log('BackgroundStorage', `Found ${backgrounds.length} backgrounds`);
+      const backgrounds = Object.entries(backgroundsObj).map(
+        ([fileId, data]) => ({
+          id: fileId,
+          name: data?.name || "Unnamed",
+          isActive: data?.isActive || false,
+          mimeType: data?.mimeType,
+          metadata: data?.metadata || {},
+          // Create object URL for preview
+          previewUrl: data?.imageData
+            ? URL.createObjectURL(data.imageData)
+            : null,
+        }),
+      );
+
+      Logger.log(
+        "BackgroundStorage",
+        `Found ${backgrounds.length} backgrounds`,
+      );
       return backgrounds;
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to get backgrounds list:', error);
+      Logger.error(
+        "BackgroundStorage",
+        "Failed to get backgrounds list:",
+        error,
+      );
       return [];
     }
   }
@@ -127,9 +160,18 @@ class BackgroundStorageService {
    * @param {string} id - Background ID
    * @returns {Promise<Object|null>} Background data
    */
-  async getBackground(id: string): Promise<{ id: string; name: string | undefined; isActive: boolean; mimeType: string | undefined; imageData: Blob | undefined; metadata: Record<string, unknown> } | null> {
+  async getBackground(id: string): Promise<{
+    id: string;
+    name: string | undefined;
+    isActive: boolean;
+    mimeType: string | undefined;
+    imageData: Blob | undefined;
+    metadata: Record<string, unknown>;
+  } | null> {
     try {
-      const bg = (await storageManager.files.load(id)) as StoredBackground | null;
+      const bg = (await storageManager.files.load(
+        id,
+      )) as StoredBackground | null;
       if (!bg) return null;
 
       return {
@@ -138,10 +180,10 @@ class BackgroundStorageService {
         isActive: bg.data?.isActive || false,
         mimeType: bg.data?.mimeType,
         imageData: bg.data?.imageData,
-        metadata: bg.data?.metadata || {}
+        metadata: bg.data?.metadata || {},
       };
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to get background:', error);
+      Logger.error("BackgroundStorage", "Failed to get background:", error);
       return null;
     }
   }
@@ -150,12 +192,21 @@ class BackgroundStorageService {
    * Get the active background
    * @returns {Promise<Object|null>} Active background data with URL
    */
-  async getActiveBackground(): Promise<{ id: string; name: string | undefined; mimeType: string | undefined; imageUrl: string | null } | null> {
+  async getActiveBackground(): Promise<{
+    id: string;
+    name: string | undefined;
+    mimeType: string | undefined;
+    imageUrl: string | null;
+  } | null> {
     try {
-      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
-      
-      const activeEntry = Object.entries(backgroundsObj).find(([_, data]) => data?.isActive === true);
-      
+      const backgroundsObj = (await storageManager.files.getByCategory(
+        this.CATEGORY,
+      )) as Record<string, Partial<BackgroundData>>;
+
+      const activeEntry = Object.entries(backgroundsObj).find(
+        ([_, data]) => data?.isActive === true,
+      );
+
       if (!activeEntry) return null;
 
       const [fileId, data] = activeEntry;
@@ -163,10 +214,14 @@ class BackgroundStorageService {
         id: fileId,
         name: data?.name,
         mimeType: data?.mimeType,
-        imageUrl: data?.imageData ? URL.createObjectURL(data.imageData) : null
+        imageUrl: data?.imageData ? URL.createObjectURL(data.imageData) : null,
       };
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to get active background:', error);
+      Logger.error(
+        "BackgroundStorage",
+        "Failed to get active background:",
+        error,
+      );
       return null;
     }
   }
@@ -177,21 +232,31 @@ class BackgroundStorageService {
    */
   async setActiveBackground(id: string | null): Promise<void> {
     try {
-      const backgroundsObj = (await storageManager.files.getByCategory(this.CATEGORY)) as Record<string, Partial<BackgroundData>>;
-      
+      const backgroundsObj = (await storageManager.files.getByCategory(
+        this.CATEGORY,
+      )) as Record<string, Partial<BackgroundData>>;
+
       for (const [fileId, data] of Object.entries(backgroundsObj)) {
         const newIsActive = fileId === id;
         if (data?.isActive !== newIsActive) {
-          await storageManager.files.save(fileId, {
-            ...(data || {}),
-            isActive: newIsActive
-          }, this.CATEGORY);
+          await storageManager.files.save(
+            fileId,
+            {
+              ...(data || {}),
+              isActive: newIsActive,
+            },
+            this.CATEGORY,
+          );
         }
       }
 
-      Logger.log('BackgroundStorage', `Active background set: ${id || 'none'}`);
+      Logger.log("BackgroundStorage", `Active background set: ${id || "none"}`);
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to set active background:', error);
+      Logger.error(
+        "BackgroundStorage",
+        "Failed to set active background:",
+        error,
+      );
       throw error;
     }
   }
@@ -210,9 +275,9 @@ class BackgroundStorageService {
   async deleteBackground(id: string): Promise<void> {
     try {
       await storageManager.files.remove(id);
-      Logger.log('BackgroundStorage', `Background deleted: ${id}`);
+      Logger.log("BackgroundStorage", `Background deleted: ${id}`);
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to delete background:', error);
+      Logger.error("BackgroundStorage", "Failed to delete background:", error);
       throw error;
     }
   }
@@ -224,17 +289,30 @@ class BackgroundStorageService {
    */
   async updateBackgroundName(id: string, newName: string): Promise<void> {
     try {
-      const bg = (await storageManager.files.load(id)) as StoredBackground | null;
-      if (!bg) throw new Error('Background not found');
+      const bg = (await storageManager.files.load(
+        id,
+      )) as StoredBackground | null;
+      if (!bg) throw new Error("Background not found");
 
-      await storageManager.files.save(id, {
-        ...bg.data,
-        name: newName
-      }, this.CATEGORY);
+      await storageManager.files.save(
+        id,
+        {
+          ...bg.data,
+          name: newName,
+        },
+        this.CATEGORY,
+      );
 
-      Logger.log('BackgroundStorage', `Background renamed: ${id} -> ${newName}`);
+      Logger.log(
+        "BackgroundStorage",
+        `Background renamed: ${id} -> ${newName}`,
+      );
     } catch (error) {
-      Logger.error('BackgroundStorage', 'Failed to update background name:', error);
+      Logger.error(
+        "BackgroundStorage",
+        "Failed to update background name:",
+        error,
+      );
       throw error;
     }
   }

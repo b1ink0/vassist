@@ -1,22 +1,25 @@
-import fs from 'fs';
-import path from 'path';
-import * as tar from 'tar';
+import fs from "fs";
+import path from "path";
+import * as tar from "tar";
 
 const rootDir = process.cwd();
-const nodeModulesDir = path.join(rootDir, 'node_modules');
-const outputDir = path.join(rootDir, 'electron', 'assets', 'runtime');
-const outputArchivePath = path.join(outputDir, 'node-llama-core.tgz');
-const stagingRoot = path.join(rootDir, '.tmp', 'node-llama-core-staging');
-const stagingNodeModulesDir = path.join(stagingRoot, 'node_modules');
+const nodeModulesDir = path.join(rootDir, "node_modules");
+const outputDir = path.join(rootDir, "electron", "assets", "runtime");
+const outputArchivePath = path.join(outputDir, "node-llama-core.tgz");
+const stagingRoot = path.join(rootDir, ".tmp", "node-llama-core-staging");
+const stagingNodeModulesDir = path.join(stagingRoot, "node_modules");
 
 const copied = new Set<string>();
 
 function packagePath(packageName: string, baseDir: string): string {
-  return path.join(baseDir, ...packageName.split('/'));
+  return path.join(baseDir, ...packageName.split("/"));
 }
 
-function readJson(jsonPath: string): { dependencies?: Record<string, string>; optionalDependencies?: Record<string, string> } {
-  return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+function readJson(jsonPath: string): {
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+} {
+  return JSON.parse(fs.readFileSync(jsonPath, "utf8"));
 }
 
 function copyPackageRecursive(packageName: string, optional = false): void {
@@ -24,7 +27,7 @@ function copyPackageRecursive(packageName: string, optional = false): void {
     return;
   }
 
-  if (packageName.startsWith('@node-llama-cpp/')) {
+  if (packageName.startsWith("@node-llama-cpp/")) {
     return;
   }
 
@@ -33,7 +36,9 @@ function copyPackageRecursive(packageName: string, optional = false): void {
     if (optional) {
       return;
     }
-    throw new Error(`Missing required dependency in node_modules: ${packageName}`);
+    throw new Error(
+      `Missing required dependency in node_modules: ${packageName}`,
+    );
   }
 
   copied.add(packageName);
@@ -42,7 +47,7 @@ function copyPackageRecursive(packageName: string, optional = false): void {
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
   fs.cpSync(sourceDir, destDir, { recursive: true });
 
-  const pkgJsonPath = path.join(sourceDir, 'package.json');
+  const pkgJsonPath = path.join(sourceDir, "package.json");
   if (!fs.existsSync(pkgJsonPath)) {
     return;
   }
@@ -66,15 +71,17 @@ function ensureCleanDir(dir: string): void {
 }
 
 async function main(): Promise<void> {
-  const coreSource = path.join(nodeModulesDir, 'node-llama-cpp');
+  const coreSource = path.join(nodeModulesDir, "node-llama-cpp");
   if (!fs.existsSync(coreSource)) {
-    throw new Error('node_modules/node-llama-cpp is missing. Install dependencies before building runtime core bundle.');
+    throw new Error(
+      "node_modules/node-llama-cpp is missing. Install dependencies before building runtime core bundle.",
+    );
   }
 
   ensureCleanDir(stagingRoot);
   fs.mkdirSync(stagingNodeModulesDir, { recursive: true });
 
-  copyPackageRecursive('node-llama-cpp', false);
+  copyPackageRecursive("node-llama-cpp", false);
 
   fs.mkdirSync(outputDir, { recursive: true });
   fs.rmSync(outputArchivePath, { force: true });
@@ -87,17 +94,19 @@ async function main(): Promise<void> {
       portable: true,
       noMtime: true,
     },
-    ['node_modules']
+    ["node_modules"],
   );
 
   const bytes = fs.statSync(outputArchivePath).size;
-  console.log(`[runtime-core] Created ${outputArchivePath} (${(bytes / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(
+    `[runtime-core] Created ${outputArchivePath} (${(bytes / 1024 / 1024).toFixed(2)} MB)`,
+  );
 
   fs.rmSync(stagingRoot, { recursive: true, force: true });
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error('[runtime-core] Failed:', message);
+  console.error("[runtime-core] Failed:", message);
   process.exitCode = 1;
 });

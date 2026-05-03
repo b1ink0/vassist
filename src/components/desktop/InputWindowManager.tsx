@@ -2,19 +2,19 @@
  * @fileoverview Manages the input window in desktop mode.
  */
 
-import { useEffect } from 'react';
-import { useApp } from '../../contexts/AppContext';
-import { useDesktop } from '../../contexts/DesktopContext';
-import { isDesktop } from '../../utils/PlatformUtils';
-import Logger from '../../services/LoggerService';
+import { useEffect } from "react";
+import { useApp } from "../../contexts/AppContext";
+import { useDesktop } from "../../contexts/DesktopContext";
+import { isDesktop } from "../../utils/PlatformUtils";
+import Logger from "../../services/LoggerService";
 
 export function InputWindowManager() {
   const { isChatInputVisible } = useApp();
   const { api } = useDesktop();
-  
+
   useEffect(() => {
     if (!isDesktop || !api?.inputWindow) return;
-    
+
     const manageInputWindow = async () => {
       try {
         if (isChatInputVisible) {
@@ -26,12 +26,16 @@ export function InputWindowManager() {
           }
         }
       } catch (error) {
-        Logger.error('InputWindowManager', 'Failed to manage input window:', error);
+        Logger.error(
+          "InputWindowManager",
+          "Failed to manage input window:",
+          error,
+        );
       }
     };
-    
+
     manageInputWindow();
   }, [isChatInputVisible, api]);
-  
+
   return null;
 }

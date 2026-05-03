@@ -1,1 +1,1 @@
-export { default, Logger } from './LoggerService';
+export { default, Logger } from "./LoggerService";

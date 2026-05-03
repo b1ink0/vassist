@@ -6,16 +6,23 @@
 
 /* global chrome */
 
-import Logger from '../../src/services/LoggerService';
+import Logger from "../../src/services/LoggerService";
 
 type OffscreenValue = string | number | boolean | null | undefined | object;
-type OffscreenMessage = Record<string, OffscreenValue | Record<string, OffscreenValue> | null | undefined>;
+type OffscreenMessage = Record<
+  string,
+  OffscreenValue | Record<string, OffscreenValue> | null | undefined
+>;
 
 interface OffscreenResponse {
   type?: string;
   requestId?: string;
   data?: Record<string, OffscreenValue> | null;
-  [key: string]: OffscreenValue | Record<string, OffscreenValue> | null | undefined;
+  [key: string]:
+    | OffscreenValue
+    | Record<string, OffscreenValue>
+    | null
+    | undefined;
 }
 
 export class OffscreenManager {
@@ -33,8 +40,8 @@ export class OffscreenManager {
     this.closeDelay = 600000; // Close after 10 minutes of inactivity (increased for Kokoro model downloads and WebGPU operations)
     this.keepaliveInterval = null;
     this.longRunningJobs = new Set(); // Track long-running operations by requestId
-    
-    Logger.log('OffscreenManager', 'Initialized with 10-minute idle timeout');
+
+    Logger.log("OffscreenManager", "Initialized with 10-minute idle timeout");
   }
 
   /**
@@ -47,31 +54,35 @@ export class OffscreenManager {
     }
 
     try {
-      Logger.log('OffscreenManager', 'Creating offscreen document...');
+      Logger.log("OffscreenManager", "Creating offscreen document...");
 
       await chrome.offscreen.createDocument({
-        url: 'offscreen.html',
+        url: "offscreen.html",
         reasons: [
-          chrome.offscreen.Reason.WORKERS,        // For spawning WebGPU/WASM computation workers (KokoroTTSCore, VMDGenerationCore, etc.)
-          chrome.offscreen.Reason.BLOBS,          // For creating WAV file blobs and audio data
-          chrome.offscreen.Reason.DOM_PARSER      // For AudioContext.decodeAudioData and processing
+          chrome.offscreen.Reason.WORKERS, // For spawning WebGPU/WASM computation workers (KokoroTTSCore, VMDGenerationCore, etc.)
+          chrome.offscreen.Reason.BLOBS, // For creating WAV file blobs and audio data
+          chrome.offscreen.Reason.DOM_PARSER, // For AudioContext.decodeAudioData and processing
         ],
-        justification: 'WebGPU/WASM AI model inference, audio processing (decoding/encoding), and 3D animation generation for virtual assistant'
+        justification:
+          "WebGPU/WASM AI model inference, audio processing (decoding/encoding), and 3D animation generation for virtual assistant",
       });
 
       this.isOffscreenOpen = true;
       this.resetCloseTimer();
-      
-      Logger.log('OffscreenManager', 'Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER');
+
+      Logger.log(
+        "OffscreenManager",
+        "Offscreen document created with reasons: WORKERS, BLOBS, DOM_PARSER",
+      );
     } catch (error) {
       const errorText = error instanceof Error ? error.message : String(error);
       // Document might already exist
-      if (errorText.includes('Only a single offscreen')) {
-        Logger.log('OffscreenManager', 'Offscreen already exists');
+      if (errorText.includes("Only a single offscreen")) {
+        Logger.log("OffscreenManager", "Offscreen already exists");
         this.isOffscreenOpen = true;
         this.resetCloseTimer();
       } else {
-        Logger.error('OffscreenManager', 'Failed to create offscreen:', error);
+        Logger.error("OffscreenManager", "Failed to create offscreen:", error);
         throw error;
       }
     }
@@ -83,26 +94,29 @@ export class OffscreenManager {
   async closeOffscreen(): Promise<void> {
     // Don't close if there are active jobs!
     if (this.activeJobs > 0) {
-      Logger.log('OffscreenManager', 'Skipping close - ${this.activeJobs} active jobs');
+      Logger.log(
+        "OffscreenManager",
+        "Skipping close - ${this.activeJobs} active jobs",
+      );
       this.resetCloseTimer(); // Reset timer for later
       return;
     }
-    
+
     if (!this.isOffscreenOpen) return;
 
     try {
-      Logger.log('OffscreenManager', 'Closing offscreen document...');
+      Logger.log("OffscreenManager", "Closing offscreen document...");
       await chrome.offscreen.closeDocument();
       this.isOffscreenOpen = false;
-      Logger.log('OffscreenManager', 'Offscreen document closed');
+      Logger.log("OffscreenManager", "Offscreen document closed");
     } catch (error) {
       const errorText = error instanceof Error ? error.message : String(error);
       // If no current document, it's already closed - not an error
-      if (errorText.includes('No current offscreen')) {
-        Logger.log('OffscreenManager', 'Offscreen already closed');
+      if (errorText.includes("No current offscreen")) {
+        Logger.log("OffscreenManager", "Offscreen already closed");
         this.isOffscreenOpen = false;
       } else {
-        Logger.error('OffscreenManager', 'Failed to close offscreen:', error);
+        Logger.error("OffscreenManager", "Failed to close offscreen:", error);
       }
     }
   }
@@ -114,42 +128,46 @@ export class OffscreenManager {
     // Don't use startJob/endJob here - let the caller manage job lifecycle
     // This is because sendToOffscreen returns immediately, but the WORK in offscreen
     // might still be ongoing (e.g., Kokoro downloading model for 2 minutes)
-    
+
     try {
       await this.ensureOffscreen();
-      
+
       // CRITICAL: Mark message as targeted to offscreen
       // This prevents background handlers from processing it
       const offscreenMessage = {
         ...message,
-        target: 'offscreen'
+        target: "offscreen",
       };
-      
-      const response = await chrome.runtime.sendMessage(offscreenMessage) as OffscreenResponse;
+
+      const response = (await chrome.runtime.sendMessage(
+        offscreenMessage,
+      )) as OffscreenResponse;
       return response;
     } catch (error) {
-      Logger.error('OffscreenManager', 'Failed to send message:', error);
+      Logger.error("OffscreenManager", "Failed to send message:", error);
       const errorText = error instanceof Error ? error.message : String(error);
-      
+
       // If receiving end doesn't exist, offscreen was closed
-      if (errorText.includes('Receiving end does not exist')) {
+      if (errorText.includes("Receiving end does not exist")) {
         this.isOffscreenOpen = false;
         await this.ensureOffscreen();
-        
+
         // Retry the message
         try {
           const offscreenMessage = {
             ...message,
-            target: 'offscreen'
+            target: "offscreen",
           };
-          const response = await chrome.runtime.sendMessage(offscreenMessage) as OffscreenResponse;
+          const response = (await chrome.runtime.sendMessage(
+            offscreenMessage,
+          )) as OffscreenResponse;
           return response;
         } catch (retryError) {
-          Logger.error('OffscreenManager', 'Retry failed:', retryError);
+          Logger.error("OffscreenManager", "Retry failed:", retryError);
           throw retryError;
         }
       }
-      
+
       throw error;
     }
   }
@@ -159,7 +177,10 @@ export class OffscreenManager {
    */
   startJob(): void {
     this.activeJobs++;
-    Logger.log('OffscreenManager', 'Job started, active jobs: ${this.activeJobs}');
+    Logger.log(
+      "OffscreenManager",
+      "Job started, active jobs: ${this.activeJobs}",
+    );
     this.startKeepalive();
     this.resetCloseTimer();
   }
@@ -169,12 +190,15 @@ export class OffscreenManager {
    */
   endJob(): void {
     this.activeJobs = Math.max(0, this.activeJobs - 1);
-    Logger.log('OffscreenManager', 'Job ended, active jobs: ${this.activeJobs}');
-    
+    Logger.log(
+      "OffscreenManager",
+      "Job ended, active jobs: ${this.activeJobs}",
+    );
+
     if (this.activeJobs === 0) {
       this.stopKeepalive();
     }
-    
+
     this.resetCloseTimer();
   }
 
@@ -186,7 +210,7 @@ export class OffscreenManager {
   startLongRunningJob(requestId: string): void {
     this.longRunningJobs.add(requestId);
     this.startJob();
-    Logger.log('OffscreenManager', 'Long-running job started: ${requestId}');
+    Logger.log("OffscreenManager", "Long-running job started: ${requestId}");
   }
 
   /**
@@ -197,7 +221,7 @@ export class OffscreenManager {
     if (this.longRunningJobs.has(requestId)) {
       this.longRunningJobs.delete(requestId);
       this.endJob();
-      Logger.log('OffscreenManager', 'Long-running job ended: ${requestId}');
+      Logger.log("OffscreenManager", "Long-running job ended: ${requestId}");
     }
   }
 
@@ -209,10 +233,13 @@ export class OffscreenManager {
   startKeepalive(): void {
     if (this.keepaliveInterval) return; // Already running
 
-    Logger.log('OffscreenManager', 'Starting keepalive pings (every 20s)');
+    Logger.log("OffscreenManager", "Starting keepalive pings (every 20s)");
     this.keepaliveInterval = setInterval(() => {
       if (this.activeJobs > 0 || this.longRunningJobs.size > 0) {
-        Logger.log('OffscreenManager', `Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running`);
+        Logger.log(
+          "OffscreenManager",
+          `Keepalive ping - ${this.activeJobs} jobs, ${this.longRunningJobs.size} long-running`,
+        );
         this.keepAlive();
       } else {
         // No active work, stop keepalive
@@ -226,7 +253,7 @@ export class OffscreenManager {
    */
   stopKeepalive(): void {
     if (this.keepaliveInterval) {
-      Logger.log('OffscreenManager', 'Stopping keepalive pings');
+      Logger.log("OffscreenManager", "Stopping keepalive pings");
       clearInterval(this.keepaliveInterval);
       this.keepaliveInterval = null;
     }

@@ -2,8 +2,8 @@
  * Model Storage Service
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -30,10 +30,10 @@ interface NameValidationResult {
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const getDefaultMetadata = (): ModelMetadata => ({
-  originalFileName: 'unknown.pmx',
+  originalFileName: "unknown.pmx",
   uploadedAt: 0,
   fileSize: 0,
   conversionInfo: {},
@@ -44,10 +44,16 @@ const normalizeModelMetadata = (value: unknown): ModelMetadata => {
     return getDefaultMetadata();
   }
 
-  const originalFileName = typeof value.originalFileName === 'string' ? value.originalFileName : 'unknown.pmx';
-  const uploadedAt = typeof value.uploadedAt === 'number' ? value.uploadedAt : 0;
-  const fileSize = typeof value.fileSize === 'number' ? value.fileSize : 0;
-  const conversionInfo = isRecord(value.conversionInfo) ? value.conversionInfo : {};
+  const originalFileName =
+    typeof value.originalFileName === "string"
+      ? value.originalFileName
+      : "unknown.pmx";
+  const uploadedAt =
+    typeof value.uploadedAt === "number" ? value.uploadedAt : 0;
+  const fileSize = typeof value.fileSize === "number" ? value.fileSize : 0;
+  const conversionInfo = isRecord(value.conversionInfo)
+    ? value.conversionInfo
+    : {};
 
   return {
     ...value,
@@ -63,7 +69,7 @@ const normalizeStoredModel = (value: unknown): StoredModel | null => {
     return null;
   }
 
-  const name = typeof value.name === 'string' ? value.name : 'Unknown Model';
+  const name = typeof value.name === "string" ? value.name : "Unknown Model";
   const isDefault = value.isDefault === true;
   const metadata = normalizeModelMetadata(value.metadata);
   const normalized: StoredModel = {
@@ -76,7 +82,7 @@ const normalizeStoredModel = (value: unknown): StoredModel | null => {
   if (value.modelData instanceof Blob) {
     normalized.modelData = value.modelData;
   }
-  if (typeof value.blobURL === 'string') {
+  if (typeof value.blobURL === "string") {
     normalized.blobURL = value.blobURL;
   }
 
@@ -97,7 +103,7 @@ class ModelStorageService {
   private readonly MAX_NAME_LENGTH: number;
 
   constructor() {
-    this.CATEGORY = 'model';
+    this.CATEGORY = "model";
     this.MAX_NAME_LENGTH = 50;
   }
 
@@ -107,18 +113,21 @@ class ModelStorageService {
    * @returns {Object} - { valid: boolean, error: string }
    */
   validateModelName(name: string): NameValidationResult {
-    if (!name || typeof name !== 'string') {
-      return { valid: false, error: 'Model name is required' };
+    if (!name || typeof name !== "string") {
+      return { valid: false, error: "Model name is required" };
     }
 
     const trimmed = name.trim();
-    
+
     if (trimmed.length === 0) {
-      return { valid: false, error: 'Model name cannot be empty' };
+      return { valid: false, error: "Model name cannot be empty" };
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return { valid: false, error: `Model name cannot exceed ${this.MAX_NAME_LENGTH} characters` };
+      return {
+        valid: false,
+        error: `Model name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
+      };
     }
 
     return { valid: true, name: trimmed };
@@ -161,11 +170,13 @@ class ModelStorageService {
 
       let modelBlob;
       if (bpmxData instanceof ArrayBuffer) {
-        modelBlob = new Blob([bpmxData], { type: 'application/octet-stream' });
+        modelBlob = new Blob([bpmxData], { type: "application/octet-stream" });
       } else if (bpmxData instanceof Blob) {
         modelBlob = bpmxData;
       } else {
-        throw new Error('Invalid model data format. Expected Blob or ArrayBuffer.');
+        throw new Error(
+          "Invalid model data format. Expected Blob or ArrayBuffer.",
+        );
       }
 
       if (setAsDefault) {
@@ -177,21 +188,26 @@ class ModelStorageService {
         modelData: modelBlob,
         isDefault: setAsDefault,
         metadata: {
-          originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : 'unknown.pmx',
+          originalFileName:
+            typeof metadata.originalFileName === "string"
+              ? metadata.originalFileName
+              : "unknown.pmx",
           uploadedAt: Date.now(),
           fileSize: modelBlob.size,
-          conversionInfo: isRecord(metadata.conversionInfo) ? metadata.conversionInfo : {},
-          ...metadata
-        }
+          conversionInfo: isRecord(metadata.conversionInfo)
+            ? metadata.conversionInfo
+            : {},
+          ...metadata,
+        },
       };
 
       await storageServiceProxy.fileSave(modelId, modelData, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model saved: ${modelId} (${validatedName})`);
-      
+      Logger.log("ModelStorage", `Model saved: ${modelId} (${validatedName})`);
+
       return modelId;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to save model:', error);
+      Logger.error("ModelStorage", "Failed to save model:", error);
       throw error;
     }
   }
@@ -206,7 +222,7 @@ class ModelStorageService {
       const modelData = await storageServiceProxy.fileLoad(modelId);
       return normalizeStoredModel(modelData);
     } catch (error) {
-      Logger.error('ModelStorage', `Failed to get model ${modelId}:`, error);
+      Logger.error("ModelStorage", `Failed to get model ${modelId}:`, error);
       return null;
     }
   }
@@ -219,23 +235,30 @@ class ModelStorageService {
    */
   async getModelsList(): Promise<ModelListItem[]> {
     try {
-      const modelsMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const modelsMetadata =
+        await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
       const metadataRecord = isRecord(modelsMetadata) ? modelsMetadata : {};
-      
-      const modelsList = Object.entries(metadataRecord).map(([id, data]): ModelListItem => {
-        const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
-        return {
-          id,
-          name: typeof entry.name === 'string' ? entry.name : 'Unknown Model',
-          isDefault: entry.isDefault === true,
-          metadata: normalizeModelMetadata(entry.metadata),
-        };
-      });
 
-      Logger.log('ModelStorage', `Retrieved ${modelsList.length} models (metadata only)`);
+      const modelsList = Object.entries(metadataRecord).map(
+        ([id, data]): ModelListItem => {
+          const entry =
+            isRecord(data) && isRecord(data.value) ? data.value : {};
+          return {
+            id,
+            name: typeof entry.name === "string" ? entry.name : "Unknown Model",
+            isDefault: entry.isDefault === true,
+            metadata: normalizeModelMetadata(entry.metadata),
+          };
+        },
+      );
+
+      Logger.log(
+        "ModelStorage",
+        `Retrieved ${modelsList.length} models (metadata only)`,
+      );
       return modelsList;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to get models list:', error);
+      Logger.error("ModelStorage", "Failed to get models list:", error);
       return [];
     }
   }
@@ -247,9 +270,11 @@ class ModelStorageService {
    */
   async getAllModels(): Promise<ModelWithId[]> {
     try {
-      const allModels = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allModels = await storageServiceProxy.filesGetByCategory(
+        this.CATEGORY,
+      );
       const allModelsRecord = isRecord(allModels) ? allModels : {};
-      
+
       const modelsArray = Object.entries(allModelsRecord)
         .map(([id, data]) => {
           const normalized = normalizeStoredModel(data);
@@ -265,7 +290,7 @@ class ModelStorageService {
 
       return modelsArray;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to get all models:', error);
+      Logger.error("ModelStorage", "Failed to get all models:", error);
       return [];
     }
   }
@@ -277,10 +302,10 @@ class ModelStorageService {
   async getDefaultModel(): Promise<ModelWithId | null> {
     try {
       const allModels = await this.getAllModels();
-      const defaultModel = allModels.find(model => model.isDefault === true);
+      const defaultModel = allModels.find((model) => model.isDefault === true);
       return defaultModel || null;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to get default model:', error);
+      Logger.error("ModelStorage", "Failed to get default model:", error);
       return null;
     }
   }
@@ -303,10 +328,10 @@ class ModelStorageService {
 
       await storageServiceProxy.fileSave(modelId, model, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model ${modelId} set as default`);
+      Logger.log("ModelStorage", `Model ${modelId} set as default`);
       return true;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to set default model:', error);
+      Logger.error("ModelStorage", "Failed to set default model:", error);
       throw error;
     }
   }
@@ -319,7 +344,7 @@ class ModelStorageService {
   async clearAllDefaults(): Promise<void> {
     try {
       const allModels = await this.getAllModels();
-      
+
       for (const model of allModels) {
         if (model.isDefault) {
           model.isDefault = false;
@@ -327,9 +352,9 @@ class ModelStorageService {
         }
       }
 
-      Logger.log('ModelStorage', 'Cleared all default flags');
+      Logger.log("ModelStorage", "Cleared all default flags");
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to clear defaults:', error);
+      Logger.error("ModelStorage", "Failed to clear defaults:", error);
       throw error;
     }
   }
@@ -362,10 +387,13 @@ class ModelStorageService {
 
       await storageServiceProxy.fileSave(modelId, model, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model ${modelId} renamed to: ${validatedName}`);
+      Logger.log(
+        "ModelStorage",
+        `Model ${modelId} renamed to: ${validatedName}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to update model name:', error);
+      Logger.error("ModelStorage", "Failed to update model name:", error);
       throw error;
     }
   }
@@ -376,22 +404,33 @@ class ModelStorageService {
    * @param {Object} metadataUpdates - Metadata fields to update
    * @returns {Promise<boolean>} - Success status
    */
-  async updateModelMetadata(modelId: string, metadataUpdates: UnknownRecord): Promise<boolean> {
+  async updateModelMetadata(
+    modelId: string,
+    metadataUpdates: UnknownRecord,
+  ): Promise<boolean> {
     try {
-      if (modelId === 'builtin_default_model') {
+      if (modelId === "builtin_default_model") {
         const existingMetadata = await this.getBuiltinModelMetadata();
-        
+
         const updatedMetadata = {
           ...existingMetadata,
-          ...metadataUpdates
+          ...metadataUpdates,
         };
-        
-        await storageServiceProxy.fileSave('builtin_default_model_metadata', updatedMetadata, this.CATEGORY);
-        
-        Logger.log('ModelStorage', 'Built-in model metadata updated:', metadataUpdates);
+
+        await storageServiceProxy.fileSave(
+          "builtin_default_model_metadata",
+          updatedMetadata,
+          this.CATEGORY,
+        );
+
+        Logger.log(
+          "ModelStorage",
+          "Built-in model metadata updated:",
+          metadataUpdates,
+        );
         return true;
       }
-      
+
       const model = await this.getModel(modelId);
       if (!model) {
         throw new Error(`Model ${modelId} not found`);
@@ -405,10 +444,14 @@ class ModelStorageService {
 
       await storageServiceProxy.fileSave(modelId, model, this.CATEGORY);
 
-      Logger.log('ModelStorage', `Model ${modelId} metadata updated:`, metadataUpdates);
+      Logger.log(
+        "ModelStorage",
+        `Model ${modelId} metadata updated:`,
+        metadataUpdates,
+      );
       return true;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to update model metadata:', error);
+      Logger.error("ModelStorage", "Failed to update model metadata:", error);
       throw error;
     }
   }
@@ -419,10 +462,15 @@ class ModelStorageService {
    */
   async getBuiltinModelMetadata(): Promise<UnknownRecord> {
     try {
-      const metadata = await storageServiceProxy.fileLoad('builtin_default_model_metadata');
+      const metadata = await storageServiceProxy.fileLoad(
+        "builtin_default_model_metadata",
+      );
       return isRecord(metadata) ? metadata : { textures: [], meshParts: [] };
     } catch {
-      Logger.log('ModelStorage', 'No metadata found for built-in model, returning empty');
+      Logger.log(
+        "ModelStorage",
+        "No metadata found for built-in model, returning empty",
+      );
       return { textures: [], meshParts: [] };
     }
   }
@@ -441,7 +489,9 @@ class ModelStorageService {
       }
 
       if (model.isDefault && !force) {
-        throw new Error('Cannot delete default model. Please set another model as default first.');
+        throw new Error(
+          "Cannot delete default model. Please set another model as default first.",
+        );
       }
 
       await storageServiceProxy.fileRemove(modelId);
@@ -450,10 +500,10 @@ class ModelStorageService {
         URL.revokeObjectURL(model.blobURL);
       }
 
-      Logger.log('ModelStorage', `Model ${modelId} deleted`);
+      Logger.log("ModelStorage", `Model ${modelId} deleted`);
       return true;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to delete model:', error);
+      Logger.error("ModelStorage", "Failed to delete model:", error);
       throw error;
     }
   }
@@ -468,7 +518,11 @@ class ModelStorageService {
       const exists = await storageServiceProxy.fileExists(modelId);
       return exists === true;
     } catch (error) {
-      Logger.error('ModelStorage', `Failed to check if model ${modelId} exists:`, error);
+      Logger.error(
+        "ModelStorage",
+        `Failed to check if model ${modelId} exists:`,
+        error,
+      );
       return false;
     }
   }
@@ -490,7 +544,11 @@ class ModelStorageService {
 
       return totalSize;
     } catch (error) {
-      Logger.error('ModelStorage', 'Failed to calculate total storage size:', error);
+      Logger.error(
+        "ModelStorage",
+        "Failed to calculate total storage size:",
+        error,
+      );
       return 0;
     }
   }

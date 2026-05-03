@@ -2,11 +2,11 @@
  * @fileoverview Chat bubble component for displaying messages near the assistant.
  */
 
-import { useState, useEffect, useRef } from 'react';
-import { cn } from '../../utils/cn';
-import { Icon } from '../icons';
-import { Button } from '../ui';
-import Logger from '../../services/LoggerService';
+import { useState, useEffect, useRef } from "react";
+import { cn } from "../../utils/cn";
+import { Icon } from "../icons";
+import { Button } from "../ui";
+import Logger from "../../services/LoggerService";
 
 interface ModelPixelPosition {
   x: number;
@@ -22,14 +22,14 @@ interface PositionManagerLike {
 interface ChatBubbleProps {
   positionManagerRef: { current: PositionManagerLike | null } | null;
   message: string;
-  type?: 'user' | 'assistant';
+  type?: "user" | "assistant";
   isVisible?: boolean;
   onHide?: () => void;
 }
 
 /**
  * Chat bubble component for displaying messages near the virtual assistant.
- * 
+ *
  * @param {Object} props
  * @param {Object} props.positionManagerRef - Reference to position manager
  * @param {string} props.message - Message text to display
@@ -38,16 +38,16 @@ interface ChatBubbleProps {
  * @param {Function} props.onHide - Hide callback
  * @returns {JSX.Element|null}
  */
-const ChatBubble = ({ 
-  positionManagerRef, 
-  message, 
-  type = 'assistant',
+const ChatBubble = ({
+  positionManagerRef,
+  message,
+  type = "assistant",
   isVisible = false,
-  onHide 
+  onHide,
 }: ChatBubbleProps) => {
   const [bubblePos, setBubblePos] = useState({ x: 0, y: 0 });
   const [isOnLeft, setIsOnLeft] = useState(false);
-  const [displayText, setDisplayText] = useState('');
+  const [displayText, setDisplayText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -58,51 +58,52 @@ const ChatBubble = ({
 
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
-        
+
         const bubbleWidth = 350;
         const bubbleHeight = 120;
         const offsetX = 20;
         const offsetY = 20;
-        
+
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - bubbleWidth - offsetX;
-        
+
         const windowWidth = window.innerWidth;
         const wouldOverflowRight = rightX + bubbleWidth > windowWidth - 10;
-        
-        const shouldBeOnLeft = wouldOverflowRight || modelPos.x > windowWidth * 0.7;
+
+        const shouldBeOnLeft =
+          wouldOverflowRight || modelPos.x > windowWidth * 0.7;
         setIsOnLeft(shouldBeOnLeft);
-        
+
         const bubbleX = shouldBeOnLeft ? leftX : rightX;
         const bubbleY = modelPos.y - bubbleHeight - offsetY;
-        
+
         setBubblePos({ x: bubbleX, y: bubbleY });
-        
-        Logger.log('ChatBubble', 'Position updated:', {
+
+        Logger.log("ChatBubble", "Position updated:", {
           modelPos,
           bubblePos: { x: bubbleX, y: bubbleY },
-          side: shouldBeOnLeft ? 'left' : 'right'
+          side: shouldBeOnLeft ? "left" : "right",
         });
       } catch (error) {
-        Logger.error('ChatBubble', 'Failed to update position:', error);
+        Logger.error("ChatBubble", "Failed to update position:", error);
       }
     };
 
     if (isVisible) {
       updatePosition();
-      window.addEventListener('resize', updatePosition);
-      window.addEventListener('modelPositionChange', updatePosition);
+      window.addEventListener("resize", updatePosition);
+      window.addEventListener("modelPositionChange", updatePosition);
 
       return () => {
-        window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('modelPositionChange', updatePosition);
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("modelPositionChange", updatePosition);
       };
     }
   }, [positionManagerRef, isVisible]);
 
   useEffect(() => {
     if (!isVisible || !message) {
-      setDisplayText('');
+      setDisplayText("");
       setIsTyping(false);
       return;
     }
@@ -113,10 +114,10 @@ const ChatBubble = ({
     }
 
     setIsTyping(true);
-    setDisplayText('');
-    
+    setDisplayText("");
+
     let currentIndex = 0;
-    
+
     typingIntervalRef.current = setInterval(() => {
       if (currentIndex < message.length) {
         setDisplayText(message.substring(0, currentIndex + 1));
@@ -137,13 +138,13 @@ const ChatBubble = ({
   }, [message, isVisible, displayText]);
 
   useEffect(() => {
-    if (isVisible && !isTyping && displayText && type === 'assistant') {
+    if (isVisible && !isTyping && displayText && type === "assistant") {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
 
       hideTimeoutRef.current = setTimeout(() => {
-        Logger.log('ChatBubble', 'Auto-hiding after delay');
+        Logger.log("ChatBubble", "Auto-hiding after delay");
         onHide?.();
       }, 10000);
 
@@ -157,32 +158,35 @@ const ChatBubble = ({
 
   if (!isVisible || !message) return null;
 
-  const isError = message.toLowerCase().startsWith('error:');
-  const isUser = type === 'user';
+  const isError = message.toLowerCase().startsWith("error:");
+  const isUser = type === "user";
 
   const bubbleClasses = isError
-    ? 'glass-error'
+    ? "glass-error"
     : isUser
-    ? 'glass-success'
-    : 'glass-message';
+      ? "glass-success"
+      : "glass-message";
 
   const triangleColor = isError
-    ? 'rgba(239, 68, 68, 0.3)'
+    ? "rgba(239, 68, 68, 0.3)"
     : isUser
-    ? 'rgba(34, 197, 94, 0.3)'
-    : 'rgba(255, 255, 255, 0.25)';
+      ? "rgba(34, 197, 94, 0.3)"
+      : "rgba(255, 255, 255, 0.25)";
 
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         left: `${bubblePos.x}px`,
         top: `${bubblePos.y}px`,
         zIndex: 998,
-        maxWidth: '350px',
-        minWidth: '200px',
+        maxWidth: "350px",
+        minWidth: "200px",
       }}
-      className={cn(bubbleClasses, 'glass-accelerated rounded-2xl p-2 md:p-4 shadow-2xl')}
+      className={cn(
+        bubbleClasses,
+        "glass-accelerated rounded-2xl p-2 md:p-4 shadow-2xl",
+      )}
     >
       <div className="glass-text text-sm leading-relaxed">
         {displayText}
@@ -193,18 +197,18 @@ const ChatBubble = ({
 
       <div
         style={{
-          position: 'absolute',
-          bottom: '-8px',
-          [isOnLeft ? 'right' : 'left']: '30px',
+          position: "absolute",
+          bottom: "-8px",
+          [isOnLeft ? "right" : "left"]: "30px",
           width: 0,
           height: 0,
-          borderLeft: '8px solid transparent',
-          borderRight: '8px solid transparent',
+          borderLeft: "8px solid transparent",
+          borderRight: "8px solid transparent",
           borderTop: `8px solid ${triangleColor}`,
         }}
       />
 
-      {type === 'assistant' && (
+      {type === "assistant" && (
         <Button
           onClick={onHide}
           variant="default"

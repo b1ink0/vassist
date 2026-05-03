@@ -1,10 +1,15 @@
-import { useState, useEffect, type ChangeEventHandler } from 'react';
-import { Icon } from '../../icons';
-import Dialog from '../../common/Dialog';
-import Toggle from '../../common/Toggle';
-import { Button, Input } from '../../ui';
-import { cn } from '../../../utils/cn';
-import type { DiscoveryItem } from '../../../services/LLMModelStorageService';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEventHandler,
+} from "react";
+import { Icon } from "../../icons";
+import Dialog from "../../common/Dialog";
+import Toggle from "../../common/Toggle";
+import { Button, Input } from "../../ui";
+import { cn } from "../../../utils/cn";
+import type { DiscoveryItem } from "../../../services/LLMModelStorageService";
 
 interface ModelEntry {
   name: string;
@@ -30,14 +35,63 @@ interface StorageResult {
 
 interface LLMStorageServiceLike {
   listModels: (customPath?: string | null) => Promise<StorageResult>;
-  onDownloadProgress: (callback: (progress: DownloadProgress) => void) => (() => void) | undefined;
-  downloadFromOllama: (modelName: string, customPath?: string | null) => Promise<StorageResult>;
-  downloadFromUrl: (url: string, customPath?: string | null) => Promise<StorageResult>;
-  searchOllamaModels: (query: string, page?: number, pageSize?: number) => Promise<{ success?: boolean; error?: string; items?: DiscoveryItem[]; nextCursor?: string | null }>;
-  listOllamaModelTags: (modelId: string, query?: string, page?: number, pageSize?: number) => Promise<{ success?: boolean; error?: string; items?: DiscoveryItem[]; nextCursor?: string | null }>;
-  searchHuggingFaceModels: (query: string, cursor?: string, pageSize?: number) => Promise<{ success?: boolean; error?: string; items?: DiscoveryItem[]; nextCursor?: string | null }>;
-  listHuggingFaceFiles: (repoId: string, query?: string, page?: number, pageSize?: number) => Promise<{ success?: boolean; error?: string; items?: DiscoveryItem[]; nextCursor?: string | null }>;
-  deleteModel: (filename: string, customPath?: string | null) => Promise<StorageResult>;
+  onDownloadProgress: (
+    callback: (progress: DownloadProgress) => void,
+  ) => (() => void) | undefined;
+  downloadFromOllama: (
+    modelName: string,
+    customPath?: string | null,
+  ) => Promise<StorageResult>;
+  downloadFromUrl: (
+    url: string,
+    customPath?: string | null,
+  ) => Promise<StorageResult>;
+  searchOllamaModels: (
+    query: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<{
+    success?: boolean;
+    error?: string;
+    items?: DiscoveryItem[];
+    nextCursor?: string | null;
+  }>;
+  listOllamaModelTags: (
+    modelId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<{
+    success?: boolean;
+    error?: string;
+    items?: DiscoveryItem[];
+    nextCursor?: string | null;
+  }>;
+  searchHuggingFaceModels: (
+    query: string,
+    cursor?: string,
+    pageSize?: number,
+  ) => Promise<{
+    success?: boolean;
+    error?: string;
+    items?: DiscoveryItem[];
+    nextCursor?: string | null;
+  }>;
+  listHuggingFaceFiles: (
+    repoId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<{
+    success?: boolean;
+    error?: string;
+    items?: DiscoveryItem[];
+    nextCursor?: string | null;
+  }>;
+  deleteModel: (
+    filename: string,
+    customPath?: string | null,
+  ) => Promise<StorageResult>;
   importModel: (customPath?: string | null) => Promise<StorageResult>;
   chooseModelsFolder?: () => Promise<StorageResult>;
 }
@@ -78,7 +132,7 @@ const SearchInput = ({
         onChange={onChange}
         placeholder={placeholder}
         disabled={disabled}
-        variant={isLightBackground ? 'dark' : 'default'}
+        variant={isLightBackground ? "dark" : "default"}
         className="w-full pr-10"
       />
       {loading && (
@@ -101,45 +155,66 @@ const CatalogList = ({
   onSelect,
 }: CatalogListProps) => {
   if (loading && items.length === 0) {
-    return <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">Loading results...</div>;
+    return (
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">
+        Loading results...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div>;
+    return (
+      <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+        {error}
+      </div>
+    );
   }
 
   if (!items.length) {
-    return <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/45">{emptyText}</div>;
+    return (
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/45">
+        {emptyText}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-2">
       <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/10 p-2 scrollbar-glass">
         {items.map((item) => {
-          const isSelected = selectedValue === item.value || selectedValue === item.id;
+          const isSelected =
+            selectedValue === item.value || selectedValue === item.id;
           return (
             <button
               key={item.id}
               type="button"
               onClick={() => onSelect(item)}
               className={cn(
-                'w-full rounded-lg border px-3 py-2 text-left transition-colors',
+                "w-full rounded-lg border px-3 py-2 text-left transition-colors",
                 isSelected
-                  ? 'border-white/30 bg-white/12 text-white'
-                  : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                  ? "border-white/30 bg-white/12 text-white"
+                  : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10",
               )}
               title={item.label}
             >
               <div className="flex min-w-0 items-start justify-between gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.label}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  {item.label}
+                </span>
                 {item.secondaryLabel && item.secondaryLabel !== item.label && (
-                  <span className="max-w-[45%] shrink truncate text-[10px] text-white/45" title={item.secondaryLabel}>
+                  <span
+                    className="max-w-[45%] shrink truncate text-[10px] text-white/45"
+                    title={item.secondaryLabel}
+                  >
                     {item.secondaryLabel}
                   </span>
                 )}
               </div>
               {item.description && (
-                <div className="mt-1 truncate text-[11px] text-white/55" title={item.description}>
+                <div
+                  className="mt-1 truncate text-[11px] text-white/55"
+                  title={item.description}
+                >
                   {item.description}
                 </div>
               )}
@@ -149,7 +224,12 @@ const CatalogList = ({
       </div>
 
       {hasMore && onLoadMore && (
-        <Button type="button" onClick={onLoadMore} variant="ghost" className="w-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10">
+        <Button
+          type="button"
+          onClick={onLoadMore}
+          variant="ghost"
+          className="w-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+        >
           Load More
         </Button>
       )}
@@ -169,29 +249,43 @@ interface OllamaBrowserProps {
   isLightBackground?: boolean;
 }
 
-const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLightBackground = false }: OllamaBrowserProps) => {
-  const initialModelId = value.includes(':') ? value.split(':')[0] || '' : value;
+const OllamaBrowser = ({
+  storageService,
+  value,
+  onSelect,
+  disabled = false,
+  isLightBackground = false,
+}: OllamaBrowserProps) => {
+  const initialModelId = value.includes(":")
+    ? value.split(":")[0] || ""
+    : value;
   const [query, setQuery] = useState(initialModelId);
   const [items, setItems] = useState<DiscoveryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [nextPage, setNextPage] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(initialModelId);
-  const [tagQuery, setTagQuery] = useState('');
+  const [tagQuery, setTagQuery] = useState("");
   const [tags, setTags] = useState<DiscoveryItem[]>([]);
   const [tagLoading, setTagLoading] = useState(false);
-  const [tagError, setTagError] = useState('');
+  const [tagError, setTagError] = useState("");
   const [nextTagPage, setNextTagPage] = useState<string | null>(null);
-  const displayItems = items.map(({ description: _description, secondaryLabel: _secondaryLabel, ...item }) => item);
-  const displayTags = tags.map(({ description: _description, secondaryLabel: _secondaryLabel, ...item }) => item);
+  const displayItems = items.map(
+    ({ description: _description, secondaryLabel: _secondaryLabel, ...item }) =>
+      item,
+  );
+  const displayTags = tags.map(
+    ({ description: _description, secondaryLabel: _secondaryLabel, ...item }) =>
+      item,
+  );
 
   useEffect(() => {
-    const nextModelId = value.includes(':') ? value.split(':')[0] || '' : value;
+    const nextModelId = value.includes(":") ? value.split(":")[0] || "" : value;
     setSelectedModelId(nextModelId);
     if (nextModelId && nextModelId !== query) {
       setQuery(nextModelId);
     }
-  }, [value]);
+  }, [query, value]);
 
   useEffect(() => {
     if (!storageService || disabled) {
@@ -202,18 +296,30 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
     const timeout = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const result = await storageService.searchOllamaModels(query.trim(), 1, 12);
+        const result = await storageService.searchOllamaModels(
+          query.trim(),
+          1,
+          12,
+        );
         if (cancelled) {
           return;
         }
         setItems(Array.isArray(result.items) ? result.items : []);
         setNextPage(result.nextCursor || null);
-        setError(result.success === false ? (result.error || 'Unable to load Ollama models') : '');
+        setError(
+          result.success === false
+            ? result.error || "Unable to load Ollama models"
+            : "",
+        );
       } catch (error) {
         if (!cancelled) {
           setItems([]);
           setNextPage(null);
-          setError(error instanceof Error ? error.message : 'Unable to load Ollama models');
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load Ollama models",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -231,7 +337,7 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
   useEffect(() => {
     if (!storageService || !selectedModelId || disabled) {
       setTags((prev) => (prev.length > 0 ? [] : prev));
-      setTagError((prev) => (prev ? '' : prev));
+      setTagError((prev) => (prev ? "" : prev));
       setNextTagPage((prev) => (prev !== null ? null : prev));
       return;
     }
@@ -240,18 +346,31 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
     const timeout = window.setTimeout(async () => {
       setTagLoading(true);
       try {
-        const result = await storageService.listOllamaModelTags(selectedModelId, tagQuery.trim(), 1, 12);
+        const result = await storageService.listOllamaModelTags(
+          selectedModelId,
+          tagQuery.trim(),
+          1,
+          12,
+        );
         if (cancelled) {
           return;
         }
         setTags(Array.isArray(result.items) ? result.items : []);
         setNextTagPage(result.nextCursor || null);
-        setTagError(result.success === false ? (result.error || 'Unable to load model tags') : '');
+        setTagError(
+          result.success === false
+            ? result.error || "Unable to load model tags"
+            : "",
+        );
       } catch (error) {
         if (!cancelled) {
           setTags([]);
           setNextTagPage(null);
-          setTagError(error instanceof Error ? error.message : 'Unable to load model tags');
+          setTagError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load model tags",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -272,12 +391,25 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
     }
     setLoading(true);
     try {
-      const result = await storageService.searchOllamaModels(query.trim(), Number(nextPage), 12);
-      setItems((prev) => [...prev, ...(Array.isArray(result.items) ? result.items : [])]);
+      const result = await storageService.searchOllamaModels(
+        query.trim(),
+        Number(nextPage),
+        12,
+      );
+      setItems((prev) => [
+        ...prev,
+        ...(Array.isArray(result.items) ? result.items : []),
+      ]);
       setNextPage(result.nextCursor || null);
-      setError(result.success === false ? (result.error || 'Unable to load Ollama models') : '');
+      setError(
+        result.success === false
+          ? result.error || "Unable to load Ollama models"
+          : "",
+      );
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unable to load Ollama models');
+      setError(
+        error instanceof Error ? error.message : "Unable to load Ollama models",
+      );
     } finally {
       setLoading(false);
     }
@@ -289,12 +421,26 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
     }
     setTagLoading(true);
     try {
-      const result = await storageService.listOllamaModelTags(selectedModelId, tagQuery.trim(), Number(nextTagPage), 12);
-      setTags((prev) => [...prev, ...(Array.isArray(result.items) ? result.items : [])]);
+      const result = await storageService.listOllamaModelTags(
+        selectedModelId,
+        tagQuery.trim(),
+        Number(nextTagPage),
+        12,
+      );
+      setTags((prev) => [
+        ...prev,
+        ...(Array.isArray(result.items) ? result.items : []),
+      ]);
       setNextTagPage(result.nextCursor || null);
-      setTagError(result.success === false ? (result.error || 'Unable to load model tags') : '');
+      setTagError(
+        result.success === false
+          ? result.error || "Unable to load model tags"
+          : "",
+      );
     } catch (error) {
-      setTagError(error instanceof Error ? error.message : 'Unable to load model tags');
+      setTagError(
+        error instanceof Error ? error.message : "Unable to load model tags",
+      );
     } finally {
       setTagLoading(false);
     }
@@ -303,7 +449,9 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-white/80">Search Ollama Library</label>
+        <label className="block text-xs font-medium text-white/80">
+          Search Ollama Library
+        </label>
         <SearchInput
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -330,7 +478,9 @@ const OllamaBrowser = ({ storageService, value, onSelect, disabled = false, isLi
 
       {selectedModelId && (
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/80">Choose Tag</label>
+          <label className="block text-xs font-medium text-white/80">
+            Choose Tag
+          </label>
           <SearchInput
             value={tagQuery}
             onChange={(event) => setTagQuery(event.target.value)}
@@ -363,17 +513,23 @@ interface HuggingFaceBrowserProps {
   isLightBackground?: boolean;
 }
 
-const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false, isLightBackground = false }: HuggingFaceBrowserProps) => {
-  const [query, setQuery] = useState('');
+const HuggingFaceBrowser = ({
+  storageService,
+  value,
+  onSelect,
+  disabled = false,
+  isLightBackground = false,
+}: HuggingFaceBrowserProps) => {
+  const [query, setQuery] = useState("");
   const [items, setItems] = useState<DiscoveryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<DiscoveryItem | null>(null);
-  const [fileQuery, setFileQuery] = useState('');
+  const [fileQuery, setFileQuery] = useState("");
   const [files, setFiles] = useState<DiscoveryItem[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
-  const [filesError, setFilesError] = useState('');
+  const [filesError, setFilesError] = useState("");
   const [nextFilePage, setNextFilePage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -385,18 +541,30 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
     const timeout = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const result = await storageService.searchHuggingFaceModels(query.trim(), '', 12);
+        const result = await storageService.searchHuggingFaceModels(
+          query.trim(),
+          "",
+          12,
+        );
         if (cancelled) {
           return;
         }
         setItems(Array.isArray(result.items) ? result.items : []);
         setNextCursor(result.nextCursor || null);
-        setError(result.success === false ? (result.error || 'Unable to search Hugging Face') : '');
+        setError(
+          result.success === false
+            ? result.error || "Unable to search Hugging Face"
+            : "",
+        );
       } catch (error) {
         if (!cancelled) {
           setItems([]);
           setNextCursor(null);
-          setError(error instanceof Error ? error.message : 'Unable to search Hugging Face');
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Unable to search Hugging Face",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -414,7 +582,7 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
   useEffect(() => {
     if (!storageService || !selectedRepo?.value || disabled) {
       setFiles((prev) => (prev.length > 0 ? [] : prev));
-      setFilesError((prev) => (prev ? '' : prev));
+      setFilesError((prev) => (prev ? "" : prev));
       setNextFilePage((prev) => (prev !== null ? null : prev));
       return;
     }
@@ -423,18 +591,31 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
     const timeout = window.setTimeout(async () => {
       setFilesLoading(true);
       try {
-        const result = await storageService.listHuggingFaceFiles(selectedRepo.value, fileQuery.trim(), 1, 12);
+        const result = await storageService.listHuggingFaceFiles(
+          selectedRepo.value,
+          fileQuery.trim(),
+          1,
+          12,
+        );
         if (cancelled) {
           return;
         }
         setFiles(Array.isArray(result.items) ? result.items : []);
         setNextFilePage(result.nextCursor || null);
-        setFilesError(result.success === false ? (result.error || 'Unable to load GGUF files') : '');
+        setFilesError(
+          result.success === false
+            ? result.error || "Unable to load GGUF files"
+            : "",
+        );
       } catch (error) {
         if (!cancelled) {
           setFiles([]);
           setNextFilePage(null);
-          setFilesError(error instanceof Error ? error.message : 'Unable to load GGUF files');
+          setFilesError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load GGUF files",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -455,29 +636,63 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
     }
     setLoading(true);
     try {
-      const result = await storageService.searchHuggingFaceModels(query.trim(), nextCursor, 12);
-      setItems((prev) => [...prev, ...(Array.isArray(result.items) ? result.items : [])]);
+      const result = await storageService.searchHuggingFaceModels(
+        query.trim(),
+        nextCursor,
+        12,
+      );
+      setItems((prev) => [
+        ...prev,
+        ...(Array.isArray(result.items) ? result.items : []),
+      ]);
       setNextCursor(result.nextCursor || null);
-      setError(result.success === false ? (result.error || 'Unable to search Hugging Face') : '');
+      setError(
+        result.success === false
+          ? result.error || "Unable to search Hugging Face"
+          : "",
+      );
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unable to search Hugging Face');
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to search Hugging Face",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const loadMoreFiles = async () => {
-    if (!storageService || !selectedRepo?.value || !nextFilePage || filesLoading) {
+    if (
+      !storageService ||
+      !selectedRepo?.value ||
+      !nextFilePage ||
+      filesLoading
+    ) {
       return;
     }
     setFilesLoading(true);
     try {
-      const result = await storageService.listHuggingFaceFiles(selectedRepo.value, fileQuery.trim(), Number(nextFilePage), 12);
-      setFiles((prev) => [...prev, ...(Array.isArray(result.items) ? result.items : [])]);
+      const result = await storageService.listHuggingFaceFiles(
+        selectedRepo.value,
+        fileQuery.trim(),
+        Number(nextFilePage),
+        12,
+      );
+      setFiles((prev) => [
+        ...prev,
+        ...(Array.isArray(result.items) ? result.items : []),
+      ]);
       setNextFilePage(result.nextCursor || null);
-      setFilesError(result.success === false ? (result.error || 'Unable to load GGUF files') : '');
+      setFilesError(
+        result.success === false
+          ? result.error || "Unable to load GGUF files"
+          : "",
+      );
     } catch (error) {
-      setFilesError(error instanceof Error ? error.message : 'Unable to load GGUF files');
+      setFilesError(
+        error instanceof Error ? error.message : "Unable to load GGUF files",
+      );
     } finally {
       setFilesLoading(false);
     }
@@ -486,7 +701,9 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-white/80">Search Hugging Face GGUF Repositories</label>
+        <label className="block text-xs font-medium text-white/80">
+          Search Hugging Face GGUF Repositories
+        </label>
         <SearchInput
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -509,8 +726,15 @@ const HuggingFaceBrowser = ({ storageService, value, onSelect, disabled = false,
 
       {selectedRepo && (
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/80">Choose GGUF File</label>
-          <div className="truncate text-[11px] text-white/55" title={selectedRepo.label}>{selectedRepo.label}</div>
+          <label className="block text-xs font-medium text-white/80">
+            Choose GGUF File
+          </label>
+          <div
+            className="truncate text-[11px] text-white/55"
+            title={selectedRepo.label}
+          >
+            {selectedRepo.label}
+          </div>
           <SearchInput
             value={fileQuery}
             onChange={(event) => setFileQuery(event.target.value)}
@@ -556,16 +780,16 @@ const getErrorMessage = (err: unknown): string => {
 
 /**
  * LocalLLMModelManager - Shared UI component for local LLM model management
- * 
+ *
  * Provides UI for:
  * - Downloading models from Ollama registry or HuggingFace
  * - Importing models from file system
  * - Listing and selecting installed models
  * - Deleting models
  * - Custom storage folder (desktop only)
- * 
+ *
  * Platform-agnostic - uses LLMModelStorageService for actual operations
- * 
+ *
  * @param {Object} storageService - Implementation of LLMModelStorageService
  * @param {string} selectedModel - Currently selected model name
  * @param {function} onModelSelect - Callback when model is selected
@@ -584,56 +808,61 @@ const LocalLLMModelManager = ({
   isLightBackground = false,
   onRequestDeleteModel = null,
   refreshTrigger = null,
-  supportsCustomFolder = true
+  supportsCustomFolder = true,
 }: LocalLLMModelManagerProps) => {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState('');
-  const [ollamaModel, setOllamaModel] = useState('');
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [downloadMethod, setDownloadMethod] = useState<'ollama' | 'huggingface'>('ollama');
-  const [pendingDeleteFilename, setPendingDeleteFilename] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [ollamaModel, setOllamaModel] = useState("");
+  const [downloadProgress, setDownloadProgress] =
+    useState<DownloadProgress | null>(null);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [downloadMethod, setDownloadMethod] = useState<
+    "ollama" | "huggingface"
+  >("ollama");
+  const [pendingDeleteFilename, setPendingDeleteFilename] = useState<
+    string | null
+  >(null);
 
   // Load model list
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     if (!storageService) return;
-    
+
     try {
       const result = await storageService.listModels(customModelsPath);
       if (result?.success) {
         setModels(result.models || []);
       }
     } catch (err) {
-      console.error('Failed to load models:', err);
+      console.error("Failed to load models:", err);
     }
-  };
+  }, [customModelsPath, storageService]);
 
   useEffect(() => {
     loadModels();
-  }, [storageService, refreshTrigger, customModelsPath]);
+  }, [loadModels, refreshTrigger]);
 
   // Download model from Hugging Face or Ollama
   const handleDownload = async () => {
     if (!storageService) {
-      setError('Storage service not available');
+      setError("Storage service not available");
       return;
     }
 
-    if (downloadMethod === 'huggingface' && !downloadUrl.trim()) {
-      setError('Please enter a Hugging Face URL');
+    if (downloadMethod === "huggingface" && !downloadUrl.trim()) {
+      setError("Please enter a Hugging Face URL");
       return;
     }
 
-    if (downloadMethod === 'ollama' && !ollamaModel.trim()) {
-      setError('Please enter an Ollama model name');
+    if (downloadMethod === "ollama" && !ollamaModel.trim()) {
+      setError("Please enter an Ollama model name");
       return;
     }
 
     setLoading(true);
-    setError('');
-    setDownloadProgress({ percent: 0, status: 'Starting...' });
+    setError("");
+    setDownloadProgress({ percent: 0, status: "Starting..." });
 
     try {
       // Listen for progress updates
@@ -641,24 +870,28 @@ const LocalLLMModelManager = ({
         setDownloadProgress(progress);
       });
 
-      const result = downloadMethod === 'ollama'
-        ? await storageService.downloadFromOllama(ollamaModel, customModelsPath)
-        : await storageService.downloadFromUrl(downloadUrl, customModelsPath);
-      
+      const result =
+        downloadMethod === "ollama"
+          ? await storageService.downloadFromOllama(
+              ollamaModel,
+              customModelsPath,
+            )
+          : await storageService.downloadFromUrl(downloadUrl, customModelsPath);
+
       unsubscribe?.();
 
       if (result?.success) {
-        setDownloadUrl('');
-        setOllamaModel('');
+        setDownloadUrl("");
+        setOllamaModel("");
         setDownloadProgress(null);
         await loadModels();
-        setError('');
+        setError("");
         if (result.note) {
           setSuccessMessage(result.note);
-          setTimeout(() => setSuccessMessage(''), 5000);
+          setTimeout(() => setSuccessMessage(""), 5000);
         }
       } else {
-        setError(result?.error || 'Download failed');
+        setError(result?.error || "Download failed");
         setDownloadProgress(null);
       }
     } catch (err: unknown) {
@@ -687,11 +920,14 @@ const LocalLLMModelManager = ({
     setPendingDeleteFilename(null);
 
     try {
-      const result = await storageService.deleteModel(filename, customModelsPath);
+      const result = await storageService.deleteModel(
+        filename,
+        customModelsPath,
+      );
       if (result?.success) {
         await loadModels();
       } else {
-        setError(result?.error || 'Delete failed');
+        setError(result?.error || "Delete failed");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -704,10 +940,10 @@ const LocalLLMModelManager = ({
 
     try {
       setLoading(true);
-      setError('');
-      
+      setError("");
+
       const result = await storageService.importModel(customModelsPath);
-      
+
       if (result?.canceled) {
         setLoading(false);
         return;
@@ -715,10 +951,10 @@ const LocalLLMModelManager = ({
 
       if (result?.success) {
         setSuccessMessage(`Model "${result.filename}" imported successfully!`);
-        setTimeout(() => setSuccessMessage(''), 5000);
+        setTimeout(() => setSuccessMessage(""), 5000);
         await loadModels();
       } else {
-        setError(result?.error || 'Import failed');
+        setError(result?.error || "Import failed");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -733,18 +969,20 @@ const LocalLLMModelManager = ({
 
     try {
       if (!storageService.chooseModelsFolder) {
-        setError('Choosing a custom folder is not supported in this environment');
+        setError(
+          "Choosing a custom folder is not supported in this environment",
+        );
         return;
       }
       const result = await storageService.chooseModelsFolder();
-      
+
       if (result?.success && result.path) {
         onCustomPathChange?.(result.path);
-        setSuccessMessage('Custom models folder set!');
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setSuccessMessage("Custom models folder set!");
+        setTimeout(() => setSuccessMessage(""), 3000);
         await loadModels();
       } else if (!result?.canceled) {
-        setError(result?.error || 'Failed to select folder');
+        setError(result?.error || "Failed to select folder");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -753,17 +991,17 @@ const LocalLLMModelManager = ({
 
   const handleClearCustomFolder = async () => {
     onCustomPathChange?.(null);
-    setSuccessMessage('Using default models folder');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    setSuccessMessage("Using default models folder");
+    setTimeout(() => setSuccessMessage(""), 3000);
     await loadModels();
   };
 
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
   return (
@@ -775,21 +1013,21 @@ const LocalLLMModelManager = ({
             <Icon name="folder" size={16} />
             Models Folder
           </h3>
-          
+
           <div className="space-y-2">
             <Input
               type="text"
-              value={customModelsPath || 'Default'}
+              value={customModelsPath || "Default"}
               readOnly
               placeholder="Default models folder"
-              variant={isLightBackground ? 'dark' : 'default'}
+              variant={isLightBackground ? "dark" : "default"}
               className="w-full text-xs"
             />
             <div className="flex gap-2">
               <Button
                 onClick={handleChooseFolder}
-                variant={isLightBackground ? 'dark' : 'default'}
-                className={customModelsPath ? 'flex-1' : 'w-full'}
+                variant={isLightBackground ? "dark" : "default"}
+                className={customModelsPath ? "flex-1" : "w-full"}
               >
                 <Icon name="folder" size={14} />
                 <span>Choose</span>
@@ -817,17 +1055,23 @@ const LocalLLMModelManager = ({
           <Icon name="upload" size={16} />
           Import Model
         </h3>
-        
+
         <button
           onClick={handleImportClick}
           disabled={loading}
           className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Icon name="upload" size={32} className="mx-auto mb-2 text-white/70" />
+          <Icon
+            name="upload"
+            size={32}
+            className="mx-auto mb-2 text-white/70"
+          />
           <p className="text-sm text-white/90 mb-1">
-            {loading ? 'Importing...' : 'Import GGUF Model'}
+            {loading ? "Importing..." : "Import GGUF Model"}
           </p>
-          <p className="text-xs text-white/50">Click to browse for .gguf file</p>
+          <p className="text-xs text-white/50">
+            Click to browse for .gguf file
+          </p>
         </button>
       </div>
 
@@ -837,27 +1081,47 @@ const LocalLLMModelManager = ({
           <Icon name="download" size={16} />
           Download Model
         </h3>
-            
+
         {/* Download method selector */}
         <div className="flex gap-2 mb-3">
           <Button
-            onClick={() => setDownloadMethod('ollama')}
-            variant={downloadMethod === 'ollama' ? (isLightBackground ? 'dark' : 'default') : 'ghost'}
-            className={cn('flex-1', downloadMethod !== 'ollama' && 'bg-white/5 text-white/60 border border-white/10')}
+            onClick={() => setDownloadMethod("ollama")}
+            variant={
+              downloadMethod === "ollama"
+                ? isLightBackground
+                  ? "dark"
+                  : "default"
+                : "ghost"
+            }
+            className={cn(
+              "flex-1",
+              downloadMethod !== "ollama" &&
+                "bg-white/5 text-white/60 border border-white/10",
+            )}
           >
             Ollama
           </Button>
           <Button
-            onClick={() => setDownloadMethod('huggingface')}
-            variant={downloadMethod === 'huggingface' ? (isLightBackground ? 'dark' : 'default') : 'ghost'}
-            className={cn('flex-1', downloadMethod !== 'huggingface' && 'bg-white/5 text-white/60 border border-white/10')}
+            onClick={() => setDownloadMethod("huggingface")}
+            variant={
+              downloadMethod === "huggingface"
+                ? isLightBackground
+                  ? "dark"
+                  : "default"
+                : "ghost"
+            }
+            className={cn(
+              "flex-1",
+              downloadMethod !== "huggingface" &&
+                "bg-white/5 text-white/60 border border-white/10",
+            )}
           >
             Hugging Face
           </Button>
         </div>
-        
+
         <div className="space-y-3">
-          {downloadMethod === 'ollama' ? (
+          {downloadMethod === "ollama" ? (
             <>
               <OllamaBrowser
                 storageService={storageService}
@@ -867,18 +1131,21 @@ const LocalLLMModelManager = ({
                 isLightBackground={isLightBackground}
               />
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/80">Selected Ollama Pull Target</label>
+                <label className="mb-1.5 block text-xs font-medium text-white/80">
+                  Selected Ollama Pull Target
+                </label>
                 <Input
                   type="text"
                   value={ollamaModel}
                   onChange={(e) => setOllamaModel(e.target.value)}
                   placeholder="qwen2.5:3b"
                   disabled={loading}
-                  variant={isLightBackground ? 'dark' : 'default'}
+                  variant={isLightBackground ? "dark" : "default"}
                   className="w-full"
                 />
                 <p className="mt-1.5 text-[10px] text-white/50">
-                  Search above, choose a tag, or type a full Ollama model reference manually.
+                  Search above, choose a tag, or type a full Ollama model
+                  reference manually.
                 </p>
               </div>
             </>
@@ -892,18 +1159,21 @@ const LocalLLMModelManager = ({
                 isLightBackground={isLightBackground}
               />
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/80">Selected Hugging Face Download URL</label>
+                <label className="mb-1.5 block text-xs font-medium text-white/80">
+                  Selected Hugging Face Download URL
+                </label>
                 <Input
                   type="text"
                   value={downloadUrl}
                   onChange={(e) => setDownloadUrl(e.target.value)}
                   placeholder="https://huggingface.co/.../resolve/.../model.gguf?download=true"
                   disabled={loading}
-                  variant={isLightBackground ? 'dark' : 'default'}
+                  variant={isLightBackground ? "dark" : "default"}
                   className="w-full"
                 />
                 <p className="mt-1.5 text-[10px] text-white/50">
-                  Search GGUF repos above, pick a file, or paste a direct download URL manually.
+                  Search GGUF repos above, pick a file, or paste a direct
+                  download URL manually.
                 </p>
               </div>
             </>
@@ -914,10 +1184,12 @@ const LocalLLMModelManager = ({
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-white/70">{downloadProgress.status}</span>
-                <span className="text-white/70">{downloadProgress.percent}%</span>
+                <span className="text-white/70">
+                  {downloadProgress.percent}%
+                </span>
               </div>
               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
                   style={{ width: `${downloadProgress.percent}%` }}
                 />
@@ -927,8 +1199,13 @@ const LocalLLMModelManager = ({
 
           <Button
             onClick={handleDownload}
-            disabled={loading || (downloadMethod === 'huggingface' ? !downloadUrl.trim() : !ollamaModel.trim())}
-            variant={isLightBackground ? 'dark' : 'default'}
+            disabled={
+              loading ||
+              (downloadMethod === "huggingface"
+                ? !downloadUrl.trim()
+                : !ollamaModel.trim())
+            }
+            variant={isLightBackground ? "dark" : "default"}
             className="w-full"
           >
             {loading ? (
@@ -939,12 +1216,15 @@ const LocalLLMModelManager = ({
             ) : (
               <>
                 <Icon name="download" size={16} />
-                <span>{downloadMethod === 'ollama' ? 'Pull Model' : 'Download Model'}</span>
+                <span>
+                  {downloadMethod === "ollama"
+                    ? "Pull Model"
+                    : "Download Model"}
+                </span>
               </>
             )}
           </Button>
         </div>
-
       </div>
 
       {/* Success Message */}
@@ -998,7 +1278,11 @@ const LocalLLMModelManager = ({
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Icon name="document" size={14} className="text-white/70 flex-shrink-0" />
+                    <Icon
+                      name="document"
+                      size={14}
+                      className="text-white/70 flex-shrink-0"
+                    />
                     <span className="text-sm font-medium text-white/90 truncate">
                       {model.name}
                     </span>
@@ -1006,7 +1290,9 @@ const LocalLLMModelManager = ({
                   <div className="flex items-center gap-3 text-[10px] text-white/50">
                     <span>{formatBytes(model.size)}</span>
                     {model.modified && (
-                      <span>{new Date(model.modified).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(model.modified).toLocaleDateString()}
+                      </span>
                     )}
                   </div>
                 </div>

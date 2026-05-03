@@ -1,6 +1,6 @@
 import { useApp } from "../contexts/AppContext";
 import { Icon } from "./icons";
-import { cn } from '../utils/cn';
+import { cn } from "../utils/cn";
 import logoSvg from "../assets/VA.svg";
 
 const platformCards = [
@@ -252,7 +252,11 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
               {capabilityRows.map((row, idx) => (
                 <div
                   key={row.label}
-                  className={cn('grid grid-cols-[140px_1fr] sm:grid-cols-[180px_1fr] gap-4 p-4 sm:p-5', idx < capabilityRows.length - 1 && 'border-b border-white/10')}
+                  className={cn(
+                    "grid grid-cols-[140px_1fr] sm:grid-cols-[180px_1fr] gap-4 p-4 sm:p-5",
+                    idx < capabilityRows.length - 1 &&
+                      "border-b border-white/10",
+                  )}
                 >
                   <p className="text-white/50 text-xs sm:text-sm uppercase tracking-[0.12em]">
                     {row.label}
@@ -327,7 +331,11 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
           {companionTechRows.map((row, idx) => (
             <div
               key={row.label}
-              className={cn('grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-4 p-4 sm:p-5', idx < companionTechRows.length - 1 && 'border-b border-white/10')}
+              className={cn(
+                "grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-4 p-4 sm:p-5",
+                idx < companionTechRows.length - 1 &&
+                  "border-b border-white/10",
+              )}
             >
               <p className="text-white/50 text-xs sm:text-sm uppercase tracking-[0.12em]">
                 {row.label}

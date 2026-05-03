@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Icon } from '../../icons';
-import Dialog from '../../common/Dialog';
-import { Button, Card } from '../../ui';
+import { useState, useEffect, useCallback } from "react";
+import { Icon } from "../../icons";
+import Dialog from "../../common/Dialog";
+import { Button, Card } from "../../ui";
 
 interface ModelStatus {
   downloaded?: boolean;
@@ -14,8 +14,12 @@ interface ModelProgress {
 
 interface AndroidApiLike {
   getSTTTTSStatus?: () => string;
-  _onSTTTTSProgress?: ((type: string, percent: number, statusText: string) => void) | null;
-  _onSTTTTSComplete?: ((type: string, result: { success?: boolean; error?: string }) => void) | null;
+  _onSTTTTSProgress?:
+    | ((type: string, percent: number, statusText: string) => void)
+    | null;
+  _onSTTTTSComplete?:
+    | ((type: string, result: { success?: boolean; error?: string }) => void)
+    | null;
   _onSTTTTSError?: ((type: string, errorMsg: string) => void) | null;
 }
 
@@ -61,8 +65,8 @@ const ModelDownloader = ({
   const [status, setStatus] = useState<ModelStatus | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<ModelProgress | null>(null);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadStatus = useCallback(async () => {
@@ -91,7 +95,11 @@ const ModelDownloader = ({
   useEffect(() => {
     if (!androidAPI) return;
 
-    androidAPI._onSTTTTSProgress = (type: string, percent: number, statusText: string) => {
+    androidAPI._onSTTTTSProgress = (
+      type: string,
+      percent: number,
+      statusText: string,
+    ) => {
       if (type === modelType) {
         setProgress({ percent, status: statusText });
       }
@@ -102,7 +110,7 @@ const ModelDownloader = ({
         setProgress(null);
         setDownloading(false);
         setSuccess(successMsg);
-        setTimeout(() => setSuccess(''), 5000);
+        setTimeout(() => setSuccess(""), 5000);
         loadStatus();
       }
     };
@@ -119,12 +127,15 @@ const ModelDownloader = ({
   const handleDownload = async () => {
     if (!androidAPI) return;
     setDownloading(true);
-    setError('');
-    setProgress({ percent: 0, status: 'Starting download...' });
+    setError("");
+    setProgress({ percent: 0, status: "Starting download..." });
     try {
-      const result = JSON.parse(downloadFn()) as { success?: boolean; error?: string };
+      const result = JSON.parse(downloadFn()) as {
+        success?: boolean;
+        error?: string;
+      };
       if (!result?.success) {
-        setError(result?.error || 'Download failed');
+        setError(result?.error || "Download failed");
         setDownloading(false);
         setProgress(null);
       }
@@ -144,13 +155,16 @@ const ModelDownloader = ({
     setShowDeleteDialog(false);
 
     try {
-      const result = JSON.parse(deleteFn()) as { success?: boolean; error?: string };
+      const result = JSON.parse(deleteFn()) as {
+        success?: boolean;
+        error?: string;
+      };
       if (result?.success) {
-        setSuccess('Model deleted successfully');
-        setTimeout(() => setSuccess(''), 3000);
+        setSuccess("Model deleted successfully");
+        setTimeout(() => setSuccess(""), 3000);
         loadStatus();
       } else {
-        setError(result?.error || 'Delete failed');
+        setError(result?.error || "Delete failed");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -184,7 +198,7 @@ const ModelDownloader = ({
       {status.downloaded ? (
         <Button
           onClick={handleDelete}
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
           size="sm"
           className="w-full"
         >
@@ -195,7 +209,7 @@ const ModelDownloader = ({
         <Button
           onClick={handleDownload}
           disabled={downloading}
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
           size="sm"
           className="w-full"
         >

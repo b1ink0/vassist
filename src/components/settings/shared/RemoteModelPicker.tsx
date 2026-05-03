@@ -164,7 +164,11 @@ const RemoteModelPicker = ({
                       <div className="px-3 text-[11px] text-white/55">
                         Listing unavailable: {error}
                       </div>
-                    ) : <span className="px-3 text-[11px] text-white/45">No models found</span>}
+                    ) : (
+                      <span className="px-3 text-[11px] text-white/45">
+                        No models found
+                      </span>
+                    )}
                   </Autocomplete.Empty>
                 </Autocomplete.List>
               </Autocomplete.Popup>

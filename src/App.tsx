@@ -2,18 +2,22 @@
  * @fileoverview Root application component with setup wizard and context providers.
  */
 
-import CameraService from './services/CameraService'
-import ScreenShareService from './services/ScreenShareService'
-import DemoSite from './components/DemoSite'
-import LoadingIndicator from './components/common/LoadingIndicator'
-import { ConfigProvider } from './contexts/ConfigContext'
-import { AppProvider } from './contexts/AppContext'
-import { SetupProvider, useSetup } from './contexts/SetupContext'
-import { AnimationProvider } from './contexts/AnimationContext'
-import { DesktopProvider } from './contexts/DesktopContext'
-import { AndroidProvider } from './contexts/AndroidContext'
-import { isAndroid, isInputWindow, isScreenPicker } from './utils/PlatformUtils'
-import { lazy, Suspense, useState } from 'react'
+import CameraService from "./services/CameraService";
+import ScreenShareService from "./services/ScreenShareService";
+import DemoSite from "./components/DemoSite";
+import LoadingIndicator from "./components/common/LoadingIndicator";
+import { ConfigProvider } from "./contexts/ConfigContext";
+import { AppProvider } from "./contexts/AppContext";
+import { SetupProvider, useSetup } from "./contexts/SetupContext";
+import { AnimationProvider } from "./contexts/AnimationContext";
+import { DesktopProvider } from "./contexts/DesktopContext";
+import { AndroidProvider } from "./contexts/AndroidContext";
+import {
+  isAndroid,
+  isInputWindow,
+  isScreenPicker,
+} from "./utils/PlatformUtils";
+import { lazy, Suspense, useState } from "react";
 
 interface AppWithSetupProps {
   mode?: string;
@@ -27,31 +31,45 @@ interface AppProps {
   isWallpaperMode?: boolean;
 }
 
-const LazyAppContent = lazy(() => import('./components/AppContent'))
-const LazySetupWizard = lazy(() => import('./components/setup/SetupWizard'))
-const LazyChatInput = lazy(() => import('./components/chat/ChatInput'))
-const LazyVideoPreview = lazy(() => import('./components/desktop/VideoPreview'))
-const LazyDesktopWindowControls = lazy(() => import('./components/desktop/DesktopWindowControls'))
-const LazyDesktopScreenShareDialog = lazy(() => import('./components/desktop/DesktopScreenShareDialog'))
-const LazyAndroidContent = lazy(() => import('../android-src/AndroidContent'))
-const LazyAndroidBackground = lazy(() => import('./components/android/AndroidBackground'))
+const LazyAppContent = lazy(() => import("./components/AppContent"));
+const LazySetupWizard = lazy(() => import("./components/setup/SetupWizard"));
+const LazyChatInput = lazy(() => import("./components/chat/ChatInput"));
+const LazyVideoPreview = lazy(
+  () => import("./components/desktop/VideoPreview"),
+);
+const LazyDesktopWindowControls = lazy(
+  () => import("./components/desktop/DesktopWindowControls"),
+);
+const LazyDesktopScreenShareDialog = lazy(
+  () => import("./components/desktop/DesktopScreenShareDialog"),
+);
+const LazyAndroidContent = lazy(() => import("../android-src/AndroidContent"));
+const LazyAndroidBackground = lazy(
+  () => import("./components/android/AndroidBackground"),
+);
 
 /**
  * Application wrapper component that handles setup flow.
- * 
+ *
  * @param {Object} props
  * @param {string} props.mode - Application mode ('development'|'extension'|'android')
  * @returns {JSX.Element}
  */
-function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, setupStarted = true, onStartSetup }: AppWithSetupProps) {
+function AppWithSetup({
+  mode = "development",
+  deferSetupUntilStarted = false,
+  setupStarted = true,
+  onStartSetup,
+}: AppWithSetupProps) {
   const { setupCompleted, isLoading } = useSetup();
-  const requireSetupOnChatClick = deferSetupUntilStarted && !setupStarted && !setupCompleted;
+  const requireSetupOnChatClick =
+    deferSetupUntilStarted && !setupStarted && !setupCompleted;
   const appContentProps = onStartSetup ? { onRequireSetup: onStartSetup } : {};
-  
+
   if (isLoading) {
     return <LoadingIndicator isVisible={true} />;
   }
-  
+
   if (!setupCompleted) {
     if (deferSetupUntilStarted && !setupStarted) {
       return (
@@ -72,7 +90,7 @@ function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, se
       </Suspense>
     );
   }
-  
+
   return (
     <Suspense fallback={<LoadingIndicator isVisible={true} />}>
       <LazyAppContent
@@ -86,7 +104,7 @@ function AppWithSetup({ mode = 'development', deferSetupUntilStarted = false, se
 
 /**
  * Android wrapper component - only loads the 3D model for wallpaper.
- * 
+ *
  * @returns {JSX.Element}
  */
 function AndroidWrapper() {
@@ -101,35 +119,49 @@ function AndroidWrapper() {
  * Check if running in Android wallpaper mode
  */
 function isWallpaperMode() {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === "undefined") return true;
   const params = new URLSearchParams(window.location.search);
-  const mode = params.get('mode');
-  return mode !== 'app';
+  const mode = params.get("mode");
+  return mode !== "app";
 }
 
 function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
   const { setupCompleted, isLoading } = useSetup();
-  const launchHandler = !isLoading && !setupCompleted ? onStartSetup : undefined;
-  const demoSiteProps = launchHandler ? { onLaunchAssistant: launchHandler } : {};
+  const launchHandler =
+    !isLoading && !setupCompleted ? onStartSetup : undefined;
+  const demoSiteProps = launchHandler
+    ? { onLaunchAssistant: launchHandler }
+    : {};
 
   return <DemoSite {...demoSiteProps} />;
 }
 
 /**
  * Root application component.
- * 
+ *
  * @param {Object} props
  * @param {string} props.mode - Application mode ('development'|'extension'|'desktop'|'android')
  * @returns {JSX.Element}
  */
-function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: AppProps) {
+function App({
+  mode = "development",
+  isWallpaperMode: explicitWallpaperMode,
+}: AppProps) {
   const [devSetupStarted, setDevSetupStarted] = useState(false);
 
   // Determine actual mode based on build-time constants and props
-  const actualMode = __DESKTOP_MODE__ ? 'desktop' : isAndroid ? 'android' : mode;
-  
-  if (actualMode === 'android') {
-    if ((typeof explicitWallpaperMode === 'boolean' ? explicitWallpaperMode : isWallpaperMode())) {
+  const actualMode = __DESKTOP_MODE__
+    ? "desktop"
+    : isAndroid
+      ? "android"
+      : mode;
+
+  if (actualMode === "android") {
+    if (
+      typeof explicitWallpaperMode === "boolean"
+        ? explicitWallpaperMode
+        : isWallpaperMode()
+    ) {
       return (
         <AndroidProvider>
           <ConfigProvider>
@@ -147,7 +179,7 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
         </AndroidProvider>
       );
     }
-    
+
     return (
       <AndroidProvider>
         <SetupProvider>
@@ -170,8 +202,8 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
       </AndroidProvider>
     );
   }
-  
-  if (actualMode === 'desktop') {
+
+  if (actualMode === "desktop") {
     if (isScreenPicker) {
       return (
         <DesktopProvider>
@@ -181,18 +213,18 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
         </DesktopProvider>
       );
     }
-    
+
     if (isInputWindow) {
       return (
         <DesktopProvider>
           <ConfigProvider>
             <AppProvider>
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-                <LazyChatInput 
-                  onSend={() => {}} 
-                  onClose={() => {}} 
-                  onVoiceTranscription={() => {}} 
-                  onVoiceMode={() => {}} 
+                <LazyChatInput
+                  onSend={() => {}}
+                  onClose={() => {}}
+                  onVoiceTranscription={() => {}}
+                  onVoiceMode={() => {}}
                 />
               </Suspense>
               <Suspense fallback={null}>
@@ -204,7 +236,7 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
         </DesktopProvider>
       );
     }
-    
+
     return (
       <DesktopProvider>
         <SetupProvider>
@@ -218,7 +250,10 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
                   <AppWithSetup mode="desktop" />
                   <Suspense fallback={null}>
                     <LazyVideoPreview service={CameraService} type="camera" />
-                    <LazyVideoPreview service={ScreenShareService} type="screen" />
+                    <LazyVideoPreview
+                      service={ScreenShareService}
+                      type="screen"
+                    />
                   </Suspense>
                 </div>
               </AppProvider>
@@ -228,16 +263,18 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
       </DesktopProvider>
     );
   }
-  
+
   // Development and Extension modes
   return (
     <SetupProvider>
       <ConfigProvider>
         <AnimationProvider>
           <AppProvider>
-            {actualMode === 'development' ? (
+            {actualMode === "development" ? (
               <div className="relative w-full h-screen overflow-hidden">
-                <DevelopmentDemoSite onStartSetup={() => setDevSetupStarted(true)} />
+                <DevelopmentDemoSite
+                  onStartSetup={() => setDevSetupStarted(true)}
+                />
                 <AppWithSetup
                   mode="development"
                   deferSetupUntilStarted={true}
@@ -246,7 +283,10 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
                 />
                 <Suspense fallback={null}>
                   <LazyVideoPreview service={CameraService} type="camera" />
-                  <LazyVideoPreview service={ScreenShareService} type="screen" />
+                  <LazyVideoPreview
+                    service={ScreenShareService}
+                    type="screen"
+                  />
                 </Suspense>
               </div>
             ) : (
@@ -254,7 +294,10 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
                 <AppWithSetup mode="extension" />
                 <Suspense fallback={null}>
                   <LazyVideoPreview service={CameraService} type="camera" />
-                  <LazyVideoPreview service={ScreenShareService} type="screen" />
+                  <LazyVideoPreview
+                    service={ScreenShareService}
+                    type="screen"
+                  />
                 </Suspense>
               </>
             )}
@@ -262,7 +305,7 @@ function App({ mode = 'development', isWallpaperMode: explicitWallpaperMode }: A
         </AnimationProvider>
       </ConfigProvider>
     </SetupProvider>
-  )
+  );
 }
 
-export default App
+export default App;

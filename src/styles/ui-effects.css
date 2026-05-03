@@ -18,10 +18,13 @@
   -webkit-backdrop-filter: blur(20px) saturate(180%) contrast(95%);
   backdrop-filter: blur(20px) saturate(180%) contrast(95%);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 
+  box-shadow:
     0 8px 32px 0 rgba(0, 0, 0, 0.37),
     inset 0 1px 2px rgba(255, 255, 255, 0.15);
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Dark theme for containers (on light backgrounds) */
@@ -40,7 +43,10 @@
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Dark theme for messages (on light backgrounds) */
@@ -59,7 +65,10 @@
   border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 .glass-message-user-dark {
@@ -75,18 +84,22 @@
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.3),
     inset 0 1px 2px rgba(255, 255, 255, 0.15);
   color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.2s ease;
   /* NO position transition - removed for instant follow */
 }
 
 .glass-button-dark {
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.4),
     inset 0 1px 2px rgba(255, 255, 255, 0.1);
   color: #ffffff;
@@ -95,13 +108,13 @@
 .glass-button:hover {
   background: rgba(255, 255, 255, 0.28);
   border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 
+  box-shadow:
     0 6px 24px rgba(0, 0, 0, 0.35),
     inset 0 1px 3px rgba(255, 255, 255, 0.25);
 }
 
 .glass-button:active {
-  box-shadow: 
+  box-shadow:
     0 2px 12px rgba(0, 0, 0, 0.3),
     inset 0 1px 2px rgba(255, 255, 255, 0.1);
 }
@@ -116,7 +129,7 @@
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  box-shadow: 
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.25),
     inset 0 1px 2px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
@@ -130,7 +143,7 @@
   outline: none;
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 
+  box-shadow:
     0 6px 24px rgba(0, 0, 0, 0.3),
     inset 0 1px 2px rgba(0, 0, 0, 0.05),
     0 0 0 2px rgba(255, 255, 255, 0.1);
@@ -143,7 +156,7 @@
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  box-shadow: 
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.35),
     inset 0 1px 2px rgba(255, 255, 255, 0.05);
   color: #ffffff;
@@ -157,7 +170,7 @@
   outline: none;
   background: rgba(0, 0, 0, 0.6);
   border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 
+  box-shadow:
     0 6px 24px rgba(0, 0, 0, 0.4),
     inset 0 1px 2px rgba(255, 255, 255, 0.1),
     0 0 0 2px rgba(255, 255, 255, 0.1);
@@ -166,25 +179,29 @@
 /* Text with enhanced readability */
 .glass-text {
   color: #ffffff;
-  text-shadow: 
+  text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.8),
     0 0 10px rgba(0, 0, 0, 0.4);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
 }
 
 /* Black text for light UI on dark backgrounds */
 .glass-text-black {
   color: #ffffff;
-  text-shadow: 
+  text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 0 4px rgba(255, 255, 255, 0.8);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
 }
 
 /* Kept for backwards compatibility - same as glass-text */
 .glass-text-dark {
   color: #ffffff;
-  text-shadow: 
+  text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.9),
     0 0 8px rgba(0, 0, 0, 0.5);
 }
@@ -231,9 +248,9 @@
 /* Bottom fade overlay for input area */
 .glass-fade-overlay {
   background: linear-gradient(
-    to top, 
-    rgba(0, 0, 0, 0.7) 0%, 
-    rgba(0, 0, 0, 0.4) 50%, 
+    to top,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.4) 50%,
     transparent 100%
   );
   -webkit-backdrop-filter: blur(16px) saturate(150%);
@@ -244,9 +261,9 @@
 /* Dark fade overlay for input area (on light backgrounds) */
 .glass-fade-overlay-dark {
   background: linear-gradient(
-    to top, 
-    rgba(0, 0, 0, 0.85) 0%, 
-    rgba(0, 0, 0, 0.6) 50%, 
+    to top,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
     transparent 100%
   );
   -webkit-backdrop-filter: blur(16px) saturate(150%);
@@ -257,14 +274,22 @@
 /* Fade overlays for scrollable content (backdrop-filter compatible) */
 /* These sit ABOVE the content and create fade effect without using mask */
 .fade-overlay-top {
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
 }
 
 .fade-overlay-bottom {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+  background: linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
@@ -272,7 +297,11 @@
 
 /* For dark backgrounds */
 .fade-overlay-top-dark {
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 0%, transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.15) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
@@ -287,16 +316,52 @@
 
 /* Mask fade for messages container - light background (use dark mask) */
 .glass-messages-mask-dark {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%);
-  transition: mask-image 0.3s ease, -webkit-mask-image 0.3s ease;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.3) 4%,
+    black 8%,
+    black 92%,
+    rgba(0, 0, 0, 0.3) 96%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.3) 4%,
+    black 8%,
+    black 92%,
+    rgba(0, 0, 0, 0.3) 96%,
+    transparent 100%
+  );
+  transition:
+    mask-image 0.3s ease,
+    -webkit-mask-image 0.3s ease;
 }
 
 /* Mask fade for messages container - dark background (use light mask) */
 .glass-messages-mask {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%);
-  transition: mask-image 0.3s ease, -webkit-mask-image 0.3s ease;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 4%,
+    white 8%,
+    white 92%,
+    rgba(255, 255, 255, 0.3) 96%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 4%,
+    white 8%,
+    white 92%,
+    rgba(255, 255, 255, 0.3) 96%,
+    transparent 100%
+  );
+  transition:
+    mask-image 0.3s ease,
+    -webkit-mask-image 0.3s ease;
 }
 
 .fade-overlay-bottom-dark {
@@ -319,11 +384,7 @@
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
   pointer-events: none;
-  mask-image: linear-gradient(
-    to bottom,
-    black 0% 50%,
-    transparent 50% 100%
-  );
+  mask-image: linear-gradient(to bottom, black 0% 50%, transparent 50% 100%);
   -webkit-mask-image: linear-gradient(
     to bottom,
     black 0% 50%,
@@ -373,7 +434,7 @@
     -webkit-backdrop-filter: blur(10px) saturate(150%);
     backdrop-filter: blur(10px) saturate(150%);
   }
-  
+
   .glass-fade-overlay {
     -webkit-backdrop-filter: blur(12px) saturate(150%);
     backdrop-filter: blur(12px) saturate(150%);
@@ -381,26 +442,28 @@
 }
 
 /* Fallback for browsers without backdrop-filter support */
-@supports not ((backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))) {
+@supports not (
+  (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))
+) {
   .glass-base,
   .glass-container {
     background: rgba(30, 30, 30, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.15);
   }
-  
+
   .glass-message,
   .glass-message-user {
     background: rgba(40, 40, 40, 0.9);
   }
-  
+
   .glass-button {
     background: rgba(50, 50, 50, 0.85);
   }
-  
+
   .glass-input {
     background: rgba(20, 20, 20, 0.9);
   }
-  
+
   .glass-fade-overlay {
     background: linear-gradient(
       to top,
@@ -425,13 +488,13 @@
     background: rgba(255, 255, 255, 0.3);
     border-color: rgba(255, 255, 255, 0.5);
   }
-  
+
   .glass-message,
   .glass-message-user {
     background: rgba(255, 255, 255, 0.4);
     border-color: rgba(255, 255, 255, 0.6);
   }
-  
+
   .glass-text-adaptive {
     color: #1a1a1a;
     text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9);
@@ -493,7 +556,9 @@
   background: transparent;
   border-radius: 4px;
   border: 1px solid transparent;
-  transition: background 0.3s ease, border-color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-thumb {
@@ -512,7 +577,8 @@
 
 /* Enhanced Loading Animation - Three Dots */
 @keyframes dot-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(0.8);
   }
@@ -551,7 +617,8 @@
 
 /* Alternative: Smooth wave loading */
 @keyframes wave-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
     opacity: 0.5;
   }

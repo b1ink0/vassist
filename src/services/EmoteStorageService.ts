@@ -1,9 +1,9 @@
 /**
- * @fileoverview Emote Storage Service 
+ * @fileoverview Emote Storage Service
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -38,59 +38,86 @@ interface NameValidationResult {
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const normalizeCategories = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
-    return ['general'];
+    return ["general"];
   }
 
   const categories = value
-    .filter((item): item is string => typeof item === 'string')
+    .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim().toLowerCase())
     .filter((item) => item.length > 0);
 
   if (categories.length === 0) {
-    return ['general'];
+    return ["general"];
   }
 
   return Array.from(new Set(categories));
 };
 
-const normalizeMetadata = (metadata: unknown, audioSize = 0, motionSize = 0): EmoteMetadata => {
+const normalizeMetadata = (
+  metadata: unknown,
+  audioSize = 0,
+  motionSize = 0,
+): EmoteMetadata => {
   const value = isRecord(metadata) ? metadata : {};
   const normalized: EmoteMetadata = {
     ...value,
-    originalAudioFileName: typeof value.originalAudioFileName === 'string' ? value.originalAudioFileName : 'unknown.mp3',
-    originalMotionFileName: typeof value.originalMotionFileName === 'string' ? value.originalMotionFileName : 'unknown.vmd',
-    originalCameraFileName: typeof value.originalCameraFileName === 'string' ? value.originalCameraFileName : null,
-    uploadedAt: typeof value.uploadedAt === 'number' ? value.uploadedAt : Date.now(),
-    audioSize: typeof value.audioSize === 'number' ? value.audioSize : audioSize,
-    motionSize: typeof value.motionSize === 'number' ? value.motionSize : motionSize,
-    cameraSize: typeof value.cameraSize === 'number' ? value.cameraSize : 0,
-    audioMimeType: typeof value.audioMimeType === 'string' ? value.audioMimeType : 'audio/mpeg',
+    originalAudioFileName:
+      typeof value.originalAudioFileName === "string"
+        ? value.originalAudioFileName
+        : "unknown.mp3",
+    originalMotionFileName:
+      typeof value.originalMotionFileName === "string"
+        ? value.originalMotionFileName
+        : "unknown.vmd",
+    originalCameraFileName:
+      typeof value.originalCameraFileName === "string"
+        ? value.originalCameraFileName
+        : null,
+    uploadedAt:
+      typeof value.uploadedAt === "number" ? value.uploadedAt : Date.now(),
+    audioSize:
+      typeof value.audioSize === "number" ? value.audioSize : audioSize,
+    motionSize:
+      typeof value.motionSize === "number" ? value.motionSize : motionSize,
+    cameraSize: typeof value.cameraSize === "number" ? value.cameraSize : 0,
+    audioMimeType:
+      typeof value.audioMimeType === "string"
+        ? value.audioMimeType
+        : "audio/mpeg",
   };
-  if (typeof value.lastRenamed === 'number') {
+  if (typeof value.lastRenamed === "number") {
     normalized.lastRenamed = value.lastRenamed;
   }
   return normalized;
 };
 
 const normalizeEmote = (value: unknown): StoredEmote | null => {
-  if (!isRecord(value) || !(value.audioData instanceof Blob) || !(value.motionData instanceof Blob)) {
+  if (
+    !isRecord(value) ||
+    !(value.audioData instanceof Blob) ||
+    !(value.motionData instanceof Blob)
+  ) {
     return null;
   }
 
   const metadata = isRecord(value.metadata) ? value.metadata : {};
   return {
     ...value,
-    name: typeof value.name === 'string' ? value.name : 'Unknown Emote',
+    name: typeof value.name === "string" ? value.name : "Unknown Emote",
     audioData: value.audioData,
     motionData: value.motionData,
     cameraData: value.cameraData instanceof Blob ? value.cameraData : null,
     categories: normalizeCategories(value.categories),
     isVisible: value.isVisible !== false,
-    metadata: normalizeMetadata(metadata, value.audioData.size, value.motionData.size),
+    metadata: normalizeMetadata(
+      metadata,
+      value.audioData.size,
+      value.motionData.size,
+    ),
   };
 };
 
@@ -99,7 +126,7 @@ class EmoteStorageService {
   private readonly MAX_NAME_LENGTH: number;
 
   constructor() {
-    this.CATEGORY = 'emote';
+    this.CATEGORY = "emote";
     this.MAX_NAME_LENGTH = 50;
   }
 
@@ -109,18 +136,21 @@ class EmoteStorageService {
    * @returns {Object} - { valid: boolean, error: string, name: string }
    */
   validateEmoteName(name: string): NameValidationResult {
-    if (!name || typeof name !== 'string') {
-      return { valid: false, error: 'Emote name is required' };
+    if (!name || typeof name !== "string") {
+      return { valid: false, error: "Emote name is required" };
     }
 
     const trimmed = name.trim();
-    
+
     if (trimmed.length === 0) {
-      return { valid: false, error: 'Emote name cannot be empty' };
+      return { valid: false, error: "Emote name cannot be empty" };
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return { valid: false, error: `Emote name cannot exceed ${this.MAX_NAME_LENGTH} characters` };
+      return {
+        valid: false,
+        error: `Emote name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
+      };
     }
 
     return { valid: true, name: trimmed };
@@ -166,33 +196,46 @@ class EmoteStorageService {
       // Convert audio to Blob if needed
       let audioBlob;
       if (audioData instanceof ArrayBuffer) {
-        const mimeType = typeof metadata.audioMimeType === 'string' ? metadata.audioMimeType : 'audio/mpeg';
+        const mimeType =
+          typeof metadata.audioMimeType === "string"
+            ? metadata.audioMimeType
+            : "audio/mpeg";
         audioBlob = new Blob([audioData], { type: mimeType });
       } else if (audioData instanceof Blob) {
         audioBlob = audioData;
       } else {
-        throw new Error('Invalid audio data format. Expected Blob or ArrayBuffer.');
+        throw new Error(
+          "Invalid audio data format. Expected Blob or ArrayBuffer.",
+        );
       }
 
       // Convert motion to Blob if needed
       let motionBlob;
       if (motionData instanceof ArrayBuffer) {
-        motionBlob = new Blob([motionData], { type: 'application/octet-stream' });
+        motionBlob = new Blob([motionData], {
+          type: "application/octet-stream",
+        });
       } else if (motionData instanceof Blob) {
         motionBlob = motionData;
       } else {
-        throw new Error('Invalid motion data format. Expected Blob or ArrayBuffer.');
+        throw new Error(
+          "Invalid motion data format. Expected Blob or ArrayBuffer.",
+        );
       }
 
       // Convert camera animation to Blob if provided (optional)
       let cameraBlob = null;
       if (cameraData) {
         if (cameraData instanceof ArrayBuffer) {
-          cameraBlob = new Blob([cameraData], { type: 'application/octet-stream' });
+          cameraBlob = new Blob([cameraData], {
+            type: "application/octet-stream",
+          });
         } else if (cameraData instanceof Blob) {
           cameraBlob = cameraData;
         } else {
-          throw new Error('Invalid camera data format. Expected Blob or ArrayBuffer.');
+          throw new Error(
+            "Invalid camera data format. Expected Blob or ArrayBuffer.",
+          );
         }
       }
 
@@ -204,25 +247,34 @@ class EmoteStorageService {
         categories: normalizeCategories(metadata.categories),
         isVisible: true,
         metadata: {
-          originalAudioFileName: typeof metadata.originalAudioFileName === 'string' ? metadata.originalAudioFileName : 'unknown.mp3',
-          originalMotionFileName: typeof metadata.originalMotionFileName === 'string' ? metadata.originalMotionFileName : 'unknown.vmd',
-          originalCameraFileName: typeof metadata.originalCameraFileName === 'string' ? metadata.originalCameraFileName : null,
+          originalAudioFileName:
+            typeof metadata.originalAudioFileName === "string"
+              ? metadata.originalAudioFileName
+              : "unknown.mp3",
+          originalMotionFileName:
+            typeof metadata.originalMotionFileName === "string"
+              ? metadata.originalMotionFileName
+              : "unknown.vmd",
+          originalCameraFileName:
+            typeof metadata.originalCameraFileName === "string"
+              ? metadata.originalCameraFileName
+              : null,
           uploadedAt: Date.now(),
           audioSize: audioBlob.size,
           motionSize: motionBlob.size,
           cameraSize: cameraBlob ? cameraBlob.size : 0,
-          audioMimeType: audioBlob.type || 'audio/mpeg',
-          ...metadata
-        }
+          audioMimeType: audioBlob.type || "audio/mpeg",
+          ...metadata,
+        },
       };
 
       await storageServiceProxy.fileSave(emoteId, emoteData, this.CATEGORY);
 
-      Logger.log('EmoteStorage', `Emote saved: ${emoteId} (${validatedName})`);
-      
+      Logger.log("EmoteStorage", `Emote saved: ${emoteId} (${validatedName})`);
+
       return emoteId;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to save emote:', error);
+      Logger.error("EmoteStorage", "Failed to save emote:", error);
       throw error;
     }
   }
@@ -237,7 +289,7 @@ class EmoteStorageService {
       const emoteData = await storageServiceProxy.fileLoad(emoteId);
       return normalizeEmote(emoteData);
     } catch (error) {
-      Logger.error('EmoteStorage', `Failed to get emote ${emoteId}:`, error);
+      Logger.error("EmoteStorage", `Failed to get emote ${emoteId}:`, error);
       return null;
     }
   }
@@ -249,9 +301,11 @@ class EmoteStorageService {
    */
   async getAllEmotes(): Promise<StoredEmoteWithId[]> {
     try {
-      const allEmotes = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allEmotes = await storageServiceProxy.filesGetByCategory(
+        this.CATEGORY,
+      );
       const allRecords = isRecord(allEmotes) ? allEmotes : {};
-      
+
       const emotesArray = Object.entries(allRecords)
         .map(([id, data]) => {
           const emote = normalizeEmote(data);
@@ -262,7 +316,7 @@ class EmoteStorageService {
 
       return emotesArray;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to get all emotes:', error);
+      Logger.error("EmoteStorage", "Failed to get all emotes:", error);
       return [];
     }
   }
@@ -272,26 +326,38 @@ class EmoteStorageService {
    * Returns only IDs and metadata for fast listing
    * @returns {Promise<Array>} - Array of emote info without blob data
    */
-  async getEmotesList(): Promise<Array<{ id: string; name: string; categories: string[]; isVisible: boolean; metadata: EmoteMetadata }>> {
+  async getEmotesList(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      categories: string[];
+      isVisible: boolean;
+      metadata: EmoteMetadata;
+    }>
+  > {
     try {
-      const emotesMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const emotesMetadata =
+        await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
       const records = isRecord(emotesMetadata) ? emotesMetadata : {};
-      
+
       const emotesList = Object.entries(records).map(([id, data]) => {
         const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
         return {
           id,
-          name: typeof entry.name === 'string' ? entry.name : 'Unknown Emote',
+          name: typeof entry.name === "string" ? entry.name : "Unknown Emote",
           categories: normalizeCategories(entry.categories),
           isVisible: entry.isVisible !== false,
           metadata: normalizeMetadata(entry.metadata),
         };
       });
 
-      Logger.log('EmoteStorage', `Retrieved ${emotesList.length} emotes (metadata only)`);
+      Logger.log(
+        "EmoteStorage",
+        `Retrieved ${emotesList.length} emotes (metadata only)`,
+      );
       return emotesList;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to get emotes list:', error);
+      Logger.error("EmoteStorage", "Failed to get emotes list:", error);
       return [];
     }
   }
@@ -331,10 +397,13 @@ class EmoteStorageService {
 
       await storageServiceProxy.fileSave(emoteId, emote, this.CATEGORY);
 
-      Logger.log('EmoteStorage', `Emote ${emoteId} renamed to: ${validatedName}`);
+      Logger.log(
+        "EmoteStorage",
+        `Emote ${emoteId} renamed to: ${validatedName}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to update emote name:', error);
+      Logger.error("EmoteStorage", "Failed to update emote name:", error);
       throw error;
     }
   }
@@ -345,7 +414,10 @@ class EmoteStorageService {
    * @param {boolean} isVisible - Visibility state
    * @returns {Promise<boolean>} - Success status
    */
-  async toggleEmoteVisibility(emoteId: string, isVisible: boolean): Promise<boolean> {
+  async toggleEmoteVisibility(
+    emoteId: string,
+    isVisible: boolean,
+  ): Promise<boolean> {
     try {
       const emote = await this.getEmote(emoteId);
       if (!emote) {
@@ -356,10 +428,13 @@ class EmoteStorageService {
 
       await storageServiceProxy.fileSave(emoteId, emote, this.CATEGORY);
 
-      Logger.log('EmoteStorage', `Emote ${emoteId} visibility set to: ${isVisible}`);
+      Logger.log(
+        "EmoteStorage",
+        `Emote ${emoteId} visibility set to: ${isVisible}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to toggle emote visibility:', error);
+      Logger.error("EmoteStorage", "Failed to toggle emote visibility:", error);
       throw error;
     }
   }
@@ -369,7 +444,10 @@ class EmoteStorageService {
    * @param {string} emoteId - Emote ID
    * @param {string[]} categories - Category list
    */
-  async updateEmoteCategories(emoteId: string, categories: string[]): Promise<boolean> {
+  async updateEmoteCategories(
+    emoteId: string,
+    categories: string[],
+  ): Promise<boolean> {
     try {
       const emote = await this.getEmote(emoteId);
       if (!emote) {
@@ -379,10 +457,13 @@ class EmoteStorageService {
       emote.categories = normalizeCategories(categories);
       await storageServiceProxy.fileSave(emoteId, emote, this.CATEGORY);
 
-      Logger.log('EmoteStorage', `Emote ${emoteId} categories updated: ${emote.categories.join(', ')}`);
+      Logger.log(
+        "EmoteStorage",
+        `Emote ${emoteId} categories updated: ${emote.categories.join(", ")}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to update emote categories:', error);
+      Logger.error("EmoteStorage", "Failed to update emote categories:", error);
       throw error;
     }
   }
@@ -401,10 +482,10 @@ class EmoteStorageService {
 
       await storageServiceProxy.fileRemove(emoteId);
 
-      Logger.log('EmoteStorage', `Emote ${emoteId} deleted`);
+      Logger.log("EmoteStorage", `Emote ${emoteId} deleted`);
       return true;
     } catch (error) {
-      Logger.error('EmoteStorage', 'Failed to delete emote:', error);
+      Logger.error("EmoteStorage", "Failed to delete emote:", error);
       throw error;
     }
   }

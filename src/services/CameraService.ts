@@ -1,12 +1,12 @@
 /**
  * CameraService - Manages camera access and frame capture
- * 
+ *
  * Provides camera device enumeration, stream management, and frame capture.
  * Registers with FrameCaptureService as a provider.
  */
 
-import Logger from './LoggerService';
-import FrameCaptureService from './FrameCaptureService';
+import Logger from "./LoggerService";
+import FrameCaptureService from "./FrameCaptureService";
 
 type CameraState = {
   devices: MediaDeviceInfo[];
@@ -29,8 +29,8 @@ class CameraService {
   private captureCanvas: HTMLCanvasElement | null;
 
   constructor() {
-    this.name = 'CameraService';
-    this.type = 'camera';
+    this.name = "CameraService";
+    this.type = "camera";
     this.devices = [];
     this.selectedDeviceId = null;
     this.stream = null;
@@ -39,7 +39,7 @@ class CameraService {
     this.permissionGranted = false;
     this.isInitializing = false;
     this.isInitialized = false;
-    
+
     // Reusable elements for frame capture
     this.captureVideo = null;
     this.captureCanvas = null;
@@ -51,38 +51,49 @@ class CameraService {
    */
   async initialize(): Promise<MediaDeviceInfo[]> {
     if (this.isInitialized) {
-      Logger.log('CameraService', 'Already initialized, skipping');
+      Logger.log("CameraService", "Already initialized, skipping");
       return this.devices;
     }
-    
+
     if (this.isInitializing) {
-      Logger.warn('CameraService', 'Initialization already in progress, skipping');
+      Logger.warn(
+        "CameraService",
+        "Initialization already in progress, skipping",
+      );
       return this.devices;
     }
 
     try {
       this.isInitializing = true;
-      Logger.log('CameraService', 'Initializing camera service...');
-      
+      Logger.log("CameraService", "Initializing camera service...");
+
       // Request camera permission
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      
+
       this.permissionGranted = true;
       this.isInitialized = true;
 
       await this.refreshDevices();
 
-      navigator.mediaDevices.addEventListener('devicechange', () => {
-        Logger.log('CameraService', 'Device change detected');
+      navigator.mediaDevices.addEventListener("devicechange", () => {
+        Logger.log("CameraService", "Device change detected");
         this.refreshDevices();
       });
 
-      Logger.log('CameraService', 'Initialized successfully with', this.devices.length, 'cameras');
+      Logger.log(
+        "CameraService",
+        "Initialized successfully with",
+        this.devices.length,
+        "cameras",
+      );
       return this.devices;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      Logger.error('CameraService', `Failed to initialize: ${err.name}: ${err.message}`);
+      Logger.error(
+        "CameraService",
+        `Failed to initialize: ${err.name}: ${err.message}`,
+      );
       throw err;
     } finally {
       this.isInitializing = false;
@@ -96,11 +107,21 @@ class CameraService {
   async refreshDevices(): Promise<MediaDeviceInfo[]> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      this.devices = devices.filter((device: MediaDeviceInfo) => device.kind === 'videoinput');
-      Logger.log('CameraService', `Found ${this.devices.length} cameras`);
+      this.devices = devices.filter(
+        (device: MediaDeviceInfo) => device.kind === "videoinput",
+      );
+      Logger.log("CameraService", `Found ${this.devices.length} cameras`);
 
-      if (this.selectedDeviceId && !this.devices.find((d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId)) {
-        Logger.warn('CameraService', 'Selected camera no longer available, resetting to default');
+      if (
+        this.selectedDeviceId &&
+        !this.devices.find(
+          (d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId,
+        )
+      ) {
+        Logger.warn(
+          "CameraService",
+          "Selected camera no longer available, resetting to default",
+        );
         this.selectedDeviceId = null;
       }
 
@@ -108,7 +129,7 @@ class CameraService {
 
       return this.devices;
     } catch (error) {
-      Logger.error('CameraService', 'Failed to enumerate devices:', error);
+      Logger.error("CameraService", "Failed to enumerate devices:", error);
       return [];
     }
   }
@@ -126,15 +147,15 @@ class CameraService {
    * @param {string|null} deviceId - Device ID or null for default
    */
   async setSelectedDevice(deviceId: string | null): Promise<void> {
-    const actualDeviceId = deviceId === '' ? null : deviceId;
-    Logger.log('CameraService', 'Selected camera:', actualDeviceId);
-    
+    const actualDeviceId = deviceId === "" ? null : deviceId;
+    Logger.log("CameraService", "Selected camera:", actualDeviceId);
+
     const previousDeviceId = this.selectedDeviceId;
     this.selectedDeviceId = actualDeviceId;
 
     // If camera is active, restart with new device
     if (this.isActive && previousDeviceId !== actualDeviceId) {
-      Logger.log('CameraService', 'Camera active, switching to new device...');
+      Logger.log("CameraService", "Camera active, switching to new device...");
       await this.stop();
       await this.start();
     } else {
@@ -157,60 +178,78 @@ class CameraService {
   async start(): Promise<MediaStream | null> {
     try {
       if (this.isActive) {
-        Logger.warn('CameraService', 'Camera already active');
+        Logger.warn("CameraService", "Camera already active");
         return this.stream;
       }
 
       if (this.stream) {
-        Logger.warn('CameraService', 'Stopping existing stream before starting new one');
-        this.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        Logger.warn(
+          "CameraService",
+          "Stopping existing stream before starting new one",
+        );
+        this.stream
+          .getTracks()
+          .forEach((track: MediaStreamTrack) => track.stop());
         this.stream = null;
       }
 
       await this.refreshDevices();
 
       if (this.selectedDeviceId) {
-        const deviceExists = this.devices.find((d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId);
+        const deviceExists = this.devices.find(
+          (d: MediaDeviceInfo) => d.deviceId === this.selectedDeviceId,
+        );
         if (!deviceExists) {
-          Logger.warn('CameraService', 'Selected device not found, falling back to default');
+          Logger.warn(
+            "CameraService",
+            "Selected device not found, falling back to default",
+          );
           this.selectedDeviceId = null;
         }
       }
 
       const constraints = {
-        video: this.selectedDeviceId 
+        video: this.selectedDeviceId
           ? { deviceId: { exact: this.selectedDeviceId } }
           : true,
-        audio: false
+        audio: false,
       };
 
       if (this.selectedDeviceId) {
-        Logger.log('CameraService', 'Using selected device:', this.selectedDeviceId);
+        Logger.log(
+          "CameraService",
+          "Using selected device:",
+          this.selectedDeviceId,
+        );
       } else {
-        Logger.log('CameraService', 'Using default camera');
+        Logger.log("CameraService", "Using default camera");
       }
 
       // Get media stream
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
+
       // Log actual resolution
       const videoTrack = this.stream.getVideoTracks()[0];
       if (videoTrack) {
         const settings = videoTrack.getSettings();
-        Logger.log('CameraService', 'Camera started at:', `${settings.width}x${settings.height}`);
+        Logger.log(
+          "CameraService",
+          "Camera started at:",
+          `${settings.width}x${settings.height}`,
+        );
       }
-      
+
       this.isActive = true;
 
       // Register with FrameCaptureService
       FrameCaptureService.registerProvider(this);
 
-      Logger.log('CameraService', 'Camera started successfully');
+      Logger.log("CameraService", "Camera started successfully");
       this.notifyListeners();
 
       return this.stream;
     } catch (error) {
-      Logger.error('CameraService', 'Failed to start camera:', error);
+      Logger.error("CameraService", "Failed to start camera:", error);
       this.isActive = false;
       this.notifyListeners();
       throw error;
@@ -223,15 +262,17 @@ class CameraService {
   async stop(): Promise<void> {
     try {
       if (!this.isActive) {
-        Logger.warn('CameraService', 'Camera not active');
+        Logger.warn("CameraService", "Camera not active");
         return;
       }
 
       if (this.stream) {
-        this.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        this.stream
+          .getTracks()
+          .forEach((track: MediaStreamTrack) => track.stop());
         this.stream = null;
       }
-      
+
       if (this.captureVideo) {
         this.captureVideo.pause();
         this.captureVideo.srcObject = null;
@@ -247,10 +288,10 @@ class CameraService {
 
       FrameCaptureService.unregisterProvider();
 
-      Logger.log('CameraService', 'Camera stopped');
+      Logger.log("CameraService", "Camera stopped");
       this.notifyListeners();
     } catch (error) {
-      Logger.error('CameraService', 'Error stopping camera:', error);
+      Logger.error("CameraService", "Error stopping camera:", error);
     }
   }
 
@@ -269,15 +310,15 @@ class CameraService {
    */
   async captureFrame(): Promise<string | null> {
     if (!this.isActive || !this.stream) {
-      Logger.warn('CameraService', 'Camera not active, cannot capture frame');
+      Logger.warn("CameraService", "Camera not active, cannot capture frame");
       return null;
     }
-    
+
     try {
       // Get video track settings to determine native resolution
       const videoTrack = this.stream.getVideoTracks()[0];
       if (!videoTrack) {
-        Logger.error('CameraService', 'No video track available');
+        Logger.error("CameraService", "No video track available");
         return null;
       }
 
@@ -287,11 +328,11 @@ class CameraService {
 
       // Create reusable video element if needed
       if (!this.captureVideo) {
-        this.captureVideo = document.createElement('video');
+        this.captureVideo = document.createElement("video");
         this.captureVideo.muted = true;
         this.captureVideo.playsInline = true;
       }
-      
+
       // Update video source if changed
       if (this.captureVideo.srcObject !== this.stream) {
         this.captureVideo.srcObject = this.stream;
@@ -299,11 +340,12 @@ class CameraService {
         if (!captureVideo) {
           return null;
         }
-        
+
         // Wait for video to be ready
         await new Promise<void>((resolve, reject) => {
           captureVideo.onloadedmetadata = () => resolve();
-          captureVideo.onerror = () => reject(new Error('Failed to load camera metadata'));
+          captureVideo.onerror = () =>
+            reject(new Error("Failed to load camera metadata"));
           captureVideo.play().catch(reject);
         });
       }
@@ -311,33 +353,44 @@ class CameraService {
       // Create or resize canvas if needed
       const targetWidth = this.captureVideo.videoWidth || width;
       const targetHeight = this.captureVideo.videoHeight || height;
-      
-      if (!this.captureCanvas || 
-          this.captureCanvas.width !== targetWidth || 
-          this.captureCanvas.height !== targetHeight) {
-        
+
+      if (
+        !this.captureCanvas ||
+        this.captureCanvas.width !== targetWidth ||
+        this.captureCanvas.height !== targetHeight
+      ) {
         if (!this.captureCanvas) {
-          this.captureCanvas = document.createElement('canvas');
+          this.captureCanvas = document.createElement("canvas");
         }
-        
+
         this.captureCanvas.width = targetWidth;
         this.captureCanvas.height = targetHeight;
       }
 
-      const ctx = this.captureCanvas.getContext('2d');
+      const ctx = this.captureCanvas.getContext("2d");
       if (!ctx) {
-        Logger.error('CameraService', 'Failed to get 2D canvas context');
+        Logger.error("CameraService", "Failed to get 2D canvas context");
         return null;
       }
-      ctx.drawImage(this.captureVideo, 0, 0, this.captureCanvas.width, this.captureCanvas.height);
+      ctx.drawImage(
+        this.captureVideo,
+        0,
+        0,
+        this.captureCanvas.width,
+        this.captureCanvas.height,
+      );
 
-      const dataUrl = this.captureCanvas.toDataURL('image/jpeg', 0.85);
-      
-      Logger.log('CameraService', 'Frame captured at full resolution:', `${this.captureCanvas.width}x${this.captureCanvas.height}`);
-      
+      const dataUrl = this.captureCanvas.toDataURL("image/jpeg", 0.85);
+
+      Logger.log(
+        "CameraService",
+        "Frame captured at full resolution:",
+        `${this.captureCanvas.width}x${this.captureCanvas.height}`,
+      );
+
       return dataUrl;
     } catch (error) {
-      Logger.error('CameraService', 'Failed to capture frame:', error);
+      Logger.error("CameraService", "Failed to capture frame:", error);
       return null;
     }
   }
@@ -357,11 +410,11 @@ class CameraService {
    */
   subscribe(callback: (state: CameraState) => void): () => void {
     this.listeners.add(callback);
-    
+
     callback({
       devices: this.devices,
       selectedDeviceId: this.selectedDeviceId,
-      isActive: this.isActive
+      isActive: this.isActive,
     });
 
     return () => {
@@ -376,14 +429,14 @@ class CameraService {
     const state = {
       devices: this.devices,
       selectedDeviceId: this.selectedDeviceId,
-      isActive: this.isActive
+      isActive: this.isActive,
     };
 
     this.listeners.forEach((listener: (state: CameraState) => void) => {
       try {
         listener(state);
       } catch (error) {
-        Logger.error('CameraService', 'Listener error:', error);
+        Logger.error("CameraService", "Listener error:", error);
       }
     });
   }

@@ -10,11 +10,11 @@ import {
   type CSSProperties,
   type ReactNode,
   type TransitionEvent,
-} from 'react';
-import { cn } from '../../utils/cn';
+} from "react";
+import { cn } from "../../utils/cn";
 
-type StreamingSpeed = 'fast' | 'normal' | 'slow';
-type StreamingVariant = 'container' | 'panel';
+type StreamingSpeed = "fast" | "normal" | "slow";
+type StreamingVariant = "container" | "panel";
 
 interface StreamingContainerProps {
   children: ReactNode;
@@ -31,7 +31,7 @@ interface StreamingContainerProps {
 
 /**
  * Container with streaming expand/collapse animation.
- * 
+ *
  * @component
  * @param {Object} props - Component props
  * @param {React.ReactNode} props.children - Child content
@@ -50,12 +50,12 @@ const StreamingContainer = ({
   children,
   active = false,
   autoActivate = true, // Auto-activate when children exist
-  speed = 'normal', // 'fast' | 'normal' | 'slow'
-  variant = 'container', // 'container' | 'panel'
+  speed = "normal", // 'fast' | 'normal' | 'slow'
+  variant = "container", // 'container' | 'panel'
   disabled = false, // Completely disable animation - show content immediately
   onExpand = null, // Callback when expansion completes
   onCollapse = null, // Callback when collapse completes
-  className = '', // Additional CSS classes
+  className = "", // Additional CSS classes
   style, // Additional inline styles
 }: StreamingContainerProps) => {
   const [isActive, setIsActive] = useState(active);
@@ -79,36 +79,39 @@ const StreamingContainer = ({
   /**
    * Handle transition end - mark as complete and trigger callbacks
    */
-  const handleTransitionEnd = useCallback((e: TransitionEvent<HTMLDivElement>) => {
-    // Only handle our own transition, not children's
-    if (e.target !== containerRef.current) return;
-    
-    // Check if it's the grid-template-rows transition
-    if (e.propertyName === 'grid-template-rows') {
-      // Trigger appropriate callback
-      if (isActive && typeof onExpand === 'function') {
-        onExpand();
-      } else if (!isActive && typeof onCollapse === 'function') {
-        onCollapse();
+  const handleTransitionEnd = useCallback(
+    (e: TransitionEvent<HTMLDivElement>) => {
+      // Only handle our own transition, not children's
+      if (e.target !== containerRef.current) return;
+
+      // Check if it's the grid-template-rows transition
+      if (e.propertyName === "grid-template-rows") {
+        // Trigger appropriate callback
+        if (isActive && typeof onExpand === "function") {
+          onExpand();
+        } else if (!isActive && typeof onCollapse === "function") {
+          onCollapse();
+        }
+
+        // Remove will-change after animation completes (performance optimization)
+        if (containerRef.current) {
+          timeoutRef.current = setTimeout(() => {
+            if (containerRef.current) {
+              containerRef.current.classList.add("streaming-complete");
+            }
+          }, 100);
+        }
       }
-      
-      // Remove will-change after animation completes (performance optimization)
-      if (containerRef.current) {
-        timeoutRef.current = setTimeout(() => {
-          if (containerRef.current) {
-            containerRef.current.classList.add('streaming-complete');
-          }
-        }, 100);
-      }
-    }
-  }, [isActive, onExpand, onCollapse]);
+    },
+    [isActive, onExpand, onCollapse],
+  );
 
   /**
    * Reset completion state when active changes
    */
   useEffect(() => {
     if (isActive && containerRef.current) {
-      containerRef.current.classList.remove('streaming-complete');
+      containerRef.current.classList.remove("streaming-complete");
     }
   }, [isActive]);
 
@@ -127,30 +130,40 @@ const StreamingContainer = ({
    * Determine CSS class based on variant and speed
    */
   const getContainerClass = (): string => {
-    const baseClass = variant === 'panel' ? 'streaming-panel' : 'streaming-container';
-    const speedSuffix = speed === 'fast' ? '-fast' : speed === 'slow' ? '-slow' : '';
+    const baseClass =
+      variant === "panel" ? "streaming-panel" : "streaming-container";
+    const speedSuffix =
+      speed === "fast" ? "-fast" : speed === "slow" ? "-slow" : "";
     return `${baseClass}${speedSuffix}`;
   };
 
   const getContentClass = (): string => {
-    return variant === 'panel' ? 'streaming-panel-content' : 'streaming-content';
+    return variant === "panel"
+      ? "streaming-panel-content"
+      : "streaming-content";
   };
 
   // If disabled, render children without animation wrapper
   if (disabled) {
-    return <div className={className} style={style}>{children}</div>;
+    return (
+      <div className={className} style={style}>
+        {children}
+      </div>
+    );
   }
 
   return (
     <div
       ref={containerRef}
-      className={cn(getContainerClass(), isActive && 'streaming-active', className)}
+      className={cn(
+        getContainerClass(),
+        isActive && "streaming-active",
+        className,
+      )}
       style={style}
       onTransitionEnd={handleTransitionEnd}
     >
-      <div className={getContentClass()}>
-        {children}
-      </div>
+      <div className={getContentClass()}>{children}</div>
     </div>
   );
 };

@@ -3,9 +3,9 @@
  * Supports: **bold**, *italic*, `code`, ```code blocks```, lists, links, headers
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { Button } from '../ui';
-import { cn } from '../../utils/cn';
+import { useMemo, useState, type ReactNode } from "react";
+import { Button } from "../ui";
+import { cn } from "../../utils/cn";
 
 /**
  * Code block component with copy button
@@ -34,7 +34,7 @@ const CodeBlock = ({ code, language }: CodeBlockProps) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy code:', err);
+      console.error("Failed to copy code:", err);
     }
   };
 
@@ -54,7 +54,10 @@ const CodeBlock = ({ code, language }: CodeBlockProps) => {
           )}
         </Button>
       </div>
-      <pre className="bg-white/5 backdrop-blur-sm rounded-lg p-3 overflow-x-auto max-w-full border border-white/10" data-lang={language || 'text'}>
+      <pre
+        className="bg-white/5 backdrop-blur-sm rounded-lg p-3 overflow-x-auto max-w-full border border-white/10"
+        data-lang={language || "text"}
+      >
         <code className="text-sm font-mono text-white/90 whitespace-pre">
           {code}
         </code>
@@ -66,26 +69,26 @@ const CodeBlock = ({ code, language }: CodeBlockProps) => {
 /**
  * Parse markdown text into React elements
  * Works with partial text during streaming
- * 
+ *
  * @param {string} text - Markdown text to parse
  * @returns {Array} Array of React elements
  */
 const parseMarkdown = (text: string): ReactNode[] => {
   if (!text) return [];
-  
+
   const elements: ReactNode[] = [];
-  const trimmedText = text.replace(/\n+$/, '');
-  const lines = trimmedText.split('\n');
+  const trimmedText = text.replace(/\n+$/, "");
+  const lines = trimmedText.split("\n");
   let inCodeBlock = false;
   let codeBlockContent: string[] = [];
-  let codeBlockLang = '';
+  let codeBlockLang = "";
   let elementKey = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    
+    const line = lines[i] ?? "";
+
     // Code block handling
-    if (line.trim().startsWith('```')) {
+    if (line.trim().startsWith("```")) {
       if (!inCodeBlock) {
         // Starting code block
         inCodeBlock = true;
@@ -94,16 +97,12 @@ const parseMarkdown = (text: string): ReactNode[] => {
       } else {
         // Ending code block
         inCodeBlock = false;
-        const code = codeBlockContent.join('\n');
+        const code = codeBlockContent.join("\n");
         elements.push(
-          <CodeBlock 
-            key={elementKey++} 
-            code={code} 
-            language={codeBlockLang}
-          />
+          <CodeBlock key={elementKey++} code={code} language={codeBlockLang} />,
         );
         codeBlockContent = [];
-        codeBlockLang = '';
+        codeBlockLang = "";
       }
       continue;
     }
@@ -114,45 +113,54 @@ const parseMarkdown = (text: string): ReactNode[] => {
     }
 
     // Empty line
-    if (line.trim() === '') {
+    if (line.trim() === "") {
       elements.push(<br key={elementKey++} />);
       continue;
     }
 
     // Headers
-    if (line.startsWith('### ')) {
+    if (line.startsWith("### ")) {
       elements.push(
-        <h3 key={elementKey++} className="text-lg font-semibold mt-3 mb-2 text-white/95">
+        <h3
+          key={elementKey++}
+          className="text-lg font-semibold mt-3 mb-2 text-white/95"
+        >
           {parseInline(line.slice(4))}
-        </h3>
+        </h3>,
       );
       continue;
     }
-    if (line.startsWith('## ')) {
+    if (line.startsWith("## ")) {
       elements.push(
-        <h2 key={elementKey++} className="text-xl font-bold mt-2 md:mt-4 mb-2 text-white">
+        <h2
+          key={elementKey++}
+          className="text-xl font-bold mt-2 md:mt-4 mb-2 text-white"
+        >
           {parseInline(line.slice(3))}
-        </h2>
+        </h2>,
       );
       continue;
     }
-    if (line.startsWith('# ')) {
+    if (line.startsWith("# ")) {
       elements.push(
-        <h1 key={elementKey++} className="text-2xl font-bold mt-2 md:mt-4 mb-3 text-white">
+        <h1
+          key={elementKey++}
+          className="text-2xl font-bold mt-2 md:mt-4 mb-3 text-white"
+        >
           {parseInline(line.slice(2))}
-        </h1>
+        </h1>,
       );
       continue;
     }
 
     // Unordered lists
     if (line.match(/^[\s]*[-*+]\s/)) {
-      const content = line.replace(/^[\s]*[-*+]\s/, '');
+      const content = line.replace(/^[\s]*[-*+]\s/, "");
       elements.push(
         <div key={elementKey++} className="flex gap-2 my-1">
           <span className="text-white/70">•</span>
           <div className="flex-1">{parseInline(content)}</div>
-        </div>
+        </div>,
       );
       continue;
     }
@@ -160,34 +168,33 @@ const parseMarkdown = (text: string): ReactNode[] => {
     // Ordered lists
     if (line.match(/^[\s]*\d+\.\s/)) {
       const match = line.match(/^[\s]*(\d+)\.\s/);
-      const number = match?.[1] ?? '1';
-      const content = line.replace(/^[\s]*\d+\.\s/, '');
+      const number = match?.[1] ?? "1";
+      const content = line.replace(/^[\s]*\d+\.\s/, "");
       elements.push(
         <div key={elementKey++} className="flex gap-2 my-1">
           <span className="text-white/70">{number}.</span>
           <div className="flex-1">{parseInline(content)}</div>
-        </div>
+        </div>,
       );
       continue;
     }
 
     // Regular paragraph
     elements.push(
-      <p key={elementKey++} className="my-1.5 break-words overflow-wrap-anywhere text-white">
+      <p
+        key={elementKey++}
+        className="my-1.5 break-words overflow-wrap-anywhere text-white"
+      >
         {parseInline(line)}
-      </p>
+      </p>,
     );
   }
 
   // Handle unclosed code block (streaming in progress)
   if (inCodeBlock && codeBlockContent.length > 0) {
-    const code = codeBlockContent.join('\n');
+    const code = codeBlockContent.join("\n");
     elements.push(
-      <CodeBlock 
-        key={elementKey++} 
-        code={code} 
-        language={codeBlockLang}
-      />
+      <CodeBlock key={elementKey++} code={code} language={codeBlockLang} />,
     );
   }
 
@@ -200,8 +207,8 @@ const parseMarkdown = (text: string): ReactNode[] => {
  * @returns {Array} Array of React elements and strings
  */
 const parseInline = (text: string): ReactNode => {
-  if (!text) return '';
-  
+  if (!text) return "";
+
   const elements: ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -209,15 +216,66 @@ const parseInline = (text: string): ReactNode => {
   // Regex patterns for inline elements
   const patterns: InlinePattern[] = [
     // Bold with ** or __
-    { regex: /\*\*(.+?)\*\*/, component: (match = '') => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
-    { regex: /__(.+?)__/, component: (match = '') => <strong key={key++} className="font-bold text-white/95">{match}</strong> },
+    {
+      regex: /\*\*(.+?)\*\*/,
+      component: (match = "") => (
+        <strong key={key++} className="font-bold text-white/95">
+          {match}
+        </strong>
+      ),
+    },
+    {
+      regex: /__(.+?)__/,
+      component: (match = "") => (
+        <strong key={key++} className="font-bold text-white/95">
+          {match}
+        </strong>
+      ),
+    },
     // Italic with * or _
-    { regex: /\*(.+?)\*/, component: (match = '') => <em key={key++} className="italic text-white/90">{match}</em> },
-    { regex: /_(.+?)_/, component: (match = '') => <em key={key++} className="italic text-white/90">{match}</em> },
+    {
+      regex: /\*(.+?)\*/,
+      component: (match = "") => (
+        <em key={key++} className="italic text-white/90">
+          {match}
+        </em>
+      ),
+    },
+    {
+      regex: /_(.+?)_/,
+      component: (match = "") => (
+        <em key={key++} className="italic text-white/90">
+          {match}
+        </em>
+      ),
+    },
     // Inline code with `
-    { regex: /`(.+?)`/, component: (match = '') => <code key={key++} className="bg-white/5 backdrop-blur-sm px-1.5 py-0.5 mx-0.5 rounded text-sm font-mono text-white/90 border border-white/10 break-all inline-block">{match}</code> },
+    {
+      regex: /`(.+?)`/,
+      component: (match = "") => (
+        <code
+          key={key++}
+          className="bg-white/5 backdrop-blur-sm px-1.5 py-0.5 mx-0.5 rounded text-sm font-mono text-white/90 border border-white/10 break-all inline-block"
+        >
+          {match}
+        </code>
+      ),
+    },
     // Links [text](url)
-    { regex: /\[(.+?)\]\((.+?)\)/, component: (label = '', url = '') => <a key={key++} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline break-all">{label}</a> },
+    {
+      regex: /\[(.+?)\]\((.+?)\)/,
+      component: (label = "", url = "") => (
+        <a
+          key={key++}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-300 underline break-all"
+        >
+          {label}
+        </a>
+      ),
+    },
   ];
 
   while (remaining.length > 0) {
@@ -229,7 +287,11 @@ const parseInline = (text: string): ReactNode => {
     // Find the earliest match
     for (const pattern of patterns) {
       const match = remaining.match(pattern.regex);
-      if (match && typeof match.index === 'number' && match.index < earliestIndex) {
+      if (
+        match &&
+        typeof match.index === "number" &&
+        match.index < earliestIndex
+      ) {
         earliestMatch = match;
         earliestIndex = match.index;
         matchedPattern = pattern;
@@ -264,18 +326,20 @@ const parseInline = (text: string): ReactNode => {
 /**
  * Markdown text component
  * Renders markdown with glassmorphism-compatible styling
- * 
+ *
  * @component
  * @param {Object} props - Component props
  * @param {string} props.text - Markdown text to render
  * @param {string} [props.className=''] - Additional CSS classes
  * @returns {JSX.Element} Rendered markdown
  */
-const MarkdownText = ({ text = '', className = '' }: MarkdownTextProps) => {
+const MarkdownText = ({ text = "", className = "" }: MarkdownTextProps) => {
   const elements = useMemo(() => parseMarkdown(text), [text]);
 
   return (
-    <div className={cn('markdown-content max-w-full overflow-hidden', className)}>
+    <div
+      className={cn("markdown-content max-w-full overflow-hidden", className)}
+    >
       {elements}
     </div>
   );

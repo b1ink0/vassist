@@ -3,8 +3,8 @@
  * Handles storage and management of MMD stage models (PMX format)
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -39,10 +39,10 @@ type StageListItem = {
 type StageWithId = StoredStage & { id: string };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const getDefaultMetadata = (): StageMetadata => ({
-  originalFileName: 'unknown.pmx',
+  originalFileName: "unknown.pmx",
   uploadedAt: 0,
   fileSize: 0,
   conversionInfo: {},
@@ -55,9 +55,12 @@ const normalizeStageMetadata = (value: unknown): StageMetadata => {
 
   return {
     ...value,
-    originalFileName: typeof value.originalFileName === 'string' ? value.originalFileName : 'unknown.pmx',
-    uploadedAt: typeof value.uploadedAt === 'number' ? value.uploadedAt : 0,
-    fileSize: typeof value.fileSize === 'number' ? value.fileSize : 0,
+    originalFileName:
+      typeof value.originalFileName === "string"
+        ? value.originalFileName
+        : "unknown.pmx",
+    uploadedAt: typeof value.uploadedAt === "number" ? value.uploadedAt : 0,
+    fileSize: typeof value.fileSize === "number" ? value.fileSize : 0,
     conversionInfo: isRecord(value.conversionInfo) ? value.conversionInfo : {},
   } as StageMetadata;
 };
@@ -69,7 +72,7 @@ const normalizeStage = (value: unknown): StoredStage | null => {
 
   const normalized: StoredStage = {
     ...value,
-    name: typeof value.name === 'string' ? value.name : 'Unknown Stage',
+    name: typeof value.name === "string" ? value.name : "Unknown Stage",
     isDefault: value.isDefault === true,
     metadata: normalizeStageMetadata(value.metadata),
   };
@@ -86,7 +89,7 @@ class StageStorageService {
   private readonly MAX_NAME_LENGTH: number;
 
   constructor() {
-    this.CATEGORY = 'stage';
+    this.CATEGORY = "stage";
     this.MAX_NAME_LENGTH = 50;
   }
 
@@ -96,18 +99,21 @@ class StageStorageService {
    * @returns {Object} - { valid: boolean, error: string }
    */
   validateStageName(name: string): NameValidationResult {
-    if (!name || typeof name !== 'string') {
-      return { valid: false, error: 'Stage name is required' };
+    if (!name || typeof name !== "string") {
+      return { valid: false, error: "Stage name is required" };
     }
 
     const trimmed = name.trim();
-    
+
     if (trimmed.length === 0) {
-      return { valid: false, error: 'Stage name cannot be empty' };
+      return { valid: false, error: "Stage name cannot be empty" };
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return { valid: false, error: `Stage name cannot exceed ${this.MAX_NAME_LENGTH} characters` };
+      return {
+        valid: false,
+        error: `Stage name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
+      };
     }
 
     return { valid: true, name: trimmed };
@@ -150,11 +156,13 @@ class StageStorageService {
 
       let stageBlob;
       if (bpmxData instanceof ArrayBuffer) {
-        stageBlob = new Blob([bpmxData], { type: 'application/octet-stream' });
+        stageBlob = new Blob([bpmxData], { type: "application/octet-stream" });
       } else if (bpmxData instanceof Blob) {
         stageBlob = bpmxData;
       } else {
-        throw new Error('Invalid stage data format. Expected Blob or ArrayBuffer.');
+        throw new Error(
+          "Invalid stage data format. Expected Blob or ArrayBuffer.",
+        );
       }
 
       if (setAsDefault) {
@@ -166,21 +174,26 @@ class StageStorageService {
         stageData: stageBlob,
         isDefault: setAsDefault,
         metadata: {
-          originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : 'unknown.pmx',
+          originalFileName:
+            typeof metadata.originalFileName === "string"
+              ? metadata.originalFileName
+              : "unknown.pmx",
           uploadedAt: Date.now(),
           fileSize: stageBlob.size,
-          conversionInfo: isRecord(metadata.conversionInfo) ? metadata.conversionInfo : {},
-          ...metadata
-        }
+          conversionInfo: isRecord(metadata.conversionInfo)
+            ? metadata.conversionInfo
+            : {},
+          ...metadata,
+        },
       };
 
       await storageServiceProxy.fileSave(stageId, stageData, this.CATEGORY);
 
-      Logger.log('StageStorage', `Stage saved: ${stageId} (${validatedName})`);
-      
+      Logger.log("StageStorage", `Stage saved: ${stageId} (${validatedName})`);
+
       return stageId;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to save stage:', error);
+      Logger.error("StageStorage", "Failed to save stage:", error);
       throw error;
     }
   }
@@ -195,7 +208,7 @@ class StageStorageService {
       const stageData = await storageServiceProxy.fileLoad(stageId);
       return normalizeStage(stageData);
     } catch (error) {
-      Logger.error('StageStorage', `Failed to get stage ${stageId}:`, error);
+      Logger.error("StageStorage", `Failed to get stage ${stageId}:`, error);
       return null;
     }
   }
@@ -207,23 +220,30 @@ class StageStorageService {
    */
   async getStagesList(): Promise<StageListItem[]> {
     try {
-      const stagesMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const stagesMetadata =
+        await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
       const metadataRecord = isRecord(stagesMetadata) ? stagesMetadata : {};
-      
-      const stagesList = Object.entries(metadataRecord).map(([id, data]): StageListItem => {
-        const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
-        return {
-          id,
-          name: typeof entry.name === 'string' ? entry.name : 'Unknown Stage',
-          isDefault: entry.isDefault === true,
-          metadata: normalizeStageMetadata(entry.metadata),
-        };
-      });
 
-      Logger.log('StageStorage', `Retrieved ${stagesList.length} stages (metadata only)`);
+      const stagesList = Object.entries(metadataRecord).map(
+        ([id, data]): StageListItem => {
+          const entry =
+            isRecord(data) && isRecord(data.value) ? data.value : {};
+          return {
+            id,
+            name: typeof entry.name === "string" ? entry.name : "Unknown Stage",
+            isDefault: entry.isDefault === true,
+            metadata: normalizeStageMetadata(entry.metadata),
+          };
+        },
+      );
+
+      Logger.log(
+        "StageStorage",
+        `Retrieved ${stagesList.length} stages (metadata only)`,
+      );
       return stagesList;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to get stages list:', error);
+      Logger.error("StageStorage", "Failed to get stages list:", error);
       return [];
     }
   }
@@ -235,9 +255,11 @@ class StageStorageService {
    */
   async getAllStages(): Promise<StageWithId[]> {
     try {
-      const allStages = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allStages = await storageServiceProxy.filesGetByCategory(
+        this.CATEGORY,
+      );
       const allStageRecords = isRecord(allStages) ? allStages : {};
-      
+
       const stagesArray = Object.entries(allStageRecords)
         .map(([id, data]) => {
           const normalized = normalizeStage(data);
@@ -250,7 +272,7 @@ class StageStorageService {
 
       return stagesArray;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to get all stages:', error);
+      Logger.error("StageStorage", "Failed to get all stages:", error);
       return [];
     }
   }
@@ -265,7 +287,7 @@ class StageStorageService {
       const defaultStage = allStages.find((stage) => stage.isDefault === true);
       return defaultStage || null;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to get default stage:', error);
+      Logger.error("StageStorage", "Failed to get default stage:", error);
       return null;
     }
   }
@@ -288,10 +310,10 @@ class StageStorageService {
 
       await storageServiceProxy.fileSave(stageId, stage, this.CATEGORY);
 
-      Logger.log('StageStorage', `Stage ${stageId} set as default`);
+      Logger.log("StageStorage", `Stage ${stageId} set as default`);
       return true;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to set default stage:', error);
+      Logger.error("StageStorage", "Failed to set default stage:", error);
       throw error;
     }
   }
@@ -304,7 +326,7 @@ class StageStorageService {
   async clearAllDefaults(): Promise<void> {
     try {
       const allStages = await this.getAllStages();
-      
+
       for (const stage of allStages) {
         if (stage.isDefault) {
           stage.isDefault = false;
@@ -312,9 +334,9 @@ class StageStorageService {
         }
       }
 
-      Logger.log('StageStorage', 'Cleared all default flags');
+      Logger.log("StageStorage", "Cleared all default flags");
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to clear defaults:', error);
+      Logger.error("StageStorage", "Failed to clear defaults:", error);
       throw error;
     }
   }
@@ -347,10 +369,13 @@ class StageStorageService {
 
       await storageServiceProxy.fileSave(stageId, stage, this.CATEGORY);
 
-      Logger.log('StageStorage', `Stage ${stageId} renamed to: ${validatedName}`);
+      Logger.log(
+        "StageStorage",
+        `Stage ${stageId} renamed to: ${validatedName}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to update stage name:', error);
+      Logger.error("StageStorage", "Failed to update stage name:", error);
       throw error;
     }
   }
@@ -361,7 +386,10 @@ class StageStorageService {
    * @param {Object} metadataUpdates - Metadata fields to update
    * @returns {Promise<boolean>} - Success status
    */
-  async updateStageMetadata(stageId: string, metadataUpdates: UnknownRecord): Promise<boolean> {
+  async updateStageMetadata(
+    stageId: string,
+    metadataUpdates: UnknownRecord,
+  ): Promise<boolean> {
     try {
       const stage = await this.getStage(stageId);
       if (!stage) {
@@ -376,10 +404,10 @@ class StageStorageService {
 
       await storageServiceProxy.fileSave(stageId, stage, this.CATEGORY);
 
-      Logger.log('StageStorage', `Stage ${stageId} metadata updated`);
+      Logger.log("StageStorage", `Stage ${stageId} metadata updated`);
       return true;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to update stage metadata:', error);
+      Logger.error("StageStorage", "Failed to update stage metadata:", error);
       throw error;
     }
   }
@@ -392,10 +420,10 @@ class StageStorageService {
   async deleteStage(stageId: string): Promise<boolean> {
     try {
       await storageServiceProxy.fileRemove(stageId);
-      Logger.log('StageStorage', `Stage ${stageId} deleted`);
+      Logger.log("StageStorage", `Stage ${stageId} deleted`);
       return true;
     } catch (error) {
-      Logger.error('StageStorage', 'Failed to delete stage:', error);
+      Logger.error("StageStorage", "Failed to delete stage:", error);
       throw error;
     }
   }

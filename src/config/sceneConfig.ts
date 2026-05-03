@@ -1,16 +1,19 @@
 /**
  * Scene Configuration
- * 
+ *
  * Configuration for MMD Model Scene including model paths, camera settings,
  * physics, shadows, and other scene properties.
- * 
+ *
  * Follows the same pattern as animationConfig.js with getter functions.
  */
 
-import { resourceLoader } from '../utils/ResourceLoader';
-import Logger from '../services/LoggerService';
-import { isDesktop, isProduction } from '../utils/PlatformUtils';
-import type { PositionManagerOptionsLike, RenderQualitySettingsLike } from '../babylon/types';
+import { resourceLoader } from "../utils/ResourceLoader";
+import Logger from "../services/LoggerService";
+import { isDesktop, isProduction } from "../utils/PlatformUtils";
+import type {
+  PositionManagerOptionsLike,
+  RenderQualitySettingsLike,
+} from "../babylon/types";
 
 interface SceneConfigData {
   enableModelLoading: boolean;
@@ -40,7 +43,10 @@ interface RenderQualityPreset extends RenderQualitySettingsLike {
   saturation: number;
 }
 
-type RenderQualityPresetMap = Record<'low' | 'medium' | 'high' | 'ultra', RenderQualityPreset>;
+type RenderQualityPresetMap = Record<
+  "low" | "medium" | "high" | "ultra",
+  RenderQualityPreset
+>;
 
 const RenderQualityPresets: RenderQualityPresetMap = {
   low: {
@@ -104,7 +110,9 @@ const RenderQualityPresetsAndroid: RenderQualityPresetMap = {
   ultra: { ...RenderQualityPresets.ultra, samples: 4 },
 };
 
-export function getRenderQualityPresets(isAndroid = false): RenderQualityPresetMap {
+export function getRenderQualityPresets(
+  isAndroid = false,
+): RenderQualityPresetMap {
   return isAndroid ? RenderQualityPresetsAndroid : RenderQualityPresets;
 }
 
@@ -113,24 +121,28 @@ export function getRenderQualityPresets(isAndroid = false): RenderQualityPresetM
  */
 const SceneConfig: SceneConfigData = {
   enableModelLoading: true,
-  
-  modelUrl: isDesktop ? "/res/assets/model/vassist_default.bpmx" : "res/assets/model/vassist_default.bpmx",
-  cameraAnimationUrl: isDesktop ? "/res/private_test/motion/2.bvmd" : "res/private_test/motion/2.bvmd",
+
+  modelUrl: isDesktop
+    ? "/res/assets/model/vassist_default.bpmx"
+    : "res/assets/model/vassist_default.bpmx",
+  cameraAnimationUrl: isDesktop
+    ? "/res/private_test/motion/2.bvmd"
+    : "res/private_test/motion/2.bvmd",
   enableCameraAnimation: true,
-  
+
   orthoHeight: 12,
   cameraDistance: -30,
-  
+
   positionConfig: {
     boundaryPadding: 0,
     allowPartialOffscreen: false,
-    partialOffscreenAmount: 0
+    partialOffscreenAmount: 0,
   },
-  
+
   transparentBackground: true,
   enablePhysics: true,
   enableShadows: true,
-  
+
   onLoadProgress: null,
   onModelLoaded: null,
   onSceneReady: null,
@@ -142,36 +154,55 @@ const SceneConfig: SceneConfigData = {
  * @param {Object} config - Configuration object
  * @returns {Promise<Object>} Configuration with resolved URLs
  */
-export async function resolveResourceURLs(config: SceneConfigData): Promise<SceneConfigData> {
-  Logger.log('sceneConfig', 'resolveResourceURLs - isExtension:', resourceLoader.isExtensionMode());
-  
-  const needsResolution = resourceLoader.isExtensionMode() || (isDesktop && isProduction);
-  
+export async function resolveResourceURLs(
+  config: SceneConfigData,
+): Promise<SceneConfigData> {
+  Logger.log(
+    "sceneConfig",
+    "resolveResourceURLs - isExtension:",
+    resourceLoader.isExtensionMode(),
+  );
+
+  const needsResolution =
+    resourceLoader.isExtensionMode() || (isDesktop && isProduction);
+
   if (!needsResolution) {
-    Logger.log('sceneConfig', 'Dev/Web mode - using paths as-is');
+    Logger.log("sceneConfig", "Dev/Web mode - using paths as-is");
     return config;
   }
-  
-  Logger.log('sceneConfig', `${isDesktop && isProduction ? 'Desktop Production' : 'Extension'} mode - resolving URLs...`);
+
+  Logger.log(
+    "sceneConfig",
+    `${isDesktop && isProduction ? "Desktop Production" : "Extension"} mode - resolving URLs...`,
+  );
   const resolvedConfig = { ...config };
-  
-  if (config.modelUrl && !config.modelUrl.startsWith('blob:')) {
+
+  if (config.modelUrl && !config.modelUrl.startsWith("blob:")) {
     resolvedConfig.modelUrl = await resourceLoader.getURLAsync(config.modelUrl);
-    Logger.log('sceneConfig', 'Resolved modelUrl:', resolvedConfig.modelUrl);
+    Logger.log("sceneConfig", "Resolved modelUrl:", resolvedConfig.modelUrl);
   }
-  
-  if (config.cameraAnimationUrl && !config.cameraAnimationUrl.startsWith('blob:')) {
-    resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(config.cameraAnimationUrl);
-    Logger.log('sceneConfig', 'Resolved cameraAnimationUrl:', resolvedConfig.cameraAnimationUrl);
+
+  if (
+    config.cameraAnimationUrl &&
+    !config.cameraAnimationUrl.startsWith("blob:")
+  ) {
+    resolvedConfig.cameraAnimationUrl = await resourceLoader.getURLAsync(
+      config.cameraAnimationUrl,
+    );
+    Logger.log(
+      "sceneConfig",
+      "Resolved cameraAnimationUrl:",
+      resolvedConfig.cameraAnimationUrl,
+    );
   }
-  
+
   return resolvedConfig;
 }
 
 /**
  * Get scene configuration
  * Returns a copy to prevent mutations
- * 
+ *
  * @returns {Object} Scene configuration
  */
 export function getSceneConfig(): SceneConfigData {
@@ -181,41 +212,51 @@ export function getSceneConfig(): SceneConfigData {
 /**
  * Get scene configuration with resolved URLs (async)
  * Use this in extension mode to ensure URLs are properly resolved
- * 
+ *
  * Checks for custom default model from IndexedDB first
- * 
+ *
  * @returns {Promise<Object>} Scene configuration with resolved URLs
  */
 export async function getSceneConfigAsync(): Promise<SceneConfigData> {
   const config = getSceneConfig();
-  
+
   try {
-    const { modelStorageService } = await import('../services/ModelStorageService');
+    const { modelStorageService } =
+      await import("../services/ModelStorageService");
     const customDefaultModel = await modelStorageService.getDefaultModel();
-    
-    
+
     if (customDefaultModel && customDefaultModel.modelData) {
-      const customFileName = customDefaultModel.name || 'model.bpmx';
-      config.customModelFile = new File([customDefaultModel.modelData], customFileName, {
-        type: customDefaultModel.modelData.type || 'application/octet-stream',
-      });
+      const customFileName = customDefaultModel.name || "model.bpmx";
+      config.customModelFile = new File(
+        [customDefaultModel.modelData],
+        customFileName,
+        {
+          type: customDefaultModel.modelData.type || "application/octet-stream",
+        },
+      );
       config.modelUrl = customFileName;
       config.modelId = customDefaultModel.id;
       config.modelFileName = customFileName;
-      const portraitClippingValue = customDefaultModel.metadata?.portraitClipping;
-      config.portraitClipping = typeof portraitClippingValue === 'number' ? portraitClippingValue : 12;
+      const portraitClippingValue =
+        customDefaultModel.metadata?.portraitClipping;
+      config.portraitClipping =
+        typeof portraitClippingValue === "number" ? portraitClippingValue : 12;
     } else {
-      config.modelId = 'builtin_default_model';
-      config.modelFileName = 'vassist_default.bpmx';
+      config.modelId = "builtin_default_model";
+      config.modelFileName = "vassist_default.bpmx";
       config.portraitClipping = 12;
     }
   } catch (error) {
-    Logger.error('sceneConfig', 'Failed to load custom default model:', error);
-    config.modelId = 'builtin_default_model';
-    config.modelFileName = 'vassist_default.bpmx';
+    Logger.error("sceneConfig", "Failed to load custom default model:", error);
+    config.modelId = "builtin_default_model";
+    config.modelFileName = "vassist_default.bpmx";
   }
-  
-  Logger.log('sceneConfig', 'Calling resolveResourceURLs with config.modelUrl:', config.modelUrl);
+
+  Logger.log(
+    "sceneConfig",
+    "Calling resolveResourceURLs with config.modelUrl:",
+    config.modelUrl,
+  );
   return resolveResourceURLs(config);
 }
 
@@ -239,7 +280,10 @@ export function getDefaultCameraAnimationUrl(): string {
  * Get camera settings
  * @returns {Object} Camera configuration
  */
-export function getCameraSettings(): { orthoHeight: number; cameraDistance: number } {
+export function getCameraSettings(): {
+  orthoHeight: number;
+  cameraDistance: number;
+} {
   return {
     orthoHeight: SceneConfig.orthoHeight,
     cameraDistance: SceneConfig.cameraDistance,
@@ -259,18 +303,20 @@ export function getPositionConfig(): PositionManagerOptionsLike {
  * @param {string} feature - Feature name: 'physics', 'shadows', 'cameraAnimation', 'transparentBackground'
  * @returns {boolean} True if enabled
  */
-export function isFeatureEnabled(feature: 'physics' | 'shadows' | 'cameraAnimation' | 'transparentBackground'): boolean {
+export function isFeatureEnabled(
+  feature: "physics" | "shadows" | "cameraAnimation" | "transparentBackground",
+): boolean {
   switch (feature) {
-    case 'physics':
+    case "physics":
       return SceneConfig.enablePhysics;
-    case 'shadows':
+    case "shadows":
       return SceneConfig.enableShadows;
-    case 'cameraAnimation':
+    case "cameraAnimation":
       return SceneConfig.enableCameraAnimation;
-    case 'transparentBackground':
+    case "transparentBackground":
       return SceneConfig.transparentBackground;
     default:
-      Logger.warn('SceneConfig', `Unknown feature: ${feature}`);
+      Logger.warn("SceneConfig", `Unknown feature: ${feature}`);
       return false;
   }
 }
@@ -280,14 +326,16 @@ export function isFeatureEnabled(feature: 'physics' | 'shadows' | 'cameraAnimati
  * @param {Object} customConfig - Custom configuration to merge
  * @returns {Object} Merged configuration
  */
-export function createSceneConfig(customConfig: Partial<SceneConfigData> = {}): SceneConfigData {
+export function createSceneConfig(
+  customConfig: Partial<SceneConfigData> = {},
+): SceneConfigData {
   return {
     ...SceneConfig,
     ...customConfig,
     positionConfig: {
       ...SceneConfig.positionConfig,
-      ...(customConfig.positionConfig || {})
-    }
+      ...(customConfig.positionConfig || {}),
+    },
   };
 }
 
@@ -296,30 +344,38 @@ export function createSceneConfig(customConfig: Partial<SceneConfigData> = {}): 
  * @param {Object} config - Configuration to validate
  * @returns {Object} Validation result { valid: boolean, errors: string[] }
  */
-export function validateSceneConfig(config: Partial<SceneConfigData>): { valid: boolean; errors: string[] } {
+export function validateSceneConfig(config: Partial<SceneConfigData>): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors = [];
-  
+
   if (!config.modelUrl) {
-    errors.push('modelUrl is required');
+    errors.push("modelUrl is required");
   }
-  
-  if (typeof config.orthoHeight !== 'number' || config.orthoHeight <= 0) {
-    errors.push('orthoHeight must be a positive number');
+
+  if (typeof config.orthoHeight !== "number" || config.orthoHeight <= 0) {
+    errors.push("orthoHeight must be a positive number");
   }
-  
-  if (typeof config.cameraDistance !== 'number') {
-    errors.push('cameraDistance must be a number');
+
+  if (typeof config.cameraDistance !== "number") {
+    errors.push("cameraDistance must be a number");
   }
-  
+
   if (config.positionConfig) {
-    if (typeof config.positionConfig.boundaryPadding !== 'number' || config.positionConfig.boundaryPadding < 0) {
-      errors.push('positionConfig.boundaryPadding must be a non-negative number');
+    if (
+      typeof config.positionConfig.boundaryPadding !== "number" ||
+      config.positionConfig.boundaryPadding < 0
+    ) {
+      errors.push(
+        "positionConfig.boundaryPadding must be a non-negative number",
+      );
     }
   }
-  
+
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }
 

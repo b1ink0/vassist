@@ -1,11 +1,11 @@
-import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Scene } from '@babylonjs/core/scene';
+import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { Scene } from "@babylonjs/core/scene";
 import type {
   AutoFocusCameraLike,
   DepthOfFieldPipelineLike,
   RuntimeBoneLike,
   RuntimeBoneModelLike,
-} from '../types';
+} from "../types";
 
 /**
  * Auto-focus controller that keeps depth-of-field focused near the model head.
@@ -37,7 +37,7 @@ export class MmdCameraAutoFocus {
    * @param {RuntimeBoneModelLike} mmdModel - Model containing runtime bones.
    * @param {string} [headBoneName='頭'] - Name of head bone.
    */
-  setTarget(mmdModel: RuntimeBoneModelLike, headBoneName = '頭'): void {
+  setTarget(mmdModel: RuntimeBoneModelLike, headBoneName = "頭"): void {
     this._headBone =
       mmdModel.runtimeBones.find((bone) => bone.name === headBoneName) ?? null;
   }
@@ -84,7 +84,7 @@ export class MmdCameraAutoFocus {
         -cameraRotation.y,
         -cameraRotation.x,
         -cameraRotation.z,
-        rotationMatrix
+        rotationMatrix,
       );
 
       Vector3.TransformNormalFromFloatsToRef(
@@ -92,7 +92,7 @@ export class MmdCameraAutoFocus {
         0,
         1,
         rotationMatrix,
-        cameraNormal
+        cameraNormal,
       );
 
       camera.position.addToRef(
@@ -101,9 +101,9 @@ export class MmdCameraAutoFocus {
           0,
           camera.distance,
           rotationMatrix,
-          cameraEyePosition
+          cameraEyePosition,
         ),
-        cameraEyePosition
+        cameraEyePosition,
       );
 
       if (camera.parent !== null) {
@@ -113,12 +113,12 @@ export class MmdCameraAutoFocus {
         Vector3.TransformCoordinatesToRef(
           cameraEyePosition,
           cameraParentWorldMatrix,
-          cameraEyePosition
+          cameraEyePosition,
         );
         Vector3.TransformNormalToRef(
           cameraNormal,
           cameraParentWorldMatrix,
-          cameraNormal
+          cameraNormal,
         );
         cameraNormal.normalize();
       }

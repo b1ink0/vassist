@@ -1,6 +1,6 @@
 /**
  * ToolbarButton Component
- * 
+ *
  * Reusable button for AI Toolbar with:
  * - Hover label expansion
  * - Loading spinner support
@@ -8,10 +8,10 @@
  * - Icon + label display
  */
 
-import { useRef } from 'react';
-import type { MouseEventHandler } from 'react';
-import { cn } from '../../utils/cn';
-import { Icon } from '../icons';
+import { useRef } from "react";
+import type { MouseEventHandler } from "react";
+import { cn } from "../../utils/cn";
+import { Icon } from "../icons";
 
 export interface ToolbarButtonProps {
   icon: string;
@@ -31,16 +31,16 @@ export interface ToolbarButtonProps {
 
 const ToolbarButton = ({
   icon,
-  loadingIcon = 'spinner',
+  loadingIcon = "spinner",
   label,
   onClick,
   disabled = false,
   isLoading = false,
-  actionType = 'summarize', // 'summarize', 'translate', 'image', 'chat'
-  className = '',
-  title = '',
-  isLightBackground = false,
-  maxLabelWidth = '100px',
+  actionType = "summarize", // 'summarize', 'translate', 'image', 'chat'
+  className = "",
+  title = "",
+  isLightBackground: _isLightBackground = false,
+  maxLabelWidth = "100px",
   onMouseEnterButton,
   onMouseLeaveButton,
 }: ToolbarButtonProps) => {
@@ -51,14 +51,14 @@ const ToolbarButton = ({
     if (onMouseEnterButton) {
       onMouseEnterButton(e);
     }
-    
+
     const label = labelRef.current;
     const button = buttonRef.current;
-    
+
     if (label && button) {
       label.style.maxWidth = maxLabelWidth;
-      button.style.paddingLeft = '0.75rem';
-      button.style.paddingRight = '0.75rem';
+      button.style.paddingLeft = "0.75rem";
+      button.style.paddingRight = "0.75rem";
     }
   };
 
@@ -66,72 +66,72 @@ const ToolbarButton = ({
     if (onMouseLeaveButton) {
       onMouseLeaveButton(e);
     }
-    
+
     if (isLoading) return;
-    
+
     const label = labelRef.current;
     const button = buttonRef.current;
-    
+
     if (label && button) {
-      label.style.maxWidth = '0';
-      button.style.paddingLeft = '';
-      button.style.paddingRight = '';
+      label.style.maxWidth = "0";
+      button.style.paddingLeft = "";
+      button.style.paddingRight = "";
     }
   };
 
   const getHoverBgClass = () => {
     const colorMap: Record<string, string> = {
-      'summarize': 'hover:bg-blue-500/30',
-      'summarize-tldr': 'hover:bg-blue-500/30',
-      'summarize-headline': 'hover:bg-orange-500/30',
-      'summarize-key-points': 'hover:bg-purple-500/30',
-      'summarize-teaser': 'hover:bg-emerald-500/30',
-      
-      'translate': 'hover:bg-teal-500/30',
-      'detect-language': 'hover:bg-lime-500/30',
-      
-      'image': 'hover:bg-violet-500/30',
-      'image-describe': 'hover:bg-violet-500/30',
-      'image-extract-text': 'hover:bg-fuchsia-500/30',
-      'image-identify-objects': 'hover:bg-pink-500/30',
-      
-      'dictionary': 'hover:bg-cyan-500/30',
-      'dictionary-define': 'hover:bg-cyan-500/30',
-      'dictionary-synonyms': 'hover:bg-amber-500/30',
-      'dictionary-antonyms': 'hover:bg-rose-500/30',
-      'dictionary-pronunciation': 'hover:bg-indigo-500/30',
-      'dictionary-examples': 'hover:bg-lime-500/30',
-      
-      'improve': 'hover:bg-rose-500/30',
-      'improve-grammar': 'hover:bg-rose-500/30',
-      'improve-spelling': 'hover:bg-yellow-500/30',
-      'improve-professional': 'hover:bg-emerald-500/30',
-      'improve-formal': 'hover:bg-sky-500/30',
-      'improve-simplify': 'hover:bg-orange-500/30',
-      'improve-expand': 'hover:bg-purple-500/30',
-      'improve-concise': 'hover:bg-teal-500/30',
-      
-      'rewrite': 'hover:bg-rose-500/30',
-      'rewrite-grammar': 'hover:bg-rose-500/30',
-      'rewrite-spelling': 'hover:bg-yellow-500/30',
-      'rewrite-professional': 'hover:bg-emerald-500/30',
-      'rewrite-moreFormal': 'hover:bg-sky-500/30',
-      'rewrite-moreCasual': 'hover:bg-yellow-500/30',
-      'rewrite-shorter': 'hover:bg-orange-500/30',
-      'rewrite-longer': 'hover:bg-purple-500/30',
-      'rewrite-simplify': 'hover:bg-orange-500/30',
-      'rewrite-concise': 'hover:bg-teal-500/30',
-      'rewrite-clarity': 'hover:bg-blue-500/30',
-      'rewrite-custom': 'hover:bg-violet-500/30',
-      
-      'write': 'hover:bg-green-500/30',
-      'chat': 'hover:bg-amber-500/30',
-      'dictation': 'hover:bg-red-500/30',
-      'insert': 'hover:bg-green-500/30',
-      'undo': 'hover:bg-slate-500/30',
-      'redo': 'hover:bg-blue-500/30',
+      summarize: "hover:bg-blue-500/30",
+      "summarize-tldr": "hover:bg-blue-500/30",
+      "summarize-headline": "hover:bg-orange-500/30",
+      "summarize-key-points": "hover:bg-purple-500/30",
+      "summarize-teaser": "hover:bg-emerald-500/30",
+
+      translate: "hover:bg-teal-500/30",
+      "detect-language": "hover:bg-lime-500/30",
+
+      image: "hover:bg-violet-500/30",
+      "image-describe": "hover:bg-violet-500/30",
+      "image-extract-text": "hover:bg-fuchsia-500/30",
+      "image-identify-objects": "hover:bg-pink-500/30",
+
+      dictionary: "hover:bg-cyan-500/30",
+      "dictionary-define": "hover:bg-cyan-500/30",
+      "dictionary-synonyms": "hover:bg-amber-500/30",
+      "dictionary-antonyms": "hover:bg-rose-500/30",
+      "dictionary-pronunciation": "hover:bg-indigo-500/30",
+      "dictionary-examples": "hover:bg-lime-500/30",
+
+      improve: "hover:bg-rose-500/30",
+      "improve-grammar": "hover:bg-rose-500/30",
+      "improve-spelling": "hover:bg-yellow-500/30",
+      "improve-professional": "hover:bg-emerald-500/30",
+      "improve-formal": "hover:bg-sky-500/30",
+      "improve-simplify": "hover:bg-orange-500/30",
+      "improve-expand": "hover:bg-purple-500/30",
+      "improve-concise": "hover:bg-teal-500/30",
+
+      rewrite: "hover:bg-rose-500/30",
+      "rewrite-grammar": "hover:bg-rose-500/30",
+      "rewrite-spelling": "hover:bg-yellow-500/30",
+      "rewrite-professional": "hover:bg-emerald-500/30",
+      "rewrite-moreFormal": "hover:bg-sky-500/30",
+      "rewrite-moreCasual": "hover:bg-yellow-500/30",
+      "rewrite-shorter": "hover:bg-orange-500/30",
+      "rewrite-longer": "hover:bg-purple-500/30",
+      "rewrite-simplify": "hover:bg-orange-500/30",
+      "rewrite-concise": "hover:bg-teal-500/30",
+      "rewrite-clarity": "hover:bg-blue-500/30",
+      "rewrite-custom": "hover:bg-violet-500/30",
+
+      write: "hover:bg-green-500/30",
+      chat: "hover:bg-amber-500/30",
+      dictation: "hover:bg-red-500/30",
+      insert: "hover:bg-green-500/30",
+      undo: "hover:bg-slate-500/30",
+      redo: "hover:bg-blue-500/30",
     };
-    return colorMap[actionType] || 'hover:bg-blue-500/30';
+    return colorMap[actionType] || "hover:bg-blue-500/30";
   };
 
   return (
@@ -142,25 +142,34 @@ const ToolbarButton = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       className={cn(
-        'flex items-center justify-center gap-1.5',
-        'border-none text-base',
-        'transition-all duration-300 ease-in-out',
-        'min-w-8 px-2',
-        'h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100',
+        "flex items-center justify-center gap-1.5",
+        "border-none text-base",
+        "transition-all duration-300 ease-in-out",
+        "min-w-8 px-2",
+        "h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100",
         getHoverBgClass(),
-        disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
-        'text-white',
-        className
+        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+        "text-white",
+        className,
       )}
       title={title}
     >
-      <span className={cn('inline-block transition-opacity duration-200', isLoading && 'animate-spin')}>
-        <Icon name={isLoading ? loadingIcon : icon} size={16} context="toolbar" />
+      <span
+        className={cn(
+          "inline-block transition-opacity duration-200",
+          isLoading && "animate-spin",
+        )}
+      >
+        <Icon
+          name={isLoading ? loadingIcon : icon}
+          size={16}
+          context="toolbar"
+        />
       </span>
-      <span 
+      <span
         ref={labelRef}
         className="text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out"
-        style={{ maxWidth: isLoading ? maxLabelWidth : '0', opacity: 1 }}
+        style={{ maxWidth: isLoading ? maxLabelWidth : "0", opacity: 1 }}
       >
         {label}
       </span>

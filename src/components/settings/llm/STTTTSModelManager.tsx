@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Icon } from '../../icons';
-import Dialog from '../../common/Dialog';
-import { Button } from '../../ui';
+import { useCallback, useEffect, useState } from "react";
+import { Icon } from "../../icons";
+import Dialog from "../../common/Dialog";
+import { Button } from "../../ui";
 
-type ModelType = 'whisper' | 'vits';
+type ModelType = "whisper" | "vits";
 
 interface ModelStatus {
   downloaded?: boolean;
@@ -30,8 +30,15 @@ interface AndroidSttTtsApi {
   downloadVitsModel?: () => string;
   deleteWhisperModel?: () => string;
   deleteVitsModel?: () => string;
-  _onSTTTTSProgress?: ((modelType: ModelType, percent: number, statusText: string) => void) | null;
-  _onSTTTTSComplete?: ((modelType: ModelType, result: { success?: boolean; error?: string }) => void) | null;
+  _onSTTTTSProgress?:
+    | ((modelType: ModelType, percent: number, statusText: string) => void)
+    | null;
+  _onSTTTTSComplete?:
+    | ((
+        modelType: ModelType,
+        result: { success?: boolean; error?: string },
+      ) => void)
+    | null;
   _onSTTTTSError?: ((modelType: ModelType, errorMsg: string) => void) | null;
 }
 
@@ -49,29 +56,35 @@ const getErrorMessage = (err: unknown): string => {
 
 /**
  * STTTTSModelManager - UI for managing on-device STT/TTS models (Android only)
- * 
+ *
  * Provides UI for:
  * - Downloading Whisper STT model (113 MB)
  * - Downloading VITS-VCTK TTS model (145 MB)
  * - Real-time progress tracking with percent and download size
  * - Deleting models
  * - Model status and size info
- * 
+ *
  * @param {Object} androidAPI - AndroidAI interface from useAndroid hook
  * @param {boolean} isLightBackground - Light background theme flag
  */
-const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSModelManagerProps) => {
-  const [status, setStatus] = useState<StatusResponse['status'] | null>(null);
+const STTTTSModelManager = ({
+  androidAPI,
+  isLightBackground = false,
+}: STTTTSModelManagerProps) => {
+  const [status, setStatus] = useState<StatusResponse["status"] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<Partial<Record<ModelType, ProgressEntry>>>({});
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [pendingDeleteModelType, setPendingDeleteModelType] = useState<ModelType | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<
+    Partial<Record<ModelType, ProgressEntry>>
+  >({});
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [pendingDeleteModelType, setPendingDeleteModelType] =
+    useState<ModelType | null>(null);
 
   // Load model status
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     if (!androidAPI?.getSTTTTSStatus) return;
-    
+
     try {
       const resultJson = androidAPI.getSTTTTSStatus();
       const result = JSON.parse(resultJson) as StatusResponse;
@@ -79,46 +92,54 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         setStatus(result.status);
       }
     } catch (err: unknown) {
-      console.error('Failed to load STT/TTS status:', err);
+      console.error("Failed to load STT/TTS status:", err);
     }
-  };
+  }, [androidAPI]);
 
   useEffect(() => {
     loadStatus();
-  }, [androidAPI]);
+  }, [loadStatus]);
 
   // Setup progress listeners
   useEffect(() => {
     if (!androidAPI) return;
 
     // Progress callback - Kotlin calls this: window.AndroidAI._onSTTTTSProgress(modelType, percent, status)
-    androidAPI._onSTTTTSProgress = (modelType: ModelType, percent: number, statusText: string) => {
-      setDownloadProgress(prev => ({
+    androidAPI._onSTTTTSProgress = (
+      modelType: ModelType,
+      percent: number,
+      statusText: string,
+    ) => {
+      setDownloadProgress((prev) => ({
         ...prev,
-        [modelType]: { percent, status: statusText }
+        [modelType]: { percent, status: statusText },
       }));
     };
 
     // Complete callback
     androidAPI._onSTTTTSComplete = (modelType: ModelType) => {
-      setDownloadProgress(prev => {
+      setDownloadProgress((prev) => {
         const { [modelType]: removed, ...rest } = prev;
         return rest;
       });
       setLoading(false);
-      setSuccessMessage(`${modelType === 'whisper' ? 'Whisper STT' : 'VITS TTS'} model downloaded successfully!`);
-      setTimeout(() => setSuccessMessage(''), 5000);
+      setSuccessMessage(
+        `${modelType === "whisper" ? "Whisper STT" : "VITS TTS"} model downloaded successfully!`,
+      );
+      setTimeout(() => setSuccessMessage(""), 5000);
       loadStatus();
     };
 
     // Error callback
     androidAPI._onSTTTTSError = (modelType: ModelType, errorMsg: string) => {
-      setDownloadProgress(prev => {
+      setDownloadProgress((prev) => {
         const { [modelType]: removed, ...rest } = prev;
         return rest;
       });
       setLoading(false);
-      setError(`${modelType === 'whisper' ? 'Whisper STT' : 'VITS TTS'} download failed: ${errorMsg}`);
+      setError(
+        `${modelType === "whisper" ? "Whisper STT" : "VITS TTS"} download failed: ${errorMsg}`,
+      );
     };
 
     return () => {
@@ -128,29 +149,33 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         androidAPI._onSTTTTSError = null;
       }
     };
-  }, [androidAPI]);
+  }, [androidAPI, loadStatus]);
 
   const handleDownload = async (modelType: ModelType) => {
     if (!androidAPI) {
-      setError('Android API not available');
+      setError("Android API not available");
       return;
     }
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      const resultJson = modelType === 'whisper'
-        ? androidAPI.downloadWhisperModel?.()
-        : androidAPI.downloadVitsModel?.();
+      const resultJson =
+        modelType === "whisper"
+          ? androidAPI.downloadWhisperModel?.()
+          : androidAPI.downloadVitsModel?.();
       if (!resultJson) {
-        throw new Error('Download API is unavailable');
+        throw new Error("Download API is unavailable");
       }
-      
-      const result = JSON.parse(resultJson) as { success?: boolean; error?: string };
-      
+
+      const result = JSON.parse(resultJson) as {
+        success?: boolean;
+        error?: string;
+      };
+
       if (!result?.success) {
-        setError(result?.error || 'Download failed');
+        setError(result?.error || "Download failed");
         setLoading(false);
       }
     } catch (err: unknown) {
@@ -170,24 +195,28 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
 
     setPendingDeleteModelType(null);
 
-    const modelName = modelType === 'whisper' ? 'Whisper STT' : 'VITS-VCTK TTS';
+    const modelName = modelType === "whisper" ? "Whisper STT" : "VITS-VCTK TTS";
 
     try {
-      const resultJson = modelType === 'whisper'
-        ? androidAPI.deleteWhisperModel?.()
-        : androidAPI.deleteVitsModel?.();
+      const resultJson =
+        modelType === "whisper"
+          ? androidAPI.deleteWhisperModel?.()
+          : androidAPI.deleteVitsModel?.();
       if (!resultJson) {
-        throw new Error('Delete API is unavailable');
+        throw new Error("Delete API is unavailable");
       }
-      
-      const result = JSON.parse(resultJson) as { success?: boolean; error?: string };
-      
+
+      const result = JSON.parse(resultJson) as {
+        success?: boolean;
+        error?: string;
+      };
+
       if (result?.success) {
         setSuccessMessage(`${modelName} deleted successfully`);
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setTimeout(() => setSuccessMessage(""), 3000);
         await loadStatus();
       } else {
-        setError(result?.error || 'Delete failed');
+        setError(result?.error || "Delete failed");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -195,7 +224,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
   };
 
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 MB';
+    if (bytes === 0) return "0 MB";
     const mb = bytes / (1024 * 1024);
     return `${mb.toFixed(1)} MB`;
   };
@@ -216,7 +245,8 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
       {/* Info Banner */}
       <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
         <p className="text-xs text-blue-300">
-          <span className="font-semibold">On-Device AI</span> - Download models once for offline speech recognition and text-to-speech.
+          <span className="font-semibold">On-Device AI</span> - Download models
+          once for offline speech recognition and text-to-speech.
         </p>
       </div>
 
@@ -225,7 +255,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Icon name="microphone" size={16} className="text-white/70" />
-            <h3 className="text-sm font-semibold text-white/90">Whisper Tiny.en (STT)</h3>
+            <h3 className="text-sm font-semibold text-white/90">
+              Whisper Tiny.en (STT)
+            </h3>
           </div>
           {whisperStatus.downloaded ? (
             <span className="px-2 py-1 rounded text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30">
@@ -242,7 +274,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Model Size:</span>
             <span className="text-white/90">
-              {whisperStatus.downloaded ? formatBytes(whisperStatus.size ?? 0) : '~99 MB'}
+              {whisperStatus.downloaded
+                ? formatBytes(whisperStatus.size ?? 0)
+                : "~99 MB"}
             </span>
           </div>
           <div className="flex justify-between text-xs">
@@ -251,7 +285,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Purpose:</span>
-            <span className="text-white/90">Speech-to-Text (Transcription)</span>
+            <span className="text-white/90">
+              Speech-to-Text (Transcription)
+            </span>
           </div>
         </div>
 
@@ -259,11 +295,15 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         {downloadProgress.whisper && (
           <div className="space-y-2 mb-3">
             <div className="flex justify-between text-xs">
-              <span className="text-white/70">{downloadProgress.whisper.status}</span>
-              <span className="text-white/70">{downloadProgress.whisper.percent}%</span>
+              <span className="text-white/70">
+                {downloadProgress.whisper.status}
+              </span>
+              <span className="text-white/70">
+                {downloadProgress.whisper.percent}%
+              </span>
             </div>
             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-to-r from-blue-400/60 to-blue-500/80 transition-all duration-300"
                 style={{ width: `${downloadProgress.whisper.percent}%` }}
               />
@@ -274,7 +314,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         <div className="flex gap-2">
           {whisperStatus.downloaded ? (
             <button
-              onClick={() => handleDelete('whisper')}
+              onClick={() => handleDelete("whisper")}
               className="flex-1 px-2 md:px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <Icon name="trash" size={14} />
@@ -282,9 +322,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
             </button>
           ) : (
             <Button
-              onClick={() => handleDownload('whisper')}
+              onClick={() => handleDownload("whisper")}
               disabled={loading || Boolean(downloadProgress.whisper)}
-              variant={isLightBackground ? 'dark' : 'default'}
+              variant={isLightBackground ? "dark" : "default"}
               className="flex-1"
             >
               {downloadProgress.whisper ? (
@@ -308,7 +348,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Icon name="speaker" size={16} className="text-white/70" />
-            <h3 className="text-sm font-semibold text-white/90">VITS-VCTK (TTS)</h3>
+            <h3 className="text-sm font-semibold text-white/90">
+              VITS-VCTK (TTS)
+            </h3>
           </div>
           {vitsStatus.downloaded ? (
             <span className="px-2 py-1 rounded text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30">
@@ -325,7 +367,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Model Size:</span>
             <span className="text-white/90">
-              {vitsStatus.downloaded ? formatBytes(vitsStatus.size ?? 0) : '~152 MB'}
+              {vitsStatus.downloaded
+                ? formatBytes(vitsStatus.size ?? 0)
+                : "~152 MB"}
             </span>
           </div>
           <div className="flex justify-between text-xs">
@@ -338,7 +382,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Purpose:</span>
-            <span className="text-white/90">Text-to-Speech (Voice Synthesis)</span>
+            <span className="text-white/90">
+              Text-to-Speech (Voice Synthesis)
+            </span>
           </div>
         </div>
 
@@ -346,11 +392,15 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         {downloadProgress.vits && (
           <div className="space-y-2 mb-3">
             <div className="flex justify-between text-xs">
-              <span className="text-white/70">{downloadProgress.vits.status}</span>
-              <span className="text-white/70">{downloadProgress.vits.percent}%</span>
+              <span className="text-white/70">
+                {downloadProgress.vits.status}
+              </span>
+              <span className="text-white/70">
+                {downloadProgress.vits.percent}%
+              </span>
             </div>
             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-to-r from-purple-400/60 to-purple-500/80 transition-all duration-300"
                 style={{ width: `${downloadProgress.vits.percent}%` }}
               />
@@ -361,7 +411,7 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
         <div className="flex gap-2">
           {vitsStatus.downloaded ? (
             <button
-              onClick={() => handleDelete('vits')}
+              onClick={() => handleDelete("vits")}
               className="flex-1 px-2 md:px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <Icon name="trash" size={14} />
@@ -369,9 +419,9 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
             </button>
           ) : (
             <Button
-              onClick={() => handleDownload('vits')}
+              onClick={() => handleDownload("vits")}
               disabled={loading || Boolean(downloadProgress.vits)}
-              variant={isLightBackground ? 'dark' : 'default'}
+              variant={isLightBackground ? "dark" : "default"}
               className="flex-1"
             >
               {downloadProgress.vits ? (
@@ -413,8 +463,8 @@ const STTTTSModelManager = ({ androidAPI, isLightBackground = false }: STTTTSMod
       {pendingDeleteModelType && (
         <Dialog
           type="confirm"
-          title={`Delete ${pendingDeleteModelType === 'whisper' ? 'Whisper STT' : 'VITS-VCTK TTS'} model?`}
-          message={`This will free up ~${pendingDeleteModelType === 'whisper' ? '99' : '152'} MB of storage.`}
+          title={`Delete ${pendingDeleteModelType === "whisper" ? "Whisper STT" : "VITS-VCTK TTS"} model?`}
+          message={`This will free up ~${pendingDeleteModelType === "whisper" ? "99" : "152"} MB of storage.`}
           confirmLabel="Delete"
           confirmStyle="error"
           isLightBackground={isLightBackground}

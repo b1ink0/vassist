@@ -9,13 +9,6 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": [
-    "tools/**/*.ts",
-    "vite.config*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "build",
-    "node_modules"
-  ]
+  "include": ["tools/**/*.ts", "vite.config*.ts"],
+  "exclude": ["dist", "build", "node_modules"]
 }

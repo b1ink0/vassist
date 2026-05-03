@@ -3,8 +3,8 @@
  * Manages GPT-SoVITS reference audio files in IndexedDB
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -36,7 +36,7 @@ interface NameValidationResult {
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const normalizeVoice = (value: unknown): StoredVoice | null => {
   if (!isRecord(value) || !(value.audioData instanceof Blob)) {
@@ -46,24 +46,38 @@ const normalizeVoice = (value: unknown): StoredVoice | null => {
   const metadata = isRecord(value.metadata) ? value.metadata : {};
   const normalizedMetadata: VoiceMetadata = {
     ...metadata,
-    fileName: typeof metadata.fileName === 'string' ? metadata.fileName : 'audio.wav',
-    fileType: typeof metadata.fileType === 'string' ? metadata.fileType : value.audioData.type,
-    fileSize: typeof metadata.fileSize === 'number' ? metadata.fileSize : value.audioData.size,
-    duration: typeof metadata.duration === 'number' ? metadata.duration : null,
-    uploadedAt: typeof metadata.uploadedAt === 'number' ? metadata.uploadedAt : Date.now(),
+    fileName:
+      typeof metadata.fileName === "string" ? metadata.fileName : "audio.wav",
+    fileType:
+      typeof metadata.fileType === "string"
+        ? metadata.fileType
+        : value.audioData.type,
+    fileSize:
+      typeof metadata.fileSize === "number"
+        ? metadata.fileSize
+        : value.audioData.size,
+    duration: typeof metadata.duration === "number" ? metadata.duration : null,
+    uploadedAt:
+      typeof metadata.uploadedAt === "number"
+        ? metadata.uploadedAt
+        : Date.now(),
     trained: metadata.trained === true,
-    checkpointPath: typeof metadata.checkpointPath === 'string' ? metadata.checkpointPath : null,
+    checkpointPath:
+      typeof metadata.checkpointPath === "string"
+        ? metadata.checkpointPath
+        : null,
   };
-  if (typeof metadata.updatedAt === 'number') {
+  if (typeof metadata.updatedAt === "number") {
     normalizedMetadata.updatedAt = metadata.updatedAt;
   }
 
   return {
     ...value,
-    name: typeof value.name === 'string' ? value.name : 'Unknown Voice',
+    name: typeof value.name === "string" ? value.name : "Unknown Voice",
     audioData: value.audioData,
-    referenceText: typeof value.referenceText === 'string' ? value.referenceText : '',
-    language: typeof value.language === 'string' ? value.language : 'en',
+    referenceText:
+      typeof value.referenceText === "string" ? value.referenceText : "",
+    language: typeof value.language === "string" ? value.language : "en",
     metadata: normalizedMetadata,
   };
 };
@@ -74,7 +88,7 @@ class VoiceStorageService {
   private readonly MAX_FILE_SIZE: number;
 
   constructor() {
-    this.CATEGORY = 'voice';
+    this.CATEGORY = "voice";
     this.MAX_NAME_LENGTH = 50;
     this.MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max
   }
@@ -85,18 +99,21 @@ class VoiceStorageService {
    * @returns {Object} - { valid: boolean, error: string }
    */
   validateVoiceName(name: string): NameValidationResult {
-    if (!name || typeof name !== 'string') {
-      return { valid: false, error: 'Voice name is required' };
+    if (!name || typeof name !== "string") {
+      return { valid: false, error: "Voice name is required" };
     }
 
     const trimmed = name.trim();
-    
+
     if (trimmed.length === 0) {
-      return { valid: false, error: 'Voice name cannot be empty' };
+      return { valid: false, error: "Voice name cannot be empty" };
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return { valid: false, error: `Voice name cannot exceed ${this.MAX_NAME_LENGTH} characters` };
+      return {
+        valid: false,
+        error: `Voice name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
+      };
     }
 
     return { valid: true, name: trimmed };
@@ -140,43 +157,48 @@ class VoiceStorageService {
       }
 
       if (!(audioFile instanceof Blob)) {
-        throw new Error('Invalid audio file format. Expected Blob or File.');
+        throw new Error("Invalid audio file format. Expected Blob or File.");
       }
 
       if (audioFile.size > this.MAX_FILE_SIZE) {
-        throw new Error(`Audio file too large. Maximum size is ${this.MAX_FILE_SIZE / 1024 / 1024}MB`);
+        throw new Error(
+          `Audio file too large. Maximum size is ${this.MAX_FILE_SIZE / 1024 / 1024}MB`,
+        );
       }
 
       if (!referenceText || referenceText.trim().length === 0) {
-        throw new Error('Reference text is required');
+        throw new Error("Reference text is required");
       }
 
       const voiceData = {
         name: validatedName,
         audioData: audioFile,
         referenceText: referenceText.trim(),
-        language: language || 'en',
+        language: language || "en",
         metadata: {
-          fileName: 'name' in audioFile && typeof (audioFile as { name?: unknown }).name === 'string'
-            ? ((audioFile as { name: string }).name)
-            : 'audio.wav',
+          fileName:
+            "name" in audioFile &&
+            typeof (audioFile as { name?: unknown }).name === "string"
+              ? (audioFile as { name: string }).name
+              : "audio.wav",
           fileType: audioFile.type,
           fileSize: audioFile.size,
-          duration: typeof metadata.duration === 'number' ? metadata.duration : null,
+          duration:
+            typeof metadata.duration === "number" ? metadata.duration : null,
           uploadedAt: Date.now(),
           trained: false,
           checkpointPath: null,
-          ...metadata
-        }
+          ...metadata,
+        },
       };
 
       await storageServiceProxy.fileSave(voiceId, voiceData, this.CATEGORY);
 
-      Logger.log('VoiceStorage', `Voice saved: ${voiceId} (${validatedName})`);
-      
+      Logger.log("VoiceStorage", `Voice saved: ${voiceId} (${validatedName})`);
+
       return voiceId;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to save voice:', error);
+      Logger.error("VoiceStorage", "Failed to save voice:", error);
       throw error;
     }
   }
@@ -191,7 +213,7 @@ class VoiceStorageService {
       const voiceData = await storageServiceProxy.fileLoad(voiceId);
       return normalizeVoice(voiceData);
     } catch (error) {
-      Logger.error('VoiceStorage', `Failed to get voice ${voiceId}:`, error);
+      Logger.error("VoiceStorage", `Failed to get voice ${voiceId}:`, error);
       return null;
     }
   }
@@ -202,9 +224,11 @@ class VoiceStorageService {
    */
   async getAllVoices(): Promise<StoredVoiceWithId[]> {
     try {
-      const allVoices = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allVoices = await storageServiceProxy.filesGetByCategory(
+        this.CATEGORY,
+      );
       const allVoiceRecords = isRecord(allVoices) ? allVoices : {};
-      
+
       const voicesArray = Object.entries(allVoiceRecords)
         .map(([id, data]) => {
           const voice = normalizeVoice(data);
@@ -215,10 +239,10 @@ class VoiceStorageService {
         })
         .filter((voice): voice is StoredVoiceWithId => voice !== null);
 
-      Logger.log('VoiceStorage', `Retrieved ${voicesArray.length} voices`);
+      Logger.log("VoiceStorage", `Retrieved ${voicesArray.length} voices`);
       return voicesArray;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to get all voices:', error);
+      Logger.error("VoiceStorage", "Failed to get all voices:", error);
       return [];
     }
   }
@@ -231,10 +255,10 @@ class VoiceStorageService {
   async deleteVoice(voiceId: string): Promise<boolean> {
     try {
       await storageServiceProxy.fileRemove(voiceId);
-      Logger.log('VoiceStorage', `Voice deleted: ${voiceId}`);
+      Logger.log("VoiceStorage", `Voice deleted: ${voiceId}`);
       return true;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to delete voice:', error);
+      Logger.error("VoiceStorage", "Failed to delete voice:", error);
       throw error;
     }
   }
@@ -245,23 +269,26 @@ class VoiceStorageService {
    * @param {Object} updates - Metadata updates
    * @returns {Promise<void>}
    */
-  async updateVoiceMetadata(voiceId: string, updates: UnknownRecord): Promise<void> {
+  async updateVoiceMetadata(
+    voiceId: string,
+    updates: UnknownRecord,
+  ): Promise<void> {
     try {
       const voiceData = await this.getVoice(voiceId);
       if (!voiceData) {
         throw new Error(`Voice ${voiceId} not found`);
       }
-      
+
       voiceData.metadata = {
         ...voiceData.metadata,
         ...updates,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       };
 
       await storageServiceProxy.fileSave(voiceId, voiceData, this.CATEGORY);
-      Logger.log('VoiceStorage', `Voice metadata updated: ${voiceId}`);
+      Logger.log("VoiceStorage", `Voice metadata updated: ${voiceId}`);
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to update voice metadata:', error);
+      Logger.error("VoiceStorage", "Failed to update voice metadata:", error);
       throw error;
     }
   }
@@ -274,16 +301,16 @@ class VoiceStorageService {
     try {
       const voices = await this.getAllVoices();
       let totalSize = 0;
-      
+
       for (const voice of voices) {
         if (voice.audioData?.size) {
           totalSize += voice.audioData.size;
         }
       }
-      
+
       return totalSize;
     } catch (error) {
-      Logger.error('VoiceStorage', 'Failed to get total size:', error);
+      Logger.error("VoiceStorage", "Failed to get total size:", error);
       return 0;
     }
   }

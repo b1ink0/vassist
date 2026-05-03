@@ -3,27 +3,46 @@
  * Centralized application state management
  */
 
-import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import type * as React from 'react';
-import ChatService from '../services/ChatService';
-import type { ChatNode, FlatChatMessage, ChatMessageInput, ChatRole, ExportedChatTree } from '../services/ChatService';
-import { 
-  AIServiceProxy, 
-  TTSServiceProxy, 
-  StorageServiceProxy, 
-  SummarizerServiceProxy, 
-  TranslatorServiceProxy, 
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from "react";
+import type * as React from "react";
+import ChatService from "../services/ChatService";
+import type {
+  ChatNode,
+  FlatChatMessage,
+  ChatMessageInput,
+  ChatRole,
+  ExportedChatTree,
+} from "../services/ChatService";
+import {
+  AIServiceProxy,
+  TTSServiceProxy,
+  StorageServiceProxy,
+  SummarizerServiceProxy,
+  TranslatorServiceProxy,
   LanguageDetectorServiceProxy,
   RewriterServiceProxy,
-  WriterServiceProxy
-} from '../services/proxies';
-import VoiceConversationService, { ConversationStates } from '../services/VoiceConversationService';
-import chatHistoryService from '../services/ChatHistoryService';
-import Logger from '../services/LoggerService';
-import { useDesktop } from './DesktopContext';
-import { isDesktop, isInputWindow } from '../utils/PlatformUtils';
-import type { PositionManagerLike, SavedModelPositionLike, SceneWithMetadata } from '../babylon/types';
-import type { AssistantHandle } from '../types/assistant';
+  WriterServiceProxy,
+} from "../services/proxies";
+import VoiceConversationService, {
+  ConversationStates,
+} from "../services/VoiceConversationService";
+import chatHistoryService from "../services/ChatHistoryService";
+import Logger from "../services/LoggerService";
+import { useDesktop } from "./DesktopContext";
+import { isDesktop, isInputWindow } from "../utils/PlatformUtils";
+import type {
+  PositionManagerLike,
+  SavedModelPositionLike,
+  SceneWithMetadata,
+} from "../babylon/types";
+import type { AssistantHandle } from "../types/assistant";
 
 interface ChatMessageItem {
   id: string;
@@ -35,7 +54,10 @@ interface ChatMessageItem {
 }
 
 interface AppPositionManager extends PositionManagerLike {
-  applyPreset: (preset: string, options?: { modelSizePx?: { width: number; height: number } }) => void;
+  applyPreset: (
+    preset: string,
+    options?: { modelSizePx?: { width: number; height: number } },
+  ) => void;
 }
 
 interface UIConfigState {
@@ -55,7 +77,12 @@ interface AIConfigState {
   aiFeatures?: {
     translator?: { enabled?: boolean; defaultTargetLanguage?: string };
     languageDetector?: { enabled?: boolean };
-    summarizer?: { enabled?: boolean; defaultType?: string; defaultFormat?: string; defaultLength?: string };
+    summarizer?: {
+      enabled?: boolean;
+      defaultType?: string;
+      defaultFormat?: string;
+      defaultLength?: string;
+    };
     rewriter?: { enabled?: boolean };
     writer?: { enabled?: boolean };
   };
@@ -68,7 +95,15 @@ type HistoryMessage = {
   audios?: Array<string | Blob | File>;
 };
 
-type PendingDropValue = string | number | boolean | Blob | File | null | undefined | Array<string | number | boolean | Blob | File | null>;
+type PendingDropValue =
+  | string
+  | number
+  | boolean
+  | Blob
+  | File
+  | null
+  | undefined
+  | Array<string | number | boolean | Blob | File | null>;
 type PendingDropData = Record<string, PendingDropValue>;
 type ChatHistorySelection = { chatId: string };
 
@@ -96,14 +131,22 @@ const normalizeHistoryTreeNode = (node: ChatNode): HistoryTreeNode => {
   const normalized: HistoryTreeNode = {};
 
   for (const [key, value] of Object.entries(node)) {
-    if (key === 'images' || key === 'audios' || key === 'branches' || value === undefined) {
+    if (
+      key === "images" ||
+      key === "audios" ||
+      key === "branches" ||
+      value === undefined
+    ) {
       continue;
     }
     normalized[key] = value;
   }
 
   if (Array.isArray(node.images)) {
-    const images = node.images.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob);
+    const images = node.images.filter(
+      (value): value is string | Blob =>
+        typeof value === "string" || value instanceof Blob,
+    );
     if (images.length > 0) {
       normalized.images = images;
     } else {
@@ -112,7 +155,10 @@ const normalizeHistoryTreeNode = (node: ChatNode): HistoryTreeNode => {
   }
 
   if (Array.isArray(node.audios)) {
-    const audios = node.audios.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob);
+    const audios = node.audios.filter(
+      (value): value is string | Blob =>
+        typeof value === "string" || value instanceof Blob,
+    );
     if (audios.length > 0) {
       normalized.audios = audios;
     } else {
@@ -121,8 +167,9 @@ const normalizeHistoryTreeNode = (node: ChatNode): HistoryTreeNode => {
   }
 
   if (Array.isArray(node.branches)) {
-    normalized.branches = node.branches
-      .map((branch) => normalizeHistoryTreeNode(branch));
+    normalized.branches = node.branches.map((branch) =>
+      normalizeHistoryTreeNode(branch),
+    );
   }
 
   return normalized;
@@ -131,16 +178,20 @@ const normalizeHistoryTreeNode = (node: ChatNode): HistoryTreeNode => {
 const toChatMessageItems = (messages: FlatChatMessage[]): ChatMessageItem[] => {
   return messages.map((message, index) => {
     const images = Array.isArray(message.images)
-      ? message.images.filter((value): value is string => typeof value === 'string')
+      ? message.images.filter(
+          (value): value is string => typeof value === "string",
+        )
       : undefined;
     const audios = Array.isArray(message.audios)
-      ? message.audios.filter((value): value is string => typeof value === 'string')
+      ? message.audios.filter(
+          (value): value is string => typeof value === "string",
+        )
       : undefined;
 
     const base: ChatMessageItem = {
       id: message.id || `msg_${index}`,
-      role: message.role || 'user',
-      content: message.content || '',
+      role: message.role || "user",
+      content: message.content || "",
       timestamp: message.timestamp,
       parentId: message.parentId,
       branchInfo: message.branchInfo,
@@ -163,27 +214,25 @@ const toAIConversation = (messages: ChatMessageItem[]) => {
   return messages.map((message) => ({
     role: message.role as ChatRole,
     content: message.content,
-    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
-    ...(message.audios && message.audios.length > 0 ? { audios: message.audios } : {}),
+    ...(message.images && message.images.length > 0
+      ? { images: message.images }
+      : {}),
+    ...(message.audios && message.audios.length > 0
+      ? { audios: message.audios }
+      : {}),
   }));
 };
 
-const toChatMessageInputs = (messages: FlatChatMessage[]): ChatMessageInput[] => {
-  return messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-    images: message.images,
-    audios: message.audios,
-  }));
-};
-
-const toChatMessageInputsFromHistory = (messages: HistoryMessage[]): ChatMessageInput[] => {
+const toChatMessageInputsFromHistory = (
+  messages: HistoryMessage[],
+): ChatMessageInput[] => {
   return messages.map((message) => {
     const roleValue = message.role;
-    const role: ChatRole = roleValue === 'assistant' || roleValue === 'system' ? roleValue : 'user';
+    const role: ChatRole =
+      roleValue === "assistant" || roleValue === "system" ? roleValue : "user";
     return {
       role,
-      content: message.content || '',
+      content: message.content || "",
       ...(Array.isArray(message.images) ? { images: message.images } : {}),
       ...(Array.isArray(message.audios) ? { audios: message.audios } : {}),
     };
@@ -197,7 +246,11 @@ interface AppContextValue {
   assistantRef: React.MutableRefObject<AssistantHandle | null>;
   sceneRef: React.MutableRefObject<SceneWithMetadata | null>;
   positionManagerRef: React.MutableRefObject<AppPositionManager | null>;
-  handleAssistantReady: (payload: { animationManager: object | null; positionManager: AppPositionManager | null; scene: SceneWithMetadata }) => void;
+  handleAssistantReady: (payload: {
+    animationManager: object | null;
+    positionManager: AppPositionManager | null;
+    scene: SceneWithMetadata;
+  }) => void;
   setIsAssistantReady: React.Dispatch<React.SetStateAction<boolean>>;
   setIsChatUIReady: React.Dispatch<React.SetStateAction<boolean>>;
 
@@ -215,7 +268,9 @@ interface AppContextValue {
   setIsProcessing: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentChatId: React.Dispatch<React.SetStateAction<string | null>>;
   setIsTempChat: React.Dispatch<React.SetStateAction<boolean>>;
-  setPendingDropData: React.Dispatch<React.SetStateAction<PendingDropData | null>>;
+  setPendingDropData: React.Dispatch<
+    React.SetStateAction<PendingDropData | null>
+  >;
 
   isVoiceMode: boolean;
   isSpeaking: boolean;
@@ -240,15 +295,26 @@ interface AppContextValue {
   setIsDragOverChat: React.Dispatch<React.SetStateAction<boolean>>;
 
   buttonPosition: { x: number; y: number };
-  setButtonPosition: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  setButtonPosition: React.Dispatch<
+    React.SetStateAction<{ x: number; y: number }>
+  >;
 
   modelOverlayPos: { x: number; y: number; width: number; height: number };
-  setModelOverlayPos: React.Dispatch<React.SetStateAction<{ x: number; y: number; width: number; height: number }>>;
+  setModelOverlayPos: React.Dispatch<
+    React.SetStateAction<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>
+  >;
   showModelLoadingOverlay: boolean;
   setShowModelLoadingOverlay: React.Dispatch<React.SetStateAction<boolean>>;
 
   savedModelPosition: SavedModelPositionLike | null;
-  setSavedModelPosition: React.Dispatch<React.SetStateAction<SavedModelPositionLike | null>>;
+  setSavedModelPosition: React.Dispatch<
+    React.SetStateAction<SavedModelPositionLike | null>
+  >;
 
   toggleChat: () => void;
   openChat: () => void;
@@ -258,25 +324,40 @@ interface AppContextValue {
   loadChatFromHistory: (chatData: ChatHistorySelection) => Promise<void>;
   updateChatMessages: (messages: ChatMessageItem[]) => void;
 
-  editUserMessage: (messageId: string, newContent: string, newImages?: string[] | null, newAudios?: string[] | null) => Promise<void>;
+  editUserMessage: (
+    messageId: string,
+    newContent: string,
+    newImages?: string[] | null,
+    newAudios?: string[] | null,
+  ) => Promise<void>;
   regenerateAIMessage: (messageId: string) => Promise<void>;
   switchToBranch: (parentId: string, branchIndex: number) => void;
   previousBranch: (messageId: string) => void;
   nextBranch: (messageId: string) => void;
-  regenerateWithStreamingRef: React.MutableRefObject<(() => Promise<void>) | null>;
-  editWithStreamingRef: React.MutableRefObject<((messageId: string) => Promise<void>) | null>;
+  regenerateWithStreamingRef: React.MutableRefObject<
+    (() => Promise<void>) | null
+  >;
+  editWithStreamingRef: React.MutableRefObject<
+    ((messageId: string) => Promise<void>) | null
+  >;
 
   startButtonDrag: () => void;
   endButtonDrag: () => void;
   startModelDrag: () => void;
   endModelDrag: () => void;
-  updateButtonPosition: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  updateButtonPosition: React.Dispatch<
+    React.SetStateAction<{ x: number; y: number }>
+  >;
 
   toggleSettingsPanel: () => void;
   toggleHistoryPanel: () => void;
 
   handleSummarize: (text: string) => Promise<string>;
-  handleTranslate: (text: string, sourceLanguage: string, targetLanguageOverride?: string) => Promise<string>;
+  handleTranslate: (
+    text: string,
+    sourceLanguage: string,
+    targetLanguageOverride?: string,
+  ) => Promise<string>;
   handleAddToChat: (data: PendingDropData | null, autoSend?: boolean) => void;
 
   sceneKey: number;
@@ -292,7 +373,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 export const useApp = (): AppContextValue => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within AppProvider');
+    throw new Error("useApp must be used within AppProvider");
   }
   return context;
 };
@@ -300,13 +381,15 @@ export const useApp = (): AppContextValue => {
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const { api } = useDesktop();
   const hasNotifiedFrontendReadyRef = useRef(false);
-  
+
   // ========================================
   // ASSISTANT STATE
   // ========================================
   const [isAssistantReady, setIsAssistantReady] = useState(false);
   const [isChatUIReady, setIsChatUIReady] = useState(false);
-  const [enableModelLoading, setEnableModelLoading] = useState<boolean | null>(null);
+  const [enableModelLoading, setEnableModelLoading] = useState<boolean | null>(
+    null,
+  );
   const assistantRef = useRef<AssistantHandle | null>(null);
   const sceneRef = useRef<SceneWithMetadata | null>(null);
   const positionManagerRef = useRef<AppPositionManager | null>(null);
@@ -326,7 +409,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isTempChat, setIsTempChat] = useState(false);
-  const [pendingDropData, setPendingDropData] = useState<PendingDropData | null>(null);
+  const [pendingDropData, setPendingDropData] =
+    useState<PendingDropData | null>(null);
 
   // ========================================
   // VOICE & TTS STATE
@@ -343,8 +427,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // ========================================
   // MESSAGE PLAYBACK STATE
   // ========================================
-  const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState<number | null>(null);
+  const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(
+    null,
+  );
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState<number | null>(
+    null,
+  );
 
   // ========================================
   // DRAG STATE
@@ -357,17 +445,23 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // POSITION STATE (for chat-only mode)
   // ========================================
   const [buttonPosition, setButtonPosition] = useState({ x: -100, y: -100 });
-  
+
   // ========================================
   // MODEL OVERLAY STATE
   // ========================================
-  const [modelOverlayPos, setModelOverlayPos] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [modelOverlayPos, setModelOverlayPos] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const [showModelLoadingOverlay, setShowModelLoadingOverlay] = useState(false);
-  
+
   // ========================================
   // SAVED MODEL POSITION (for tab visibility unmount/remount)
   // ========================================
-  const [savedModelPosition, setSavedModelPosition] = useState<SavedModelPositionLike | null>(null);
+  const [savedModelPosition, setSavedModelPosition] =
+    useState<SavedModelPositionLike | null>(null);
 
   // ========================================
   // SCENE RELOAD STATE
@@ -377,93 +471,117 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // ========================================
   // ASSISTANT INITIALIZATION
   // ========================================
-  
+
   // Load configs on mount
   useEffect(() => {
     const loadConfigs = async () => {
       try {
         // Load UI config
-        const loadedUIConfigRaw = await StorageServiceProxy.configLoad('uiConfig');
-        const loadedUIConfig = (loadedUIConfigRaw && typeof loadedUIConfigRaw === 'object')
-          ? (loadedUIConfigRaw as UIConfigState)
-          : { enableModelLoading: true };
-        Logger.log('AppContext', 'UI Config loaded:', loadedUIConfig);
+        const loadedUIConfigRaw =
+          await StorageServiceProxy.configLoad("uiConfig");
+        const loadedUIConfig =
+          loadedUIConfigRaw && typeof loadedUIConfigRaw === "object"
+            ? (loadedUIConfigRaw as UIConfigState)
+            : { enableModelLoading: true };
+        Logger.log("AppContext", "UI Config loaded:", loadedUIConfig);
         setUIConfig(loadedUIConfig);
         setEnableModelLoading(loadedUIConfig.enableModelLoading ?? true);
-        
+
         // Load AI config
-        const loadedAIConfigRaw = await StorageServiceProxy.configLoad('aiConfig');
-        const loadedAIConfig = (loadedAIConfigRaw && typeof loadedAIConfigRaw === 'object')
-          ? (loadedAIConfigRaw as AIConfigState)
-          : {};
-        Logger.log('AppContext', 'AI Config loaded:', loadedAIConfig);
+        const loadedAIConfigRaw =
+          await StorageServiceProxy.configLoad("aiConfig");
+        const loadedAIConfig =
+          loadedAIConfigRaw && typeof loadedAIConfigRaw === "object"
+            ? (loadedAIConfigRaw as AIConfigState)
+            : {};
+        Logger.log("AppContext", "AI Config loaded:", loadedAIConfig);
         setAIConfig(loadedAIConfig);
-        
+
         // Configure services (only if provider is set)
         try {
           if (loadedAIConfig.provider) {
             await AIServiceProxy.configure(loadedAIConfig);
-            Logger.log('AppContext', 'AI Service configured');
+            Logger.log("AppContext", "AI Service configured");
           } else {
-            Logger.log('AppContext', 'Skipping AI Service configuration - no provider set');
+            Logger.log(
+              "AppContext",
+              "Skipping AI Service configuration - no provider set",
+            );
           }
-          
+
           // Configure AI Features services if enabled (only if we have a provider)
           if (loadedAIConfig.provider) {
             if (loadedAIConfig.aiFeatures?.translator?.enabled !== false) {
               await TranslatorServiceProxy.configure(loadedAIConfig);
-              Logger.log('AppContext', 'Translator Service configured');
+              Logger.log("AppContext", "Translator Service configured");
             }
-            if (loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false) {
+            if (
+              loadedAIConfig.aiFeatures?.languageDetector?.enabled !== false
+            ) {
               await LanguageDetectorServiceProxy.configure(loadedAIConfig);
-              Logger.log('AppContext', 'Language Detector Service configured');
+              Logger.log("AppContext", "Language Detector Service configured");
             }
             if (loadedAIConfig.aiFeatures?.summarizer?.enabled !== false) {
               await SummarizerServiceProxy.configure(loadedAIConfig);
-              Logger.log('AppContext', 'Summarizer Service configured');
+              Logger.log("AppContext", "Summarizer Service configured");
             }
           }
           if (loadedAIConfig.aiFeatures?.rewriter?.enabled !== false) {
             await RewriterServiceProxy.configure(loadedAIConfig);
-            Logger.log('AppContext', 'Rewriter Service configured');
+            Logger.log("AppContext", "Rewriter Service configured");
           }
           if (loadedAIConfig.aiFeatures?.writer?.enabled !== false) {
             await WriterServiceProxy.configure(loadedAIConfig);
-            Logger.log('AppContext', 'Writer Service configured');
+            Logger.log("AppContext", "Writer Service configured");
           }
         } catch (error) {
-          Logger.warn('AppContext', 'Failed to configure services:', error);
+          Logger.warn("AppContext", "Failed to configure services:", error);
         }
       } catch (error) {
-        Logger.error('AppContext', 'Failed to load configs:', error);
+        Logger.error("AppContext", "Failed to load configs:", error);
         setEnableModelLoading(true);
       }
     };
-    
+
     loadConfigs();
-    
+
     // Listen for config changes (when saved in ConfigContext)
     const handleConfigChange = async (event: Event) => {
-      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object') {
+      if (
+        !(event instanceof CustomEvent) ||
+        !event.detail ||
+        typeof event.detail !== "object"
+      ) {
         return;
       }
-      const detail = event.detail as { type?: string; config?: UIConfigState | AIConfigState };
-      if (detail.type === 'aiConfig') {
+      const detail = event.detail as {
+        type?: string;
+        config?: UIConfigState | AIConfigState;
+      };
+      if (detail.type === "aiConfig") {
         const updatedConfig = detail.config as AIConfigState;
-        Logger.log('AppContext', 'AI Config updated from settings:', updatedConfig);
+        Logger.log(
+          "AppContext",
+          "AI Config updated from settings:",
+          updatedConfig,
+        );
         setAIConfig(updatedConfig);
-      } else if (detail.type === 'uiConfig') {
+      } else if (detail.type === "uiConfig") {
         const updatedConfig = detail.config as UIConfigState;
-        Logger.log('AppContext', 'UI Config updated from settings:', updatedConfig);
+        Logger.log(
+          "AppContext",
+          "UI Config updated from settings:",
+          updatedConfig,
+        );
         setUIConfig(updatedConfig);
         setEnableModelLoading(updatedConfig.enableModelLoading ?? true);
       }
     };
-    
-    window.addEventListener('vassist-config-updated', handleConfigChange);
-    
+
+    window.addEventListener("vassist-config-updated", handleConfigChange);
+
     return () => {
-      window.removeEventListener('vassist-config-updated', handleConfigChange);
+      window.removeEventListener("vassist-config-updated", handleConfigChange);
     };
   }, []);
 
@@ -473,35 +591,46 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       const timer = setTimeout(() => {
         setIsAssistantReady(true);
         setIsChatUIReady(true);
-        Logger.log('AppContext', 'Running in chat-only mode (no 3D model)');
+        Logger.log("AppContext", "Running in chat-only mode (no 3D model)");
       }, 800);
-      
+
       return () => clearTimeout(timer);
     }
   }, [enableModelLoading]);
 
-    const notifyFrontendReady = useCallback((reason: string) => {
-    if (!__DESKTOP_MODE__ || isInputWindow || !api?.window?.frontendReady) {
-      return;
-    }
+  const notifyFrontendReady = useCallback(
+    (reason: string) => {
+      if (!__DESKTOP_MODE__ || isInputWindow || !api?.window?.frontendReady) {
+        return;
+      }
 
-    if (hasNotifiedFrontendReadyRef.current) {
-      return;
-    }
+      if (hasNotifiedFrontendReadyRef.current) {
+        return;
+      }
 
-    api.window.frontendReady()
-      .then(() => {
-        hasNotifiedFrontendReadyRef.current = true;
-        Logger.log('AppContext', `Notified Electron that frontend is ready (${reason})`);
-      })
-      .catch(err => {
-        Logger.error('AppContext', `Failed to notify Electron frontend ready (${reason}):`, err);
-      });
-  }, [api]);
+      api.window
+        .frontendReady()
+        .then(() => {
+          hasNotifiedFrontendReadyRef.current = true;
+          Logger.log(
+            "AppContext",
+            `Notified Electron that frontend is ready (${reason})`,
+          );
+        })
+        .catch((err) => {
+          Logger.error(
+            "AppContext",
+            `Failed to notify Electron frontend ready (${reason}):`,
+            err,
+          );
+        });
+    },
+    [api],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      notifyFrontendReady('startup');
+      notifyFrontendReady("startup");
     }, 300);
 
     return () => clearTimeout(timer);
@@ -510,19 +639,32 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Handle assistant ready callback
    */
-  // eslint-disable-next-line no-unused-vars
-  const handleAssistantReady = useCallback(({ animationManager, positionManager, scene }: { animationManager: object | null; positionManager: AppPositionManager | null; scene: SceneWithMetadata }) => {
-    Logger.log('AppContext', 'VirtualAssistant ready!');
-    setIsAssistantReady(true);
-    setIsChatUIReady(true);
-    
-    positionManagerRef.current = positionManager;
-    sceneRef.current = scene;
-    
-    Logger.log('AppContext', 'Position manager ref set, ready for position tracking');
-    
-    notifyFrontendReady('assistant-ready');
-  }, [notifyFrontendReady]);
+  const handleAssistantReady = useCallback(
+    ({
+      animationManager: _animationManager,
+      positionManager,
+      scene,
+    }: {
+      animationManager: object | null;
+      positionManager: AppPositionManager | null;
+      scene: SceneWithMetadata;
+    }) => {
+      Logger.log("AppContext", "VirtualAssistant ready!");
+      setIsAssistantReady(true);
+      setIsChatUIReady(true);
+
+      positionManagerRef.current = positionManager;
+      sceneRef.current = scene;
+
+      Logger.log(
+        "AppContext",
+        "Position manager ref set, ready for position tracking",
+      );
+
+      notifyFrontendReady("assistant-ready");
+    },
+    [notifyFrontendReady],
+  );
 
   // ========================================
   // VOICE & TTS TRACKING
@@ -532,7 +674,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // Skip in input window as ChatInput handles it there
   useEffect(() => {
     if (isInputWindow) return;
-    
+
     const handleStateChange = (state: string) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
     };
@@ -549,11 +691,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Only poll when NOT in voice mode
     if (isVoiceMode) return;
-    
+
     const interval = setInterval(() => {
       // isCurrentlyPlaying now correctly returns true only when audio is actually playing
       const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
-      setIsSpeaking(prev => {
+      setIsSpeaking((prev) => {
         // Only update state if value actually changed to prevent unnecessary re-renders
         if (prev !== isPlaying) {
           return isPlaying;
@@ -572,95 +714,114 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Summarize text using configured AI service
    */
-  const handleSummarize = useCallback(async (text: string) => {
-    // Check if explicitly disabled (undefined/null means enabled by default)
-    if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
-      throw new Error('Summarizer is disabled in settings');
-    }
-    
-    const options = {
-      type: aiConfig?.aiFeatures?.summarizer?.defaultType || 'tldr',
-      format: aiConfig?.aiFeatures?.summarizer?.defaultFormat || 'plain-text',
-      length: aiConfig?.aiFeatures?.summarizer?.defaultLength || 'medium',
-    };
-    
-    return await SummarizerServiceProxy.summarize(text, options);
-  }, [aiConfig]);
+  const handleSummarize = useCallback(
+    async (text: string) => {
+      // Check if explicitly disabled (undefined/null means enabled by default)
+      if (aiConfig?.aiFeatures?.summarizer?.enabled === false) {
+        throw new Error("Summarizer is disabled in settings");
+      }
+
+      const options = {
+        type: aiConfig?.aiFeatures?.summarizer?.defaultType || "tldr",
+        format: aiConfig?.aiFeatures?.summarizer?.defaultFormat || "plain-text",
+        length: aiConfig?.aiFeatures?.summarizer?.defaultLength || "medium",
+      };
+
+      return await SummarizerServiceProxy.summarize(text, options);
+    },
+    [aiConfig],
+  );
 
   /**
    * Translate text using configured AI service
    */
-  const handleTranslate = useCallback(async (text: string, sourceLanguage: string, targetLanguageOverride?: string) => {
-    // Check if explicitly disabled (undefined/null means enabled by default)
-    if (aiConfig?.aiFeatures?.translator?.enabled === false) {
-      throw new Error('Translator is disabled in settings');
-    }
-    
-    const targetLanguage = targetLanguageOverride || aiConfig?.aiFeatures?.translator?.defaultTargetLanguage || 'en';
-    
-    // Auto-detect source language if not provided
-    let sourceLang = sourceLanguage;
-    if (!sourceLang) {
-      try {
-        const detectionResults = await LanguageDetectorServiceProxy.detect(text);
+  const handleTranslate = useCallback(
+    async (
+      text: string,
+      sourceLanguage: string,
+      targetLanguageOverride?: string,
+    ) => {
+      // Check if explicitly disabled (undefined/null means enabled by default)
+      if (aiConfig?.aiFeatures?.translator?.enabled === false) {
+        throw new Error("Translator is disabled in settings");
+      }
+
+      const targetLanguage =
+        targetLanguageOverride ||
+        aiConfig?.aiFeatures?.translator?.defaultTargetLanguage ||
+        "en";
+
+      // Auto-detect source language if not provided
+      let sourceLang = sourceLanguage;
+      if (!sourceLang) {
+        try {
+          const detectionResults =
+            await LanguageDetectorServiceProxy.detect(text);
           const firstResult = detectionResults?.[0];
           if (firstResult?.detectedLanguage) {
             sourceLang = firstResult.detectedLanguage;
+          }
+        } catch (err) {
+          Logger.warn("AppContext", "Language detection failed:", err);
+          throw new Error("Could not detect source language");
         }
-      } catch (err) {
-        Logger.warn('AppContext', 'Language detection failed:', err);
-        throw new Error('Could not detect source language');
       }
-    }
-    
-    // Don't translate if source and target are the same
-    if (sourceLang === targetLanguage) {
-      return text;
-    }
-    
-    return await TranslatorServiceProxy.translate(text, sourceLang, targetLanguage);
-  }, [aiConfig]);
+
+      // Don't translate if source and target are the same
+      if (sourceLang === targetLanguage) {
+        return text;
+      }
+
+      return await TranslatorServiceProxy.translate(
+        text,
+        sourceLang,
+        targetLanguage,
+      );
+    },
+    [aiConfig],
+  );
 
   /**
    * Add content to chat (using existing drag-drop flow)
    * @param {Object} data - The data to add to chat
    * @param {boolean} autoSend - Whether to automatically send the message (default: false)
    */
-  const handleAddToChat = useCallback((data: PendingDropData | null, autoSend = false) => {
-    Logger.log('AppContext', 'Add to chat:', data, 'autoSend:', autoSend);
-    
-    // Open chat if closed
-    if (!isChatContainerVisible || !isChatInputVisible) {
-      setPendingDropData(data);
-      setIsChatInputVisible(true);
-      setIsChatContainerVisible(true);
-      
-      // Focus input after chat opens
-      setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
-        window.dispatchEvent(event);
-      }, 100);
-      
-      // If auto-send, trigger send after chat opens and content is added
-      if (autoSend) {
+  const handleAddToChat = useCallback(
+    (data: PendingDropData | null, autoSend = false) => {
+      Logger.log("AppContext", "Add to chat:", data, "autoSend:", autoSend);
+
+      // Open chat if closed
+      if (!isChatContainerVisible || !isChatInputVisible) {
+        setPendingDropData(data);
+        setIsChatInputVisible(true);
+        setIsChatContainerVisible(true);
+
+        // Focus input after chat opens
         setTimeout(() => {
-          const sendEvent = new CustomEvent('chatAutoSend');
-          window.dispatchEvent(sendEvent);
-        }, 300);
+          const event = new CustomEvent("focusChatInput");
+          window.dispatchEvent(event);
+        }, 100);
+
+        // If auto-send, trigger send after chat opens and content is added
+        if (autoSend) {
+          setTimeout(() => {
+            const sendEvent = new CustomEvent("chatAutoSend");
+            window.dispatchEvent(sendEvent);
+          }, 300);
+        }
+      } else {
+        // Dispatch event for ChatInput to handle
+        const safeDetail = data ? { ...data, autoSend } : { autoSend };
+        const event = new CustomEvent("chatDragDrop", {
+          detail: safeDetail,
+          bubbles: true,
+          composed: true,
+        });
+        window.dispatchEvent(event);
       }
-    } else {
-      // Dispatch event for ChatInput to handle
-      const safeDetail = data
-        ? { ...data, autoSend }
-        : { autoSend };
-      const event = new CustomEvent('chatDragDrop', {
-        detail: safeDetail,
-        bubbles: true,
-        composed: true,
-      });
-      window.dispatchEvent(event);
-    }
-  }, [isChatContainerVisible, isChatInputVisible]);
+    },
+    [isChatContainerVisible, isChatInputVisible],
+  );
 
   // ========================================
   // CHAT ACTIONS
@@ -670,8 +831,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Toggle chat visibility
    */
   const toggleChat = useCallback(() => {
-    Logger.log('AppContext', 'Toggle chat');
-    
+    Logger.log("AppContext", "Toggle chat");
+
     if (isChatContainerVisible || isChatInputVisible) {
       setIsChatInputVisible(false);
       setIsChatContainerVisible(false);
@@ -679,10 +840,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       setIsChatInputVisible(true);
       setIsChatContainerVisible(true);
-      
+
       // Focus input after chat opens
       setTimeout(() => {
-        const event = new CustomEvent('focusChatInput');
+        const event = new CustomEvent("focusChatInput");
         window.dispatchEvent(event);
       }, 100);
     }
@@ -692,13 +853,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Open chat (without toggle)
    */
   const openChat = useCallback(() => {
-    Logger.log('AppContext', 'Open chat');
+    Logger.log("AppContext", "Open chat");
     setIsChatInputVisible(true);
     setIsChatContainerVisible(true);
-    
+
     // Focus input after chat opens
     setTimeout(() => {
-      const event = new CustomEvent('focusChatInput');
+      const event = new CustomEvent("focusChatInput");
       window.dispatchEvent(event);
     }, 100);
   }, []);
@@ -707,15 +868,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Close chat
    */
   const closeChat = useCallback(() => {
-    Logger.log('AppContext', 'Close chat');
+    Logger.log("AppContext", "Close chat");
     setIsChatInputVisible(false);
     setIsChatContainerVisible(false);
-    
+
     // Stop playback and abort TTS generation
     TTSServiceProxy.stopPlayback();
-    
+
     // Dispatch event to abort TTS generation stream in ChatController
-    const event = new CustomEvent('abortTTSGeneration');
+    const event = new CustomEvent("abortTTSGeneration");
     window.dispatchEvent(event);
   }, []);
 
@@ -723,39 +884,39 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Clear chat
    */
   const clearChat = useCallback(async () => {
-    Logger.log('AppContext', 'Clear chat');
-    
+    Logger.log("AppContext", "Clear chat");
+
     // If temp, delete from history
     if (isTempChat && currentChatId) {
       try {
         await chatHistoryService.deleteChat(currentChatId);
-        Logger.log('AppContext', 'Temp chat deleted:', currentChatId);
+        Logger.log("AppContext", "Temp chat deleted:", currentChatId);
       } catch (error) {
-        Logger.error('AppContext', 'Failed to delete temp chat:', error);
+        Logger.error("AppContext", "Failed to delete temp chat:", error);
       }
     }
-    
+
     // Stop AI generation
     AIServiceProxy.abortRequest();
-    
+
     // Stop TTS
     TTSServiceProxy.stopPlayback();
-    
+
     // Dispatch event to abort TTS generation stream in ChatController
-    const event = new CustomEvent('abortTTSGeneration');
+    const event = new CustomEvent("abortTTSGeneration");
     window.dispatchEvent(event);
-    
+
     // Return assistant to idle
     const isReady = assistantRef.current?.isReady;
     const idle = assistantRef.current?.idle;
     if (isReady && isReady() && idle) {
       idle();
     }
-    
+
     // Clear messages and tree
     ChatService.clearMessages();
     setChatMessages([]);
-    
+
     // Reset state
     setIsProcessing(false);
     setCurrentChatId(null);
@@ -766,85 +927,92 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Stop generation/TTS
    */
   const stopGeneration = useCallback(() => {
-    Logger.log('AppContext', 'Stop generation');
-    
+    Logger.log("AppContext", "Stop generation");
+
     AIServiceProxy.abortRequest();
     TTSServiceProxy.stopPlayback();
-    
+
     // Dispatch event to abort TTS generation stream in ChatController
-    const event = new CustomEvent('abortTTSGeneration');
+    const event = new CustomEvent("abortTTSGeneration");
     window.dispatchEvent(event);
-    
+
     if (isVoiceMode) {
       VoiceConversationService.interrupt();
     }
-    
+
     const isReady = assistantRef.current?.isReady;
     const idle = assistantRef.current?.idle;
     if (isReady && isReady() && idle) {
       idle();
     }
-    
+
     setIsProcessing(false);
   }, [isVoiceMode]);
 
   /**
    * Load chat from history
    */
-  const loadChatFromHistory = useCallback(async (chatData: ChatHistorySelection) => {
-    const { chatId } = chatData;
-    Logger.log('AppContext', 'Loading chat from history:', chatId);
-    
-    try {
-      // Stop ongoing operations
-      AIServiceProxy.abortRequest();
-      TTSServiceProxy.stopPlayback();
-      
-      // Load full chat
-      const fullChat = await chatHistoryService.loadChat(chatId);
-      
-      // Load tree if available, otherwise set flat messages
-      if (fullChat.chatServiceData) {
-        ChatService.importTree(fullChat.chatServiceData);
-        const messages = toChatMessageItems(ChatService.getMessages());
-        setChatMessages(messages);
-        Logger.log('AppContext', 'Loaded chat with tree structure');
-      } else if (fullChat.messages) {
-        // Backward compatibility: set flat messages
-        const historyMessages = fullChat.messages as HistoryMessage[];
-        ChatService.setMessages(toChatMessageInputsFromHistory(historyMessages));
-        const normalizedMessages = toChatMessageItems(ChatService.getMessages());
-        setChatMessages(normalizedMessages);
-        Logger.log('AppContext', 'Loaded flat messages');
+  const loadChatFromHistory = useCallback(
+    async (chatData: ChatHistorySelection) => {
+      const { chatId } = chatData;
+      Logger.log("AppContext", "Loading chat from history:", chatId);
+
+      try {
+        // Stop ongoing operations
+        AIServiceProxy.abortRequest();
+        TTSServiceProxy.stopPlayback();
+
+        // Load full chat
+        const fullChat = await chatHistoryService.loadChat(chatId);
+
+        // Load tree if available, otherwise set flat messages
+        if (fullChat.chatServiceData) {
+          ChatService.importTree(fullChat.chatServiceData);
+          const messages = toChatMessageItems(ChatService.getMessages());
+          setChatMessages(messages);
+          Logger.log("AppContext", "Loaded chat with tree structure");
+        } else if (fullChat.messages) {
+          // Backward compatibility: set flat messages
+          const historyMessages = fullChat.messages as HistoryMessage[];
+          ChatService.setMessages(
+            toChatMessageInputsFromHistory(historyMessages),
+          );
+          const normalizedMessages = toChatMessageItems(
+            ChatService.getMessages(),
+          );
+          setChatMessages(normalizedMessages);
+          Logger.log("AppContext", "Loaded flat messages");
+        }
+
+        // Set current chat ID
+        setCurrentChatId(fullChat.chatId);
+        setIsTempChat(false);
+
+        // Mark as not temp
+        await chatHistoryService.markAsTempChat(fullChat.chatId, false);
+
+        // Make sure chat UI is visible
+        if (!isChatContainerVisible) {
+          setIsChatContainerVisible(true);
+          setIsChatInputVisible(true);
+
+          // Focus input after chat opens
+          setTimeout(() => {
+            const event = new CustomEvent("focusChatInput");
+            window.dispatchEvent(event);
+          }, 100);
+        }
+
+        // Reset processing state
+        setIsProcessing(false);
+
+        Logger.log("AppContext", "Chat loaded successfully");
+      } catch (error) {
+        Logger.error("AppContext", "Failed to load chat:", error);
       }
-      
-      // Set current chat ID
-      setCurrentChatId(fullChat.chatId);
-      setIsTempChat(false);
-      
-      // Mark as not temp
-      await chatHistoryService.markAsTempChat(fullChat.chatId, false);
-      
-      // Make sure chat UI is visible
-      if (!isChatContainerVisible) {
-        setIsChatContainerVisible(true);
-        setIsChatInputVisible(true);
-        
-        // Focus input after chat opens
-        setTimeout(() => {
-          const event = new CustomEvent('focusChatInput');
-          window.dispatchEvent(event);
-        }, 100);
-      }
-      
-      // Reset processing state
-      setIsProcessing(false);
-      
-      Logger.log('AppContext', 'Chat loaded successfully');
-    } catch (error) {
-      Logger.error('AppContext', 'Failed to load chat:', error);
-    }
-  }, [isChatContainerVisible]);
+    },
+    [isChatContainerVisible],
+  );
 
   /**
    * Update chat messages (typically called by ChatController)
@@ -855,81 +1023,109 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Callback refs for streaming regeneration (populated by ChatController)
   const regenerateWithStreamingRef = useRef<(() => Promise<void>) | null>(null);
-  const editWithStreamingRef = useRef<((messageId: string) => Promise<void>) | null>(null);
+  const editWithStreamingRef = useRef<
+    ((messageId: string) => Promise<void>) | null
+  >(null);
 
   /**
    * Edit a user message (creates new branch, regenerates AI response with streaming)
    */
-  const editUserMessage = useCallback(async (messageId: string, newContent: string, newImages: string[] | null = null, newAudios: string[] | null = null) => {
-    Logger.log('AppContext', 'Editing user message:', messageId);
-    
-    try {
-      // Edit in tree (creates new branch)
-      const newMessageId = ChatService.editMessage(
-        messageId,
-        newContent,
-        null,
-        null
-      );
-      
-      // Update UI with new active path (without AI response yet)
-      const updatedMessages = toChatMessageItems(ChatService.getMessages());
-      setChatMessages(updatedMessages);
-      
-      // Use streaming regeneration if available
-      if (editWithStreamingRef.current) {
-        await editWithStreamingRef.current(newMessageId);
-      } else {
-        Logger.warn('AppContext', 'Streaming handler not available, using fallback');
-        // Fallback to non-streaming
-        const conversationContext = updatedMessages.slice(0, updatedMessages.findIndex(m => m.id === newMessageId) + 1);
-          const aiResponse = await AIServiceProxy.sendMessage(toAIConversation(conversationContext));
-        
-        if (aiResponse?.success && aiResponse?.response) {
-          ChatService.addMessage('assistant', aiResponse.response, null, null);
+  const editUserMessage = useCallback(
+    async (
+      messageId: string,
+      newContent: string,
+      _newImages: string[] | null = null,
+      _newAudios: string[] | null = null,
+    ) => {
+      Logger.log("AppContext", "Editing user message:", messageId);
+
+      try {
+        // Edit in tree (creates new branch)
+        const newMessageId = ChatService.editMessage(
+          messageId,
+          newContent,
+          null,
+          null,
+        );
+
+        // Update UI with new active path (without AI response yet)
+        const updatedMessages = toChatMessageItems(ChatService.getMessages());
+        setChatMessages(updatedMessages);
+
+        // Use streaming regeneration if available
+        if (editWithStreamingRef.current) {
+          await editWithStreamingRef.current(newMessageId);
+        } else {
+          Logger.warn(
+            "AppContext",
+            "Streaming handler not available, using fallback",
+          );
+          // Fallback to non-streaming
+          const conversationContext = updatedMessages.slice(
+            0,
+            updatedMessages.findIndex((m) => m.id === newMessageId) + 1,
+          );
+          const aiResponse = await AIServiceProxy.sendMessage(
+            toAIConversation(conversationContext),
+          );
+
+          if (aiResponse?.success && aiResponse?.response) {
+            ChatService.addMessage(
+              "assistant",
+              aiResponse.response,
+              null,
+              null,
+            );
             setChatMessages(toChatMessageItems(ChatService.getMessages()));
+          }
         }
+
+        return;
+      } catch (error) {
+        Logger.error("AppContext", "Failed to edit message:", error);
+        setIsProcessing(false);
+        throw error;
       }
-      
-      return;
-    } catch (error) {
-      Logger.error('AppContext', 'Failed to edit message:', error);
-      setIsProcessing(false);
-      throw error;
-    }
-  }, []);
+    },
+    [],
+  );
 
   /**
    * Regenerate AI response
    */
   const regenerateAIMessage = useCallback(async (messageId: string) => {
-    Logger.log('AppContext', 'Regenerating AI message:', messageId);
-    
+    Logger.log("AppContext", "Regenerating AI message:", messageId);
+
     try {
       // Create regeneration point (removes this AI message and everything after)
       ChatService.createRegenerationBranch(messageId);
-      
+
       // Update UI (show conversation up to parent)
       const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
-      
+
       // Use streaming regeneration if available
       if (regenerateWithStreamingRef.current) {
         await regenerateWithStreamingRef.current();
       } else {
-        Logger.warn('AppContext', 'Streaming handler not available, using fallback');
+        Logger.warn(
+          "AppContext",
+          "Streaming handler not available, using fallback",
+        );
         // Fallback to non-streaming
         setIsProcessing(true);
-          const aiResponse = await AIServiceProxy.sendMessage(toAIConversation(updatedMessages));
-        
+        const aiResponse = await AIServiceProxy.sendMessage(
+          toAIConversation(updatedMessages),
+        );
+
         if (aiResponse?.success && aiResponse?.response) {
-          ChatService.addMessage('assistant', aiResponse.response, null, null);
-            setChatMessages(toChatMessageItems(ChatService.getMessages()));
+          ChatService.addMessage("assistant", aiResponse.response, null, null);
+          setChatMessages(toChatMessageItems(ChatService.getMessages()));
         }
         setIsProcessing(false);
       }
     } catch (error) {
-      Logger.error('AppContext', 'Failed to regenerate message:', error);
+      Logger.error("AppContext", "Failed to regenerate message:", error);
       setIsProcessing(false);
       throw error;
     }
@@ -938,37 +1134,50 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Switch to a different branch
    */
-  const switchToBranch = useCallback((parentId: string, branchIndex: number) => {
-    Logger.log('AppContext', 'Switching to branch:', branchIndex, 'at parent:', parentId);
-    
-    try {
-      ChatService.switchBranch(parentId, branchIndex);
-      
-      // Update UI
-      const updatedMessages = toChatMessageItems(ChatService.getMessages());
-      setChatMessages(updatedMessages);
-      
-      Logger.log('AppContext', 'Branch switched successfully');
-    } catch (error) {
-      Logger.error('AppContext', 'Failed to switch branch:', error);
-      throw error;
-    }
-  }, []);
+  const switchToBranch = useCallback(
+    (parentId: string, branchIndex: number) => {
+      Logger.log(
+        "AppContext",
+        "Switching to branch:",
+        branchIndex,
+        "at parent:",
+        parentId,
+      );
+
+      try {
+        ChatService.switchBranch(parentId, branchIndex);
+
+        // Update UI
+        const updatedMessages = toChatMessageItems(ChatService.getMessages());
+        setChatMessages(updatedMessages);
+
+        Logger.log("AppContext", "Branch switched successfully");
+      } catch (error) {
+        Logger.error("AppContext", "Failed to switch branch:", error);
+        throw error;
+      }
+    },
+    [],
+  );
 
   /**
    * Navigate to previous branch
    */
   const previousBranch = useCallback((messageId: string) => {
-    Logger.log('AppContext', 'Navigating to previous branch');
-    
+    Logger.log("AppContext", "Navigating to previous branch");
+
     try {
       ChatService.previousBranch(messageId);
-      
+
       // Update UI
       const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
     } catch (error) {
-      Logger.error('AppContext', 'Failed to navigate to previous branch:', error);
+      Logger.error(
+        "AppContext",
+        "Failed to navigate to previous branch:",
+        error,
+      );
     }
   }, []);
 
@@ -976,16 +1185,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Navigate to next branch
    */
   const nextBranch = useCallback((messageId: string) => {
-    Logger.log('AppContext', 'Navigating to next branch');
-    
+    Logger.log("AppContext", "Navigating to next branch");
+
     try {
       ChatService.nextBranch(messageId);
-      
+
       // Update UI
       const updatedMessages = toChatMessageItems(ChatService.getMessages());
       setChatMessages(updatedMessages);
     } catch (error) {
-      Logger.error('AppContext', 'Failed to navigate to next branch:', error);
+      Logger.error("AppContext", "Failed to navigate to next branch:", error);
     }
   }, []);
 
@@ -1024,9 +1233,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Update button position
    */
-  const updateButtonPosition = useCallback((pos: React.SetStateAction<{ x: number; y: number }>) => {
-    setButtonPosition(pos);
-  }, []);
+  const updateButtonPosition = useCallback(
+    (pos: React.SetStateAction<{ x: number; y: number }>) => {
+      setButtonPosition(pos);
+    },
+    [],
+  );
 
   // ========================================
   // PANEL ACTIONS
@@ -1036,14 +1248,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
    * Toggle settings panel
    */
   const toggleSettingsPanel = useCallback(() => {
-    setIsSettingsPanelOpen(prev => !prev);
+    setIsSettingsPanelOpen((prev) => !prev);
   }, []);
 
   /**
    * Toggle history panel
    */
   const toggleHistoryPanel = useCallback(() => {
-    setIsHistoryPanelOpen(prev => !prev);
+    setIsHistoryPanelOpen((prev) => !prev);
   }, []);
 
   // ========================================
@@ -1058,7 +1270,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const autoSaveTimer = setTimeout(async () => {
       try {
         if (isTempChat) {
-          Logger.log('AppContext', 'Skipping save - temp mode enabled');
+          Logger.log("AppContext", "Skipping save - temp mode enabled");
           return;
         }
 
@@ -1066,7 +1278,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (!chatId) {
           chatId = chatHistoryService.generateChatId();
           setCurrentChatId(chatId);
-          Logger.log('AppContext', 'New chat created for auto-save:', chatId);
+          Logger.log("AppContext", "New chat created for auto-save:", chatId);
         }
 
         const sourceUrl = window.location.href;
@@ -1075,20 +1287,28 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           exportTree: () => {
             const exportedTree: ExportedChatTree = ChatService.exportTree();
             const rawTree = exportedTree.tree;
-            const normalizedTree = rawTree && typeof rawTree === 'object'
-              ? normalizeHistoryTreeNode(rawTree)
-              : undefined;
+            const normalizedTree =
+              rawTree && typeof rawTree === "object"
+                ? normalizeHistoryTreeNode(rawTree)
+                : undefined;
             return {
               ...exportedTree,
               ...(normalizedTree ? { tree: normalizedTree } : {}),
             } as HistoryTreeData;
           },
-          getMessages: () => ChatService.getMessages().map((message) => ({
-            role: message.role,
-            content: message.content,
-            images: message.images.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob),
-            audios: message.audios.filter((value): value is string | Blob => typeof value === 'string' || value instanceof Blob),
-          })),
+          getMessages: () =>
+            ChatService.getMessages().map((message) => ({
+              role: message.role,
+              content: message.content,
+              images: message.images.filter(
+                (value): value is string | Blob =>
+                  typeof value === "string" || value instanceof Blob,
+              ),
+              audios: message.audios.filter(
+                (value): value is string | Blob =>
+                  typeof value === "string" || value instanceof Blob,
+              ),
+            })),
         };
 
         await chatHistoryService.saveChat({
@@ -1101,9 +1321,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           },
         });
 
-        Logger.log('AppContext', 'Chat auto-saved (debounced):', chatId);
+        Logger.log("AppContext", "Chat auto-saved (debounced):", chatId);
       } catch (error) {
-        Logger.error('AppContext', 'Failed to auto-save chat (debounced):', error);
+        Logger.error(
+          "AppContext",
+          "Failed to auto-save chat (debounced):",
+          error,
+        );
       }
     }, 2000);
 
@@ -1120,24 +1344,24 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const parseKeyEvent = useCallback((event: KeyboardEvent): string | null => {
     const modifiers = [];
     let mainKey = event.key;
-    
+
     // Ignore modifier-only presses
-    if (['Control', 'Alt', 'Shift', 'Meta'].includes(mainKey)) {
+    if (["Control", "Alt", "Shift", "Meta"].includes(mainKey)) {
       return null;
     }
-    
+
     // Collect modifiers
-    if (event.ctrlKey) modifiers.push('Ctrl');
-    if (event.altKey) modifiers.push('Alt');
-    if (event.shiftKey) modifiers.push('Shift');
-    if (event.metaKey) modifiers.push('Meta');
-    
+    if (event.ctrlKey) modifiers.push("Ctrl");
+    if (event.altKey) modifiers.push("Alt");
+    if (event.shiftKey) modifiers.push("Shift");
+    if (event.metaKey) modifiers.push("Meta");
+
     // Normalize key name
     if (mainKey.length === 1) {
       mainKey = mainKey.toUpperCase();
     }
-    
-    return [...modifiers, mainKey].join('+');
+
+    return [...modifiers, mainKey].join("+");
   }, []);
 
   /**
@@ -1147,53 +1371,63 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     if (isDesktop) return;
 
     if (!uiConfig?.shortcuts?.enabled) return;
-    
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const combo = parseKeyEvent(event);
       if (!combo) return;
-      
+
       const shortcuts = uiConfig?.shortcuts;
       if (!shortcuts) {
         return;
       }
-      
+
       // Check for Open Chat shortcut
       if (shortcuts.openChat && combo === shortcuts.openChat) {
         event.preventDefault();
         event.stopPropagation();
-        Logger.log('AppContext', 'Toggle Chat shortcut triggered:', combo);
+        Logger.log("AppContext", "Toggle Chat shortcut triggered:", combo);
         toggleChat();
         return;
       }
-      
+
       // Check for Toggle Avatar shortcut
       if (shortcuts.toggleMode && combo === shortcuts.toggleMode) {
         event.preventDefault();
         event.stopPropagation();
-        Logger.log('AppContext', 'Toggle Avatar shortcut triggered:', combo);
-        
+        Logger.log("AppContext", "Toggle Avatar shortcut triggered:", combo);
+
         const newValue = !uiConfig.enableModelLoading;
-        
-        setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
+
+        setUIConfig((prev) => ({ ...prev, enableModelLoading: newValue }));
         setEnableModelLoading(newValue);
-        
+
         // Create updated config and notify listeners
         const updatedConfig = { ...uiConfig, enableModelLoading: newValue };
-        window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: updatedConfig }));
-        
-        StorageServiceProxy.configSave('uiConfig', updatedConfig)
+        window.dispatchEvent(
+          new CustomEvent("uiConfigUpdated", { detail: updatedConfig }),
+        );
+
+        StorageServiceProxy.configSave("uiConfig", updatedConfig)
           .then(() => {
-            Logger.log('AppContext', 'Avatar visibility toggled via shortcut:', newValue);
+            Logger.log(
+              "AppContext",
+              "Avatar visibility toggled via shortcut:",
+              newValue,
+            );
           })
-          .catch(err => {
-            Logger.error('AppContext', 'Failed to toggle avatar via shortcut:', err);
+          .catch((err) => {
+            Logger.error(
+              "AppContext",
+              "Failed to toggle avatar via shortcut:",
+              err,
+            );
           });
         return;
       }
     };
-    
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [uiConfig, parseKeyEvent, toggleChat]);
 
   /**
@@ -1202,45 +1436,56 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Only in desktop main window (not input window)
     if (!isDesktop || !api?.shortcuts || isInputWindow) return;
-    
+
     // Register shortcuts when config changes
     if (uiConfig?.shortcuts) {
-      api.shortcuts.register(uiConfig.shortcuts)
+      api.shortcuts
+        .register(uiConfig.shortcuts)
         .then(() => {
-          Logger.log('AppContext', 'Global shortcuts registered in Electron');
+          Logger.log("AppContext", "Global shortcuts registered in Electron");
         })
-        .catch(err => {
-          Logger.error('AppContext', 'Failed to register shortcuts:', err);
+        .catch((err) => {
+          Logger.error("AppContext", "Failed to register shortcuts:", err);
         });
     }
-    
+
     // Listen for shortcut events from main process
     const cleanupOpenChat = api.shortcuts.onOpenChat(() => {
-      Logger.log('AppContext', 'Open Chat shortcut triggered from Electron');
+      Logger.log("AppContext", "Open Chat shortcut triggered from Electron");
       toggleChat();
     });
-    
+
     const cleanupToggleModel = api.shortcuts.onToggleModel(() => {
-      Logger.log('AppContext', 'Toggle Model shortcut triggered from Electron');
-      
+      Logger.log("AppContext", "Toggle Model shortcut triggered from Electron");
+
       const newValue = !(uiConfig?.enableModelLoading ?? true);
-      
-      setUIConfig(prev => ({ ...prev, enableModelLoading: newValue }));
+
+      setUIConfig((prev) => ({ ...prev, enableModelLoading: newValue }));
       setEnableModelLoading(newValue);
-      
+
       // Create updated config and notify listeners
       const updatedConfig = { ...uiConfig, enableModelLoading: newValue };
-      window.dispatchEvent(new CustomEvent('uiConfigUpdated', { detail: updatedConfig }));
-      
-      StorageServiceProxy.configSave('uiConfig', updatedConfig)
+      window.dispatchEvent(
+        new CustomEvent("uiConfigUpdated", { detail: updatedConfig }),
+      );
+
+      StorageServiceProxy.configSave("uiConfig", updatedConfig)
         .then(() => {
-          Logger.log('AppContext', 'Avatar visibility toggled via Electron shortcut:', newValue);
+          Logger.log(
+            "AppContext",
+            "Avatar visibility toggled via Electron shortcut:",
+            newValue,
+          );
         })
-        .catch(err => {
-          Logger.error('AppContext', 'Failed to toggle avatar via Electron shortcut:', err);
+        .catch((err) => {
+          Logger.error(
+            "AppContext",
+            "Failed to toggle avatar via Electron shortcut:",
+            err,
+          );
         });
     });
-    
+
     return () => {
       cleanupOpenChat?.();
       cleanupToggleModel?.();
@@ -1251,37 +1496,52 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // SCENE RELOAD
   // ========================================
   const reloadScene = useCallback(() => {
-    Logger.log('AppContext', 'Reloading 3D scene - clearing saved position');
+    Logger.log("AppContext", "Reloading 3D scene - clearing saved position");
     setSavedModelPosition(null);
-    setSceneKey(prev => prev + 1);
+    setSceneKey((prev) => prev + 1);
   }, []);
 
-  const forceChatOnlyMode = useCallback((reason = '3d-scene-error') => {
-    Logger.error('AppContext', `Forcing chat-only mode due to 3D failure (${reason})`);
+  const forceChatOnlyMode = useCallback(
+    (reason = "3d-scene-error") => {
+      Logger.error(
+        "AppContext",
+        `Forcing chat-only mode due to 3D failure (${reason})`,
+      );
 
-    setEnableModelLoading(false);
-    setIsAssistantReady(true);
-    setIsChatUIReady(true);
-    setShowModelLoadingOverlay(false);
+      setEnableModelLoading(false);
+      setIsAssistantReady(true);
+      setIsChatUIReady(true);
+      setShowModelLoadingOverlay(false);
 
-    const nextUIConfig: UIConfigState = {
-      ...(uiConfig ?? {}),
-      enableModelLoading: false,
-    };
+      const nextUIConfig: UIConfigState = {
+        ...(uiConfig ?? {}),
+        enableModelLoading: false,
+      };
 
-    setUIConfig(nextUIConfig);
-    window.dispatchEvent(new CustomEvent('vassist-config-updated', {
-      detail: { type: 'uiConfig', config: nextUIConfig }
-    }));
+      setUIConfig(nextUIConfig);
+      window.dispatchEvent(
+        new CustomEvent("vassist-config-updated", {
+          detail: { type: "uiConfig", config: nextUIConfig },
+        }),
+      );
 
-    StorageServiceProxy.configSave('uiConfig', nextUIConfig)
-      .then(() => {
-        Logger.log('AppContext', 'Persisted chat-only fallback config after 3D failure');
-      })
-      .catch((error) => {
-        Logger.error('AppContext', 'Failed to persist chat-only fallback config:', error);
-      });
-  }, [uiConfig]);
+      StorageServiceProxy.configSave("uiConfig", nextUIConfig)
+        .then(() => {
+          Logger.log(
+            "AppContext",
+            "Persisted chat-only fallback config after 3D failure",
+          );
+        })
+        .catch((error) => {
+          Logger.error(
+            "AppContext",
+            "Failed to persist chat-only fallback config:",
+            error,
+          );
+        });
+    },
+    [uiConfig],
+  );
 
   // ========================================
   // CONTEXT VALUE
@@ -1307,7 +1567,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     currentChatId,
     isTempChat,
     pendingDropData,
-    
+
     // Chat UI setters
     setIsChatInputVisible,
     setIsChatContainerVisible,
@@ -1352,7 +1612,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     setModelOverlayPos,
     showModelLoadingOverlay,
     setShowModelLoadingOverlay,
-    
+
     // Saved model position (persists across unmount/remount)
     savedModelPosition,
     setSavedModelPosition,
@@ -1372,7 +1632,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     switchToBranch,
     previousBranch,
     nextBranch,
-    
+
     // Branching callback refs (for ChatController to populate)
     regenerateWithStreamingRef,
     editWithStreamingRef,

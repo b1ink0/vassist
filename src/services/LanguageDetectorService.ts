@@ -1,16 +1,20 @@
 /**
  * LanguageDetectorService - Multi-provider Language Detection service
- * 
+ *
  * Supports Chrome AI LanguageDetector API (on-device) and polyfills for OpenAI/Ollama.
  * Works in both extension mode (multi-tab) and dev mode (single instance).
  */
 
-import OpenAI from 'openai';
-import Logger from './LoggerService';
-import { isExtension } from '../utils/PlatformUtils';
+import OpenAI from "openai";
+import Logger from "./LoggerService";
+import { isExtension } from "../utils/PlatformUtils";
 
-type DetectorProvider = 'chrome-ai' | 'openai' | 'ollama';
-type DetectorAvailability = 'readily' | 'downloading' | 'downloadable' | 'unavailable';
+type DetectorProvider = "chrome-ai" | "openai" | "ollama";
+type DetectorAvailability =
+  | "readily"
+  | "downloading"
+  | "downloadable"
+  | "unavailable";
 
 type DetectionResult = { detectedLanguage: string; confidence: number };
 
@@ -21,13 +25,20 @@ interface DetectorSession {
 
 interface DetectorState {
   detectorSession: DetectorSession | null;
-  config: { provider: DetectorProvider; model?: string; temperature?: number } | null;
+  config: {
+    provider: DetectorProvider;
+    model?: string;
+    temperature?: number;
+  } | null;
   provider: DetectorProvider | null;
   llmClient: OpenAI | null;
 }
 
-const getLanguageDetectorApi = (): any => (self as typeof globalThis & { LanguageDetector?: any }).LanguageDetector ?? null;
-const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+const getLanguageDetectorApi = (): any =>
+  (self as typeof globalThis & { LanguageDetector?: any }).LanguageDetector ??
+  null;
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
 
 class LanguageDetectorService {
   private readonly isExtensionMode: boolean;
@@ -43,7 +54,7 @@ class LanguageDetectorService {
       provider: null,
       llmClient: null,
     };
-    
+
     if (this.isExtensionMode) {
       return;
     }
@@ -55,7 +66,7 @@ class LanguageDetectorService {
    */
   initTab(tabId: number): void {
     if (!this.isExtensionMode) return;
-    
+
     if (!this.tabStates.has(tabId)) {
       this.tabStates.set(tabId, {
         detectorSession: null,
@@ -63,7 +74,7 @@ class LanguageDetectorService {
         provider: null,
         llmClient: null,
       });
-      Logger.log('LanguageDetectorService', `Tab ${tabId} initialized`);
+      Logger.log("LanguageDetectorService", `Tab ${tabId} initialized`);
     }
   }
 
@@ -73,21 +84,25 @@ class LanguageDetectorService {
    */
   cleanupTab(tabId: number): void {
     if (!this.isExtensionMode) return;
-    
+
     const state = this.tabStates.get(tabId);
     if (state) {
       // Destroy detector session if it exists
       if (state.detectorSession) {
         try {
-          if (typeof state.detectorSession.destroy === 'function') {
+          if (typeof state.detectorSession.destroy === "function") {
             state.detectorSession.destroy();
           }
         } catch (error) {
-          Logger.warn('LanguageDetectorService', 'Error destroying session:', error);
+          Logger.warn(
+            "LanguageDetectorService",
+            "Error destroying session:",
+            error,
+          );
         }
       }
       this.tabStates.delete(tabId);
-      Logger.log('LanguageDetectorService', `Tab ${tabId} cleaned up`);
+      Logger.log("LanguageDetectorService", `Tab ${tabId} cleaned up`);
     }
   }
 
@@ -99,7 +114,7 @@ class LanguageDetectorService {
   _getState(tabId: number | null = null): DetectorState {
     if (this.isExtensionMode) {
       if (tabId === null) {
-        throw new Error('tabId is required in extension mode');
+        throw new Error("tabId is required in extension mode");
       }
       this.initTab(tabId);
       return this.tabStates.get(tabId) as DetectorState;
@@ -119,59 +134,69 @@ class LanguageDetectorService {
   async configure(config: any, tabId: number | null = null): Promise<boolean> {
     const state = this._getState(tabId);
     const { provider } = config;
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
-    Logger.log('other', `${logPrefix} Configuring provider: ${provider}`);
-    
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
+    Logger.log("other", `${logPrefix} Configuring provider: ${provider}`);
+
     try {
-      if (provider === 'chrome-ai') {
+      if (provider === "chrome-ai") {
         // Check Chrome AI LanguageDetector availability
         if (!getLanguageDetectorApi()) {
-          throw new Error('Chrome AI LanguageDetector not available. Chrome 138+ required.');
+          throw new Error(
+            "Chrome AI LanguageDetector not available. Chrome 138+ required.",
+          );
         }
-        
-        state.config = { provider: 'chrome-ai' };
-        state.provider = 'chrome-ai';
-        Logger.log('other', `${logPrefix} Chrome AI LanguageDetector configured`);
-      } 
-      else if (provider === 'openai') {
+
+        state.config = { provider: "chrome-ai" };
+        state.provider = "chrome-ai";
+        Logger.log(
+          "other",
+          `${logPrefix} Chrome AI LanguageDetector configured`,
+        );
+      } else if (provider === "openai") {
         const openaiConfig = config.openai;
         state.llmClient = new OpenAI({
           apiKey: openaiConfig.apiKey,
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
+
         state.config = {
-          provider: 'openai',
-          model: openaiConfig.model || 'gpt-4o-mini',
+          provider: "openai",
+          model: openaiConfig.model || "gpt-4o-mini",
           temperature: openaiConfig.temperature || 0.1,
         };
-        state.provider = 'openai';
-        Logger.log('other', `${logPrefix} OpenAI configured for language detection`);
-      }
-      else if (provider === 'ollama') {
+        state.provider = "openai";
+        Logger.log(
+          "other",
+          `${logPrefix} OpenAI configured for language detection`,
+        );
+      } else if (provider === "ollama") {
         const ollamaConfig = config.ollama;
         state.llmClient = new OpenAI({
-          apiKey: 'ollama',
-          baseURL: ollamaConfig.endpoint + '/v1',
+          apiKey: "ollama",
+          baseURL: ollamaConfig.endpoint + "/v1",
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
-        
+
         state.config = {
-          provider: 'ollama',
+          provider: "ollama",
           model: ollamaConfig.model,
           temperature: ollamaConfig.temperature || 0.1,
         };
-        state.provider = 'ollama';
-        Logger.log('other', `${logPrefix} Ollama configured for language detection`);
-      }
-      else {
+        state.provider = "ollama";
+        Logger.log(
+          "other",
+          `${logPrefix} Ollama configured for language detection`,
+        );
+      } else {
         throw new Error(`Unknown provider: ${provider}`);
       }
-      
+
       return true;
     } catch (error) {
-      Logger.error('other', `${logPrefix} Configuration failed:`, error);
+      Logger.error("other", `${logPrefix} Configuration failed:`, error);
       state.config = null;
       state.provider = null;
       state.llmClient = null;
@@ -194,31 +219,43 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<string>} 'readily', 'downloading', 'downloadable', or 'unavailable'
    */
-  async checkAvailability(tabId: number | null = null): Promise<DetectorAvailability> {
+  async checkAvailability(
+    tabId: number | null = null,
+  ): Promise<DetectorAvailability> {
     const state = this._getState(tabId);
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
     if (!state.provider) {
-      return 'unavailable';
+      return "unavailable";
     }
-    
-    if (state.provider === 'chrome-ai') {
+
+    if (state.provider === "chrome-ai") {
       const detectorApi = getLanguageDetectorApi();
       if (!detectorApi) {
-        return 'unavailable';
+        return "unavailable";
       }
-      
+
       try {
         const availability = await detectorApi.availability();
-        Logger.log('other', `${logPrefix} LanguageDetector availability:`, availability);
+        Logger.log(
+          "other",
+          `${logPrefix} LanguageDetector availability:`,
+          availability,
+        );
         return availability;
       } catch (error) {
-        Logger.error('other', `${logPrefix} Failed to check availability:`, error);
-        return 'unavailable';
+        Logger.error(
+          "other",
+          `${logPrefix} Failed to check availability:`,
+          error,
+        );
+        return "unavailable";
       }
     } else {
       // For OpenAI/Ollama, always ready (cloud-based)
-      return 'readily';
+      return "readily";
     }
   }
 
@@ -227,33 +264,41 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Object>} LanguageDetector session
    */
-  async _getOrCreateSession(tabId: number | null = null): Promise<DetectorSession | null> {
+  async _getOrCreateSession(
+    tabId: number | null = null,
+  ): Promise<DetectorSession | null> {
     const state = this._getState(tabId);
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
-    if (state.provider !== 'chrome-ai') {
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
+    if (state.provider !== "chrome-ai") {
       // No sessions for OpenAI/Ollama
       return null;
     }
-    
+
     if (state.detectorSession) {
       return state.detectorSession;
     }
-    
+
     // Create new Chrome AI LanguageDetector session
     try {
-      Logger.log('other', `${logPrefix} Creating language detector session`);
+      Logger.log("other", `${logPrefix} Creating language detector session`);
       const detectorApi = getLanguageDetectorApi();
       if (!detectorApi) {
-        throw new Error('LanguageDetector API unavailable');
+        throw new Error("LanguageDetector API unavailable");
       }
       const session = await detectorApi.create();
-      
+
       state.detectorSession = session;
-      Logger.log('other', `${logPrefix} Language detector session created`);
+      Logger.log("other", `${logPrefix} Language detector session created`);
       return session;
     } catch (error) {
-      Logger.error('other', `${logPrefix} Failed to create language detector session:`, error);
+      Logger.error(
+        "other",
+        `${logPrefix} Failed to create language detector session:`,
+        error,
+      );
       throw asError(error);
     }
   }
@@ -264,29 +309,41 @@ class LanguageDetectorService {
    * @param {number} tabId - Tab ID (extension mode only)
    * @returns {Promise<Array>} Array of {detectedLanguage: string, confidence: number} sorted by confidence
    */
-  async detect(text: string, tabId: number | null = null): Promise<DetectionResult[]> {
+  async detect(
+    text: string,
+    tabId: number | null = null,
+  ): Promise<DetectionResult[]> {
     const state = this._getState(tabId);
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
     if (!state.provider) {
-      throw new Error('LanguageDetectorService not configured');
+      throw new Error("LanguageDetectorService not configured");
     }
-    
-    Logger.log('other', `${logPrefix} Detecting language:`, text.substring(0, 50));
-    
-    if (state.provider === 'chrome-ai') {
+
+    Logger.log(
+      "other",
+      `${logPrefix} Detecting language:`,
+      text.substring(0, 50),
+    );
+
+    if (state.provider === "chrome-ai") {
       const session = await this._getOrCreateSession(tabId);
       if (!session) {
-        throw new Error('Language detector session unavailable');
+        throw new Error("Language detector session unavailable");
       }
       const results = await session.detect(text);
-      Logger.log('other', `${logPrefix} Detection complete:`, results.slice(0, 3));
+      Logger.log(
+        "other",
+        `${logPrefix} Detection complete:`,
+        results.slice(0, 3),
+      );
       return results;
-    } 
-    else if (state.provider === 'openai' || state.provider === 'ollama') {
+    } else if (state.provider === "openai" || state.provider === "ollama") {
       return await this._detectWithOpenAICompatible(text, tabId);
     }
-    
+
     throw new Error(`Unknown provider: ${state.provider}`);
   }
 
@@ -294,10 +351,15 @@ class LanguageDetectorService {
    * Detect language using OpenAI-compatible API (polyfill for OpenAI/Ollama)
    * @private
    */
-  async _detectWithOpenAICompatible(text: string, tabId: number | null = null): Promise<DetectionResult[]> {
+  async _detectWithOpenAICompatible(
+    text: string,
+    tabId: number | null = null,
+  ): Promise<DetectionResult[]> {
     const state = this._getState(tabId);
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
     const prompt = `Detect the language of the following text. Respond ONLY with a JSON array of language detections in this exact format, sorted by confidence (highest first):
 [
   {"detectedLanguage": "en", "confidence": 0.95},
@@ -307,33 +369,39 @@ class LanguageDetectorService {
 Use ISO 639-1 language codes (en, es, fr, de, ja, zh, etc.). The confidence values should sum to approximately 1.0.
 
 Text: ${text}`;
-    
+
     try {
       if (!state.llmClient || !state.config?.model) {
-        throw new Error('Language detector LLM client not configured');
+        throw new Error("Language detector LLM client not configured");
       }
       const response = await state.llmClient.chat.completions.create({
         model: state.config.model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: "user", content: prompt }],
         temperature: state.config.temperature ?? null,
       });
-      
-      const content = response.choices[0]?.message?.content?.trim() ?? '';
+
+      const content = response.choices[0]?.message?.content?.trim() ?? "";
       // Parse JSON from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        throw new Error('Failed to parse language detection response');
+        throw new Error("Failed to parse language detection response");
       }
-      
+
       const results = JSON.parse(jsonMatch[0]);
-      Logger.log('other', `${logPrefix} ${state.provider} detection complete:`, results.slice(0, 3));
+      Logger.log(
+        "other",
+        `${logPrefix} ${state.provider} detection complete:`,
+        results.slice(0, 3),
+      );
       return results as DetectionResult[];
     } catch (error) {
-      Logger.error('other', `${logPrefix} ${state.provider} detection failed:`, error);
+      Logger.error(
+        "other",
+        `${logPrefix} ${state.provider} detection failed:`,
+        error,
+      );
       // Fallback to English with low confidence
-      return [
-        { detectedLanguage: 'en', confidence: 0.5 }
-      ];
+      return [{ detectedLanguage: "en", confidence: 0.5 }];
     }
   }
 
@@ -343,16 +411,18 @@ Text: ${text}`;
    */
   async destroy(tabId: number | null = null): Promise<void> {
     const state = this._getState(tabId);
-    const logPrefix = this.isExtensionMode ? `[LanguageDetectorService] Tab ${tabId}` : '[LanguageDetectorService]';
-    
+    const logPrefix = this.isExtensionMode
+      ? `[LanguageDetectorService] Tab ${tabId}`
+      : "[LanguageDetectorService]";
+
     if (state.detectorSession) {
-      Logger.log('other', `${logPrefix} Destroying language detector session`);
+      Logger.log("other", `${logPrefix} Destroying language detector session`);
       try {
-        if (typeof state.detectorSession.destroy === 'function') {
+        if (typeof state.detectorSession.destroy === "function") {
           state.detectorSession.destroy();
         }
       } catch (error) {
-        Logger.warn('other', `${logPrefix} Error destroying session:`, error);
+        Logger.warn("other", `${logPrefix} Error destroying session:`, error);
       }
       state.detectorSession = null;
     }

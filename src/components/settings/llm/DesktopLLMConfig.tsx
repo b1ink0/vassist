@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Icon } from '../../icons';
-import { useDesktop } from '../../../contexts/DesktopContext';
-import { isDesktop } from '../../../utils/PlatformUtils';
-import { Button, Select, Input } from '../../ui';
-import LocalLLMModelManager from './LocalLLMModelManager';
-import { getLLMModelStorage, type DiscoveryResult } from '../../../services/LLMModelStorageService';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Icon } from "../../icons";
+import { useDesktop } from "../../../contexts/DesktopContext";
+import { isDesktop } from "../../../utils/PlatformUtils";
+import { Button, Select, Input } from "../../ui";
+import LocalLLMModelManager from "./LocalLLMModelManager";
+import {
+  getLLMModelStorage,
+  type DiscoveryResult,
+} from "../../../services/LLMModelStorageService";
 
 interface DesktopLLMConfigShape {
   endpoint?: string;
@@ -40,17 +43,30 @@ interface BackendProgress {
 
 interface DesktopLlmBridge {
   listModels: (customPath?: string | null) => Promise<unknown>;
-  pullModel: (modelName: string, customPath?: string | null) => Promise<unknown>;
+  pullModel: (
+    modelName: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
   downloadModel: (url: string, customPath?: string | null) => Promise<unknown>;
-  deleteModel: (filename: string, customPath?: string | null) => Promise<unknown>;
+  deleteModel: (
+    filename: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
   chooseModelFile: () => Promise<unknown>;
-  importModel: (filePath: string, customPath?: string | null) => Promise<unknown>;
+  importModel: (
+    filePath: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
   chooseModelsFolder: () => Promise<unknown>;
-  onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => (() => void) | undefined;
+  onDownloadProgress: (
+    callback: (progress: { percent: number; status: string }) => void,
+  ) => (() => void) | undefined;
   getBackendStatus: (backend?: string) => Promise<unknown>;
   installBackend: (backend: string) => Promise<unknown>;
   cancelBackendInstall: () => Promise<unknown>;
-  onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => (() => void) | undefined;
+  onBackendInstallProgress: (
+    callback: (progress: Record<string, unknown>) => void,
+  ) => (() => void) | undefined;
 }
 
 interface ModelEntry {
@@ -60,22 +76,24 @@ interface ModelEntry {
 }
 
 const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return false;
   }
   const record = value as Record<string, unknown>;
-  return typeof record.listModels === 'function'
-    && typeof record.pullModel === 'function'
-    && typeof record.downloadModel === 'function'
-    && typeof record.deleteModel === 'function'
-    && typeof record.chooseModelFile === 'function'
-    && typeof record.importModel === 'function'
-    && typeof record.chooseModelsFolder === 'function'
-    && typeof record.onDownloadProgress === 'function'
-    && typeof record.getBackendStatus === 'function'
-    && typeof record.installBackend === 'function'
-    && typeof record.cancelBackendInstall === 'function'
-    && typeof record.onBackendInstallProgress === 'function';
+  return (
+    typeof record.listModels === "function" &&
+    typeof record.pullModel === "function" &&
+    typeof record.downloadModel === "function" &&
+    typeof record.deleteModel === "function" &&
+    typeof record.chooseModelFile === "function" &&
+    typeof record.importModel === "function" &&
+    typeof record.chooseModelsFolder === "function" &&
+    typeof record.onDownloadProgress === "function" &&
+    typeof record.getBackendStatus === "function" &&
+    typeof record.installBackend === "function" &&
+    typeof record.cancelBackendInstall === "function" &&
+    typeof record.onBackendInstallProgress === "function"
+  );
 };
 
 interface DesktopLLMConfigProps {
@@ -97,37 +115,40 @@ const getErrorMessage = (error: unknown): string => {
 /**
  * Reusable Desktop LLM Configuration Component
  * Used in both setup wizard and settings panel for desktop-local LLM provider
- * 
+ *
  * @param {Object} config - Current LLM configuration (endpoint, model, etc.)
  * @param {Function} onChange - Callback when configuration changes
  * @param {boolean} isLightBackground - Whether component is on light background
  * @param {boolean} showTitle - Whether to show section title
  * @param {boolean} isSetupMode - Whether in setup wizard (affects UI slightly)
  */
-const DesktopLLMConfig = ({ 
-  config = {}, 
+const DesktopLLMConfig = ({
+  config = {},
   onChange,
   isLightBackground = false,
   isSetupMode = false,
   onRequestDeleteModel,
-  refreshTrigger
+  refreshTrigger,
 }: DesktopLLMConfigProps) => {
   const { api } = useDesktop();
-  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(
+    null,
+  );
   const [backendLoading, setBackendLoading] = useState(false);
-  const [backendError, setBackendError] = useState('');
-  const [backendProgress, setBackendProgress] = useState<BackendProgress | null>(null);
+  const [backendError, setBackendError] = useState("");
+  const [backendProgress, setBackendProgress] =
+    useState<BackendProgress | null>(null);
 
   const handleChange = (key: string, value: string | number | null) => {
     onChange({ [key]: value });
   };
 
   const handleModelSelect = (modelName: string) => {
-    handleChange('model', modelName);
+    handleChange("model", modelName);
   };
 
   const handleCustomPathChange = (path: string | null) => {
-    handleChange('customModelsPath', path);
+    handleChange("customModelsPath", path);
   };
 
   const desktopLlmBridge = isDesktopLlmBridge(api?.llm) ? api.llm : null;
@@ -139,52 +160,135 @@ const DesktopLLMConfig = ({
     const unsupportedDiscovery = async (): Promise<DiscoveryResult> => ({
       success: false,
       items: [],
-      error: 'Desktop model discovery is unavailable. Restart the desktop app to reload preload APIs.',
+      error:
+        "Desktop model discovery is unavailable. Restart the desktop app to reload preload APIs.",
     });
 
     return {
-      listModels: (customPath?: string | null) => desktopLlmBridge.listModels(customPath) as Promise<{ success: boolean; models?: ModelEntry[] }>,
-      pullModel: (modelName: string, customPath?: string | null) => desktopLlmBridge.pullModel(modelName, customPath) as Promise<{ success: boolean; error?: string }>,
-      downloadModel: (url: string, customPath?: string | null) => desktopLlmBridge.downloadModel(url, customPath) as Promise<{ success: boolean; error?: string }>,
-      searchOllamaModels: (query: string, page = 1, pageSize = 20) => desktopLlmBridge.searchOllamaModels
-        ? desktopLlmBridge.searchOllamaModels(query, page, pageSize) as Promise<DiscoveryResult>
-        : unsupportedDiscovery(),
-      listOllamaModelTags: (modelId: string, query = '', page = 1, pageSize = 20) => desktopLlmBridge.listOllamaModelTags
-        ? desktopLlmBridge.listOllamaModelTags(modelId, query, page, pageSize) as Promise<DiscoveryResult>
-        : unsupportedDiscovery(),
-      searchHuggingFaceModels: (query: string, cursor = '', pageSize = 20) => desktopLlmBridge.searchHuggingFaceModels
-        ? desktopLlmBridge.searchHuggingFaceModels(query, cursor, pageSize) as Promise<DiscoveryResult>
-        : unsupportedDiscovery(),
-      listHuggingFaceFiles: (repoId: string, query = '', page = 1, pageSize = 20) => desktopLlmBridge.listHuggingFaceFiles
-        ? desktopLlmBridge.listHuggingFaceFiles(repoId, query, page, pageSize) as Promise<DiscoveryResult>
-        : unsupportedDiscovery(),
-      deleteModel: (filename: string, customPath?: string | null) => desktopLlmBridge.deleteModel(filename, customPath) as Promise<{ success: boolean; error?: string }>,
-      chooseModelFile: () => desktopLlmBridge.chooseModelFile() as Promise<{ canceled?: boolean; path?: string }>,
-      importModel: (filePath: string, customPath?: string | null) => desktopLlmBridge.importModel(filePath, customPath) as Promise<{ success: boolean; error?: string }>,
-      chooseModelsFolder: () => desktopLlmBridge.chooseModelsFolder() as Promise<{ success: boolean; error?: string; path?: string }>,
-      onDownloadProgress: (callback: (progress: { percent: number; status: string }) => void) => {
+      listModels: (customPath?: string | null) =>
+        desktopLlmBridge.listModels(customPath) as Promise<{
+          success: boolean;
+          models?: ModelEntry[];
+        }>,
+      pullModel: (modelName: string, customPath?: string | null) =>
+        desktopLlmBridge.pullModel(modelName, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      downloadModel: (url: string, customPath?: string | null) =>
+        desktopLlmBridge.downloadModel(url, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      searchOllamaModels: (query: string, page = 1, pageSize = 20) =>
+        desktopLlmBridge.searchOllamaModels
+          ? (desktopLlmBridge.searchOllamaModels(
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      listOllamaModelTags: (
+        modelId: string,
+        query = "",
+        page = 1,
+        pageSize = 20,
+      ) =>
+        desktopLlmBridge.listOllamaModelTags
+          ? (desktopLlmBridge.listOllamaModelTags(
+              modelId,
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      searchHuggingFaceModels: (query: string, cursor = "", pageSize = 20) =>
+        desktopLlmBridge.searchHuggingFaceModels
+          ? (desktopLlmBridge.searchHuggingFaceModels(
+              query,
+              cursor,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      listHuggingFaceFiles: (
+        repoId: string,
+        query = "",
+        page = 1,
+        pageSize = 20,
+      ) =>
+        desktopLlmBridge.listHuggingFaceFiles
+          ? (desktopLlmBridge.listHuggingFaceFiles(
+              repoId,
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      deleteModel: (filename: string, customPath?: string | null) =>
+        desktopLlmBridge.deleteModel(filename, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      chooseModelFile: () =>
+        desktopLlmBridge.chooseModelFile() as Promise<{
+          canceled?: boolean;
+          path?: string;
+        }>,
+      importModel: (filePath: string, customPath?: string | null) =>
+        desktopLlmBridge.importModel(filePath, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      chooseModelsFolder: () =>
+        desktopLlmBridge.chooseModelsFolder() as Promise<{
+          success: boolean;
+          error?: string;
+          path?: string;
+        }>,
+      onDownloadProgress: (
+        callback: (progress: { percent: number; status: string }) => void,
+      ) => {
         const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
         return () => unsubscribe?.();
       },
-      getBackendStatus: (backend = 'auto') => desktopLlmBridge.getBackendStatus(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
-      installBackend: (backend: string) => desktopLlmBridge.installBackend(backend) as Promise<{ success: boolean } & Record<string, unknown>>,
-      cancelBackendInstall: () => desktopLlmBridge.cancelBackendInstall() as Promise<{ success: boolean } & Record<string, unknown>>,
-      onBackendInstallProgress: (callback: (progress: Record<string, unknown>) => void) => {
+      getBackendStatus: (backend = "auto") =>
+        desktopLlmBridge.getBackendStatus(backend) as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      installBackend: (backend: string) =>
+        desktopLlmBridge.installBackend(backend) as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      cancelBackendInstall: () =>
+        desktopLlmBridge.cancelBackendInstall() as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      onBackendInstallProgress: (
+        callback: (progress: Record<string, unknown>) => void,
+      ) => {
         const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
         return () => unsubscribe?.();
       },
     };
   }, [desktopLlmBridge]);
-  const storageService = useMemo(() => (isDesktop && desktopLlmApi ? getLLMModelStorage({ llm: desktopLlmApi }) : null), [desktopLlmApi]);
-  const selectedBackend = config.backend || 'auto';
+  const storageService = useMemo(
+    () =>
+      isDesktop && desktopLlmApi
+        ? getLLMModelStorage({ llm: desktopLlmApi })
+        : null,
+    [desktopLlmApi],
+  );
+  const selectedBackend = config.backend || "auto";
   const backendProgressBytes = useMemo(() => {
     if (!backendProgress) return null;
-    const downloaded = typeof backendProgress.downloadedBytes === 'number'
-      ? backendProgress.downloadedBytes
-      : null;
-    const total = typeof backendProgress.totalBytes === 'number'
-      ? backendProgress.totalBytes
-      : null;
+    const downloaded =
+      typeof backendProgress.downloadedBytes === "number"
+        ? backendProgress.downloadedBytes
+        : null;
+    const total =
+      typeof backendProgress.totalBytes === "number"
+        ? backendProgress.totalBytes
+        : null;
     if (downloaded === null) return null;
     return {
       downloadedMB: (downloaded / 1024 / 1024).toFixed(1),
@@ -206,7 +310,9 @@ const DesktopLLMConfig = ({
         setBackendError(status.error);
       }
     } catch (error: unknown) {
-      setBackendError(getErrorMessage(error) || 'Failed to load backend status');
+      setBackendError(
+        getErrorMessage(error) || "Failed to load backend status",
+      );
     }
   }, [selectedBackend, storageService]);
 
@@ -215,17 +321,19 @@ const DesktopLLMConfig = ({
 
     loadBackendStatus();
 
-    const unsubscribe = storageService.onBackendInstallProgress((progress: BackendProgress) => {
-      setBackendProgress(progress);
-      if (progress?.stage === 'done') {
-        setBackendLoading(false);
-        setBackendError('');
-        loadBackendStatus();
-      } else if (progress?.stage === 'error') {
-        setBackendLoading(false);
-        setBackendError(progress.status || 'Backend installation failed');
-      }
-    });
+    const unsubscribe = storageService.onBackendInstallProgress(
+      (progress: BackendProgress) => {
+        setBackendProgress(progress);
+        if (progress?.stage === "done") {
+          setBackendLoading(false);
+          setBackendError("");
+          loadBackendStatus();
+        } else if (progress?.stage === "error") {
+          setBackendLoading(false);
+          setBackendError(progress.status || "Backend installation failed");
+        }
+      },
+    );
 
     return () => unsubscribe?.();
   }, [storageService, selectedBackend, loadBackendStatus]);
@@ -234,18 +342,22 @@ const DesktopLLMConfig = ({
     if (!storageService) return;
 
     setBackendLoading(true);
-    setBackendError('');
-    setBackendProgress({ percent: 0, stage: 'install', status: 'Starting backend setup...' });
+    setBackendError("");
+    setBackendProgress({
+      percent: 0,
+      stage: "install",
+      status: "Starting backend setup...",
+    });
 
     try {
       const result = await storageService.installBackend(selectedBackend);
       if (!result?.success) {
         setBackendLoading(false);
-        setBackendError(result?.error || 'Backend installation failed');
+        setBackendError(result?.error || "Backend installation failed");
       }
     } catch (error: unknown) {
       setBackendLoading(false);
-      setBackendError(getErrorMessage(error) || 'Backend installation failed');
+      setBackendError(getErrorMessage(error) || "Backend installation failed");
     }
   };
 
@@ -254,9 +366,15 @@ const DesktopLLMConfig = ({
       {/* Info Banner */}
       <div className="p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-2">
-          <Icon name="cpu" size={18} className="text-white/90 shrink-0 mt-0.5" />
+          <Icon
+            name="cpu"
+            size={18}
+            className="text-white/90 shrink-0 mt-0.5"
+          />
           <p className="text-xs text-white/90">
-            <span className="font-semibold">Desktop Local AI</span> - On-device language model using llama.cpp. GPU-accelerated and runs entirely on your desktop!
+            <span className="font-semibold">Desktop Local AI</span> - On-device
+            language model using llama.cpp. GPU-accelerated and runs entirely on
+            your desktop!
           </p>
         </div>
       </div>
@@ -265,10 +383,13 @@ const DesktopLLMConfig = ({
       <div className="p-3 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-2 h-2 rounded-full bg-green-400"></div>
-          <span className="text-sm font-semibold text-white/90">Ready to use!</span>
+          <span className="text-sm font-semibold text-white/90">
+            Ready to use!
+          </span>
         </div>
         <p className="text-xs text-white/60">
-          Model: {config.model || 'No model selected'} • llama.cpp via Electron • GPU accelerated
+          Model: {config.model || "No model selected"} • llama.cpp via Electron
+          • GPU accelerated
         </p>
         {!config.model && (
           <p className="text-[10px] text-yellow-400 mt-1">
@@ -281,8 +402,12 @@ const DesktopLLMConfig = ({
       <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-white/90">Runtime Backend</h3>
-            <p className="text-[11px] text-white/60">Choose and install llama.cpp compute backend</p>
+            <h3 className="text-sm font-semibold text-white/90">
+              Runtime Backend
+            </h3>
+            <p className="text-[11px] text-white/60">
+              Choose and install llama.cpp compute backend
+            </p>
           </div>
           <button
             onClick={loadBackendStatus}
@@ -295,21 +420,21 @@ const DesktopLLMConfig = ({
 
         <Select
           value={selectedBackend}
-          onChange={(e) => handleChange('backend', e.target.value)}
-          variant={isLightBackground ? 'dark' : 'default'}
+          onChange={(e) => handleChange("backend", e.target.value)}
+          variant={isLightBackground ? "dark" : "default"}
           options={
             backendItems.length > 0
               ? backendItems.map((item) => ({
                   value: item.name,
-                  label: `${item.name.toUpperCase()}${!item.supported ? ' (unsupported)' : ''}`,
+                  label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
                   disabled: !item.supported,
                 }))
               : [
-                  { value: 'auto', label: 'AUTO' },
-                  { value: 'cpu', label: 'CPU' },
-                  { value: 'cuda', label: 'CUDA' },
-                  { value: 'vulkan', label: 'VULKAN' },
-                  { value: 'metal', label: 'METAL' },
+                  { value: "auto", label: "AUTO" },
+                  { value: "cpu", label: "CPU" },
+                  { value: "cuda", label: "CUDA" },
+                  { value: "vulkan", label: "VULKAN" },
+                  { value: "metal", label: "METAL" },
                 ]
           }
         />
@@ -322,12 +447,16 @@ const DesktopLLMConfig = ({
           </p>
           <Button
             onClick={installSelectedBackend}
-            disabled={backendLoading || selectedBackend === 'auto'}
-            variant={isLightBackground ? 'dark' : 'default'}
+            disabled={backendLoading || selectedBackend === "auto"}
+            variant={isLightBackground ? "dark" : "default"}
             size="sm"
             type="button"
           >
-            {backendLoading ? 'Installing...' : (backendStatus?.selectedInstalled ? 'Reinstall' : 'Install')}
+            {backendLoading
+              ? "Installing..."
+              : backendStatus?.selectedInstalled
+                ? "Reinstall"
+                : "Install"}
           </Button>
         </div>
 
@@ -335,7 +464,9 @@ const DesktopLLMConfig = ({
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
               <span className="text-white/70">{backendProgress.status}</span>
-              <span className="text-white/70">{Math.round(backendProgress.percent || 0)}%</span>
+              <span className="text-white/70">
+                {Math.round(backendProgress.percent || 0)}%
+              </span>
             </div>
             {backendProgressBytes && (
               <div className="text-xs text-white/70">
@@ -347,7 +478,9 @@ const DesktopLLMConfig = ({
             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
-                style={{ width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%` }}
+                style={{
+                  width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
+                }}
               />
             </div>
           </div>
@@ -362,7 +495,11 @@ const DesktopLLMConfig = ({
       <details className="group" open={isSetupMode}>
         <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
           <span>Advanced Settings</span>
-          <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+          <Icon
+            name="arrow-down"
+            size={14}
+            className="group-open:rotate-180 transition-transform"
+          />
         </summary>
         <div className="mt-2 space-y-3">
           <div>
@@ -371,10 +508,10 @@ const DesktopLLMConfig = ({
             </label>
             <Input
               type="text"
-              value={config.endpoint || 'http://127.0.0.1:11438'}
-              onChange={(e) => handleChange('endpoint', e.target.value)}
+              value={config.endpoint || "http://127.0.0.1:11438"}
+              onChange={(e) => handleChange("endpoint", e.target.value)}
               placeholder="http://127.0.0.1:11438"
-              variant={isLightBackground ? 'dark' : 'default'}
+              variant={isLightBackground ? "dark" : "default"}
             />
             <p className="text-[10px] text-white/50 mt-1">
               Local AI server endpoint
@@ -385,19 +522,24 @@ const DesktopLLMConfig = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
-                Temperature ({config.temperature !== undefined ? config.temperature : 0.7})
+                Temperature (
+                {config.temperature !== undefined ? config.temperature : 0.7})
               </label>
               <input
                 type="range"
                 min="0"
                 max="2"
                 step="0.1"
-                value={config.temperature !== undefined ? config.temperature : 0.7}
-                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
+                value={
+                  config.temperature !== undefined ? config.temperature : 0.7
+                }
+                onChange={(e) =>
+                  handleChange("temperature", parseFloat(e.target.value))
+                }
                 className="w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Max Tokens ({config.maxTokens || 2048})
@@ -408,11 +550,13 @@ const DesktopLLMConfig = ({
                 max="8192"
                 step="256"
                 value={config.maxTokens || 2048}
-                onChange={(e) => handleChange('maxTokens', parseInt(e.target.value))}
-                variant={isLightBackground ? 'dark' : 'default'}
+                onChange={(e) =>
+                  handleChange("maxTokens", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Context Size ({config.contextSize || 4096})
@@ -423,28 +567,33 @@ const DesktopLLMConfig = ({
                 max="32768"
                 step="512"
                 value={config.contextSize || 4096}
-                onChange={(e) => handleChange('contextSize', parseInt(e.target.value))}
-                variant={isLightBackground ? 'dark' : 'default'}
+                onChange={(e) =>
+                  handleChange("contextSize", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
-                GPU Layers ({config.gpuLayers !== undefined ? config.gpuLayers : 33})
+                GPU Layers (
+                {config.gpuLayers !== undefined ? config.gpuLayers : 33})
               </label>
               <Input
                 type="number"
                 min="0"
                 max="100"
                 value={config.gpuLayers !== undefined ? config.gpuLayers : 33}
-                onChange={(e) => handleChange('gpuLayers', parseInt(e.target.value))}
-                variant={isLightBackground ? 'dark' : 'default'}
+                onChange={(e) =>
+                  handleChange("gpuLayers", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
               />
               <p className="text-[10px] text-white/50 mt-1">
                 Offload layers to GPU (0 = CPU only)
               </p>
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
                 Threads ({config.threads || 4})
@@ -454,8 +603,10 @@ const DesktopLLMConfig = ({
                 min="1"
                 max="32"
                 value={config.threads || 4}
-                onChange={(e) => handleChange('threads', parseInt(e.target.value))}
-                variant={isLightBackground ? 'dark' : 'default'}
+                onChange={(e) =>
+                  handleChange("threads", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
               />
             </div>
           </div>

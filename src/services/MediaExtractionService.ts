@@ -2,7 +2,7 @@
  * Service for extracting media elements (images, audios) from DOM/HTML
  * Used by both AIToolbar (selection) and DragDropService (HTML drops)
  */
-import Logger from './LoggerService';
+import Logger from "./LoggerService";
 
 interface ExtractionInput {
   files?: FileList | File[];
@@ -23,7 +23,7 @@ interface ExtractedMedia {
   dataUrl: string;
   name: string;
   size: number;
-  type: 'image' | 'audio';
+  type: "image" | "audio";
 }
 
 interface ExtractionResult {
@@ -34,7 +34,7 @@ interface ExtractionResult {
 }
 
 interface MediaItem {
-  type: 'image' | 'audio';
+  type: "image" | "audio";
   name: string;
   size: number;
   src?: string;
@@ -44,14 +44,14 @@ interface MediaItem {
 interface DomExtractedItem {
   src: string;
   name: string;
-  type: 'image' | 'audio';
+  type: "image" | "audio";
 }
 
 class MediaExtractionService {
   /**
    * MAIN METHOD: Process and extract media from any input source
    * Handles Files, HTML string, DOM container, or Selection - returns ready-to-use data
-   * 
+   *
    * @param {Object} input - Input configuration
    * @param {FileList|Array<File>} [input.files] - File objects to process
    * @param {string} [input.htmlString] - HTML string to parse
@@ -70,58 +70,92 @@ class MediaExtractionService {
     options: ExtractionOptions = {},
   ): Promise<ExtractionResult> {
     const result: ExtractionResult = {
-      text: '',
+      text: "",
       images: [],
       audios: [],
-      errors: []
+      errors: [],
     };
 
     const {
       maxImages = Infinity,
       maxAudios = Infinity,
       currentImageCount = 0,
-      currentAudioCount = 0
+      currentAudioCount = 0,
     } = options;
 
     try {
       // STEP 1: Gather all media items into a unified array
       let mediaItems: MediaItem[] = []; // Format: {type: 'image'|'audio', name, size, src?, file?}
-      
+
       if (input.files && input.files.length > 0) {
         // From File objects
         mediaItems = Array.from(input.files)
-          .filter((file: File) => file.type.startsWith('image/') || file.type.startsWith('audio/'))
+          .filter(
+            (file: File) =>
+              file.type.startsWith("image/") || file.type.startsWith("audio/"),
+          )
           .map((file: File) => ({
-            type: file.type.startsWith('image/') ? 'image' : 'audio',
+            type: file.type.startsWith("image/") ? "image" : "audio",
             name: file.name,
             size: file.size,
-            file: file // Keep File reference for fileToDataUrl
+            file: file, // Keep File reference for fileToDataUrl
           })) as MediaItem[];
       } else if (input.htmlString) {
         // From HTML string
         const parser = new DOMParser();
-        const doc = parser.parseFromString(input.htmlString, 'text/html');
+        const doc = parser.parseFromString(input.htmlString, "text/html");
         const media = this._extractMediaFromContainer(doc.body, null);
-        
+
         mediaItems = [
-          ...media.images.map((img): MediaItem => ({ type: 'image', name: img.name, size: 0, src: img.src })),
-          ...media.audios.map((aud): MediaItem => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
+          ...media.images.map(
+            (img): MediaItem => ({
+              type: "image",
+              name: img.name,
+              size: 0,
+              src: img.src,
+            }),
+          ),
+          ...media.audios.map(
+            (aud): MediaItem => ({
+              type: "audio",
+              name: aud.name,
+              size: 0,
+              src: aud.src,
+            }),
+          ),
         ];
-        
+
         // Extract text
-        const textContent = doc.body.textContent || doc.body.innerText || '';
+        const textContent = doc.body.textContent || doc.body.innerText || "";
         if (textContent.trim()) {
           result.text = textContent.trim();
         }
       } else if (input.container) {
         // From DOM container/selection
-        const media = this._extractMediaFromContainer(input.container, input.selection);
-        
+        const media = this._extractMediaFromContainer(
+          input.container,
+          input.selection,
+        );
+
         mediaItems = [
-          ...media.images.map((img): MediaItem => ({ type: 'image', name: img.name, size: 0, src: img.src })),
-          ...media.audios.map((aud): MediaItem => ({ type: 'audio', name: aud.name, size: 0, src: aud.src }))
+          ...media.images.map(
+            (img): MediaItem => ({
+              type: "image",
+              name: img.name,
+              size: 0,
+              src: img.src,
+            }),
+          ),
+          ...media.audios.map(
+            (aud): MediaItem => ({
+              type: "audio",
+              name: aud.name,
+              size: 0,
+              src: aud.src,
+            }),
+          ),
         ];
-        
+
         // Extract text from selection
         if (input.selection) {
           const text = input.selection.toString().trim();
@@ -130,46 +164,51 @@ class MediaExtractionService {
           }
         }
       }
-      
+
       // Process plain text
       if (input.textString && !result.text) {
         result.text = input.textString.trim();
       }
-      
+
       // STEP 2: Process all media items in ONE unified loop
       for (const item of mediaItems) {
-        const isImage = item.type === 'image';
+        const isImage = item.type === "image";
         const targetArray = isImage ? result.images : result.audios;
         const currentCount = isImage ? currentImageCount : currentAudioCount;
         const maxCount = isImage ? maxImages : maxAudios;
-        
+
         // Check limit
         if (currentCount + targetArray.length >= maxCount) {
-          result.errors.push(`Maximum ${maxCount} ${isImage ? 'images' : 'audio files'} allowed`);
+          result.errors.push(
+            `Maximum ${maxCount} ${isImage ? "images" : "audio files"} allowed`,
+          );
           break;
         }
-        
+
         try {
           // Convert to dataUrl (conditionally choose converter based on source)
-          const dataUrl = item.file 
+          const dataUrl = item.file
             ? await this.fileToDataUrl(item.file)
-            : await this.urlToDataUrl(item.src ?? '');
-          
+            : await this.urlToDataUrl(item.src ?? "");
+
           targetArray.push({
             dataUrl,
             name: item.name,
             size: item.size,
-            type: item.type
+            type: item.type,
           });
         } catch (error) {
-          Logger.error('MediaExtractionService', `Failed to convert ${item.type}:`, error);
+          Logger.error(
+            "MediaExtractionService",
+            `Failed to convert ${item.type}:`,
+            error,
+          );
           // Silently skip failed items
         }
       }
-
     } catch (error) {
-      Logger.error('MediaExtractionService', 'Error processing input:', error);
-      result.errors.push('Failed to process content');
+      Logger.error("MediaExtractionService", "Error processing input:", error);
+      result.errors.push("Failed to process content");
     }
 
     return result;
@@ -185,41 +224,42 @@ class MediaExtractionService {
   ): { images: DomExtractedItem[]; audios: DomExtractedItem[] } {
     const images: DomExtractedItem[] = [];
     const audios: DomExtractedItem[] = [];
-    
+
     // Extract images
-    const imgElements = container?.querySelectorAll('img') || [];
+    const imgElements = container?.querySelectorAll("img") || [];
     imgElements.forEach((img: HTMLImageElement) => {
       if (selection && !selection.containsNode(img, true)) {
         return;
       }
-      
+
       const src = img.src || img.currentSrc;
       if (src) {
         images.push({
           src,
-          name: img.alt || img.title || 'Image',
-          type: 'image'
+          name: img.alt || img.title || "Image",
+          type: "image",
         });
       }
     });
-    
+
     // Extract audios
-    const audioElements = container?.querySelectorAll('audio') || [];
+    const audioElements = container?.querySelectorAll("audio") || [];
     audioElements.forEach((audio: HTMLAudioElement) => {
       if (selection && !selection.containsNode(audio, true)) {
         return;
       }
-      
-      const src = audio.src || audio.currentSrc || audio.querySelector('source')?.src;
+
+      const src =
+        audio.src || audio.currentSrc || audio.querySelector("source")?.src;
       if (src) {
         audios.push({
           src,
-          name: audio.title || 'Audio',
-          type: 'audio'
+          name: audio.title || "Audio",
+          type: "audio",
         });
       }
     });
-    
+
     return { images, audios };
   }
 
@@ -229,28 +269,32 @@ class MediaExtractionService {
    * @returns {Promise<string>} Data URL
    */
   static async urlToDataUrl(url: string): Promise<string> {
-    if (url.startsWith('data:')) {
+    if (url.startsWith("data:")) {
       return url;
     }
 
     try {
       const response = await fetch(url);
       const blob = await response.blob();
-      
+
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          if (typeof reader.result === 'string') {
+          if (typeof reader.result === "string") {
             resolve(reader.result);
             return;
           }
-          reject(new Error('Failed to convert blob to data URL'));
+          reject(new Error("Failed to convert blob to data URL"));
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
     } catch (error) {
-      Logger.error('MediaExtractionService', 'Failed to convert URL to dataURL:', error);
+      Logger.error(
+        "MediaExtractionService",
+        "Failed to convert URL to dataURL:",
+        error,
+      );
       return url;
     }
   }
@@ -264,11 +308,11 @@ class MediaExtractionService {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        if (typeof reader.result === 'string') {
+        if (typeof reader.result === "string") {
           resolve(reader.result);
           return;
         }
-        reject(new Error('Failed to convert file to data URL'));
+        reject(new Error("Failed to convert file to data URL"));
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);

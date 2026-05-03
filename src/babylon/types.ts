@@ -1,11 +1,11 @@
-import type { Camera } from '@babylonjs/core/Cameras/camera';
-import type { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
-import type { Scene } from '@babylonjs/core/scene';
-import type { MmdAnimationSpan } from 'babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation';
-import type { ElectronAPI } from '../types/electron';
+import type { Camera } from "@babylonjs/core/Cameras/camera";
+import type { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { Scene } from "@babylonjs/core/scene";
+import type { MmdAnimationSpan } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
+import type { ElectronAPI } from "../types/electron";
 
-export type CameraMode = '2D' | '3D';
+export type CameraMode = "2D" | "3D";
 
 export interface PixelSize {
   width: number;
@@ -196,7 +196,9 @@ export interface CameraTrackLike {
   positions?: number[];
 }
 
-export type MmdBindableAnimationLike = ConstructorParameters<typeof MmdAnimationSpan>[0];
+export type MmdBindableAnimationLike = ConstructorParameters<
+  typeof MmdAnimationSpan
+>[0];
 
 export type LoadedAnimationLike = MmdBindableAnimationLike & {
   name: string;
@@ -296,7 +298,7 @@ export interface PositionManagerLike {
     width: number,
     height: number,
     effectiveHeight?: number | CameraOffset | null,
-    offset?: CameraOffset
+    offset?: CameraOffset,
   ) => void;
   updateCameraFrustum: () => void;
 }

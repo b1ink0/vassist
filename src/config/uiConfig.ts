@@ -1,12 +1,12 @@
 /**
  * UI Configuration
- * 
+ *
  * Settings for user interface behavior and appearance.
  */
 
-import { isAndroid, isDesktop } from '../utils/PlatformUtils';
+import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 
-export type BackgroundThemeMode = 'adaptive' | 'light' | 'dark';
+export type BackgroundThemeMode = "adaptive" | "light" | "dark";
 
 export interface PixelSize {
   width: number;
@@ -38,11 +38,14 @@ export interface PositionPreset {
   description: string;
 }
 
-export type PositionPresetOverride = Omit<PositionPreset, 'name' | 'description'>;
+export type PositionPresetOverride = Omit<
+  PositionPreset,
+  "name" | "description"
+>;
 
-export type FPSLimit = 15 | 24 | 30 | 60 | 90 | 'native';
-export type PhysicsEngine = 'bullet' | 'havok';
-export type RenderQuality = 'low' | 'medium' | 'high' | 'ultra' | 'custom';
+export type FPSLimit = 15 | 24 | 30 | 60 | 90 | "native";
+export type PhysicsEngine = "bullet" | "havok";
+export type RenderQuality = "low" | "medium" | "high" | "ultra" | "custom";
 
 export interface CustomQualitySettings {
   samples: number;
@@ -91,7 +94,7 @@ export interface UIConfig {
   };
   modelSizePx: PixelSize | null;
   camera: {
-    mode: '2D' | '3D';
+    mode: "2D" | "3D";
     locked: boolean;
     savePosition: boolean;
     saved3D: {
@@ -128,14 +131,14 @@ export const BackgroundThemeModes: {
   LIGHT: BackgroundThemeMode;
   DARK: BackgroundThemeMode;
 } = {
-  ADAPTIVE: 'adaptive', // Auto-detect background brightness
-  LIGHT: 'dark',       // Force light theme (dark chat on light background)
-  DARK: 'light',         // Force dark theme (light chat on dark background)
+  ADAPTIVE: "adaptive", // Auto-detect background brightness
+  LIGHT: "dark", // Force light theme (dark chat on light background)
+  DARK: "light", // Force dark theme (light chat on dark background)
 };
 
 /**
  * Position preset definitions
- * 
+ *
  * Each preset contains:
  * - name: Display name for UI
  * - modelSize: Dimensions in pixels { width, height }
@@ -153,8 +156,8 @@ export const BackgroundThemeModes: {
  * - description: Detailed description
  */
 export const PositionPresets: Record<string, PositionPreset> = {
-  'bottom-right': {
-    name: 'Bottom Right',
+  "bottom-right": {
+    name: "Bottom Right",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 }, // Keep SAME as normal - PositionManager will handle it
     padding: 0,
@@ -163,11 +166,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 80, right: 0, top: 100, bottom: 0 }, // 0 = no custom boundaries
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 }, // Separate boundaries for Portrait Mode
     portraitClipPlaneY: 12,
-    description: 'Default chatbot position in bottom-right corner'
+    description: "Default chatbot position in bottom-right corner",
   },
-  
-  'bottom-left': {
-    name: 'Bottom Left',
+
+  "bottom-left": {
+    name: "Bottom Left",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -176,11 +179,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 0, right: 80, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Chatbot position in bottom-left corner'
+    description: "Chatbot position in bottom-left corner",
   },
-  
-  'bottom-center': {
-    name: 'Bottom Center',
+
+  "bottom-center": {
+    name: "Bottom Center",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -189,11 +192,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 40, right: 40, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Chatbot position at bottom center'
+    description: "Chatbot position at bottom center",
   },
-  
-  'center': {
-    name: 'Center',
+
+  center: {
+    name: "Center",
     modelSize: { width: 600, height: 900 },
     portraitModelSize: { width: 600, height: 900 },
     padding: 0,
@@ -202,11 +205,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 0, right: 0, top: 0, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Large centered view for development/debugging'
+    description: "Large centered view for development/debugging",
   },
-  
-  'top-right': {
-    name: 'Top Right',
+
+  "top-right": {
+    name: "Top Right",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -215,11 +218,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 80, right: 0, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Top-right corner position'
+    description: "Top-right corner position",
   },
 
-  'top-left': {
-    name: 'Top Left',
+  "top-left": {
+    name: "Top Left",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -228,11 +231,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 0, right: 80, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Top-left corner position'
+    description: "Top-left corner position",
   },
 
-  'top-center': {
-    name: 'Top Center',
+  "top-center": {
+    name: "Top Center",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -241,11 +244,11 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 40, right: 40, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Model at top center of screen'
+    description: "Model at top center of screen",
   },
 
-  'last-location': {
-    name: 'Last Location',
+  "last-location": {
+    name: "Last Location",
     modelSize: { width: 300, height: 500 },
     portraitModelSize: { width: 300, height: 500 },
     padding: 0,
@@ -254,7 +257,7 @@ export const PositionPresets: Record<string, PositionPreset> = {
     customBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitCustomBoundaries: { left: 0, right: 0, top: 100, bottom: 0 },
     portraitClipPlaneY: 12,
-    description: 'Restore model to last saved position'
+    description: "Restore model to last saved position",
   },
 };
 
@@ -295,14 +298,14 @@ export const FPSLimitOptions: {
   FPS_30: Extract<FPSLimit, 30>;
   FPS_60: Extract<FPSLimit, 60>;
   FPS_90: Extract<FPSLimit, 90>;
-  NATIVE: Extract<FPSLimit, 'native'>;
+  NATIVE: Extract<FPSLimit, "native">;
 } = {
   FPS_15: 15,
   FPS_24: 24,
   FPS_30: 30,
   FPS_60: 60,
   FPS_90: 90,
-  NATIVE: 'native', // No limit - matches monitor refresh rate
+  NATIVE: "native", // No limit - matches monitor refresh rate
 };
 
 /**
@@ -311,11 +314,11 @@ export const FPSLimitOptions: {
  * - HAVOK: Havok Physics - Used in extension mode
  */
 export const PhysicsEngineOptions: {
-  BULLET: Extract<PhysicsEngine, 'bullet'>;
-  HAVOK: Extract<PhysicsEngine, 'havok'>;
+  BULLET: Extract<PhysicsEngine, "bullet">;
+  HAVOK: Extract<PhysicsEngine, "havok">;
 } = {
-  BULLET: 'bullet',
-  HAVOK: 'havok',
+  BULLET: "bullet",
+  HAVOK: "havok",
 };
 
 /**
@@ -328,33 +331,33 @@ export const PhysicsEngineOptions: {
  * - CUSTOM: User-defined settings
  */
 export const RenderQualityOptions: {
-  LOW: Extract<RenderQuality, 'low'>;
-  MEDIUM: Extract<RenderQuality, 'medium'>;
-  HIGH: Extract<RenderQuality, 'high'>;
-  ULTRA: Extract<RenderQuality, 'ultra'>;
-  CUSTOM: Extract<RenderQuality, 'custom'>;
+  LOW: Extract<RenderQuality, "low">;
+  MEDIUM: Extract<RenderQuality, "medium">;
+  HIGH: Extract<RenderQuality, "high">;
+  ULTRA: Extract<RenderQuality, "ultra">;
+  CUSTOM: Extract<RenderQuality, "custom">;
 } = {
-  LOW: 'low',
-  MEDIUM: 'medium',
-  HIGH: 'high',
-  ULTRA: 'ultra',
-  CUSTOM: 'custom',
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  ULTRA: "ultra",
+  CUSTOM: "custom",
 };
 
 /**
  * Default Custom Render Quality Settings
  */
 export const DefaultCustomQualitySettings: CustomQualitySettings = {
-  samples: 2,                    // MSAA samples: 1, 2, 4, 8
+  samples: 2, // MSAA samples: 1, 2, 4, 8
   bloomEnabled: true,
-  bloomKernel: 32,               // 16, 32, 48, 64
-  bloomScale: 0.5,               // 0.1 - 1.0
-  bloomWeight: 0.2,              // 0.05 - 0.5
-  bloomThreshold: 0.9,           // 0.5 - 1.0
+  bloomKernel: 32, // 16, 32, 48, 64
+  bloomScale: 0.5, // 0.1 - 1.0
+  bloomWeight: 0.2, // 0.05 - 0.5
+  bloomThreshold: 0.9, // 0.5 - 1.0
   fxaaEnabled: true,
-  contrast: 1.2,                 // 0.5 - 2.0
-  exposure: 1.05,                // 0.5 - 2.0
-  saturation: 15,                // -50 - 50
+  contrast: 1.2, // 0.5 - 2.0
+  exposure: 1.05, // 0.5 - 2.0
+  saturation: 15, // -50 - 50
 };
 
 /**
@@ -362,48 +365,48 @@ export const DefaultCustomQualitySettings: CustomQualitySettings = {
  */
 export const DefaultUIConfig: UIConfig = {
   enableModelLoading: true,
-  
+
   enablePortraitMode: false,
-  
+
   enablePhysics: true,
-  
+
   physicsEngine: PhysicsEngineOptions.BULLET,
-  
+
   renderQuality: RenderQualityOptions.MEDIUM,
-  
+
   customQuality: { ...DefaultCustomQualitySettings },
-  
+
   fpsLimit: FPSLimitOptions.FPS_60,
-  
+
   autoLoadOnAllPages: true,
-  
+
   enableAIToolbar: true,
-  
+
   aiToolbar: {
     showOnInputFocus: true,
     showOnImageHover: true,
   },
-  
+
   enableColoredIcons: false,
   enableColoredIconsToolbarOnly: false,
-  
+
   enableDebugPanel: false,
 
   emotePlayback: {
     showDurationBar: true,
     showTime: true,
-    autoPlayCategory: 'all',
+    autoPlayCategory: "all",
   },
-  
+
   position: {
-    preset: (isDesktop || isAndroid) ? 'bottom-center' : 'bottom-right',
+    preset: isDesktop || isAndroid ? "bottom-center" : "bottom-right",
     lastLocation: null,
   },
-  
+
   modelSizePx: null,
-  
+
   camera: {
-    mode: '2D',
+    mode: "2D",
     locked: true,
     savePosition: false,
     saved3D: {
@@ -418,19 +421,19 @@ export const DefaultUIConfig: UIConfig = {
       rotation: { x: 0, y: 0 },
     },
   },
-  
+
   backgroundDetection: {
     mode: BackgroundThemeModes.ADAPTIVE,
     sampleGridSize: 5,
     showDebug: false,
   },
-  
+
   smoothStreamingAnimation: false,
-  
+
   shortcuts: {
     enabled: false,
-    openChat: '',
-    toggleMode: '',
-    toggleVisibility: '',
+    openChat: "",
+    toggleMode: "",
+    toggleVisibility: "",
   },
 };

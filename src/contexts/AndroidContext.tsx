@@ -2,8 +2,8 @@
  * @fileoverview Android Context for AndroidAI JavaScript interface access
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
-import type { AndroidAPI } from '../types/android';
+import { createContext, useContext, type ReactNode } from "react";
+import type { AndroidAPI } from "../types/android";
 
 interface AndroidContextValue {
   api: AndroidAPI | null;
@@ -16,7 +16,7 @@ interface AndroidProviderProps {
 
 // Get the AndroidAI interface exposed by WebView (available immediately when page loads)
 const getAndroidAPI = (): AndroidAPI | null => {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   return window.AndroidAI || null;
 };
 
@@ -36,9 +36,7 @@ export function AndroidProvider({ children }: AndroidProviderProps) {
   };
 
   return (
-    <AndroidContext.Provider value={value}>
-      {children}
-    </AndroidContext.Provider>
+    <AndroidContext.Provider value={value}>{children}</AndroidContext.Provider>
   );
 }
 

@@ -16,10 +16,28 @@ export interface AndroidAPI {
   deleteLLMModel?: (filename: string) => string;
   importLLMModel?: () => string;
   getLLMModelsDirectory?: () => string;
-  searchOllamaModels?: (query: string, page?: number, pageSize?: number) => string;
-  listOllamaModelTags?: (modelId: string, query?: string, page?: number, pageSize?: number) => string;
-  searchHuggingFaceModels?: (query: string, cursor?: string, pageSize?: number) => string;
-  listHuggingFaceFiles?: (repoId: string, query?: string, page?: number, pageSize?: number) => string;
+  searchOllamaModels?: (
+    query: string,
+    page?: number,
+    pageSize?: number,
+  ) => string;
+  listOllamaModelTags?: (
+    modelId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => string;
+  searchHuggingFaceModels?: (
+    query: string,
+    cursor?: string,
+    pageSize?: number,
+  ) => string;
+  listHuggingFaceFiles?: (
+    repoId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => string;
 
   getSTTTTSStatus?: () => string;
   downloadWhisperModel?: () => string;
@@ -32,7 +50,9 @@ export interface AndroidAPI {
   _onImportComplete?: ((result: unknown) => void) | null;
   _onDownloadProgress?: ((percent: number, status: string) => void) | null;
 
-  _onSTTTTSProgress?: ((modelType: string, percent: number, statusText: string) => void) | null;
+  _onSTTTTSProgress?:
+    | ((modelType: string, percent: number, statusText: string) => void)
+    | null;
   _onSTTTTSComplete?: ((modelType: string, result: unknown) => void) | null;
   _onSTTTTSError?: ((modelType: string, errorMsg: string) => void) | null;
 }

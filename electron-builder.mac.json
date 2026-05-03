@@ -5,9 +5,7 @@
     "output": "dist-desktop-release",
     "buildResources": "build"
   },
-  "asarUnpack": [
-    "electron/assets/runtime/**"
-  ],
+  "asarUnpack": ["electron/assets/runtime/**"],
   "files": [
     "dist-desktop/**/*",
     "electron/server/build/Release/server.node",
@@ -41,10 +39,7 @@
     "!node_modules/@node-llama-cpp/**"
   ],
   "mac": {
-    "target": [
-      "dmg",
-      "zip"
-    ],
+    "target": ["dmg", "zip"],
     "icon": "electron/assets/icon.icns"
   }
 }

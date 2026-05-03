@@ -3,7 +3,7 @@
  * Manages per-tab state and lifecycle
  */
 
-import Logger from '../../src/services/LoggerService';
+import Logger from "../../src/services/LoggerService";
 
 interface TabState {
   id: number;
@@ -21,7 +21,7 @@ export class TabManager {
 
   constructor() {
     this.tabs = new Map(); // tabId -> tabState
-    Logger.log('TabManager', 'Initialized');
+    Logger.log("TabManager", "Initialized");
   }
 
   /**
@@ -32,17 +32,17 @@ export class TabManager {
       return this.tabs.get(tabId) as TabState;
     }
 
-    Logger.log('TabManager', 'Initializing tab ${tabId}');
+    Logger.log("TabManager", "Initializing tab ${tabId}");
 
     const tabState = {
       id: tabId,
       chatState: {
         messages: [],
-        isProcessing: false
+        isProcessing: false,
       },
       abortControllers: new Map(), // requestId -> AbortController
       created: Date.now(),
-      lastActivity: Date.now()
+      lastActivity: Date.now(),
     };
 
     this.tabs.set(tabId, tabState);
@@ -71,7 +71,7 @@ export class TabManager {
    * Clean up tab
    */
   cleanupTab(tabId: number): void {
-    Logger.log('TabManager', 'Cleaning up tab ${tabId}');
+    Logger.log("TabManager", "Cleaning up tab ${tabId}");
 
     const tab = this.tabs.get(tabId);
     if (!tab) return;
@@ -81,7 +81,7 @@ export class TabManager {
       try {
         controller.abort();
       } catch (error) {
-        Logger.warn('TabManager', 'Error aborting controller:', error);
+        Logger.warn("TabManager", "Error aborting controller:", error);
       }
     }
 
@@ -121,7 +121,11 @@ export class TabManager {
   /**
    * Set abort controller for request
    */
-  setAbortController(tabId: number, requestId: string, controller: AbortController): void {
+  setAbortController(
+    tabId: number,
+    requestId: string,
+    controller: AbortController,
+  ): void {
     const tab = this.tabs.get(tabId);
     if (tab) {
       tab.abortControllers.set(requestId, controller);

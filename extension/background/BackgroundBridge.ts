@@ -6,8 +6,8 @@
 
 /* global chrome */
 
-import { MessageTypes } from '../shared/MessageTypes';
-import Logger from '../../src/services/LoggerService';
+import { MessageTypes } from "../shared/MessageTypes";
+import Logger from "../../src/services/LoggerService";
 
 type BridgeValue = string | number | boolean | null | undefined | object;
 type BridgeData = Record<string, BridgeValue>;
@@ -51,13 +51,13 @@ export class BackgroundBridge {
   offscreenReady: boolean;
 
   constructor() {
-    this.name = 'BackgroundBridge';
+    this.name = "BackgroundBridge";
     this.tabStates = new Map(); // tabId -> { chatState, abortControllers, etc. }
     this.messageHandlers = new Map(); // messageType -> handler function
     this.offscreenReady = false;
-    
+
     this.setupListeners();
-    Logger.log('BackgroundBridge', 'Initialized');
+    Logger.log("BackgroundBridge", "Initialized");
   }
 
   /**
@@ -65,43 +65,50 @@ export class BackgroundBridge {
    */
   setupListeners(): void {
     // Listen for messages from content scripts and offscreen
-    chrome.runtime.onMessage.addListener((message: BridgeMessage, sender: chrome.runtime.MessageSender, sendResponse) => {
-      // CRITICAL: Only handle messages targeted to background or without target
-      // Ignore messages for offscreen or other contexts
-      if (message.target && message.target !== 'background') {
-        // Not for us, ignore silently (no response)
-        return false;
-      }
-      
-      // Ignore progress messages - they're handled by temporary listeners
-      // These come from offscreen during downloads
-      if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
-        // Not an error - just not for the main handler
-        return false;
-      }
-      
-      this.handleMessage(message, sender)
-        .then(sendResponse)
-        .catch((error) => {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          Logger.error('BackgroundBridge', 'Message handling error:', error);
-          sendResponse({
-            type: MessageTypes.ERROR,
-            requestId: message.requestId,
-            error: errorMessage
+    chrome.runtime.onMessage.addListener(
+      (
+        message: BridgeMessage,
+        sender: chrome.runtime.MessageSender,
+        sendResponse,
+      ) => {
+        // CRITICAL: Only handle messages targeted to background or without target
+        // Ignore messages for offscreen or other contexts
+        if (message.target && message.target !== "background") {
+          // Not for us, ignore silently (no response)
+          return false;
+        }
+
+        // Ignore progress messages - they're handled by temporary listeners
+        // These come from offscreen during downloads
+        if (message.type === MessageTypes.KOKORO_DOWNLOAD_PROGRESS) {
+          // Not an error - just not for the main handler
+          return false;
+        }
+
+        this.handleMessage(message, sender)
+          .then(sendResponse)
+          .catch((error) => {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            Logger.error("BackgroundBridge", "Message handling error:", error);
+            sendResponse({
+              type: MessageTypes.ERROR,
+              requestId: message.requestId,
+              error: errorMessage,
+            });
           });
-        });
-      
-      // Return true to indicate async response
-      return true;
-    });
+
+        // Return true to indicate async response
+        return true;
+      },
+    );
 
     // Listen for tab removal to clean up state
     chrome.tabs.onRemoved.addListener((tabId) => {
       this.cleanupTab(tabId);
     });
 
-    Logger.log('BackgroundBridge', 'Listeners set up');
+    Logger.log("BackgroundBridge", "Listeners set up");
   }
 
   /**
@@ -111,7 +118,7 @@ export class BackgroundBridge {
    */
   registerHandler(messageType: string, handler: MessageHandler): void {
     this.messageHandlers.set(messageType, handler);
-    Logger.log('BackgroundBridge', 'Registered handler for ${messageType}');
+    Logger.log("BackgroundBridge", "Registered handler for ${messageType}");
   }
 
   /**
@@ -120,11 +127,17 @@ export class BackgroundBridge {
    * @param {Object} sender - Message sender info
    * @returns {Promise<Object>} Response
    */
-  async handleMessage(message: BridgeMessage, sender: chrome.runtime.MessageSender): Promise<BridgeResponse> {
+  async handleMessage(
+    message: BridgeMessage,
+    sender: chrome.runtime.MessageSender,
+  ): Promise<BridgeResponse> {
     const { type, requestId, tabId: messageTabId } = message;
     const tabId = messageTabId || sender.tab?.id;
 
-    Logger.log('BackgroundBridge', 'Received ${type} from tab ${tabId}, request ${requestId}');
+    Logger.log(
+      "BackgroundBridge",
+      "Received ${type} from tab ${tabId}, request ${requestId}",
+    );
 
     // Initialize tab state if needed
     if (tabId && !this.tabStates.has(tabId)) {
@@ -140,7 +153,7 @@ export class BackgroundBridge {
     // Call handler
     try {
       const data = await handler(message, sender, tabId);
-      
+
       if (data === undefined) {
         return {
           type: MessageTypes.SUCCESS,
@@ -154,7 +167,7 @@ export class BackgroundBridge {
         data,
       };
     } catch (error) {
-      Logger.error('BackgroundBridge', 'Handler error for ${type}:', error);
+      Logger.error("BackgroundBridge", "Handler error for ${type}:", error);
       throw error;
     }
   }
@@ -168,7 +181,11 @@ export class BackgroundBridge {
     try {
       await chrome.tabs.sendMessage(tabId, message);
     } catch (error) {
-      Logger.error('BackgroundBridge', 'Failed to send to tab ${tabId}:', error);
+      Logger.error(
+        "BackgroundBridge",
+        "Failed to send to tab ${tabId}:",
+        error,
+      );
     }
   }
 
@@ -182,7 +199,7 @@ export class BackgroundBridge {
       const response = await chrome.runtime.sendMessage(message);
       return response;
     } catch (error) {
-      Logger.error('BackgroundBridge', 'Failed to send to offscreen:', error);
+      Logger.error("BackgroundBridge", "Failed to send to offscreen:", error);
       throw error;
     }
   }
@@ -192,15 +209,15 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    */
   initializeTab(tabId: number): void {
-    Logger.log('BackgroundBridge', 'Initializing tab ${tabId}');
-    
+    Logger.log("BackgroundBridge", "Initializing tab ${tabId}");
+
     this.tabStates.set(tabId, {
       chatState: {
         messages: [],
-        isProcessing: false
+        isProcessing: false,
       },
       abortControllers: new Map(), // requestId -> AbortController
-      lastActivity: Date.now()
+      lastActivity: Date.now(),
     });
   }
 
@@ -231,15 +248,15 @@ export class BackgroundBridge {
    * @param {number} tabId - Tab ID
    */
   cleanupTab(tabId: number): void {
-    Logger.log('BackgroundBridge', 'Cleaning up tab ${tabId}');
-    
+    Logger.log("BackgroundBridge", "Cleaning up tab ${tabId}");
+
     const state = this.tabStates.get(tabId);
     if (state) {
       // Abort any pending requests for this tab
       for (const controller of state.abortControllers.values()) {
         controller.abort();
       }
-      
+
       this.tabStates.delete(tabId);
     }
   }
@@ -258,7 +275,7 @@ export class BackgroundBridge {
   cleanupInactiveTabs(): void {
     const oneHour = 60 * 60 * 1000;
     const now = Date.now();
-    
+
     for (const [tabId, state] of this.tabStates.entries()) {
       if (now - state.lastActivity > oneHour) {
         this.cleanupTab(tabId);

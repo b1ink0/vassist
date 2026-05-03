@@ -5,9 +5,7 @@
     "output": "dist-desktop-release",
     "buildResources": "build"
   },
-  "asarUnpack": [
-    "electron/assets/runtime/**"
-  ],
+  "asarUnpack": ["electron/assets/runtime/**"],
   "files": [
     "dist-desktop/**/*",
     "electron/server/build/Release/server.node",
@@ -38,10 +36,7 @@
     "!node_modules/@node-llama-cpp/**"
   ],
   "win": {
-    "target": [
-      "nsis",
-      "portable"
-    ],
+    "target": ["nsis", "portable"],
     "icon": "electron/assets/icon-512.png"
   }
 }

@@ -3,14 +3,14 @@
  * Quick Start introduction
  */
 
-import { useSetup } from '../../../contexts/SetupContext';
-import { Icon } from '../../icons';
-import logo from '../../../assets/VA.svg';
-import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
-import FlagCopyButton from '../../common/FlagCopyButton';
-import { Button } from '../../ui';
+import { useSetup } from "../../../contexts/SetupContext";
+import { Icon } from "../../icons";
+import logo from "../../../assets/VA.svg";
+import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
+import FlagCopyButton from "../../common/FlagCopyButton";
+import { Button } from "../../ui";
 
-const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
+const WelcomeStep = ({ isLightBackground: _isLightBackground = false }) => {
   const { nextStep } = useSetup();
   const showChromeAIHelp = !isAndroid && !isDesktop;
 
@@ -21,7 +21,11 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
         <div className="relative w-24 h-24 sm:w-32 sm:h-32">
           <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-white/10 rounded-full blur-xl"></div>
           <div className="relative w-full h-full glass-container rounded-full flex items-center justify-center overflow-hidden">
-            <img src={logo} alt="VAssist Logo" className="w-full h-full object-contain" />
+            <img
+              src={logo}
+              alt="VAssist Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
       </div>
@@ -46,7 +50,7 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
 
       {/* Documentation Link */}
       <div className="mt-2 md:mt-4 text-sm text-white/80">
-        <a 
+        <a
           href="https://b1ink0.github.io/vassist/docs/intro"
           target="_blank"
           rel="noopener noreferrer"
@@ -64,34 +68,40 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
             <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-center gap-2 hover:text-white transition-colors">
               <Icon name="info" size={16} />
               <span>Using Chrome Built-in AI? Click here first</span>
-              <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+              <Icon
+                name="arrow-down"
+                size={14}
+                className="group-open:rotate-180 transition-transform"
+              />
             </summary>
             <div className="mt-4 p-2 md:p-4 rounded-lg bg-white/10 border border-white/20 space-y-3">
               <p className="text-xs text-white/70 mb-3">
-                If you plan to use Chrome's built-in AI features (free, on-device), you'll need to enable these flags <strong>before</strong> starting setup:
+                If you plan to use Chrome's built-in AI features (free,
+                on-device), you'll need to enable these flags{" "}
+                <strong>before</strong> starting setup:
               </p>
-              
+
               <div className="space-y-2 text-xs">
                 <FlagCopyButton
                   flagUrl="chrome://flags/#optimization-guide-on-device-model"
                   flagValue="Enabled BypassPerfRequirement"
                 />
-                
+
                 <FlagCopyButton
                   flagUrl="chrome://flags/#prompt-api-for-gemini-nano"
                   flagValue="Enabled"
                 />
-                
+
                 <FlagCopyButton
                   flagUrl="chrome://flags/#prompt-api-for-gemini-nano-multimodal-input"
                   flagValue="Enabled (for voice input)"
                 />
-                
+
                 <FlagCopyButton
                   flagUrl="chrome://flags/#writer-api-for-gemini-nano"
                   flagValue="Enabled (optional - for content generation)"
                 />
-                
+
                 <FlagCopyButton
                   flagUrl="chrome://flags/#rewriter-api-for-gemini-nano"
                   flagValue="Enabled (optional - for text rewriting)"
@@ -100,8 +110,16 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
 
               <div className="pt-3 border-t border-white/10">
                 <p className="text-[11px] text-white/70 flex items-start gap-1.5">
-                  <Icon name="warning" size={12} className="flex-shrink-0 mt-0.5" />
-                  <span>After enabling flags, <strong>restart Chrome completely</strong> before continuing with setup.</span>
+                  <Icon
+                    name="warning"
+                    size={12}
+                    className="flex-shrink-0 mt-0.5"
+                  />
+                  <span>
+                    After enabling flags,{" "}
+                    <strong>restart Chrome completely</strong> before continuing
+                    with setup.
+                  </span>
                 </p>
               </div>
             </div>
@@ -118,4 +136,3 @@ const WelcomeStep = ({ isLightBackground = false }) => { // eslint-disable-line 
 };
 
 export default WelcomeStep;
-

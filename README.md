@@ -86,7 +86,6 @@ VAssist lets you configure LLM, STT, and TTS providers independently from setup/
 
 </details>
 
-
 ---
 
 ### Companion Customization

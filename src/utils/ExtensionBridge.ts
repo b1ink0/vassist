@@ -4,7 +4,7 @@
  * Uses window.postMessage for cross-world communication
  */
 
-import Logger from '../services/LoggerService';
+import Logger from "../services/LoggerService";
 
 type BridgeOptions = { timeout?: number };
 type PendingRequest = {
@@ -31,10 +31,10 @@ class ExtensionBridge {
    * Setup listener for responses from content script
    */
   _setupMessageListener(): void {
-    window.addEventListener('message', (event) => {
+    window.addEventListener("message", (event) => {
       // Only accept messages from same window
       if (event.source !== window) return;
-      
+
       // Check for broadcast messages (not tied to a specific request)
       if (event.data && event.data.__VASSIST_BROADCAST__) {
         // Notify all registered listeners
@@ -42,58 +42,76 @@ class ExtensionBridge {
           try {
             listener(event.data);
           } catch (error) {
-            Logger.error('ExtensionBridge', 'Listener error:', error);
+            Logger.error("ExtensionBridge", "Listener error:", error);
           }
         });
         return;
       }
-      
+
       // Check for regular response format
       if (event.data && event.data.__VASSIST_RESPONSE__) {
         const { requestId, payload, error } = event.data;
-        
+
         const pending = this.pending.get(requestId);
         if (pending) {
-          Logger.log('ExtensionBridge', '✅ Found pending promise, resolving for requestId:', requestId);
+          Logger.log(
+            "ExtensionBridge",
+            "✅ Found pending promise, resolving for requestId:",
+            requestId,
+          );
           this.pending.delete(requestId);
-          
-          if (typeof error === 'string' && error) {
+
+          if (typeof error === "string" && error) {
             pending.reject(new Error(error));
           } else {
             pending.resolve(payload);
           }
         } else {
-          Logger.warn('ExtensionBridge', '❌ No pending promise found for requestId:', requestId);
+          Logger.warn(
+            "ExtensionBridge",
+            "❌ No pending promise found for requestId:",
+            requestId,
+          );
         }
       }
-      
+
       // Check for streaming token
       if (event.data && event.data.__VASSIST_STREAM_TOKEN__) {
         const { requestId, token } = event.data;
-        
+
         const pending = this.pending.get(requestId);
         if (pending && pending.onChunk) {
-          Logger.log('ExtensionBridge', '✅ Calling onChunk callback for token:', token);
+          Logger.log(
+            "ExtensionBridge",
+            "✅ Calling onChunk callback for token:",
+            token,
+          );
           // Reset timeout on each chunk
           if (pending.timeoutId) {
             clearTimeout(pending.timeoutId);
             pending.timeoutId = setTimeout(() => {
               this.pending.delete(requestId);
-              pending.reject(new Error('Streaming timeout'));
+              pending.reject(new Error("Streaming timeout"));
             }, pending.timeout);
           }
-          
+
           // Call chunk callback
           pending.onChunk(token);
         } else {
-          Logger.warn('ExtensionBridge', '❌ No pending request found for requestId:', requestId, 'Available:', Array.from(this.pending.keys()));
+          Logger.warn(
+            "ExtensionBridge",
+            "❌ No pending request found for requestId:",
+            requestId,
+            "Available:",
+            Array.from(this.pending.keys()),
+          );
         }
       }
-      
+
       // Check for stream end
       if (event.data && event.data.__VASSIST_STREAM_END__) {
         const { requestId } = event.data;
-        
+
         const pending = this.pending.get(requestId);
         if (pending) {
           if (pending.timeoutId) {
@@ -103,18 +121,20 @@ class ExtensionBridge {
           pending.resolve(undefined);
         }
       }
-      
+
       // Check for stream error
       if (event.data && event.data.__VASSIST_STREAM_ERROR__) {
         const { requestId, error } = event.data;
-        
+
         const pending = this.pending.get(requestId);
         if (pending) {
           if (pending.timeoutId) {
             clearTimeout(pending.timeoutId);
           }
           this.pending.delete(requestId);
-          pending.reject(new Error(typeof error === 'string' ? error : 'Streaming error'));
+          pending.reject(
+            new Error(typeof error === "string" ? error : "Streaming error"),
+          );
         }
       }
     });
@@ -127,11 +147,15 @@ class ExtensionBridge {
    * @param {Object} options - Options (timeout, etc.)
    * @returns {Promise<Object>} Response from background
    */
-  async sendMessage(type: string, payload?: unknown, options: BridgeOptions = {}): Promise<unknown> {
+  async sendMessage(
+    type: string,
+    payload?: unknown,
+    options: BridgeOptions = {},
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const requestId = ++this.requestId;
       const timeout = options.timeout || 30000;
-      
+
       // Set timeout for request
       const timeoutId = setTimeout(() => {
         if (this.pending.has(requestId)) {
@@ -139,7 +163,7 @@ class ExtensionBridge {
           reject(new Error(`Request timeout: ${type}`));
         }
       }, timeout);
-      
+
       // Store promise callbacks with timeout cleanup (do this BEFORE sending message)
       this.pending.set(requestId, {
         resolve: (value) => {
@@ -149,19 +173,22 @@ class ExtensionBridge {
         reject: (error: Error) => {
           clearTimeout(timeoutId);
           reject(error);
-        }
+        },
       });
-      
+
       // Send message to content script (after pending is set)
-      window.postMessage({
-        __VASSIST_MESSAGE__: true,
-        type,
-        payload,
-        requestId,
-        timeout // Pass timeout to content script
-      }, '*');
-      
-      Logger.log('ExtensionBridge', 'Sent to content script:', type);
+      window.postMessage(
+        {
+          __VASSIST_MESSAGE__: true,
+          type,
+          payload,
+          requestId,
+          timeout, // Pass timeout to content script
+        },
+        "*",
+      );
+
+      Logger.log("ExtensionBridge", "Sent to content script:", type);
     });
   }
 
@@ -174,11 +201,16 @@ class ExtensionBridge {
    * @param {Object} options - Options (timeout, etc.)
    * @returns {Promise<void>} Resolves when stream completes
    */
-  async sendStreamingMessage(type: string, payload: unknown, onChunk: (chunk: string) => void, options: BridgeOptions = {}): Promise<void> {
+  async sendStreamingMessage(
+    type: string,
+    payload: unknown,
+    onChunk: (chunk: string) => void,
+    options: BridgeOptions = {},
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const requestId = ++this.requestId;
       const timeout = options.timeout || 120000; // 2 minutes for streaming
-      
+
       // Set up timeout
       const timeoutId = setTimeout(() => {
         if (this.pending.has(requestId)) {
@@ -186,7 +218,7 @@ class ExtensionBridge {
           reject(new Error(`Streaming timeout: ${type}`));
         }
       }, timeout);
-      
+
       // Store pending request with streaming support
       this.pending.set(requestId, {
         resolve: () => {
@@ -199,20 +231,29 @@ class ExtensionBridge {
         },
         onChunk,
         timeoutId,
-        timeout
+        timeout,
       });
-      
+
       // Send streaming request to content script
-      window.postMessage({
-        __VASSIST_MESSAGE__: true,
+      window.postMessage(
+        {
+          __VASSIST_MESSAGE__: true,
+          type,
+          payload,
+          requestId,
+          streaming: true, // Flag for streaming request
+          timeout, // Pass timeout to content script
+        },
+        "*",
+      );
+
+      Logger.log(
+        "ExtensionBridge",
+        "Sent streaming request:",
         type,
-        payload,
+        "requestId:",
         requestId,
-        streaming: true, // Flag for streaming request
-        timeout // Pass timeout to content script
-      }, '*');
-      
-      Logger.log('ExtensionBridge', 'Sent streaming request:', type, 'requestId:', requestId);
+      );
     });
   }
 
@@ -221,7 +262,7 @@ class ExtensionBridge {
    * @returns {boolean} True if in extension mode
    */
   isExtensionMode(): boolean {
-    return typeof window !== 'undefined' && !!window.__VASSIST_BRIDGE__;
+    return typeof window !== "undefined" && !!window.__VASSIST_BRIDGE__;
   }
 
   /**
@@ -232,10 +273,14 @@ class ExtensionBridge {
    */
   async getResourceURL(path: string): Promise<string> {
     try {
-      const response = await this.sendMessage('GET_RESOURCE_URL', { path }, { timeout: 5000 }) as { url?: string };
+      const response = (await this.sendMessage(
+        "GET_RESOURCE_URL",
+        { path },
+        { timeout: 5000 },
+      )) as { url?: string };
       return response.url || `/${path}`;
     } catch (error) {
-      Logger.error('ExtensionBridge', 'Failed to get resource URL:', error);
+      Logger.error("ExtensionBridge", "Failed to get resource URL:", error);
       return `/${path}`; // Fallback to relative path
     }
   }
@@ -248,12 +293,14 @@ class ExtensionBridge {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const payload = {
       bytes: Array.from(bytes),
-      mimeType: blob.type || 'application/octet-stream',
+      mimeType: blob.type || "application/octet-stream",
     };
 
-    const response = await this.sendMessage('CREATE_BLOB_URL', payload, { timeout: 10000 }) as { url?: string };
+    const response = (await this.sendMessage("CREATE_BLOB_URL", payload, {
+      timeout: 10000,
+    })) as { url?: string };
     if (!response.url) {
-      throw new Error('Failed to create blob URL in extension context');
+      throw new Error("Failed to create blob URL in extension context");
     }
     return response.url;
   }
@@ -262,7 +309,7 @@ class ExtensionBridge {
    * Revoke a blob URL previously created by createBlobURL.
    */
   async revokeBlobURL(url: string): Promise<void> {
-    await this.sendMessage('REVOKE_BLOB_URL', { url }, { timeout: 5000 });
+    await this.sendMessage("REVOKE_BLOB_URL", { url }, { timeout: 5000 });
   }
 
   /**
@@ -271,11 +318,15 @@ class ExtensionBridge {
    * @param {Function} listener - Callback function (message) => {}
    */
   addMessageListener(listener: (message: unknown) => void): void {
-    if (typeof listener !== 'function') {
-      throw new Error('Listener must be a function');
+    if (typeof listener !== "function") {
+      throw new Error("Listener must be a function");
     }
     this.messageListeners.add(listener);
-    Logger.log('ExtensionBridge', 'Added message listener, total:', this.messageListeners.size);
+    Logger.log(
+      "ExtensionBridge",
+      "Added message listener, total:",
+      this.messageListeners.size,
+    );
   }
 
   /**
@@ -284,7 +335,11 @@ class ExtensionBridge {
    */
   removeMessageListener(listener: (message: unknown) => void): void {
     this.messageListeners.delete(listener);
-    Logger.log('ExtensionBridge', 'Removed message listener, total:', this.messageListeners.size);
+    Logger.log(
+      "ExtensionBridge",
+      "Removed message listener, total:",
+      this.messageListeners.size,
+    );
   }
 }
 
@@ -293,6 +348,6 @@ export const extensionBridge = new ExtensionBridge();
 export default extensionBridge;
 
 // Expose on window for extension mode
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.__VASSIST_BRIDGE__ = extensionBridge;
 }

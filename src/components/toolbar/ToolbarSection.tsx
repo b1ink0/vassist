@@ -1,6 +1,6 @@
 /**
  * ToolbarSection Component
- * 
+ *
  * Expandable section for AI Toolbar with:
  * - Main button with sub-buttons
  * - Auto-expand on hover
@@ -9,12 +9,15 @@
  * - Optional separator after section
  */
 
-import { useState, useEffect } from 'react';
-import type { MouseEventHandler } from 'react';
-import ToolbarButton from './ToolbarButton';
-import type { ToolbarButtonProps } from './ToolbarButton';
+import { useState, useEffect } from "react";
+import type { MouseEventHandler } from "react";
+import ToolbarButton from "./ToolbarButton";
+import type { ToolbarButtonProps } from "./ToolbarButton";
 
-type ToolbarSectionButton = Omit<ToolbarButtonProps, 'isLightBackground' | 'onMouseEnterButton' | 'onMouseLeaveButton'>;
+type ToolbarSectionButton = Omit<
+  ToolbarButtonProps,
+  "isLightBackground" | "onMouseEnterButton" | "onMouseLeaveButton"
+>;
 
 interface ToolbarSectionProps {
   mainButton: ToolbarSectionButton;
@@ -37,9 +40,9 @@ const ToolbarSection = ({
   useEffect(() => {
     let anySubButtonLoading = false;
     if (isLoading && subButtons && subButtons.length > 0) {
-      anySubButtonLoading = subButtons.some(btn => btn.isLoading);
+      anySubButtonLoading = subButtons.some((btn) => btn.isLoading);
     }
-    
+
     const shouldExpand = isHovered || anySubButtonLoading;
     setIsExpanded(shouldExpand);
   }, [isHovered, isLoading, subButtons]);
@@ -54,28 +57,35 @@ const ToolbarSection = ({
 
   const [hoveredSubButton, setHoveredSubButton] = useState(false);
 
-  const handleMainButtonMouseEnter: MouseEventHandler<HTMLButtonElement> = (e) => {
+  const handleMainButtonMouseEnter: MouseEventHandler<HTMLButtonElement> = (
+    e,
+  ) => {
     if (!hoveredSubButton) {
-      e.currentTarget.dataset.mainHovered = 'true';
+      e.currentTarget.dataset.mainHovered = "true";
     }
   };
 
-  const handleMainButtonMouseLeave: MouseEventHandler<HTMLButtonElement> = (e) => {
-    e.currentTarget.dataset.mainHovered = 'false';
+  const handleMainButtonMouseLeave: MouseEventHandler<HTMLButtonElement> = (
+    e,
+  ) => {
+    e.currentTarget.dataset.mainHovered = "false";
   };
 
   const getSubButtonsMaxWidth = () => {
-    if (!subButtons || subButtons.length === 0) return '0';
-    const maxLabelWidth = Math.max(...subButtons.map(btn => {
-      const width = btn.maxLabelWidth || '100px';
-      return parseInt(width);
-    }));
-    const totalWidth = subButtons.length * (48 + maxLabelWidth) + (subButtons.length - 1) * 2;
+    if (!subButtons || subButtons.length === 0) return "0";
+    const maxLabelWidth = Math.max(
+      ...subButtons.map((btn) => {
+        const width = btn.maxLabelWidth || "100px";
+        return parseInt(width);
+      }),
+    );
+    const totalWidth =
+      subButtons.length * (48 + maxLabelWidth) + (subButtons.length - 1) * 2;
     return `${totalWidth}px`;
   };
 
   return (
-    <div 
+    <div
       className="flex items-center gap-0.5"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -87,13 +97,13 @@ const ToolbarSection = ({
         onMouseEnterButton={handleMainButtonMouseEnter}
         onMouseLeaveButton={handleMainButtonMouseLeave}
       />
-      
+
       {/* Sub-buttons container */}
       {subButtons && subButtons.length > 0 && (
-        <div 
+        <div
           className="flex items-center gap-0.5 overflow-hidden transition-all duration-300 ease-in-out"
           style={{
-            maxWidth: isExpanded ? getSubButtonsMaxWidth() : '0',
+            maxWidth: isExpanded ? getSubButtonsMaxWidth() : "0",
             opacity: isExpanded ? 1 : 0,
           }}
         >
@@ -108,13 +118,13 @@ const ToolbarSection = ({
           ))}
         </div>
       )}
-      
+
       {/* Separator after sub-buttons */}
       {showSeparator && subButtons && subButtons.length > 0 && (
-        <div 
+        <div
           className="overflow-hidden transition-all duration-300 ease-in-out"
           style={{
-            maxWidth: isExpanded ? '20px' : '0',
+            maxWidth: isExpanded ? "20px" : "0",
             opacity: isExpanded ? 1 : 0,
           }}
         >

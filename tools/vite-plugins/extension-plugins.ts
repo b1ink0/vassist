@@ -1,33 +1,41 @@
-/* eslint-env node */
-
-import fs from 'fs';
-import path from 'path';
-import archiver from 'archiver';
-import { fileURLToPath } from 'url';
-import type { Plugin } from 'vite';
+import fs from "fs";
+import path from "path";
+import archiver from "archiver";
+import { fileURLToPath } from "url";
+import type { Plugin } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.join(__dirname, '..', '..');
+const rootDir = path.join(__dirname, "..", "..");
 
 /**
  * Recursively copy directory
  * Returns true if any files were copied (used to skip empty directories)
  */
-function copyDir(src: string, dest: string, excludePrivateTests = false): boolean {
+function copyDir(
+  src: string,
+  dest: string,
+  excludePrivateTests = false,
+): boolean {
   const entries = fs.readdirSync(src, { withFileTypes: true });
   let hasFiles = false;
-  
+
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
 
     // Skip private_test folder only when creating ZIP
-    if (excludePrivateTests && entry.isDirectory() && entry.name === 'private_test') {
-      console.log(`[zip-extension] Skipping ${srcPath} (private_test excluded from ZIP)`);
+    if (
+      excludePrivateTests &&
+      entry.isDirectory() &&
+      entry.name === "private_test"
+    ) {
+      console.log(
+        `[zip-extension] Skipping ${srcPath} (private_test excluded from ZIP)`,
+      );
       continue;
     }
-    
+
     if (entry.isDirectory()) {
       // Recursively copy directory
       const dirHasFiles = copyDir(srcPath, destPath, excludePrivateTests);
@@ -43,7 +51,7 @@ function copyDir(src: string, dest: string, excludePrivateTests = false): boolea
       hasFiles = true;
     }
   }
-  
+
   return hasFiles;
 }
 
@@ -52,19 +60,19 @@ function copyDir(src: string, dest: string, excludePrivateTests = false): boolea
  */
 export function wrapContentScriptPlugin(): Plugin {
   return {
-    name: 'wrap-content-script',
+    name: "wrap-content-script",
     writeBundle() {
-      const distDir = path.join(rootDir, 'dist-extension');
-      const contentFile = path.join(distDir, 'content.js');
-      
+      const distDir = path.join(rootDir, "dist-extension");
+      const contentFile = path.join(distDir, "content.js");
+
       if (!fs.existsSync(contentFile)) {
-        console.warn('[wrap-content] Warning: content.js not found');
+        console.warn("[wrap-content] Warning: content.js not found");
         return;
       }
-      
-      console.log('[wrap-content] Wrapping content.js as IIFE...');
-      const content = fs.readFileSync(contentFile, 'utf-8');
-      
+
+      console.log("[wrap-content] Wrapping content.js as IIFE...");
+      const content = fs.readFileSync(contentFile, "utf-8");
+
       const wrapped = `/**
  * Content Script Entry Point (IIFE)
  * Loads the ES module content script
@@ -84,11 +92,11 @@ export function wrapContentScriptPlugin(): Plugin {
     });
 })();
 `;
-      
-      fs.writeFileSync(path.join(distDir, 'content-module.js'), content);
+
+      fs.writeFileSync(path.join(distDir, "content-module.js"), content);
       fs.writeFileSync(contentFile, wrapped);
-      console.log('[wrap-content] Content script wrapped successfully');
-    }
+      console.log("[wrap-content] Content script wrapped successfully");
+    },
   };
 }
 
@@ -97,49 +105,59 @@ export function wrapContentScriptPlugin(): Plugin {
  */
 export function copyAssetsPlugin(shouldZip: boolean): Plugin {
   return {
-    name: 'copy-assets',
+    name: "copy-assets",
     closeBundle() {
-      const publicDir = path.join(rootDir, 'public');
-      const resDir = path.join(publicDir, 'res');
-      const iconsDir = path.join(rootDir, 'extension', 'icons');
-      const manifestFile = path.join(rootDir, 'extension', 'manifest.json');
-      const distDir = path.join(rootDir, 'dist-extension');
-      const distResDir = path.join(distDir, 'res');
-      const distIconsDir = path.join(distDir, 'icons');
-      const distManifestFile = path.join(distDir, 'manifest.json');
-      
-      console.log('[copy-assets] Copying assets to dist-extension...');
-      
+      const publicDir = path.join(rootDir, "public");
+      const resDir = path.join(publicDir, "res");
+      const iconsDir = path.join(rootDir, "extension", "icons");
+      const manifestFile = path.join(rootDir, "extension", "manifest.json");
+      const distDir = path.join(rootDir, "dist-extension");
+      const distResDir = path.join(distDir, "res");
+      const distIconsDir = path.join(distDir, "icons");
+      const distManifestFile = path.join(distDir, "manifest.json");
+
+      console.log("[copy-assets] Copying assets to dist-extension...");
+
       if (fs.existsSync(resDir)) {
         console.log(`[copy-assets] Copying ${resDir} to ${distResDir}`);
         copyDir(resDir, distResDir, false); // Don't exclude during normal build
       }
-      
+
       if (fs.existsSync(iconsDir)) {
         console.log(`[copy-assets] Copying ${iconsDir} to ${distIconsDir}`);
         copyDir(iconsDir, distIconsDir);
       }
-      
+
       if (fs.existsSync(manifestFile)) {
-        console.log(`[copy-assets] Copying ${manifestFile} to ${distManifestFile}`);
+        console.log(
+          `[copy-assets] Copying ${manifestFile} to ${distManifestFile}`,
+        );
         fs.copyFileSync(manifestFile, distManifestFile);
       }
-      
+
       // Copy ONNX Runtime WASM files from @huggingface/transformers to assets
-      const transformersPath = path.join(rootDir, 'node_modules', '@huggingface', 'transformers', 'dist');
-      const wasmDestDir = path.join(distDir, 'assets');
-      
+      const transformersPath = path.join(
+        rootDir,
+        "node_modules",
+        "@huggingface",
+        "transformers",
+        "dist",
+      );
+      const wasmDestDir = path.join(distDir, "assets");
+
       if (fs.existsSync(transformersPath)) {
-        console.log('[copy-assets] Copying ONNX Runtime WASM files to assets...');
+        console.log(
+          "[copy-assets] Copying ONNX Runtime WASM files to assets...",
+        );
         fs.mkdirSync(wasmDestDir, { recursive: true });
-        
+
         // Only copy the 2 files we actually need
         const wasmFiles = [
-          'ort-wasm-simd-threaded.jsep.wasm',
-          'ort-wasm-simd-threaded.jsep.mjs',
+          "ort-wasm-simd-threaded.jsep.wasm",
+          "ort-wasm-simd-threaded.jsep.mjs",
         ];
-        
-        wasmFiles.forEach(file => {
+
+        wasmFiles.forEach((file) => {
           const srcFile = path.join(transformersPath, file);
           const destFile = path.join(wasmDestDir, file);
           if (fs.existsSync(srcFile)) {
@@ -148,27 +166,35 @@ export function copyAssetsPlugin(shouldZip: boolean): Plugin {
           }
         });
       }
-      
+
       // Move offscreen.html from extension/offscreen/ to root
-      const nestedOffscreenHtml = path.join(distDir, 'extension', 'offscreen', 'offscreen.html');
-      const rootOffscreenHtml = path.join(distDir, 'offscreen.html');
-      
+      const nestedOffscreenHtml = path.join(
+        distDir,
+        "extension",
+        "offscreen",
+        "offscreen.html",
+      );
+      const rootOffscreenHtml = path.join(distDir, "offscreen.html");
+
       if (fs.existsSync(nestedOffscreenHtml)) {
-        console.log('[copy-assets] Moving offscreen.html to root...');
+        console.log("[copy-assets] Moving offscreen.html to root...");
         fs.copyFileSync(nestedOffscreenHtml, rootOffscreenHtml);
         // Remove the nested directory structure
-        fs.rmSync(path.join(distDir, 'extension'), { recursive: true, force: true });
-        console.log('[copy-assets] offscreen.html moved to root');
+        fs.rmSync(path.join(distDir, "extension"), {
+          recursive: true,
+          force: true,
+        });
+        console.log("[copy-assets] offscreen.html moved to root");
       }
-      
-      console.log('[copy-assets] Asset copying complete!');
-      
+
+      console.log("[copy-assets] Asset copying complete!");
+
       // Create zip if ZIP env var is set
       if (shouldZip) {
-        console.log('[zip-extension] Creating extension zip file...');
+        console.log("[zip-extension] Creating extension zip file...");
         createExtensionZip(distDir);
       }
-    }
+    },
   };
 }
 
@@ -177,45 +203,47 @@ export function copyAssetsPlugin(shouldZip: boolean): Plugin {
  * Excludes private_test folder from the ZIP
  */
 function createExtensionZip(distDir: string): void {
-  const buildDir = path.join(rootDir, 'build');
-  const tempZipDir = path.join(buildDir, 'temp-zip');
-  
+  const buildDir = path.join(rootDir, "build");
+  const tempZipDir = path.join(buildDir, "temp-zip");
+
   // Clean temp directory
   if (fs.existsSync(tempZipDir)) {
     fs.rmSync(tempZipDir, { recursive: true, force: true });
   }
-  
+
   // Copy dist-extension to temp, excluding private_test
-  console.log('[zip-extension] Preparing files for ZIP...');
+  console.log("[zip-extension] Preparing files for ZIP...");
   copyDir(distDir, tempZipDir, true); // true = exclude private_test
-  
+
   fs.mkdirSync(buildDir, { recursive: true });
-  const outputFile = path.join(buildDir, 'vassist-extension.zip');
+  const outputFile = path.join(buildDir, "vassist-extension.zip");
   const output = fs.createWriteStream(outputFile);
-  const archive = archiver('zip', {
-    zlib: { level: 9 } // Maximum compression
+  const archive = archiver("zip", {
+    zlib: { level: 9 }, // Maximum compression
   });
 
-  output.on('close', () => {
+  output.on("close", () => {
     const sizeInMB = (archive.pointer() / 1024 / 1024).toFixed(2);
-    console.log('[zip-extension] Extension packaged successfully!');
+    console.log("[zip-extension] Extension packaged successfully!");
     console.log(`[zip-extension] File: ${outputFile}`);
-    console.log(`[zip-extension] Size: ${sizeInMB} MB (${archive.pointer()} bytes)`);
-    
+    console.log(
+      `[zip-extension] Size: ${sizeInMB} MB (${archive.pointer()} bytes)`,
+    );
+
     // Clean up temp directory
     fs.rmSync(tempZipDir, { recursive: true, force: true });
   });
 
-  archive.on('warning', (err: Error & { code?: string }) => {
-    if (err.code === 'ENOENT') {
-      console.warn('[zip-extension] Warning:', err);
+  archive.on("warning", (err: Error & { code?: string }) => {
+    if (err.code === "ENOENT") {
+      console.warn("[zip-extension] Warning:", err);
     } else {
       throw err;
     }
   });
 
-  archive.on('error', (err: Error) => {
-    console.error('[zip-extension] Error:', err);
+  archive.on("error", (err: Error) => {
+    console.error("[zip-extension] Error:", err);
     throw err;
   });
 

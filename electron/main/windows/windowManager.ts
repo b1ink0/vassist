@@ -1,5 +1,11 @@
-import type { App, BrowserWindow, BrowserWindowConstructorOptions, BrowserWindow as BrowserWindowInstance, Event } from 'electron';
-import type * as pathType from 'path';
+import type {
+  App,
+  BrowserWindow,
+  BrowserWindowConstructorOptions,
+  BrowserWindow as BrowserWindowInstance,
+  Event,
+} from "electron";
+import type * as pathType from "path";
 
 type WindowState = {
   mainWindow: BrowserWindowInstance | null;
@@ -7,8 +13,8 @@ type WindowState = {
 };
 
 type WindowManagerDeps = {
-  BrowserWindow: typeof import('electron').BrowserWindow;
-  screen: typeof import('electron').screen;
+  BrowserWindow: typeof import("electron").BrowserWindow;
+  screen: typeof import("electron").screen;
   path: typeof pathType;
   app: App & { isQuitting?: boolean };
   __dirname: string;
@@ -30,7 +36,8 @@ export function createWindowManager({
   function createInputWindow() {
     if (state.inputWindow) return;
 
-    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const { width: screenWidth, height: screenHeight } =
+      screen.getPrimaryDisplay().workAreaSize;
     const inputWidth = 600;
     const inputHeight = 400;
 
@@ -48,7 +55,7 @@ export function createWindowManager({
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        preload: path.join(__dirname, 'preload.cjs'),
+        preload: path.join(__dirname, "preload.cjs"),
       },
     };
 
@@ -56,25 +63,26 @@ export function createWindowManager({
     const inputWindow = state.inputWindow;
 
     if (devServerUrl) {
-      inputWindow.loadURL(devServerUrl + '/electron/index.html?window=input');
+      inputWindow.loadURL(devServerUrl + "/electron/index.html?window=input");
     } else {
-      inputWindow.loadURL('app://./electron/index.html?window=input');
+      inputWindow.loadURL("app://./electron/index.html?window=input");
     }
     maybeOpenDevTools(inputWindow);
 
-    inputWindow.once('ready-to-show', () => {
+    inputWindow.once("ready-to-show", () => {
       inputWindow.show();
       inputWindow.setOpacity(0);
       inputWindow.setIgnoreMouseEvents(true);
     });
 
-    inputWindow.on('closed', () => {
+    inputWindow.on("closed", () => {
       state.inputWindow = null;
     });
   }
 
   async function createMainWindow() {
-    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const { width: screenWidth, height: screenHeight } =
+      screen.getPrimaryDisplay().workAreaSize;
 
     const initialWidth = 400;
     const initialHeight = 525;
@@ -94,7 +102,7 @@ export function createWindowManager({
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        preload: path.join(__dirname, 'preload.cjs'),
+        preload: path.join(__dirname, "preload.cjs"),
       },
     };
 
@@ -102,26 +110,26 @@ export function createWindowManager({
     const mainWindow = state.mainWindow;
 
     if (devServerUrl) {
-      mainWindow.loadURL(devServerUrl + '/electron/index.html');
+      mainWindow.loadURL(devServerUrl + "/electron/index.html");
     } else {
-      mainWindow.loadURL('app://./electron/index.html');
+      mainWindow.loadURL("app://./electron/index.html");
     }
     maybeOpenDevTools(mainWindow);
 
-    mainWindow.once('ready-to-show', () => {
+    mainWindow.once("ready-to-show", () => {
       mainWindow.show();
       mainWindow.setIgnoreMouseEvents(true);
       createInputWindow();
     });
 
-    mainWindow.on('close', (event: Event) => {
+    mainWindow.on("close", (event: Event) => {
       if (!app.isQuitting) {
         event.preventDefault();
         mainWindow.hide();
       }
     });
 
-    mainWindow.on('closed', () => {
+    mainWindow.on("closed", () => {
       state.mainWindow = null;
     });
   }

@@ -4,15 +4,6 @@
     "lib": ["ES2022", "DOM", "WebWorker"],
     "types": ["chrome", "vite/client"]
   },
-  "include": [
-    "extension",
-    "src/types",
-    "src/env.d.ts"
-  ],
-  "exclude": [
-    "dist",
-    "dist-extension",
-    "build",
-    "node_modules"
-  ]
+  "include": ["extension", "src/types", "src/env.d.ts"],
+  "exclude": ["dist", "dist-extension", "build", "node_modules"]
 }

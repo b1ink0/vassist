@@ -1,9 +1,22 @@
-import { StorageServiceProxy } from '../services/proxies';
-import { DefaultUIConfig, BackgroundThemeModes } from '../config/uiConfig';
-import Logger from '../services/LoggerService';
+import { StorageServiceProxy } from "../services/proxies";
+import { DefaultUIConfig, BackgroundThemeModes } from "../config/uiConfig";
+import Logger from "../services/LoggerService";
 
-type GridSampleArea = { type: 'grid'; x: number; y: number; width: number; height: number; padding: number };
-type HorizontalSampleArea = { type: 'horizontal'; centerX: number; centerY: number; width: number; padding: number };
+type GridSampleArea = {
+  type: "grid";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  padding: number;
+};
+type HorizontalSampleArea = {
+  type: "horizontal";
+  centerX: number;
+  centerY: number;
+  width: number;
+  padding: number;
+};
 type SampleArea = GridSampleArea | HorizontalSampleArea;
 type SamplePoint = { x: number; y: number };
 type DetectionOptions = {
@@ -35,10 +48,14 @@ class BackgroundDetector {
    */
   async _loadConfig(): Promise<void> {
     try {
-      const config = await StorageServiceProxy.configLoad('uiConfig', DefaultUIConfig);
-        this.cachedUIConfig = (config as typeof DefaultUIConfig) || DefaultUIConfig;
+      const config = await StorageServiceProxy.configLoad(
+        "uiConfig",
+        DefaultUIConfig,
+      );
+      this.cachedUIConfig =
+        (config as typeof DefaultUIConfig) || DefaultUIConfig;
     } catch (error) {
-      Logger.error('BackgroundDetector', 'Failed to load UI config:', error);
+      Logger.error("BackgroundDetector", "Failed to load UI config:", error);
       this.cachedUIConfig = DefaultUIConfig;
     }
   }
@@ -54,17 +71,25 @@ class BackgroundDetector {
    */
   detectBrightness(options: DetectionOptions = {}) {
     const {
-      sampleArea = { type: 'grid', x: 0, y: 0, width: 400, height: 500, padding: 60 } as SampleArea,
+      sampleArea = {
+        type: "grid",
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 500,
+        padding: 60,
+      } as SampleArea,
       elementsToIgnore = [],
-      logPrefix = '[BackgroundDetector]',
+      logPrefix = "[BackgroundDetector]",
       enableDebug, // No default - will be undefined if not passed
     } = options;
 
     try {
       // Get UI config from cache (loads async in background)
       const uiConfig = this.cachedUIConfig;
-      const bgConfig = uiConfig.backgroundDetection || DefaultUIConfig.backgroundDetection;
-      
+      const bgConfig =
+        uiConfig.backgroundDetection || DefaultUIConfig.backgroundDetection;
+
       // If forced mode, skip detection
       if (bgConfig.mode === BackgroundThemeModes.LIGHT) {
         return { isLight: true, brightness: 255, debugMarkers: [] };
@@ -72,24 +97,25 @@ class BackgroundDetector {
       if (bgConfig.mode === BackgroundThemeModes.DARK) {
         return { isLight: false, brightness: 0, debugMarkers: [] };
       }
-      
+
       // Use config setting for debug, but allow override if explicitly set
-      const showDebug = enableDebug !== undefined ? enableDebug : (bgConfig.showDebug || false);
+      const showDebug =
+        enableDebug !== undefined ? enableDebug : bgConfig.showDebug || false;
       const gridSize = bgConfig.sampleGridSize || 5;
-      
+
       // Generate sample points based on area type
       const samplePoints = this._generateSamplePoints(sampleArea, gridSize);
-      
+
       // Collect brightness values
       const allBrightness: number[] = [];
       const markers: Array<Record<string, unknown>> = [];
-      
+
       for (const point of samplePoints) {
         const result = this._samplePointBrightness(point, elementsToIgnore);
-        
+
         // Always include the result since we now default to white if nothing found
         allBrightness.push(result.brightness);
-        
+
         if (showDebug) {
           const hue = (result.brightness / 255) * 120; // 0 (red) to 120 (green)
           const color = `hsl(${hue}, 100%, 50%)`;
@@ -98,28 +124,31 @@ class BackgroundDetector {
             y: point.y,
             color,
             brightness: Math.round(result.brightness),
-            alpha: result.alpha?.toFixed(2) || '1.00',
-            element: result.element || 'unknown',
+            alpha: result.alpha?.toFixed(2) || "1.00",
+            element: result.element || "unknown",
           });
         }
       }
-      
+
       if (allBrightness.length === 0) {
-        Logger.warn('other', `${logPrefix} No valid samples found`);
+        Logger.warn("other", `${logPrefix} No valid samples found`);
         return { isLight: false, brightness: 0, debugMarkers: [] };
       }
-      
+
       // Calculate median brightness (more robust than average)
       const sortedBrightness = [...allBrightness].sort((a, b) => a - b);
       const medianIndex = Math.floor(sortedBrightness.length / 2);
-      const medianBrightness = sortedBrightness.length % 2 === 0
-        ? ((sortedBrightness[medianIndex - 1] ?? 0) + (sortedBrightness[medianIndex] ?? 0)) / 2
-        : (sortedBrightness[medianIndex] ?? 0);
-      
+      const medianBrightness =
+        sortedBrightness.length % 2 === 0
+          ? ((sortedBrightness[medianIndex - 1] ?? 0) +
+              (sortedBrightness[medianIndex] ?? 0)) /
+            2
+          : (sortedBrightness[medianIndex] ?? 0);
+
       // Use dark theme if median brightness is above threshold (light background)
       const brightnessThreshold = 127.5;
       const isLight = medianBrightness > brightnessThreshold;
-      
+
       return {
         isLight,
         brightness: medianBrightness,
@@ -127,7 +156,7 @@ class BackgroundDetector {
         sampleCount: allBrightness.length,
       };
     } catch (error) {
-      Logger.error('other', `${logPrefix} Detection failed:`, error);
+      Logger.error("other", `${logPrefix} Detection failed:`, error);
       return { isLight: false, brightness: 0, debugMarkers: [] };
     }
   }
@@ -136,32 +165,39 @@ class BackgroundDetector {
    * Generate sample points based on area configuration
    * @private
    */
-  _generateSamplePoints(sampleArea: SampleArea, gridSize: number): SamplePoint[] {
+  _generateSamplePoints(
+    sampleArea: SampleArea,
+    gridSize: number,
+  ): SamplePoint[] {
     const points: SamplePoint[] = [];
-    
-    if (sampleArea.type === 'grid') {
+
+    if (sampleArea.type === "grid") {
       // Grid sampling (for ChatContainer)
       const { x, y, width, height, padding } = sampleArea;
       const cols = gridSize;
       const rows = gridSize;
-      
+
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
-          const px = x + padding + (col * (width - 2 * padding) / (cols - 1));
-          const py = y + padding + (row * (height - 2 * padding) / (rows - 1));
+          const px = x + padding + (col * (width - 2 * padding)) / (cols - 1);
+          const py = y + padding + (row * (height - 2 * padding)) / (rows - 1);
           points.push({ x: px, y: py });
         }
       }
-    } else if (sampleArea.type === 'horizontal') {
+    } else if (sampleArea.type === "horizontal") {
       // Horizontal line sampling (for ChatInput)
       const { centerX, centerY, width, padding } = sampleArea;
-      
+
       for (let i = 0; i < gridSize; i++) {
-        const x = centerX - width/2 + padding + (i * (width - padding*2) / (gridSize - 1));
+        const x =
+          centerX -
+          width / 2 +
+          padding +
+          (i * (width - padding * 2)) / (gridSize - 1);
         points.push({ x, y: centerY });
       }
     }
-    
+
     return points;
   }
 
@@ -169,92 +205,97 @@ class BackgroundDetector {
    * Sample brightness at a specific point
    * @private
    */
-  _samplePointBrightness(point: SamplePoint, elementsToIgnore: Array<HTMLElement | string> = []) {
+  _samplePointBrightness(
+    point: SamplePoint,
+    elementsToIgnore: Array<HTMLElement | string> = [],
+  ) {
     let elementBehind = document.elementFromPoint(point.x, point.y);
     if (!elementBehind) {
-      return { brightness: 255, alpha: 1, element: 'default', type: 'default' };
+      return { brightness: 255, alpha: 1, element: "default", type: "default" };
     }
-    
+
     // Traverse up DOM tree to find first element with non-transparent background
-    let bgColor = '';
-    let bgImage = '';
+    let bgColor = "";
+    let bgImage = "";
     let attempts = 0;
     const maxAttempts = 10;
-    
+
     while (elementBehind && attempts < maxAttempts) {
       // Check if this element should be ignored
       const shouldIgnore = elementsToIgnore.some((el) => {
         if (el instanceof HTMLElement) {
           return elementBehind === el;
-        } else if (typeof el === 'string') {
+        } else if (typeof el === "string") {
           // Selector or ID
-          if (el.startsWith('.')) {
+          if (el.startsWith(".")) {
             return !!elementBehind?.closest(el);
-          } else if (el.startsWith('#')) {
+          } else if (el.startsWith("#")) {
             return (elementBehind as HTMLElement).id === el.substring(1);
           }
         }
         return false;
       });
-      
+
       if (shouldIgnore) {
         // Move up to parent
         elementBehind = elementBehind.parentElement;
         attempts++;
         continue;
       }
-      
+
       const computedStyle = window.getComputedStyle(elementBehind);
       bgColor = computedStyle.backgroundColor;
       bgImage = computedStyle.backgroundImage;
-      
+
       // Check for gradient backgrounds first
-      if (bgImage && bgImage !== 'none' && bgImage.includes('gradient')) {
+      if (bgImage && bgImage !== "none" && bgImage.includes("gradient")) {
         const brightness = this._calculateGradientBrightness(bgImage);
         if (brightness !== null) {
           return {
             brightness,
             alpha: 1,
             element: elementBehind.tagName,
-            type: 'gradient',
+            type: "gradient",
           };
         }
       }
-      
+
       // Check if we got a valid solid color
-      const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+      const rgbMatch = bgColor.match(
+        /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/,
+      );
       if (rgbMatch) {
         const a = rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1;
         // If we found a non-transparent color, use it
         if (a > 0.1) {
-            const r = parseInt(rgbMatch[1] || '0', 10);
-            const g = parseInt(rgbMatch[2] || '0', 10);
-            const b = parseInt(rgbMatch[3] || '0', 10);
-          
+          const r = parseInt(rgbMatch[1] || "0", 10);
+          const g = parseInt(rgbMatch[2] || "0", 10);
+          const b = parseInt(rgbMatch[3] || "0", 10);
+
           // Calculate perceived brightness using luminance formula
           const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-          
+
           return {
             brightness,
             alpha: a,
             element: elementBehind.tagName,
-            type: 'solid',
+            type: "solid",
           };
         }
       }
-      
+
       // Move to parent element
       elementBehind = elementBehind.parentElement;
       attempts++;
     }
-    
+
     // If we traversed all the way up without finding a background, default to white
     // This handles websites that don't explicitly set background colors (browser default is white)
     return {
       brightness: 255, // White background
       alpha: 1,
-      element: 'body-default',
-      type: 'default',
+      element: "body-default",
+      type: "default",
     };
   }
 
@@ -266,30 +307,34 @@ class BackgroundDetector {
     try {
       // Extract colors from gradient string
       // Supports: linear-gradient, radial-gradient, conic-gradient
-      const colorMatches = gradientString.matchAll(/rgba?\([\d\s,]+\)|#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)/g);
+      const colorMatches = gradientString.matchAll(
+        /rgba?\([\d\s,]+\)|#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)/g,
+      );
       const colors = [];
-      
+
       for (const match of colorMatches) {
         const color = this._parseColor(match[0]);
         if (color) {
           colors.push(color);
         }
       }
-      
+
       if (colors.length === 0) {
         return null;
       }
-      
+
       // For simplicity, calculate average brightness of all gradient colors
       // More sophisticated: could calculate based on gradient direction and point position
-      const avgBrightness = colors.reduce((sum, color) => {
-        const brightness = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
-        return sum + brightness;
-      }, 0) / colors.length;
-      
+      const avgBrightness =
+        colors.reduce((sum, color) => {
+          const brightness =
+            0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+          return sum + brightness;
+        }, 0) / colors.length;
+
       return avgBrightness;
     } catch (error) {
-      Logger.warn('BackgroundDetector', 'Failed to parse gradient:', error);
+      Logger.warn("BackgroundDetector", "Failed to parse gradient:", error);
       return null;
     }
   }
@@ -298,35 +343,39 @@ class BackgroundDetector {
    * Parse a CSS color string to RGB values
    * @private
    */
-  _parseColor(colorString: string): { r: number; g: number; b: number; a: number } | null {
+  _parseColor(
+    colorString: string,
+  ): { r: number; g: number; b: number; a: number } | null {
     // Handle rgb/rgba
-    const rgbMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    const rgbMatch = colorString.match(
+      /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/,
+    );
     if (rgbMatch) {
       return {
-          r: parseInt(rgbMatch[1] || '0', 10),
-          g: parseInt(rgbMatch[2] || '0', 10),
-          b: parseInt(rgbMatch[3] || '0', 10),
+        r: parseInt(rgbMatch[1] || "0", 10),
+        g: parseInt(rgbMatch[2] || "0", 10),
+        b: parseInt(rgbMatch[3] || "0", 10),
         a: rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1,
       };
     }
-    
+
     // Handle hex colors
     const hexMatch = colorString.match(/^#([0-9a-fA-F]{3,8})$/);
     if (hexMatch) {
-        const hex = hexMatch[1] || '';
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        let a = 1;
-      
+      const hex = hexMatch[1] || "";
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 1;
+
       if (hex.length === 3) {
         // #RGB
-          const h0 = hex.charAt(0);
-          const h1 = hex.charAt(1);
-          const h2 = hex.charAt(2);
-          r = parseInt(h0 + h0, 16);
-          g = parseInt(h1 + h1, 16);
-          b = parseInt(h2 + h2, 16);
+        const h0 = hex.charAt(0);
+        const h1 = hex.charAt(1);
+        const h2 = hex.charAt(2);
+        r = parseInt(h0 + h0, 16);
+        g = parseInt(h1 + h1, 16);
+        b = parseInt(h2 + h2, 16);
       } else if (hex.length === 6) {
         // #RRGGBB
         r = parseInt(hex.substr(0, 2), 16);
@@ -339,52 +388,54 @@ class BackgroundDetector {
         b = parseInt(hex.substr(4, 2), 16);
         a = parseInt(hex.substr(6, 2), 16) / 255;
       }
-      
+
       return { r, g, b, a };
     }
-    
+
     // Handle hsl/hsla (convert to RGB)
-    const hslMatch = colorString.match(/hsla?\((\d+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/);
+    const hslMatch = colorString.match(
+      /hsla?\((\d+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/,
+    );
     if (hslMatch) {
-      const h = parseInt(hslMatch[1] || '0', 10) / 360;
-      const s = parseFloat(hslMatch[2] || '0') / 100;
-      const l = parseFloat(hslMatch[3] || '0') / 100;
+      const h = parseInt(hslMatch[1] || "0", 10) / 360;
+      const s = parseFloat(hslMatch[2] || "0") / 100;
+      const l = parseFloat(hslMatch[3] || "0") / 100;
       const a = hslMatch[4] !== undefined ? parseFloat(hslMatch[4]) : 1;
-      
+
       // HSL to RGB conversion
       const hslToRgb = (h: number, s: number, l: number) => {
         let r: number, g: number, b: number;
-        
+
         if (s === 0) {
           r = g = b = l;
         } else {
           const hue2rgb = (p: number, q: number, t: number) => {
             if (t < 0) t += 1;
             if (t > 1) t -= 1;
-            if (t < 1/6) return p + (q - p) * 6 * t;
-            if (t < 1/2) return q;
-            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
             return p;
           };
-          
+
           const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
           const p = 2 * l - q;
-          r = hue2rgb(p, q, h + 1/3);
+          r = hue2rgb(p, q, h + 1 / 3);
           g = hue2rgb(p, q, h);
-          b = hue2rgb(p, q, h - 1/3);
+          b = hue2rgb(p, q, h - 1 / 3);
         }
-        
+
         return {
           r: Math.round(r * 255),
           g: Math.round(g * 255),
           b: Math.round(b * 255),
         };
       };
-      
+
       const rgb = hslToRgb(h, s, l);
       return { ...rgb, a };
     }
-    
+
     return null;
   }
 
@@ -393,25 +444,25 @@ class BackgroundDetector {
    */
   withDisabledPointerEvents<T>(elements: HTMLElement[], callback: () => T): T {
     const originalStyles = new Map<HTMLElement, string>();
-    
+
     // Disable pointer events
     elements.forEach((el) => {
       if (el && el.style) {
         originalStyles.set(el, el.style.pointerEvents);
-        el.style.pointerEvents = 'none';
+        el.style.pointerEvents = "none";
       }
     });
-    
+
     // Execute callback
     const result = callback();
-    
+
     // Restore pointer events
     elements.forEach((el) => {
       if (el && el.style) {
-        el.style.pointerEvents = originalStyles.get(el) || '';
+        el.style.pointerEvents = originalStyles.get(el) || "";
       }
     });
-    
+
     return result;
   }
 }

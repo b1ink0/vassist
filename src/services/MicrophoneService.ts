@@ -1,4 +1,4 @@
-import Logger from './LoggerService';
+import Logger from "./LoggerService";
 
 type DeviceChangePayload = {
   devices: MediaDeviceInfo[];
@@ -35,13 +35,13 @@ class MicrophoneService {
       await this.refreshDevices();
 
       // Listen for device changes
-      navigator.mediaDevices.addEventListener('devicechange', () => {
+      navigator.mediaDevices.addEventListener("devicechange", () => {
         void this.refreshDevices();
       });
 
       return this.devices;
     } catch (error) {
-      Logger.error('MicrophoneService', 'Failed to initialize:', error);
+      Logger.error("MicrophoneService", "Failed to initialize:", error);
       throw error;
     }
   }
@@ -53,12 +53,21 @@ class MicrophoneService {
   async refreshDevices(): Promise<MediaDeviceInfo[]> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      this.devices = devices.filter((device) => device.kind === 'audioinput');
-      Logger.log('MicrophoneService', `Found ${this.devices.length} microphones`);
+      this.devices = devices.filter((device) => device.kind === "audioinput");
+      Logger.log(
+        "MicrophoneService",
+        `Found ${this.devices.length} microphones`,
+      );
 
       // If selected device is no longer available, reset to default
-      if (this.selectedDeviceId && !this.devices.find((d) => d.deviceId === this.selectedDeviceId)) {
-        Logger.warn('MicrophoneService', 'Selected device no longer available, resetting to default');
+      if (
+        this.selectedDeviceId &&
+        !this.devices.find((d) => d.deviceId === this.selectedDeviceId)
+      ) {
+        Logger.warn(
+          "MicrophoneService",
+          "Selected device no longer available, resetting to default",
+        );
         this.selectedDeviceId = null;
       }
 
@@ -67,7 +76,7 @@ class MicrophoneService {
 
       return this.devices;
     } catch (error) {
-      Logger.error('MicrophoneService', 'Failed to enumerate devices:', error);
+      Logger.error("MicrophoneService", "Failed to enumerate devices:", error);
       return [];
     }
   }
@@ -85,8 +94,8 @@ class MicrophoneService {
    * @param {string} deviceId - Device ID or null for default
    */
   setSelectedDevice(deviceId: string | null): void {
-    const actualDeviceId = deviceId === '' ? null : deviceId;
-    Logger.log('MicrophoneService', 'Selected device:', actualDeviceId);
+    const actualDeviceId = deviceId === "" ? null : deviceId;
+    Logger.log("MicrophoneService", "Selected device:", actualDeviceId);
     this.selectedDeviceId = actualDeviceId;
     this.notifyListeners();
   }
@@ -109,13 +118,15 @@ class MicrophoneService {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-      }
+      },
     };
 
     if (this.selectedDeviceId) {
       const audioConstraints = constraints.audio;
-      if (audioConstraints && typeof audioConstraints === 'object') {
-        (audioConstraints as MediaTrackConstraints).deviceId = { exact: this.selectedDeviceId };
+      if (audioConstraints && typeof audioConstraints === "object") {
+        (audioConstraints as MediaTrackConstraints).deviceId = {
+          exact: this.selectedDeviceId,
+        };
       }
     }
 
@@ -143,7 +154,7 @@ class MicrophoneService {
           selectedDeviceId: this.selectedDeviceId,
         });
       } catch (error) {
-        Logger.error('MicrophoneService', 'Listener error:', error);
+        Logger.error("MicrophoneService", "Listener error:", error);
       }
     });
   }

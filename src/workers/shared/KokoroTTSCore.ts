@@ -9,10 +9,10 @@
  * Kokoro TTS Core Class
  * Singleton instance manages model lifecycle
  */
-import Logger from '../../services/LoggerService';
+import Logger from "../../services/LoggerService";
 
-type KokoroDevice = 'auto' | 'webgpu' | 'wasm';
-type KokoroRuntimeDevice = 'webgpu' | 'wasm';
+type KokoroDevice = "auto" | "webgpu" | "wasm";
+type KokoroRuntimeDevice = "webgpu" | "wasm";
 
 interface KokoroConfig {
   modelId: string;
@@ -43,7 +43,10 @@ interface KokoroRawAudio {
 }
 
 interface KokoroTTSInstance {
-  generate(text: string, options: { voice: string; speed: number }): Promise<KokoroRawAudio | Float32Array>;
+  generate(
+    text: string,
+    options: { voice: string; speed: number },
+  ): Promise<KokoroRawAudio | Float32Array>;
   list_voices(): Promise<string[]>;
 }
 
@@ -51,10 +54,10 @@ interface KokoroTTSFactory {
   from_pretrained(
     modelId: string,
     options: {
-      dtype: 'fp32' | 'q8';
+      dtype: "fp32" | "q8";
       device: KokoroRuntimeDevice;
       progress_callback?: (progress: unknown) => void;
-    }
+    },
   ): Promise<KokoroTTSInstance>;
 }
 
@@ -98,24 +101,44 @@ export class KokoroTTSCore {
    * - webgpu -> fp32 (required for WebGPU backend)
    * - wasm -> q8 (recommended for WASM backend, best balance)
    */
-  async initialize(config: KokoroConfig, progressCallback: KokoroProgressCallback | null = null): Promise<boolean> {
-    const requestedDevice = config.device ?? 'auto';
+  async initialize(
+    config: KokoroConfig,
+    progressCallback: KokoroProgressCallback | null = null,
+  ): Promise<boolean> {
+    const requestedDevice = config.device ?? "auto";
 
     // If already initialized with same config AND same device, return success
-    if (this.isInitialized && this.modelId === config.modelId && this.config?.device === requestedDevice) {
-      Logger.log('KokoroTTSCore', 'Already initialized with model:', this.modelId, 'device:', this.config?.device);
+    if (
+      this.isInitialized &&
+      this.modelId === config.modelId &&
+      this.config?.device === requestedDevice
+    ) {
+      Logger.log(
+        "KokoroTTSCore",
+        "Already initialized with model:",
+        this.modelId,
+        "device:",
+        this.config?.device,
+      );
       return true;
     }
 
     // If device changed, we need to re-initialize with new backend
     if (this.isInitialized && this.config?.device !== requestedDevice) {
-      Logger.log('KokoroTTSCore', 'Device changed from', this.config?.device, 'to', requestedDevice, '- destroying old model');
+      Logger.log(
+        "KokoroTTSCore",
+        "Device changed from",
+        this.config?.device,
+        "to",
+        requestedDevice,
+        "- destroying old model",
+      );
       await this.destroy();
     }
 
     // If currently initializing, wait for it
     if (this.isInitializing && this.initPromise) {
-      Logger.log('KokoroTTSCore', 'Initialization in progress, waiting...');
+      Logger.log("KokoroTTSCore", "Initialization in progress, waiting...");
       return await this.initPromise;
     }
 
@@ -123,19 +146,19 @@ export class KokoroTTSCore {
 
     this.initPromise = (async (): Promise<boolean> => {
       try {
-        Logger.log('KokoroTTSCore', 'Initializing Kokoro TTS...', config);
+        Logger.log("KokoroTTSCore", "Initializing Kokoro TTS...", config);
 
         // Dynamic import of kokoro-js
-        const module = (await import('kokoro-js')) as unknown as KokoroModule;
+        const module = (await import("kokoro-js")) as unknown as KokoroModule;
         const { KokoroTTS } = module;
 
-        Logger.log('KokoroTTSCore', 'Loaded kokoro-js');
+        Logger.log("KokoroTTSCore", "Loaded kokoro-js");
 
         // Determine device backend
         let device: KokoroDevice = requestedDevice;
 
         // Auto-detect if requested (workers now support WebGPU via navigator.gpu)
-        if (device === 'auto' && typeof navigator !== 'undefined') {
+        if (device === "auto" && typeof navigator !== "undefined") {
           try {
             const gpuCapableNavigator = navigator as Navigator & {
               gpu?: { requestAdapter: () => Promise<unknown> };
@@ -143,23 +166,31 @@ export class KokoroTTSCore {
 
             if (gpuCapableNavigator.gpu) {
               const adapter = await gpuCapableNavigator.gpu.requestAdapter();
-              device = adapter ? 'webgpu' : 'wasm';
+              device = adapter ? "webgpu" : "wasm";
             } else {
-              device = 'wasm';
+              device = "wasm";
             }
           } catch (error: unknown) {
-            Logger.warn('KokoroTTSCore', 'WebGPU detection failed, using WASM:', error);
-            device = 'wasm';
+            Logger.warn(
+              "KokoroTTSCore",
+              "WebGPU detection failed, using WASM:",
+              error,
+            );
+            device = "wasm";
           }
         }
 
-        const runtimeDevice: KokoroRuntimeDevice = device === 'webgpu' ? 'webgpu' : 'wasm';
+        const runtimeDevice: KokoroRuntimeDevice =
+          device === "webgpu" ? "webgpu" : "wasm";
 
         // CRITICAL: Map device to correct dtype
         // WebGPU REQUIRES fp32, WASM works best with q8
-        const dtype: 'fp32' | 'q8' = runtimeDevice === 'webgpu' ? 'fp32' : 'q8';
+        const dtype: "fp32" | "q8" = runtimeDevice === "webgpu" ? "fp32" : "q8";
 
-        Logger.log('KokoroTTSCore', `Loading model with device=${runtimeDevice}, dtype=${dtype} (auto-mapped)`);
+        Logger.log(
+          "KokoroTTSCore",
+          `Loading model with device=${runtimeDevice}, dtype=${dtype} (auto-mapped)`,
+        );
 
         // Load model with progress tracking and retry logic
         try {
@@ -169,7 +200,11 @@ export class KokoroTTSCore {
             progress_callback: (progress: unknown) => {
               const parsedProgress = KokoroTTSCore.parseProgress(progress);
               if (!parsedProgress) {
-                Logger.warn('KokoroTTSCore', 'Invalid progress object:', progress);
+                Logger.warn(
+                  "KokoroTTSCore",
+                  "Invalid progress object:",
+                  progress,
+                );
                 return;
               }
 
@@ -177,28 +212,35 @@ export class KokoroTTSCore {
               const total = parsedProgress.total;
               const percent = total > 0 ? (loaded / total) * 100 : 0;
 
-              Logger.log('KokoroTTSCore', `Download progress: ${percent.toFixed(1)}%`);
+              Logger.log(
+                "KokoroTTSCore",
+                `Download progress: ${percent.toFixed(1)}%`,
+              );
 
               if (progressCallback) {
                 progressCallback({
                   loaded,
                   total,
                   percent,
-                  file: parsedProgress.file
+                  file: parsedProgress.file,
                 });
               }
-            }
+            },
           });
         } catch (deviceError: unknown) {
-          Logger.error('KokoroTTSCore', `Failed with ${runtimeDevice} backend:`, deviceError);
+          Logger.error(
+            "KokoroTTSCore",
+            `Failed with ${runtimeDevice} backend:`,
+            deviceError,
+          );
 
           // Fallback: If WebGPU failed, try WASM with q8
-          if (runtimeDevice === 'webgpu') {
-            Logger.log('KokoroTTSCore', 'Falling back to WASM backend...');
+          if (runtimeDevice === "webgpu") {
+            Logger.log("KokoroTTSCore", "Falling back to WASM backend...");
 
             this.tts = await KokoroTTS.from_pretrained(config.modelId, {
-              dtype: 'q8', // WASM always uses q8
-              device: 'wasm',
+              dtype: "q8", // WASM always uses q8
+              device: "wasm",
               progress_callback: (progress: unknown) => {
                 const parsedProgress = KokoroTTSCore.parseProgress(progress);
                 if (!parsedProgress) {
@@ -214,14 +256,14 @@ export class KokoroTTSCore {
                     loaded,
                     total,
                     percent,
-                    file: parsedProgress.file || 'model files (WASM fallback)'
+                    file: parsedProgress.file || "model files (WASM fallback)",
                   });
                 }
-              }
+              },
             });
 
-            Logger.log('KokoroTTSCore', 'WASM fallback successful');
-            this.config = { ...config, device: 'wasm' };
+            Logger.log("KokoroTTSCore", "WASM fallback successful");
+            this.config = { ...config, device: "wasm" };
           } else {
             throw deviceError;
           }
@@ -232,19 +274,24 @@ export class KokoroTTSCore {
         this.isInitialized = true;
         this.isInitializing = false;
 
-        Logger.log('KokoroTTSCore', 'Model loaded successfully with', this.config.device, 'backend');
+        Logger.log(
+          "KokoroTTSCore",
+          "Model loaded successfully with",
+          this.config.device,
+          "backend",
+        );
 
         // Log available voices for debugging
         try {
           const voices = await this.tts.list_voices();
-          Logger.log('KokoroTTSCore', 'Available voices:', voices);
+          Logger.log("KokoroTTSCore", "Available voices:", voices);
         } catch (voiceError: unknown) {
-          Logger.warn('KokoroTTSCore', 'Could not list voices:', voiceError);
+          Logger.warn("KokoroTTSCore", "Could not list voices:", voiceError);
         }
 
         return true;
       } catch (error: unknown) {
-        Logger.error('KokoroTTSCore', 'Initialization failed:', error);
+        Logger.error("KokoroTTSCore", "Initialization failed:", error);
         this.isInitializing = false;
         this.isInitialized = false;
         this.tts = null;
@@ -253,12 +300,15 @@ export class KokoroTTSCore {
         const errorMsg = KokoroTTSCore.getErrorMessage(error);
         let errorMessage = errorMsg;
 
-        if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-          errorMessage = 'Network error: Unable to download model. Check your internet connection and try again.';
-        } else if (errorMsg.includes('quota') || errorMsg.includes('storage')) {
-          errorMessage = 'Storage error: Not enough disk space. Free up some space and try again.';
-        } else if (errorMsg.includes('WebGPU') || errorMsg.includes('gpu')) {
-          errorMessage = 'GPU error: WebGPU not available. Using WASM fallback failed.';
+        if (errorMsg.includes("network") || errorMsg.includes("fetch")) {
+          errorMessage =
+            "Network error: Unable to download model. Check your internet connection and try again.";
+        } else if (errorMsg.includes("quota") || errorMsg.includes("storage")) {
+          errorMessage =
+            "Storage error: Not enough disk space. Free up some space and try again.";
+        } else if (errorMsg.includes("WebGPU") || errorMsg.includes("gpu")) {
+          errorMessage =
+            "GPU error: WebGPU not available. Using WASM fallback failed.";
         }
 
         throw new Error(errorMessage);
@@ -271,21 +321,27 @@ export class KokoroTTSCore {
   /**
    * Generate speech from text
    */
-  async generate(text: string, options: KokoroGenerateOptions = {}): Promise<ArrayBuffer> {
+  async generate(
+    text: string,
+    options: KokoroGenerateOptions = {},
+  ): Promise<ArrayBuffer> {
     if (!this.isInitialized || !this.tts) {
-      throw new Error('Kokoro TTS not initialized. Call initialize() first.');
+      throw new Error("Kokoro TTS not initialized. Call initialize() first.");
     }
 
     try {
-      Logger.log('KokoroTTSCore', `Generating speech: "${text.substring(0, 50)}..." with voice=${options.voice}, speed=${options.speed}`);
+      Logger.log(
+        "KokoroTTSCore",
+        `Generating speech: "${text.substring(0, 50)}..." with voice=${options.voice}, speed=${options.speed}`,
+      );
 
       // Generate audio - kokoro-js v1.2.1 returns RawAudio object
       const result = await this.tts.generate(text, {
-        voice: options.voice || 'af_heart',
-        speed: options.speed !== undefined ? options.speed : 1.0
+        voice: options.voice || "af_heart",
+        speed: options.speed !== undefined ? options.speed : 1.0,
       });
 
-      Logger.log('KokoroTTSCore', 'Raw result type:', typeof result, result);
+      Logger.log("KokoroTTSCore", "Raw result type:", typeof result, result);
 
       // IMPORTANT: The native .toBlob() creates 32-bit float WAV (audioFormat: 3)
       // which many browsers/audio players don't support properly.
@@ -313,22 +369,29 @@ export class KokoroTTSCore {
             if (sampleValue < min) min = sampleValue;
             if (sampleValue > max) max = sampleValue;
           }
-          Logger.log('KokoroTTSCore', `Sample range: min=${min}, max=${max}`);
+          Logger.log("KokoroTTSCore", `Sample range: min=${min}, max=${max}`);
         }
       } else {
-        Logger.error('KokoroTTSCore', 'Invalid audio format:', result);
-        throw new Error(`Invalid audio format returned from kokoro-js. Expected RawAudio object or Float32Array, got ${typeof result}`);
+        Logger.error("KokoroTTSCore", "Invalid audio format:", result);
+        throw new Error(
+          `Invalid audio format returned from kokoro-js. Expected RawAudio object or Float32Array, got ${typeof result}`,
+        );
       }
 
       // Convert to WAV format for playback (16-bit PCM)
       const wavBuffer = this.float32ToWav(audioSamples, sampleRate);
 
-      Logger.log('KokoroTTSCore', `Generated ${wavBuffer.byteLength} bytes of audio (${audioSamples.length} samples at ${sampleRate}Hz)`);
+      Logger.log(
+        "KokoroTTSCore",
+        `Generated ${wavBuffer.byteLength} bytes of audio (${audioSamples.length} samples at ${sampleRate}Hz)`,
+      );
 
       return wavBuffer;
     } catch (error: unknown) {
-      Logger.error('KokoroTTSCore', 'Generation failed:', error);
-      throw new Error(`Kokoro speech generation failed: ${KokoroTTSCore.getErrorMessage(error)}`);
+      Logger.error("KokoroTTSCore", "Generation failed:", error);
+      throw new Error(
+        `Kokoro speech generation failed: ${KokoroTTSCore.getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -337,14 +400,16 @@ export class KokoroTTSCore {
    */
   async listVoices(): Promise<string[]> {
     if (!this.isInitialized || !this.tts) {
-      throw new Error('Kokoro TTS not initialized. Call initialize() first.');
+      throw new Error("Kokoro TTS not initialized. Call initialize() first.");
     }
 
     try {
       return await this.tts.list_voices();
     } catch (error: unknown) {
-      Logger.error('KokoroTTSCore', 'Failed to list voices:', error);
-      throw new Error(`Failed to list voices: ${KokoroTTSCore.getErrorMessage(error)}`);
+      Logger.error("KokoroTTSCore", "Failed to list voices:", error);
+      throw new Error(
+        `Failed to list voices: ${KokoroTTSCore.getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -356,7 +421,7 @@ export class KokoroTTSCore {
       initialized: this.isInitialized,
       initializing: this.isInitializing,
       modelId: this.modelId,
-      config: this.config
+      config: this.config,
     };
   }
 
@@ -364,7 +429,7 @@ export class KokoroTTSCore {
    * Destroy the TTS model and free up memory
    */
   async destroy(): Promise<void> {
-    Logger.log('KokoroTTSCore', 'Destroying model...');
+    Logger.log("KokoroTTSCore", "Destroying model...");
 
     this.tts = null;
     this.isInitialized = false;
@@ -373,7 +438,7 @@ export class KokoroTTSCore {
     this.config = null;
     this.initPromise = null;
 
-    Logger.log('KokoroTTSCore', 'Model destroyed');
+    Logger.log("KokoroTTSCore", "Model destroyed");
   }
 
   /**
@@ -387,7 +452,7 @@ export class KokoroTTSCore {
     try {
       return this.tts !== null && this.isInitialized;
     } catch (error: unknown) {
-      Logger.warn('KokoroTTSCore', 'Ping failed:', error);
+      Logger.warn("KokoroTTSCore", "Ping failed:", error);
       return false;
     }
   }
@@ -396,28 +461,32 @@ export class KokoroTTSCore {
    * Clear cache and reset model
    */
   async clearCache(): Promise<boolean> {
-    Logger.log('KokoroTTSCore', 'Clearing cache and resetting model...');
+    Logger.log("KokoroTTSCore", "Clearing cache and resetting model...");
 
     try {
       // First destroy the model instance
       await this.destroy();
 
       // Then clear transformers.js cache from IndexedDB
-      if (typeof indexedDB !== 'undefined') {
+      if (typeof indexedDB !== "undefined") {
         const idbFactory = indexedDB as IDBFactory & {
           databases?: () => Promise<Array<{ name?: string }>>;
         };
 
-        if (typeof idbFactory.databases === 'function') {
+        if (typeof idbFactory.databases === "function") {
           const databases = await idbFactory.databases();
           for (const db of databases) {
             const dbName = db.name;
-            if (dbName && dbName.includes('transformers')) {
-              Logger.log('KokoroTTSCore', 'Deleting database:', dbName);
+            if (dbName && dbName.includes("transformers")) {
+              Logger.log("KokoroTTSCore", "Deleting database:", dbName);
               await new Promise<void>((resolve, reject) => {
                 const request = indexedDB.deleteDatabase(dbName);
                 request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error || new Error('Failed to delete IndexedDB database'));
+                request.onerror = () =>
+                  reject(
+                    request.error ||
+                      new Error("Failed to delete IndexedDB database"),
+                  );
               });
             }
           }
@@ -425,20 +494,20 @@ export class KokoroTTSCore {
       }
 
       // Also clear any Cache Storage API caches
-      if (typeof caches !== 'undefined') {
+      if (typeof caches !== "undefined") {
         const cacheKeys = await caches.keys();
         for (const key of cacheKeys) {
-          if (key.includes('transformers')) {
-            Logger.log('KokoroTTSCore', 'Deleting cache:', key);
+          if (key.includes("transformers")) {
+            Logger.log("KokoroTTSCore", "Deleting cache:", key);
             await caches.delete(key);
           }
         }
       }
 
-      Logger.log('KokoroTTSCore', 'Cache cleared, model reset');
+      Logger.log("KokoroTTSCore", "Cache cleared, model reset");
       return true;
     } catch (error: unknown) {
-      Logger.error('KokoroTTSCore', 'Failed to clear cache:', error);
+      Logger.error("KokoroTTSCore", "Failed to clear cache:", error);
       throw error;
     }
   }
@@ -451,43 +520,50 @@ export class KokoroTTSCore {
       let totalSize = 0;
 
       // Check IndexedDB databases
-      if (typeof indexedDB !== 'undefined') {
+      if (typeof indexedDB !== "undefined") {
         const idbFactory = indexedDB as IDBFactory & {
           databases?: () => Promise<Array<{ name?: string }>>;
         };
 
-        if (typeof idbFactory.databases === 'function') {
+        if (typeof idbFactory.databases === "function") {
           const databases = await idbFactory.databases();
           const transformerDatabases = databases
             .map((d) => d.name)
-            .filter((name): name is string => typeof name === 'string' && name.includes('transformers'));
+            .filter(
+              (name): name is string =>
+                typeof name === "string" && name.includes("transformers"),
+            );
 
-          if (transformerDatabases.length > 0 && typeof navigator !== 'undefined' && 'storage' in navigator) {
+          if (
+            transformerDatabases.length > 0 &&
+            typeof navigator !== "undefined" &&
+            "storage" in navigator
+          ) {
             const estimate = await navigator.storage.estimate();
             totalSize = estimate.usage || 0;
 
             return {
               usage: totalSize,
               quota: estimate.quota || 0,
-              databases: transformerDatabases
+              databases: transformerDatabases,
             };
           }
         }
       }
 
       // Fallback to storage estimate
-      if (typeof navigator !== 'undefined' && 'storage' in navigator) {
+      if (typeof navigator !== "undefined" && "storage" in navigator) {
         const estimate = await navigator.storage.estimate();
         return {
           usage: estimate.usage || 0,
           quota: estimate.quota || 0,
-          databases: []
+          databases: [],
         };
       }
 
       return { usage: 0, quota: 0, databases: [] };
     } catch (error: unknown) {
-      Logger.error('KokoroTTSCore', 'Failed to get cache size:', error);
+      Logger.error("KokoroTTSCore", "Failed to get cache size:", error);
       return { usage: 0, quota: 0, databases: [] };
     }
   }
@@ -512,15 +588,15 @@ export class KokoroTTSCore {
     let offset = 0;
 
     // RIFF chunk descriptor
-    this.writeString(view, offset, 'RIFF');
+    this.writeString(view, offset, "RIFF");
     offset += 4;
     view.setUint32(offset, bufferSize - 8, true);
     offset += 4;
-    this.writeString(view, offset, 'WAVE');
+    this.writeString(view, offset, "WAVE");
     offset += 4;
 
     // fmt sub-chunk
-    this.writeString(view, offset, 'fmt ');
+    this.writeString(view, offset, "fmt ");
     offset += 4;
     view.setUint32(offset, 16, true);
     offset += 4; // Subchunk1Size (16 for PCM)
@@ -538,7 +614,7 @@ export class KokoroTTSCore {
     offset += 2;
 
     // data sub-chunk
-    this.writeString(view, offset, 'data');
+    this.writeString(view, offset, "data");
     offset += 4;
     view.setUint32(offset, dataSize, true);
     offset += 4;
@@ -552,7 +628,8 @@ export class KokoroTTSCore {
 
       // Convert to 16-bit signed integer
       // Float range [-1.0, 1.0] maps to Int16 range [-32768, 32767]
-      const int16Value = sample < 0 ? Math.floor(sample * 32768) : Math.floor(sample * 32767);
+      const int16Value =
+        sample < 0 ? Math.floor(sample * 32768) : Math.floor(sample * 32767);
 
       view.setInt16(offset, int16Value, true);
     }
@@ -571,7 +648,7 @@ export class KokoroTTSCore {
   }
 
   private static isRawAudio(value: unknown): value is KokoroRawAudio {
-    if (!value || typeof value !== 'object') {
+    if (!value || typeof value !== "object") {
       return false;
     }
 
@@ -579,15 +656,17 @@ export class KokoroTTSCore {
     return candidate.audio instanceof Float32Array;
   }
 
-  private static parseProgress(progress: unknown): { loaded: number; total: number; file: string } | null {
-    if (!progress || typeof progress !== 'object') {
+  private static parseProgress(
+    progress: unknown,
+  ): { loaded: number; total: number; file: string } | null {
+    if (!progress || typeof progress !== "object") {
       return null;
     }
 
     const record = progress as Record<string, unknown>;
-    const loaded = typeof record.loaded === 'number' ? record.loaded : 0;
-    const total = typeof record.total === 'number' ? record.total : 0;
-    const file = typeof record.file === 'string' ? record.file : 'model files';
+    const loaded = typeof record.loaded === "number" ? record.loaded : 0;
+    const total = typeof record.total === "number" ? record.total : 0;
+    const file = typeof record.file === "string" ? record.file : "model files";
 
     return { loaded, total, file };
   }
@@ -597,7 +676,7 @@ export class KokoroTTSCore {
       return error.message;
     }
 
-    if (typeof error === 'string') {
+    if (typeof error === "string") {
       return error;
     }
 

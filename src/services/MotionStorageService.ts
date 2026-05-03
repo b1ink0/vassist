@@ -2,8 +2,8 @@
  * Motion Storage Service
  */
 
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -36,10 +36,10 @@ interface NameValidationResult {
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const getDefaultMetadata = (): MotionMetadata => ({
-  originalFileName: 'unknown.vmd',
+  originalFileName: "unknown.vmd",
   uploadedAt: 0,
   fileSize: 0,
   conversionInfo: {},
@@ -50,10 +50,16 @@ const normalizeMotionMetadata = (value: unknown): MotionMetadata => {
     return getDefaultMetadata();
   }
 
-  const originalFileName = typeof value.originalFileName === 'string' ? value.originalFileName : 'unknown.vmd';
-  const uploadedAt = typeof value.uploadedAt === 'number' ? value.uploadedAt : 0;
-  const fileSize = typeof value.fileSize === 'number' ? value.fileSize : 0;
-  const conversionInfo = isRecord(value.conversionInfo) ? value.conversionInfo : {};
+  const originalFileName =
+    typeof value.originalFileName === "string"
+      ? value.originalFileName
+      : "unknown.vmd";
+  const uploadedAt =
+    typeof value.uploadedAt === "number" ? value.uploadedAt : 0;
+  const fileSize = typeof value.fileSize === "number" ? value.fileSize : 0;
+  const conversionInfo = isRecord(value.conversionInfo)
+    ? value.conversionInfo
+    : {};
 
   return {
     ...value,
@@ -64,7 +70,9 @@ const normalizeMotionMetadata = (value: unknown): MotionMetadata => {
   } as MotionMetadata;
 };
 
-const normalizeEnabledByCategory = (value: unknown): Record<string, boolean> => {
+const normalizeEnabledByCategory = (
+  value: unknown,
+): Record<string, boolean> => {
   if (!isRecord(value)) {
     return {};
   }
@@ -80,7 +88,7 @@ const normalizeAnimationCategories = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.filter((item): item is string => typeof item === 'string');
+  return value.filter((item): item is string => typeof item === "string");
 };
 
 const normalizeStoredMotion = (value: unknown): StoredMotion | null => {
@@ -88,26 +96,28 @@ const normalizeStoredMotion = (value: unknown): StoredMotion | null => {
     return null;
   }
 
-  const animationCategories = normalizeAnimationCategories(value.animationCategories);
+  const animationCategories = normalizeAnimationCategories(
+    value.animationCategories,
+  );
   const enabledByCategory = normalizeEnabledByCategory(value.enabledByCategory);
   const normalized: StoredMotion = {
     ...value,
-    name: typeof value.name === 'string' ? value.name : 'Unknown Motion',
+    name: typeof value.name === "string" ? value.name : "Unknown Motion",
     animationCategories,
     enabledByCategory,
     metadata: normalizeMotionMetadata(value.metadata),
   };
 
-  if (typeof value.animationCategory === 'string') {
+  if (typeof value.animationCategory === "string") {
     normalized.animationCategory = value.animationCategory;
   }
-  if (typeof value.isEnabled === 'boolean') {
+  if (typeof value.isEnabled === "boolean") {
     normalized.isEnabled = value.isEnabled;
   }
   if (value.motionData instanceof Blob) {
     normalized.motionData = value.motionData;
   }
-  if (typeof value.blobURL === 'string') {
+  if (typeof value.blobURL === "string") {
     normalized.blobURL = value.blobURL;
   }
 
@@ -119,7 +129,7 @@ class MotionStorageService {
   private readonly MAX_NAME_LENGTH: number;
 
   constructor() {
-    this.CATEGORY = 'motion';
+    this.CATEGORY = "motion";
     this.MAX_NAME_LENGTH = 50;
   }
 
@@ -129,18 +139,21 @@ class MotionStorageService {
    * @returns {Object} - { valid: boolean, error: string, name: string }
    */
   validateMotionName(name: string): NameValidationResult {
-    if (!name || typeof name !== 'string') {
-      return { valid: false, error: 'Motion name is required' };
+    if (!name || typeof name !== "string") {
+      return { valid: false, error: "Motion name is required" };
     }
 
     const trimmed = name.trim();
-    
+
     if (trimmed.length === 0) {
-      return { valid: false, error: 'Motion name cannot be empty' };
+      return { valid: false, error: "Motion name cannot be empty" };
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return { valid: false, error: `Motion name cannot exceed ${this.MAX_NAME_LENGTH} characters` };
+      return {
+        valid: false,
+        error: `Motion name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
+      };
     }
 
     return { valid: true, name: trimmed };
@@ -185,11 +198,13 @@ class MotionStorageService {
 
       let motionBlob;
       if (bvmdData instanceof ArrayBuffer) {
-        motionBlob = new Blob([bvmdData], { type: 'application/octet-stream' });
+        motionBlob = new Blob([bvmdData], { type: "application/octet-stream" });
       } else if (bvmdData instanceof Blob) {
         motionBlob = bvmdData;
       } else {
-        throw new Error('Invalid motion data format. Expected Blob or ArrayBuffer.');
+        throw new Error(
+          "Invalid motion data format. Expected Blob or ArrayBuffer.",
+        );
       }
 
       const motionData: StoredMotion = {
@@ -198,21 +213,29 @@ class MotionStorageService {
         animationCategories,
         enabledByCategory,
         metadata: {
-          originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : 'unknown.vmd',
+          originalFileName:
+            typeof metadata.originalFileName === "string"
+              ? metadata.originalFileName
+              : "unknown.vmd",
           uploadedAt: Date.now(),
           fileSize: motionBlob.size,
-          conversionInfo: isRecord(metadata.conversionInfo) ? metadata.conversionInfo : {},
-          ...metadata
-        }
+          conversionInfo: isRecord(metadata.conversionInfo)
+            ? metadata.conversionInfo
+            : {},
+          ...metadata,
+        },
       };
 
       await storageServiceProxy.fileSave(motionId, motionData, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion saved: ${motionId} (${validatedName}) - Categories: ${animationCategories.join(', ')}`);
-      
+      Logger.log(
+        "MotionStorage",
+        `Motion saved: ${motionId} (${validatedName}) - Categories: ${animationCategories.join(", ")}`,
+      );
+
       return motionId;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to save motion:', error);
+      Logger.error("MotionStorage", "Failed to save motion:", error);
       throw error;
     }
   }
@@ -227,7 +250,7 @@ class MotionStorageService {
       const motionData = await storageServiceProxy.fileLoad(motionId);
       return normalizeStoredMotion(motionData);
     } catch (error) {
-      Logger.error('MotionStorage', `Failed to get motion ${motionId}:`, error);
+      Logger.error("MotionStorage", `Failed to get motion ${motionId}:`, error);
       return null;
     }
   }
@@ -239,9 +262,11 @@ class MotionStorageService {
    */
   async getAllMotions(): Promise<MotionWithId[]> {
     try {
-      const allMotions = await storageServiceProxy.filesGetByCategory(this.CATEGORY);
+      const allMotions = await storageServiceProxy.filesGetByCategory(
+        this.CATEGORY,
+      );
       const motionRecords = isRecord(allMotions) ? allMotions : {};
-      
+
       const motionsArray = Object.entries(motionRecords)
         .map(([id, data]) => {
           const normalized = normalizeStoredMotion(data);
@@ -257,7 +282,7 @@ class MotionStorageService {
 
       return motionsArray;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to get all motions:', error);
+      Logger.error("MotionStorage", "Failed to get all motions:", error);
       return [];
     }
   }
@@ -268,26 +293,42 @@ class MotionStorageService {
    * Fetches only metadata from database level, not blob data
    * @returns {Promise<Array>} - Array of motion info without blob data
    */
-  async getMotionsList(): Promise<Array<{ id: string; name: string; animationCategories: string[]; enabledByCategory: Record<string, boolean>; metadata: MotionMetadata }>> {
+  async getMotionsList(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      animationCategories: string[];
+      enabledByCategory: Record<string, boolean>;
+      metadata: MotionMetadata;
+    }>
+  > {
     try {
-      const motionsMetadata = await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
+      const motionsMetadata =
+        await storageServiceProxy.filesGetMetadataByCategory(this.CATEGORY);
       const metadataRecords = isRecord(motionsMetadata) ? motionsMetadata : {};
-      
+
       const motionsList = Object.entries(metadataRecords).map(([id, data]) => {
         const entry = isRecord(data) && isRecord(data.value) ? data.value : {};
         return {
           id,
-          name: typeof entry.name === 'string' ? entry.name : 'Unknown Motion',
-          animationCategories: normalizeAnimationCategories(entry.animationCategories),
-          enabledByCategory: normalizeEnabledByCategory(entry.enabledByCategory),
+          name: typeof entry.name === "string" ? entry.name : "Unknown Motion",
+          animationCategories: normalizeAnimationCategories(
+            entry.animationCategories,
+          ),
+          enabledByCategory: normalizeEnabledByCategory(
+            entry.enabledByCategory,
+          ),
           metadata: normalizeMotionMetadata(entry.metadata),
         };
       });
 
-      Logger.log('MotionStorage', `Retrieved ${motionsList.length} motions (metadata only)`);
+      Logger.log(
+        "MotionStorage",
+        `Retrieved ${motionsList.length} motions (metadata only)`,
+      );
       return motionsList;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to get motions list:', error);
+      Logger.error("MotionStorage", "Failed to get motions list:", error);
       return [];
     }
   }
@@ -300,14 +341,23 @@ class MotionStorageService {
   async getMotionsByCategory(animCategory: string): Promise<MotionWithId[]> {
     try {
       const allMotions = await this.getAllMotions();
-      const categoryMotions = allMotions.filter((motion) =>
-        motion.animationCategories && motion.animationCategories.includes(animCategory)
+      const categoryMotions = allMotions.filter(
+        (motion) =>
+          motion.animationCategories &&
+          motion.animationCategories.includes(animCategory),
       );
 
-      Logger.log('MotionStorage', `Retrieved ${categoryMotions.length} motions for category: ${animCategory}`);
+      Logger.log(
+        "MotionStorage",
+        `Retrieved ${categoryMotions.length} motions for category: ${animCategory}`,
+      );
       return categoryMotions;
     } catch (error) {
-      Logger.error('MotionStorage', `Failed to get motions for category ${animCategory}:`, error);
+      Logger.error(
+        "MotionStorage",
+        `Failed to get motions for category ${animCategory}:`,
+        error,
+      );
       return [];
     }
   }
@@ -340,10 +390,13 @@ class MotionStorageService {
 
       await storageServiceProxy.fileSave(motionId, motion, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion ${motionId} renamed to: ${validatedName}`);
+      Logger.log(
+        "MotionStorage",
+        `Motion ${motionId} renamed to: ${validatedName}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to update motion name:', error);
+      Logger.error("MotionStorage", "Failed to update motion name:", error);
       throw error;
     }
   }
@@ -354,7 +407,10 @@ class MotionStorageService {
    * @param {Object} metadataUpdates - Metadata or top-level fields to update
    * @returns {Promise<boolean>} - Success status
    */
-  async updateMotionMetadata(motionId: string, metadataUpdates: UnknownRecord): Promise<boolean> {
+  async updateMotionMetadata(
+    motionId: string,
+    metadataUpdates: UnknownRecord,
+  ): Promise<boolean> {
     try {
       const motion = await this.getMotion(motionId);
       if (!motion) {
@@ -362,16 +418,35 @@ class MotionStorageService {
       }
 
       Object.keys(metadataUpdates).forEach((key) => {
-        if (key === 'animationCategory' || key === 'animationCategories' || key === 'enabledByCategory' || key === 'isEnabled' || key === 'name') {
-          if (key === 'animationCategories') {
-            motion.animationCategories = normalizeAnimationCategories(metadataUpdates[key]);
-          } else if (key === 'enabledByCategory') {
-            motion.enabledByCategory = normalizeEnabledByCategory(metadataUpdates[key]);
-          } else if (key === 'animationCategory' && typeof metadataUpdates[key] === 'string') {
+        if (
+          key === "animationCategory" ||
+          key === "animationCategories" ||
+          key === "enabledByCategory" ||
+          key === "isEnabled" ||
+          key === "name"
+        ) {
+          if (key === "animationCategories") {
+            motion.animationCategories = normalizeAnimationCategories(
+              metadataUpdates[key],
+            );
+          } else if (key === "enabledByCategory") {
+            motion.enabledByCategory = normalizeEnabledByCategory(
+              metadataUpdates[key],
+            );
+          } else if (
+            key === "animationCategory" &&
+            typeof metadataUpdates[key] === "string"
+          ) {
             motion.animationCategory = metadataUpdates[key] as string;
-          } else if (key === 'isEnabled' && typeof metadataUpdates[key] === 'boolean') {
+          } else if (
+            key === "isEnabled" &&
+            typeof metadataUpdates[key] === "boolean"
+          ) {
             motion.isEnabled = metadataUpdates[key] as boolean;
-          } else if (key === 'name' && typeof metadataUpdates[key] === 'string') {
+          } else if (
+            key === "name" &&
+            typeof metadataUpdates[key] === "string"
+          ) {
             motion.name = metadataUpdates[key] as string;
           }
         } else {
@@ -384,10 +459,14 @@ class MotionStorageService {
 
       await storageServiceProxy.fileSave(motionId, motion, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion ${motionId} metadata updated:`, metadataUpdates);
+      Logger.log(
+        "MotionStorage",
+        `Motion ${motionId} metadata updated:`,
+        metadataUpdates,
+      );
       return true;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to update motion metadata:', error);
+      Logger.error("MotionStorage", "Failed to update motion metadata:", error);
       throw error;
     }
   }
@@ -398,7 +477,10 @@ class MotionStorageService {
    * @param {boolean} enabled - Enabled state
    * @returns {Promise<boolean>} - Success status
    */
-  async toggleMotionEnabled(motionId: string, enabled: boolean): Promise<boolean> {
+  async toggleMotionEnabled(
+    motionId: string,
+    enabled: boolean,
+  ): Promise<boolean> {
     try {
       const motion = await this.getMotion(motionId);
       if (!motion) {
@@ -406,19 +488,26 @@ class MotionStorageService {
       }
 
       if (!enabled) {
-        const motionCategory = motion.animationCategory ?? motion.animationCategories[0];
+        const motionCategory =
+          motion.animationCategory ?? motion.animationCategories[0];
         if (motionCategory) {
-          const categoryMotions = await this.getMotionsByCategory(motionCategory);
+          const categoryMotions =
+            await this.getMotionsByCategory(motionCategory);
           const enabledMotions = categoryMotions.filter((m) => m.isEnabled);
-        
-          if (enabledMotions.length === 1 && enabledMotions[0]?.id === motionId) {
-            throw new Error(`Cannot disable last enabled motion in category: ${motionCategory}`);
+
+          if (
+            enabledMotions.length === 1 &&
+            enabledMotions[0]?.id === motionId
+          ) {
+            throw new Error(
+              `Cannot disable last enabled motion in category: ${motionCategory}`,
+            );
           }
         }
       }
 
       motion.isEnabled = enabled;
-      
+
       if (!motion.metadata) {
         motion.metadata = getDefaultMetadata();
       }
@@ -426,10 +515,13 @@ class MotionStorageService {
 
       await storageServiceProxy.fileSave(motionId, motion, this.CATEGORY);
 
-      Logger.log('MotionStorage', `Motion ${motionId} ${enabled ? 'enabled' : 'disabled'}`);
+      Logger.log(
+        "MotionStorage",
+        `Motion ${motionId} ${enabled ? "enabled" : "disabled"}`,
+      );
       return true;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to toggle motion:', error);
+      Logger.error("MotionStorage", "Failed to toggle motion:", error);
       throw error;
     }
   }
@@ -449,17 +541,23 @@ class MotionStorageService {
       // Check if this motion is enabled in any category and if it's the last one
       if (motion.animationCategories && motion.animationCategories.length > 0) {
         const enabledByCategory = motion.enabledByCategory || {};
-        
+
         for (const category of motion.animationCategories) {
           // Only check categories where this motion is enabled
           if (enabledByCategory[category] === true) {
             const categoryMotions = await this.getMotionsByCategory(category);
-            const enabledMotions = categoryMotions.filter((m) =>
-              m.enabledByCategory && m.enabledByCategory[category] === true
+            const enabledMotions = categoryMotions.filter(
+              (m) =>
+                m.enabledByCategory && m.enabledByCategory[category] === true,
             );
-            
-            if (enabledMotions.length === 1 && enabledMotions[0]?.id === motionId) {
-              throw new Error(`Cannot delete last enabled motion in category: ${category}`);
+
+            if (
+              enabledMotions.length === 1 &&
+              enabledMotions[0]?.id === motionId
+            ) {
+              throw new Error(
+                `Cannot delete last enabled motion in category: ${category}`,
+              );
             }
           }
         }
@@ -471,10 +569,10 @@ class MotionStorageService {
         URL.revokeObjectURL(motion.blobURL);
       }
 
-      Logger.log('MotionStorage', `Motion ${motionId} deleted`);
+      Logger.log("MotionStorage", `Motion ${motionId} deleted`);
       return true;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to delete motion:', error);
+      Logger.error("MotionStorage", "Failed to delete motion:", error);
       throw error;
     }
   }
@@ -489,7 +587,11 @@ class MotionStorageService {
       const exists = await storageServiceProxy.fileExists(motionId);
       return exists === true;
     } catch (error) {
-      Logger.error('MotionStorage', `Failed to check if motion ${motionId} exists:`, error);
+      Logger.error(
+        "MotionStorage",
+        `Failed to check if motion ${motionId} exists:`,
+        error,
+      );
       return false;
     }
   }
@@ -511,7 +613,11 @@ class MotionStorageService {
 
       return totalSize;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to calculate total storage size:', error);
+      Logger.error(
+        "MotionStorage",
+        "Failed to calculate total storage size:",
+        error,
+      );
       return 0;
     }
   }
@@ -520,20 +626,28 @@ class MotionStorageService {
    * Get storage statistics grouped by category
    * @returns {Promise<Object>} - Statistics object
    */
-  async getStorageStats(): Promise<Record<string, { count: number; enabled: number; disabled: number; totalSize: number }>> {
+  async getStorageStats(): Promise<
+    Record<
+      string,
+      { count: number; enabled: number; disabled: number; totalSize: number }
+    >
+  > {
     try {
       const allMotions = await this.getAllMotions();
-      const stats: Record<string, { count: number; enabled: number; disabled: number; totalSize: number }> = {};
+      const stats: Record<
+        string,
+        { count: number; enabled: number; disabled: number; totalSize: number }
+      > = {};
 
       for (const motion of allMotions) {
-        const category = motion.animationCategory || 'unknown';
-        
+        const category = motion.animationCategory || "unknown";
+
         if (!stats[category]) {
           stats[category] = {
             count: 0,
             enabled: 0,
             disabled: 0,
-            totalSize: 0
+            totalSize: 0,
           };
         }
 
@@ -543,7 +657,7 @@ class MotionStorageService {
         } else {
           stats[category].disabled++;
         }
-        
+
         if (motion.metadata && motion.metadata.fileSize) {
           stats[category].totalSize += motion.metadata.fileSize;
         }
@@ -551,7 +665,7 @@ class MotionStorageService {
 
       return stats;
     } catch (error) {
-      Logger.error('MotionStorage', 'Failed to get storage stats:', error);
+      Logger.error("MotionStorage", "Failed to get storage stats:", error);
       return {};
     }
   }

@@ -1,18 +1,18 @@
-import { cva, type VariantProps } from 'class-variance-authority';
-import * as React from 'react';
-import { Select as BaseSelect } from '@base-ui/react/select';
-import type { SelectHTMLAttributes } from 'react';
-import { Icon } from '../icons';
-import { cn } from '../../utils/cn';
+import { cva, type VariantProps } from "class-variance-authority";
+import * as React from "react";
+import { Select as BaseSelect } from "@base-ui/react/select";
+import type { SelectHTMLAttributes } from "react";
+import { Icon } from "../icons";
+import { cn } from "../../utils/cn";
 
-const selectVariants = cva('glass-input w-full min-h-[36px] pr-11 text-left', {
+const selectVariants = cva("glass-input w-full min-h-[36px] pr-11 text-left", {
   variants: {
     variant: {
-      default: '',
-      dark:    'glass-input-dark',
+      default: "",
+      dark: "glass-input-dark",
     },
   },
-  defaultVariants: { variant: 'default' },
+  defaultVariants: { variant: "default" },
 });
 
 interface SelectOption {
@@ -26,11 +26,16 @@ interface SelectGroup {
   options: SelectOption[];
 }
 
-type SelectTriggerRender = React.ComponentProps<typeof BaseSelect.Trigger>['render'];
-type SelectSide = React.ComponentProps<typeof BaseSelect.Positioner>['side'];
-type SelectAlign = React.ComponentProps<typeof BaseSelect.Positioner>['align'];
+type SelectTriggerRender = React.ComponentProps<
+  typeof BaseSelect.Trigger
+>["render"];
+type SelectSide = React.ComponentProps<typeof BaseSelect.Positioner>["side"];
+type SelectAlign = React.ComponentProps<typeof BaseSelect.Positioner>["align"];
 
-interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'>, VariantProps<typeof selectVariants> {
+interface SelectProps
+  extends
+    Omit<SelectHTMLAttributes<HTMLSelectElement>, "onChange">,
+    VariantProps<typeof selectVariants> {
   className?: string;
   options?: SelectOption[];
   groups?: SelectGroup[];
@@ -64,8 +69,8 @@ const Select = ({
   open,
   defaultOpen,
   onOpenChange,
-  side = 'bottom',
-  align = 'center',
+  side = "bottom",
+  align = "center",
   sideOffset = 8,
   positionerClassName,
   popupClassName,
@@ -80,20 +85,22 @@ const Select = ({
   }, [grouped, groups, options]);
 
   const isControlled = value !== undefined;
-  const initialValue = String(defaultValue ?? value ?? optionItems[0]?.value ?? '');
+  const initialValue = String(
+    defaultValue ?? value ?? optionItems[0]?.value ?? "",
+  );
   const [internalValue, setInternalValue] = React.useState(initialValue);
 
   React.useEffect(() => {
     if (!isControlled) {
       return;
     }
-    setInternalValue(String(value ?? ''));
+    setInternalValue(String(value ?? ""));
   }, [isControlled, value]);
 
-  const selectedValue = isControlled ? String(value ?? '') : internalValue;
+  const selectedValue = isControlled ? String(value ?? "") : internalValue;
 
   const triggerChange = (nextValue: string | null): void => {
-    const resolvedValue = nextValue ?? '';
+    const resolvedValue = nextValue ?? "";
 
     if (!isControlled) {
       setInternalValue(resolvedValue);
@@ -111,8 +118,10 @@ const Select = ({
     onChange(syntheticEvent);
   };
 
-  const textClass = variant === 'dark' ? 'glass-text' : 'glass-text-black';
-  const triggerClassName = trigger ? className : cn(selectVariants({ variant }), 'relative', className);
+  const textClass = variant === "dark" ? "glass-text" : "glass-text-black";
+  const triggerClassName = trigger
+    ? className
+    : cn(selectVariants({ variant }), "relative", className);
 
   return (
     <BaseSelect.Root
@@ -129,8 +138,8 @@ const Select = ({
         {!trigger && (
           <>
             <BaseSelect.Value
-              className={cn('block truncate pr-2', textClass)}
-              placeholder={placeholder || 'Select'}
+              className={cn("block truncate pr-2", textClass)}
+              placeholder={placeholder || "Select"}
             />
             <BaseSelect.Icon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70">
               <Icon name="chevron-down" size={16} />
@@ -140,12 +149,28 @@ const Select = ({
       </BaseSelect.Trigger>
 
       <BaseSelect.Portal>
-        <BaseSelect.Positioner side={side} sideOffset={sideOffset} align={align} alignItemWithTrigger={false} className={cn('z-[10040] outline-none', positionerClassName)}>
-          <BaseSelect.Popup className={cn('glass-container rounded-xl border border-white/15 p-1 shadow-xl backdrop-blur-[12px]', popupClassName)}>
+        <BaseSelect.Positioner
+          side={side}
+          sideOffset={sideOffset}
+          align={align}
+          alignItemWithTrigger={false}
+          className={cn("z-[10040] outline-none", positionerClassName)}
+        >
+          <BaseSelect.Popup
+            className={cn(
+              "glass-container rounded-xl border border-white/15 p-1 shadow-xl backdrop-blur-[12px]",
+              popupClassName,
+            )}
+          >
             <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center text-white/50">
               <Icon name="chevron-up" size={16} />
             </BaseSelect.ScrollUpArrow>
-            <BaseSelect.List className={cn('max-h-64 min-w-[var(--anchor-width)] overflow-y-auto scrollbar-glass', listClassName)}>
+            <BaseSelect.List
+              className={cn(
+                "max-h-64 min-w-[var(--anchor-width)] overflow-y-auto scrollbar-glass",
+                listClassName,
+              )}
+            >
               {grouped
                 ? groups.map((group) => (
                     <React.Fragment key={group.label}>
@@ -162,7 +187,9 @@ const Select = ({
                           <BaseSelect.ItemIndicator className="w-4 text-white/75">
                             <Icon name="check" size={16} />
                           </BaseSelect.ItemIndicator>
-                          <BaseSelect.ItemText className="truncate">{opt.label}</BaseSelect.ItemText>
+                          <BaseSelect.ItemText className="truncate">
+                            {opt.label}
+                          </BaseSelect.ItemText>
                         </BaseSelect.Item>
                       ))}
                     </React.Fragment>
@@ -173,8 +200,10 @@ const Select = ({
                       value={String(opt.value)}
                       disabled={opt.disabled}
                       className="group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-white/85 outline-none transition-colors data-[highlighted]:bg-white/10 data-[disabled]:opacity-40"
-                      >
-                      <BaseSelect.ItemText className="truncate">{opt.label}</BaseSelect.ItemText>
+                    >
+                      <BaseSelect.ItemText className="truncate">
+                        {opt.label}
+                      </BaseSelect.ItemText>
                       <BaseSelect.ItemIndicator className="w-4 text-white/75">
                         <Icon name="check" size={16} />
                       </BaseSelect.ItemIndicator>

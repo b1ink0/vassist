@@ -4,185 +4,238 @@
  * Used by both offscreen worker and SharedWorker
  */
 
-import { VMDFile } from './VMDFile.js';
-import { AudioProcessingCore, type JapaneseVowel, type VowelAdjustmentConfig, type VowelRanges } from './AudioProcessingCore';
-import Logger from '../../services/LoggerService';
+import { VMDFile } from "./VMDFile.js";
+import {
+  AudioProcessingCore,
+  type JapaneseVowel,
+  type VowelAdjustmentConfig,
+  type VowelRanges,
+} from "./AudioProcessingCore";
+import Logger from "../../services/LoggerService";
 
 interface VMDGenerationConfig extends VowelAdjustmentConfig {
-    smoothness: number;
-    optimize_vmd: boolean;
+  smoothness: number;
+  optimize_vmd: boolean;
 }
 
 export class VMDGenerationCore {
-    static defaultConfig: VMDGenerationConfig = {
-        a_weight_multiplier: 2.7,
-        i_weight_multiplier: 1,
-        o_weight_multiplier: 2.7,
-        u_weight_multiplier: 2.5,
-        smoothness: 30,
-        optimize_vmd: true
+  static defaultConfig: VMDGenerationConfig = {
+    a_weight_multiplier: 2.7,
+    i_weight_multiplier: 1,
+    o_weight_multiplier: 2.7,
+    u_weight_multiplier: 2.5,
+    smoothness: 30,
+    optimize_vmd: true,
+  };
+
+  // Japanese vowel frequency ranges (in Hz)
+  static vowelRanges: VowelRanges = {
+    あ: [800, 1200], // A sound
+    い: [2300, 2700], // I sound
+    う: [300, 700], // U sound
+    お: [500, 900], // O sound
+  };
+
+  /**
+   * Generate VMD from decoded audio data (PCM)
+   * @param {Float32Array} audioData - Decoded PCM audio samples
+   * @param {number} sampleRate - Sample rate of audio
+   * @param {string} modelName - Model name for VMD
+   * @param {Object} config - Generation configuration
+   * @returns {Promise<ArrayBuffer>} VMD data
+   */
+  static async generateVMDFromPCM(
+    audioData: Float32Array,
+    sampleRate: number,
+    modelName = "Model",
+    config: Partial<VMDGenerationConfig> = {},
+  ): Promise<ArrayBuffer> {
+    try {
+      const mergedConfig = { ...VMDGenerationCore.defaultConfig, ...config };
+
+      Logger.log(
+        "VMDGenCore",
+        `Generating VMD from PCM: ${audioData.length} samples @ ${sampleRate}Hz`,
+      );
+
+      // Step 1: Compute spectrogram (async with yields)
+      const frameRate = 30; // VMD uses 30 fps
+      const spectrogram = await AudioProcessingCore.computeSpectrogram(
+        audioData,
+        sampleRate,
+        frameRate,
+      );
+
+      Logger.log(
+        "VMDGenCore",
+        `Spectrogram computed: ${spectrogram.data.length} frames`,
+      );
+
+      // Calculate max energy for speech detection
+      const maxEnergy = AudioProcessingCore.getMaxEnergy(spectrogram.data);
+
+      // Step 2: Analyze vowel frequencies
+      const vowelWeights = AudioProcessingCore.analyzeVowelFrequencies(
+        spectrogram,
+        VMDGenerationCore.vowelRanges,
+      );
+
+      // Step 3: Apply smoothing
+      const smoothness = mergedConfig.smoothness || 15;
+      const smoothedWeights = AudioProcessingCore.smoothVowelWeights(
+        vowelWeights,
+        smoothness,
+      );
+
+      Logger.log(
+        "VMDGenCore",
+        `Applied smoothing with window size: ${smoothness}`,
+      );
+
+      // Step 4: Create VMD file with energy detection
+      const vmd = new VMDFile(modelName);
+
+      // Add morph frames with gradual energy scaling
+      // Yield to event loop every 100 frames to prevent blocking
+      for (let frame = 0; frame < smoothedWeights.length; frame++) {
+        // Yield to event loop periodically
+        if (frame % 100 === 0 && frame > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        // Calculate energy for this frame
+        const currentSpectrogramFrame = spectrogram.data[frame];
+        const currentWeights = smoothedWeights[frame];
+        if (!currentSpectrogramFrame || !currentWeights) {
+          continue;
+        }
+
+        const frameEnergy = AudioProcessingCore.getFrameEnergy(
+          currentSpectrogramFrame,
+        );
+
+        // Gradual energy scale
+        const energyScale =
+          maxEnergy > 0 ? Math.min(Math.sqrt(frameEnergy / maxEnergy), 1.0) : 0;
+
+        // Adjust weights
+        const weights = AudioProcessingCore.adjustVowelWeights(
+          currentWeights,
+          mergedConfig,
+        );
+
+        // Add frames for each vowel with energy scaling
+        for (const [vowel, weight] of Object.entries(weights) as Array<
+          [JapaneseVowel, number]
+        >) {
+          const scaledWeight = Math.min(weight * energyScale, 1.0);
+          vmd.addMorphFrame(vowel, frame, scaledWeight);
+        }
+      }
+
+      // Step 5: Optimize VMD
+      if (mergedConfig.optimize_vmd) {
+        VMDGenerationCore.optimizeVMD(vmd);
+      }
+
+      // Step 6: Save VMD file
+      const vmdData = vmd.save();
+
+      Logger.log(
+        "VMDGenCore",
+        `VMD generated: ${vmdData.byteLength} bytes, ${vmd.getMorphFrames().length} frames`,
+      );
+
+      return vmdData;
+    } catch (error: unknown) {
+      Logger.error("VMDGenCore", "Error generating VMD:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Optimize VMD data by removing unnecessary frames
+   */
+  static optimizeVMD(vmd: VMDFile): void {
+    const isKeyframe = (v1: number, v2: number, v3: number): boolean => {
+      return (
+        (v1 > v2 && v1 > v3) ||
+        (v1 < v2 && v1 < v3) ||
+        (v1 === 0 && (v2 !== 0 || v3 !== 0)) ||
+        (v1 === 1 && (v2 !== 1 || v3 !== 1)) ||
+        (v1 < 0.0099 && ((v2 > 0.0099 && v2 > v1) || (v3 > 0.0099 && v3 > v1)))
+      );
     };
 
-    // Japanese vowel frequency ranges (in Hz)
-    static vowelRanges: VowelRanges = {
-        'あ': [800, 1200],   // A sound
-        'い': [2300, 2700],  // I sound
-        'う': [300, 700],    // U sound
-        'お': [500, 900]     // O sound
+    const allFrames = vmd.getMorphFrames();
+    const optimizedFrames: typeof allFrames = [];
+    const vowelFrames: Record<JapaneseVowel, typeof allFrames> = {
+      あ: [],
+      い: [],
+      う: [],
+      お: [],
     };
 
-    /**
-     * Generate VMD from decoded audio data (PCM)
-     * @param {Float32Array} audioData - Decoded PCM audio samples
-     * @param {number} sampleRate - Sample rate of audio
-     * @param {string} modelName - Model name for VMD
-     * @param {Object} config - Generation configuration
-     * @returns {Promise<ArrayBuffer>} VMD data
-     */
-    static async generateVMDFromPCM(audioData: Float32Array, sampleRate: number, modelName = 'Model', config: Partial<VMDGenerationConfig> = {}): Promise<ArrayBuffer> {
-        try {
-            const mergedConfig = { ...VMDGenerationCore.defaultConfig, ...config };
-            
-            Logger.log('VMDGenCore', `Generating VMD from PCM: ${audioData.length} samples @ ${sampleRate}Hz`);
-            
-            // Step 1: Compute spectrogram (async with yields)
-            const frameRate = 30; // VMD uses 30 fps
-            const spectrogram = await AudioProcessingCore.computeSpectrogram(audioData, sampleRate, frameRate);
-            
-            Logger.log('VMDGenCore', `Spectrogram computed: ${spectrogram.data.length} frames`);
-            
-            // Calculate max energy for speech detection
-            const maxEnergy = AudioProcessingCore.getMaxEnergy(spectrogram.data);
-            
-            // Step 2: Analyze vowel frequencies
-            const vowelWeights = AudioProcessingCore.analyzeVowelFrequencies(
-                spectrogram,
-                VMDGenerationCore.vowelRanges
-            );
-            
-            // Step 3: Apply smoothing
-            const smoothness = mergedConfig.smoothness || 15;
-            const smoothedWeights = AudioProcessingCore.smoothVowelWeights(vowelWeights, smoothness);
-            
-            Logger.log('VMDGenCore', `Applied smoothing with window size: ${smoothness}`);
-            
-            // Step 4: Create VMD file with energy detection
-            const vmd = new VMDFile(modelName);
-            
-            // Add morph frames with gradual energy scaling
-            // Yield to event loop every 100 frames to prevent blocking
-            for (let frame = 0; frame < smoothedWeights.length; frame++) {
-                // Yield to event loop periodically
-                if (frame % 100 === 0 && frame > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 0));
-                }
-                
-                // Calculate energy for this frame
-                const currentSpectrogramFrame = spectrogram.data[frame];
-                const currentWeights = smoothedWeights[frame];
-                if (!currentSpectrogramFrame || !currentWeights) {
-                    continue;
-                }
-
-                const frameEnergy = AudioProcessingCore.getFrameEnergy(currentSpectrogramFrame);
-                
-                // Gradual energy scale
-                const energyScale = maxEnergy > 0 ? Math.min(Math.sqrt(frameEnergy / maxEnergy), 1.0) : 0;
-                
-                // Adjust weights
-                const weights = AudioProcessingCore.adjustVowelWeights(
-                    currentWeights,
-                    mergedConfig
-                );
-                
-                // Add frames for each vowel with energy scaling
-                for (const [vowel, weight] of Object.entries(weights) as Array<[JapaneseVowel, number]>) {
-                    const scaledWeight = Math.min(weight * energyScale, 1.0);
-                    vmd.addMorphFrame(vowel, frame, scaledWeight);
-                }
-            }
-            
-            // Step 5: Optimize VMD
-            if (mergedConfig.optimize_vmd) {
-                VMDGenerationCore.optimizeVMD(vmd);
-            }
-            
-            // Step 6: Save VMD file
-            const vmdData = vmd.save();
-            
-            Logger.log('VMDGenCore', `VMD generated: ${vmdData.byteLength} bytes, ${vmd.getMorphFrames().length} frames`);
-            
-            return vmdData;
-            
-        } catch (error: unknown) {
-            Logger.error('VMDGenCore', 'Error generating VMD:', error);
-            throw error;
-        }
+    // Group frames by vowel
+    for (const frame of allFrames) {
+      if (frame.name in vowelFrames) {
+        const vowel = frame.name as JapaneseVowel;
+        vowelFrames[vowel].push(frame);
+      } else {
+        optimizedFrames.push(frame);
+      }
     }
 
-    /**
-     * Optimize VMD data by removing unnecessary frames
-     */
-    static optimizeVMD(vmd: VMDFile): void {
-        const isKeyframe = (v1: number, v2: number, v3: number): boolean => {
-            return (v1 > v2 && v1 > v3) || (v1 < v2 && v1 < v3) ||
-                   (v1 === 0 && (v2 !== 0 || v3 !== 0)) || 
-                   (v1 === 1 && (v2 !== 1 || v3 !== 1)) ||
-                   (v1 < 0.0099 && ((v2 > 0.0099 && v2 > v1) || (v3 > 0.0099 && v3 > v1)));
-        };
+    // Optimize each vowel's frames
+    for (const [_vowel, frames] of Object.entries(vowelFrames)) {
+      if (frames.length === 0) continue;
 
-        const allFrames = vmd.getMorphFrames();
-        const optimizedFrames: typeof allFrames = [];
-        const vowelFrames: Record<JapaneseVowel, typeof allFrames> = {
-            'あ': [],
-            'い': [],
-            'う': [],
-            'お': []
-        };
+      // Sort by frame number
+      frames.sort(
+        (a: (typeof allFrames)[number], b: (typeof allFrames)[number]) =>
+          a.frame - b.frame,
+      );
 
-        // Group frames by vowel
-        for (const frame of allFrames) {
-            if (frame.name in vowelFrames) {
-                const vowel = frame.name as JapaneseVowel;
-                vowelFrames[vowel].push(frame);
-            } else {
-                optimizedFrames.push(frame);
-            }
+      // Always keep first and last two frames
+      optimizedFrames.push(...frames.slice(0, 2));
+      if (frames.length > 2) {
+        optimizedFrames.push(...frames.slice(-2));
+      }
+
+      // Check intermediate frames
+      for (let i = 2; i < frames.length - 2; i++) {
+        const currentFrame = frames[i];
+        const previousFrame = frames[i - 1];
+        const nextFrame = frames[i + 1];
+
+        if (!currentFrame || !previousFrame || !nextFrame) {
+          continue;
         }
 
-        // Optimize each vowel's frames
-        for (const [_vowel, frames] of Object.entries(vowelFrames)) {
-            if (frames.length === 0) continue;
-            
-            // Sort by frame number
-            frames.sort((a: (typeof allFrames)[number], b: (typeof allFrames)[number]) => a.frame - b.frame);
-            
-            // Always keep first and last two frames
-            optimizedFrames.push(...frames.slice(0, 2));
-            if (frames.length > 2) {
-                optimizedFrames.push(...frames.slice(-2));
-            }
-            
-            // Check intermediate frames
-            for (let i = 2; i < frames.length - 2; i++) {
-                const currentFrame = frames[i];
-                const previousFrame = frames[i - 1];
-                const nextFrame = frames[i + 1];
-
-                if (!currentFrame || !previousFrame || !nextFrame) {
-                    continue;
-                }
-
-                if (!frames.every((f: (typeof allFrames)[number]) => f.weight === 0) && 
-                    isKeyframe(currentFrame.weight, previousFrame.weight, nextFrame.weight)) {
-                    optimizedFrames.push(currentFrame);
-                }
-            }
+        if (
+          !frames.every((f: (typeof allFrames)[number]) => f.weight === 0) &&
+          isKeyframe(
+            currentFrame.weight,
+            previousFrame.weight,
+            nextFrame.weight,
+          )
+        ) {
+          optimizedFrames.push(currentFrame);
         }
-
-        // Update VMD with optimized frames
-        vmd.setMorphFrames(optimizedFrames.sort((a: (typeof allFrames)[number], b: (typeof allFrames)[number]) => a.frame - b.frame));
-        
-        Logger.log('VMDGenCore', `Optimized: ${vmd.getMorphFrames().length} frames kept`);
+      }
     }
+
+    // Update VMD with optimized frames
+    vmd.setMorphFrames(
+      optimizedFrames.sort(
+        (a: (typeof allFrames)[number], b: (typeof allFrames)[number]) =>
+          a.frame - b.frame,
+      ),
+    );
+
+    Logger.log(
+      "VMDGenCore",
+      `Optimized: ${vmd.getMorphFrames().length} frames kept`,
+    );
+  }
 }

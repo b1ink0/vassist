@@ -4,9 +4,13 @@
  * TODO: Replace SVG icons with @heroicons/react/24/outline (MinusIcon, XMarkIcon, Square2StackIcon)
  */
 
-import { MinusIcon, XMarkIcon, Square2StackIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
-import { useDesktop } from '../../contexts/DesktopContext';
+import {
+  MinusIcon,
+  XMarkIcon,
+  Square2StackIcon,
+} from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { useDesktop } from "../../contexts/DesktopContext";
 
 /**
  * Window controls for Electron desktop app
@@ -25,7 +29,7 @@ export default function DesktopWindowControls() {
     if (api?.window?.minimize) {
       api.window.minimize();
     } else {
-      console.error('Minimize function not available');
+      console.error("Minimize function not available");
     }
   };
 
@@ -33,7 +37,7 @@ export default function DesktopWindowControls() {
     if (api?.window?.maximize) {
       api.window.maximize();
     } else {
-      console.error('Maximize function not available');
+      console.error("Maximize function not available");
     }
   };
 
@@ -41,16 +45,16 @@ export default function DesktopWindowControls() {
     if (api?.window?.close) {
       api.window.close();
     } else {
-      console.error('Close function not available');
+      console.error("Close function not available");
     }
   };
 
   return (
-    <div 
-      className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
-    >
+    <div className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full">
       {!electronAvailable && (
-        <span className="text-xs text-red-500 mr-2">Electron API not loaded</span>
+        <span className="text-xs text-red-500 mr-2">
+          Electron API not loaded
+        </span>
       )}
       <button
         onClick={handleMinimize}

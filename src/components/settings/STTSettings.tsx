@@ -4,19 +4,22 @@
  * Handles Speech-to-Text provider selection and configuration
  */
 
-import { useMemo, useState, useEffect } from 'react';
-import { useConfig } from '../../contexts/ConfigContext';
-import { useAndroid } from '../../contexts/AndroidContext';
-import { STTProviders, type STTRemoteProviderProfile } from '../../config/aiConfig';
-import { isAndroid, isDesktop } from '../../utils/PlatformUtils';
-import OpenAISTTConfig from './stt/OpenAISTTConfig';
-import OpenAICompatibleSTTConfig from './stt/OpenAICompatibleSTTConfig';
-import ChromeAISTTConfig from './stt/ChromeAISTTConfig';
-import DesktopSTTConfig from './stt/DesktopSTTConfig';
-import WhisperModelDownloader from './stt/WhisperModelDownloader';
-import Toggle from '../common/Toggle';
-import { Icon } from '../icons';
-import { Button, Input, Select, Card, SettingsRow } from '../ui';
+import { useMemo, useState, useEffect } from "react";
+import { useConfig } from "../../contexts/ConfigContext";
+import { useAndroid } from "../../contexts/AndroidContext";
+import {
+  STTProviders,
+  type STTRemoteProviderProfile,
+} from "../../config/aiConfig";
+import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import OpenAISTTConfig from "./stt/OpenAISTTConfig";
+import OpenAICompatibleSTTConfig from "./stt/OpenAICompatibleSTTConfig";
+import ChromeAISTTConfig from "./stt/ChromeAISTTConfig";
+import DesktopSTTConfig from "./stt/DesktopSTTConfig";
+import WhisperModelDownloader from "./stt/WhisperModelDownloader";
+import Toggle from "../common/Toggle";
+import { Icon } from "../icons";
+import { Button, Input, Select, Card, SettingsRow } from "../ui";
 
 interface STTSettingsProps {
   isLightBackground?: boolean;
@@ -24,54 +27,77 @@ interface STTSettingsProps {
 }
 
 type STTProviderKey =
-  | 'android-local'
-  | 'desktop-local'
-  | 'chrome-ai-multimodal'
-  | 'openai'
-  | 'openai-compatible';
+  | "android-local"
+  | "desktop-local"
+  | "chrome-ai-multimodal"
+  | "openai"
+  | "openai-compatible";
 
 interface ProviderRecord {
   [key: string]: string;
 }
 
-const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSettingsProps) => {
+const STTSettings = ({
+  isLightBackground = false,
+  hasChromeAI = false,
+}: STTSettingsProps) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('');
-  const [profileName, setProfileName] = useState('');
-  
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [profileName, setProfileName] = useState("");
+
   const { api: androidAPI } = useAndroid();
-  
+
   const {
     sttConfig,
     sttTesting,
     updateSTTConfig,
     testSTTRecording,
-    
+
     chromeAiStatus,
     checkChromeAIAvailability,
     startChromeAIDownload,
   } = useConfig();
-  const remoteProfiles = Array.isArray(sttConfig.remoteProfiles) ? sttConfig.remoteProfiles : [];
-  const [selectedProfileId, setSelectedProfileId] = useState('');
-  const currentRemoteProvider = sttConfig.provider === STTProviders.OPENAI || sttConfig.provider === STTProviders.OPENAI_COMPATIBLE
-    ? sttConfig.provider
-    : null;
-  const currentProviderProfiles = currentRemoteProvider
-    ? remoteProfiles.filter((profile) => profile.provider === currentRemoteProvider)
-    : [];
-  const selectedProfile = currentProviderProfiles.find((profile) => profile.id === selectedProfileId) || null;
-  const compactActionVariant = isLightBackground ? 'dark' : 'ghost';
+  const remoteProfiles = useMemo(
+    () =>
+      Array.isArray(sttConfig.remoteProfiles) ? sttConfig.remoteProfiles : [],
+    [sttConfig.remoteProfiles],
+  );
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const currentRemoteProvider =
+    sttConfig.provider === STTProviders.OPENAI ||
+    sttConfig.provider === STTProviders.OPENAI_COMPATIBLE
+      ? sttConfig.provider
+      : null;
+  const currentProviderProfiles = useMemo(
+    () =>
+      currentRemoteProvider
+        ? remoteProfiles.filter(
+            (profile) => profile.provider === currentRemoteProvider,
+          )
+        : [],
+    [currentRemoteProvider, remoteProfiles],
+  );
+  const selectedProfile =
+    currentProviderProfiles.find(
+      (profile) => profile.id === selectedProfileId,
+    ) || null;
+  const compactActionVariant = isLightBackground ? "dark" : "ghost";
 
   useEffect(() => {
-    if (selectedProfileId && !currentProviderProfiles.some((profile) => profile.id === selectedProfileId)) {
-      setSelectedProfileId('');
+    if (
+      selectedProfileId &&
+      !currentProviderProfiles.some(
+        (profile) => profile.id === selectedProfileId,
+      )
+    ) {
+      setSelectedProfileId("");
     }
   }, [currentProviderProfiles, selectedProfileId]);
 
   useEffect(() => {
     if (!selectedProfile) {
       if (!selectedProfileId) {
-        setProfileName('');
+        setProfileName("");
       }
       return;
     }
@@ -80,10 +106,10 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
   }, [selectedProfile, selectedProfileId]);
 
   const applyRemoteProfile = (profile: STTRemoteProviderProfile) => {
-    if (profile.provider === 'openai') {
-      updateSTTConfig('openai', {
+    if (profile.provider === "openai") {
+      updateSTTConfig("openai", {
         ...sttConfig.openai,
-        apiKey: profile.apiKey || '',
+        apiKey: profile.apiKey || "",
         model: profile.model,
         language: profile.language || sttConfig.openai.language,
         temperature: profile.temperature ?? sttConfig.openai.temperature,
@@ -91,25 +117,33 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
       return;
     }
 
-    updateSTTConfig('openai-compatible', {
-      ...sttConfig['openai-compatible'],
-      endpoint: profile.endpoint || sttConfig['openai-compatible']?.endpoint || '',
-      apiKey: profile.apiKey || '',
+    updateSTTConfig("openai-compatible", {
+      ...sttConfig["openai-compatible"],
+      endpoint:
+        profile.endpoint || sttConfig["openai-compatible"]?.endpoint || "",
+      apiKey: profile.apiKey || "",
       model: profile.model,
-      language: profile.language || sttConfig['openai-compatible']?.language || 'auto',
-      temperature: profile.temperature ?? sttConfig['openai-compatible']?.temperature ?? 0,
+      language:
+        profile.language || sttConfig["openai-compatible"]?.language || "auto",
+      temperature:
+        profile.temperature ?? sttConfig["openai-compatible"]?.temperature ?? 0,
     });
   };
 
-  const handleRemoteProfileSelection = (provider: STTRemoteProviderProfile['provider'], nextProfileId: string) => {
+  const handleRemoteProfileSelection = (
+    provider: STTRemoteProviderProfile["provider"],
+    nextProfileId: string,
+  ) => {
     setSelectedProfileId(nextProfileId);
 
     if (!nextProfileId) {
-      setProfileName('');
+      setProfileName("");
       return;
     }
 
-    const profile = remoteProfiles.find((entry) => entry.id === nextProfileId && entry.provider === provider);
+    const profile = remoteProfiles.find(
+      (entry) => entry.id === nextProfileId && entry.provider === provider,
+    );
     if (!profile) {
       return;
     }
@@ -118,43 +152,48 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
     applyRemoteProfile(profile);
   };
 
-  const saveCurrentRemoteProfile = (provider: STTRemoteProviderProfile['provider']) => {
+  const saveCurrentRemoteProfile = (
+    provider: STTRemoteProviderProfile["provider"],
+  ) => {
     const nextProfileId = selectedProfile?.id || `stt-remote-${Date.now()}`;
     const defaultName = `Saved Backend ${currentProviderProfiles.length + (selectedProfile ? 0 : 1)}`;
-    const nextProfile: STTRemoteProviderProfile = provider === STTProviders.OPENAI
-      ? {
-          id: nextProfileId,
-          name: profileName.trim() || selectedProfile?.name || defaultName,
-          provider: 'openai',
-          apiKey: sttConfig.openai.apiKey,
-          model: sttConfig.openai.model,
-          language: sttConfig.openai.language,
-          temperature: sttConfig.openai.temperature,
-        }
-      : {
-          id: nextProfileId,
-          name: profileName.trim() || selectedProfile?.name || defaultName,
-          provider: 'openai-compatible',
-          endpoint: sttConfig['openai-compatible']?.endpoint,
-          apiKey: sttConfig['openai-compatible']?.apiKey,
-          model: sttConfig['openai-compatible']?.model || '',
-          language: sttConfig['openai-compatible']?.language,
-          temperature: sttConfig['openai-compatible']?.temperature,
-        };
+    const nextProfile: STTRemoteProviderProfile =
+      provider === STTProviders.OPENAI
+        ? {
+            id: nextProfileId,
+            name: profileName.trim() || selectedProfile?.name || defaultName,
+            provider: "openai",
+            apiKey: sttConfig.openai.apiKey,
+            model: sttConfig.openai.model,
+            language: sttConfig.openai.language,
+            temperature: sttConfig.openai.temperature,
+          }
+        : {
+            id: nextProfileId,
+            name: profileName.trim() || selectedProfile?.name || defaultName,
+            provider: "openai-compatible",
+            endpoint: sttConfig["openai-compatible"]?.endpoint,
+            apiKey: sttConfig["openai-compatible"]?.apiKey,
+            model: sttConfig["openai-compatible"]?.model || "",
+            language: sttConfig["openai-compatible"]?.language,
+            temperature: sttConfig["openai-compatible"]?.temperature,
+          };
 
     updateSTTConfig(
-      'remoteProfiles',
+      "remoteProfiles",
       selectedProfile
-        ? remoteProfiles.map((profile) => (profile.id === selectedProfile.id ? nextProfile : profile))
-        : [...remoteProfiles, nextProfile]
+        ? remoteProfiles.map((profile) =>
+            profile.id === selectedProfile.id ? nextProfile : profile,
+          )
+        : [...remoteProfiles, nextProfile],
     );
     setSelectedProfileId(nextProfile.id);
     setProfileName(nextProfile.name);
   };
 
   const startNewRemoteProfile = () => {
-    setSelectedProfileId('');
-    setProfileName('');
+    setSelectedProfileId("");
+    setProfileName("");
   };
 
   const deleteRemoteProfile = () => {
@@ -162,31 +201,49 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
       return;
     }
 
-    updateSTTConfig('remoteProfiles', remoteProfiles.filter((profile) => profile.id !== selectedProfile.id));
-    setSelectedProfileId('');
-    setProfileName('');
+    updateSTTConfig(
+      "remoteProfiles",
+      remoteProfiles.filter((profile) => profile.id !== selectedProfile.id),
+    );
+    setSelectedProfileId("");
+    setProfileName("");
   };
 
-  const renderRemoteProfileBar = (provider: STTRemoteProviderProfile['provider']) => (
+  const renderRemoteProfileBar = (
+    provider: STTRemoteProviderProfile["provider"],
+  ) => (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-white/90">Saved Backends</label>
+      <label className="block text-sm font-medium text-white/90">
+        Saved Backends
+      </label>
       <Input
         type="text"
         value={profileName}
         onChange={(event) => setProfileName(event.target.value)}
         placeholder="Backend name"
-        variant={isLightBackground ? 'dark' : 'default'}
+        variant={isLightBackground ? "dark" : "default"}
         size="xs"
       />
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <Select
           value={selectedProfileId}
-          onChange={(event) => handleRemoteProfileSelection(provider, event.target.value)}
-          variant={isLightBackground ? 'dark' : 'default'}
+          onChange={(event) =>
+            handleRemoteProfileSelection(provider, event.target.value)
+          }
+          variant={isLightBackground ? "dark" : "default"}
           className="min-h-[32px]"
           options={[
-            { value: '', label: currentProviderProfiles.length === 0 ? 'No saved backends yet' : 'Select a saved backend' },
-            ...currentProviderProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
+            {
+              value: "",
+              label:
+                currentProviderProfiles.length === 0
+                  ? "No saved backends yet"
+                  : "Select a saved backend",
+            },
+            ...currentProviderProfiles.map((profile) => ({
+              value: profile.id,
+              label: profile.name,
+            })),
           ]}
         />
         <Button
@@ -199,7 +256,7 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           <Icon name="add" size={14} />
         </Button>
         <Button
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
           size="icon"
           onClick={() => saveCurrentRemoteProfile(provider)}
           title="Save current STT backend"
@@ -223,30 +280,33 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
   // Load available microphones (desktop mode only)
   useEffect(() => {
     if (!isDesktop || sttConfig.provider !== STTProviders.DESKTOP_LOCAL) return;
-    
+
     const loadDevices = async () => {
       try {
         const deviceList = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = deviceList.filter((device) => device.kind === 'audioinput');
+        const audioInputs = deviceList.filter(
+          (device) => device.kind === "audioinput",
+        );
         setDevices(audioInputs);
-        
+
         if (!selectedDeviceId && audioInputs.length > 0) {
-          setSelectedDeviceId(audioInputs[0]?.deviceId ?? '');
+          setSelectedDeviceId(audioInputs[0]?.deviceId ?? "");
         }
       } catch (error) {
-        console.error('Failed to enumerate devices:', error);
+        console.error("Failed to enumerate devices:", error);
       }
     };
-    
+
     loadDevices();
-  }, [sttConfig.provider, isDesktop]);
+  }, [selectedDeviceId, sttConfig.provider]);
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
       return STTProviders as ProviderRecord;
     }
     if (isDesktop) {
-      const { ANDROID_LOCAL, CHROME_AI_MULTIMODAL, ...desktopProviders } = STTProviders;
+      const { ANDROID_LOCAL, CHROME_AI_MULTIMODAL, ...desktopProviders } =
+        STTProviders;
       return desktopProviders as ProviderRecord;
     }
     const { ANDROID_LOCAL, ...otherProviders } = STTProviders;
@@ -255,28 +315,35 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
 
   return (
     <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">STT Configuration</h3>
-      
+      <h3 className="text-base font-semibold text-white mb-4">
+        STT Configuration
+      </h3>
+
       {/* Enable STT Toggle */}
       <Card variant="default">
         <SettingsRow label="Enable Speech-to-Text">
           <Toggle
             id="enable-stt"
             checked={sttConfig.enabled}
-            onChange={(checked) => updateSTTConfig('enabled', checked)}
+            onChange={(checked) => updateSTTConfig("enabled", checked)}
           />
         </SettingsRow>
       </Card>
 
       {/* Provider Selection */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Provider</label>
+        <label className="block text-sm font-medium text-white/90">
+          Provider
+        </label>
         <Select
           value={sttConfig.provider}
-          onChange={(e) => updateSTTConfig('provider', e.target.value)}
-          variant={isLightBackground ? 'dark' : 'default'}
+          onChange={(e) => updateSTTConfig("provider", e.target.value)}
+          variant={isLightBackground ? "dark" : "default"}
           disabled={!sttConfig.enabled}
-          options={Object.entries(availableProviders).map(([key, value]) => ({ value, label: key }))}
+          options={Object.entries(availableProviders).map(([key, value]) => ({
+            value,
+            label: key,
+          }))}
         />
         {isAndroid && (
           <p className="text-xs text-white/50">
@@ -285,7 +352,7 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
         )}
       </div>
 
-      {sttConfig.provider === 'chrome-ai-multimodal' && !hasChromeAI && (
+      {sttConfig.provider === "chrome-ai-multimodal" && !hasChromeAI && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
           <p className="text-xs text-red-300">
             Chrome AI requires Chrome 138 or later. Please update your browser.
@@ -300,25 +367,31 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           {sttConfig.provider === STTProviders.ANDROID_LOCAL && (
             <>
               {/* Whisper Model Downloader */}
-              <WhisperModelDownloader 
+              <WhisperModelDownloader
                 androidAPI={androidAPI}
                 isLightBackground={isLightBackground}
               />
-              
-              <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
+
+              <h4 className="text-sm font-semibold text-white/90">
+                Android Local STT
+              </h4>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">Language</label>
+                <label className="block text-sm font-medium text-white/90">
+                  Language
+                </label>
                 <Select
-                  value={sttConfig['android-local']?.language || 'en'}
-                  onChange={(e) => updateSTTConfig('android-local.language', e.target.value)}
-                  variant={isLightBackground ? 'dark' : 'default'}
+                  value={sttConfig["android-local"]?.language || "en"}
+                  onChange={(e) =>
+                    updateSTTConfig("android-local.language", e.target.value)
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
                   options={[
-                    { value: 'en', label: 'English' },
-                    { value: 'es', label: 'Spanish' },
-                    { value: 'ja', label: 'Japanese' },
-                    { value: 'zh', label: 'Chinese' },
-                    { value: 'de', label: 'German' },
-                    { value: 'fr', label: 'French' },
+                    { value: "en", label: "English" },
+                    { value: "es", label: "Spanish" },
+                    { value: "ja", label: "Japanese" },
+                    { value: "zh", label: "Chinese" },
+                    { value: "de", label: "German" },
+                    { value: "fr", label: "French" },
                   ]}
                 />
               </div>
@@ -331,9 +404,11 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           {/* Desktop Local STT Configuration */}
           {sttConfig.provider === STTProviders.DESKTOP_LOCAL && isDesktop && (
             <>
-              <h4 className="text-sm font-semibold text-white/90">Desktop Local STT (Whisper)</h4>
+              <h4 className="text-sm font-semibold text-white/90">
+                Desktop Local STT (Whisper)
+              </h4>
               <DesktopSTTConfig
-                config={sttConfig['desktop-local'] || {}}
+                config={sttConfig["desktop-local"] || {}}
                 onChange={(updates: Record<string, unknown>) => {
                   Object.entries(updates).forEach(([key, value]) => {
                     updateSTTConfig(`desktop-local.${key}`, value);
@@ -348,10 +423,12 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           {/* OpenAI Whisper Configuration */}
           {sttConfig.provider === STTProviders.OPENAI && (
             <>
-              {renderRemoteProfileBar('openai')}
+              {renderRemoteProfileBar("openai")}
               <OpenAISTTConfig
                 config={sttConfig.openai || {}}
-                onChange={(field: string, value: string) => updateSTTConfig(`openai.${field}`, value)}
+                onChange={(field: string, value: string) =>
+                  updateSTTConfig(`openai.${field}`, value)
+                }
                 isLightBackground={isLightBackground}
               />
             </>
@@ -360,10 +437,12 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           {/* OpenAI-Compatible STT Configuration */}
           {sttConfig.provider === STTProviders.OPENAI_COMPATIBLE && (
             <>
-              {renderRemoteProfileBar('openai-compatible')}
+              {renderRemoteProfileBar("openai-compatible")}
               <OpenAICompatibleSTTConfig
-                config={sttConfig['openai-compatible'] || {}}
-                onChange={(field: string, value: string) => updateSTTConfig(`openai-compatible.${field}`, value)}
+                config={sttConfig["openai-compatible"] || {}}
+                onChange={(field: string, value: string) =>
+                  updateSTTConfig(`openai-compatible.${field}`, value)
+                }
                 isLightBackground={isLightBackground}
               />
             </>
@@ -372,7 +451,7 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
           {/* Chrome AI Multimodal STT Configuration */}
           {sttConfig.provider === STTProviders.CHROME_AI_MULTIMODAL && (
             <ChromeAISTTConfig
-              config={sttConfig['chrome-ai-multimodal'] || {}}
+              config={sttConfig["chrome-ai-multimodal"] || {}}
               onChange={(updates) => {
                 Object.entries(updates).forEach(([field, value]) => {
                   updateSTTConfig(`chrome-ai-multimodal.${field}`, value);
@@ -391,20 +470,27 @@ const STTSettings = ({ isLightBackground = false, hasChromeAI = false }: STTSett
       {/* Actions */}
       <div className="space-y-3 pt-4">
         {/* Microphone Selector (Desktop mode only) */}
-        {isDesktop && sttConfig.provider === STTProviders.DESKTOP_LOCAL && devices.length > 0 && (
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Microphone</label>
-            <Select
-              value={selectedDeviceId}
-              onChange={(e) => setSelectedDeviceId(e.target.value)}
-              variant={isLightBackground ? 'dark' : 'default'}
-              options={devices.map((d) => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.substring(0, 8)}` }))}
-            />
-          </div>
-        )}
-        
+        {isDesktop &&
+          sttConfig.provider === STTProviders.DESKTOP_LOCAL &&
+          devices.length > 0 && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-white/90">
+                Microphone
+              </label>
+              <Select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                variant={isLightBackground ? "dark" : "default"}
+                options={devices.map((d) => ({
+                  value: d.deviceId,
+                  label: d.label || `Microphone ${d.deviceId.substring(0, 8)}`,
+                }))}
+              />
+            </div>
+          )}
+
         <Button
-          variant={isLightBackground ? 'dark' : 'default'}
+          variant={isLightBackground ? "dark" : "default"}
           onClick={() => testSTTRecording(selectedDeviceId)}
           disabled={!sttConfig.enabled || sttTesting}
         >

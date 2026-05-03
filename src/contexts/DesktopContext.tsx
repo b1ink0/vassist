@@ -2,11 +2,11 @@
  * @fileoverview Desktop Context for Electron API access
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
-import type { ElectronAPI } from '../types/electron';
+import { createContext, useContext, type ReactNode } from "react";
+import type { ElectronAPI } from "../types/electron";
 
 // Get the API exposed by preload script (or null if not in Electron)
-const electronAPI = typeof window !== 'undefined' ? window.electron : null;
+const electronAPI = typeof window !== "undefined" ? window.electron : null;
 
 interface DesktopContextValue {
   api: ElectronAPI | null;
@@ -25,9 +25,7 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     api: electronAPI ?? null,
   };
   return (
-    <DesktopContext.Provider value={value}>
-      {children}
-    </DesktopContext.Provider>
+    <DesktopContext.Provider value={value}>{children}</DesktopContext.Provider>
   );
 }
 

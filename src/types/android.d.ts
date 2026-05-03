@@ -1,4 +1,4 @@
-import type { AndroidAPI } from './android';
+import type { AndroidAPI } from "./android";
 
 declare global {
   interface Window {

@@ -5,19 +5,23 @@
  * Extension mode: Bridge messages to background via window.postMessage
  */
 
-import { isExtension } from '../../utils/PlatformUtils';
+import { isExtension } from "../../utils/PlatformUtils";
 
 export interface BridgeSendOptions {
   timeout?: number;
 }
 
 export interface ExtensionBridgeLike {
-  sendMessage(type: string, payload?: unknown, options?: BridgeSendOptions): Promise<unknown>;
+  sendMessage(
+    type: string,
+    payload?: unknown,
+    options?: BridgeSendOptions,
+  ): Promise<unknown>;
   sendStreamingMessage?(
     type: string,
     payload: unknown,
     onChunk: (chunk: string) => void,
-    options?: BridgeSendOptions
+    options?: BridgeSendOptions,
   ): Promise<void>;
   addMessageListener?(listener: (message: unknown) => void): void;
   removeMessageListener?(listener: (message: unknown) => void): void;
@@ -42,19 +46,22 @@ export class ServiceProxy {
     this._bridge = null;
     this.directService = {};
     this._configuring = false;
-    
+
     // Pre-load bridge immediately in extension mode (synchronous)
-    if (this.isExtension && typeof window !== 'undefined') {
+    if (this.isExtension && typeof window !== "undefined") {
       try {
         // Import ExtensionBridge synchronously (it's already loaded in main.js)
-        import('../../utils/ExtensionBridge').then(module => {
-          const bridge = (module as { extensionBridge?: ExtensionBridgeLike }).extensionBridge;
-          if (bridge) {
-            this._bridge = bridge;
-          }
-        }).catch(() => {
-          // Silently fail - will retry via waitForBridge
-        });
+        import("../../utils/ExtensionBridge")
+          .then((module) => {
+            const bridge = (module as { extensionBridge?: ExtensionBridgeLike })
+              .extensionBridge;
+            if (bridge) {
+              this._bridge = bridge;
+            }
+          })
+          .catch(() => {
+            // Silently fail - will retry via waitForBridge
+          });
       } catch {
         // Silently fail - will retry via waitForBridge
       }
@@ -70,24 +77,25 @@ export class ServiceProxy {
     if (!this.isExtension) {
       return null;
     }
-    
+
     // Check if we're in a service worker context (no window object)
-    const isServiceWorker = typeof window === 'undefined' && typeof self !== 'undefined';
-    
+    const isServiceWorker =
+      typeof window === "undefined" && typeof self !== "undefined";
+
     if (isServiceWorker) {
       // In service worker, we don't need a bridge - services run directly here
       return null;
     }
-    
-    if (typeof window === 'undefined') {
+
+    if (typeof window === "undefined") {
       return null;
     }
-    
+
     // Return bridge if already loaded
     if (this._bridge) {
       return this._bridge;
     }
-    
+
     // If bridge not yet loaded, try to get it from ExtensionBridge singleton
     // The singleton is auto-created when module loads
     try {
@@ -99,7 +107,7 @@ export class ServiceProxy {
     } catch {
       // Ignore errors during fallback
     }
-    
+
     return null;
   }
 
@@ -115,9 +123,9 @@ export class ServiceProxy {
       if (bridge) {
         return bridge;
       }
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    
+
     return null;
   }
 
@@ -127,7 +135,9 @@ export class ServiceProxy {
    * @returns {Promise<*>} Result
    */
   async callViaBridge(_method: string, ..._args: unknown[]): Promise<unknown> {
-    throw new Error(`${this.name}Proxy.callViaBridge() must be implemented by subclass`);
+    throw new Error(
+      `${this.name}Proxy.callViaBridge() must be implemented by subclass`,
+    );
   }
 
   /**
@@ -136,7 +146,9 @@ export class ServiceProxy {
    * @returns {Promise<*>} Result
    */
   async callDirect(_method: string, ..._args: unknown[]): Promise<unknown> {
-    throw new Error(`${this.name}Proxy.callDirect() must be implemented by subclass`);
+    throw new Error(
+      `${this.name}Proxy.callDirect() must be implemented by subclass`,
+    );
   }
 
   /**

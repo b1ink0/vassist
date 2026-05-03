@@ -1,19 +1,19 @@
-import JSZip from 'jszip';
-import storageServiceProxy from './proxies/StorageServiceProxy';
-import Logger from './LoggerService';
+import JSZip from "jszip";
+import storageServiceProxy from "./proxies/StorageServiceProxy";
+import Logger from "./LoggerService";
 
 type UnknownRecord = Record<string, unknown>;
 
 type BackupFileCategory =
-  | 'model'
-  | 'motion'
-  | 'emote'
-  | 'stage'
-  | 'voice'
-  | 'background'
-  | 'image'
-  | 'audio'
-  | 'general';
+  | "model"
+  | "motion"
+  | "emote"
+  | "stage"
+  | "voice"
+  | "background"
+  | "image"
+  | "audio"
+  | "general";
 
 export interface BackupSelection {
   config: boolean;
@@ -30,14 +30,14 @@ export interface BackupSelection {
 }
 
 interface SerializedBlobMarker {
-  __backupType: 'blob';
+  __backupType: "blob";
   mimeType: string;
   base64: string;
 }
 
 interface BackupArchiveV1 {
   version: 1;
-  app: 'vassist';
+  app: "vassist";
   createdAt: string;
   payload: {
     config: Record<string, unknown>;
@@ -63,7 +63,7 @@ const DEFAULT_SELECTION: BackupSelection = {
 };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
 const isBlobMarker = (value: unknown): value is SerializedBlobMarker => {
   if (!isRecord(value)) {
@@ -71,14 +71,14 @@ const isBlobMarker = (value: unknown): value is SerializedBlobMarker => {
   }
 
   return (
-    value.__backupType === 'blob' &&
-    typeof value.mimeType === 'string' &&
-    typeof value.base64 === 'string'
+    value.__backupType === "blob" &&
+    typeof value.mimeType === "string" &&
+    typeof value.base64 === "string"
   );
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
+  let binary = "";
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
 
@@ -101,49 +101,56 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
   return bytes.buffer;
 };
 
-const detectFileCategory = (fileId: string, value: unknown): BackupFileCategory => {
-  if (fileId.startsWith('model_')) return 'model';
-  if (fileId.startsWith('motion_')) return 'motion';
-  if (fileId.startsWith('emote_')) return 'emote';
-  if (fileId.startsWith('stage_')) return 'stage';
-  if (fileId.startsWith('voice_')) return 'voice';
-  if (fileId.startsWith('background_')) return 'background';
-  if (fileId.startsWith('image_')) return 'image';
-  if (fileId.startsWith('audio_')) return 'audio';
+const detectFileCategory = (
+  fileId: string,
+  value: unknown,
+): BackupFileCategory => {
+  if (fileId.startsWith("model_")) return "model";
+  if (fileId.startsWith("motion_")) return "motion";
+  if (fileId.startsWith("emote_")) return "emote";
+  if (fileId.startsWith("stage_")) return "stage";
+  if (fileId.startsWith("voice_")) return "voice";
+  if (fileId.startsWith("background_")) return "background";
+  if (fileId.startsWith("image_")) return "image";
+  if (fileId.startsWith("audio_")) return "audio";
 
   if (!isRecord(value)) {
-    return 'general';
+    return "general";
   }
 
-  if (value.modelData instanceof Blob) return 'model';
-  if (value.motionData instanceof Blob) return 'motion';
-  if (value.audioData instanceof Blob || value.cameraData instanceof Blob) return 'emote';
-  if (value.stageData instanceof Blob) return 'stage';
-  if (value.referenceAudio instanceof Blob) return 'voice';
-  if (value.type === 'image') return 'image';
-  if (value.type === 'audio') return 'audio';
+  if (value.modelData instanceof Blob) return "model";
+  if (value.motionData instanceof Blob) return "motion";
+  if (value.audioData instanceof Blob || value.cameraData instanceof Blob)
+    return "emote";
+  if (value.stageData instanceof Blob) return "stage";
+  if (value.referenceAudio instanceof Blob) return "voice";
+  if (value.type === "image") return "image";
+  if (value.type === "audio") return "audio";
 
-  return 'general';
+  return "general";
 };
 
-const shouldIncludeFileCategory = (category: BackupFileCategory, selection: BackupSelection): boolean => {
+const shouldIncludeFileCategory = (
+  category: BackupFileCategory,
+  selection: BackupSelection,
+): boolean => {
   switch (category) {
-    case 'model':
+    case "model":
       return selection.models;
-    case 'motion':
+    case "motion":
       return selection.motions;
-    case 'emote':
+    case "emote":
       return selection.emotes;
-    case 'stage':
+    case "stage":
       return selection.stages;
-    case 'voice':
+    case "voice":
       return selection.voices;
-    case 'background':
+    case "background":
       return selection.backgrounds;
-    case 'image':
-    case 'audio':
+    case "image":
+    case "audio":
       return selection.chats;
-    case 'general':
+    case "general":
     default:
       return selection.otherFiles;
   }
@@ -169,7 +176,7 @@ const recursivelyRewriteChatMediaIds = (
 
   if (Array.isArray(cloned.imageFileIds)) {
     cloned.imageFileIds = cloned.imageFileIds.map((id) => {
-      if (typeof id !== 'string') {
+      if (typeof id !== "string") {
         return id;
       }
       return fileIdMap.get(id) ?? id;
@@ -178,7 +185,7 @@ const recursivelyRewriteChatMediaIds = (
 
   if (Array.isArray(cloned.audioFileIds)) {
     cloned.audioFileIds = cloned.audioFileIds.map((id) => {
-      if (typeof id !== 'string') {
+      if (typeof id !== "string") {
         return id;
       }
       return fileIdMap.get(id) ?? id;
@@ -197,15 +204,17 @@ class AppDataBackupService {
     if (value instanceof Blob) {
       const buffer = await value.arrayBuffer();
       const blobMarker: SerializedBlobMarker = {
-        __backupType: 'blob',
-        mimeType: value.type || 'application/octet-stream',
+        __backupType: "blob",
+        mimeType: value.type || "application/octet-stream",
         base64: arrayBufferToBase64(buffer),
       };
       return blobMarker;
     }
 
     if (Array.isArray(value)) {
-      const serializedArray = await Promise.all(value.map((item) => this.serializeValue(item)));
+      const serializedArray = await Promise.all(
+        value.map((item) => this.serializeValue(item)),
+      );
       return serializedArray;
     }
 
@@ -228,7 +237,9 @@ class AppDataBackupService {
 
     if (isBlobMarker(value)) {
       const buffer = base64ToArrayBuffer(value.base64);
-      return new Blob([buffer], { type: value.mimeType || 'application/octet-stream' });
+      return new Blob([buffer], {
+        type: value.mimeType || "application/octet-stream",
+      });
     }
 
     if (isRecord(value)) {
@@ -242,7 +253,9 @@ class AppDataBackupService {
     return value;
   }
 
-  private normalizeSelection(selection?: Partial<BackupSelection>): BackupSelection {
+  private normalizeSelection(
+    selection?: Partial<BackupSelection>,
+  ): BackupSelection {
     return {
       ...DEFAULT_SELECTION,
       ...(selection ?? {}),
@@ -252,13 +265,14 @@ class AppDataBackupService {
   async exportToZip(selection?: Partial<BackupSelection>): Promise<Blob> {
     const effectiveSelection = this.normalizeSelection(selection);
 
-    const [configRaw, settingsRaw, dataRaw, chatsRaw, filesRaw] = await Promise.all([
-      storageServiceProxy.configGetAll(),
-      storageServiceProxy.settingsGetAll(),
-      storageServiceProxy.dataGetAll(),
-      storageServiceProxy.chatGetAll(),
-      storageServiceProxy.filesGetAll(),
-    ]);
+    const [configRaw, settingsRaw, dataRaw, chatsRaw, filesRaw] =
+      await Promise.all([
+        storageServiceProxy.configGetAll(),
+        storageServiceProxy.settingsGetAll(),
+        storageServiceProxy.dataGetAll(),
+        storageServiceProxy.chatGetAll(),
+        storageServiceProxy.filesGetAll(),
+      ]);
 
     const config = isRecord(configRaw) ? configRaw : {};
     const settings = isRecord(settingsRaw) ? settingsRaw : {};
@@ -266,7 +280,10 @@ class AppDataBackupService {
     const chats = isRecord(chatsRaw) ? chatsRaw : {};
     const files = isRecord(filesRaw) ? filesRaw : {};
 
-    const serializedFiles: Record<string, { category: BackupFileCategory; data: unknown }> = {};
+    const serializedFiles: Record<
+      string,
+      { category: BackupFileCategory; data: unknown }
+    > = {};
     for (const [fileId, fileData] of Object.entries(files)) {
       const category = detectFileCategory(fileId, fileData);
       if (!shouldIncludeFileCategory(category, effectiveSelection)) {
@@ -294,7 +311,7 @@ class AppDataBackupService {
 
     const archive: BackupArchiveV1 = {
       version: 1,
-      app: 'vassist',
+      app: "vassist",
       createdAt: new Date().toISOString(),
       payload: {
         config: effectiveSelection.config ? config : {},
@@ -306,25 +323,28 @@ class AppDataBackupService {
     };
 
     const zip = new JSZip();
-    zip.file('vassist-backup.json', JSON.stringify(archive));
+    zip.file("vassist-backup.json", JSON.stringify(archive));
 
-    return await zip.generateAsync({ type: 'blob' });
+    return await zip.generateAsync({ type: "blob" });
   }
 
-  async importFromZip(file: File, selection?: Partial<BackupSelection>): Promise<void> {
+  async importFromZip(
+    file: File,
+    selection?: Partial<BackupSelection>,
+  ): Promise<void> {
     const effectiveSelection = this.normalizeSelection(selection);
     const zip = await JSZip.loadAsync(file);
-    const backupEntry = zip.file('vassist-backup.json');
+    const backupEntry = zip.file("vassist-backup.json");
 
     if (!backupEntry) {
-      throw new Error('Invalid backup file. Missing vassist-backup.json');
+      throw new Error("Invalid backup file. Missing vassist-backup.json");
     }
 
-    const backupText = await backupEntry.async('string');
+    const backupText = await backupEntry.async("string");
     const parsed = JSON.parse(backupText) as BackupArchiveV1;
 
-    if (parsed.app !== 'vassist' || parsed.version !== 1 || !parsed.payload) {
-      throw new Error('Unsupported backup format.');
+    if (parsed.app !== "vassist" || parsed.version !== 1 || !parsed.payload) {
+      throw new Error("Unsupported backup format.");
     }
 
     const payload = parsed.payload;
@@ -348,7 +368,7 @@ class AppDataBackupService {
           continue;
         }
 
-        const category = (entry.category as BackupFileCategory) || 'general';
+        const category = (entry.category as BackupFileCategory) || "general";
         if (!shouldIncludeFileCategory(category, effectiveSelection)) {
           continue;
         }
@@ -363,20 +383,23 @@ class AppDataBackupService {
     if (effectiveSelection.data && isRecord(payload.data)) {
       for (const [key, rawValue] of Object.entries(payload.data)) {
         const deserialized = this.deserializeValue(rawValue);
-        await storageServiceProxy.dataSave(key, deserialized, 'imported');
+        await storageServiceProxy.dataSave(key, deserialized, "imported");
       }
     }
 
     if (effectiveSelection.chats && isRecord(payload.chats)) {
       for (const [, rawChat] of Object.entries(payload.chats)) {
         const deserializedChat = this.deserializeValue(rawChat);
-        const rewritten = recursivelyRewriteChatMediaIds(deserializedChat, fileIdMap);
+        const rewritten = recursivelyRewriteChatMediaIds(
+          deserializedChat,
+          fileIdMap,
+        );
 
         if (!isRecord(rewritten)) {
           continue;
         }
 
-        const newChatId = generateImportedId('chat');
+        const newChatId = generateImportedId("chat");
         const chatRecord: UnknownRecord = {
           ...rewritten,
           chatId: newChatId,
@@ -387,7 +410,7 @@ class AppDataBackupService {
       }
     }
 
-    Logger.log('BackupService', 'Backup import completed successfully');
+    Logger.log("BackupService", "Backup import completed successfully");
   }
 }
 

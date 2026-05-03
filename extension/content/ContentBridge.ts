@@ -6,7 +6,7 @@
 
 /* global chrome */
 
-import { MessageBridge } from '../shared/MessageBridge';
+import { MessageBridge } from "../shared/MessageBridge";
 
 type BridgePayloadValue = string | number | boolean | null | undefined | object;
 type BridgePayload = Record<string, BridgePayloadValue>;
@@ -23,7 +23,7 @@ interface OutgoingMessage {
 
 export class ContentBridge extends MessageBridge {
   constructor() {
-    super('ContentBridge');
+    super("ContentBridge");
     this.setupListeners();
   }
 
@@ -47,8 +47,8 @@ export class ContentBridge extends MessageBridge {
       if (response) {
         this.handleResponse(response);
       }
-    } catch (error) {
-      throw new Error('Failed to communicate with background service');
+    } catch {
+      throw new Error("Failed to communicate with background service");
     }
   }
 
@@ -69,7 +69,7 @@ export class ContentBridge extends MessageBridge {
    */
   async reconnect() {
     // Extension context cannot reconnect - page needs reload
-    throw new Error('Extension context invalidated');
+    throw new Error("Extension context invalidated");
   }
 }
 

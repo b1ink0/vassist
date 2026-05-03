@@ -3,17 +3,15 @@
  * Creates a build for Android live wallpaper app
  */
 
-/* eslint-env node */
-
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import { resolve } from 'path';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import fs from 'fs';
-import { vadAssetsPlugin } from './tools/vite-plugins/vad-assets-plugin';
-import { androidModelsPlugin } from './tools/vite-plugins/android-models-plugin';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "path";
+import { fileURLToPath } from "url";
+import path from "path";
+import fs from "fs";
+import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
+import { androidModelsPlugin } from "./tools/vite-plugins/android-models-plugin";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,14 +19,14 @@ const __dirname = path.dirname(__filename);
 // Plugin to move index.html from android-src/ subdirectory to root and fix paths
 function moveIndexHtmlPlugin() {
   return {
-    name: 'move-index-html',
+    name: "move-index-html",
     closeBundle() {
-      const srcPath = resolve(__dirname, 'dist-android/android-src/index.html');
-      const destPath = resolve(__dirname, 'dist-android/index.html');
-      
+      const srcPath = resolve(__dirname, "dist-android/android-src/index.html");
+      const destPath = resolve(__dirname, "dist-android/index.html");
+
       if (fs.existsSync(srcPath)) {
         // Read and update the HTML content to fix asset paths
-        let content = fs.readFileSync(srcPath, 'utf-8');
+        let content = fs.readFileSync(srcPath, "utf-8");
         // Fix all relative paths that go up one directory
         content = content.replace(/src="\.\.\/assets\//g, 'src="./assets/');
         content = content.replace(/href="\.\.\/assets\//g, 'href="./assets/');
@@ -36,37 +34,40 @@ function moveIndexHtmlPlugin() {
         fs.writeFileSync(destPath, content);
         fs.unlinkSync(srcPath);
         // Remove empty android-src directory
-        const androidSrcDir = resolve(__dirname, 'dist-android/android-src');
-        if (fs.existsSync(androidSrcDir) && fs.readdirSync(androidSrcDir).length === 0) {
+        const androidSrcDir = resolve(__dirname, "dist-android/android-src");
+        if (
+          fs.existsSync(androidSrcDir) &&
+          fs.readdirSync(androidSrcDir).length === 0
+        ) {
           fs.rmdirSync(androidSrcDir);
         }
       }
-    }
+    },
   };
 }
 
-export default defineConfig(({ mode, command }) => {
-  const isProduction = mode === 'production';
-  const packageModels = process.argv.includes('--package-models');
-  
+export default defineConfig(({ mode }) => {
+  const isProduction = mode === "production";
+  const packageModels = process.argv.includes("--package-models");
+
   return {
     // Base path for WebViewAssetLoader: https://vassist.app/
     // Assets will be at /assets/public/assets/*, so we use relative path
-    base: './',
-    publicDir: 'public',
-    
+    base: "./",
+    publicDir: "public",
+
     plugins: [
       react({
         babel: {
-          plugins: [['babel-plugin-react-compiler']],
+          plugins: [["babel-plugin-react-compiler"]],
         },
       }),
       tailwindcss(),
       androidModelsPlugin(packageModels),
       moveIndexHtmlPlugin(),
-      vadAssetsPlugin('dist-android'),
+      vadAssetsPlugin("dist-android"),
     ],
-    
+
     define: {
       // Build-time constants for mode detection
       __EXTENSION_MODE__: JSON.stringify(false),
@@ -75,21 +76,21 @@ export default defineConfig(({ mode, command }) => {
       __DEV_MODE__: JSON.stringify(!isProduction),
       __PROD_MODE__: JSON.stringify(isProduction),
     },
-    
+
     build: {
-      outDir: 'dist-android',
+      outDir: "dist-android",
       emptyOutDir: true,
       sourcemap: !isProduction,
-      minify: isProduction ? 'esbuild' : false,
+      minify: isProduction ? "esbuild" : false,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'android-src/index.html'),
+          index: resolve(__dirname, "android-src/index.html"),
         },
         output: {
           // Ensure index.html is at root of dist-android
-          entryFileNames: 'assets/[name]-[hash].js',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: 'assets/[name]-[hash][extname]',
+          entryFileNames: "assets/[name]-[hash].js",
+          chunkFileNames: "assets/[name]-[hash].js",
+          assetFileNames: "assets/[name]-[hash][extname]",
           manualChunks: () => null,
         },
       },
@@ -97,40 +98,40 @@ export default defineConfig(({ mode, command }) => {
       copyPublicDir: true,
       chunkSizeWarningLimit: 50000,
     },
-    
+
     worker: {
-      format: 'es',
+      format: "es",
       plugins: () => [],
     },
-    
-    assetsInclude: ['**/*.wasm'],
-    
+
+    assetsInclude: ["**/*.wasm"],
+
     optimizeDeps: {
       exclude: [
-        '@babylonjs/havok',
-        '@huggingface/transformers',
-        'kokoro-js',
-        'onnxruntime-web',
+        "@babylonjs/havok",
+        "@huggingface/transformers",
+        "kokoro-js",
+        "onnxruntime-web",
       ],
     },
-    
+
     resolve: {
       alias: {
-        '@': resolve(__dirname, './src'),
-        '@services': resolve(__dirname, './src/services'),
-        '@components': resolve(__dirname, './src/components'),
-        '@utils': resolve(__dirname, './src/utils'),
+        "@": resolve(__dirname, "./src"),
+        "@services": resolve(__dirname, "./src/services"),
+        "@components": resolve(__dirname, "./src/components"),
+        "@utils": resolve(__dirname, "./src/utils"),
       },
     },
-    
+
     server: {
       port: 3002,
       fs: {
-        allow: ['..'],
+        allow: [".."],
         deny: [
-          '**/electron/server/**',
-          '**/.git/**',
-          '**/node_modules/**/.git/**',
+          "**/electron/server/**",
+          "**/.git/**",
+          "**/node_modules/**/.git/**",
         ],
       },
     },

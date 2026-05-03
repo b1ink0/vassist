@@ -1,18 +1,19 @@
 /**
  * ScreenShareService - Universal screen sharing and frame capture
- * 
+ *
  * Works on all platforms: Desktop (Electron), Web, Dev, Extension
  * Uses getDisplayMedia() for Chromium-based platforms
  * Note: IPC communication handled by components using useDesktop() hook
  */
 
-import Logger from './LoggerService';
-import FrameCaptureService from './FrameCaptureService';
-import { isAndroid } from '../utils/PlatformUtils';
+import Logger from "./LoggerService";
+import FrameCaptureService from "./FrameCaptureService";
+import { isAndroid } from "../utils/PlatformUtils";
 
 type ScreenShareState = { isActive: boolean };
 type ScreenShareListener = (state: ScreenShareState) => void;
-const asError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
 
 class ScreenShareService {
   name: string;
@@ -27,15 +28,15 @@ class ScreenShareService {
   private captureCanvas: HTMLCanvasElement | null;
 
   constructor() {
-    this.name = 'ScreenShareService';
-    this.type = 'screen';
+    this.name = "ScreenShareService";
+    this.type = "screen";
     this.stream = null;
     this.isActive = false;
     this.listeners = new Set();
     this.permissionGranted = false;
     this.isInitializing = false;
     this.isInitialized = false;
-    
+
     // Reusable elements for frame capture
     this.captureVideo = null;
     this.captureCanvas = null;
@@ -47,34 +48,38 @@ class ScreenShareService {
    */
   async initialize(): Promise<boolean> {
     if (this.isInitialized) {
-      Logger.log('ScreenShareService', 'Already initialized');
+      Logger.log("ScreenShareService", "Already initialized");
       return true;
     }
-    
+
     if (this.isInitializing) {
-      Logger.warn('ScreenShareService', 'Initialization already in progress');
+      Logger.warn("ScreenShareService", "Initialization already in progress");
       return false;
     }
 
     try {
       this.isInitializing = true;
-      Logger.log('ScreenShareService', 'Initializing screen share service...');
-      
+      Logger.log("ScreenShareService", "Initializing screen share service...");
+
       // Android not supported yet
       if (isAndroid) {
-        throw new Error('Screen share not supported on Android yet');
+        throw new Error("Screen share not supported on Android yet");
       }
-      
+
       // Check if getDisplayMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('getDisplayMedia not supported');
+        throw new Error("getDisplayMedia not supported");
       }
-      
+
       this.isInitialized = true;
-      Logger.log('ScreenShareService', 'Initialized successfully');
+      Logger.log("ScreenShareService", "Initialized successfully");
       return true;
     } catch (error) {
-      Logger.error('ScreenShareService', 'Failed to initialize:', asError(error).message);
+      Logger.error(
+        "ScreenShareService",
+        "Failed to initialize:",
+        asError(error).message,
+      );
       throw asError(error);
     } finally {
       this.isInitializing = false;
@@ -88,7 +93,7 @@ class ScreenShareService {
   async start(): Promise<MediaStream> {
     try {
       if (this.isActive) {
-        Logger.warn('ScreenShareService', 'Screen share already active');
+        Logger.warn("ScreenShareService", "Screen share already active");
         if (this.stream) {
           return this.stream;
         }
@@ -96,53 +101,67 @@ class ScreenShareService {
 
       // Stop any existing stream first
       if (this.stream) {
-        Logger.warn('ScreenShareService', 'Stopping existing stream before starting new one');
+        Logger.warn(
+          "ScreenShareService",
+          "Stopping existing stream before starting new one",
+        );
         this.stream.getTracks().forEach((track) => track.stop());
         this.stream = null;
       }
 
-      Logger.log('ScreenShareService', 'Starting screen share...');
+      Logger.log("ScreenShareService", "Starting screen share...");
 
       // Request screen share - shows system picker
       this.stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: false // No system audio for now
+        audio: false, // No system audio for now
       });
-      
+
       // Log actual resolution
       const videoTrack = this.stream.getVideoTracks()[0];
       if (videoTrack) {
         const settings = videoTrack.getSettings();
-        Logger.log('ScreenShareService', 'Screen share started at:', `${settings.width}x${settings.height}`);
-        
+        Logger.log(
+          "ScreenShareService",
+          "Screen share started at:",
+          `${settings.width}x${settings.height}`,
+        );
+
         // Listen for user stopping share via browser UI
         videoTrack.onended = () => {
-          Logger.log('ScreenShareService', 'User stopped screen share via browser');
+          Logger.log(
+            "ScreenShareService",
+            "User stopped screen share via browser",
+          );
           this.stop();
         };
       }
-      
+
       this.isActive = true;
       this.permissionGranted = true;
 
       // Register with FrameCaptureService
       FrameCaptureService.registerProvider(this);
 
-      Logger.log('ScreenShareService', 'Screen share started successfully');
+      Logger.log("ScreenShareService", "Screen share started successfully");
       this.notifyListeners();
 
       return this.stream;
     } catch (error) {
       const normalized = asError(error);
-      Logger.error('ScreenShareService', 'Failed to start screen share:', normalized.message);
+      Logger.error(
+        "ScreenShareService",
+        "Failed to start screen share:",
+        normalized.message,
+      );
       this.isActive = false;
       this.notifyListeners();
-      
+
       // User cancelled the picker
-      if (normalized.name === 'NotAllowedError') {
-        throw new Error('Screen share permission denied');
+      if (normalized.name === "NotAllowedError") {
+        throw new Error("Screen share permission denied");
       }
-      
+
       throw normalized;
     }
   }
@@ -153,7 +172,7 @@ class ScreenShareService {
   async stop(): Promise<void> {
     try {
       if (!this.isActive) {
-        Logger.warn('ScreenShareService', 'Screen share not active');
+        Logger.warn("ScreenShareService", "Screen share not active");
         return;
       }
 
@@ -162,7 +181,7 @@ class ScreenShareService {
         this.stream.getTracks().forEach((track) => track.stop());
         this.stream = null;
       }
-      
+
       // Cleanup capture elements
       if (this.captureVideo) {
         this.captureVideo.pause();
@@ -180,10 +199,10 @@ class ScreenShareService {
       // Unregister from FrameCaptureService
       FrameCaptureService.unregisterProvider();
 
-      Logger.log('ScreenShareService', 'Screen share stopped');
+      Logger.log("ScreenShareService", "Screen share stopped");
       this.notifyListeners();
     } catch (error) {
-      Logger.error('ScreenShareService', 'Error stopping screen share:', error);
+      Logger.error("ScreenShareService", "Error stopping screen share:", error);
     }
   }
 
@@ -213,15 +232,18 @@ class ScreenShareService {
    */
   async captureFrame(): Promise<string | null> {
     if (!this.isActive || !this.stream) {
-      Logger.warn('ScreenShareService', 'Screen share not active, cannot capture frame');
+      Logger.warn(
+        "ScreenShareService",
+        "Screen share not active, cannot capture frame",
+      );
       return null;
     }
-    
+
     try {
       // Get video track settings to determine native resolution
       const videoTrack = this.stream.getVideoTracks()[0];
       if (!videoTrack) {
-        Logger.error('ScreenShareService', 'No video track available');
+        Logger.error("ScreenShareService", "No video track available");
         return null;
       }
 
@@ -231,15 +253,15 @@ class ScreenShareService {
 
       // Create reusable video element if needed
       if (!this.captureVideo) {
-        this.captureVideo = document.createElement('video');
+        this.captureVideo = document.createElement("video");
         this.captureVideo.muted = true;
         this.captureVideo.playsInline = true;
       }
-      
+
       // Update video source if changed
       if (this.captureVideo.srcObject !== this.stream) {
         this.captureVideo.srcObject = this.stream;
-        
+
         // Wait for video to be ready
         const video = this.captureVideo;
         await new Promise<void>((resolve, reject) => {
@@ -252,33 +274,44 @@ class ScreenShareService {
       // Create or resize canvas if needed
       const targetWidth = this.captureVideo.videoWidth || width;
       const targetHeight = this.captureVideo.videoHeight || height;
-      
-      if (!this.captureCanvas || 
-          this.captureCanvas.width !== targetWidth || 
-          this.captureCanvas.height !== targetHeight) {
-        
+
+      if (
+        !this.captureCanvas ||
+        this.captureCanvas.width !== targetWidth ||
+        this.captureCanvas.height !== targetHeight
+      ) {
         if (!this.captureCanvas) {
-          this.captureCanvas = document.createElement('canvas');
+          this.captureCanvas = document.createElement("canvas");
         }
-        
+
         this.captureCanvas.width = targetWidth;
         this.captureCanvas.height = targetHeight;
       }
 
-      const ctx = this.captureCanvas.getContext('2d');
+      const ctx = this.captureCanvas.getContext("2d");
       if (!ctx) {
         return null;
       }
-      ctx.drawImage(this.captureVideo, 0, 0, this.captureCanvas.width, this.captureCanvas.height);
+      ctx.drawImage(
+        this.captureVideo,
+        0,
+        0,
+        this.captureCanvas.width,
+        this.captureCanvas.height,
+      );
 
       // Convert to data URL with high quality
-      const dataUrl = this.captureCanvas.toDataURL('image/jpeg', 0.85);
-      
-      Logger.log('ScreenShareService', 'Frame captured at full resolution:', `${this.captureCanvas.width}x${this.captureCanvas.height}`);
-      
+      const dataUrl = this.captureCanvas.toDataURL("image/jpeg", 0.85);
+
+      Logger.log(
+        "ScreenShareService",
+        "Frame captured at full resolution:",
+        `${this.captureCanvas.width}x${this.captureCanvas.height}`,
+      );
+
       return dataUrl;
     } catch (error) {
-      Logger.error('ScreenShareService', 'Failed to capture frame:', error);
+      Logger.error("ScreenShareService", "Failed to capture frame:", error);
       return null;
     }
   }
@@ -298,10 +331,10 @@ class ScreenShareService {
    */
   subscribe(callback: ScreenShareListener): () => void {
     this.listeners.add(callback);
-    
+
     // Immediately call with current state
     callback({
-      isActive: this.isActive
+      isActive: this.isActive,
     });
 
     return () => {
@@ -314,14 +347,14 @@ class ScreenShareService {
    */
   notifyListeners(): void {
     const state = {
-      isActive: this.isActive
+      isActive: this.isActive,
     };
 
     this.listeners.forEach((listener) => {
       try {
         listener(state);
       } catch (error) {
-        Logger.error('ScreenShareService', 'Listener error:', error);
+        Logger.error("ScreenShareService", "Listener error:", error);
       }
     });
   }

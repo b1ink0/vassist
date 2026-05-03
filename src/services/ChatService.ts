@@ -2,9 +2,9 @@
  * ChatService - chat conversation management
  */
 
-import Logger from './LoggerService';
+import Logger from "./LoggerService";
 
-export type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatRole = "system" | "user" | "assistant";
 export type ChatAttachment = string | Blob | File;
 
 export interface ChatNode {
@@ -72,8 +72,8 @@ class ChatService {
   constructor() {
     // Tree structure
     this.tree = this._createRoot();
-    this.activePath = ['root']; // IDs of messages in current conversation
-    
+    this.activePath = ["root"]; // IDs of messages in current conversation
+
     // Context limits
     this.maxMessages = 20;
   }
@@ -84,10 +84,10 @@ class ChatService {
    */
   _createRoot(): ChatNode {
     return {
-      id: 'root',
+      id: "root",
       parentId: null,
       content: null,
-      role: 'system',
+      role: "system",
       branches: [],
       currentBranchIndex: 0,
       timestamp: Date.now(),
@@ -106,7 +106,10 @@ class ChatService {
    * Find node by ID
    * @private
    */
-  _findNode(nodeId: string, currentNode: ChatNode = this.tree): ChatNode | null {
+  _findNode(
+    nodeId: string,
+    currentNode: ChatNode = this.tree,
+  ): ChatNode | null {
     if (currentNode.id === nodeId) {
       return currentNode;
     }
@@ -131,8 +134,13 @@ class ChatService {
    * @param {Array} audios - Optional audio attachments
    * @returns {string} New message ID
    */
-  addMessage(role: ChatRole, content: string, images: ChatAttachment[] | null = null, audios: ChatAttachment[] | null = null): string {
-    const parentId = this.activePath[this.activePath.length - 1] ?? 'root';
+  addMessage(
+    role: ChatRole,
+    content: string,
+    images: ChatAttachment[] | null = null,
+    audios: ChatAttachment[] | null = null,
+  ): string {
+    const parentId = this.activePath[this.activePath.length - 1] ?? "root";
     const parent = this._findNode(parentId);
 
     if (!parent) {
@@ -157,9 +165,11 @@ class ChatService {
     parent.currentBranchIndex = parent.branches.length - 1;
     this.activePath.push(newMessage.id);
 
-    const imageInfo = images && images.length > 0 ? ` with ${images.length} image(s)` : '';
-    const audioInfo = audios && audios.length > 0 ? ` with ${audios.length} audio(s)` : '';
-    Logger.log('ChatService', `Added ${role} message${imageInfo}${audioInfo}`);
+    const imageInfo =
+      images && images.length > 0 ? ` with ${images.length} image(s)` : "";
+    const audioInfo =
+      audios && audios.length > 0 ? ` with ${audios.length} audio(s)` : "";
+    Logger.log("ChatService", `Added ${role} message${imageInfo}${audioInfo}`);
 
     return newMessage.id;
   }
@@ -177,11 +187,11 @@ class ChatService {
         continue;
       }
       const node = this._findNode(nodeId);
-      if (node && node.role !== 'system') {
+      if (node && node.role !== "system") {
         messages.push({
           id: node.id,
           role: node.role,
-          content: node.content ?? '',
+          content: node.content ?? "",
           images: node.images || [],
           audios: node.audios || [],
           imageFileIds: node.imageFileIds || [],
@@ -202,7 +212,7 @@ class ChatService {
    */
   updateLastMessage(content: string): void {
     if (this.activePath.length < 2) {
-      Logger.warn('ChatService', 'No messages to update');
+      Logger.warn("ChatService", "No messages to update");
       return;
     }
 
@@ -211,7 +221,7 @@ class ChatService {
       return;
     }
     const node = this._findNode(lastId);
-    
+
     if (node) {
       node.content = content;
       node.timestamp = Date.now();
@@ -224,17 +234,15 @@ class ChatService {
    */
   setMessages(messages: ChatMessageInput[]): void {
     this.clear();
-    
+
     for (const msg of messages) {
-      this.addMessage(
-        msg.role,
-        msg.content,
-        msg.images,
-        msg.audios
-      );
+      this.addMessage(msg.role, msg.content, msg.images, msg.audios);
     }
-    
-    Logger.log('ChatService', `Set ${messages.length} messages from flat array`);
+
+    Logger.log(
+      "ChatService",
+      `Set ${messages.length} messages from flat array`,
+    );
   }
 
   /**
@@ -257,32 +265,49 @@ class ChatService {
    * @param {string} systemPrompt - System prompt to inject
    * @returns {Array}
    */
-  getFormattedMessages(systemPrompt?: string): Array<{ role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] }> {
-    const formatted: Array<{ role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] }> = [];
+  getFormattedMessages(systemPrompt?: string): Array<{
+    role: ChatRole;
+    content: string;
+    images?: ChatAttachment[];
+    audios?: ChatAttachment[];
+  }> {
+    const formatted: Array<{
+      role: ChatRole;
+      content: string;
+      images?: ChatAttachment[];
+      audios?: ChatAttachment[];
+    }> = [];
 
     // Add system prompt if provided
     if (systemPrompt) {
       formatted.push({
-        role: 'system',
+        role: "system",
         content: systemPrompt,
       });
     }
 
     // Add active conversation messages
     const messages = this.getMessages();
-    formatted.push(...messages.map((m) => {
-      const payload: { role: ChatRole; content: string; images?: ChatAttachment[]; audios?: ChatAttachment[] } = {
-        role: m.role,
-        content: m.content,
-      };
-      if (m.images.length > 0) {
-        payload.images = m.images;
-      }
-      if (m.audios.length > 0) {
-        payload.audios = m.audios;
-      }
-      return payload;
-    }));
+    formatted.push(
+      ...messages.map((m) => {
+        const payload: {
+          role: ChatRole;
+          content: string;
+          images?: ChatAttachment[];
+          audios?: ChatAttachment[];
+        } = {
+          role: m.role,
+          content: m.content,
+        };
+        if (m.images.length > 0) {
+          payload.images = m.images;
+        }
+        if (m.audios.length > 0) {
+          payload.audios = m.audios;
+        }
+        return payload;
+      }),
+    );
 
     return formatted;
   }
@@ -305,7 +330,7 @@ class ChatService {
     const messages = this.getMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (message && message.role === 'user') {
+      if (message && message.role === "user") {
         return message;
       }
     }
@@ -320,7 +345,7 @@ class ChatService {
     const messages = this.getMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (message && message.role === 'assistant') {
+      if (message && message.role === "assistant") {
         return message;
       }
     }
@@ -357,19 +382,24 @@ class ChatService {
    * @param {Array} newAudios - Optional new audios array
    * @returns {string} New message ID
    */
-  editMessage(messageId: string, newContent: string, newImages: ChatAttachment[] | null = null, newAudios: ChatAttachment[] | null = null): string {
+  editMessage(
+    messageId: string,
+    newContent: string,
+    newImages: ChatAttachment[] | null = null,
+    newAudios: ChatAttachment[] | null = null,
+  ): string {
     const node = this._findNode(messageId);
-    if (!node || node.role !== 'user') {
-      throw new Error('Can only edit user messages');
+    if (!node || node.role !== "user") {
+      throw new Error("Can only edit user messages");
     }
 
     if (!node.parentId) {
-      throw new Error('Cannot edit root/system node');
+      throw new Error("Cannot edit root/system node");
     }
 
     const parent = this._findNode(node.parentId);
     if (!parent) {
-      throw new Error('Parent node not found');
+      throw new Error("Parent node not found");
     }
 
     // Create new branch with edited content
@@ -378,8 +408,8 @@ class ChatService {
       parentId: node.parentId,
       role: node.role,
       content: newContent,
-      images: newImages !== null ? newImages : (node.images || []),
-      audios: newAudios !== null ? newAudios : (node.audios || []),
+      images: newImages !== null ? newImages : node.images || [],
+      audios: newAudios !== null ? newAudios : node.audios || [],
       imageFileIds: node.imageFileIds || [],
       audioFileIds: node.audioFileIds || [],
       branches: [],
@@ -399,7 +429,7 @@ class ChatService {
       this.activePath.push(newMessage.id);
     }
 
-    Logger.log('ChatService', 'Edited message:', messageId, '→', newMessage.id);
+    Logger.log("ChatService", "Edited message:", messageId, "→", newMessage.id);
     return newMessage.id;
   }
 
@@ -410,8 +440,8 @@ class ChatService {
    */
   createRegenerationBranch(messageId: string): string {
     const node = this._findNode(messageId);
-    if (!node || node.role !== 'assistant') {
-      throw new Error('Can only regenerate assistant messages');
+    if (!node || node.role !== "assistant") {
+      throw new Error("Can only regenerate assistant messages");
     }
 
     // Remove this AI message and everything after from active path
@@ -420,8 +450,8 @@ class ChatService {
       this.activePath = this.activePath.slice(0, messageIndex);
     }
 
-    Logger.log('ChatService', 'Created regeneration point at:', node.parentId);
-    return node.parentId ?? 'root';
+    Logger.log("ChatService", "Created regeneration point at:", node.parentId);
+    return node.parentId ?? "root";
   }
 
   /**
@@ -463,7 +493,13 @@ class ChatService {
       }
     }
 
-    Logger.log('ChatService', 'Switched to branch', branchIndex, 'at node', nodeId);
+    Logger.log(
+      "ChatService",
+      "Switched to branch",
+      branchIndex,
+      "at node",
+      nodeId,
+    );
   }
 
   /**
@@ -479,7 +515,9 @@ class ChatService {
     const parent = this._findNode(node.parentId);
     if (!parent) return;
 
-    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === messageId);
+    const currentIndex = parent.branches.findIndex(
+      (b: ChatNode) => b.id === messageId,
+    );
     if (currentIndex > 0) {
       this.switchBranch(parent.id, currentIndex - 1);
     }
@@ -498,7 +536,9 @@ class ChatService {
     const parent = this._findNode(node.parentId);
     if (!parent) return;
 
-    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === messageId);
+    const currentIndex = parent.branches.findIndex(
+      (b: ChatNode) => b.id === messageId,
+    );
     if (currentIndex < parent.branches.length - 1) {
       this.switchBranch(parent.id, currentIndex + 1);
     }
@@ -518,7 +558,9 @@ class ChatService {
       return null;
     }
 
-    const currentIndex = parent.branches.findIndex((b: ChatNode) => b.id === node.id);
+    const currentIndex = parent.branches.findIndex(
+      (b: ChatNode) => b.id === node.id,
+    );
     return {
       currentIndex: currentIndex + 1,
       totalBranches: parent.branches.length,
@@ -548,19 +590,26 @@ class ChatService {
    * Import tree from persistence
    * @param {Object} data
    */
-  importTree(data: Partial<ExportedChatTree> | ImportTreeData | null | undefined): void {
+  importTree(
+    data: Partial<ExportedChatTree> | ImportTreeData | null | undefined,
+  ): void {
     const typed = data;
     if (!typed || !typed.tree || !typed.activePath) {
-      throw new Error('Invalid tree data');
+      throw new Error("Invalid tree data");
     }
 
     if (!Array.isArray(typed.activePath)) {
-      throw new Error('Invalid activePath data');
+      throw new Error("Invalid activePath data");
     }
 
     this.tree = typed.tree as ChatNode;
     this.activePath = typed.activePath;
-    Logger.log('ChatService', 'Imported tree with', this.activePath.length - 1, 'messages');
+    Logger.log(
+      "ChatService",
+      "Imported tree with",
+      this.activePath.length - 1,
+      "messages",
+    );
   }
 
   /**
@@ -568,14 +617,19 @@ class ChatService {
    */
   clear(): void {
     this.tree = this._createRoot();
-    this.activePath = ['root'];
-    Logger.log('ChatService', 'Cleared');
+    this.activePath = ["root"];
+    Logger.log("ChatService", "Cleared");
   }
 
   /**
    * Get tree statistics
    */
-  getStats(): { totalNodes: number; totalBranches: number; maxDepth: number; activePathLength: number } {
+  getStats(): {
+    totalNodes: number;
+    totalBranches: number;
+    maxDepth: number;
+    activePathLength: number;
+  } {
     let totalNodes = 0;
     let totalBranches = 0;
     let maxDepth = 0;

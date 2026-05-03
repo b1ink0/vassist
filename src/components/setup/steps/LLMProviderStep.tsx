@@ -1,17 +1,22 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSetup } from '../../../contexts/SetupContext';
-import { AIServiceProxy } from '../../../services/proxies';
-import ProviderSelection from '../shared/ProviderSelection';
-import DesktopLLMConfig from '../../settings/llm/DesktopLLMConfig';
-import Icon from '../../icons/Icon';
-import StatusMessage from '../../common/StatusMessage';
-import Logger from '../../../services/LoggerService';
-import { cn } from '../../../utils/cn';
-import { isAndroid, isDesktop } from '../../../utils/PlatformUtils';
-import FlagCopyButton from '../../common/FlagCopyButton';
-import { Button, Input } from '../../ui';
+import { useState, useEffect, useRef } from "react";
+import { useSetup } from "../../../contexts/SetupContext";
+import { AIServiceProxy } from "../../../services/proxies";
+import ProviderSelection from "../shared/ProviderSelection";
+import DesktopLLMConfig from "../../settings/llm/DesktopLLMConfig";
+import Icon from "../../icons/Icon";
+import StatusMessage from "../../common/StatusMessage";
+import Logger from "../../../services/LoggerService";
+import { cn } from "../../../utils/cn";
+import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
+import FlagCopyButton from "../../common/FlagCopyButton";
+import { Button, Input } from "../../ui";
 
-type LLMProviderId = 'android-local' | 'desktop-local' | 'chrome-ai' | 'openai' | 'ollama';
+type LLMProviderId =
+  | "android-local"
+  | "desktop-local"
+  | "chrome-ai"
+  | "openai"
+  | "ollama";
 
 interface LLMProviderStepProps {
   isLightBackground?: boolean;
@@ -42,8 +47,8 @@ interface LLMConfigShape {
   provider?: string;
   openai?: { apiKey?: string; model?: string };
   ollama?: { endpoint?: string; model?: string };
-  'android-local'?: { endpoint?: string; model?: string };
-  'desktop-local'?: { endpoint?: string; model?: string };
+  "android-local"?: { endpoint?: string; model?: string };
+  "desktop-local"?: { endpoint?: string; model?: string };
 }
 
 interface LLMTestConfig {
@@ -51,8 +56,13 @@ interface LLMTestConfig {
   chromeAi?: { enableImageSupport: boolean; enableAudioSupport: boolean };
   openai?: { apiKey: string; model: string };
   ollama?: { endpoint: string; model: string };
-  'android-local'?: { endpoint: string; model: string; temperature: number; maxTokens: number };
-  'desktop-local'?: {
+  "android-local"?: {
+    endpoint: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+  };
+  "desktop-local"?: {
     endpoint: string;
     model: string;
     temperature: number;
@@ -69,40 +79,54 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const asRecord = (value: unknown): Record<string, unknown> => {
-  if (value && typeof value === 'object') {
+  if (value && typeof value === "object") {
     return value as Record<string, unknown>;
   }
   return {};
 };
 
-const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) => {
+const LLMProviderStep = ({
+  isLightBackground = false,
+}: LLMProviderStepProps) => {
   const { setupData, updateSetupData } = useSetup();
   const initialLoadRef = useRef(true);
   const isWebMode = !isAndroid && !isDesktop;
-  const defaultProvider = isAndroid ? 'android-local' : (isDesktop ? 'desktop-local' : 'chrome-ai');
-  const [selectedProvider, setSelectedProvider] = useState<LLMProviderId>(defaultProvider as LLMProviderId);
-  const [apiKey, setApiKey] = useState('');
-  const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
-  const [ollamaModel, setOllamaModel] = useState('llama2');
-  const [androidEndpoint, setAndroidEndpoint] = useState('http://127.0.0.1:8765');
-  const [desktopEndpoint, setDesktopEndpoint] = useState('http://127.0.0.1:11438');
-  const [desktopModel, setDesktopModel] = useState('qwen3:0.6b');
+  const defaultProvider = isAndroid
+    ? "android-local"
+    : isDesktop
+      ? "desktop-local"
+      : "chrome-ai";
+  const [selectedProvider, setSelectedProvider] = useState<LLMProviderId>(
+    defaultProvider as LLMProviderId,
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [ollamaEndpoint, setOllamaEndpoint] = useState(
+    "http://localhost:11434",
+  );
+  const [ollamaModel, setOllamaModel] = useState("llama2");
+  const [androidEndpoint, setAndroidEndpoint] = useState(
+    "http://127.0.0.1:8765",
+  );
+  const [desktopEndpoint, setDesktopEndpoint] = useState(
+    "http://127.0.0.1:11438",
+  );
+  const [desktopModel, setDesktopModel] = useState("qwen3:0.6b");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResultState | null>(null);
   const [chromeAIStatus, setChromeAIStatus] = useState<ChromeAIStatusState>({
     checking: false,
     available: false,
     ready: false,
-    message: 'Checking...',
+    message: "Checking...",
     needsFlags: false,
     needsDownload: false,
     downloading: false,
     downloadProgress: 0,
-    downloadDetails: '',
+    downloadDetails: "",
     downloadTimedOut: false,
     downloadAttempts: 0,
     flags: [],
-    state: '',
+    state: "",
   });
 
   useEffect(() => {
@@ -110,24 +134,30 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
     if (isWebMode) {
       checkChromeAIStatus();
     }
-    
+
     // Load existing setup data if any (only on first mount)
     const llmData = setupData?.llm as LLMConfigShape | undefined;
     if (llmData) {
       if (llmData.provider) {
-        const normalizedProvider = (!isWebMode && llmData.provider === 'chrome-ai') ? defaultProvider : llmData.provider;
+        const normalizedProvider =
+          !isWebMode && llmData.provider === "chrome-ai"
+            ? defaultProvider
+            : llmData.provider;
         setSelectedProvider(normalizedProvider as LLMProviderId);
       }
-      
+
       // Load provider-specific configs
       if (llmData.openai?.apiKey) setApiKey(llmData.openai.apiKey);
       if (llmData.ollama?.endpoint) setOllamaEndpoint(llmData.ollama.endpoint);
       if (llmData.ollama?.model) setOllamaModel(llmData.ollama.model);
-      if (llmData['android-local']?.endpoint) setAndroidEndpoint(llmData['android-local'].endpoint);
-      if (llmData['desktop-local']?.endpoint) setDesktopEndpoint(llmData['desktop-local'].endpoint);
-      if (llmData['desktop-local']?.model) setDesktopModel(llmData['desktop-local'].model);
+      if (llmData["android-local"]?.endpoint)
+        setAndroidEndpoint(llmData["android-local"].endpoint);
+      if (llmData["desktop-local"]?.endpoint)
+        setDesktopEndpoint(llmData["desktop-local"].endpoint);
+      if (llmData["desktop-local"]?.model)
+        setDesktopModel(llmData["desktop-local"].model);
     }
-    
+
     // Mark initial load complete after first load
     if (initialLoadRef.current) {
       initialLoadRef.current = false;
@@ -138,9 +168,9 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
   // Save data whenever provider or config changes (but skip initial load)
   useEffect(() => {
     if (initialLoadRef.current) return; // Don't save on initial load
-    
-    Logger.log('LLMProviderStep', 'Saving provider config:', selectedProvider);
-    
+
+    Logger.log("LLMProviderStep", "Saving provider config:", selectedProvider);
+
     const llmConfig = {
       provider: selectedProvider,
       chromeAi: {
@@ -149,19 +179,19 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
       },
       openai: {
         apiKey: apiKey,
-        model: 'gpt-3.5-turbo',
+        model: "gpt-3.5-turbo",
       },
       ollama: {
         endpoint: ollamaEndpoint,
         model: ollamaModel,
       },
-      'android-local': {
+      "android-local": {
         endpoint: androidEndpoint,
-        model: 'qwen3-local',
+        model: "qwen3-local",
         temperature: 0.7,
         maxTokens: 2048,
       },
-      'desktop-local': {
+      "desktop-local": {
         endpoint: desktopEndpoint,
         model: desktopModel,
         temperature: 0.7,
@@ -171,50 +201,66 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
         threads: 4,
       },
     };
-    
+
     updateSetupData({ llm: llmConfig });
-  }, [selectedProvider, apiKey, ollamaEndpoint, ollamaModel, androidEndpoint, desktopEndpoint, desktopModel, updateSetupData]);
+  }, [
+    selectedProvider,
+    apiKey,
+    ollamaEndpoint,
+    ollamaModel,
+    androidEndpoint,
+    desktopEndpoint,
+    desktopModel,
+    updateSetupData,
+  ]);
 
   const checkChromeAIStatus = async () => {
-    setChromeAIStatus(prev => ({ ...prev, checking: true }));
-    
+    setChromeAIStatus((prev) => ({ ...prev, checking: true }));
+
     try {
       const rawResult = await AIServiceProxy.checkChromeAIAvailability();
       const result = asRecord(rawResult);
       const available = result.available === true;
-      const state = typeof result.state === 'string' ? result.state : undefined;
-      const message = typeof result.message === 'string' ? result.message : '';
+      const state = typeof result.state === "string" ? result.state : undefined;
+      const message = typeof result.message === "string" ? result.message : "";
       const requiresFlags = result.requiresFlags === true;
-      const flags = Array.isArray(result.flags) ? result.flags.filter((flag): flag is string => typeof flag === 'string') : [];
-      
+      const flags = Array.isArray(result.flags)
+        ? result.flags.filter(
+            (flag): flag is string => typeof flag === "string",
+          )
+        : [];
+
       // ChromeAIValidator returns 'available: true' when ready, not 'ready: true'
       const isReady = available;
-      const needsDownload = state === 'after-download' || state === 'downloadable';
-      const isDownloading = state === 'downloading';
+      const needsDownload =
+        state === "after-download" || state === "downloadable";
+      const isDownloading = state === "downloading";
       const needsFlags = requiresFlags;
-      
-      setChromeAIStatus(prev => ({
+
+      setChromeAIStatus((prev) => ({
         ...prev, // PRESERVE downloadAttempts!
         checking: false,
         available,
         ready: isReady,
-        message: message || (isReady ? 'Chrome AI is ready!' : 'Setup required'),
+        message:
+          message || (isReady ? "Chrome AI is ready!" : "Setup required"),
         needsFlags: needsFlags,
         needsDownload: needsDownload && !needsFlags,
         downloading: isDownloading,
         downloadProgress: isDownloading ? prev.downloadProgress : 0,
-        downloadDetails: isDownloading ? prev.downloadDetails : '',
-        downloadAttempts: (isReady || isDownloading) ? 0 : prev.downloadAttempts, // Reset only if ready or downloading
+        downloadDetails: isDownloading ? prev.downloadDetails : "",
+        downloadAttempts: isReady || isDownloading ? 0 : prev.downloadAttempts, // Reset only if ready or downloading
         flags,
-        state: state ?? '',
+        state: state ?? "",
       }));
     } catch (error: unknown) {
-      setChromeAIStatus(prev => ({
+      setChromeAIStatus((prev) => ({
         ...prev, // PRESERVE downloadAttempts!
         checking: false,
         available: false,
         ready: false,
-        message: getErrorMessage(error) || 'Failed to check Chrome AI availability',
+        message:
+          getErrorMessage(error) || "Failed to check Chrome AI availability",
         needsFlags: false,
         needsDownload: false,
         downloading: false,
@@ -224,62 +270,73 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
 
   const handleDownloadModel = async () => {
     const newAttempts = chromeAIStatus.downloadAttempts + 1;
-    
-    Logger.log('LLMProviderStep', 'Download attempt:', newAttempts);
-    
-    setChromeAIStatus(prev => ({ 
-      ...prev, 
-      downloading: true, 
+
+    Logger.log("LLMProviderStep", "Download attempt:", newAttempts);
+
+    setChromeAIStatus((prev) => ({
+      ...prev,
+      downloading: true,
       downloadProgress: 0,
-      downloadDetails: 'Initializing download...',
+      downloadDetails: "Initializing download...",
       downloadTimedOut: false,
-      downloadAttempts: newAttempts
+      downloadAttempts: newAttempts,
     }));
-    
+
     // Set timeout to show the chrome:// link after 30 seconds
     const timeoutId = setTimeout(() => {
-      setChromeAIStatus(prev => ({
+      setChromeAIStatus((prev) => ({
         ...prev,
-        downloadTimedOut: true
+        downloadTimedOut: true,
       }));
     }, 30000);
-    
+
     try {
       // Trigger model download with progress callback
-      const rawResult = await AIServiceProxy.downloadChromeAIModel((progress: unknown) => {
-        const progressRecord = asRecord(progress);
-        const progressValue = typeof progressRecord.progress === 'number' ? progressRecord.progress : 0;
-        const details = typeof progressRecord.details === 'string' ? progressRecord.details : `${progressValue.toFixed(1)}%`;
-        setChromeAIStatus(prev => ({
-          ...prev,
-          downloadProgress: progressValue,
-          downloadDetails: details
-        }));
-      });
+      const rawResult = await AIServiceProxy.downloadChromeAIModel(
+        (progress: unknown) => {
+          const progressRecord = asRecord(progress);
+          const progressValue =
+            typeof progressRecord.progress === "number"
+              ? progressRecord.progress
+              : 0;
+          const details =
+            typeof progressRecord.details === "string"
+              ? progressRecord.details
+              : `${progressValue.toFixed(1)}%`;
+          setChromeAIStatus((prev) => ({
+            ...prev,
+            downloadProgress: progressValue,
+            downloadDetails: details,
+          }));
+        },
+      );
       const result = asRecord(rawResult);
-      
+
       clearTimeout(timeoutId);
-      
-      Logger.log('LLMProviderStep', 'Download result:', result);
+
+      Logger.log("LLMProviderStep", "Download result:", result);
 
       if (result.success === true) {
-        setChromeAIStatus(prev => ({
+        setChromeAIStatus((prev) => ({
           ...prev,
-          downloadDetails: (typeof result.message === 'string' ? result.message : '') || 'Download initiated. Please check chrome://on-device-internals for progress.',
+          downloadDetails:
+            (typeof result.message === "string" ? result.message : "") ||
+            "Download initiated. Please check chrome://on-device-internals for progress.",
         }));
       }
-      
+
       // Recheck status after download
       await checkChromeAIStatus();
     } catch (error: unknown) {
       clearTimeout(timeoutId);
-      Logger.error('LLMProviderStep', 'Download error:', error);
-      setChromeAIStatus(prev => ({ 
-        ...prev, 
+      Logger.error("LLMProviderStep", "Download error:", error);
+      setChromeAIStatus((prev) => ({
+        ...prev,
         downloading: false,
         downloadTimedOut: false,
-        message: getErrorMessage(error) || 'Failed to download model',
-        downloadDetails: 'Please try manually at chrome://components or check chrome://flags'
+        message: getErrorMessage(error) || "Failed to download model",
+        downloadDetails:
+          "Please try manually at chrome://components or check chrome://flags",
       }));
     }
   };
@@ -287,63 +344,121 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
   // Build providers list - Android Local/Desktop Local first if on their respective platforms
   const providers = [
     // Android Local - only shown on Android, always first and recommended
-    ...(isAndroid ? [{
-      id: 'android-local',
-      name: 'Android Local',
-      description: 'On-device AI using Qwen3-0.6B',
-      iconName: 'cpu',
-      available: true,
-      recommended: true,
-      requirements: 'Ready to use! Pre-installed on device',
-      pros: ['100% Free', 'Privacy-focused (local)', 'No internet needed', 'Fast on-device inference'],
-      cons: ['Limited model size', 'No image/audio support yet']
-    }] : []),
+    ...(isAndroid
+      ? [
+          {
+            id: "android-local",
+            name: "Android Local",
+            description: "On-device AI using Qwen3-0.6B",
+            iconName: "cpu",
+            available: true,
+            recommended: true,
+            requirements: "Ready to use! Pre-installed on device",
+            pros: [
+              "100% Free",
+              "Privacy-focused (local)",
+              "No internet needed",
+              "Fast on-device inference",
+            ],
+            cons: ["Limited model size", "No image/audio support yet"],
+          },
+        ]
+      : []),
     // Desktop Local - only shown on Desktop, always first and recommended
-    ...(isDesktop ? [{
-      id: 'desktop-local',
-      name: 'Desktop Local',
-      description: 'On-device AI using llama.cpp',
-      iconName: 'cpu',
-      available: true,
-      recommended: true,
-      requirements: 'Ready to use! llama-server via Electron',
-      pros: ['100% Free', 'Privacy-focused (local)', 'No internet needed', 'GPU accelerated', 'Supports large models'],
-      cons: ['Requires model download', 'GPU recommended']
-    }] : []),
+    ...(isDesktop
+      ? [
+          {
+            id: "desktop-local",
+            name: "Desktop Local",
+            description: "On-device AI using llama.cpp",
+            iconName: "cpu",
+            available: true,
+            recommended: true,
+            requirements: "Ready to use! llama-server via Electron",
+            pros: [
+              "100% Free",
+              "Privacy-focused (local)",
+              "No internet needed",
+              "GPU accelerated",
+              "Supports large models",
+            ],
+            cons: ["Requires model download", "GPU recommended"],
+          },
+        ]
+      : []),
     // Chrome AI - only on non-Android/non-Desktop (web mode)
-    ...(isWebMode ? [{
-      id: 'chrome-ai',
-      name: 'Chrome AI',
-      description: 'Free, local AI powered by Google',
-      iconName: 'globe',
-      available: true,
-      recommended: chromeAIStatus.ready,
-      requirements: chromeAIStatus.ready ? 'Ready to use!' : chromeAIStatus.available ? 'Setup required' : 'Chrome 138+ required',
-      pros: ['100% Free', 'Privacy-focused (local)', 'No API keys needed', 'Fast response'],
-      cons: chromeAIStatus.ready ? ['Limited to Chrome browser'] : ['Requires Chrome 138+', 'Needs browser flags', 'Model download required']
-    }] : []),
+    ...(isWebMode
+      ? [
+          {
+            id: "chrome-ai",
+            name: "Chrome AI",
+            description: "Free, local AI powered by Google",
+            iconName: "globe",
+            available: true,
+            recommended: chromeAIStatus.ready,
+            requirements: chromeAIStatus.ready
+              ? "Ready to use!"
+              : chromeAIStatus.available
+                ? "Setup required"
+                : "Chrome 138+ required",
+            pros: [
+              "100% Free",
+              "Privacy-focused (local)",
+              "No API keys needed",
+              "Fast response",
+            ],
+            cons: chromeAIStatus.ready
+              ? ["Limited to Chrome browser"]
+              : [
+                  "Requires Chrome 138+",
+                  "Needs browser flags",
+                  "Model download required",
+                ],
+          },
+        ]
+      : []),
     {
-      id: 'openai',
-      name: 'OpenAI',
-      description: 'Cloud-based AI with GPT models',
-      iconName: 'ai',
+      id: "openai",
+      name: "OpenAI",
+      description: "Cloud-based AI with GPT models",
+      iconName: "ai",
       available: true,
       recommended: false,
-      requirements: 'API key required (paid service)',
-      pros: ['Most capable models', 'Works on any browser', 'Regular updates', 'Reliable'],
-      cons: ['Requires API key', 'Costs money per request', 'Needs internet', 'Data sent to OpenAI']
+      requirements: "API key required (paid service)",
+      pros: [
+        "Most capable models",
+        "Works on any browser",
+        "Regular updates",
+        "Reliable",
+      ],
+      cons: [
+        "Requires API key",
+        "Costs money per request",
+        "Needs internet",
+        "Data sent to OpenAI",
+      ],
     },
     {
-      id: 'ollama',
-      name: 'Ollama',
-      description: 'Run large language models locally',
-      iconName: 'cpu',
+      id: "ollama",
+      name: "Ollama",
+      description: "Run large language models locally",
+      iconName: "cpu",
       available: true,
       recommended: false,
-      requirements: 'Local Ollama server required',
-      pros: ['100% Free', 'Privacy-focused (local)', 'Many model options', 'Works on any browser'],
-      cons: ['Requires local installation', 'Needs powerful hardware', 'Manual setup', 'Slower than cloud']
-    }
+      requirements: "Local Ollama server required",
+      pros: [
+        "100% Free",
+        "Privacy-focused (local)",
+        "Many model options",
+        "Works on any browser",
+      ],
+      cons: [
+        "Requires local installation",
+        "Needs powerful hardware",
+        "Manual setup",
+        "Slower than cloud",
+      ],
+    },
   ];
 
   const handleProviderSelect = (providerId: string) => {
@@ -358,56 +473,61 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
     try {
       // Build config based on selected provider
       const testConfig: LLMTestConfig = {
-        provider: selectedProvider
+        provider: selectedProvider,
       };
 
-      if (selectedProvider === 'android-local') {
-        testConfig['android-local'] = {
+      if (selectedProvider === "android-local") {
+        testConfig["android-local"] = {
           endpoint: androidEndpoint,
-          model: 'qwen3-local',
+          model: "qwen3-local",
           temperature: 0.7,
-          maxTokens: 2048
+          maxTokens: 2048,
         };
-      } else if (selectedProvider === 'desktop-local') {
-        testConfig['desktop-local'] = {
+      } else if (selectedProvider === "desktop-local") {
+        testConfig["desktop-local"] = {
           endpoint: desktopEndpoint,
           model: desktopModel,
           temperature: 0.7,
           maxTokens: 2048,
           contextSize: 4096,
           gpuLayers: 99,
-          threads: 4
+          threads: 4,
         };
-      } else if (selectedProvider === 'chrome-ai') {
+      } else if (selectedProvider === "chrome-ai") {
         testConfig.chromeAi = {
           enableImageSupport: true,
-          enableAudioSupport: true
+          enableAudioSupport: true,
         };
-      } else if (selectedProvider === 'openai') {
+      } else if (selectedProvider === "openai") {
         if (!apiKey) {
-          throw new Error('API key is required');
+          throw new Error("API key is required");
         }
         testConfig.openai = {
           apiKey: apiKey,
-          model: 'gpt-3.5-turbo'
+          model: "gpt-3.5-turbo",
         };
-      } else if (selectedProvider === 'ollama') {
+      } else if (selectedProvider === "ollama") {
         if (!ollamaEndpoint) {
-          throw new Error('Ollama endpoint is required');
+          throw new Error("Ollama endpoint is required");
         }
         testConfig.ollama = {
           endpoint: ollamaEndpoint,
-          model: ollamaModel
+          model: ollamaModel,
         };
       }
 
       // Configure AIService with test config
-      await AIServiceProxy.configure(testConfig as unknown as Record<string, unknown>);
+      await AIServiceProxy.configure(
+        testConfig as unknown as Record<string, unknown>,
+      );
 
       // Test connection (returns true on success, throws on failure)
       await AIServiceProxy.testConnection();
-      
-      setTestResult({ success: true, message: `${selectedProvider.toUpperCase()} is working!` });
+
+      setTestResult({
+        success: true,
+        message: `${selectedProvider.toUpperCase()} is working!`,
+      });
     } catch (error: unknown) {
       setTestResult({ success: false, message: getErrorMessage(error) });
     } finally {
@@ -437,14 +557,20 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
       />
 
       {/* Provider-specific Configuration */}
-      {selectedProvider === 'android-local' && (
+      {selectedProvider === "android-local" && (
         <div className="space-y-3">
           {/* Info Banner */}
           <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <div className="flex items-start gap-2">
-              <Icon name="cpu" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+              <Icon
+                name="cpu"
+                size={18}
+                className="text-white/80 flex-shrink-0 mt-0.5"
+              />
               <p className="text-xs text-white/70">
-                <span className="font-semibold">Android Local AI</span> - On-device language model using Qwen3-0.6B. Runs entirely on your device, no internet needed!
+                <span className="font-semibold">Android Local AI</span> -
+                On-device language model using Qwen3-0.6B. Runs entirely on your
+                device, no internet needed!
               </p>
             </div>
           </div>
@@ -453,7 +579,9 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
           <div className="p-3 rounded-lg bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-white/70"></div>
-              <span className="text-sm font-semibold text-white/90">Ready to use!</span>
+              <span className="text-sm font-semibold text-white/90">
+                Ready to use!
+              </span>
             </div>
             <p className="text-xs text-white/60">
               Model: Qwen3-0.6B-Q4 (400MB) • Optimized for mobile devices
@@ -464,7 +592,11 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
           <details className="group">
             <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
               <span>Advanced Settings</span>
-              <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+              <Icon
+                name="arrow-down"
+                size={14}
+                className="group-open:rotate-180 transition-transform"
+              />
             </summary>
             <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
               <div>
@@ -487,23 +619,27 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
         </div>
       )}
 
-      {selectedProvider === 'desktop-local' && (
+      {selectedProvider === "desktop-local" && (
         <DesktopLLMConfig
           config={{
             endpoint: desktopEndpoint,
-            model: desktopModel
+            model: desktopModel,
           }}
           onChange={(updates) => {
-            if (typeof updates.endpoint === 'string') setDesktopEndpoint(updates.endpoint);
-            if (typeof updates.model === 'string') setDesktopModel(updates.model);
+            if (typeof updates.endpoint === "string")
+              setDesktopEndpoint(updates.endpoint);
+            if (typeof updates.model === "string")
+              setDesktopModel(updates.model);
           }}
           isSetupMode={true}
         />
       )}
 
-      {selectedProvider === 'openai' && (
+      {selectedProvider === "openai" && (
         <div className="rounded-lg p-2 sm:p-3 border border-white/10">
-          <h3 className="text-sm font-semibold text-white mb-2">OpenAI Config</h3>
+          <h3 className="text-sm font-semibold text-white mb-2">
+            OpenAI Config
+          </h3>
           <div className="space-y-2">
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
@@ -517,7 +653,7 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
                 className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
-                Get from{' '}
+                Get from{" "}
                 <a
                   href="https://platform.openai.com/api-keys"
                   target="_blank"
@@ -532,9 +668,11 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
         </div>
       )}
 
-      {selectedProvider === 'ollama' && (
+      {selectedProvider === "ollama" && (
         <div className="rounded-lg p-2 sm:p-3 border border-white/10">
-          <h3 className="text-sm font-semibold text-white mb-2">Ollama Config</h3>
+          <h3 className="text-sm font-semibold text-white mb-2">
+            Ollama Config
+          </h3>
           <div className="space-y-2">
             <div>
               <label className="block text-xs font-medium text-white/90 mb-1">
@@ -574,107 +712,162 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
         </div>
       )}
 
-      {selectedProvider === 'chrome-ai' && (
+      {selectedProvider === "chrome-ai" && (
         <div className="space-y-4">
           {/* Info Banner */}
           <div className="p-3 rounded-lg bg-white/10 border border-white/20">
             <div className="flex items-start gap-2">
-              <Icon name="ai" size={18} className="text-white/80 flex-shrink-0 mt-0.5" />
+              <Icon
+                name="ai"
+                size={18}
+                className="text-white/80 flex-shrink-0 mt-0.5"
+              />
               <p className="text-xs text-white/70">
-                <span className="font-semibold">Chrome Built-in AI</span> - On-device language model using Gemini Nano. No API key needed, works offline!
+                <span className="font-semibold">Chrome Built-in AI</span> -
+                On-device language model using Gemini Nano. No API key needed,
+                works offline!
               </p>
             </div>
           </div>
 
           {/* Availability Status */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">Status</label>
+            <label className="block text-sm font-medium text-white/90">
+              Status
+            </label>
             <div className="p-3 rounded-lg bg-white/5 border border-white/10">
               {chromeAIStatus.checking ? (
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                   <span className="text-xs text-white/70">
-                    {chromeAIStatus.checking ? 'Rechecking...' : 'Checking availability...'}
+                    {chromeAIStatus.checking
+                      ? "Rechecking..."
+                      : "Checking availability..."}
                   </span>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center gap-2 mb-2">
-                    <div className={cn('w-2 h-2 rounded-full', chromeAIStatus.ready ? 'bg-green-400' : chromeAIStatus.downloading ? 'bg-yellow-400 animate-pulse' : 'bg-red-400')}></div>
-                    <span className="text-sm font-semibold text-white/90">{chromeAIStatus.message}</span>
+                    <div
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        chromeAIStatus.ready
+                          ? "bg-green-400"
+                          : chromeAIStatus.downloading
+                            ? "bg-yellow-400 animate-pulse"
+                            : "bg-red-400",
+                      )}
+                    ></div>
+                    <span className="text-sm font-semibold text-white/90">
+                      {chromeAIStatus.message}
+                    </span>
                   </div>
-                  
+
                   {/* Download Progress */}
                   {chromeAIStatus.downloading && (
                     <div className="mt-3 space-y-2">
                       {/* Progress Bar */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs">
-                          <span className="text-white/70">Downloading model...</span>
-                          <span className="text-yellow-300 font-semibold">{chromeAIStatus.downloadProgress.toFixed(1)}%</span>
+                          <span className="text-white/70">
+                            Downloading model...
+                          </span>
+                          <span className="text-yellow-300 font-semibold">
+                            {chromeAIStatus.downloadProgress.toFixed(1)}%
+                          </span>
                         </div>
                         <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-yellow-500 to-yellow-400 transition-all duration-300 rounded-full"
-                            style={{ width: `${chromeAIStatus.downloadProgress}%` }}
+                            style={{
+                              width: `${chromeAIStatus.downloadProgress}%`,
+                            }}
                           />
                         </div>
                         {chromeAIStatus.downloadDetails && (
-                          <p className="text-xs text-white/50">{chromeAIStatus.downloadDetails}</p>
+                          <p className="text-xs text-white/50">
+                            {chromeAIStatus.downloadDetails}
+                          </p>
                         )}
                       </div>
-                      
+
                       {/* Timeout Message */}
                       {chromeAIStatus.downloadTimedOut && (
                         <div className="p-2 rounded bg-white/10 border border-white/20 space-y-2">
                           <p className="text-xs text-white/70">
-                            <Icon name="info" size={12} className="inline mr-1" />
-                            The download is likely happening in the background. Track real-time progress at:
+                            <Icon
+                              name="info"
+                              size={12}
+                              className="inline mr-1"
+                            />
+                            The download is likely happening in the background.
+                            Track real-time progress at:
                           </p>
                           <div className="flex items-start gap-2 p-2 bg-white/5 rounded border border-white/10">
-                            <Icon name="globe" size={14} className="text-white/80 mt-1 flex-shrink-0" />
-                            <code className="text-xs text-white/70 break-all flex-1">chrome://on-device-internals/</code>
+                            <Icon
+                              name="globe"
+                              size={14}
+                              className="text-white/80 mt-1 flex-shrink-0"
+                            />
+                            <code className="text-xs text-white/70 break-all flex-1">
+                              chrome://on-device-internals/
+                            </code>
                             <button
                               onClick={() => {
-                                navigator.clipboard.writeText('chrome://on-device-internals/');
+                                navigator.clipboard.writeText(
+                                  "chrome://on-device-internals/",
+                                );
                               }}
                               className="flex-shrink-0 px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
                               title="Copy to clipboard"
                             >
-                              <Icon name="copy" size={14} className="text-white/80" />
+                              <Icon
+                                name="copy"
+                                size={14}
+                                className="text-white/80"
+                              />
                             </button>
                           </div>
                           <p className="text-xs text-white/50">
-                            Copy the URL above and paste it into your browser's address bar.
+                            Copy the URL above and paste it into your browser's
+                            address bar.
                           </p>
                         </div>
                       )}
                     </div>
                   )}
-                  
+
                   {/* Download Button */}
-                  {chromeAIStatus.needsDownload && !chromeAIStatus.needsFlags && !chromeAIStatus.downloading && (
-                    <>
-                      <Button
-                        onClick={handleDownloadModel}
-                        className="mt-3 w-full text-xs flex items-center justify-center gap-2"
-                      >
-                        <Icon name="download" size={14} />
-                        <span>Start Model Download</span>
-                      </Button>
-                      
-                      {/* Show message after 3 attempts */}
-                      {chromeAIStatus.downloadAttempts >= 3 && (
-                        <div className="mt-2 p-2 rounded bg-white/10 border border-white/20">
-                          <p className="text-xs text-white/70">
-                            <Icon name="info" size={12} className="inline mr-1" />
-                            The model may already be downloading in the background. Please wait a few minutes and click "Refresh Status" to check progress.
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  
+                  {chromeAIStatus.needsDownload &&
+                    !chromeAIStatus.needsFlags &&
+                    !chromeAIStatus.downloading && (
+                      <>
+                        <Button
+                          onClick={handleDownloadModel}
+                          className="mt-3 w-full text-xs flex items-center justify-center gap-2"
+                        >
+                          <Icon name="download" size={14} />
+                          <span>Start Model Download</span>
+                        </Button>
+
+                        {/* Show message after 3 attempts */}
+                        {chromeAIStatus.downloadAttempts >= 3 && (
+                          <div className="mt-2 p-2 rounded bg-white/10 border border-white/20">
+                            <p className="text-xs text-white/70">
+                              <Icon
+                                name="info"
+                                size={12}
+                                className="inline mr-1"
+                              />
+                              The model may already be downloading in the
+                              background. Please wait a few minutes and click
+                              "Refresh Status" to check progress.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                   {/* Refresh Status Button */}
                   <Button
                     onClick={checkChromeAIStatus}
@@ -682,8 +875,16 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
                     variant="ghost"
                     className="mt-2 text-xs flex items-center gap-1"
                   >
-                    <Icon name="refresh" size={12} className={chromeAIStatus.checking ? 'animate-spin' : ''} />
-                    <span>{chromeAIStatus.checking ? 'Checking...' : 'Refresh Status'}</span>
+                    <Icon
+                      name="refresh"
+                      size={12}
+                      className={chromeAIStatus.checking ? "animate-spin" : ""}
+                    />
+                    <span>
+                      {chromeAIStatus.checking
+                        ? "Checking..."
+                        : "Refresh Status"}
+                    </span>
                   </Button>
                 </>
               )}
@@ -694,7 +895,11 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
           <details className="group" open>
             <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
               <span>Required Chrome Flags</span>
-              <Icon name="arrow-down" size={14} className="group-open:rotate-180 transition-transform" />
+              <Icon
+                name="arrow-down"
+                size={14}
+                className="group-open:rotate-180 transition-transform"
+              />
             </summary>
             <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-2 text-xs">
               <FlagCopyButton
@@ -710,7 +915,9 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
                 flagValue="Enabled"
               />
               <p className="text-white/50 mt-2">
-                Enable these flags and restart Chrome, then visit <code className="text-white/70">chrome://components</code> to download "Optimization Guide On Device Model"
+                Enable these flags and restart Chrome, then visit{" "}
+                <code className="text-white/70">chrome://components</code> to
+                download "Optimization Guide On Device Model"
               </p>
             </div>
           </details>
@@ -718,8 +925,11 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
       )}
 
       {/* Test Connection */}
-      {(selectedProvider === 'android-local' || 
-        (selectedProvider !== 'chrome-ai' && (selectedProvider === 'openai' ? apiKey.length > 0 : (ollamaEndpoint && ollamaModel)))) && (
+      {(selectedProvider === "android-local" ||
+        (selectedProvider !== "chrome-ai" &&
+          (selectedProvider === "openai"
+            ? apiKey.length > 0
+            : ollamaEndpoint && ollamaModel))) && (
         <div>
           <Button
             onClick={testConnection}
@@ -740,15 +950,18 @@ const LLMProviderStep = ({ isLightBackground = false }: LLMProviderStepProps) =>
           </Button>
 
           {testResult && (
-            <StatusMessage 
-              message={testResult.success ? `success:${testResult.message}` : `error:${testResult.message}`}
+            <StatusMessage
+              message={
+                testResult.success
+                  ? `success:${testResult.message}`
+                  : `error:${testResult.message}`
+              }
               isLightBackground={isLightBackground}
               className="mt-2"
             />
           )}
         </div>
       )}
-
     </div>
   );
 };

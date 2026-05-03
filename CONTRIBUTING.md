@@ -15,6 +15,7 @@ Thanks for your interest in contributing! This guide covers everything you need 
 ### Getting Started
 
 Clone the repo, install dependencies, and you're ready to go:
+
 - Use `bun install` or `npm install` for dependencies
 - Run `bun run dev` for demo mode development
 - Run `bun run build:extension` to build the extension
@@ -23,16 +24,19 @@ Clone the repo, install dependencies, and you're ready to go:
 ### Available Commands
 
 **Development:**
+
 - `bun run dev` - Demo mode dev server (http://localhost:5173)
 - `bun run dev:extension` - Build extension in watch mode
 - `bun run dev:all` - Run both simultaneously
 
 **Production:**
+
 - `bun run build` - Build demo for production
 - `bun run build:extension` - Build extension for production
 - `bun run build:all` - Build both
 
 **Utilities:**
+
 - `bun run lint` - Run ESLint
 - `bun run preview` - Preview production build
 
@@ -45,12 +49,14 @@ Clone the repo, install dependencies, and you're ready to go:
 VAssist runs in two modes that share 95% of the same code:
 
 **Demo Mode** (Standalone Web App)
+
 - Lives at the demo URL
 - Direct API calls to services
 - Hot reload for fast development
 - Perfect for testing features quickly
 
 **Extension Mode** (Chrome Extension)
+
 - Injects into any website
 - Message passing between contexts
 - Shadow DOM for isolation
@@ -59,12 +65,14 @@ VAssist runs in two modes that share 95% of the same code:
 ### How Code Sharing Works
 
 **Shared Components (95%):**
+
 - `src/components/` - All React UI
 - `src/babylon/` - All 3D rendering
 - `src/config/` - All configuration
 - `src/utils/` - Most utilities
 
 **Mode-Specific (5%):**
+
 - `src/services/` - Demo mode: direct calls
 - `extension/` - Extension mode: message passing
 
@@ -73,14 +81,16 @@ VAssist runs in two modes that share 95% of the same code:
 ### Extension Architecture
 
 VAssist uses a multi-layer architecture:
+
 1. Main World (React App)
-2. Content Script (Isolated World) 
+2. Content Script (Isolated World)
 3. Background Service Worker
 4. External APIs
 
 ### Shadow DOM Isolation
 
 VAssist uses Shadow DOM for zero CSS conflicts with host pages:
+
 - Canvas for 3D character is outside (Babylon.js WebGL needs direct browser access)
 - All UI lives inside closed shadow-root with scoped Tailwind styles
 - Tested on YouTube, Twitter, Gmail, GitHub - works everywhere
@@ -92,6 +102,7 @@ VAssist uses Shadow DOM for zero CSS conflicts with host pages:
 The project is organized into shared source code and extension-specific files:
 
 **Main Source (`src/`):**
+
 - `components/` - React components, settings panels, setup wizard
 - `babylon/` - 3D rendering (MMDModelScene, AnimationManager)
 - `services/` - Services with smart routing proxies
@@ -100,12 +111,14 @@ The project is organized into shared source code and extension-specific files:
 - `workers/` - Web workers (AudioWorkerClient)
 
 **Extension (`extension/`):**
+
 - `manifest.json` - Extension configuration
 - `background/` - Service worker and per-tab services
 - `content/` - Content script injection
 - `offscreen/` - Audio processing
 
 **Static Assets (`public/`):**
+
 - `res/assets/model/` - 3D models (.bpmx format)
 - `res/assets/motion/` - Animations (.bvmd format)
 
@@ -139,12 +152,14 @@ Components in `src/components/` automatically work in both demo and extension mo
 Before submitting a PR, test in both modes:
 
 **Demo Mode:**
+
 - [ ] `bun run dev` starts without errors
 - [ ] Feature works as expected
 - [ ] No console errors
 - [ ] Performance is acceptable
 
 **Extension Mode:**
+
 - [ ] `bun run build:extension` completes
 - [ ] Extension loads in Chrome
 - [ ] Feature works on multiple websites
@@ -152,17 +167,20 @@ Before submitting a PR, test in both modes:
 - [ ] Multi-tab behavior is correct
 
 **Cross-browser:**
+
 - [ ] Test in Chrome stable
 - [ ] Test in Chrome Canary (for new APIs)
 
 ### Debugging
 
 **Demo Mode:**
+
 - Open DevTools (F12) and check Console
 - Use React DevTools for component debugging
 - Monitor Network tab for API calls
 
 **Extension Mode:**
+
 - **Content Script:** F12 on webpage, look for `[Content]` logs
 - **Background Worker:** Right-click extension icon → "Inspect service worker", look for `[Background]` logs
 - **Offscreen Document:** Check background console for `[Offscreen]` logs

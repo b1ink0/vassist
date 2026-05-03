@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Icon } from '../icons';
-import { cn } from '../../utils/cn';
+import { useState } from "react";
+import { Icon } from "../icons";
+import { cn } from "../../utils/cn";
 
 interface FlagCopyButtonProps {
   flagUrl: string;
@@ -18,7 +18,11 @@ const FlagCopyButton = ({ flagUrl, flagValue }: FlagCopyButtonProps) => {
 
   return (
     <div className="flex items-start gap-2 p-2 bg-white/5 rounded border border-white/10">
-      <Icon name="flag" size={14} className="text-white/80 mt-1 flex-shrink-0" />
+      <Icon
+        name="flag"
+        size={14}
+        className="text-white/80 mt-1 flex-shrink-0"
+      />
       <div className="flex-1 min-w-0">
         <code className="text-xs text-white/70 break-all block">{flagUrl}</code>
         <p className="text-[10px] text-white/60 mt-1">
@@ -28,15 +32,15 @@ const FlagCopyButton = ({ flagUrl, flagValue }: FlagCopyButtonProps) => {
       <button
         onClick={handleCopy}
         className={cn(
-          'flex-shrink-0 px-2 py-1 rounded border border-white/20 transition-colors',
-          'bg-white/10 hover:bg-white/20'
+          "flex-shrink-0 px-2 py-1 rounded border border-white/20 transition-colors",
+          "bg-white/10 hover:bg-white/20",
         )}
         title="Copy flag URL"
       >
         <Icon
-          name={copied ? 'check' : 'copy'}
+          name={copied ? "check" : "copy"}
           size={14}
-          className={copied ? 'text-white' : 'text-white/80'}
+          className={copied ? "text-white" : "text-white/80"}
         />
       </button>
     </div>

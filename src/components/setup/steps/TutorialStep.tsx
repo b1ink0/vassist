@@ -3,46 +3,52 @@
  * Shows scrollable gallery of GIFs demonstrating all features
  */
 
-import { Icon } from '../../icons';
+import { Icon } from "../../icons";
 
-const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line no-unused-vars
+const TutorialStep = ({ isLightBackground: _isLightBackground = false }) => {
   const tutorials = [
     {
-      title: 'Chat Interface',
-      description: 'Ask questions and have natural conversations with your AI assistant',
-      gifPath: '/tutorials/chat.gif', // Placeholder - replace with actual GIF
-      icon: 'message-circle'
+      title: "Chat Interface",
+      description:
+        "Ask questions and have natural conversations with your AI assistant",
+      gifPath: "/tutorials/chat.gif", // Placeholder - replace with actual GIF
+      icon: "message-circle",
     },
     {
-      title: 'Voice Input',
-      description: 'Use speech-to-text to communicate hands-free with your assistant',
-      gifPath: '/tutorials/voice.gif',
-      icon: 'mic'
+      title: "Voice Input",
+      description:
+        "Use speech-to-text to communicate hands-free with your assistant",
+      gifPath: "/tutorials/voice.gif",
+      icon: "mic",
     },
     {
-      title: 'Virtual Character',
-      description: 'Interact with your animated character companion in real-time',
-      gifPath: '/tutorials/character.gif',
-      icon: 'user'
+      title: "Virtual Character",
+      description:
+        "Interact with your animated character companion in real-time",
+      gifPath: "/tutorials/character.gif",
+      icon: "user",
     },
     {
-      title: 'Model Dragging',
-      description: 'Reposition your character anywhere on the screen by dragging',
-      gifPath: '/tutorials/drag.gif',
-      icon: 'move'
+      title: "Model Dragging",
+      description:
+        "Reposition your character anywhere on the screen by dragging",
+      gifPath: "/tutorials/drag.gif",
+      icon: "move",
     },
     {
-      title: 'AI Toolbar',
-      description: 'Access quick AI actions: translate, summarize, rewrite, and more',
-      gifPath: '/tutorials/toolbar.gif',
-      icon: 'sparkles'
+      title: "AI Toolbar",
+      description:
+        "Access quick AI actions: translate, summarize, rewrite, and more",
+      gifPath: "/tutorials/toolbar.gif",
+      icon: "sparkles",
     },
     {
-      title: 'Settings Panel',
-      description: 'Customize everything: AI models, voices, appearance, and behavior',
-      gifPath: '/tutorials/settings.gif',
-      icon: 'settings'
-    }
+      title: "Settings Panel",
+      description:
+        "Customize everything: AI models, voices, appearance, and behavior",
+      gifPath: "/tutorials/settings.gif",
+      icon: "settings",
+    },
   ];
 
   return (
@@ -69,7 +75,9 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
                 <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center">
                   <Icon name={tutorial.icon} size={14} className="text-white" />
                 </div>
-                <h3 className="text-sm font-semibold text-white">{tutorial.title}</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  {tutorial.title}
+                </h3>
               </div>
               <p className="text-xs text-white/70">{tutorial.description}</p>
             </div>
@@ -79,8 +87,14 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
               {/* Placeholder - replace with actual GIF when available */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <Icon name={tutorial.icon} size={48} className="text-white/30 mb-2 mx-auto" />
-                  <p className="text-xs text-white/50">Tutorial GIF Coming Soon</p>
+                  <Icon
+                    name={tutorial.icon}
+                    size={48}
+                    className="text-white/30 mb-2 mx-auto"
+                  />
+                  <p className="text-xs text-white/50">
+                    Tutorial GIF Coming Soon
+                  </p>
                 </div>
               </div>
               {/* Uncomment when GIFs are ready:
@@ -98,9 +112,15 @@ const TutorialStep = ({ isLightBackground = false }) => { // eslint-disable-line
       {/* Bottom Info */}
       <div className="mt-4 p-3 rounded-lg bg-white/10 border border-white/20">
         <div className="flex items-start gap-2">
-          <Icon name="info" size={16} className="text-white/80 flex-shrink-0 mt-0.5" />
+          <Icon
+            name="info"
+            size={16}
+            className="text-white/80 flex-shrink-0 mt-0.5"
+          />
           <p className="text-xs text-white/70">
-            <span className="font-semibold">Pro Tip:</span> All these features are accessible anytime! Look for the chat button, character controls, and settings icon once you complete setup.
+            <span className="font-semibold">Pro Tip:</span> All these features
+            are accessible anytime! Look for the chat button, character
+            controls, and settings icon once you complete setup.
           </p>
         </div>
       </div>

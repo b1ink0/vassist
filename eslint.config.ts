@@ -112,6 +112,7 @@ export default defineConfig([
         {
           prefer: "type-imports",
           fixStyle: "separate-type-imports",
+          disallowTypeAnnotations: false,
         },
       ],
     },
