@@ -30,12 +30,17 @@
     "build:all": "concurrently \"vite build --mode production\" \"vite build --config vite.config.extension.ts --mode production\"",
     "cap:open:android": "bunx cap open android",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky",
     "typecheck": "tsc -b --pretty false",
     "typecheck:all": "tsc -b --pretty false",
     "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
     "typecheck:extension": "tsc -p tsconfig.extension.json --noEmit",
     "typecheck:tools": "tsc -p tsconfig.tools.json --noEmit --pretty false",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:staged": "lint-staged",
     "preview": "vite preview",
     "preview:desktop": "bunx electron ."
   },
@@ -83,8 +88,6 @@
     "@types/react-dom": "^19.2.3",
     "@types/unbzip2-stream": "^1.4.3",
     "@types/unzipper": "^0.10.11",
-    "@typescript-eslint/eslint-plugin": "^8.44.0",
-    "@typescript-eslint/parser": "^8.44.0",
     "@vitejs/plugin-react": "^5.2.0",
     "archiver": "^7.0.1",
     "babel-plugin-react-compiler": "^19.1.0-rc.1-rc-af1b7da-20250421",
@@ -93,16 +96,30 @@
     "electron-builder": "^26.8.1",
     "esbuild": "^0.25.12",
     "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "node-addon-api": "^8.7.0",
     "node-gyp": "^11.5.0",
+    "prettier": "^3.8.3",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.1",
     "unbzip2-stream": "^1.4.3",
     "vite": "npm:rolldown-vite@7.1.14",
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{css,scss,html,json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.1.14"
