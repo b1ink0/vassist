@@ -36,7 +36,11 @@ import VoiceConversationService, {
 import chatHistoryService from "../services/ChatHistoryService";
 import Logger from "../services/LoggerService";
 import { useDesktop } from "./DesktopContext";
-import { isDesktop, isInputWindow } from "../utils/PlatformUtils";
+import {
+  isDesktop,
+  isInputWindow,
+  isScreenPicker,
+} from "../utils/PlatformUtils";
 import type {
   PositionManagerLike,
   SavedModelPositionLike,
@@ -600,7 +604,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   const notifyFrontendReady = useCallback(
     (reason: string) => {
-      if (!__DESKTOP_MODE__ || isInputWindow || !api?.window?.frontendReady) {
+      if (
+        !__DESKTOP_MODE__ ||
+        isInputWindow ||
+        isScreenPicker ||
+        !api?.window?.frontendReady
+      ) {
         return;
       }
 

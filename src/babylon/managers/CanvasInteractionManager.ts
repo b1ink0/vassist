@@ -104,56 +104,59 @@ export class CanvasInteractionManager {
     Logger.log("CanvasInteractionManager", "Initialized");
   }
 
-  /**
-   * Handle document mouse move - detect if over model
-   */
-  handleDocumentMouseMove(event: MouseEvent): void {
-    // Skip if currently dragging (canvas already has pointer-events:auto)
-    if (this.isDragging) return;
+  private updateInteractiveState(clientX: number, clientY: number): boolean {
+    if (this.isDragging) {
+      return true;
+    }
 
-    // Get canvas position
     const rect = this.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const isCameraLocked =
+      this.scene.metadata?.isCameraLocked &&
+      this.scene.metadata.isCameraLocked();
 
-    // Check if mouse is even over the canvas bounds
     if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
-      // Mouse is outside canvas - ensure click-through only if camera is locked
-      const isCameraLocked =
-        this.scene.metadata?.isCameraLocked &&
-        this.scene.metadata.isCameraLocked();
       if (isCameraLocked && this.canvas.style.pointerEvents !== "none") {
         this.canvas.style.pointerEvents = "none";
         this.canvas.style.cursor = "default";
       }
       this.isOverModel = false;
-      return;
+      return false;
     }
 
-    // Temporarily enable pointer events to do picking
     this.canvas.style.pointerEvents = "auto";
     const pickResult = this.scene.pick(x, y);
-
-    // Check if over model
     const overModel =
       Boolean(pickResult?.hit) &&
       this.isModelMesh((pickResult?.pickedMesh as AbstractMesh | null) ?? null);
 
     if (overModel) {
-      // Over model - keep pointer-events:auto and show grab cursor
       this.isOverModel = true;
       this.canvas.style.cursor = "grab";
-    } else {
-      // Not over model - restore click-through only if camera is locked
-      const isCameraLocked =
-        this.scene.metadata?.isCameraLocked &&
-        this.scene.metadata.isCameraLocked();
-      if (isCameraLocked) {
-        this.canvas.style.pointerEvents = "none";
-      }
-      this.canvas.style.cursor = "default";
-      this.isOverModel = false;
+      return true;
     }
+
+    this.canvas.style.cursor = "default";
+    this.isOverModel = false;
+
+    if (isCameraLocked) {
+      this.canvas.style.pointerEvents = "none";
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Handle document mouse move - detect if over model
+   */
+  handleDocumentMouseMove(event: MouseEvent): void {
+    this.updateInteractiveState(event.clientX, event.clientY);
+  }
+
+  isInteractiveAtPoint(clientX: number, clientY: number): boolean {
+    return this.updateInteractiveState(clientX, clientY);
   }
 
   /**

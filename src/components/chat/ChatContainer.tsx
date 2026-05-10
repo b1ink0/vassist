@@ -1783,6 +1783,7 @@ const ChatContainer = ({
 
       <div
         ref={containerRef}
+        data-electron-interactive="true"
         style={{
           position: "fixed",
           left: `${containerPos.x}px`,

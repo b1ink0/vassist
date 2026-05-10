@@ -40,6 +40,9 @@ const LazyVideoPreview = lazy(
 const LazyDesktopWindowControls = lazy(
   () => import("./components/desktop/DesktopWindowControls"),
 );
+const LazyDesktopWindowInteractivityBridge = lazy(
+  () => import("./components/desktop/DesktopWindowInteractivityBridge"),
+);
 const LazyDesktopScreenShareDialog = lazy(
   () => import("./components/desktop/DesktopScreenShareDialog"),
 );
@@ -207,9 +210,13 @@ function App({
     if (isScreenPicker) {
       return (
         <DesktopProvider>
-          <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-            <LazyDesktopScreenShareDialog />
-          </Suspense>
+          <ConfigProvider>
+            <AppProvider>
+              <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+                <LazyDesktopScreenShareDialog />
+              </Suspense>
+            </AppProvider>
+          </ConfigProvider>
         </DesktopProvider>
       );
     }
@@ -219,6 +226,9 @@ function App({
         <DesktopProvider>
           <ConfigProvider>
             <AppProvider>
+              <Suspense fallback={null}>
+                <LazyDesktopWindowInteractivityBridge />
+              </Suspense>
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
                 <LazyChatInput
                   onSend={() => {}}
@@ -243,6 +253,9 @@ function App({
           <ConfigProvider>
             <AnimationProvider>
               <AppProvider>
+                <Suspense fallback={null}>
+                  <LazyDesktopWindowInteractivityBridge />
+                </Suspense>
                 <Suspense fallback={null}>
                   <LazyDesktopWindowControls />
                 </Suspense>

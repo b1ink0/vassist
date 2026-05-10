@@ -60,21 +60,26 @@ export function registerUIIPCHandlers({
   ipcMain.handle(
     "window:set-ignore-mouse-events",
     (
-      _event: IpcMainInvokeEvent,
+      event: IpcMainInvokeEvent,
       ignore: boolean,
       options?: { forward?: boolean },
     ) => {
-      if (state.mainWindow) {
-        state.mainWindow.setIgnoreMouseEvents(ignore, options);
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      const targetWindow = senderWindow ?? state.mainWindow;
+
+      if (targetWindow) {
+        targetWindow.setIgnoreMouseEvents(ignore, options);
       }
     },
   );
 
-  ipcMain.handle("window:frontend-ready", () => {
-    if (state.mainWindow) {
-      console.log("[Main] Frontend ready - enabling mouse events");
-      state.mainWindow.setIgnoreMouseEvents(false);
-      state.mainWindow.moveTop();
+  ipcMain.handle("window:frontend-ready", (event: IpcMainInvokeEvent) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+    if (senderWindow && senderWindow === state.mainWindow) {
+      console.log("[Main] Frontend ready - enabling pass-through monitoring");
+      senderWindow.setIgnoreMouseEvents(true, { forward: true });
+      senderWindow.moveTop();
     }
   });
 

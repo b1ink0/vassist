@@ -7,6 +7,7 @@ const cardVariants = cva("rounded-lg border", {
     variant: {
       default: "bg-white/5 border-white/10",
       elevated: "bg-white/10 border-white/20",
+      none: "bg-transparent border-transparent",
     },
     padding: {
       default: "p-3",

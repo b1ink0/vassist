@@ -50,7 +50,10 @@ export default function DesktopWindowControls() {
   };
 
   return (
-    <div className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full">
+    <div
+      data-electron-interactive="true"
+      className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
+    >
       {!electronAvailable && (
         <span className="text-xs text-red-500 mr-2">
           Electron API not loaded

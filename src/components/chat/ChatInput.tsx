@@ -1815,6 +1815,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                   "p-2 rounded-lg",
                   isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
                 )}
+                data-electron-interactive="true"
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   {attachedImages.map((img, index) => (
@@ -1895,6 +1896,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
           {recordingError && (
             <div
+              data-electron-interactive="true"
               className={cn(
                 "glass-error max-w-3xl mx-auto mb-2 px-2 md:px-4 py-2 rounded-lg flex items-center justify-between gap-2",
                 isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
@@ -1949,6 +1951,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             {isVoiceMode ? (
               <>
                 <div
+                  data-electron-interactive="true"
                   className={cn(
                     "glass-container",
                     isLightBackground && "glass-container-dark",
@@ -2161,6 +2164,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             ) : (
               <>
                 <div
+                  data-electron-interactive="true"
                   className={cn(
                     "glass-container",
                     isLightBackground && "glass-container-dark",

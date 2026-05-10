@@ -3226,6 +3226,7 @@ const AIToolbar = () => {
       {shouldRender && (
         <div
           ref={toolbarRef}
+          data-electron-interactive="true"
           className={cn(
             "fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px]",
             "border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform",
@@ -3668,6 +3669,7 @@ const AIToolbar = () => {
         (action === "write-input" || action === "rewrite-custom") ? (
           <div
             ref={resultPanelRef}
+            data-electron-interactive="true"
             className={cn(
               isResultPanelClosing ? "animate-fade-out" : "animate-fade-in",
             )}

@@ -178,7 +178,7 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-14 sm:pb-20">
         <div className="max-w-4xl">
           <p className="inline-flex items-center px-3 py-1 text-[11px] tracking-[0.12em] uppercase rounded-full border border-white/20 bg-white/5 text-white/80">
-            Open source · MIT
+            Open source
           </p>
           <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-semibold leading-[0.95] tracking-[-0.02em]">
             One AI assistant,
@@ -378,8 +378,8 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
                 Download or Build
               </h2>
               <p className="mt-4 text-white/72 max-w-2xl leading-relaxed">
-                MIT-licensed. Pick a runtime, run setup, and configure providers
-                from settings. The codebase builds for all three targets from a
+                Pick a runtime, run setup, and configure providers from
+                settings. The codebase builds for all three targets from a
                 single repo.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
@@ -427,7 +427,7 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
       <footer className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 border-t border-white/10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-sm text-white/60">
           <p>VAssist</p>
-          <p>MIT License</p>
+          <p>GPL-3.0 License</p>
         </div>
       </footer>
     </div>

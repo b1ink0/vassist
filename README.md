@@ -205,7 +205,7 @@ bun run build:android
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+GPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
 ## Links
 

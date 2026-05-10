@@ -1603,9 +1603,6 @@ const ChatButton = ({
             left: `${emotePanelLeft}px`,
             top: `${emotePanelTop}px`,
             zIndex: isAndroid ? 201 : 10001,
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-            scrollSnapType: "y mandatory",
             ...(isDesktop && emotes.length > 7
               ? {
                   maskImage:
@@ -1615,16 +1612,13 @@ const ChatButton = ({
                 }
               : {}),
           }}
-          className="fixed w-[125px] max-h-[300px] overflow-y-auto py-1"
+          variant="none"
+          className="fixed w-[135px] max-h-[300px] overflow-y-auto px-1 snap-y snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          <style>{`
-          div::-webkit-scrollbar { display: none; }
-        `}</style>
           {emotes.length === 0 ? (
             <div
-              style={{ scrollSnapAlign: "center" }}
               className={cn(
-                "glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap",
+                "glass-button snap-center flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap",
                 isLightBackground && "glass-button-dark",
                 "backdrop-blur-[10px] text-white/50 cursor-default pointer-events-none",
               )}
@@ -1636,10 +1630,9 @@ const ChatButton = ({
               {/* Auto-play button */}
               <Button
                 onClick={handleAutoPlayToggle}
-                style={{ scrollSnapAlign: "center" }}
                 variant={isLightBackground ? "dark" : "default"}
                 className={cn(
-                  "flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                  "snap-center flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                   isAutoPlayActive && "ring-2 ring-white/50",
                 )}
                 title={isAutoPlayActive ? "Stop auto-play" : "Start auto-play"}
@@ -1655,9 +1648,8 @@ const ChatButton = ({
               </Button>
 
               <div
-                style={{ scrollSnapAlign: "center" }}
                 className={cn(
-                  "glass-button relative h-[35px] min-h-[35px] w-[125px] mb-2 rounded-[17.5px] backdrop-blur-[10px]",
+                  "glass-button snap-center relative h-[35px] min-h-[35px] w-[125px] mb-2 rounded-[17.5px] backdrop-blur-[10px]",
                   isLightBackground && "glass-button-dark",
                 )}
                 title="Emote category"
@@ -1699,9 +1691,8 @@ const ChatButton = ({
               {/* Emote list */}
               {filteredEmotes.length === 0 ? (
                 <div
-                  style={{ scrollSnapAlign: "center" }}
                   className={cn(
-                    "glass-button flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap",
+                    "glass-button snap-center flex items-center justify-center px-2 md:px-4 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[12px] rounded-[17.5px] whitespace-nowrap",
                     isLightBackground && "glass-button-dark",
                     "backdrop-blur-[10px] text-white/70 cursor-default pointer-events-none",
                   )}
@@ -1730,10 +1721,9 @@ const ChatButton = ({
                         );
                       }
                     }}
-                    style={{ scrollSnapAlign: "center" }}
                     variant={isLightBackground ? "dark" : "default"}
                     className={cn(
-                      "flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                      "snap-center flex items-center justify-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[15px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                       currentPlayingEmoteId === emote.id &&
                         "ring-2 ring-white/50",
                     )}
@@ -1763,9 +1753,6 @@ const ChatButton = ({
             left: `${avatarPanelLeft}px`,
             top: `${avatarPanelTop}px`,
             zIndex: isAndroid ? 201 : 10001,
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-            scrollSnapType: "y mandatory",
             ...(isDesktop &&
             ((panelMode === "avatar" && models.length > 6) ||
               (panelMode === "stage" && stages.length > 6))
@@ -1777,20 +1764,17 @@ const ChatButton = ({
                 }
               : {}),
           }}
-          className="fixed w-[125px] max-h-[300px] overflow-y-auto py-1"
+          variant="none"
+          className="fixed w-[135px] max-h-[300px] overflow-y-auto px-1 snap-y snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          <style>{`
-          div::-webkit-scrollbar { display: none; }
-        `}</style>
           {panelMode === "avatar" ? (
             <>
               {/* Default Model */}
               <Button
                 onClick={() => handleModelSelect(null)}
-                style={{ scrollSnapAlign: "center" }}
                 variant={isLightBackground ? "dark" : "default"}
                 className={cn(
-                  "flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                  "snap-center flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                   selectedModelId === null && "ring-2 ring-white/50",
                 )}
                 title="VAssist Default"
@@ -1806,10 +1790,9 @@ const ChatButton = ({
                 <Button
                   key={model.id}
                   onClick={() => handleModelSelect(model.id)}
-                  style={{ scrollSnapAlign: "center" }}
                   variant={isLightBackground ? "dark" : "default"}
                   className={cn(
-                    "flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                    "snap-center flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                     selectedModelId === model.id && "ring-2 ring-white/50",
                   )}
                   title={model.name}
@@ -1826,10 +1809,9 @@ const ChatButton = ({
               {/* No Stage Option */}
               <Button
                 onClick={() => handleStageSelect(null)}
-                style={{ scrollSnapAlign: "center" }}
                 variant={isLightBackground ? "dark" : "default"}
                 className={cn(
-                  "flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                  "snap-center flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                   selectedStageId === null && "ring-2 ring-white/50",
                 )}
                 title="No Stage"
@@ -1845,10 +1827,9 @@ const ChatButton = ({
                 <Button
                   key={stage.id}
                   onClick={() => handleStageSelect(stage.id)}
-                  style={{ scrollSnapAlign: "center" }}
                   variant={isLightBackground ? "dark" : "default"}
                   className={cn(
-                    "flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
+                    "snap-center flex items-center justify-start gap-2 px-3 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 text-[13px] rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]",
                     selectedStageId === stage.id && "ring-2 ring-white/50",
                   )}
                   title={stage.name}
@@ -1874,7 +1855,8 @@ const ChatButton = ({
             top: `${avatarPanelTop + Math.min((models.length + 1) * 43, 300) + 8}px`,
             zIndex: isAndroid ? 201 : 10001,
           }}
-          className="fixed w-[125px] flex flex-col gap-1 p-1"
+          variant="none"
+          className="fixed w-[135px] flex flex-col gap-1 p-1"
         >
           <div className="flex gap-1 justify-between">
             {/* 3D/2D Toggle Button */}

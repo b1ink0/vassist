@@ -138,6 +138,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
     return (
       <div
         ref={ref}
+        data-electron-interactive="true"
         data-ai-toolbar-result="true"
         className={cn(
           "fixed top-0 left-0 w-[380px] p-3 rounded-xl",

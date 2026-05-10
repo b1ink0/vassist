@@ -2,6 +2,7 @@ import type {
   BrowserWindow,
   DesktopCapturer,
   DesktopCapturerSource,
+  DisplayMediaRequestHandlerHandlerRequest,
   IpcMainEvent,
   IpcMain,
   Protocol,
@@ -84,8 +85,20 @@ export function setupDesktopPermissions({
     thumbnailSize: { width: 1920, height: 1080 },
   };
 
+  const setOtherWindowsInteractive = (
+    excludedWindow?: BrowserWindow | null,
+  ) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window === excludedWindow || window.isDestroyed()) {
+        continue;
+      }
+
+      window.setIgnoreMouseEvents(false);
+    }
+  };
+
   const mediaHandler = (
-    _request: unknown,
+    _request: DisplayMediaRequestHandlerHandlerRequest,
     callback: (result: {
       video?: DesktopCapturerSource;
       audio?: "loopback" | "loopbackWithMute" | WebFrameMain;
@@ -95,7 +108,8 @@ export function setupDesktopPermissions({
       .getSources(sourceOptions)
       .then((sources) => {
         if (sources.length === 0) {
-          return callback({});
+          (callback as unknown as (result: null) => void)(null);
+          return;
         }
 
         let callbackCalled = false;
@@ -111,6 +125,13 @@ export function setupDesktopPermissions({
           }
         };
 
+        const abortCallback = () => {
+          if (!callbackCalled) {
+            callbackCalled = true;
+            (callback as unknown as (result: null) => void)(null);
+          }
+        };
+
         let pickerWindow: BrowserWindow | null = new BrowserWindow({
           width: 900,
           height: 600,
@@ -120,7 +141,9 @@ export function setupDesktopPermissions({
           alwaysOnTop: true,
           autoHideMenuBar: true,
           frame: false,
-          backgroundColor: "#1a1a1a",
+          transparent: true,
+          backgroundColor: "#00000000",
+          show: false,
           webPreferences: {
             preload: path.join(__dirname, "preload.cjs"),
             nodeIntegration: false,
@@ -139,6 +162,12 @@ export function setupDesktopPermissions({
         } else {
           pickerWindow.loadURL("app://./electron/index.html?mode=screenPicker");
         }
+
+        pickerWindow.once("ready-to-show", () => {
+          pickerWindow?.setIgnoreMouseEvents(false);
+          setOtherWindowsInteractive(pickerWindow);
+          pickerWindow?.show();
+        });
 
         const sourcesData = sources.map((source) => ({
           id: source.id,
@@ -163,13 +192,14 @@ export function setupDesktopPermissions({
           if (selectedSource) {
             safeCallback({ video: selectedSource, audio: "loopback" });
           } else {
-            safeCallback({});
+            abortCallback();
           }
           cleanup();
         };
 
         const handlePickerCancel = () => {
           console.log("Picker: Cancelled");
+          abortCallback();
           cleanup();
         };
 
@@ -187,6 +217,7 @@ export function setupDesktopPermissions({
             pickerWindow.destroy();
           }
           pickerWindow = null;
+          setOtherWindowsInteractive(null);
           console.log("Picker: Cleanup complete");
         };
 
@@ -197,15 +228,14 @@ export function setupDesktopPermissions({
         pickerWindow.on("closed", () => {
           console.log("Picker: Window closed event");
           if (!callbackCalled) {
-            callbackCalled = true;
-            callback({});
+            abortCallback();
           }
           cleanup();
         });
       })
       .catch((error: unknown) => {
         console.error("Failed to get desktop sources:", error);
-        callback({});
+        (callback as unknown as (result: null) => void)(null);
       });
   };
 
