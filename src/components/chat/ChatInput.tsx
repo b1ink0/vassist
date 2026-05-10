@@ -27,12 +27,7 @@ import { useConfig } from "../../contexts/ConfigContext";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/LoggerService";
-import {
-  isAndroid,
-  isDesktop,
-  isExtension,
-  isInputWindow,
-} from "../../utils/PlatformUtils";
+import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 import { useDesktop } from "../../contexts/DesktopContext";
 import MicrophoneService from "../../services/MicrophoneService";
 import CameraService from "../../services/CameraService";
@@ -753,14 +748,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             unsubscribeCameraDevices?.();
           };
         }
-        return;
-      }
-
-      if (isExtension) {
-        Logger.log(
-          "ChatInput",
-          "Extension: Skipping camera service initialization",
-        );
         return;
       }
 
@@ -1739,6 +1726,19 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const voiceStateDisplay = isVoiceMode
       ? getVoiceStateDisplay()
       : { icon: "stop", label: "Ready", class: "idle", showInterrupt: false };
+    const iconButtonClass = (options?: {
+      active?: boolean;
+      activeClassName?: string;
+      disabled?: boolean;
+      pulse?: boolean;
+    }) =>
+      cn(
+        "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
+        options?.disabled ? "opacity-50 cursor-not-allowed" : null,
+        isLightBackground ? "glass-text" : "glass-text-black",
+        options?.active && options.activeClassName,
+        options?.pulse && "animate-pulse",
+      );
     const hasAttachments =
       attachedImages.length > 0 || attachedAudios.length > 0;
     const shouldFollowKeyboard =
@@ -1983,130 +1983,135 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <Button
                         type="button"
                         onClick={handleInterrupt}
-                        variant={isLightBackground ? "dark" : "default"}
-                        size="sm"
-                        className="hover:bg-red-500/20 flex items-center gap-1.5"
+                        variant="unstyled"
+                        className={iconButtonClass({
+                          active: true,
+                          activeClassName: "text-red-400 hover:bg-red-500/12",
+                        })}
+                        title="Interrupt"
                       >
                         <Icon
                           name="hand-stop"
                           size={16}
-                          className={
-                            isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black"
-                          }
+                          className="text-current"
                         />
                       </Button>
                     )}
+
+                    <Select
+                      value={selectedMicId || ""}
+                      onChange={(event) =>
+                        handleMicSelect(event.target.value || null)
+                      }
+                      variant={isLightBackground ? "dark" : "default"}
+                      options={micDeviceOptions}
+                      disabled={isRecording || isProcessingRecording}
+                      side="top"
+                      align="end"
+                      listClassName="min-w-[250px]"
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="unstyled"
+                          disabled={isRecording || isProcessingRecording}
+                          className={iconButtonClass({
+                            disabled: isRecording || isProcessingRecording,
+                          })}
+                          title="Select Microphone"
+                        >
+                          <Icon
+                            name="microphone"
+                            size={16}
+                            className="text-current"
+                          />
+                          <Icon
+                            name="chevron-down"
+                            size={14}
+                            className="text-current"
+                          />
+                        </Button>
+                      }
+                    />
+
                     <Button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
-                      variant={isLightBackground ? "dark" : "default"}
-                      size="sm"
-                      className={cn(
-                        "flex items-center gap-1",
-                        attachedImages.length > 0 &&
-                          "bg-blue-500/20 text-blue-400",
-                      )}
+                      variant="unstyled"
+                      className={iconButtonClass({
+                        active: attachedImages.length > 0,
+                        activeClassName: "text-blue-400",
+                      })}
                       title={
                         attachedImages.length > 0
                           ? `${attachedImages.length} image(s)`
                           : "Attach image"
                       }
                     >
-                      <Icon
-                        name="image"
-                        size={16}
-                        className={
-                          isLightBackground ? "glass-text" : "glass-text-black"
-                        }
-                      />
+                      <Icon name="image" size={16} className="text-current" />
                       {attachedImages.length > 0 && (
-                        <span
-                          className={
-                            isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black"
-                          }
-                        >
+                        <span className="text-current">
                           {attachedImages.length}
                         </span>
                       )}
                     </Button>
 
-                    {/* Camera controls are disabled in extension mode */}
-                    {!isExtension && (
-                      <div className="relative flex items-center gap-1">
-                        <Button
-                          type="button"
-                          onClick={handleCameraClick}
-                          variant={isLightBackground ? "dark" : "default"}
-                          size="sm"
-                          className={cn(
-                            "flex items-center gap-1",
-                            isCameraActive && "bg-green-500/20 text-green-400",
-                          )}
-                          title={
-                            isCameraActive ? "Stop Camera" : "Start Camera"
-                          }
-                        >
-                          <Icon
-                            name="camera"
-                            size={16}
-                            className={
-                              isCameraActive
-                                ? "animate-pulse"
-                                : isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black"
-                            }
-                          />
-                        </Button>
-
-                        <Select
-                          value={selectedCameraId || ""}
-                          onChange={(event) => {
-                            void handleCameraSelect(event.target.value || null);
-                          }}
-                          variant={isLightBackground ? "dark" : "default"}
-                          options={cameraDeviceOptions}
-                          side="top"
-                          align="end"
-                          listClassName="min-w-[250px]"
-                          trigger={
-                            <Button
-                              type="button"
-                              variant={isLightBackground ? "dark" : "default"}
-                              size="sm"
-                              className="px-1"
-                              title="Select Camera"
-                            >
-                              <Icon
-                                name="chevron-down"
-                                size={14}
-                                className={
-                                  isLightBackground
-                                    ? "glass-text"
-                                    : "glass-text-black"
-                                }
-                              />
-                            </Button>
-                          }
+                    <div className="relative flex items-center gap-1">
+                      <Button
+                        type="button"
+                        onClick={handleCameraClick}
+                        variant="unstyled"
+                        className={iconButtonClass({
+                          active: isCameraActive,
+                          activeClassName: "text-green-400",
+                          pulse: isCameraActive,
+                        })}
+                        title={isCameraActive ? "Stop Camera" : "Start Camera"}
+                      >
+                        <Icon
+                          name="camera"
+                          size={16}
+                          className="text-current"
                         />
-                      </div>
-                    )}
+                      </Button>
+
+                      <Select
+                        value={selectedCameraId || ""}
+                        onChange={(event) => {
+                          void handleCameraSelect(event.target.value || null);
+                        }}
+                        variant={isLightBackground ? "dark" : "default"}
+                        options={cameraDeviceOptions}
+                        side="top"
+                        align="end"
+                        listClassName="min-w-[250px]"
+                        trigger={
+                          <Button
+                            type="button"
+                            variant="unstyled"
+                            className={iconButtonClass()}
+                            title="Select Camera"
+                          >
+                            <Icon
+                              name="chevron-down"
+                              size={14}
+                              className="text-current"
+                            />
+                          </Button>
+                        }
+                      />
+                    </div>
 
                     {/* Screen Share button (Chrome-based platforms) */}
                     {!isAndroid && (
                       <Button
                         type="button"
                         onClick={handleScreenShareClick}
-                        variant={isLightBackground ? "dark" : "default"}
-                        size="sm"
-                        className={cn(
-                          "flex items-center gap-1",
-                          isScreenShareActive && "bg-blue-500/20 text-blue-400",
-                        )}
+                        variant="unstyled"
+                        className={iconButtonClass({
+                          active: isScreenShareActive,
+                          activeClassName: "text-blue-400",
+                          pulse: isScreenShareActive,
+                        })}
                         title={
                           isScreenShareActive
                             ? "Stop Screen Share"
@@ -2114,15 +2119,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         }
                       >
                         <Icon
-                          name="maximize"
-                          size={16}
-                          className={
+                          name={
                             isScreenShareActive
-                              ? "animate-pulse"
-                              : isLightBackground
-                                ? "glass-text"
-                                : "glass-text-black"
+                              ? "screen-share-off"
+                              : "screen-share"
                           }
+                          size={16}
+                          className="text-current"
                         />
                       </Button>
                     )}
@@ -2130,33 +2133,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                     <Button
                       type="button"
                       onClick={handleVoiceModeToggle}
-                      variant="error"
-                      size="sm"
-                      title="Stop Voice Mode"
+                      variant="unstyled"
+                      className={iconButtonClass()}
+                      title="Close Voice Mode"
                     >
-                      <Icon
-                        name="phone"
-                        size={16}
-                        className={
-                          isLightBackground ? "glass-text" : "glass-text-black"
-                        }
-                      />
-                    </Button>
-
-                    <Button
-                      type="button"
-                      onClick={wrappedOnClose}
-                      variant={isLightBackground ? "dark" : "default"}
-                      size="sm"
-                      title="Close (Esc)"
-                    >
-                      <Icon
-                        name="close"
-                        size={16}
-                        className={
-                          isLightBackground ? "glass-text" : "glass-text-black"
-                        }
-                      />
+                      <Icon name="close" size={16} className="text-current" />
                     </Button>
                   </div>
                 </div>
@@ -2295,36 +2276,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       >
                         <Icon name="phone" size={18} />
                       </button>
-
-                      {/* Microphone selection */}
-                      <Select
-                        value={selectedMicId || ""}
-                        onChange={(event) =>
-                          handleMicSelect(event.target.value || null)
-                        }
-                        variant={isLightBackground ? "dark" : "default"}
-                        options={micDeviceOptions}
-                        disabled={isRecording || isProcessingRecording}
-                        side="top"
-                        align="end"
-                        listClassName="min-w-[250px]"
-                        trigger={
-                          <button
-                            type="button"
-                            className={cn(
-                              "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                              isRecording || isProcessingRecording
-                                ? "opacity-50 cursor-not-allowed"
-                                : isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black",
-                            )}
-                            title="Select Microphone"
-                          >
-                            <Icon name="chevron-down" size={18} />
-                          </button>
-                        }
-                      />
 
                       <button
                         type="button"

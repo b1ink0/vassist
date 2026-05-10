@@ -199,13 +199,15 @@ const ChatButton = ({
     api: DesktopApiForChatButton | null;
   };
 
-  const isLeftSide = buttonPos.x < window.innerWidth / 2;
-
   const [isDragging, setIsDragging] = useState(false);
+  const [dragVisualPos, setDragVisualPos] = useState<ButtonPosition | null>(
+    null,
+  );
   const [hasDragged, setHasDragged] = useState(false);
   const dragStartPos = useRef<ButtonPosition>({ x: 0, y: 0 });
   const dragStartButtonPos = useRef<ButtonPosition>({ x: 0, y: 0 });
   const buttonPosRef = useRef<ButtonPosition>({ x: -100, y: -100 });
+  const dragVisualPosRef = useRef<ButtonPosition | null>(null);
   const lastSetPosition = useRef<ButtonPosition>({ x: -100, y: -100 });
   const [isDragOverButton, setIsDragOverButton] = useState(false);
   const [isEmotePanelOpen, setIsEmotePanelOpen] = useState(false);
@@ -232,9 +234,7 @@ const ChatButton = ({
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
   const buttonRef = useRef<HTMLDivElement | null>(null);
-  const buttonDragEventTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const buttonDragAnimationFrameRef = useRef<number | null>(null);
 
   // Delayed render state for fade animation
   const [shouldRender, setShouldRender] = useState(isVisible);
@@ -665,6 +665,44 @@ const ChatButton = ({
     buttonPosRef.current = buttonPos;
   }, [buttonPos]);
 
+  useEffect(() => {
+    if (
+      !isDragging &&
+      dragVisualPos &&
+      dragVisualPos.x === buttonPos.x &&
+      dragVisualPos.y === buttonPos.y
+    ) {
+      setDragVisualPos(null);
+      dragVisualPosRef.current = null;
+    }
+  }, [isDragging, dragVisualPos, buttonPos.x, buttonPos.y]);
+
+  const flushDragVisualPosition = useCallback(() => {
+    buttonDragAnimationFrameRef.current = null;
+
+    const latestPos = dragVisualPosRef.current;
+    if (!latestPos) {
+      return;
+    }
+
+    setDragVisualPos(latestPos);
+
+    if (isChatOpen) {
+      const event = new CustomEvent("chatButtonMoved", { detail: latestPos });
+      window.dispatchEvent(event);
+    }
+  }, [isChatOpen]);
+
+  const scheduleDragVisualUpdate = useCallback(() => {
+    if (buttonDragAnimationFrameRef.current !== null) {
+      return;
+    }
+
+    buttonDragAnimationFrameRef.current = requestAnimationFrame(() => {
+      flushDragVisualPosition();
+    });
+  }, [flushDragVisualPosition]);
+
   // Adjust button position when chat opens (if in chat-only mode)
   useEffect(() => {
     if (!modelDisabled || !isChatOpen) return;
@@ -895,28 +933,24 @@ const ChatButton = ({
       const newPos = { x: boundedX, y: boundedY };
       buttonPosRef.current = newPos;
 
-      if (isChatOpen && !buttonDragEventTimeoutRef.current) {
-        buttonDragEventTimeoutRef.current = setTimeout(() => {
-          const event = new CustomEvent("chatButtonMoved", { detail: newPos });
-          window.dispatchEvent(event);
-          buttonDragEventTimeoutRef.current = null;
-        }, 16); // ~60fps
-      }
+      dragVisualPosRef.current = newPos;
+      scheduleDragVisualUpdate();
     },
-    [modelDisabled, isDragging, isChatOpen],
+    [modelDisabled, isDragging, isChatOpen, scheduleDragVisualUpdate],
   );
 
   const handleMouseUp = useCallback(() => {
     if (!modelDisabled || !isDragging) return;
 
-    if (buttonDragEventTimeoutRef.current) {
-      clearTimeout(buttonDragEventTimeoutRef.current);
-      buttonDragEventTimeoutRef.current = null;
+    if (buttonDragAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(buttonDragAnimationFrameRef.current);
+      buttonDragAnimationFrameRef.current = null;
     }
 
     setIsDragging(false);
 
-    const finalPos = buttonPosRef.current;
+    const finalPos = dragVisualPosRef.current ?? buttonPosRef.current;
+    setDragVisualPos(finalPos);
 
     // Update React state to match DOM
     setButtonPos(finalPos);
@@ -947,6 +981,14 @@ const ChatButton = ({
     uiConfig.position?.preset,
     updateUIConfig,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (buttonDragAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(buttonDragAnimationFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!modelDisabled) return;
@@ -1508,6 +1550,8 @@ const ChatButton = ({
   const maxListLength = Math.max(models.length, stages.length);
   const avatarPanelHeight = Math.min((maxListLength + 1) * 43, 300);
   const avatarPanelGap = 8;
+  const renderedButtonPos = dragVisualPos ?? buttonPos;
+  const isLeftSide = renderedButtonPos.x < window.innerWidth / 2;
 
   const cameraControlsHeight = 35 * 2 + 4;
   const cameraControlsGap = 8;
@@ -1534,22 +1578,26 @@ const ChatButton = ({
       cameraControlsOffset;
   } else {
     if (isDesktop) {
-      emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
-      avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
+      emotePanelLeft = renderedButtonPos.x - emotePanelWidth - emotePanelGap;
+      avatarPanelLeft = renderedButtonPos.x - avatarPanelWidth - avatarPanelGap;
     } else {
       if (isLeftSide) {
-        emotePanelLeft = buttonPos.x;
-        avatarPanelLeft = buttonPos.x;
+        emotePanelLeft = renderedButtonPos.x;
+        avatarPanelLeft = renderedButtonPos.x;
       } else {
-        emotePanelLeft = buttonPos.x - emotePanelWidth - emotePanelGap;
-        avatarPanelLeft = buttonPos.x - avatarPanelWidth - avatarPanelGap;
+        emotePanelLeft = renderedButtonPos.x - emotePanelWidth - emotePanelGap;
+        avatarPanelLeft =
+          renderedButtonPos.x - avatarPanelWidth - avatarPanelGap;
       }
     }
 
     emotePanelTop =
-      buttonPos.y - TOTAL_BUTTON_OFFSET - emotePanelHeight - emotePanelGap;
+      renderedButtonPos.y -
+      TOTAL_BUTTON_OFFSET -
+      emotePanelHeight -
+      emotePanelGap;
     avatarPanelTop =
-      buttonPos.y -
+      renderedButtonPos.y -
       TOTAL_BUTTON_OFFSET -
       avatarPanelHeight -
       avatarPanelGap -
@@ -1572,8 +1620,8 @@ const ChatButton = ({
         top: "auto",
       }
     : {
-        left: `${buttonPos.x}px`,
-        top: `${buttonPos.y - visualButtonOffset}px`,
+        left: `${renderedButtonPos.x}px`,
+        top: `${renderedButtonPos.y - visualButtonOffset}px`,
       };
 
   return (

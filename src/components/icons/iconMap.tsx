@@ -7,6 +7,7 @@ import * as HeroIconsSolid from "@heroicons/react/24/solid";
 import * as HeroIconsOutline from "@heroicons/react/24/outline";
 import { FaGithub } from "react-icons/fa";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { LuScreenShare, LuScreenShareOff } from "react-icons/lu";
 
 export const iconMap = {
   close: HeroIconsSolid.XMarkIcon,
@@ -49,6 +50,8 @@ export const iconMap = {
   image: HeroIconsSolid.PhotoIcon,
   photo: HeroIconsSolid.PhotoIcon,
   camera: HeroIconsSolid.CameraIcon,
+  "screen-share": LuScreenShare,
+  "screen-share-off": LuScreenShareOff,
   music: HeroIconsSolid.MusicalNoteIcon,
   document: HeroIconsSolid.DocumentIcon,
   note: HeroIconsSolid.DocumentTextIcon,

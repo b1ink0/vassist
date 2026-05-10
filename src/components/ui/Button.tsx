@@ -10,6 +10,7 @@ const buttonVariants = cva(
         default: "glass-button rounded-lg hover:bg-white/20",
         dark: "glass-button glass-button-dark rounded-lg hover:bg-white/20",
         ghost: "rounded-lg hover:bg-white/10 text-white/70 hover:text-white",
+        unstyled: "",
         error: "glass-error rounded-lg",
         link: "underline-offset-4 hover:underline text-white/70",
       },

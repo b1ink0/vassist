@@ -411,12 +411,16 @@ const ThreeDSettings = ({
     }
   }, [activeSubTab]);
 
-  const processModelUploadWithProgress =
-    pmxConverterService.processModelUpload as unknown as (
-      file: File,
-      modelName: string,
-      onProgress?: (step: string, message: string) => void,
-    ) => Promise<string>;
+  const processModelUploadWithProgress = (
+    file: File,
+    modelName: string,
+    onProgress?: (step: string, message: string) => void,
+  ) =>
+    pmxConverterService.processModelUpload(
+      file,
+      modelName,
+      onProgress ?? null,
+    ) as Promise<string>;
 
   const saveMotionWithCategories =
     motionStorageService.saveMotion as unknown as (

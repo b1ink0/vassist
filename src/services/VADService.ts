@@ -5,7 +5,7 @@
  */
 
 import { MicVAD } from "@ricky0123/vad-web";
-import { isDesktop } from "../utils/PlatformUtils";
+import { isDesktop, isExtension } from "../utils/PlatformUtils";
 import MicrophoneService from "./MicrophoneService";
 import Logger from "./LoggerService";
 
@@ -36,6 +36,22 @@ class VADService {
     this.onSpeechRealStart = null;
     this.onSpeechEnd = null;
     this.onError = null;
+  }
+
+  private async resolveExtensionAssetBasePath(): Promise<string> {
+    try {
+      const { extensionBridge } = await import("../utils/ExtensionBridge");
+      const assetBasePath = await extensionBridge.getResourceURL("assets/");
+
+      return assetBasePath.endsWith("/") ? assetBasePath : `${assetBasePath}/`;
+    } catch (error) {
+      Logger.warn(
+        "VAD",
+        "Failed to resolve extension asset base path, falling back to /assets/",
+        error,
+      );
+      return "/assets/";
+    }
   }
 
   /**
@@ -70,12 +86,13 @@ class VADService {
 
       Logger.log("VAD", "Initializing VAD (Silero v5)...");
 
-      // Determine asset path based on build type
-      // The library appends model filenames to baseAssetPath
-      // Desktop: Use app:// protocol - files are in dist-desktop/assets/
-      // Android: HTML at root, assets in /assets/ directory - use absolute path
-      // Web/Extension: Files in ./assets/ relative to HTML
-      const baseAssetPath = isDesktop ? "app://./assets/" : "/assets/";
+      const baseAssetPath = isExtension
+        ? await this.resolveExtensionAssetBasePath()
+        : isDesktop
+          ? "app://./assets/"
+          : "/assets/";
+
+      Logger.log("VAD", "Resolved asset base path:", baseAssetPath);
 
       // Initialize MicVAD with Silero v5 model
       this.vad = await MicVAD.new({
