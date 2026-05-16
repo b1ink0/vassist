@@ -6,7 +6,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as React from "react";
-import { useConfig } from "../../contexts/ConfigContext";
+import { useConfigAI } from "../../hooks/config/useConfigAI";
+import { useConfigStatus } from "../../hooks/config/useConfigStatus";
 import {
   AIProviders,
   type AIConfig,
@@ -1384,16 +1385,14 @@ const LLMSettings = ({
   onRequestDeleteLLMModel,
   refreshTrigger = 0,
 }: LLMSettingsProps) => {
+  const { chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload } =
+    useConfigStatus();
   const {
     aiConfig,
     aiTesting,
     updateAIConfig,
     testAIConnection,
-
-    chromeAiStatus,
-    checkChromeAIAvailability,
-    startChromeAIDownload,
-  } = useConfig();
+  } = useConfigAI();
 
   const { api: androidAPI } = useAndroid();
   const { api: desktopAPI } = useDesktop();

@@ -1,38 +1,34 @@
 /**
- * @fileoverview Desktop Context for Electron API access
+ * @fileoverview Desktop store compatibility layer.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { ElectronAPI } from "../types/electron";
-
-// Get the API exposed by preload script (or null if not in Electron)
-const electronAPI = typeof window !== "undefined" ? window.electron : null;
+import { useShallow } from "zustand/react/shallow";
+import { useDesktopStore } from "../stores/useDesktopStore";
 
 interface DesktopContextValue {
   api: ElectronAPI | null;
 }
-
-const DesktopContext = createContext<DesktopContextValue>({
-  api: null,
-});
 
 interface DesktopProviderProps {
   children: ReactNode;
 }
 
 export function DesktopProvider({ children }: DesktopProviderProps) {
-  const value = {
-    api: electronAPI ?? null,
-  };
-  return (
-    <DesktopContext.Provider value={value}>{children}</DesktopContext.Provider>
-  );
+  const refreshApi = useDesktopStore((state) => state.refreshApi);
+
+  useEffect(() => {
+    refreshApi();
+  }, [refreshApi]);
+
+  return <>{children}</>;
 }
 
-/**
- * Hook to access desktop API
- * @returns {{ api: ElectronAPI | null }}
- */
 export function useDesktop(): DesktopContextValue {
-  return useContext(DesktopContext);
+  return useDesktopStore(
+    useShallow((state) => ({
+      api: state.api,
+    })),
+  );
 }

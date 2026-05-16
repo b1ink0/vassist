@@ -14,9 +14,11 @@ import {
   type SetStateAction,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useApp } from "../../contexts/AppContext";
-import { useConfig } from "../../contexts/ConfigContext";
 import { useDesktop } from "../../contexts/DesktopContext";
+import { useChat } from "../../hooks/app/useChat";
+import { useDrag } from "../../hooks/app/useDrag";
+import { useScene } from "../../hooks/app/useScene";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import { Icon } from "../icons";
 import { Button, Card } from "../ui";
 import { cn } from "../../utils/cn";
@@ -184,17 +186,15 @@ const ChatButton = ({
   isChatOpen = false,
   chatInputRef,
 }: ChatButtonProps) => {
+  const { positionManagerRef, sceneRef } = useScene();
   const {
-    positionManagerRef,
     buttonPosition: buttonPos,
     updateButtonPosition: setButtonPos,
     startButtonDrag,
     endButtonDrag,
-    setPendingDropData,
-    sceneRef,
-  } = useApp();
-
-  const { uiConfig, updateUIConfig } = useConfig();
+  } = useDrag();
+  const { setPendingDropData } = useChat();
+  const { uiConfig, updateUIConfig } = useConfigUI();
   const { api: desktopAPI } = useDesktop() as {
     api: DesktopApiForChatButton | null;
   };

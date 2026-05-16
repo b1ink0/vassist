@@ -33,8 +33,14 @@ import emoteStorageService from "../../services/EmoteStorageService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import { useDesktop } from "../../contexts/DesktopContext";
 import { useAndroid } from "../../contexts/AndroidContext";
-import { useApp } from "../../contexts/AppContext";
-import { useConfig } from "../../contexts/ConfigContext";
+import { useChat } from "../../hooks/app/useChat";
+import { useDrag } from "../../hooks/app/useDrag";
+import { usePlayback } from "../../hooks/app/usePlayback";
+import { useScene } from "../../hooks/app/useScene";
+import { useTooling } from "../../hooks/app/useTooling";
+import { useConfigAI } from "../../hooks/config/useConfigAI";
+import { useConfigTTS } from "../../hooks/config/useConfigTTS";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 import { isDesktop, isAndroid } from "../../utils/PlatformUtils";
 import type { PositionManagerLike } from "../../babylon/types";
@@ -226,47 +232,6 @@ interface AndroidApiLike {
   deleteLLMModel?: (filename: string) => string;
 }
 
-interface AppContextForChatContainer {
-  positionManagerRef: MutableRefObject<PositionManagerLike | null>;
-  chatMessages: ChatMessageLike[];
-  isVoiceMode: boolean;
-  isChatContainerVisible: boolean;
-  isProcessing: boolean;
-  isSpeaking: boolean;
-  playingMessageIndex: number | null;
-  loadingMessageIndex: number | null;
-  isDragOverChat: boolean;
-  isSettingsPanelOpen: boolean;
-  isHistoryPanelOpen: boolean;
-  isTempChat: boolean;
-  buttonPosition: ButtonPosition;
-  isDraggingButton: boolean;
-  isDraggingModel: boolean;
-  setPlayingMessageIndex: Dispatch<SetStateAction<number | null>>;
-  setLoadingMessageIndex: Dispatch<SetStateAction<number | null>>;
-  setIsDragOverChat: Dispatch<SetStateAction<boolean>>;
-  setIsSettingsPanelOpen: Dispatch<SetStateAction<boolean>>;
-  setIsHistoryPanelOpen: Dispatch<SetStateAction<boolean>>;
-  setIsTempChat: Dispatch<SetStateAction<boolean>>;
-  loadChatFromHistory: (chat: ChatHistorySelection) => Promise<void>;
-  clearChat: () => void;
-  stopGeneration: () => void;
-  closeChat: () => void;
-  startButtonDrag: () => void;
-  endButtonDrag: () => void;
-  startModelDrag: () => void;
-  endModelDrag: () => void;
-  editUserMessage: (
-    messageId: string,
-    content: string,
-    images: string[],
-    audios: string[],
-  ) => Promise<void>;
-  regenerateAIMessage: (messageId: string) => Promise<void>;
-  previousBranch: (messageId: string) => void;
-  nextBranch: (messageId: string) => void;
-}
-
 const storageService = StorageServiceProxy as StorageServiceLike;
 const ttsService = TTSServiceProxy as unknown as TTSServiceLike;
 const dragDropCtor = DragDropService as unknown as new (options: {
@@ -292,43 +257,51 @@ const ChatContainer = ({
   modelDisabled = false,
   onDragDrop,
 }: ChatContainerProps) => {
+  const { positionManagerRef } = useScene();
   const {
-    positionManagerRef,
     chatMessages: messages,
-    isVoiceMode,
     isChatContainerVisible: isVisible,
     isProcessing: isGenerating,
-    isSpeaking,
-    playingMessageIndex,
-    loadingMessageIndex,
-    isDragOverChat: isDragOver,
-    isSettingsPanelOpen,
-    isHistoryPanelOpen,
     isTempChat,
-    buttonPosition,
-    isDraggingButton,
-    isDraggingModel,
-    setPlayingMessageIndex,
-    setLoadingMessageIndex,
-    setIsDragOverChat: setIsDragOver,
-    setIsSettingsPanelOpen,
-    setIsHistoryPanelOpen,
     setIsTempChat,
     loadChatFromHistory,
     clearChat,
     stopGeneration,
     closeChat,
+  } = useChat();
+  const {
+    isVoiceMode,
+    isSpeaking,
+    playingMessageIndex,
+    loadingMessageIndex,
+    setPlayingMessageIndex,
+    setLoadingMessageIndex,
+  } = usePlayback();
+  const {
+    isDragOverChat: isDragOver,
+    buttonPosition,
+    isDraggingButton,
+    isDraggingModel,
+    setIsDragOverChat: setIsDragOver,
     startButtonDrag,
     endButtonDrag,
     startModelDrag,
     endModelDrag,
+  } = useDrag();
+  const {
+    isSettingsPanelOpen,
+    isHistoryPanelOpen,
+    setIsSettingsPanelOpen,
+    setIsHistoryPanelOpen,
     editUserMessage,
     regenerateAIMessage,
     previousBranch,
     nextBranch,
-  }: AppContextForChatContainer = useApp();
+  } = useTooling();
 
-  const { updateUIConfig, uiConfig, updateTTSConfig, aiConfig } = useConfig();
+  const { updateUIConfig, uiConfig } = useConfigUI();
+  const { updateTTSConfig } = useConfigTTS();
+  const { aiConfig } = useConfigAI();
   const { api } = useDesktop() as { api: DesktopApiLike | null };
   const { api: androidAPI } = useAndroid() as { api: AndroidApiLike | null };
 

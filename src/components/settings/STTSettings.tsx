@@ -5,8 +5,9 @@
  */
 
 import { useMemo, useState, useEffect } from "react";
-import { useConfig } from "../../contexts/ConfigContext";
 import { useAndroid } from "../../contexts/AndroidContext";
+import { useConfigSTT } from "../../hooks/config/useConfigSTT";
+import { useConfigStatus } from "../../hooks/config/useConfigStatus";
 import {
   STTProviders,
   type STTRemoteProviderProfile,
@@ -46,17 +47,15 @@ const STTSettings = ({
   const [profileName, setProfileName] = useState("");
 
   const { api: androidAPI } = useAndroid();
+  const { chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload } =
+    useConfigStatus();
 
   const {
     sttConfig,
     sttTesting,
     updateSTTConfig,
     testSTTRecording,
-
-    chromeAiStatus,
-    checkChromeAIAvailability,
-    startChromeAIDownload,
-  } = useConfig();
+  } = useConfigSTT();
   const remoteProfiles = useMemo(
     () =>
       Array.isArray(sttConfig.remoteProfiles) ? sttConfig.remoteProfiles : [],

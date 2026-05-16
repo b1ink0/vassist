@@ -13,7 +13,10 @@ import LLMSettings from "./settings/LLMSettings";
 import TTSSettings from "./settings/TTSSettings";
 import STTSettings from "./settings/STTSettings";
 import AIFeaturesSettings from "./settings/AIFeaturesSettings";
-import { useConfig } from "../contexts/ConfigContext";
+import { useConfigAI } from "../hooks/config/useConfigAI";
+import { useConfigSTT } from "../hooks/config/useConfigSTT";
+import { useConfigTTS } from "../hooks/config/useConfigTTS";
+import { useConfigUI } from "../hooks/config/useConfigUI";
 import Logger from "../services/LoggerService";
 
 type SettingsTabId = "ui" | "3d" | "llm" | "tts" | "stt" | "ai-plus";
@@ -80,21 +83,13 @@ const SettingsPanel = ({
     "ai-plus": null,
   });
 
-  const {
-    uiConfigSaved,
-    aiConfigSaved,
-    aiConfigError,
-    aiTesting,
-    clearAIConfigError,
-    ttsConfigSaved,
-    ttsConfigError,
-    ttsTesting,
-    clearTTSConfigError,
-    sttConfigSaved,
-    sttConfigError,
-    sttTesting,
-    clearSTTConfigError,
-  } = useConfig();
+  const { uiConfigSaved } = useConfigUI();
+  const { aiConfigSaved, aiConfigError, aiTesting, clearAIConfigError } =
+    useConfigAI();
+  const { ttsConfigSaved, ttsConfigError, ttsTesting, clearTTSConfigError } =
+    useConfigTTS();
+  const { sttConfigSaved, sttConfigError, sttTesting, clearSTTConfigError } =
+    useConfigSTT();
 
   useEffect(() => {
     const validator = ChromeAIValidator;

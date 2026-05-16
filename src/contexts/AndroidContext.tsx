@@ -1,9 +1,11 @@
 /**
- * @fileoverview Android Context for AndroidAI JavaScript interface access
+ * @fileoverview Android store compatibility layer.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { AndroidAPI } from "../types/android";
+import { useShallow } from "zustand/react/shallow";
+import { useAndroidStore } from "../stores/useAndroidStore";
 
 interface AndroidContextValue {
   api: AndroidAPI | null;
@@ -14,36 +16,21 @@ interface AndroidProviderProps {
   children: ReactNode;
 }
 
-// Get the AndroidAI interface exposed by WebView (available immediately when page loads)
-const getAndroidAPI = (): AndroidAPI | null => {
-  if (typeof window === "undefined") return null;
-  return window.AndroidAI || null;
-};
-
-const AndroidContext = createContext<AndroidContextValue>({
-  api: null,
-  isReady: false,
-});
-
 export function AndroidProvider({ children }: AndroidProviderProps) {
-  // AndroidAI is registered before page loads, so it's available immediately
-  const api = getAndroidAPI();
-  const isReady = api !== null;
+  const refreshApi = useAndroidStore((state) => state.refreshApi);
 
-  const value = {
-    api,
-    isReady,
-  };
+  useEffect(() => {
+    refreshApi();
+  }, [refreshApi]);
 
-  return (
-    <AndroidContext.Provider value={value}>{children}</AndroidContext.Provider>
-  );
+  return <>{children}</>;
 }
 
-/**
- * Hook to access Android API
- * @returns {{ api: AndroidAI | null, isReady: boolean }}
- */
-export function useAndroid() {
-  return useContext(AndroidContext);
+export function useAndroid(): AndroidContextValue {
+  return useAndroidStore(
+    useShallow((state) => ({
+      api: state.api,
+      isReady: state.isReady,
+    })),
+  );
 }

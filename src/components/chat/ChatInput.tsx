@@ -22,8 +22,9 @@ import VoiceConversationService, {
 import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/DragDropService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
-import { useApp } from "../../contexts/AppContext";
-import { useConfig } from "../../contexts/ConfigContext";
+import { useChat } from "../../hooks/app/useChat";
+import { useTooling } from "../../hooks/app/useTooling";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/LoggerService";
@@ -116,11 +117,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       isChatInputVisible: isVisible,
       pendingDropData,
       setPendingDropData,
+    } = useChat();
+    const {
       isSettingsPanelOpen,
       isHistoryPanelOpen,
-    } = useApp();
+    } = useTooling();
 
-    const { uiConfig } = useConfig();
+    const { uiConfig } = useConfigUI();
     const { api } = useDesktop();
 
     // Local state for input window (synced from main window)

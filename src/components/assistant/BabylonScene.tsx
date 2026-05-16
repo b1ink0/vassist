@@ -11,10 +11,11 @@ import {
 import { getSceneConfigAsync } from "../../config/sceneConfig";
 import DragDropService from "../../services/DragDropService";
 import { cn } from "../../utils/cn";
-import { useApp } from "../../contexts/AppContext";
 import { Icon } from "../icons";
-import { useConfig } from "../../contexts/ConfigContext";
 import { useDesktop } from "../../contexts/DesktopContext";
+import { useChat } from "../../hooks/app/useChat";
+import { useScene } from "../../hooks/app/useScene";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import { FPSLimitOptions } from "../../config/uiConfig";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
@@ -145,7 +146,7 @@ const BabylonScene = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cleanupFnRef = useRef<(() => void) | null>(null);
 
-  const { uiConfig, updateUIConfig } = useConfig();
+  const { uiConfig, updateUIConfig } = useConfigUI();
   const { api: desktopAPI } = useDesktop();
   const uiConfigForScene: UIConfigForScene | null = uiConfig;
   const modelSizePx = getModelSizePx(uiConfigForScene);
@@ -298,10 +299,12 @@ const BabylonScene = ({
     modelOverlayPos,
     setModelOverlayPos,
     setShowModelLoadingOverlay,
+    forceChatOnlyMode,
+  } = useScene();
+  const {
     setPendingDropData,
     openChat,
-    forceChatOnlyMode,
-  } = useApp();
+  } = useChat();
 
   const isFirstMountRef = useRef(true);
 

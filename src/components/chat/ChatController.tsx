@@ -32,7 +32,10 @@ import VoiceConversationService, {
 import { DefaultAIConfig, DefaultTTSConfig } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
 import chatHistoryService from "../../services/ChatHistoryService";
-import { useApp } from "../../contexts/AppContext";
+import { useAssistant } from "../../hooks/app/useAssistant";
+import { useChat } from "../../hooks/app/useChat";
+import { usePlayback } from "../../hooks/app/usePlayback";
+import { useTooling } from "../../hooks/app/useTooling";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
@@ -298,13 +301,11 @@ const ChatController = ({
   const inputWindowSttRecordingRef = useRef(false);
   const inputWindowSttProcessingRef = useRef(false);
 
+  const { assistantRef: appAssistantRef, isAssistantReady } = useAssistant();
   const {
-    assistantRef: appAssistantRef,
-    isAssistantReady,
     isChatInputVisible,
     isChatContainerVisible,
     chatMessages,
-    isVoiceMode: _isVoiceMode,
     currentChatId,
     isTempChat,
     pendingDropData,
@@ -312,14 +313,13 @@ const ChatController = ({
     setIsChatContainerVisible,
     setChatMessages,
     setIsProcessing,
-    setIsVoiceMode,
-    setIsSpeaking,
     setCurrentChatId,
     setPendingDropData,
-    regenerateWithStreamingRef,
-    editWithStreamingRef,
     closeChat,
-  } = useApp();
+  } = useChat();
+  const { isVoiceMode: _isVoiceMode, setIsVoiceMode, setIsSpeaking } =
+    usePlayback();
+  const { regenerateWithStreamingRef, editWithStreamingRef } = useTooling();
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;

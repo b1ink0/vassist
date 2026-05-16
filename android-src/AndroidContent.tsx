@@ -6,7 +6,7 @@
 
 import { useMemo, useCallback } from "react";
 import VirtualAssistant from "../src/components/assistant/VirtualAssistant";
-import { useApp } from "../src/contexts/AppContext";
+import { useAssistant } from "../src/hooks/app/useAssistant";
 import Logger from "../src/services/LoggerService";
 import type {
   PositionManagerLike,
@@ -33,7 +33,7 @@ interface AssistantReadyPayload {
  */
 function AndroidContent() {
   const { assistantRef, handleAssistantReady: contextHandleAssistantReady } =
-    useApp();
+    useAssistant();
 
   /**
    * Handles VirtualAssistant ready event.

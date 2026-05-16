@@ -5,9 +5,9 @@
  */
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
-import { useConfig } from "../../contexts/ConfigContext";
-import { useApp } from "../../contexts/AppContext";
 import { useAnimation } from "../../contexts/AnimationContext";
+import { useScene } from "../../hooks/app/useScene";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import {
   PositionPresets,
   FPSLimitOptions,
@@ -163,11 +163,6 @@ interface EmoteZipFolder {
   files: string[];
 }
 
-interface AppContextLike {
-  reloadScene: () => void;
-  sceneRef: { current: SceneLike | null };
-}
-
 interface UploadState {
   uploading: boolean;
   progress: string;
@@ -207,9 +202,8 @@ const ThreeDSettings = ({
   onRequestSettingsErrorDialog,
   refreshTrigger,
 }: ThreeDSettingsProps) => {
-  const { uiConfig, updateUIConfig } = useConfig();
-
-  const { reloadScene, sceneRef } = useApp() as unknown as AppContextLike;
+  const { uiConfig, updateUIConfig } = useConfigUI();
+  const { reloadScene, sceneRef } = useScene();
 
   const {
     disabledDefaultAnimations,

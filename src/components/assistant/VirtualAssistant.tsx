@@ -18,10 +18,10 @@ import {
   getAnimationForEmotion,
 } from "../../config/animationConfig";
 import { TTSServiceProxy } from "../../services/proxies";
-import { useConfig } from "../../contexts/ConfigContext";
-import { useApp } from "../../contexts/AppContext";
 import { useDesktop } from "../../contexts/DesktopContext";
 import { useAnimation } from "../../contexts/AnimationContext";
+import { useScene } from "../../hooks/app/useScene";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 import emotePlayerService from "../../services/EmotePlayerService";
 import type {
@@ -124,8 +124,8 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
       portraitMode = false,
       previewPosition = "bottom-center",
     } = props;
-    const { uiConfig, updateUIConfig, isConfigLoading } = useConfig();
-    const { savedModelPosition, setSavedModelPosition } = useApp();
+    const { uiConfig, updateUIConfig, isConfigLoading } = useConfigUI();
+    const { savedModelPosition, setSavedModelPosition } = useScene();
     const { api: desktopAPI } = useDesktop();
     const { getRandomAnimation, getEnabledAnimations } = useAnimation();
 

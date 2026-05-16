@@ -1,7 +1,7 @@
 import React from "react";
 import { iconMap } from "./iconMap";
 import { getIconColor } from "./iconColors";
-import { useApp } from "../../contexts/AppContext";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 
 type IconName = keyof typeof iconMap;
@@ -38,7 +38,7 @@ const Icon = ({
   style = {},
   ...props
 }: IconProps) => {
-  const { uiConfig } = useApp();
+  const { uiConfig } = useConfigUI();
   const IconComponent = iconMap[name as IconName];
 
   if (!IconComponent) {

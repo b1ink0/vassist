@@ -9,7 +9,7 @@ import DebugOverlay from "./DebugOverlay";
 import type { DebugOverlayPositionManagerLike } from "./DebugOverlay";
 import ResourceLoader from "../../utils/ResourceLoader";
 import { StorageServiceProxy } from "../../services/proxies";
-import { useConfig } from "../../contexts/ConfigContext";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 import type { Scene } from "@babylonjs/core";
 import type {
@@ -53,7 +53,7 @@ const ControlPanel = ({
   positionManagerRef,
   onStateChange,
 }: ControlPanelProps) => {
-  const { uiConfig } = useConfig();
+  const { uiConfig } = useConfigUI();
   const [showPerf, setShowPerf] = useState(false);
   const [perfData, setPerfData] = useState({
     fps: 0,

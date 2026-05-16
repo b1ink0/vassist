@@ -6,8 +6,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Icon } from "../icons";
-import { useConfig } from "../../contexts/ConfigContext";
 import { useAndroid } from "../../contexts/AndroidContext";
+import { useConfigStatus } from "../../hooks/config/useConfigStatus";
+import { useConfigTTS } from "../../hooks/config/useConfigTTS";
 import {
   TTSProviders,
   OpenAIVoices,
@@ -51,6 +52,8 @@ const TTSSettings = ({
   const [profileName, setProfileName] = useState("");
 
   const { api: androidAPI } = useAndroid();
+  const { kokoroStatus, checkKokoroStatus, initializeKokoro } =
+    useConfigStatus();
 
   const {
     ttsConfig,
@@ -59,10 +62,7 @@ const TTSSettings = ({
     setTtsConfigError,
     updateTTSConfig,
     testTTSConnection,
-    kokoroStatus,
-    checkKokoroStatus,
-    initializeKokoro,
-  } = useConfig();
+  } = useConfigTTS();
   const remoteProfiles = useMemo(
     () =>
       Array.isArray(ttsConfig.remoteProfiles) ? ttsConfig.remoteProfiles : [],

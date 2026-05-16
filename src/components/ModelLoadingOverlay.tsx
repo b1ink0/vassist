@@ -2,7 +2,7 @@
  * @fileoverview Loading overlay component for 3D model loading states.
  */
 
-import { useApp } from "../contexts/AppContext";
+import { useScene } from "../hooks/app/useScene";
 import LoadingIndicator from "./common/LoadingIndicator";
 
 /**
@@ -11,7 +11,7 @@ import LoadingIndicator from "./common/LoadingIndicator";
  * @returns {JSX.Element|null}
  */
 const ModelLoadingOverlay = () => {
-  const { showModelLoadingOverlay, modelOverlayPos } = useApp();
+  const { showModelLoadingOverlay, modelOverlayPos } = useScene();
 
   if (!showModelLoadingOverlay || modelOverlayPos.width === 0) {
     return null;

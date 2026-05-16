@@ -9,8 +9,11 @@ import ControlPanel from "./debug/ControlPanel";
 import ChatController from "./chat/ChatController";
 import LoadingIndicator from "./common/LoadingIndicator";
 import ModelLoadingOverlay from "./ModelLoadingOverlay";
-import { useApp } from "../contexts/AppContext";
-import { useConfig } from "../contexts/ConfigContext";
+import { useAssistant } from "../hooks/app/useAssistant";
+import { useScene } from "../hooks/app/useScene";
+import { useConfigStatus } from "../hooks/config/useConfigStatus";
+import { useConfigTTS } from "../hooks/config/useConfigTTS";
+import { useConfigUI } from "../hooks/config/useConfigUI";
 import { useVisibilityUnmount } from "../hooks/useVisibilityUnmount";
 import Logger from "../services/LoggerService";
 import type { PositionManagerLike, SceneWithMetadata } from "../babylon/types";
@@ -56,15 +59,16 @@ function AppContent({
   const {
     isAssistantReady,
     isChatUIReady,
-    enableModelLoading,
     assistantRef,
     sceneRef,
     positionManagerRef,
     handleAssistantReady: contextHandleAssistantReady,
-    sceneKey,
-  } = useApp();
-
-  const { kokoroStatus, ttsConfig } = useConfig();
+  } = useAssistant();
+  const { sceneKey } = useScene();
+  const { isConfigLoading, uiConfig } = useConfigUI();
+  const { kokoroStatus } = useConfigStatus();
+  const { ttsConfig } = useConfigTTS();
+  const enableModelLoading = isConfigLoading ? null : uiConfig.enableModelLoading;
   const chatControllerProps = onRequireSetup ? { onRequireSetup } : {};
 
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);

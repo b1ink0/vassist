@@ -3,8 +3,9 @@
  */
 
 import { useEffect, useRef, type RefObject } from "react";
-import { useApp } from "../contexts/AppContext";
 import { useDesktop } from "../contexts/DesktopContext";
+import { useChat } from "./app/useChat";
+import { useScene } from "./app/useScene";
 import { isDesktop, isInputWindow } from "../utils/PlatformUtils";
 
 interface DesktopResizeOptions {
@@ -25,12 +26,8 @@ export function useDesktopWindowResize(
   containerRef: RefObject<HTMLElement | null> | null = null,
   options: DesktopResizeOptions = {},
 ): void {
-  const appContext = useApp();
-  const isChatContainerVisible =
-    typeof appContext?.isChatContainerVisible === "boolean"
-      ? appContext.isChatContainerVisible
-      : false;
-  const positionManagerRef = appContext?.positionManagerRef;
+  const { isChatContainerVisible } = useChat();
+  const { positionManagerRef } = useScene();
   const { api } = useDesktop();
   const observerRef = useRef<ResizeObserver | null>(null);
   const DEFAULT_MAIN_WINDOW_WIDTH = 400;

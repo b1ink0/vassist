@@ -4,7 +4,7 @@
  * Handles model loading, theme mode, chat position, and background detection settings
  */
 
-import { useConfig } from "../../contexts/ConfigContext";
+import { useConfigUI } from "../../hooks/config/useConfigUI";
 import { BackgroundThemeModes, PositionPresets } from "../../config/uiConfig";
 import ExtensionBridge from "../../utils/ExtensionBridge";
 import Toggle from "../common/Toggle";
@@ -45,7 +45,7 @@ const UISettings = ({
   onRequestResetSetupDialog,
   onRequestSettingsErrorDialog,
 }: UISettingsProps) => {
-  const { uiConfig, updateUIConfig } = useConfig();
+  const { uiConfig, updateUIConfig } = useConfigUI();
 
   const { resetSetup } = useSetup();
   const [isResetting, setIsResetting] = useState(false);

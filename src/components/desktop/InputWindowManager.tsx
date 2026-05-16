@@ -3,13 +3,13 @@
  */
 
 import { useEffect } from "react";
-import { useApp } from "../../contexts/AppContext";
 import { useDesktop } from "../../contexts/DesktopContext";
+import { useChat } from "../../hooks/app/useChat";
 import { isDesktop } from "../../utils/PlatformUtils";
 import Logger from "../../services/LoggerService";
 
 export function InputWindowManager() {
-  const { isChatInputVisible } = useApp();
+  const { isChatInputVisible } = useChat();
   const { api } = useDesktop();
 
   useEffect(() => {
