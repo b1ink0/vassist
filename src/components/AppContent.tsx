@@ -9,11 +9,23 @@ import ControlPanel from "./debug/ControlPanel";
 import ChatController from "./chat/ChatController";
 import LoadingIndicator from "./common/LoadingIndicator";
 import ModelLoadingOverlay from "./ModelLoadingOverlay";
-import { useAssistant } from "../hooks/app/useAssistant";
-import { useScene } from "../hooks/app/useScene";
-import { useConfigStatus } from "../hooks/config/useConfigStatus";
-import { useConfigTTS } from "../hooks/config/useConfigTTS";
-import { useConfigUI } from "../hooks/config/useConfigUI";
+import {
+  useAssistantRef,
+  useHandleAssistantReady,
+  useIsAssistantReady,
+  useIsChatUIReady,
+} from "../hooks/app/useAssistant";
+import {
+  usePositionManagerRef,
+  useSceneKey,
+  useSceneRef,
+} from "../hooks/app/useScene";
+import { useIsKokoroPreInitializing } from "../hooks/config/useConfigStatus";
+import { useTTSConfig } from "../hooks/config/useConfigTTS";
+import {
+  useEnableModelLoading,
+  useIsConfigLoading,
+} from "../hooks/config/useConfigUI";
 import { useVisibilityUnmount } from "../hooks/useVisibilityUnmount";
 import Logger from "../services/LoggerService";
 import type { PositionManagerLike, SceneWithMetadata } from "../babylon/types";
@@ -56,19 +68,18 @@ function AppContent({
 }: AppContentProps) {
   const [currentState, setCurrentState] = useState("IDLE");
 
-  const {
-    isAssistantReady,
-    isChatUIReady,
-    assistantRef,
-    sceneRef,
-    positionManagerRef,
-    handleAssistantReady: contextHandleAssistantReady,
-  } = useAssistant();
-  const { sceneKey } = useScene();
-  const { isConfigLoading, uiConfig } = useConfigUI();
-  const { kokoroStatus } = useConfigStatus();
-  const { ttsConfig } = useConfigTTS();
-  const enableModelLoading = isConfigLoading ? null : uiConfig.enableModelLoading;
+  const isAssistantReady = useIsAssistantReady();
+  const isChatUIReady = useIsChatUIReady();
+  const assistantRef = useAssistantRef();
+  const sceneRef = useSceneRef();
+  const positionManagerRef = usePositionManagerRef();
+  const contextHandleAssistantReady = useHandleAssistantReady();
+  const sceneKey = useSceneKey();
+  const isConfigLoading = useIsConfigLoading();
+  const enableModelLoadingSetting = useEnableModelLoading();
+  const isKokoroPreInitializing = useIsKokoroPreInitializing();
+  const ttsConfig = useTTSConfig();
+  const enableModelLoading = isConfigLoading ? null : enableModelLoadingSetting;
   const chatControllerProps = onRequireSetup ? { onRequireSetup } : {};
 
   const shouldMountModel = useVisibilityUnmount(enableModelLoading === true);
@@ -77,7 +88,7 @@ function AppContent({
     ttsConfig.enabled &&
     ttsConfig.provider === "kokoro" &&
     ttsConfig.kokoro?.keepModelLoaded !== false &&
-    kokoroStatus.preInitializing;
+    isKokoroPreInitializing;
 
   /**
    * Handles VirtualAssistant ready event.

@@ -22,14 +22,21 @@ import VoiceConversationService, {
 import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/DragDropService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
-import { useChat } from "../../hooks/app/useChat";
-import { useTooling } from "../../hooks/app/useTooling";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import {
+  useChatActions,
+  useIsChatInputVisible,
+  usePendingDropData,
+} from "../../hooks/app/useChat";
+import {
+  useIsHistoryPanelOpen,
+  useIsSettingsPanelOpen,
+} from "../../hooks/app/useTooling";
+import { useUIConfig } from "../../hooks/config/useConfigUI";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
-import { useDesktop } from "../../contexts/DesktopContext";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import MicrophoneService from "../../services/MicrophoneService";
 import CameraService from "../../services/CameraService";
 import ScreenShareService from "../../services/ScreenShareService";
@@ -113,18 +120,14 @@ const useDesktopWindowResizeTyped = useDesktopWindowResize as unknown as (
  */
 const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
   ({ onSend, onClose, onVoiceTranscription, onVoiceMode }, ref) => {
-    const {
-      isChatInputVisible: isVisible,
-      pendingDropData,
-      setPendingDropData,
-    } = useChat();
-    const {
-      isSettingsPanelOpen,
-      isHistoryPanelOpen,
-    } = useTooling();
+    const isVisible = useIsChatInputVisible();
+    const pendingDropData = usePendingDropData();
+    const { setPendingDropData } = useChatActions();
+    const isSettingsPanelOpen = useIsSettingsPanelOpen();
+    const isHistoryPanelOpen = useIsHistoryPanelOpen();
 
-    const { uiConfig } = useConfigUI();
-    const { api } = useDesktop();
+    const uiConfig = useUIConfig();
+    const api = useDesktopApi();
 
     // Local state for input window (synced from main window)
     const [localPendingDropData, setLocalPendingDropData] =

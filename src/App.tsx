@@ -6,18 +6,18 @@ import CameraService from "./services/CameraService";
 import ScreenShareService from "./services/ScreenShareService";
 import DemoSite from "./components/DemoSite";
 import LoadingIndicator from "./components/common/LoadingIndicator";
-import { ConfigProvider } from "./contexts/ConfigContext";
-import { AppProvider } from "./contexts/AppContext";
 import { SetupProvider, useSetup } from "./contexts/SetupContext";
 import { AnimationProvider } from "./contexts/AnimationContext";
-import { DesktopProvider } from "./contexts/DesktopContext";
-import { AndroidProvider } from "./contexts/AndroidContext";
+import { useInitializeAppStore } from "./hooks/bootstrap/useInitializeAppStore";
+import { useInitializeConfigStore } from "./hooks/bootstrap/useInitializeConfigStore";
+import { useRefreshAndroidApi } from "./hooks/useAndroidStore";
+import { useRefreshDesktopApi } from "./hooks/useDesktopStore";
 import {
   isAndroid,
   isInputWindow,
   isScreenPicker,
 } from "./utils/PlatformUtils";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
 interface AppWithSetupProps {
   mode?: string;
@@ -29,6 +29,21 @@ interface AppWithSetupProps {
 interface AppProps {
   mode?: string;
   isWallpaperMode?: boolean;
+}
+
+function StoreBootstrap({ children }: { children: ReactNode }) {
+  useInitializeConfigStore();
+  useInitializeAppStore();
+
+  const refreshDesktopApi = useRefreshDesktopApi();
+  const refreshAndroidApi = useRefreshAndroidApi();
+
+  useEffect(() => {
+    refreshDesktopApi();
+    refreshAndroidApi();
+  }, [refreshAndroidApi, refreshDesktopApi]);
+
+  return <>{children}</>;
 }
 
 const LazyAppContent = lazy(() => import("./components/AppContent"));
@@ -166,158 +181,127 @@ function App({
         : isWallpaperMode()
     ) {
       return (
-        <AndroidProvider>
-          <ConfigProvider>
-            <AnimationProvider>
-              <AppProvider>
-                <div className="relative w-full h-screen overflow-hidden bg-transparent">
-                  <Suspense fallback={null}>
-                    <LazyAndroidBackground />
-                  </Suspense>
-                  <AndroidWrapper />
-                </div>
-              </AppProvider>
-            </AnimationProvider>
-          </ConfigProvider>
-        </AndroidProvider>
+        <StoreBootstrap>
+          <AnimationProvider>
+            <div className="relative w-full h-screen overflow-hidden bg-transparent">
+              <Suspense fallback={null}>
+                <LazyAndroidBackground />
+              </Suspense>
+              <AndroidWrapper />
+            </div>
+          </AnimationProvider>
+        </StoreBootstrap>
       );
     }
 
     return (
-      <AndroidProvider>
+      <StoreBootstrap>
         <SetupProvider>
-          <ConfigProvider>
-            <AnimationProvider>
-              <AppProvider>
-                <div className="relative w-full h-screen overflow-hidden">
-                  <Suspense fallback={null}>
-                    <LazyAndroidBackground />
-                  </Suspense>
-                  <AppWithSetup mode="android" />
-                  <Suspense fallback={null}>
-                    <LazyVideoPreview service={CameraService} type="camera" />
-                  </Suspense>
-                </div>
-              </AppProvider>
-            </AnimationProvider>
-          </ConfigProvider>
+          <AnimationProvider>
+            <div className="relative w-full h-screen overflow-hidden">
+              <Suspense fallback={null}>
+                <LazyAndroidBackground />
+              </Suspense>
+              <AppWithSetup mode="android" />
+              <Suspense fallback={null}>
+                <LazyVideoPreview service={CameraService} type="camera" />
+              </Suspense>
+            </div>
+          </AnimationProvider>
         </SetupProvider>
-      </AndroidProvider>
+      </StoreBootstrap>
     );
   }
 
   if (actualMode === "desktop") {
     if (isScreenPicker) {
       return (
-        <DesktopProvider>
-          <ConfigProvider>
-            <AppProvider>
-              <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-                <LazyDesktopScreenShareDialog />
-              </Suspense>
-            </AppProvider>
-          </ConfigProvider>
-        </DesktopProvider>
+        <StoreBootstrap>
+          <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+            <LazyDesktopScreenShareDialog />
+          </Suspense>
+        </StoreBootstrap>
       );
     }
 
     if (isInputWindow) {
       return (
-        <DesktopProvider>
-          <ConfigProvider>
-            <AppProvider>
-              <Suspense fallback={null}>
-                <LazyDesktopWindowInteractivityBridge />
-              </Suspense>
-              <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-                <LazyChatInput
-                  onSend={() => {}}
-                  onClose={() => {}}
-                  onVoiceTranscription={() => {}}
-                  onVoiceMode={() => {}}
-                />
-              </Suspense>
-              <Suspense fallback={null}>
-                <LazyVideoPreview service={CameraService} type="camera" />
-                <LazyVideoPreview service={ScreenShareService} type="screen" />
-              </Suspense>
-            </AppProvider>
-          </ConfigProvider>
-        </DesktopProvider>
+        <StoreBootstrap>
+          <Suspense fallback={null}>
+            <LazyDesktopWindowInteractivityBridge />
+          </Suspense>
+          <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+            <LazyChatInput
+              onSend={() => {}}
+              onClose={() => {}}
+              onVoiceTranscription={() => {}}
+              onVoiceMode={() => {}}
+            />
+          </Suspense>
+          <Suspense fallback={null}>
+            <LazyVideoPreview service={CameraService} type="camera" />
+            <LazyVideoPreview service={ScreenShareService} type="screen" />
+          </Suspense>
+        </StoreBootstrap>
       );
     }
 
     return (
-      <DesktopProvider>
+      <StoreBootstrap>
         <SetupProvider>
-          <ConfigProvider>
-            <AnimationProvider>
-              <AppProvider>
-                <Suspense fallback={null}>
-                  <LazyDesktopWindowInteractivityBridge />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <LazyDesktopWindowControls />
-                </Suspense>
-                <div className="relative w-full h-screen overflow-hidden">
-                  <AppWithSetup mode="desktop" />
-                  <Suspense fallback={null}>
-                    <LazyVideoPreview service={CameraService} type="camera" />
-                    <LazyVideoPreview
-                      service={ScreenShareService}
-                      type="screen"
-                    />
-                  </Suspense>
-                </div>
-              </AppProvider>
-            </AnimationProvider>
-          </ConfigProvider>
+          <AnimationProvider>
+            <Suspense fallback={null}>
+              <LazyDesktopWindowInteractivityBridge />
+            </Suspense>
+            <Suspense fallback={null}>
+              <LazyDesktopWindowControls />
+            </Suspense>
+            <div className="relative w-full h-screen overflow-hidden">
+              <AppWithSetup mode="desktop" />
+              <Suspense fallback={null}>
+                <LazyVideoPreview service={CameraService} type="camera" />
+                <LazyVideoPreview service={ScreenShareService} type="screen" />
+              </Suspense>
+            </div>
+          </AnimationProvider>
         </SetupProvider>
-      </DesktopProvider>
+      </StoreBootstrap>
     );
   }
 
   // Development and Extension modes
   return (
-    <SetupProvider>
-      <ConfigProvider>
+    <StoreBootstrap>
+      <SetupProvider>
         <AnimationProvider>
-          <AppProvider>
-            {actualMode === "development" ? (
-              <div className="relative w-full h-screen overflow-hidden">
-                <DevelopmentDemoSite
-                  onStartSetup={() => setDevSetupStarted(true)}
-                />
-                <AppWithSetup
-                  mode="development"
-                  deferSetupUntilStarted={true}
-                  setupStarted={devSetupStarted}
-                  onStartSetup={() => setDevSetupStarted(true)}
-                />
-                <Suspense fallback={null}>
-                  <LazyVideoPreview service={CameraService} type="camera" />
-                  <LazyVideoPreview
-                    service={ScreenShareService}
-                    type="screen"
-                  />
-                </Suspense>
-              </div>
-            ) : (
-              <>
-                <AppWithSetup mode="extension" />
-                <Suspense fallback={null}>
-                  <LazyVideoPreview service={CameraService} type="camera" />
-                  <LazyVideoPreview
-                    service={ScreenShareService}
-                    type="screen"
-                  />
-                </Suspense>
-              </>
-            )}
-          </AppProvider>
+          {actualMode === "development" ? (
+            <div className="relative w-full h-screen overflow-hidden">
+              <DevelopmentDemoSite
+                onStartSetup={() => setDevSetupStarted(true)}
+              />
+              <AppWithSetup
+                mode="development"
+                deferSetupUntilStarted={true}
+                setupStarted={devSetupStarted}
+                onStartSetup={() => setDevSetupStarted(true)}
+              />
+              <Suspense fallback={null}>
+                <LazyVideoPreview service={CameraService} type="camera" />
+                <LazyVideoPreview service={ScreenShareService} type="screen" />
+              </Suspense>
+            </div>
+          ) : (
+            <>
+              <AppWithSetup mode="extension" />
+              <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+                <LazyVideoPreview service={CameraService} type="camera" />
+                <LazyVideoPreview service={ScreenShareService} type="screen" />
+              </Suspense>
+            </>
+          )}
         </AnimationProvider>
-      </ConfigProvider>
-    </SetupProvider>
+      </SetupProvider>
+    </StoreBootstrap>
   );
 }
 

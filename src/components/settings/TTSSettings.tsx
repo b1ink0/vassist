@@ -6,9 +6,17 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Icon } from "../icons";
-import { useAndroid } from "../../contexts/AndroidContext";
-import { useConfigStatus } from "../../hooks/config/useConfigStatus";
-import { useConfigTTS } from "../../hooks/config/useConfigTTS";
+import {
+  useConfigStatusActions,
+  useKokoroStatus,
+} from "../../hooks/config/useConfigStatus";
+import {
+  useConfigTTSActions,
+  useTTSConfig,
+  useTTSConfigError,
+  useTTSTesting,
+} from "../../hooks/config/useConfigTTS";
+import { useAndroidApi } from "../../hooks/useAndroidStore";
 import {
   TTSProviders,
   OpenAIVoices,
@@ -51,18 +59,15 @@ const TTSSettings = ({
   const [testLanguage, setTestLanguage] = useState(GPTSoVITSLanguages.ENGLISH);
   const [profileName, setProfileName] = useState("");
 
-  const { api: androidAPI } = useAndroid();
-  const { kokoroStatus, checkKokoroStatus, initializeKokoro } =
-    useConfigStatus();
+  const androidAPI = useAndroidApi();
+  const kokoroStatus = useKokoroStatus();
+  const { checkKokoroStatus, initializeKokoro } = useConfigStatusActions();
 
-  const {
-    ttsConfig,
-    ttsTesting,
-    ttsConfigError,
-    setTtsConfigError,
-    updateTTSConfig,
-    testTTSConnection,
-  } = useConfigTTS();
+  const ttsConfig = useTTSConfig();
+  const ttsTesting = useTTSTesting();
+  const ttsConfigError = useTTSConfigError();
+  const { setTtsConfigError, updateTTSConfig, testTTSConnection } =
+    useConfigTTSActions();
   const remoteProfiles = useMemo(
     () =>
       Array.isArray(ttsConfig.remoteProfiles) ? ttsConfig.remoteProfiles : [],

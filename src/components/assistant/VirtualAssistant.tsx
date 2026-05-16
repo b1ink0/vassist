@@ -18,10 +18,17 @@ import {
   getAnimationForEmotion,
 } from "../../config/animationConfig";
 import { TTSServiceProxy } from "../../services/proxies";
-import { useDesktop } from "../../contexts/DesktopContext";
 import { useAnimation } from "../../contexts/AnimationContext";
-import { useScene } from "../../hooks/app/useScene";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import {
+  useSavedModelPosition,
+  useSceneActions,
+} from "../../hooks/app/useScene";
+import {
+  useConfigUIActions,
+  useIsConfigLoading,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/LoggerService";
 import emotePlayerService from "../../services/EmotePlayerService";
 import type {
@@ -124,9 +131,12 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
       portraitMode = false,
       previewPosition = "bottom-center",
     } = props;
-    const { uiConfig, updateUIConfig, isConfigLoading } = useConfigUI();
-    const { savedModelPosition, setSavedModelPosition } = useScene();
-    const { api: desktopAPI } = useDesktop();
+    const uiConfig = useUIConfig();
+    const { updateUIConfig } = useConfigUIActions();
+    const isConfigLoading = useIsConfigLoading();
+    const savedModelPosition = useSavedModelPosition();
+    const { setSavedModelPosition } = useSceneActions();
+    const desktopAPI = useDesktopApi();
     const { getRandomAnimation, getEnabledAnimations } = useAnimation();
 
     const [animationManager, setAnimationManager] =

@@ -6,8 +6,11 @@
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { useAnimation } from "../../contexts/AnimationContext";
-import { useScene } from "../../hooks/app/useScene";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import { useSceneActions, useSceneRef } from "../../hooks/app/useScene";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
 import {
   PositionPresets,
   FPSLimitOptions,
@@ -202,8 +205,10 @@ const ThreeDSettings = ({
   onRequestSettingsErrorDialog,
   refreshTrigger,
 }: ThreeDSettingsProps) => {
-  const { uiConfig, updateUIConfig } = useConfigUI();
-  const { reloadScene, sceneRef } = useScene();
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
+  const { reloadScene } = useSceneActions();
+  const sceneRef = useSceneRef();
 
   const {
     disabledDefaultAnimations,
@@ -416,24 +421,39 @@ const ThreeDSettings = ({
       onProgress ?? null,
     ) as Promise<string>;
 
-  const saveMotionWithCategories =
-    motionStorageService.saveMotion as unknown as (
-      id: string | null,
-      name: string,
-      bvmdData: ArrayBuffer,
-      animationCategories: string[],
-      metadata: Record<string, unknown>,
-      enabledByCategory: Record<string, boolean>,
-    ) => Promise<string>;
+  const saveMotionWithCategories = (
+    id: string | null,
+    name: string,
+    bvmdData: ArrayBuffer,
+    animationCategories: string[],
+    metadata: Record<string, unknown>,
+    enabledByCategory: Record<string, boolean>,
+  ): Promise<string> =>
+    motionStorageService.saveMotion(
+      id,
+      name,
+      bvmdData,
+      animationCategories,
+      metadata,
+      enabledByCategory,
+    );
 
-  const saveEmoteWithCamera = emoteStorageService.saveEmote as unknown as (
+  const saveEmoteWithCamera = (
     id: string | null,
     name: string,
     audioFile: File,
     motionBvmdData: ArrayBuffer,
-    cameraBvmdData?: ArrayBuffer | null,
-    metadata?: Record<string, unknown>,
-  ) => Promise<string>;
+    cameraBvmdData: ArrayBuffer | null = null,
+    metadata: Record<string, unknown> = {},
+  ): Promise<string> =>
+    emoteStorageService.saveEmote(
+      id,
+      name,
+      audioFile,
+      motionBvmdData,
+      cameraBvmdData,
+      metadata,
+    );
 
   const loadModels = async () => {
     try {

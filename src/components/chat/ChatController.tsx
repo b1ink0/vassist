@@ -32,14 +32,28 @@ import VoiceConversationService, {
 import { DefaultAIConfig, DefaultTTSConfig } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
 import chatHistoryService from "../../services/ChatHistoryService";
-import { useAssistant } from "../../hooks/app/useAssistant";
-import { useChat } from "../../hooks/app/useChat";
-import { usePlayback } from "../../hooks/app/usePlayback";
-import { useTooling } from "../../hooks/app/useTooling";
+import {
+  useAssistantRef,
+  useIsAssistantReady,
+} from "../../hooks/app/useAssistant";
+import {
+  useChatActions,
+  useChatMessages,
+  useCurrentChatId,
+  useIsChatContainerVisible,
+  useIsChatInputVisible,
+  useIsTempChat,
+  usePendingDropData,
+} from "../../hooks/app/useChat";
+import {
+  useIsVoiceMode,
+  usePlaybackActions,
+} from "../../hooks/app/usePlayback";
+import { useToolingActions } from "../../hooks/app/useTooling";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
-import { useDesktop } from "../../contexts/DesktopContext";
 import MicrophoneService from "../../services/MicrophoneService";
 import CameraService from "../../services/CameraService";
 import ScreenShareService from "../../services/ScreenShareService";
@@ -294,21 +308,22 @@ const ChatController = ({
   requireSetupOnChatClick = false,
   onRequireSetup,
 }: ChatControllerProps) => {
-  const { api } = useDesktop() as { api: DesktopApiForChatController | null };
+  const api = useDesktopApi() as DesktopApiForChatController | null;
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
   const inputWindowSttRecordingRef = useRef(false);
   const inputWindowSttProcessingRef = useRef(false);
 
-  const { assistantRef: appAssistantRef, isAssistantReady } = useAssistant();
+  const appAssistantRef = useAssistantRef();
+  const isAssistantReady = useIsAssistantReady();
+  const isChatInputVisible = useIsChatInputVisible();
+  const isChatContainerVisible = useIsChatContainerVisible();
+  const chatMessages = useChatMessages();
+  const currentChatId = useCurrentChatId();
+  const isTempChat = useIsTempChat();
+  const pendingDropData = usePendingDropData();
   const {
-    isChatInputVisible,
-    isChatContainerVisible,
-    chatMessages,
-    currentChatId,
-    isTempChat,
-    pendingDropData,
     setIsChatInputVisible,
     setIsChatContainerVisible,
     setChatMessages,
@@ -316,10 +331,11 @@ const ChatController = ({
     setCurrentChatId,
     setPendingDropData,
     closeChat,
-  } = useChat();
-  const { isVoiceMode: _isVoiceMode, setIsVoiceMode, setIsSpeaking } =
-    usePlayback();
-  const { regenerateWithStreamingRef, editWithStreamingRef } = useTooling();
+  } = useChatActions();
+  const _isVoiceMode = useIsVoiceMode();
+  const { setIsVoiceMode, setIsSpeaking } = usePlaybackActions();
+  const { regenerateWithStreamingRef, editWithStreamingRef } =
+    useToolingActions();
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;

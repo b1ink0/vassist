@@ -10,14 +10,14 @@ import {
   Square2StackIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import { useDesktop } from "../../contexts/DesktopContext";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 
 /**
  * Window controls for Electron desktop app
  * Only rendered when __DESKTOP_MODE__ is true
  */
 export default function DesktopWindowControls() {
-  const { api } = useDesktop();
+  const api = useDesktopApi();
   const [electronAvailable] = useState(!!api);
 
   // Only render in desktop mode

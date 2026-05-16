@@ -147,10 +147,18 @@ class EmoteStorageService {
     }
 
     if (trimmed.length > this.MAX_NAME_LENGTH) {
-      return {
-        valid: false,
-        error: `Emote name cannot exceed ${this.MAX_NAME_LENGTH} characters`,
-      };
+      const truncated = trimmed.slice(0, this.MAX_NAME_LENGTH).trimEnd();
+
+      Logger.warn(
+        "EmoteStorage",
+        `Emote name exceeded ${this.MAX_NAME_LENGTH} characters and was truncated: "${trimmed}" -> "${truncated}"`,
+      );
+
+      if (truncated.length === 0) {
+        return { valid: false, error: "Emote name cannot be empty" };
+      }
+
+      return { valid: true, name: truncated };
     }
 
     return { valid: true, name: trimmed };

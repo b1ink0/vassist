@@ -31,16 +31,41 @@ import { motionStorageService } from "../../services/MotionStorageService";
 import { stageStorageService } from "../../services/StageStorageService";
 import emoteStorageService from "../../services/EmoteStorageService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
-import { useDesktop } from "../../contexts/DesktopContext";
-import { useAndroid } from "../../contexts/AndroidContext";
-import { useChat } from "../../hooks/app/useChat";
-import { useDrag } from "../../hooks/app/useDrag";
-import { usePlayback } from "../../hooks/app/usePlayback";
-import { useScene } from "../../hooks/app/useScene";
-import { useTooling } from "../../hooks/app/useTooling";
-import { useConfigAI } from "../../hooks/config/useConfigAI";
-import { useConfigTTS } from "../../hooks/config/useConfigTTS";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import {
+  useChatActions,
+  useChatMessages,
+  useIsChatContainerVisible,
+  useIsProcessing,
+  useIsTempChat,
+} from "../../hooks/app/useChat";
+import {
+  useButtonPosition,
+  useDragActions,
+  useIsDragOverChat,
+  useIsDraggingButton,
+  useIsDraggingModel,
+} from "../../hooks/app/useDrag";
+import {
+  useIsSpeaking,
+  useIsVoiceMode,
+  useLoadingMessageIndex,
+  usePlaybackActions,
+  usePlayingMessageIndex,
+} from "../../hooks/app/usePlayback";
+import { usePositionManagerRef } from "../../hooks/app/useScene";
+import {
+  useIsHistoryPanelOpen,
+  useIsSettingsPanelOpen,
+  useToolingActions,
+} from "../../hooks/app/useTooling";
+import { useAIConfig } from "../../hooks/config/useConfigAI";
+import { useConfigTTSActions } from "../../hooks/config/useConfigTTS";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
+import { useAndroidApi } from "../../hooks/useAndroidStore";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/LoggerService";
 import { isDesktop, isAndroid } from "../../utils/PlatformUtils";
 import type { PositionManagerLike } from "../../babylon/types";
@@ -257,53 +282,52 @@ const ChatContainer = ({
   modelDisabled = false,
   onDragDrop,
 }: ChatContainerProps) => {
-  const { positionManagerRef } = useScene();
+  const positionManagerRef = usePositionManagerRef();
+  const messages = useChatMessages();
+  const isVisible = useIsChatContainerVisible();
+  const isGenerating = useIsProcessing();
+  const isTempChat = useIsTempChat();
   const {
-    chatMessages: messages,
-    isChatContainerVisible: isVisible,
-    isProcessing: isGenerating,
-    isTempChat,
     setIsTempChat,
     loadChatFromHistory,
     clearChat,
     stopGeneration,
     closeChat,
-  } = useChat();
+  } = useChatActions();
+  const isVoiceMode = useIsVoiceMode();
+  const isSpeaking = useIsSpeaking();
+  const playingMessageIndex = usePlayingMessageIndex();
+  const loadingMessageIndex = useLoadingMessageIndex();
+  const { setPlayingMessageIndex, setLoadingMessageIndex } =
+    usePlaybackActions();
+  const isDragOver = useIsDragOverChat();
+  const buttonPosition = useButtonPosition();
+  const isDraggingButton = useIsDraggingButton();
+  const isDraggingModel = useIsDraggingModel();
   const {
-    isVoiceMode,
-    isSpeaking,
-    playingMessageIndex,
-    loadingMessageIndex,
-    setPlayingMessageIndex,
-    setLoadingMessageIndex,
-  } = usePlayback();
-  const {
-    isDragOverChat: isDragOver,
-    buttonPosition,
-    isDraggingButton,
-    isDraggingModel,
     setIsDragOverChat: setIsDragOver,
     startButtonDrag,
     endButtonDrag,
     startModelDrag,
     endModelDrag,
-  } = useDrag();
+  } = useDragActions();
+  const isSettingsPanelOpen = useIsSettingsPanelOpen();
+  const isHistoryPanelOpen = useIsHistoryPanelOpen();
   const {
-    isSettingsPanelOpen,
-    isHistoryPanelOpen,
     setIsSettingsPanelOpen,
     setIsHistoryPanelOpen,
     editUserMessage,
     regenerateAIMessage,
     previousBranch,
     nextBranch,
-  } = useTooling();
+  } = useToolingActions();
 
-  const { updateUIConfig, uiConfig } = useConfigUI();
-  const { updateTTSConfig } = useConfigTTS();
-  const { aiConfig } = useConfigAI();
-  const { api } = useDesktop() as { api: DesktopApiLike | null };
-  const { api: androidAPI } = useAndroid() as { api: AndroidApiLike | null };
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
+  const { updateTTSConfig } = useConfigTTSActions();
+  const aiConfig = useAIConfig();
+  const api = useDesktopApi() as DesktopApiLike | null;
+  const androidAPI = useAndroidApi() as AndroidApiLike | null;
 
   const buttonPosRef = useRef<ButtonPosition>(buttonPosition);
   const buttonInitializedRef = useRef(false);

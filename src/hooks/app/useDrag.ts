@@ -1,13 +1,21 @@
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "../../stores/useAppStore";
 
-export const useDrag = () =>
+export const useIsDraggingButton = () =>
+  useAppStore((state) => state.isDraggingButton);
+
+export const useIsDraggingModel = () =>
+  useAppStore((state) => state.isDraggingModel);
+
+export const useIsDragOverChat = () =>
+  useAppStore((state) => state.isDragOverChat);
+
+export const useButtonPosition = () =>
+  useAppStore((state) => state.buttonPosition);
+
+export const useDragActions = () =>
   useAppStore(
     useShallow((state) => ({
-      isDraggingButton: state.isDraggingButton,
-      isDraggingModel: state.isDraggingModel,
-      isDragOverChat: state.isDragOverChat,
-      buttonPosition: state.buttonPosition,
       setIsDraggingButton: state.setIsDraggingButton,
       setIsDraggingModel: state.setIsDraggingModel,
       setIsDragOverChat: state.setIsDragOverChat,

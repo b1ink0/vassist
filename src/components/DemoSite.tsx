@@ -1,4 +1,4 @@
-import { useChat } from "../hooks/app/useChat";
+import { useChatActions } from "../hooks/app/useChat";
 import { Icon } from "./icons";
 import { cn } from "../utils/cn";
 import logoSvg from "../assets/VA.svg";
@@ -115,7 +115,7 @@ interface DemoSiteProps {
 }
 
 const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
-  const { openChat } = useChat();
+  const { openChat } = useChatActions();
 
   const handlePrimaryAction = () => {
     if (onLaunchAssistant) {

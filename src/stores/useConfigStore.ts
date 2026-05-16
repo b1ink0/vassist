@@ -35,6 +35,7 @@ import {
 } from "../utils/debounce";
 import { getErrorMessage, setConfigValueAtPath } from "./storeUtils";
 import { useDesktopStore } from "./useDesktopStore";
+import type { SetupData } from "./createSetupStore";
 
 export interface ChromeAiStatus {
   checking: boolean;
@@ -192,6 +193,7 @@ export interface ConfigStoreState {
     desiredDeviceOverride?: string | null,
   ) => Promise<unknown>;
   initializeKokoro: () => Promise<unknown>;
+  applySetupData: (setupData: SetupData) => Promise<void>;
 }
 
 const saveTimeouts: Record<ConfigKind, ReturnType<typeof setTimeout> | null> = {
@@ -201,7 +203,10 @@ const saveTimeouts: Record<ConfigKind, ReturnType<typeof setTimeout> | null> = {
   stt: null,
 };
 
-const pathDebouncers: Record<ConfigKind, Record<string, ConfigPathDebouncer>> = {
+const pathDebouncers: Record<
+  ConfigKind,
+  Record<string, ConfigPathDebouncer>
+> = {
   ui: {},
   ai: {},
   tts: {},
@@ -402,6 +407,143 @@ const clearSaveTimeout = (kind: ConfigKind) => {
   }
 };
 
+const clearAllConfigPathDebouncers = () => {
+  Object.values(pathDebouncers).forEach((debouncers) => {
+    Object.values(debouncers).forEach((item) => item.debounced.cancel());
+    Object.keys(debouncers).forEach((key) => {
+      delete debouncers[key];
+    });
+  });
+};
+
+const buildConfigsFromSetupData = (setupData: SetupData) => {
+  const aiFeatureOverrides = setupData.aiFeatures;
+  const aiConfig = normalizeAIConfig({
+    ...DefaultAIConfig,
+    provider: setupData.llm?.provider || DefaultAIConfig.provider,
+    chromeAi: {
+      ...DefaultAIConfig.chromeAi,
+      enableImageSupport: setupData.llm?.chromeAi?.enableImageSupport ?? true,
+      enableAudioSupport: setupData.llm?.chromeAi?.enableAudioSupport ?? true,
+    },
+    openai: {
+      ...DefaultAIConfig.openai,
+      apiKey: setupData.llm?.openai?.apiKey || "",
+      model: setupData.llm?.openai?.model || "gpt-4o-mini",
+    },
+    ollama: {
+      ...DefaultAIConfig.ollama,
+      endpoint: setupData.llm?.ollama?.endpoint || "http://localhost:11434",
+      model: setupData.llm?.ollama?.model || "llama3.2",
+    },
+    aiFeatures: {
+      ...DefaultAIConfig.aiFeatures,
+      translator: {
+        ...DefaultAIConfig.aiFeatures.translator,
+        ...(aiFeatureOverrides?.translator ?? {}),
+      },
+      languageDetector: {
+        ...DefaultAIConfig.aiFeatures.languageDetector,
+        ...(aiFeatureOverrides?.languageDetector ?? {}),
+      },
+      summarizer: {
+        ...DefaultAIConfig.aiFeatures.summarizer,
+        ...(aiFeatureOverrides?.summarizer ?? {}),
+      },
+      rewriter: {
+        ...DefaultAIConfig.aiFeatures.rewriter,
+        ...(aiFeatureOverrides?.rewriter ?? {}),
+      },
+      writer: {
+        ...DefaultAIConfig.aiFeatures.writer,
+        ...(aiFeatureOverrides?.writer ?? {}),
+      },
+    },
+  });
+
+  const ttsConfig = normalizeTTSConfig({
+    ...DefaultTTSConfig,
+    enabled: setupData.tts?.enabled ?? DefaultTTSConfig.enabled,
+    provider: setupData.tts?.provider || DefaultTTSConfig.provider,
+    kokoro: {
+      ...DefaultTTSConfig.kokoro,
+      voice: setupData.tts?.kokoro?.voice || "af_heart",
+      speed: setupData.tts?.kokoro?.speed || 1.0,
+      device: setupData.tts?.kokoro?.device || "auto",
+    },
+    openai: {
+      ...DefaultTTSConfig.openai,
+      apiKey: setupData.tts?.openai?.apiKey || "",
+      voice: setupData.tts?.openai?.voice || "nova",
+    },
+    "openai-compatible": {
+      ...DefaultTTSConfig["openai-compatible"],
+      endpoint:
+        setupData.tts?.["openai-compatible"]?.endpoint ||
+        "http://localhost:8000",
+      apiKey: setupData.tts?.["openai-compatible"]?.apiKey || "",
+      model: setupData.tts?.["openai-compatible"]?.model || "tts",
+      voice: setupData.tts?.["openai-compatible"]?.voice || "default",
+      speed: setupData.tts?.["openai-compatible"]?.speed || 1.0,
+    },
+  });
+
+  const sttConfig = normalizeSTTConfig({
+    ...DefaultSTTConfig,
+    enabled: setupData.stt?.enabled ?? DefaultSTTConfig.enabled,
+    provider: setupData.stt?.provider || DefaultSTTConfig.provider,
+    "chrome-ai-multimodal": {
+      ...DefaultSTTConfig["chrome-ai-multimodal"],
+      temperature: setupData.sttConfig?.chromeAi?.temperature || 0.1,
+      topK: setupData.sttConfig?.chromeAi?.topK || 3,
+      outputLanguage: setupData.sttConfig?.chromeAi?.outputLanguage || "en",
+    },
+    openai: {
+      ...DefaultSTTConfig.openai,
+      apiKey: setupData.sttConfig?.openai?.apiKey || "",
+      language: setupData.sttConfig?.openai?.language || "en",
+    },
+    "openai-compatible": {
+      ...DefaultSTTConfig["openai-compatible"],
+      endpoint:
+        setupData.sttConfig?.["openai-compatible"]?.endpoint ||
+        "http://localhost:8000",
+      apiKey: setupData.sttConfig?.["openai-compatible"]?.apiKey || "",
+      model: "whisper",
+      language: setupData.sttConfig?.["openai-compatible"]?.language || "en",
+    },
+  });
+
+  const uiConfig: UIConfig = {
+    ...DefaultUIConfig,
+    enableModelLoading: setupData.ui?.enableModelLoading ?? true,
+    enablePortraitMode: setupData.ui?.enablePortraitMode ?? false,
+    position: {
+      ...DefaultUIConfig.position,
+      preset: setupData.ui?.position || "bottom-right",
+      lastLocation: null,
+    },
+    enableAIToolbar: setupData.ui?.enableAIToolbar ?? true,
+    emotePlayback: {
+      ...DefaultUIConfig.emotePlayback,
+      showDurationBar: true,
+      showTime: true,
+      autoPlayCategory: "all",
+    },
+    shortcuts: {
+      ...DefaultUIConfig.shortcuts,
+      ...(setupData.ui?.shortcuts || {}),
+    },
+  };
+
+  return {
+    aiConfig,
+    ttsConfig,
+    sttConfig,
+    uiConfig,
+  };
+};
+
 const syncDesktopLocalEndpoints = (
   aiConfig: AIConfig,
   ttsConfig: TTSConfig,
@@ -503,8 +645,10 @@ const syncDesktopServerForProviders = async (
   }
 
   const llmUsesDesktopLocal = aiConfig?.provider === AIProviders.DESKTOP_LOCAL;
-  const ttsUsesDesktopLocal = ttsConfig?.provider === TTSProviders.DESKTOP_LOCAL;
-  const sttUsesDesktopLocal = sttConfig?.provider === STTProviders.DESKTOP_LOCAL;
+  const ttsUsesDesktopLocal =
+    ttsConfig?.provider === TTSProviders.DESKTOP_LOCAL;
+  const sttUsesDesktopLocal =
+    sttConfig?.provider === STTProviders.DESKTOP_LOCAL;
   const needsDesktopProxy =
     llmUsesDesktopLocal || ttsUsesDesktopLocal || sttUsesDesktopLocal;
 
@@ -623,11 +767,17 @@ const markSavedFlag = (
       return;
     case "tts":
       useConfigStore.setState({ ttsConfigSaved: true, ttsConfigError: "" });
-      setTimeout(() => useConfigStore.setState({ ttsConfigSaved: false }), 2000);
+      setTimeout(
+        () => useConfigStore.setState({ ttsConfigSaved: false }),
+        2000,
+      );
       return;
     case "stt":
       useConfigStore.setState({ sttConfigSaved: true, sttConfigError: "" });
-      setTimeout(() => useConfigStore.setState({ sttConfigSaved: false }), 2000);
+      setTimeout(
+        () => useConfigStore.setState({ sttConfigSaved: false }),
+        2000,
+      );
       return;
   }
 };
@@ -674,14 +824,22 @@ const applyPathUpdate = (kind: ConfigKind, path: string, value: unknown) => {
     const nextTtsConfig = setConfigValueAtPath(state.ttsConfig, path, value);
     useConfigStore.setState({ ttsConfig: nextTtsConfig });
     scheduleConfigSave("tts");
-    void syncDesktopServerForProviders(state.aiConfig, nextTtsConfig, state.sttConfig);
+    void syncDesktopServerForProviders(
+      state.aiConfig,
+      nextTtsConfig,
+      state.sttConfig,
+    );
     return;
   }
 
   const nextSttConfig = setConfigValueAtPath(state.sttConfig, path, value);
   useConfigStore.setState({ sttConfig: nextSttConfig });
   scheduleConfigSave("stt");
-  void syncDesktopServerForProviders(state.aiConfig, state.ttsConfig, nextSttConfig);
+  void syncDesktopServerForProviders(
+    state.aiConfig,
+    state.ttsConfig,
+    nextSttConfig,
+  );
 };
 
 const scheduleConfigPathUpdate = (
@@ -846,22 +1004,25 @@ export const useConfigStore = create<ConfigStoreState>()(
           const savedUiConfig = (await StorageServiceProxy.configLoad(
             "uiConfig",
           )) as Partial<UIConfig> | null;
-          const mergedUiConfig = { ...DefaultUIConfig, ...(savedUiConfig ?? {}) };
+          const mergedUiConfig = {
+            ...DefaultUIConfig,
+            ...(savedUiConfig ?? {}),
+          };
 
           savedAiConfig = normalizeAIConfig(
-            (await StorageServiceProxy.configLoad("aiConfig")) as
-              | Partial<AIConfig>
-              | null,
+            (await StorageServiceProxy.configLoad(
+              "aiConfig",
+            )) as Partial<AIConfig> | null,
           );
           savedTtsConfig = normalizeTTSConfig(
-            (await StorageServiceProxy.configLoad("ttsConfig")) as
-              | Partial<TTSConfig>
-              | null,
+            (await StorageServiceProxy.configLoad(
+              "ttsConfig",
+            )) as Partial<TTSConfig> | null,
           );
           savedSttConfig = normalizeSTTConfig(
-            (await StorageServiceProxy.configLoad("sttConfig")) as
-              | Partial<STTConfig>
-              | null,
+            (await StorageServiceProxy.configLoad(
+              "sttConfig",
+            )) as Partial<STTConfig> | null,
           );
 
           const synced = syncDesktopLocalEndpoints(
@@ -886,21 +1047,33 @@ export const useConfigStore = create<ConfigStoreState>()(
             await configureAIAndFeatureServices(savedAiConfig);
             Logger.log("ConfigStore", "AI services configured");
           } catch (error) {
-            Logger.warn("ConfigStore", "Failed to configure AI services:", error);
+            Logger.warn(
+              "ConfigStore",
+              "Failed to configure AI services:",
+              error,
+            );
           }
 
           try {
             TTSServiceProxy.configure(savedTtsConfig);
             Logger.log("ConfigStore", "TTS service configured");
           } catch (error) {
-            Logger.warn("ConfigStore", "Failed to configure TTS service:", error);
+            Logger.warn(
+              "ConfigStore",
+              "Failed to configure TTS service:",
+              error,
+            );
           }
 
           try {
             STTServiceProxy.configure(savedSttConfig);
             Logger.log("ConfigStore", "STT service configured");
           } catch (error) {
-            Logger.warn("ConfigStore", "Failed to configure STT service:", error);
+            Logger.warn(
+              "ConfigStore",
+              "Failed to configure STT service:",
+              error,
+            );
           }
         } catch (error) {
           Logger.error("ConfigStore", "Failed to load configs:", error);
@@ -968,7 +1141,11 @@ export const useConfigStore = create<ConfigStoreState>()(
         if (!get().aiConfig.aiFeatures?.translator?.enabled) {
           throw new Error("Translator is disabled in settings");
         }
-        return TranslatorServiceProxy.translate(text, sourceLanguage, targetLanguage);
+        return TranslatorServiceProxy.translate(
+          text,
+          sourceLanguage,
+          targetLanguage,
+        );
       },
       testLanguageDetector: async (text) => {
         if (!get().aiConfig.aiFeatures?.languageDetector?.enabled) {
@@ -1113,7 +1290,10 @@ export const useConfigStore = create<ConfigStoreState>()(
           set((state) => {
             state.sttConfigError = "🎤 Recording for 3 seconds... Speak now!";
           });
-          const transcription = await STTServiceProxy.testRecording(3, deviceId);
+          const transcription = await STTServiceProxy.testRecording(
+            3,
+            deviceId,
+          );
           set((state) => {
             state.sttConfigError = `✅ Transcription: "${transcription}"`;
           });
@@ -1135,6 +1315,41 @@ export const useConfigStore = create<ConfigStoreState>()(
         set((state) => {
           state.sttConfigError = "";
         });
+      },
+      applySetupData: async (setupData) => {
+        const built = buildConfigsFromSetupData(setupData);
+        const synced = syncDesktopLocalEndpoints(
+          built.aiConfig,
+          built.ttsConfig,
+          built.sttConfig,
+        );
+
+        clearSaveTimeout("ui");
+        clearSaveTimeout("ai");
+        clearSaveTimeout("tts");
+        clearSaveTimeout("stt");
+        clearAllConfigPathDebouncers();
+
+        set((state) => {
+          state.uiConfig = built.uiConfig;
+          state.aiConfig = synced.aiConfig;
+          state.ttsConfig = synced.ttsConfig;
+          state.sttConfig = synced.sttConfig;
+          state.uiConfigError = "";
+          state.aiConfigError = "";
+          state.ttsConfigError = "";
+          state.sttConfigError = "";
+        });
+
+        await saveUIConfigInternal(false);
+        await saveAIConfigInternal(false);
+        await saveTTSConfigInternal(false);
+        await saveSTTConfigInternal(false);
+        await syncDesktopServerForProviders(
+          synced.aiConfig,
+          synced.ttsConfig,
+          synced.sttConfig,
+        );
       },
       checkChromeAIAvailability: async () => {
         set((state) => {

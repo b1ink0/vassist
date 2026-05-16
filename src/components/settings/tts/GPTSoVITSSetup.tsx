@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
-import { useDesktop } from "../../../contexts/DesktopContext";
+import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { cn } from "../../../utils/cn";
 import { Button, Select } from "../../ui";
 
@@ -70,7 +70,7 @@ const GPTSoVITSSetup = ({
   config = {},
   onConfigChange,
 }: GPTSoVITSSetupProps) => {
-  const { api: desktopAPI } = useDesktop();
+  const desktopAPI = useDesktopApi();
   const setupApi = desktopAPI?.gptSovitsSetup as GPTSoVITSSetupApi | undefined;
   const [selectedBackend, setSelectedBackend] = useState(
     (config?.pytorchBackend || "auto").toLowerCase(),

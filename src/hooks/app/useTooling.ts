@@ -1,11 +1,15 @@
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "../../stores/useAppStore";
 
-export const useTooling = () =>
+export const useIsSettingsPanelOpen = () =>
+  useAppStore((state) => state.isSettingsPanelOpen);
+
+export const useIsHistoryPanelOpen = () =>
+  useAppStore((state) => state.isHistoryPanelOpen);
+
+export const useToolingActions = () =>
   useAppStore(
     useShallow((state) => ({
-      isSettingsPanelOpen: state.isSettingsPanelOpen,
-      isHistoryPanelOpen: state.isHistoryPanelOpen,
       setIsSettingsPanelOpen: state.setIsSettingsPanelOpen,
       setIsHistoryPanelOpen: state.setIsHistoryPanelOpen,
       toggleSettingsPanel: state.toggleSettingsPanel,

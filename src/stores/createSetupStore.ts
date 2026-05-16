@@ -4,6 +4,7 @@ import StorageServiceProxy from "../services/proxies/StorageServiceProxy";
 import Logger from "../services/LoggerService";
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { getErrorMessage } from "./storeUtils";
+import { useConfigStore } from "./useConfigStore";
 
 const DEFAULT_LLM_PROVIDER = isAndroid
   ? "android-local"
@@ -227,159 +228,8 @@ export const createSetupStore = () => {
 
     const persistAndReload = async () => {
       const setupData = get().setupData;
-
-      const aiConfig = {
-        provider: setupData.llm?.provider || DEFAULT_LLM_PROVIDER,
-        chromeAi: {
-          temperature: 1.0,
-          topK: 3,
-          outputLanguage: "en",
-          enableImageSupport: setupData.llm?.chromeAi?.enableImageSupport ?? true,
-          enableAudioSupport: setupData.llm?.chromeAi?.enableAudioSupport ?? true,
-          systemPromptType: "default",
-          systemPrompt: "",
-          selectedSystemPromptProfileId: "default",
-          systemPromptProfiles: [],
-        },
-        openai: {
-          apiKey: setupData.llm?.openai?.apiKey || "",
-          model: setupData.llm?.openai?.model || "gpt-4o-mini",
-          temperature: 0.7,
-          maxTokens: 2000,
-          enableImageSupport: true,
-          enableAudioSupport: true,
-          systemPromptType: "default",
-          systemPrompt: "",
-          selectedSystemPromptProfileId: "default",
-          systemPromptProfiles: [],
-        },
-        ollama: {
-          endpoint: setupData.llm?.ollama?.endpoint || "http://localhost:11434",
-          model: setupData.llm?.ollama?.model || "llama3.2",
-          temperature: 0.7,
-          maxTokens: 2000,
-          enableImageSupport: true,
-          enableAudioSupport: true,
-          systemPromptType: "default",
-          systemPrompt: "",
-          selectedSystemPromptProfileId: "default",
-          systemPromptProfiles: [],
-        },
-        aiFeatures: setupData.aiFeatures || {
-          translator: { enabled: true, defaultTargetLanguage: "en" },
-          languageDetector: { enabled: true },
-          summarizer: {
-            enabled: true,
-            defaultType: "tldr",
-            defaultFormat: "plain-text",
-            defaultLength: "medium",
-          },
-          rewriter: {
-            enabled: true,
-            defaultTone: "as-is",
-            defaultFormat: "as-is",
-            defaultLength: "as-is",
-          },
-          writer: {
-            enabled: true,
-            defaultTone: "neutral",
-            defaultFormat: "plain-text",
-            defaultLength: "medium",
-          },
-        },
-      };
-      Logger.log("SetupStore", "Saving aiConfig:", aiConfig);
-      await StorageServiceProxy.configSave("aiConfig", aiConfig);
-
-      const ttsConfig = {
-        enabled: setupData.tts?.enabled ?? false,
-        provider: setupData.tts?.provider || DEFAULT_TTS_PROVIDER,
-        kokoro: {
-          modelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
-          voice: setupData.tts?.kokoro?.voice || "af_heart",
-          speed: setupData.tts?.kokoro?.speed || 1.0,
-          device: setupData.tts?.kokoro?.device || "auto",
-          keepModelLoaded: true,
-        },
-        openai: {
-          apiKey: setupData.tts?.openai?.apiKey || "",
-          model: "tts-1",
-          voice: setupData.tts?.openai?.voice || "nova",
-          speed: 1.0,
-        },
-        "openai-compatible": {
-          endpoint:
-            setupData.tts?.["openai-compatible"]?.endpoint ||
-            "http://localhost:8000",
-          apiKey: setupData.tts?.["openai-compatible"]?.apiKey || "",
-          model: setupData.tts?.["openai-compatible"]?.model || "tts",
-          voice: setupData.tts?.["openai-compatible"]?.voice || "default",
-          speed: setupData.tts?.["openai-compatible"]?.speed || 1.0,
-        },
-        chunkSize: 500,
-        minChunkSize: 100,
-      };
-      Logger.log("SetupStore", "Saving ttsConfig:", ttsConfig);
-      await StorageServiceProxy.configSave("ttsConfig", ttsConfig);
-
-      const sttConfig = {
-        enabled: setupData.stt?.enabled ?? false,
-        provider: setupData.stt?.provider || DEFAULT_STT_PROVIDER,
-        "chrome-ai-multimodal": {
-          temperature: setupData.sttConfig?.chromeAi?.temperature || 0.1,
-          topK: setupData.sttConfig?.chromeAi?.topK || 3,
-          outputLanguage: setupData.sttConfig?.chromeAi?.outputLanguage || "en",
-        },
-        openai: {
-          apiKey: setupData.sttConfig?.openai?.apiKey || "",
-          model: "whisper-1",
-          language: setupData.sttConfig?.openai?.language || "en",
-          temperature: 0,
-        },
-        "openai-compatible": {
-          endpoint:
-            setupData.sttConfig?.["openai-compatible"]?.endpoint ||
-            "http://localhost:8000",
-          apiKey: setupData.sttConfig?.["openai-compatible"]?.apiKey || "",
-          model: "whisper",
-          language:
-            setupData.sttConfig?.["openai-compatible"]?.language || "en",
-          temperature: 0,
-        },
-        recordingFormat: "webm",
-        maxRecordingDuration: 60,
-        audioDeviceSwitchDelay: 300,
-      };
-      Logger.log("SetupStore", "Saving sttConfig:", sttConfig);
-      await StorageServiceProxy.configSave("sttConfig", sttConfig);
-
-      const uiConfig = {
-        enableModelLoading: setupData.ui?.enableModelLoading ?? true,
-        enablePortraitMode: setupData.ui?.enablePortraitMode ?? false,
-        enablePhysics: true,
-        fpsLimit: 60,
-        position: {
-          preset: setupData.ui?.position || "bottom-right",
-          custom: { x: 0, y: 0 },
-        },
-        enableAIToolbar: setupData.ui?.enableAIToolbar ?? true,
-        emotePlayback: {
-          showDurationBar: true,
-          showTime: true,
-          autoPlayCategory: "all",
-        },
-        enableChatHistory: true,
-        enableVoiceInput: false,
-        theme: "dark",
-        shortcuts: setupData.ui?.shortcuts || {
-          enabled: false,
-          openChat: "",
-          toggleMode: "",
-          toggleVisibility: "",
-        },
-      };
-      Logger.log("SetupStore", "Saving uiConfig:", uiConfig);
-      await StorageServiceProxy.configSave("uiConfig", uiConfig);
+      Logger.log("SetupStore", "Applying setup data through ConfigStore");
+      await useConfigStore.getState().applySetupData(setupData);
 
       const completedSteps = Array.from(
         { length: TOTAL_SETUP_STEPS },
@@ -428,7 +278,11 @@ export const createSetupStore = () => {
               };
             }
 
-            Logger.log("SetupStore", "Loaded setup state from storage:", savedState);
+            Logger.log(
+              "SetupStore",
+              "Loaded setup state from storage:",
+              savedState,
+            );
             break;
           } catch (error) {
             retries += 1;
@@ -468,7 +322,11 @@ export const createSetupStore = () => {
           setupData: snapshot.setupData,
         });
       } catch (error) {
-        Logger.error("SetupStore", "Unexpected error in loadSetupState:", error);
+        Logger.error(
+          "SetupStore",
+          "Unexpected error in loadSetupState:",
+          error,
+        );
         const snapshot = {
           ...cloneDefaultSetupState(),
           setupCompleted: true,
@@ -540,13 +398,21 @@ export const createSetupStore = () => {
         scheduleSave();
       },
       updateSetupData: async (pathOrData, value) => {
-        const nextSetupData = updateSetupDataAtPath(get().setupData, pathOrData, value);
+        const nextSetupData = updateSetupDataAtPath(
+          get().setupData,
+          pathOrData,
+          value,
+        );
         set({ setupData: nextSetupData });
         scheduleSave();
       },
       completeSetup: async () => {
         try {
-          Logger.log("SetupStore", "Completing setup with data:", get().setupData);
+          Logger.log(
+            "SetupStore",
+            "Completing setup with data:",
+            get().setupData,
+          );
           await persistAndReload();
         } catch (error) {
           Logger.error("SetupStore", "Failed to complete setup:", error);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "../ui";
 import { cn } from "../../utils/cn";
-import { useDesktop } from "../../contexts/DesktopContext";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 
 interface DesktopShareSource {
   id: string;
@@ -11,7 +11,7 @@ interface DesktopShareSource {
 }
 
 const DesktopScreenShareDialog = () => {
-  const { api } = useDesktop();
+  const api = useDesktopApi();
   const [sources, setSources] = useState<DesktopShareSource[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

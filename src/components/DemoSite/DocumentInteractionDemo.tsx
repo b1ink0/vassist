@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
-import { useTooling } from "../../hooks/app/useTooling";
+import { useToolingActions } from "../../hooks/app/useTooling";
 
 interface DemoTheme {
   gradient: string;
@@ -21,7 +21,7 @@ const DocumentInteractionDemo = ({
   isDark,
 }: DocumentInteractionDemoProps) => {
   const [showHiddenContent, setShowHiddenContent] = useState(false);
-  const { handleAddToChat } = useTooling();
+  const { handleAddToChat } = useToolingActions();
 
   const handleTryAction = (question: string) => {
     handleAddToChat(

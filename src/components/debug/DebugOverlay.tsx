@@ -6,7 +6,10 @@ import { useState, useEffect } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
 import * as BABYLON from "@babylonjs/core";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 import type { PositionManagerLike as BabylonPositionManagerLike } from "../../babylon/types";
 
@@ -54,7 +57,8 @@ const toNumber = (value: number | string): number => {
  * @returns {JSX.Element}
  */
 const DebugOverlay = ({ scene, positionManager }: DebugOverlayProps) => {
-  const { uiConfig, updateUIConfig } = useConfigUI();
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
   const [activeTab, setActiveTab] = useState("debug");
   const [showAxis, setShowAxis] = useState(false);
   const [showCoords, setShowCoords] = useState(false);

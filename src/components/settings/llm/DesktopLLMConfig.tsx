@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "../../icons";
-import { useDesktop } from "../../../contexts/DesktopContext";
+import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { isDesktop } from "../../../utils/PlatformUtils";
 import { Button, Select, Input } from "../../ui";
 import LocalLLMModelManager from "./LocalLLMModelManager";
@@ -130,7 +130,7 @@ const DesktopLLMConfig = ({
   onRequestDeleteModel,
   refreshTrigger,
 }: DesktopLLMConfigProps) => {
-  const { api } = useDesktop();
+  const api = useDesktopApi();
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(
     null,
   );

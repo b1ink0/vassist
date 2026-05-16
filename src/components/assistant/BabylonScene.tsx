@@ -12,10 +12,17 @@ import { getSceneConfigAsync } from "../../config/sceneConfig";
 import DragDropService from "../../services/DragDropService";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
-import { useDesktop } from "../../contexts/DesktopContext";
-import { useChat } from "../../hooks/app/useChat";
-import { useScene } from "../../hooks/app/useScene";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import { useChatActions } from "../../hooks/app/useChat";
+import {
+  useModelOverlayPos,
+  usePositionManagerRef,
+  useSceneActions,
+} from "../../hooks/app/useScene";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { FPSLimitOptions } from "../../config/uiConfig";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
@@ -132,7 +139,7 @@ const BabylonScene = ({
   onSceneReady,
   onLoadProgress,
   sceneConfig = {},
-  positionManagerRef,
+  positionManagerRef: externalPositionManagerRef,
   isPreview = false,
   previewWidth = "100%",
   previewHeight = "100%",
@@ -146,8 +153,9 @@ const BabylonScene = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cleanupFnRef = useRef<(() => void) | null>(null);
 
-  const { uiConfig, updateUIConfig } = useConfigUI();
-  const { api: desktopAPI } = useDesktop();
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
+  const desktopAPI = useDesktopApi();
   const uiConfigForScene: UIConfigForScene | null = uiConfig;
   const modelSizePx = getModelSizePx(uiConfigForScene);
   const fpsLimit = uiConfigForScene?.fpsLimit ?? FPSLimitOptions.FPS_60;
@@ -214,6 +222,11 @@ const BabylonScene = ({
   }, []);
 
   // On mount, if desktop and saved config exists, resize Electron window to match
+  const storePositionManagerRef = usePositionManagerRef();
+  const activePositionManagerRef =
+    externalPositionManagerRef ?? storePositionManagerRef;
+  const modelOverlayPos: ModelOverlayPosition = useModelOverlayPos();
+
   useEffect(() => {
     if (!isDesktop || !desktopAPI?.window || isPreview) return;
 
@@ -241,12 +254,12 @@ const BabylonScene = ({
           setCanvasSize({ width: windowSize.width, height: windowSize.height });
 
           setTimeout(() => {
-            if (positionManagerRef?.current) {
+            if (activePositionManagerRef?.current) {
               Logger.log(
                 "BabylonScene",
                 "Updating PositionManager after window resize on mount",
               );
-              const pm = positionManagerRef.current;
+              const pm = activePositionManagerRef.current;
 
               const oldCanvasWidth = pm.canvasWidth;
               const oldCanvasHeight = pm.canvasHeight;
@@ -293,18 +306,11 @@ const BabylonScene = ({
           );
         });
     }
-  }, [modelSizePx, desktopAPI, isPreview, positionManagerRef]);
+  }, [modelSizePx, desktopAPI, isPreview, activePositionManagerRef]);
 
-  const {
-    modelOverlayPos,
-    setModelOverlayPos,
-    setShowModelLoadingOverlay,
-    forceChatOnlyMode,
-  } = useScene();
-  const {
-    setPendingDropData,
-    openChat,
-  } = useChat();
+  const { setModelOverlayPos, setShowModelLoadingOverlay, forceChatOnlyMode } =
+    useSceneActions();
+  const { setPendingDropData, openChat } = useChatActions();
 
   const isFirstMountRef = useRef(true);
 
@@ -723,11 +729,11 @@ const BabylonScene = ({
   }, []);
 
   useEffect(() => {
-    if (!positionManagerRef?.current || !isReady) return;
+    if (!activePositionManagerRef?.current || !isReady) return;
 
     const updatePosition = (): void => {
       try {
-        const activePositionManager = positionManagerRef.current;
+        const activePositionManager = activePositionManagerRef.current;
         if (!activePositionManager) {
           return;
         }
@@ -754,7 +760,7 @@ const BabylonScene = ({
       window.removeEventListener("modelPositionChange", updatePosition);
       window.removeEventListener("resize", updatePosition);
     };
-  }, [positionManagerRef, isReady, setModelOverlayPos]);
+  }, [activePositionManagerRef, isReady, setModelOverlayPos]);
 
   useEffect(() => {
     if (isPreview) return;

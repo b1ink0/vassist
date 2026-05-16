@@ -6,8 +6,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as React from "react";
-import { useConfigAI } from "../../hooks/config/useConfigAI";
-import { useConfigStatus } from "../../hooks/config/useConfigStatus";
+import {
+  useAIConfig,
+  useAITesting,
+  useConfigAIActions,
+} from "../../hooks/config/useConfigAI";
+import {
+  useChromeAIStatus,
+  useConfigStatusActions,
+} from "../../hooks/config/useConfigStatus";
 import {
   AIProviders,
   type AIConfig,
@@ -15,8 +22,8 @@ import {
 } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
-import { useAndroid } from "../../contexts/AndroidContext";
-import { useDesktop } from "../../contexts/DesktopContext";
+import { useAndroidApi } from "../../hooks/useAndroidStore";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import DesktopLLMConfig from "./llm/DesktopLLMConfig";
 import LocalLLMModelManager from "./llm/LocalLLMModelManager";
 import {
@@ -1385,17 +1392,15 @@ const LLMSettings = ({
   onRequestDeleteLLMModel,
   refreshTrigger = 0,
 }: LLMSettingsProps) => {
-  const { chromeAiStatus, checkChromeAIAvailability, startChromeAIDownload } =
-    useConfigStatus();
-  const {
-    aiConfig,
-    aiTesting,
-    updateAIConfig,
-    testAIConnection,
-  } = useConfigAI();
+  const chromeAiStatus = useChromeAIStatus();
+  const { checkChromeAIAvailability, startChromeAIDownload } =
+    useConfigStatusActions();
+  const aiConfig = useAIConfig();
+  const aiTesting = useAITesting();
+  const { updateAIConfig, testAIConnection } = useConfigAIActions();
 
-  const { api: androidAPI } = useAndroid();
-  const { api: desktopAPI } = useDesktop();
+  const androidAPI = useAndroidApi();
+  const desktopAPI = useDesktopApi();
   const desktopLlmBridge = isDesktopLlmBridge(desktopAPI?.llm)
     ? desktopAPI.llm
     : null;

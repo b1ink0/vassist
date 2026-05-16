@@ -5,7 +5,10 @@
  * Works with all LLM providers (Chrome AI, OpenAI, Ollama)
  */
 
-import { useConfigAI } from "../../hooks/config/useConfigAI";
+import {
+  useAIConfig,
+  useConfigAIActions,
+} from "../../hooks/config/useConfigAI";
 import ChromeAIValidator from "../../services/ChromeAIValidator";
 import React from "react";
 import AIFeaturesConfig from "../common/AIFeaturesConfig";
@@ -17,15 +20,15 @@ interface AIFeaturesSettingsProps {
 const AIFeaturesSettings = ({
   isLightBackground = false,
 }: AIFeaturesSettingsProps) => {
+  const aiConfig = useAIConfig();
   const {
-    aiConfig,
     updateAIConfig,
     testTranslator,
     testLanguageDetector,
     testSummarizer,
     testRewriter,
     testWriter,
-  } = useConfigAI();
+  } = useConfigAIActions();
 
   const chromeVersion = ChromeAIValidator.getChromeVersion();
   const needsFlags =

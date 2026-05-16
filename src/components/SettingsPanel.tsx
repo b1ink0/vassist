@@ -13,10 +13,25 @@ import LLMSettings from "./settings/LLMSettings";
 import TTSSettings from "./settings/TTSSettings";
 import STTSettings from "./settings/STTSettings";
 import AIFeaturesSettings from "./settings/AIFeaturesSettings";
-import { useConfigAI } from "../hooks/config/useConfigAI";
-import { useConfigSTT } from "../hooks/config/useConfigSTT";
-import { useConfigTTS } from "../hooks/config/useConfigTTS";
-import { useConfigUI } from "../hooks/config/useConfigUI";
+import {
+  useAIConfigError,
+  useAIConfigSaved,
+  useAITesting,
+  useConfigAIActions,
+} from "../hooks/config/useConfigAI";
+import {
+  useConfigSTTActions,
+  useSTTConfigError,
+  useSTTConfigSaved,
+  useSTTTesting,
+} from "../hooks/config/useConfigSTT";
+import {
+  useConfigTTSActions,
+  useTTSConfigError,
+  useTTSConfigSaved,
+  useTTSTesting,
+} from "../hooks/config/useConfigTTS";
+import { useUIConfigSaved } from "../hooks/config/useConfigUI";
 import Logger from "../services/LoggerService";
 
 type SettingsTabId = "ui" | "3d" | "llm" | "tts" | "stt" | "ai-plus";
@@ -83,13 +98,19 @@ const SettingsPanel = ({
     "ai-plus": null,
   });
 
-  const { uiConfigSaved } = useConfigUI();
-  const { aiConfigSaved, aiConfigError, aiTesting, clearAIConfigError } =
-    useConfigAI();
-  const { ttsConfigSaved, ttsConfigError, ttsTesting, clearTTSConfigError } =
-    useConfigTTS();
-  const { sttConfigSaved, sttConfigError, sttTesting, clearSTTConfigError } =
-    useConfigSTT();
+  const uiConfigSaved = useUIConfigSaved();
+  const aiConfigSaved = useAIConfigSaved();
+  const aiConfigError = useAIConfigError();
+  const aiTesting = useAITesting();
+  const { clearAIConfigError } = useConfigAIActions();
+  const ttsConfigSaved = useTTSConfigSaved();
+  const ttsConfigError = useTTSConfigError();
+  const ttsTesting = useTTSTesting();
+  const { clearTTSConfigError } = useConfigTTSActions();
+  const sttConfigSaved = useSTTConfigSaved();
+  const sttConfigError = useSTTConfigError();
+  const sttTesting = useSTTTesting();
+  const { clearSTTConfigError } = useConfigSTTActions();
 
   useEffect(() => {
     const validator = ChromeAIValidator;

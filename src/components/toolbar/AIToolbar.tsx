@@ -4,10 +4,10 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { cn } from "../../utils/cn";
-import { useTooling } from "../../hooks/app/useTooling";
-import { useConfigAI } from "../../hooks/config/useConfigAI";
-import { useConfigTTS } from "../../hooks/config/useConfigTTS";
-import { useConfigUI } from "../../hooks/config/useConfigUI";
+import { useToolingActions } from "../../hooks/app/useTooling";
+import { useAIConfig } from "../../hooks/config/useConfigAI";
+import { useTTSConfig } from "../../hooks/config/useConfigTTS";
+import { useUIConfig } from "../../hooks/config/useConfigUI";
 import BackgroundDetector from "../../utils/BackgroundDetector";
 import MediaExtractionService from "../../services/MediaExtractionService";
 import UtilService from "../../services/UtilService";
@@ -70,10 +70,10 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const AIToolbar = () => {
-  const { uiConfig } = useConfigUI();
-  const { aiConfig } = useConfigAI();
-  const { ttsConfig } = useConfigTTS();
-  const { handleAddToChat } = useTooling();
+  const uiConfig = useUIConfig();
+  const aiConfig = useAIConfig();
+  const ttsConfig = useTTSConfig();
+  const { handleAddToChat } = useToolingActions();
 
   const [isVisible, setIsVisible] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);

@@ -1,16 +1,27 @@
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "../../stores/useAppStore";
 
-export const useChat = () =>
+export const useIsChatInputVisible = () =>
+  useAppStore((state) => state.isChatInputVisible);
+
+export const useIsChatContainerVisible = () =>
+  useAppStore((state) => state.isChatContainerVisible);
+
+export const useChatMessages = () => useAppStore((state) => state.chatMessages);
+
+export const useIsProcessing = () => useAppStore((state) => state.isProcessing);
+
+export const useCurrentChatId = () =>
+  useAppStore((state) => state.currentChatId);
+
+export const useIsTempChat = () => useAppStore((state) => state.isTempChat);
+
+export const usePendingDropData = () =>
+  useAppStore((state) => state.pendingDropData);
+
+export const useChatActions = () =>
   useAppStore(
     useShallow((state) => ({
-      isChatInputVisible: state.isChatInputVisible,
-      isChatContainerVisible: state.isChatContainerVisible,
-      chatMessages: state.chatMessages,
-      isProcessing: state.isProcessing,
-      currentChatId: state.currentChatId,
-      isTempChat: state.isTempChat,
-      pendingDropData: state.pendingDropData,
       setIsChatInputVisible: state.setIsChatInputVisible,
       setIsChatContainerVisible: state.setIsChatContainerVisible,
       setChatMessages: state.setChatMessages,

@@ -1,13 +1,19 @@
 import { useShallow } from "zustand/react/shallow";
 import { useConfigStore } from "../../stores/useConfigStore";
 
-export const useConfigAI = () =>
+export const useAIConfig = () => useConfigStore((state) => state.aiConfig);
+
+export const useAIConfigSaved = () =>
+  useConfigStore((state) => state.aiConfigSaved);
+
+export const useAIConfigError = () =>
+  useConfigStore((state) => state.aiConfigError);
+
+export const useAITesting = () => useConfigStore((state) => state.aiTesting);
+
+export const useConfigAIActions = () =>
   useConfigStore(
     useShallow((state) => ({
-      aiConfig: state.aiConfig,
-      aiConfigSaved: state.aiConfigSaved,
-      aiConfigError: state.aiConfigError,
-      aiTesting: state.aiTesting,
       updateAIConfig: state.updateAIConfig,
       saveAIConfig: state.saveAIConfig,
       testAIConnection: state.testAIConnection,

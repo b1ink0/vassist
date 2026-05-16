@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useDesktop } from "../../contexts/DesktopContext";
-import { useDrag } from "../../hooks/app/useDrag";
-import { useScene } from "../../hooks/app/useScene";
+import { useIsDraggingModel } from "../../hooks/app/useDrag";
+import { useSceneRef } from "../../hooks/app/useScene";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/LoggerService";
 import { isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 
@@ -41,9 +41,9 @@ function isDomInteractiveTarget(target: Element | null): boolean {
 }
 
 export default function DesktopWindowInteractivityBridge() {
-  const { api } = useDesktop();
-  const { isDraggingModel } = useDrag();
-  const { sceneRef } = useScene();
+  const api = useDesktopApi();
+  const isDraggingModel = useIsDraggingModel();
+  const sceneRef = useSceneRef();
   const latestPointRef = useRef<{ x: number; y: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastIgnoreStateRef = useRef<boolean | null>(null);

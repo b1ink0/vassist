@@ -1,14 +1,20 @@
 import { useShallow } from "zustand/react/shallow";
 import { useConfigStore } from "../../stores/useConfigStore";
 
-export const useConfigStatus = () =>
+export const useChromeAIStatus = () =>
+  useConfigStore((state) => state.chromeAiStatus);
+
+export const useKokoroStatus = () =>
+  useConfigStore((state) => state.kokoroStatus);
+
+export const useIsKokoroPreInitializing = () =>
+  useConfigStore((state) => state.kokoroStatus.preInitializing);
+
+export const useConfigStatusActions = () =>
   useConfigStore(
     useShallow((state) => ({
-      isConfigLoading: state.isConfigLoading,
-      chromeAiStatus: state.chromeAiStatus,
       checkChromeAIAvailability: state.checkChromeAIAvailability,
       startChromeAIDownload: state.startChromeAIDownload,
-      kokoroStatus: state.kokoroStatus,
       checkKokoroStatus: state.checkKokoroStatus,
       initializeKokoro: state.initializeKokoro,
     })),

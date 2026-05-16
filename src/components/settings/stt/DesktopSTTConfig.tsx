@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../icons";
-import { useDesktop } from "../../../contexts/DesktopContext";
+import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { cn } from "../../../utils/cn";
 import { Button, Input, Select } from "../../ui";
 
@@ -62,7 +62,7 @@ const DesktopSTTConfig = ({
   isSetupMode = false,
   isLightBackground = false,
 }: DesktopSTTConfigProps) => {
-  const { api: desktopAPI } = useDesktop();
+  const desktopAPI = useDesktopApi();
   const whisperSetup = desktopAPI?.whisperSetup as WhisperSetupApi | undefined;
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
