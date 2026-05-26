@@ -93,6 +93,7 @@ const SetupWizard = () => {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden"
       data-setup-wizard
+      data-testid="setup-wizard"
     >
       {/* Backdrop with blur */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-md"></div>
@@ -119,7 +120,10 @@ const SetupWizard = () => {
                 <h1 className="text-sm sm:text-base font-bold text-white">
                   Setup
                 </h1>
-                <p className="text-xs text-white/70">
+                <p
+                  className="text-xs text-white/70"
+                  data-testid="setup-step-title"
+                >
                   {currentStep}/{totalSteps}: {getStepTitle()}
                 </p>
               </div>
@@ -131,6 +135,7 @@ const SetupWizard = () => {
             <div
               className="h-full transition-all duration-500 ease-out bg-gradient-to-r from-white/40 via-white/60 to-white/40 shadow-[0_0_10px_rgba(255,255,255,0.5)]"
               style={{ width: `${progress}%` }}
+              data-testid="setup-progress-bar"
             />
           </div>
         </div>
@@ -138,6 +143,7 @@ const SetupWizard = () => {
         {/* Content area */}
         <div
           ref={contentRef}
+          data-testid={`setup-step-${currentStep}`}
           className={cn(
             isLightBackground ? "glass-container-dark" : "glass-container",
             "flex-1 overflow-y-auto p-2 md:p-4 sm:p-6 scrollbar-glass hover-scrollbar",
@@ -158,6 +164,7 @@ const SetupWizard = () => {
             <Button
               onClick={previousStep}
               disabled={!canGoBack}
+              data-testid="setup-previous-button"
               variant={canGoBack ? "default" : "ghost"}
               className={cn(
                 "px-3 sm:px-4 py-2 text-sm font-medium flex items-center gap-1",
@@ -177,6 +184,7 @@ const SetupWizard = () => {
             {/* Next button */}
             <Button
               onClick={handleNextClick}
+              data-testid="setup-next-button"
               className={cn(
                 "px-3 sm:px-4 py-2 text-sm font-medium",
                 isLightBackground ? "text-gray-800" : "text-white",

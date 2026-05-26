@@ -9,6 +9,8 @@ import { createRoot } from "react-dom/client";
 import { extensionBridge } from "../../src/utils/ExtensionBridge";
 import App from "../../src/App";
 import Logger from "../../src/services/LoggerService";
+import { prepareVAssistTestRuntime } from "../../src/testing/testBridge";
+import { isVAssistTestMode } from "../../src/testing/runtime";
 import type { Root } from "react-dom/client";
 
 // Make bridge globally accessible
@@ -17,6 +19,7 @@ window.__VASSIST_BRIDGE__ = extensionBridge;
 let isInitialized = false;
 let reactRoot: Root | null = null;
 let isInitializing = false;
+let initRetryTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const getShadowRoot = () => {
   const container = document.getElementById("virtual-assistant-extension-root");
@@ -26,7 +29,32 @@ const getShadowRoot = () => {
   return container.shadowRoot.getElementById("react-root");
 };
 
-const initReactApp = () => {
+const clearInitRetry = () => {
+  if (initRetryTimeout) {
+    clearTimeout(initRetryTimeout);
+    initRetryTimeout = null;
+  }
+};
+
+const resetInitState = () => {
+  isInitialized = false;
+  reactRoot = null;
+  isInitializing = false;
+};
+
+const scheduleInitRetry = (reason: string) => {
+  if (initRetryTimeout || isInitializing) {
+    return;
+  }
+
+  Logger.log("Extension Content", `Scheduling init retry: ${reason}`);
+  initRetryTimeout = setTimeout(() => {
+    initRetryTimeout = null;
+    void initReactApp();
+  }, 100);
+};
+
+const initReactApp = async () => {
   if (isInitializing) {
     Logger.log("Extension Content", "Already initializing, skipping...");
     return;
@@ -45,14 +73,20 @@ const initReactApp = () => {
         "Extension Content",
         "React root element not found, skipping initialization",
       );
+      scheduleInitRetry("react root missing");
       return;
     }
 
     Logger.log("Extension Content", "Initializing React app in shadow DOM...");
+    clearInitRetry();
     isInitializing = true;
 
     reactRoot = createRoot(rootElement);
-    isInitialized = true;
+
+    if (isVAssistTestMode) {
+      document.documentElement.dataset.vassistTestMode = "true";
+      await prepareVAssistTestRuntime();
+    }
 
     reactRoot.render(
       <React.StrictMode>
@@ -60,10 +94,28 @@ const initReactApp = () => {
       </React.StrictMode>,
     );
 
+    isInitialized = true;
     Logger.log("Extension Content", "React app rendered successfully");
-    isInitializing = false;
   } catch (error) {
-    Logger.error("Extension Content", "Failed to initialize React app:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    Logger.error(
+      "Extension Content",
+      "Failed to initialize React app in shadow DOM:",
+      errorMessage,
+    );
+
+    if (reactRoot) {
+      try {
+        reactRoot.unmount();
+      } catch {
+        // Best effort cleanup before retrying.
+      }
+    }
+
+    resetInitState();
+    scheduleInitRetry("init error");
+    return;
+  } finally {
     isInitializing = false;
   }
 };
@@ -76,10 +128,9 @@ const observer = new MutationObserver((mutations) => {
         node.id === "virtual-assistant-extension-root"
       ) {
         Logger.log("Extension Content", "Container detected, initializing...");
-        isInitialized = false;
-        reactRoot = null;
-        isInitializing = false;
-        setTimeout(initReactApp, 100);
+        resetInitState();
+        clearInitRetry();
+        scheduleInitRetry("container detected");
       }
     }
 
@@ -89,6 +140,7 @@ const observer = new MutationObserver((mutations) => {
         node.id === "virtual-assistant-extension-root"
       ) {
         Logger.log("Extension Content", "Container removed, cleaning up...");
+        clearInitRetry();
 
         if (reactRoot) {
           Logger.log("Extension Content", "Unmounting React app...");
@@ -106,9 +158,7 @@ const observer = new MutationObserver((mutations) => {
           }
         }
 
-        isInitialized = false;
-        reactRoot = null;
-        isInitializing = false;
+        resetInitState();
       }
     }
   }
@@ -123,7 +173,7 @@ const checkExisting = () => {
       "Extension Content",
       "Found existing container, initializing...",
     );
-    setTimeout(initReactApp, 100);
+    scheduleInitRetry("existing container");
   }
 };
 

@@ -388,7 +388,7 @@ const AIFeaturesConfig = ({
       )}
 
       {/* Translator */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="ai-feature-translator-section">
         <Card variant="default">
           <SettingsRow label="Translator">
             <Toggle
@@ -437,6 +437,7 @@ const AIFeaturesConfig = ({
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
+                    data-testid="ai-feature-translator-test"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -447,6 +448,7 @@ const AIFeaturesConfig = ({
                       : "Test"}
                   </Button>
                   <Button
+                    data-testid="ai-feature-translator-clear"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -469,7 +471,10 @@ const AIFeaturesConfig = ({
       </div>
 
       {/* Language Detector */}
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        data-testid="ai-feature-language-detector-section"
+      >
         <Card variant="default">
           <SettingsRow label="Language Detector">
             <Toggle
@@ -508,6 +513,7 @@ const AIFeaturesConfig = ({
 
                 <div className="grid grid-cols-2 gap-2">
                   <Button
+                    data-testid="ai-feature-language-detector-test"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -518,6 +524,7 @@ const AIFeaturesConfig = ({
                       : "Test"}
                   </Button>
                   <Button
+                    data-testid="ai-feature-language-detector-clear"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -540,7 +547,7 @@ const AIFeaturesConfig = ({
       </div>
 
       {/* Summarizer */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="ai-feature-summarizer-section">
         <Card variant="default">
           <SettingsRow label="Summarizer">
             <Toggle
@@ -560,6 +567,7 @@ const AIFeaturesConfig = ({
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
+                    data-testid="ai-feature-summarizer-test"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -570,6 +578,7 @@ const AIFeaturesConfig = ({
                       : "Test"}
                   </Button>
                   <Button
+                    data-testid="ai-feature-summarizer-clear"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -592,7 +601,7 @@ const AIFeaturesConfig = ({
       </div>
 
       {/* Rewriter */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="ai-feature-rewriter-section">
         <Card variant="default">
           <SettingsRow label="Text Rewriter">
             <Toggle
@@ -612,6 +621,7 @@ const AIFeaturesConfig = ({
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
+                    data-testid="ai-feature-rewriter-test"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -620,6 +630,7 @@ const AIFeaturesConfig = ({
                     {rewriterTest.status === "loading" ? "Testing..." : "Test"}
                   </Button>
                   <Button
+                    data-testid="ai-feature-rewriter-clear"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -642,7 +653,7 @@ const AIFeaturesConfig = ({
       </div>
 
       {/* Writer */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="ai-feature-writer-section">
         <Card variant="default">
           <SettingsRow label="Content Writer">
             <Toggle
@@ -662,6 +673,7 @@ const AIFeaturesConfig = ({
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
+                    data-testid="ai-feature-writer-test"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"
@@ -670,6 +682,7 @@ const AIFeaturesConfig = ({
                     {writerTest.status === "loading" ? "Testing..." : "Test"}
                   </Button>
                   <Button
+                    data-testid="ai-feature-writer-clear"
                     variant={isLightBackground ? "dark" : "default"}
                     size="sm"
                     className="w-full"

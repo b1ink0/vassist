@@ -58,6 +58,8 @@ const ProviderSelection = ({
           <div
             key={provider.id}
             onClick={() => available && onProviderSelect(provider.id)}
+            data-testid={`provider-option-${provider.id}`}
+            data-selected={selectedProvider === provider.id ? "true" : "false"}
             className={cn(
               "rounded-lg transition-all duration-300 border-2",
               compact ? "p-2 sm:p-3" : "p-6",

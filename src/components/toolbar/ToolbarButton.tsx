@@ -25,6 +25,7 @@ export interface ToolbarButtonProps {
   title?: string;
   isLightBackground?: boolean;
   maxLabelWidth?: string;
+  testId?: string;
   onMouseEnterButton?: MouseEventHandler<HTMLButtonElement>;
   onMouseLeaveButton?: MouseEventHandler<HTMLButtonElement>;
 }
@@ -41,6 +42,7 @@ const ToolbarButton = ({
   title = "",
   isLightBackground: _isLightBackground = false,
   maxLabelWidth = "100px",
+  testId,
   onMouseEnterButton,
   onMouseLeaveButton,
 }: ToolbarButtonProps) => {
@@ -137,6 +139,12 @@ const ToolbarButton = ({
   return (
     <button
       ref={buttonRef}
+      data-testid={
+        testId ||
+        (actionType
+          ? `ai-toolbar-button-${actionType.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+          : undefined)
+      }
       onClick={onClick}
       disabled={disabled}
       onMouseEnter={handleMouseEnter}

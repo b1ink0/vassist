@@ -246,6 +246,7 @@ const UISettings = ({
         >
           <Toggle
             checked={uiConfig.enableColoredIcons || false}
+            data-testid="toggle-use-colored-icons"
             onChange={(checked) =>
               updateUIConfig("enableColoredIcons", checked)
             }
@@ -326,6 +327,7 @@ const UISettings = ({
             </div>
             <Toggle
               checked={uiConfig.smoothStreamingAnimation || false}
+              data-testid="toggle-smooth-streaming-animation"
               onChange={(checked) =>
                 updateUIConfig("smoothStreamingAnimation", checked)
               }

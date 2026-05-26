@@ -398,6 +398,7 @@ const ChatMessage = ({
 
                   <textarea
                     ref={editTextareaRef}
+                    data-testid={`chat-message-edit-textarea-${messageIndex}`}
                     value={editingContent}
                     onChange={handleEditContentChange}
                     className={cn(
@@ -418,6 +419,7 @@ const ChatMessage = ({
                   <div className="flex gap-1 justify-end mt-1">
                     <Button
                       onClick={handleCancelEdit}
+                      data-testid={`chat-message-edit-cancel-${messageIndex}`}
                       variant={isLightBackground ? "dark" : "default"}
                       className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Cancel (Esc)"
@@ -433,6 +435,7 @@ const ChatMessage = ({
                     </Button>
                     <Button
                       onClick={handleSaveEdit}
+                      data-testid={`chat-message-edit-save-${messageIndex}`}
                       disabled={
                         !editingContent.trim() &&
                         editingImages.length === 0 &&
@@ -508,6 +511,7 @@ const ChatMessage = ({
                   <>
                     <Button
                       onClick={() => onPreviousBranch(message)}
+                      data-testid={`chat-message-assistant-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
                       variant={isLightBackground ? "dark" : "default"}
                       className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
@@ -532,6 +536,7 @@ const ChatMessage = ({
                     </span>
                     <Button
                       onClick={() => onNextBranch(message)}
+                      data-testid={`chat-message-assistant-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
                       variant={isLightBackground ? "dark" : "default"}
                       className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
@@ -635,6 +640,7 @@ const ChatMessage = ({
               {isUser && !isError && !isEditing && (
                 <Button
                   onClick={handleStartEdit}
+                  data-testid={`chat-message-edit-button-${messageIndex}`}
                   variant={isLightBackground ? "dark" : "default"}
                   className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Edit message"
@@ -657,6 +663,7 @@ const ChatMessage = ({
                   <>
                     <Button
                       onClick={() => onPreviousBranch(message)}
+                      data-testid={`chat-message-user-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
                       variant={isLightBackground ? "dark" : "default"}
                       className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
@@ -681,6 +688,7 @@ const ChatMessage = ({
                     </span>
                     <Button
                       onClick={() => onNextBranch(message)}
+                      data-testid={`chat-message-user-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
                       variant={isLightBackground ? "dark" : "default"}
                       className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
@@ -701,6 +709,7 @@ const ChatMessage = ({
               {!isUser && !isError && !isEditing && (
                 <Button
                   onClick={() => onRewriteMessage(message)}
+                  data-testid={`chat-message-regenerate-button-${messageIndex}`}
                   variant={isLightBackground ? "dark" : "default"}
                   className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Regenerate response"

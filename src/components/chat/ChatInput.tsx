@@ -40,6 +40,7 @@ import { useDesktopApi } from "../../hooks/useDesktopStore";
 import MicrophoneService from "../../services/MicrophoneService";
 import CameraService from "../../services/CameraService";
 import ScreenShareService from "../../services/ScreenShareService";
+import { isVAssistTestMode } from "../../testing/runtime";
 import { cn } from "../../utils/cn";
 
 interface AttachmentItem {
@@ -1446,6 +1447,30 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      * Toggles voice conversation mode.
      */
     const handleVoiceModeToggle = async () => {
+      if (isVAssistTestMode) {
+        if (isVoiceMode) {
+          setIsVoiceMode(false);
+          setVoiceState(ConversationStates.IDLE);
+          setAttachedImages([]);
+          setAttachedAudios([]);
+          setRecordingError("");
+          if (onVoiceMode) {
+            onVoiceMode(false);
+          }
+        } else {
+          setAttachedImages([]);
+          setAttachedAudios([]);
+          setRecordingError("");
+          setVoiceState(ConversationStates.IDLE);
+          setIsVoiceMode(true);
+          if (onVoiceMode) {
+            onVoiceMode(true);
+          }
+        }
+
+        return;
+      }
+
       if (!STTServiceProxy.isConfigured()) {
         setRecordingError(
           "STT not configured. Please configure in Control Panel.",
@@ -1988,6 +2013,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                     {voiceStateDisplay.showInterrupt && (
                       <Button
                         type="button"
+                        data-testid="chat-voice-interrupt-button"
                         onClick={handleInterrupt}
                         variant="unstyled"
                         className={iconButtonClass({
@@ -2018,6 +2044,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       trigger={
                         <Button
                           type="button"
+                          data-testid="chat-voice-mic-select"
                           variant="unstyled"
                           disabled={isRecording || isProcessingRecording}
                           className={iconButtonClass({
@@ -2041,6 +2068,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
                     <Button
                       type="button"
+                      data-testid="chat-voice-attach-image-button"
                       onClick={() => imageInputRef.current?.click()}
                       variant="unstyled"
                       className={iconButtonClass({
@@ -2064,6 +2092,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                     <div className="relative flex items-center gap-1">
                       <Button
                         type="button"
+                        data-testid="chat-voice-camera-toggle-button"
                         onClick={handleCameraClick}
                         variant="unstyled"
                         className={iconButtonClass({
@@ -2093,6 +2122,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         trigger={
                           <Button
                             type="button"
+                            data-testid="chat-voice-camera-select"
                             variant="unstyled"
                             className={iconButtonClass()}
                             title="Select Camera"
@@ -2111,6 +2141,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                     {!isAndroid && (
                       <Button
                         type="button"
+                        data-testid="chat-voice-screen-share-button"
                         onClick={handleScreenShareClick}
                         variant="unstyled"
                         className={iconButtonClass({
@@ -2138,6 +2169,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
                     <Button
                       type="button"
+                      data-testid="chat-voice-close-button"
                       onClick={handleVoiceModeToggle}
                       variant="unstyled"
                       className={iconButtonClass()}
@@ -2161,6 +2193,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                 >
                   <textarea
                     ref={textareaRef}
+                    data-testid="chat-input-textarea"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -2183,6 +2216,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         type="button"
                         onClick={() => imageInputRef.current?.click()}
+                        data-testid="chat-attach-image-button"
                         disabled={isRecording || isProcessingRecording}
                         className={cn(
                           "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
@@ -2209,6 +2243,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         type="button"
                         onClick={() => audioInputRef.current?.click()}
+                        data-testid="chat-attach-audio-button"
                         disabled={isRecording || isProcessingRecording}
                         className={cn(
                           "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
@@ -2235,6 +2270,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         type="button"
                         onClick={handleMicClick}
+                        data-testid="chat-voice-input-button"
                         disabled={isProcessingRecording}
                         className={cn(
                           "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
@@ -2269,6 +2305,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         type="button"
                         onClick={handleVoiceModeToggle}
+                        data-testid="chat-voice-mode-button"
                         disabled={isRecording || isProcessingRecording}
                         className={cn(
                           "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
@@ -2286,6 +2323,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         type="button"
                         onClick={wrappedOnClose}
+                        data-testid="chat-close-button"
                         className={cn(
                           "p-1.5 rounded-lg transition-all hover:bg-white/10",
                           isLightBackground ? "glass-text" : "glass-text-black",
@@ -2300,6 +2338,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       <button
                         ref={submitButtonRef}
                         type="submit"
+                        data-testid="chat-send-button"
                         disabled={!message.trim() && !hasAttachments}
                         className={cn(
                           "p-1.5 rounded-lg transition-all",

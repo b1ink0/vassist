@@ -384,6 +384,7 @@ const ChatHistoryPanel = ({
   return (
     <div
       ref={containerRef}
+      data-testid="chat-history-panel"
       className={cn(
         "flex flex-col h-full rounded-3xl overflow-hidden glass-container",
         isLightBackground && "glass-container-dark",
@@ -415,6 +416,7 @@ const ChatHistoryPanel = ({
         <div className="relative">
           <Input
             type="text"
+            data-testid="chat-history-search-input"
             placeholder="Search chats..."
             value={searchQuery}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -424,6 +426,7 @@ const ChatHistoryPanel = ({
           />
           {searchQuery && (
             <Button
+              data-testid="chat-history-search-clear"
               onClick={() => {
                 setSearchQuery("");
               }}
@@ -470,6 +473,7 @@ const ChatHistoryPanel = ({
         {filteredChats.map((chat) => (
           <div
             key={chat.chatId}
+            data-testid={`chat-history-item-${chat.chatId}`}
             className="px-2 md:px-4 py-2 md:py-3 border-b border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
             onClick={() => onSelectChat && onSelectChat(chat)}
           >
@@ -509,6 +513,7 @@ const ChatHistoryPanel = ({
                     e.stopPropagation();
                     handleEditTitle(chat);
                   }}
+                  data-testid={`chat-history-edit-${chat.chatId}`}
                   variant={isLightBackground ? "dark" : "default"}
                   className="h-6 w-6 rounded-md"
                   title="Edit title"
@@ -529,6 +534,7 @@ const ChatHistoryPanel = ({
                     e.stopPropagation();
                     handleDeleteClick(chat.chatId);
                   }}
+                  data-testid={`chat-history-delete-${chat.chatId}`}
                   disabled={deletingChatId === chat.chatId}
                   variant={isLightBackground ? "dark" : "default"}
                   className={cn(

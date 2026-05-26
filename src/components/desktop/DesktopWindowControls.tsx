@@ -51,6 +51,7 @@ export default function DesktopWindowControls() {
 
   return (
     <div
+      data-testid="desktop-window-controls"
       data-electron-interactive="true"
       className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
     >
@@ -61,6 +62,7 @@ export default function DesktopWindowControls() {
       )}
       <button
         onClick={handleMinimize}
+        data-testid="desktop-window-minimize-button"
         className="p-1 rounded-full hover:bg-white/10 transition-colors"
         title="Minimize"
       >
@@ -68,6 +70,7 @@ export default function DesktopWindowControls() {
       </button>
       <button
         onClick={handleMaximize}
+        data-testid="desktop-window-maximize-button"
         className="p-1 rounded-full hover:bg-white/10 transition-colors"
         title="Maximize/Restore"
       >
@@ -75,6 +78,7 @@ export default function DesktopWindowControls() {
       </button>
       <button
         onClick={handleClose}
+        data-testid="desktop-window-close-button"
         className="p-1 rounded-full hover:bg-red-500/30 transition-colors"
         title="Close"
       >

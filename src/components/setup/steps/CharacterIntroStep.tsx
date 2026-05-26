@@ -147,6 +147,7 @@ const CharacterIntroStep = ({
           >
             <Toggle
               checked={characterEnabled}
+              data-testid="setup-toggle-enable-avatar"
               onChange={handleCharacterToggle}
             />
           </SettingsRow>
@@ -170,6 +171,7 @@ const CharacterIntroStep = ({
                       : "border-white/10 bg-white/5 hover:border-white/20",
                   )}
                   onClick={() => handleDisplayModeChange("normal")}
+                  data-testid="setup-display-mode-normal"
                 >
                   {displayMode === "normal" && (
                     <div className="absolute top-3 right-3 z-10">
@@ -236,6 +238,7 @@ const CharacterIntroStep = ({
                       : "border-white/10 bg-white/5 hover:border-white/20",
                   )}
                   onClick={() => handleDisplayModeChange("portrait")}
+                  data-testid="setup-display-mode-portrait"
                 >
                   {displayMode === "portrait" && (
                     <div className="absolute top-3 right-3 z-10">
@@ -304,6 +307,7 @@ const CharacterIntroStep = ({
                       <button
                         key={position.key}
                         onClick={() => handlePositionChange(position.key)}
+                        data-testid={`setup-position-${position.key}`}
                         className={cn(
                           "relative p-3 rounded-lg border-2 transition-all duration-300 text-left",
                           isSelected

@@ -328,6 +328,7 @@ const STTSettings = ({
         <SettingsRow label="Enable Speech-to-Text">
           <Toggle
             id="enable-stt"
+            data-testid="toggle-enable-stt"
             checked={sttConfig.enabled}
             onChange={(checked) => updateSTTConfig("enabled", checked)}
           />

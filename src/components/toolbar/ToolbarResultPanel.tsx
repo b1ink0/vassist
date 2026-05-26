@@ -140,6 +140,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
         ref={ref}
         data-electron-interactive="true"
         data-ai-toolbar-result="true"
+        data-testid="ai-toolbar-result-panel"
         className={cn(
           "fixed top-0 left-0 w-[380px] p-3 rounded-xl",
           "border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl",
@@ -179,6 +180,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
             {/* Language selector for translation */}
             {action === "translate" && !isLoading && onTargetLanguageChange && (
               <select
+                data-testid="ai-toolbar-translate-target-select"
                 value={
                   selectedTargetLanguage ||
                   aiConfig?.aiFeatures?.translator?.defaultTargetLanguage ||
@@ -203,6 +205,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
             {/* Regenerate button */}
             {!isLoading && !error && result && onRegenerateClick && (
               <button
+                data-testid="ai-toolbar-result-regenerate"
                 onClick={onRegenerateClick}
                 disabled={isRegenerating}
                 className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white"
@@ -218,6 +221,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
             {/* Copy button */}
             {!isLoading && !error && result && onCopyClick && (
               <button
+                data-testid="ai-toolbar-result-copy"
                 onClick={onCopyClick}
                 className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
                 title="Copy to clipboard"
@@ -238,6 +242,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
               ttsConfig?.enabled &&
               onSpeakerClick && (
                 <button
+                  data-testid="ai-toolbar-result-speaker"
                   onClick={onSpeakerClick}
                   disabled={false}
                   className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed text-white"
@@ -265,6 +270,7 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
 
           {/* Close button */}
           <button
+            data-testid="ai-toolbar-result-close"
             onClick={onClose}
             className="w-5 h-5 flex items-center justify-center text-xs rounded-xl border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
           >

@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
   const shouldZip = process.env.ZIP === "true";
+  const outDir = process.env.VITE_VASSIST_EXTENSION_OUT_DIR || "dist-extension";
 
   return {
     plugins: [
@@ -28,7 +29,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       wrapContentScriptPlugin(), // Wrap content script as IIFE
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
-      vadAssetsPlugin("dist-extension"),
+      vadAssetsPlugin(outDir),
     ],
 
     define: {
@@ -41,7 +42,7 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      outDir: "dist-extension",
+      outDir,
       emptyOutDir: true,
 
       // Minify for production using esbuild

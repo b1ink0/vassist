@@ -411,6 +411,7 @@ const RemoteProfileManager = ({
         Saved Backends
       </label>
       <Input
+        data-testid="llm-saved-backend-name-input"
         type="text"
         value={profileName}
         onChange={(event) => setProfileName(event.target.value)}
@@ -420,6 +421,7 @@ const RemoteProfileManager = ({
       />
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <Select
+          data-testid="llm-saved-backend-select"
           value={selectedProfileId}
           onChange={(event) => handleProfileChange(event.target.value)}
           variant={isLightBackground ? "dark" : "default"}
@@ -440,6 +442,7 @@ const RemoteProfileManager = ({
         />
         <Button
           type="button"
+          data-testid="llm-saved-backend-new-button"
           size="icon"
           variant={actionVariant}
           onClick={startNewProfile}
@@ -450,6 +453,7 @@ const RemoteProfileManager = ({
         </Button>
         <Button
           type="button"
+          data-testid="llm-saved-backend-save-button"
           size="icon"
           variant={isLightBackground ? "dark" : "default"}
           onClick={saveCurrentProvider}
@@ -460,6 +464,7 @@ const RemoteProfileManager = ({
         </Button>
         <Button
           type="button"
+          data-testid="llm-saved-backend-delete-button"
           size="icon"
           variant="error"
           onClick={deleteProfile}
@@ -522,6 +527,7 @@ const ModelConfigRemote = ({
           </p>
         </div>
         <Toggle
+          data-testid="llm-routing-enabled-toggle"
           checked={routing?.enabled === true}
           onChange={(checked) =>
             onChange("routing", { ...routing, enabled: checked })
@@ -540,6 +546,7 @@ const ModelConfigRemote = ({
               <div className="flex items-center gap-2">
                 <span className="text-xs text-white/60">Use main LLM</span>
                 <Toggle
+                  data-testid="llm-routing-vision-use-main-toggle"
                   checked={routing?.visionModel?.useSameAsMain !== false}
                   onChange={(checked) =>
                     onChange("routing", {
@@ -556,6 +563,7 @@ const ModelConfigRemote = ({
             {routing?.visionModel?.useSameAsMain === false && (
               <div className="space-y-2">
                 <Select
+                  data-testid="llm-routing-vision-profile-select"
                   value={routing?.visionModel?.profileId || ""}
                   onChange={(event) =>
                     onChange("routing", {
@@ -570,6 +578,7 @@ const ModelConfigRemote = ({
                   options={profileOptions}
                 />
                 <RemoteModelPicker
+                  inputTestId="llm-routing-vision-model-input"
                   value={routing?.visionModel?.modelName || ""}
                   onChange={(value) =>
                     onChange("routing", {
@@ -599,6 +608,7 @@ const ModelConfigRemote = ({
               <div className="flex items-center gap-2">
                 <span className="text-xs text-white/60">Use main LLM</span>
                 <Toggle
+                  data-testid="llm-routing-router-use-main-toggle"
                   checked={routing?.routerModel?.useSameAsMain !== false}
                   onChange={(checked) =>
                     onChange("routing", {
@@ -615,6 +625,7 @@ const ModelConfigRemote = ({
             {routing?.routerModel?.useSameAsMain === false && (
               <div className="space-y-2">
                 <Select
+                  data-testid="llm-routing-router-profile-select"
                   value={routing?.routerModel?.profileId || ""}
                   onChange={(event) =>
                     onChange("routing", {
@@ -629,6 +640,7 @@ const ModelConfigRemote = ({
                   options={profileOptions}
                 />
                 <RemoteModelPicker
+                  inputTestId="llm-routing-router-model-input"
                   value={routing?.routerModel?.modelName || ""}
                   onChange={(value) =>
                     onChange("routing", {
@@ -1313,6 +1325,7 @@ const SystemPromptSection = ({
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <Select
+              data-testid="llm-system-profile-select"
               value={selectedProfile?.id || "default"}
               onChange={(e) => {
                 const nextId = e.target.value;
@@ -1326,6 +1339,7 @@ const SystemPromptSection = ({
             />
           </div>
           <Button
+            data-testid="llm-system-profile-add-button"
             size="icon"
             variant={isLightBackground ? "dark" : "default"}
             title="Add profile"
@@ -1334,6 +1348,7 @@ const SystemPromptSection = ({
             <Icon name="add" size={16} />
           </Button>
           <Button
+            data-testid="llm-system-profile-delete-button"
             size="icon"
             variant={isLightBackground ? "dark" : "default"}
             title="Delete current profile"
@@ -1353,6 +1368,7 @@ const SystemPromptSection = ({
           Profile Name
         </label>
         <Input
+          data-testid="llm-system-profile-name-input"
           value={draftProfileName}
           onChange={(e) => setDraftProfileName(e.target.value)}
           onBlur={() => commitDraftEdits()}
@@ -1367,6 +1383,7 @@ const SystemPromptSection = ({
           System Prompt
         </label>
         <textarea
+          data-testid="llm-system-profile-prompt-input"
           value={draftProfilePrompt}
           onChange={(e) => setDraftProfilePrompt(e.target.value)}
           onBlur={() => commitDraftEdits()}

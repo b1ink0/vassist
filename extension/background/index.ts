@@ -63,6 +63,131 @@ const asNumberArray = (value: MessageValue): number[] => {
   return value.filter((item): item is number => typeof item === "number");
 };
 
+const isFakeAiTestMode =
+  import.meta.env.VITE_VASSIST_FAKE_AI === "1" ||
+  import.meta.env.VITE_VASSIST_FAKE_AI === "true";
+const fakeAiConfiguredTabs = new Set<number>();
+
+const normalizeFakeAiText = (value: string): string =>
+  value.replace(/\s+/g, " ").trim();
+
+const extractFakeAiMessageContent = (message: unknown): string => {
+  const content =
+    message && typeof message === "object" && "content" in message
+      ? (message as { content?: unknown }).content
+      : message;
+
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return "";
+      }
+
+      const part = item as { type?: string; value?: unknown };
+      if (part.type === "text") {
+        return typeof part.value === "string" ? part.value : "";
+      }
+
+      if (part.type === "image") {
+        return "[image]";
+      }
+
+      if (part.type === "audio") {
+        return "[audio]";
+      }
+
+      return "";
+    })
+    .join(" ");
+};
+
+const extractFakeAiInputText = (messages: unknown[]): string => {
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message &&
+        typeof message === "object" &&
+        "role" in message &&
+        (message as { role?: unknown }).role === "user",
+    );
+
+  const prioritizedText = lastUserMessage
+    ? extractFakeAiMessageContent(lastUserMessage)
+    : messages.map(extractFakeAiMessageContent).join(" ");
+
+  return normalizeFakeAiText(prioritizedText);
+};
+
+const buildFakeAiTitle = (promptText: string): string => {
+  const userMessageMatch = promptText.match(/User message:\s*"([\s\S]*?)"/i);
+  const sourceText = userMessageMatch?.[1] ?? promptText;
+  const normalized = normalizeFakeAiText(sourceText).replace(/^"|"$/g, "");
+
+  if (!normalized) {
+    return "New Chat";
+  }
+
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(" ")
+    .slice(0, 50);
+};
+
+const buildFakeAiResponse = (messages: unknown[]): string => {
+  const promptText = extractFakeAiInputText(messages);
+
+  if (!promptText) {
+    return "Fake assistant response: (empty prompt)";
+  }
+
+  if (/say\s+"?ok"?\s+if\s+you\s+can\s+hear\s+me/i.test(promptText)) {
+    return "OK";
+  }
+
+  if (/generate a very short title/i.test(promptText)) {
+    return buildFakeAiTitle(promptText);
+  }
+
+  if (/transcribe this audio/i.test(promptText)) {
+    return "Fake transcription of the provided audio.";
+  }
+
+  return `Fake assistant response: ${promptText}`;
+};
+
+const streamFakeAiResponse = async (
+  response: string,
+  onToken: ((token: string) => void) | null,
+): Promise<void> => {
+  if (!onToken) {
+    return;
+  }
+
+  const splitIndex = Math.max(1, Math.floor(response.length / 2));
+  const firstChunk = response.slice(0, splitIndex);
+  const secondChunk = response.slice(splitIndex);
+
+  if (firstChunk) {
+    onToken(firstChunk);
+  }
+
+  if (secondChunk) {
+    await Promise.resolve();
+    onToken(secondChunk);
+  }
+};
+
 const requireSenderTabId = (sender: chrome.runtime.MessageSender): number => {
   if (typeof sender.tab?.id !== "number") {
     throw new Error("Sender tab ID required");
@@ -825,6 +950,10 @@ async function registerHandlers() {
     MessageTypes.AI_CONFIGURE,
     async (message, _sender, tabId) => {
       if (!tabId) throw new Error("Tab ID required");
+      if (isFakeAiTestMode) {
+        fakeAiConfiguredTabs.add(tabId);
+        return { configured: true };
+      }
       const config = asMessageData(message.data.config);
       Logger.log("Background", "AI_CONFIGURE called for tab:", tabId);
       await aiService.configure(config, tabId);
@@ -837,6 +966,9 @@ async function registerHandlers() {
     MessageTypes.AI_IS_CONFIGURED,
     async (_message, _sender, tabId) => {
       if (!tabId) throw new Error("Tab ID required");
+      if (isFakeAiTestMode) {
+        return { configured: fakeAiConfiguredTabs.has(tabId) };
+      }
       const configured = aiService.isConfigured(tabId);
       return { configured };
     },
@@ -871,6 +1003,12 @@ async function registerHandlers() {
           }
         : null;
 
+      if (isFakeAiTestMode) {
+        const response = buildFakeAiResponse(messages);
+        await streamFakeAiResponse(response, streamCallback);
+        return { response };
+      }
+
       // Call AI service with or without streaming
       const result = await aiService.sendMessage(
         messages,
@@ -887,6 +1025,9 @@ async function registerHandlers() {
     MessageTypes.AI_ABORT,
     async (_message, _sender, tabId) => {
       if (!tabId) throw new Error("Tab ID required");
+      if (isFakeAiTestMode) {
+        return { aborted: true };
+      }
       const aborted = aiService.abortRequest(tabId);
       return { aborted };
     },
@@ -896,6 +1037,9 @@ async function registerHandlers() {
     MessageTypes.AI_IS_GENERATING,
     async (_message, _sender, tabId) => {
       if (!tabId) throw new Error("Tab ID required");
+      if (isFakeAiTestMode) {
+        return { isGenerating: false };
+      }
       const isGenerating = aiService.isGenerating(tabId);
       return { isGenerating };
     },
@@ -905,6 +1049,9 @@ async function registerHandlers() {
     MessageTypes.AI_TEST_CONNECTION,
     async (message, _sender, tabId) => {
       if (!tabId) throw new Error("Tab ID required");
+      if (isFakeAiTestMode) {
+        return { success: true };
+      }
       const success = await aiService.testConnection(tabId);
       return { success };
     },

@@ -13,6 +13,7 @@ interface RemoteModelPickerProps {
   placeholder?: string;
   isLightBackground?: boolean;
   disabled?: boolean;
+  inputTestId?: string;
 }
 
 const RemoteModelPicker = ({
@@ -24,6 +25,7 @@ const RemoteModelPicker = ({
   placeholder,
   isLightBackground = false,
   disabled = false,
+  inputTestId,
 }: RemoteModelPickerProps) => {
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -114,6 +116,7 @@ const RemoteModelPicker = ({
       >
         <div className="relative">
           <Autocomplete.Input
+            data-testid={inputTestId}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             onFocus={() => setOpen(true)}

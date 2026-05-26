@@ -18,6 +18,7 @@ import {
   isScreenPicker,
 } from "./utils/PlatformUtils";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { vassistTestFlags } from "./testing/runtime";
 
 interface AppWithSetupProps {
   mode?: string;
@@ -166,6 +167,8 @@ function App({
   isWallpaperMode: explicitWallpaperMode,
 }: AppProps) {
   const [devSetupStarted, setDevSetupStarted] = useState(false);
+  const shouldRenderCameraPreview =
+    !vassistTestFlags.enabled || !vassistTestFlags.disableCamera;
 
   // Determine actual mode based on build-time constants and props
   const actualMode = __DESKTOP_MODE__
@@ -203,9 +206,11 @@ function App({
                 <LazyAndroidBackground />
               </Suspense>
               <AppWithSetup mode="android" />
-              <Suspense fallback={null}>
-                <LazyVideoPreview service={CameraService} type="camera" />
-              </Suspense>
+              {shouldRenderCameraPreview && (
+                <Suspense fallback={null}>
+                  <LazyVideoPreview service={CameraService} type="camera" />
+                </Suspense>
+              )}
             </div>
           </AnimationProvider>
         </SetupProvider>
@@ -239,7 +244,9 @@ function App({
             />
           </Suspense>
           <Suspense fallback={null}>
-            <LazyVideoPreview service={CameraService} type="camera" />
+            {shouldRenderCameraPreview && (
+              <LazyVideoPreview service={CameraService} type="camera" />
+            )}
             <LazyVideoPreview service={ScreenShareService} type="screen" />
           </Suspense>
         </StoreBootstrap>
@@ -259,7 +266,9 @@ function App({
             <div className="relative w-full h-screen overflow-hidden">
               <AppWithSetup mode="desktop" />
               <Suspense fallback={null}>
-                <LazyVideoPreview service={CameraService} type="camera" />
+                {shouldRenderCameraPreview && (
+                  <LazyVideoPreview service={CameraService} type="camera" />
+                )}
                 <LazyVideoPreview service={ScreenShareService} type="screen" />
               </Suspense>
             </div>
@@ -276,17 +285,21 @@ function App({
         <AnimationProvider>
           {actualMode === "development" ? (
             <div className="relative w-full h-screen overflow-hidden">
-              <DevelopmentDemoSite
-                onStartSetup={() => setDevSetupStarted(true)}
-              />
+              {!vassistTestFlags.enabled && (
+                <DevelopmentDemoSite
+                  onStartSetup={() => setDevSetupStarted(true)}
+                />
+              )}
               <AppWithSetup
                 mode="development"
-                deferSetupUntilStarted={true}
-                setupStarted={devSetupStarted}
+                deferSetupUntilStarted={!vassistTestFlags.enabled}
+                setupStarted={vassistTestFlags.enabled || devSetupStarted}
                 onStartSetup={() => setDevSetupStarted(true)}
               />
               <Suspense fallback={null}>
-                <LazyVideoPreview service={CameraService} type="camera" />
+                {shouldRenderCameraPreview && (
+                  <LazyVideoPreview service={CameraService} type="camera" />
+                )}
                 <LazyVideoPreview service={ScreenShareService} type="screen" />
               </Suspense>
             </div>
@@ -294,7 +307,9 @@ function App({
             <>
               <AppWithSetup mode="extension" />
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-                <LazyVideoPreview service={CameraService} type="camera" />
+                {shouldRenderCameraPreview && (
+                  <LazyVideoPreview service={CameraService} type="camera" />
+                )}
                 <LazyVideoPreview service={ScreenShareService} type="screen" />
               </Suspense>
             </>

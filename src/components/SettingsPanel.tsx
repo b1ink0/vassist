@@ -239,6 +239,9 @@ const SettingsPanel = ({
 
   return (
     <div
+      role="dialog"
+      aria-label="Settings panel"
+      data-testid="settings-panel"
       className={cn(
         "absolute inset-0 flex flex-col glass-container rounded-2xl overflow-hidden",
         isLightBackground && "glass-container-dark",
@@ -310,6 +313,7 @@ const SettingsPanel = ({
           activeTab={activeTab}
           onTabChange={(tabId) => setActiveTab(tabId as SettingsTabId)}
           tabsRef={tabsRef}
+          ariaLabel="Settings sections"
         />
       </div>
 
@@ -320,7 +324,10 @@ const SettingsPanel = ({
             transform: `translateX(-${["ui", "3d", "llm", "tts", "stt", "ai-plus"].indexOf(activeTab) * 100}%)`,
           }}
         >
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
+          <div
+            data-testid="settings-tab-ui"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
+          >
             <UISettings
               isLightBackground={isLightBackground}
               {...(onRequestResetSetupDialog
@@ -332,7 +339,10 @@ const SettingsPanel = ({
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass">
+          <div
+            data-testid="settings-tab-3d"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass"
+          >
             <ThreeDSettings
               isLightBackground={isLightBackground}
               {...(onRequestDeleteModelDialog
@@ -354,7 +364,10 @@ const SettingsPanel = ({
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass">
+          <div
+            data-testid="settings-tab-llm"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass"
+          >
             <LLMSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
@@ -363,7 +376,10 @@ const SettingsPanel = ({
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
+          <div
+            data-testid="settings-tab-tts"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
+          >
             <TTSSettings
               isLightBackground={isLightBackground}
               onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
@@ -371,14 +387,20 @@ const SettingsPanel = ({
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
+          <div
+            data-testid="settings-tab-stt"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
+          >
             <STTSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
             />
           </div>
 
-          <div className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4">
+          <div
+            data-testid="settings-tab-ai-plus"
+            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
+          >
             <AIFeaturesSettings isLightBackground={isLightBackground} />
           </div>
         </div>

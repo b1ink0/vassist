@@ -1931,6 +1931,7 @@ const ThreeDSettings = ({
                 </div>
                 <Toggle
                   checked={uiConfig.enableModelLoading}
+                  data-testid="toggle-enable-avatar"
                   onChange={(checked) =>
                     updateUIConfig("enableModelLoading", checked)
                   }

@@ -30,6 +30,7 @@ interface ShortcutInputProps {
   placeholder: string;
   disabled: boolean;
   isLightBackground: boolean;
+  testId: string;
 }
 
 interface ShortcutsConfigProps {
@@ -123,6 +124,7 @@ const ShortcutInput = ({
   placeholder,
   disabled,
   isLightBackground,
+  testId,
 }: ShortcutInputProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const inputRef = useRef<HTMLDivElement | null>(null);
@@ -170,6 +172,7 @@ const ShortcutInput = ({
         ref={inputRef}
         tabIndex={disabled ? -1 : 0}
         onClick={handleClick}
+        data-testid={testId}
         className={cn(
           "glass-input",
           isLightBackground && "glass-input-dark",
@@ -195,6 +198,7 @@ const ShortcutInput = ({
       {value && !disabled && (
         <Button
           onClick={handleClear}
+          data-testid={`${testId}-clear`}
           variant="default"
           className={cn(
             "p-2 transition-colors",
@@ -320,6 +324,7 @@ const ShortcutsConfig = ({
             placeholder="Click to set shortcut"
             disabled={!localShortcuts.enabled}
             isLightBackground={isLightBackground}
+            testId="shortcut-input-open-chat"
           />
         </div>
 
@@ -338,6 +343,7 @@ const ShortcutsConfig = ({
             placeholder="Click to set shortcut"
             disabled={!localShortcuts.enabled}
             isLightBackground={isLightBackground}
+            testId="shortcut-input-toggle-avatar"
           />
         </div>
 
@@ -358,6 +364,7 @@ const ShortcutsConfig = ({
             placeholder="Click to set shortcut"
             disabled={!localShortcuts.enabled}
             isLightBackground={isLightBackground}
+            testId="shortcut-input-toggle-visibility"
           />
         </div>
       </div>

@@ -59,10 +59,16 @@ function copyDir(
  * Plugin to wrap content script as IIFE
  */
 export function wrapContentScriptPlugin(): Plugin {
+  let distDir = path.join(rootDir, "dist-extension");
+
   return {
     name: "wrap-content-script",
+    configResolved(config) {
+      distDir = path.isAbsolute(config.build.outDir)
+        ? config.build.outDir
+        : path.join(rootDir, config.build.outDir);
+    },
     writeBundle() {
-      const distDir = path.join(rootDir, "dist-extension");
       const contentFile = path.join(distDir, "content.js");
 
       if (!fs.existsSync(contentFile)) {
@@ -104,19 +110,25 @@ export function wrapContentScriptPlugin(): Plugin {
  * Plugin to copy assets to extension build
  */
 export function copyAssetsPlugin(shouldZip: boolean): Plugin {
+  let distDir = path.join(rootDir, "dist-extension");
+
   return {
     name: "copy-assets",
+    configResolved(config) {
+      distDir = path.isAbsolute(config.build.outDir)
+        ? config.build.outDir
+        : path.join(rootDir, config.build.outDir);
+    },
     closeBundle() {
       const publicDir = path.join(rootDir, "public");
       const resDir = path.join(publicDir, "res");
       const iconsDir = path.join(rootDir, "extension", "icons");
       const manifestFile = path.join(rootDir, "extension", "manifest.json");
-      const distDir = path.join(rootDir, "dist-extension");
       const distResDir = path.join(distDir, "res");
       const distIconsDir = path.join(distDir, "icons");
       const distManifestFile = path.join(distDir, "manifest.json");
 
-      console.log("[copy-assets] Copying assets to dist-extension...");
+      console.log(`[copy-assets] Copying assets to ${distDir}...`);
 
       if (fs.existsSync(resDir)) {
         console.log(`[copy-assets] Copying ${resDir} to ${distResDir}`);

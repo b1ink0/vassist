@@ -46,6 +46,9 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+const isElectronTestMode =
+  process.env.VITE_VASSIST_TEST_MODE === "1" ||
+  process.env.VITE_VASSIST_TEST_MODE === "true";
 const serverBasePath = devServerUrl
   ? path.join(process.cwd(), "electron", "server")
   : path.join(__dirname, "server");
@@ -165,10 +168,14 @@ app.whenReady().then(() => {
 
   setupAppProtocolHandler({ protocol, fs, path, __dirname });
 
-  trayShortcutsManager.createTray();
+  if (!isElectronTestMode) {
+    trayShortcutsManager.createTray();
+  }
   windowManager.createMainWindow();
 
-  pythonServerManager.startWhisperServer();
+  if (!isElectronTestMode) {
+    pythonServerManager.startWhisperServer();
+  }
 
   app.on("activate", () => {
     windowManager.showMainWindowFromActivate();

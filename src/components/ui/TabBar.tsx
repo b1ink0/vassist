@@ -30,6 +30,7 @@ interface TabBarProps {
   onTabChange: (tabId: string) => void;
   tabsRef?: MutableRefObject<TabRefs>;
   size?: VariantProps<typeof tabButtonVariants>["size"];
+  ariaLabel?: string;
 }
 
 const TabBar = ({
@@ -38,8 +39,13 @@ const TabBar = ({
   onTabChange,
   tabsRef,
   size = "default",
+  ariaLabel,
 }: TabBarProps) => (
-  <div className="flex border-b border-white/20 relative">
+  <div
+    className="flex border-b border-white/20 relative"
+    role="tablist"
+    aria-label={ariaLabel}
+  >
     {tabs.map(({ id, label }) => (
       <button
         key={id}
@@ -58,6 +64,9 @@ const TabBar = ({
           activeTab === id ? "text-white" : "text-white/60 hover:text-white/90",
         )}
         type="button"
+        role="tab"
+        aria-selected={activeTab === id}
+        data-testid={`tab-${id}`}
         onClick={() => onTabChange(id)}
       >
         {label}

@@ -1,7 +1,24 @@
+import type { VAssistTestApi } from "./testing/testBridge";
+
 /**
  * Build-time environment constants
  * These are injected by Vite at build time via the `define` option
  */
+
+interface ImportMetaEnv {
+  readonly VITE_VASSIST_TEST_MODE?: string;
+  readonly VITE_VASSIST_DISABLE_CAMERA?: string;
+  readonly VITE_VASSIST_DISABLE_MIC?: string;
+  readonly VITE_VASSIST_DISABLE_TTS?: string;
+  readonly VITE_VASSIST_DISABLE_STT?: string;
+  readonly VITE_VASSIST_DISABLE_HEAVY_MODEL_LOADING?: string;
+  readonly VITE_VASSIST_FAKE_AI?: string;
+  readonly VITE_VASSIST_FAKE_EXTENSION_HOST?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
 
 declare global {
   /**
@@ -33,6 +50,10 @@ declare global {
    * @constant
    */
   const __PROD_MODE__: boolean;
+
+  interface Window {
+    __VASSIST_TEST_API__?: VAssistTestApi;
+  }
 }
 
 export {};

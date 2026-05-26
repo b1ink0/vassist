@@ -2134,6 +2134,16 @@ const ChatButton = ({
           <Button
             onClick={handleClick}
             onMouseDown={handleMouseDown}
+            aria-label={
+              modelDisabled
+                ? isChatOpen
+                  ? "Close chat"
+                  : "Open chat"
+                : isChatOpen
+                  ? "Close chat"
+                  : "Open chat"
+            }
+            data-testid="chat-button"
             style={{
               cursor: modelDisabled
                 ? isDragging

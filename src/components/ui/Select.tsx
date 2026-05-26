@@ -40,6 +40,7 @@ interface SelectProps
   extends
     Omit<SelectHTMLAttributes<HTMLSelectElement>, "onChange">,
     VariantProps<typeof selectVariants> {
+  "data-testid"?: string;
   className?: string;
   options?: SelectOption[];
   groups?: SelectGroup[];
@@ -81,6 +82,7 @@ const Select = ({
   popupClassName,
   listClassName,
   portalContainer,
+  "data-testid": dataTestId,
 }: SelectProps) => {
   const grouped = Array.isArray(groups) && groups.length > 0;
   const optionItems = React.useMemo(() => {
@@ -171,7 +173,11 @@ const Select = ({
       name={name}
       required={required}
     >
-      <BaseSelect.Trigger className={triggerClassName} render={trigger}>
+      <BaseSelect.Trigger
+        className={triggerClassName}
+        render={trigger}
+        data-testid={dataTestId}
+      >
         {!trigger && (
           <>
             <BaseSelect.Value

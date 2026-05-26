@@ -565,6 +565,7 @@ const ChatContainer = ({
         const offsetX = 15;
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
+        const availableHeight = windowHeight - chatInputHeight;
 
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - containerWidth - offsetX;
@@ -593,7 +594,7 @@ const ChatContainer = ({
         let containerY = modelPos.y;
         containerY = Math.max(
           10,
-          Math.min(containerY, windowHeight - containerHeight - 10),
+          Math.min(containerY, availableHeight - containerHeight - 10),
         );
 
         return { x: containerX, y: containerY };
@@ -692,6 +693,7 @@ const ChatContainer = ({
           const offsetX = 15;
           const windowWidth = window.innerWidth;
           const windowHeight = window.innerHeight;
+          const availableHeight = windowHeight - chatInputHeight;
 
           const rightX = modelPos.x + modelPos.width + offsetX;
           const leftX = modelPos.x - containerWidth - offsetX;
@@ -717,7 +719,7 @@ const ChatContainer = ({
           let containerY = modelPos.y;
           containerY = Math.max(
             10,
-            Math.min(containerY, windowHeight - containerHeight - 10),
+            Math.min(containerY, availableHeight - containerHeight - 10),
           );
 
           setContainerPos({ x: containerX, y: containerY });
@@ -1848,6 +1850,8 @@ const ChatContainer = ({
               variant={isLightBackground ? "dark" : "default"}
               className={isClosing ? "animate-fade-out" : "animate-fade-in"}
               title="Settings"
+              aria-label="Settings"
+              data-testid="settings-toggle-button"
             >
               <span
                 className={cn(
@@ -1865,6 +1869,7 @@ const ChatContainer = ({
               variant={isLightBackground ? "dark" : "default"}
               className={isClosing ? "animate-fade-out" : "animate-fade-in"}
               title="Chat history"
+              aria-label="Chat history"
             >
               <span
                 className={cn(

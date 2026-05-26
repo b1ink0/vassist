@@ -334,6 +334,7 @@ const TTSSettings = ({
         <SettingsRow label="Enable Text-to-Speech">
           <Toggle
             id="enable-tts"
+            data-testid="toggle-enable-tts"
             checked={ttsConfig.enabled}
             onChange={(checked) => updateTTSConfig("enabled", checked)}
           />

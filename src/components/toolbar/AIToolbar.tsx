@@ -64,6 +64,32 @@ interface EditableCheckResult {
   selectionEnd: number;
   editableType: EditableType;
 }
+
+const getExtensionShadowRoot = (): ShadowRoot | null => {
+  const extensionContainer = document.getElementById(
+    "virtual-assistant-extension-root",
+  );
+
+  return extensionContainer?.shadowRoot ?? null;
+};
+
+const getFocusedElement = (): HTMLElement | null => {
+  const shadowActiveElement = getExtensionShadowRoot()?.activeElement;
+
+  if (shadowActiveElement instanceof HTMLElement) {
+    return shadowActiveElement;
+  }
+
+  return document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
+};
+
+const getInteractionTargets = (): Array<Document | ShadowRoot> => {
+  const shadowRoot = getExtensionShadowRoot();
+  return shadowRoot ? [document, shadowRoot] : [document];
+};
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   return "Unknown error";
@@ -323,7 +349,7 @@ const AIToolbar = () => {
   }, []);
 
   const checkEditableContent = useCallback((): EditableCheckResult => {
-    const activeElement = document.activeElement;
+    const activeElement = getFocusedElement();
     const isInputOrTextarea =
       activeElement &&
       (activeElement.tagName === "INPUT" ||
@@ -632,7 +658,7 @@ const AIToolbar = () => {
   }, [isLoading, action, isSpeaking, currentSessionId]);
 
   const getSelection = useCallback((): SelectionSnapshot => {
-    const activeElement = document.activeElement;
+    const activeElement = getFocusedElement();
     const isInputOrTextarea =
       activeElement &&
       (activeElement.tagName === "INPUT" ||
@@ -693,7 +719,7 @@ const AIToolbar = () => {
    */
   const calculatePosition = useCallback(
     (selection: Selection | null): ToolbarPosition | null => {
-      const activeElement = document.activeElement;
+      const activeElement = getFocusedElement();
       const isInputOrTextarea =
         activeElement &&
         (activeElement.tagName === "INPUT" ||
@@ -783,7 +809,7 @@ const AIToolbar = () => {
     selectionTimeoutRef.current = setTimeout(() => {
       const { text, images, audios, selection } = getSelection();
 
-      const activeElement = document.activeElement;
+      const activeElement = getFocusedElement();
       if (activeElement && (resultPanelRef.current || toolbarRef.current)) {
         if (
           (resultPanelRef.current &&
@@ -1317,19 +1343,27 @@ const AIToolbar = () => {
   useEffect(() => {
     const showOnInputFocus = aiToolbarSettings?.showOnInputFocus !== false;
     const showOnImageHover = aiToolbarSettings?.showOnImageHover !== false;
+    const eventTargets = getInteractionTargets();
+    const mouseDownListener = handleClickOutside as EventListener;
+    const focusInListener = handleInputFocus as EventListener;
 
     if (!isEnabled) {
       setIsVisible(false);
       return;
     }
 
-    document.addEventListener("mouseup", handleMouseUp);
+    eventTargets.forEach((target) => {
+      target.addEventListener("mouseup", handleMouseUp);
+      target.addEventListener("mousedown", mouseDownListener);
+      target.addEventListener("keyup", handleSelectionChange);
+    });
     document.addEventListener("selectionchange", handleSelectionChange);
-    document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener("scroll", handleScroll, true);
 
     if (showOnInputFocus) {
-      document.addEventListener("focusin", handleInputFocus);
+      eventTargets.forEach((target) => {
+        target.addEventListener("focusin", focusInListener);
+      });
     }
 
     let observer: MutationObserver | null = null;
@@ -1361,13 +1395,18 @@ const AIToolbar = () => {
     }
 
     return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
+      eventTargets.forEach((target) => {
+        target.removeEventListener("mouseup", handleMouseUp);
+        target.removeEventListener("mousedown", mouseDownListener);
+        target.removeEventListener("keyup", handleSelectionChange);
+      });
       document.removeEventListener("selectionchange", handleSelectionChange);
-      document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("scroll", handleScroll, true);
 
       if (showOnInputFocus) {
-        document.removeEventListener("focusin", handleInputFocus);
+        eventTargets.forEach((target) => {
+          target.removeEventListener("focusin", focusInListener);
+        });
       }
 
       if (showOnImageHover) {
@@ -3084,7 +3123,7 @@ const AIToolbar = () => {
               if (editableElement && isEditableContent) {
                 const separator = accumulatedTranscription ? " " : "";
 
-                if (document.activeElement !== editableElement) {
+                if (getFocusedElement() !== editableElement) {
                   editableElement.focus();
                 }
 
@@ -3231,6 +3270,7 @@ const AIToolbar = () => {
         <div
           ref={toolbarRef}
           data-electron-interactive="true"
+          data-testid="ai-toolbar"
           className={cn(
             "fixed top-0 left-0 flex items-center gap-0.5 p-1 rounded-[20px]",
             "border shadow-[0_4px_20px_rgba(0,0,0,0.25)] backdrop-blur-xl will-change-transform",
@@ -3674,6 +3714,7 @@ const AIToolbar = () => {
           <div
             ref={resultPanelRef}
             data-electron-interactive="true"
+            data-testid="ai-toolbar-writer-panel"
             className={cn(
               isResultPanelClosing ? "animate-fade-out" : "animate-fade-in",
             )}
@@ -3691,6 +3732,7 @@ const AIToolbar = () => {
           >
             {/* Writer input field */}
             <input
+              data-testid="ai-toolbar-writer-input"
               type="text"
               value={writerPrompt}
               onChange={(e) => setWriterPrompt(e.target.value)}
@@ -3751,6 +3793,7 @@ const AIToolbar = () => {
               }}
             >
               <button
+                data-testid="ai-toolbar-writer-submit"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -3809,6 +3852,7 @@ const AIToolbar = () => {
                 <Icon name="send" size={16} />
               </button>
               <button
+                data-testid="ai-toolbar-writer-cancel"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
