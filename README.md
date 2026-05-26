@@ -1,131 +1,78 @@
 <div align="center">
   <img src="public/VA.svg" alt="VAssist Logo" width="64" />
   <h1>VAssist</h1>
-  <p>Cross-platform AI assistant available as a Browser Extension, Desktop App, and Android App, with in-page tools, full chat, voice interaction, and a customizable virtual companion.</p>
+  <p>Cross-platform AI assistant for the browser, desktop, and Android, with full chat, on-page tools, voice, and a live companion.</p>
 </div>
 
 <div align="center">
 
-[Try Demo](https://vassist-demo.vercel.app) • [Documentation](https://b1ink0.github.io/vassist/docs/intro) • [Installation](#installation)
+[Try Demo](https://vassist-demo.vercel.app) • [Documentation](https://b1ink0.github.io/vassist/intro) • [Releases](https://github.com/b1ink0/vassist/releases)
 
 </div>
 
-## Overview
+## What VAssist Is
 
 <div align="center">
-  <img src="./assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
+  <img src="./documentation/site/public/assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
 </div>
 
-VAssist is built around three core surfaces:
+VAssist combines three ways of working in one product:
 
-- **Chat Interface** - Full conversation workspace with streaming, attachments, voice mode, and history branching
-- **Virtual Companion** - Animated assistant with responsive states and interaction feedback
-- **AI Toolbar** - Appears on selection/focus and runs rewrite, summarize, translate, writer, dictation, and image tools
+- **Full chat** for longer conversations, attachments, voice conversation, saved chats, and alternate replies
+- **AI toolbar** for rewrite, summarize, translate, dictation, writing, and image tools directly on the current page
+- **Virtual companion** for the live avatar, PMX or BPMX assets, VMD or BVMD motions, emotes, and Android wallpaper mode
 
-The experience is provider-configurable from setup/settings, so chat/voice/tools can run with different LLM, STT, and TTS backends.
+Setup and settings let you mix local and remote providers, so chat, speech input, and speech output do not have to come from the same backend.
 
-[View full documentation →](https://b1ink0.github.io/vassist/docs/intro)
+[Open the docs →](https://b1ink0.github.io/vassist/intro)
 
-## Features
+## Choose a Version
 
-VAssist combines three workflows in one interface:
+| Version | Best for | Highlights |
+| --- | --- | --- |
+| Desktop app | People who want the deepest local setup | Local GGUF models, GPT-SoVITS, Faster Whisper, camera, screen share, tray access |
+| Android app | People who want VAssist on a phone or tablet | Android-local AI, live wallpaper mode, shared app and wallpaper settings |
+| Browser extension | People who want VAssist inside normal websites | In-page toolbar, page-aware chat, Chrome AI support where available |
 
-- In-page tools for rewrite, summarize, translate, writing, dictation, and image actions
-- Full chat with streaming, attachments, page context, and history branching
-- A customizable 3D companion with PMX models, stages, VMD motions, and emotes
-- Android live wallpaper mode for running the companion avatar on the home screen
+## AI and Voice Options
 
-### Chat Interface
+| Capability | Local options | Remote or hosted options |
+| --- | --- | --- |
+| Chat and main AI | Desktop Local with node-llama-cpp and llama.cpp, Android Local with native llama.cpp, Chrome AI in supported browsers | OpenAI, Ollama, OpenAI-compatible servers |
+| Speech output | Kokoro.js, Android Local VITS, Desktop Local GPT-SoVITS | GPT-SoVITS remote, OpenAI TTS, OpenAI-compatible TTS |
+| Speech input | Android Local Whisper, Desktop Local Faster Whisper, Chrome AI speech input | OpenAI Whisper, OpenAI-compatible STT |
 
-<div align="center">
-  <img src="./assets/chat.png" alt="Chat Interface" />
-</div>
-
-Open full chat for streaming responses, page context, attachments, and history branching.
-
----
-
-### Virtual Companion
-
-<div align="center">
-  <img src="./assets/companion.png" alt="Virtual Companion" />
-</div>
-
-Use a customizable companion with model/stage/motion/emote controls and runtime-aware behavior.
-
----
-
-### AI Toolbar
-
-<div align="center">
-  <img src="./assets/toolbars.png" alt="AI Toolbar" />
-</div>
-
-Select text in-page to open quick rewrite, summarize, translate, writer, dictation, and image actions.
-
----
-
-### Provider and Runtime Details
-
-VAssist lets you configure LLM, STT, and TTS providers independently from setup/settings.
-
-- LLM providers: Chrome AI, OpenAI, Ollama, android-local, desktop-local
-- STT providers: Chrome AI Multimodal, OpenAI, OpenAI-compatible, android-local, desktop-local
-- TTS providers: Kokoro, OpenAI, OpenAI-compatible, GPT-SoVITS remote, android-local, desktop-local
-
-<details>
-<summary>Local provider implementation details</summary>
-
-- android-local runs through the in-app Android local AI server and uses llama.cpp with GGUF model management; mmproj pairing is supported for vision-capable models
-- desktop-local runs through the desktop local AI server and uses node-llama-cpp for local LLM inference
-- Android local STT is handled by WhisperService (whisper-tiny.en) using sherpa-onnx on-device inference
-- Android local TTS is handled by VitsService (vits-vctk, multi-speaker) using sherpa-onnx on-device inference
-- Desktop local STT is proxied by the local server to the Faster Whisper Python service
-- Desktop local TTS is proxied by the local server to GPT-SoVITS and returned as WAV audio
-- Both local runtimes expose OpenAI-style audio routes for transcription and speech through the local server surface
-
-</details>
-
----
-
-### Companion Customization
-
-- Upload custom PMX companion models and PMX stages
-- Import VMD animations, assign categories, and control which motions are enabled
-- Create/import emotes with motion, audio, and camera variants
-- Apply the configured avatar as an Android live wallpaper from the app setup flow
+The [AI and Media Stack guide](https://b1ink0.github.io/vassist/architecture/ai-and-media-stack) covers the engine and file-format details behind those options, including GGUF, mmproj, PMX, VMD, Kokoro, GPT-SoVITS, and VITS.
 
 ## Installation
 
-### Install From Releases
+For normal use, install from [GitHub Releases](https://github.com/b1ink0/vassist/releases):
 
-Download artifacts from [releases](https://github.com/b1ink0/vassist/releases):
+1. Desktop app: download the installer for your OS.
+2. Android app: download the APK and install it on your device.
+3. Browser extension: download `vassist-extension.zip`, extract it, and load it as an unpacked extension in Chrome.
 
-- Desktop App: install the desktop installer package for your OS
-- Android App: install the APK on your Android device
-- Browser Extension: download `vassist-extension.zip`
+[Detailed installation guide →](https://b1ink0.github.io/vassist/getting-started/installation)
 
-<details>
-<summary>Extension install (Chrome)</summary>
+## Learn the App
 
-1. Download `vassist-extension.zip` from [releases](https://github.com/b1ink0/vassist/releases).
-2. Extract the zip file.
-3. Open `chrome://extensions`.
-4. Enable **Developer mode** (top-right toggle).
-5. Click **Load unpacked**.
-6. Select the extracted folder.
+- [Start Here](https://b1ink0.github.io/vassist/intro) for the recommended reading order
+- [Setup Wizard](https://b1ink0.github.io/vassist/getting-started/setup-wizard) for the first-run choices
+- [Use VAssist](https://b1ink0.github.io/vassist/guide/) for chat, toolbar, capture, and companion guides
+- [Platform Guides](https://b1ink0.github.io/vassist/platforms/desktop) for desktop, Android, and extension differences
+- [AI and Media Stack](https://b1ink0.github.io/vassist/architecture/ai-and-media-stack) for the deeper engine and file-format reference
 
-</details>
+## Build From Source
 
-### Build From Source
+Source builds are mainly for contributors and custom deployments.
 
-#### Requirements
+### Requirements
 
 - Bun (recommended) or Node.js
-- Chrome (for extension runtime)
-- Android Studio + SDK (for Android build/run)
+- Chrome for the extension runtime
+- Android Studio plus the Android SDK for Android builds
 
-1. Clone and install dependencies:
+1. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/b1ink0/vassist.git
@@ -133,60 +80,17 @@ cd vassist
 bun install
 ```
 
-2. Choose your runtime:
+2. Choose the runtime you want to run:
 
 - Extension: `bun run dev:extension` (or build zip with `bun run build:extension:zip`)
 - Desktop app: `bun run dev:desktop` (or production build with `bun run build:desktop:production`)
 - Android app: `bun run dev:android` (or production build with `bun run build:android`)
 
-<details>
-<summary>Android run (Capacitor dev flow)</summary>
-
-1. Build and sync Android assets:
-
-```bash
-bun run dev:android
-```
-
-2. Open Android project:
-
-```bash
-bun run cap:open:android
-```
-
-3. Run from Android Studio on emulator/device.
-4. Use the Android app option to set VAssist as your live wallpaper.
-
-</details>
-
-<details>
-<summary>Optional Chrome AI mode</summary>
-
-If you specifically want Chrome built-in AI providers, enable the required Chrome AI flags in your browser.
-
-</details>
-
-[Detailed installation guide →](https://b1ink0.github.io/vassist/docs/installation)
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
-```bash
-git clone https://github.com/b1ink0/vassist.git
-cd vassist
-bun install
-
-bun run dev:extension          # Extension development build (watch)
-bun run dev:desktop            # Desktop renderer development
-bun run dev:android            # Android web build + Capacitor sync
-bun run build:extension        # Build extension
-bun run build:extension:zip    # Create distributable
-bun run build:desktop:production
-bun run build:android
-```
-
-## Built With
+## Main Technologies
 
 - **React** - UI framework
 - **Vite** - Build tool
@@ -194,7 +98,6 @@ bun run build:android
 - **Capacitor (Android)** - Android runtime bridge
 - **Babylon.js** - Character rendering and animation
 - **babylon-mmd** - PMX/VMD companion pipeline
-- **Tailwind CSS** - Styling
 - **Dexie.js** - IndexedDB wrapper
 - **Kokoro.js** - On-device TTS
 - **node-llama-cpp** - Desktop local LLM integration
@@ -209,6 +112,4 @@ GPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
 ## Links
 
-[🐛 Issues](https://github.com/b1ink0/vassist/issues) • [💬 Discussions](https://github.com/b1ink0/vassist/discussions) • [📖 Docs](https://b1ink0.github.io/vassist/docs/intro)
-
----
+[🐛 Issues](https://github.com/b1ink0/vassist/issues) • [💬 Discussions](https://github.com/b1ink0/vassist/discussions) • [📖 Docs](https://b1ink0.github.io/vassist/intro)

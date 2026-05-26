@@ -43,6 +43,7 @@ private_test
 *.tar.gz
 *.whl
 *.tmp*
+.vitepress
 electron/server/gpt-sovits/python*/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/

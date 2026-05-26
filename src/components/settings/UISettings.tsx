@@ -181,7 +181,7 @@ const UISettings = ({
               troubleshooting, and feature explanations.
             </p>
             <a
-              href="https://b1ink0.github.io/vassist/docs/intro"
+              href="https://b1ink0.github.io/vassist/intro"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
