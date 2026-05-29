@@ -21,6 +21,23 @@ interface ImportMeta {
 }
 
 declare global {
+  interface Window {
+    VAssistEmbed?: {
+      inject: (options?: {
+        target?: string | HTMLElement | null;
+        hostId?: string;
+        deferSetupUntilStarted?: boolean;
+      }) => HTMLElement;
+      remove: (hostId?: string) => void;
+    };
+    VAssistEmbedConfig?: {
+      target?: string | HTMLElement | null;
+      hostId?: string;
+      deferSetupUntilStarted?: boolean;
+      autoInject?: boolean;
+    };
+  }
+
   /**
    * True when building for Chrome Extension, false otherwise
    * @constant
@@ -44,6 +61,12 @@ declare global {
    * @constant
    */
   const __ANDROID_MODE__: boolean;
+
+  /**
+   * True when building for generic embedded usage, false otherwise
+   * @constant
+   */
+  const __EMBED_MODE__: boolean;
 
   /**
    * True when building in production mode, false for development

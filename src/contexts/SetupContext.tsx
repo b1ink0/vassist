@@ -2,12 +2,7 @@
  * SetupContext backed by a scoped Zustand store.
  */
 
-import {
-  createContext,
-  useContext,
-  useRef,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useRef, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -41,7 +36,9 @@ export function useSetupStoreSelector<T>(
 ): T {
   const store = useContext(SetupStoreContext);
   if (!store) {
-    throw new Error("useSetupStoreSelector must be used within a SetupProvider");
+    throw new Error(
+      "useSetupStoreSelector must be used within a SetupProvider",
+    );
   }
 
   return useStore(store, selector);
@@ -62,6 +59,7 @@ export const useSetup = (): SetupStoreState =>
       markStepComplete: state.markStepComplete,
       updateSetupData: state.updateSetupData,
       completeSetup: state.completeSetup,
+      completeSetupWithDefaults: state.completeSetupWithDefaults,
       resetSetup: state.resetSetup,
     })),
   );

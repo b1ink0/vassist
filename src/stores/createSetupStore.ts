@@ -129,6 +129,7 @@ export interface SetupStoreState {
     value?: unknown,
   ) => Promise<void>;
   completeSetup: () => Promise<void>;
+  completeSetupWithDefaults: () => Promise<void>;
   resetSetup: () => Promise<void>;
 }
 
@@ -226,8 +227,7 @@ export const createSetupStore = () => {
       }, 500);
     };
 
-    const persistAndReload = async () => {
-      const setupData = get().setupData;
+    const persistAndReload = async (setupData = get().setupData) => {
       Logger.log("SetupStore", "Applying setup data through ConfigStore");
       await useConfigStore.getState().applySetupData(setupData);
 
@@ -416,6 +416,24 @@ export const createSetupStore = () => {
           await persistAndReload();
         } catch (error) {
           Logger.error("SetupStore", "Failed to complete setup:", error);
+          throw error;
+        }
+      },
+      completeSetupWithDefaults: async () => {
+        try {
+          const defaultSetupData = cloneDefaultSetupState().setupData;
+          Logger.log(
+            "SetupStore",
+            "Completing setup with default data:",
+            defaultSetupData,
+          );
+          await persistAndReload(defaultSetupData);
+        } catch (error) {
+          Logger.error(
+            "SetupStore",
+            "Failed to complete setup with defaults:",
+            error,
+          );
           throw error;
         }
       },

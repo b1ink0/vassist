@@ -9,6 +9,7 @@
 import { ContentBridge } from "./ContentBridge";
 import { MessageTypes } from "../shared/MessageTypes";
 import Logger from "../../src/services/LoggerService";
+import { VASSIST_REACT_ROOT_ID } from "../../src/utils/VAssistDomIds";
 
 type BridgeValue = string | number | boolean | null | undefined | object;
 
@@ -197,7 +198,7 @@ class VirtualAssistantInjector {
     Logger.log("Content Script", "injectReactApp: Creating root div");
     // Create root div for React
     const root = document.createElement("div");
-    root.id = "react-root";
+    root.id = VASSIST_REACT_ROOT_ID;
     root.style.cssText = `
       background: transparent;
       pointer-events: auto;

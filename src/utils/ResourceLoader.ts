@@ -5,7 +5,7 @@
  */
 
 import Logger from "../services/LoggerService";
-import { isDesktop, isProduction } from "./PlatformUtils";
+import { isDesktop, isEmbed, isProduction } from "./PlatformUtils";
 
 class ResourceLoader {
   private isExtension: boolean;
@@ -38,16 +38,53 @@ class ResourceLoader {
     );
   }
 
+  private normalizeRuntimePath(path: string): string | null {
+    if (path.startsWith("blob:") || path.includes("://")) {
+      return null;
+    }
+
+    return path.startsWith("/") ? path.slice(1) : path;
+  }
+
+  private resolveEmbedRuntimeUrl(path: string): string | null {
+    if (!isEmbed) {
+      return null;
+    }
+
+    const normalizedPath = this.normalizeRuntimePath(path);
+    if (!normalizedPath) {
+      return null;
+    }
+
+    // Keep this as a runtime URL resolution. Vite rewrites direct
+    // new URL(dynamic, import.meta.url) calls into a static asset map,
+    // which turns unknown public paths into "undefined".
+    const URLConstructor = URL;
+    return new URLConstructor(
+      `../${normalizedPath}`,
+      import.meta.url,
+    ).toString();
+  }
+
+  private resolveRuntimeUrl(path: string): string | null {
+    return this.resolveEmbedRuntimeUrl(path);
+  }
+
   /**
    * Get URL for a resource file
    * @param {string} path - Relative path to resource (e.g., 'res/models/model.pmx')
    * @returns {string|Promise<string>} - Full URL to resource
    */
   getURL(path: string): string {
+    const runtimeUrl = this.resolveRuntimeUrl(path);
+    if (runtimeUrl) {
+      return runtimeUrl;
+    }
+
     if (!this.isExtension) {
       // In dev mode, use relative path from public folder
       // Vite serves public folder at root
-      return `/${path}`;
+      return path.startsWith("/") ? path : `/${path}`;
     }
 
     // Extension mode - request URL from content script via ExtensionBridge
@@ -75,6 +112,10 @@ class ResourceLoader {
     if (!this.isExtension) {
       if (path.startsWith("blob:") || path.includes("://")) {
         return path;
+      }
+      const runtimeUrl = this.resolveRuntimeUrl(path);
+      if (runtimeUrl) {
+        return runtimeUrl;
       }
       if (isDesktop && isProduction) {
         if (path.startsWith("res/")) {

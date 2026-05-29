@@ -7,6 +7,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 // Import ExtensionBridge first to ensure it's initialized before any services
 import { extensionBridge } from "../../src/utils/ExtensionBridge";
+import { VASSIST_REACT_ROOT_ID } from "../../src/utils/VAssistDomIds";
 import App from "../../src/App";
 import Logger from "../../src/services/LoggerService";
 import { prepareVAssistTestRuntime } from "../../src/testing/testBridge";
@@ -26,7 +27,7 @@ const getShadowRoot = () => {
   if (!container || !container.shadowRoot) {
     return null;
   }
-  return container.shadowRoot.getElementById("react-root");
+  return container.shadowRoot.getElementById(VASSIST_REACT_ROOT_ID);
 };
 
 const clearInitRetry = () => {

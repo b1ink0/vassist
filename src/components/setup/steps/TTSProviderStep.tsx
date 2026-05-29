@@ -197,9 +197,8 @@ const TTSProviderStep = ({
     : isDesktop
       ? "desktop-local"
       : "kokoro";
-  const [selectedProvider, setSelectedProvider] = useState<TTSProviderId>(
-    defaultTTSProvider as TTSProviderId,
-  );
+  const [selectedProvider, setSelectedProvider] =
+    useState<TTSProviderId>("disabled");
   const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState(
     "http://127.0.0.1:8765",
   );
@@ -256,7 +255,7 @@ const TTSProviderStep = ({
       ? STTProviders.DESKTOP_LOCAL
       : STTProviders.CHROME_AI_MULTIMODAL;
   const [selectedSTTProvider, setSelectedSTTProvider] =
-    useState(defaultSTTProvider);
+    useState<string>("disabled");
   const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState(
     "http://127.0.0.1:8765",
   );
@@ -294,7 +293,9 @@ const TTSProviderStep = ({
     const sttConfigData = setupData?.sttConfig as STTConfigState | undefined;
 
     if (ttsData) {
-      if (ttsData.provider) {
+      if (ttsData.enabled === false) {
+        setSelectedProvider("disabled");
+      } else if (ttsData.provider) {
         const normalizedTTSProvider =
           (isAndroid || isDesktop) && ttsData.provider === "kokoro"
             ? defaultTTSProvider
@@ -335,7 +336,9 @@ const TTSProviderStep = ({
         setDesktopTrained(ttsData["desktop-local"].trained);
     }
 
-    if (sttData?.provider) {
+    if (sttData?.enabled === false) {
+      setSelectedSTTProvider("disabled");
+    } else if (sttData?.provider) {
       const normalizedSTTProvider =
         !isWebMode && sttData.provider === STTProviders.CHROME_AI_MULTIMODAL
           ? defaultSTTProvider
@@ -369,7 +372,8 @@ const TTSProviderStep = ({
 
     const ttsData = {
       enabled: selectedProvider !== "disabled",
-      provider: selectedProvider === "disabled" ? "kokoro" : selectedProvider,
+      provider:
+        selectedProvider === "disabled" ? defaultTTSProvider : selectedProvider,
       kokoro: kokoroConfig,
       openai: {
         apiKey: openAIKey,
@@ -457,6 +461,7 @@ const TTSProviderStep = ({
     desktopPytorchBackend,
     desktopTrained,
     defaultSTTProvider,
+    defaultTTSProvider,
     updateSetupData,
   ]);
 
@@ -870,6 +875,14 @@ const TTSProviderStep = ({
         provider: selectedProvider,
         enabled: true,
       };
+
+      if (selectedProvider === "disabled") {
+        setTestResult({
+          success: true,
+          message: "TTS is disabled. No provider test is required.",
+        });
+        return;
+      }
 
       if (selectedProvider === "openai") {
         if (!openAIKey) {

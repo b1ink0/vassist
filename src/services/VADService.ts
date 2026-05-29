@@ -5,9 +5,17 @@
  */
 
 import { MicVAD } from "@ricky0123/vad-web";
-import { isDesktop, isExtension } from "../utils/PlatformUtils";
+import { isDesktop, isEmbed, isExtension } from "../utils/PlatformUtils";
 import MicrophoneService from "./MicrophoneService";
 import Logger from "./LoggerService";
+
+const ORT_WASM_MODULE_FILENAME = "ort-wasm-simd-threaded.mjs";
+const ORT_WASM_BINARY_FILENAME = "ort-wasm-simd-threaded.wasm";
+
+type OnnxWasmPathOverrides = {
+  mjs: string;
+  wasm: string;
+};
 
 type VADStartOptions = {
   onSpeechStart?: (() => void) | null;
@@ -54,6 +62,21 @@ class VADService {
     }
   }
 
+  private resolveEmbedAssetBasePath(): string {
+    return new URL("./", import.meta.url).toString();
+  }
+
+  private resolveOnnxWasmPathOverrides(
+    baseAssetPath: string,
+  ): OnnxWasmPathOverrides {
+    // ORT accepts explicit .mjs/.wasm URLs here. Using file overrides avoids
+    // malformed requests like /assets/undefined when locateFile() receives no filename.
+    return {
+      mjs: `${baseAssetPath}${ORT_WASM_MODULE_FILENAME}`,
+      wasm: `${baseAssetPath}${ORT_WASM_BINARY_FILENAME}`,
+    };
+  }
+
   /**
    * Initialize and start VAD
    * @param {Object} options - Configuration options
@@ -90,9 +113,14 @@ class VADService {
         ? await this.resolveExtensionAssetBasePath()
         : isDesktop
           ? "app://./assets/"
-          : "/assets/";
+          : isEmbed
+            ? this.resolveEmbedAssetBasePath()
+            : "/assets/";
+      const onnxWasmPathOverrides =
+        this.resolveOnnxWasmPathOverrides(baseAssetPath);
 
       Logger.log("VAD", "Resolved asset base path:", baseAssetPath);
+      Logger.log("VAD", "Resolved ONNX wasm paths:", onnxWasmPathOverrides);
 
       // Initialize MicVAD with Silero v5 model
       this.vad = await MicVAD.new({
@@ -111,7 +139,7 @@ class VADService {
         baseAssetPath: baseAssetPath,
 
         // WASM files path for ONNX Runtime
-        onnxWASMBasePath: baseAssetPath,
+        onnxWASMBasePath: onnxWasmPathOverrides as unknown as string,
 
         // ONNX Runtime configuration
         ortConfig: (ort: any) => {

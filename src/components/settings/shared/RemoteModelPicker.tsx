@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import AIServiceProxy from "../../../services/proxies/AIServiceProxy";
 import { cn } from "../../../utils/cn";
+import { resolvePortalContainer } from "../../../utils/resolvePortalContainer";
 import { Icon } from "../../icons";
 
 interface RemoteModelPickerProps {
@@ -27,6 +28,7 @@ const RemoteModelPicker = ({
   disabled = false,
   inputTestId,
 }: RemoteModelPickerProps) => {
+  const [portalAnchor, setPortalAnchor] = useState<HTMLDivElement | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -101,9 +103,12 @@ const RemoteModelPicker = ({
 
   const popupVisible =
     open && (loading || models.length > 0 || error.length > 0 || hasLoaded);
+  const portalContainer = useMemo(() => {
+    return resolvePortalContainer(undefined, portalAnchor);
+  }, [portalAnchor]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" ref={setPortalAnchor}>
       <Autocomplete.Root
         items={models}
         value={value}
@@ -139,7 +144,7 @@ const RemoteModelPicker = ({
         </div>
 
         {popupVisible && (
-          <Autocomplete.Portal>
+          <Autocomplete.Portal container={portalContainer}>
             <Autocomplete.Positioner
               sideOffset={8}
               align="start"

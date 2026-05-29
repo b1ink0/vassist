@@ -3,7 +3,7 @@
   "compilerOptions": {
     "types": ["vite/client"]
   },
-  "include": ["src", "android-src"],
+  "include": ["src", "android-src", "embed"],
   "exclude": [
     "dist",
     "dist-android",

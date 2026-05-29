@@ -9,7 +9,7 @@
 
 import { resourceLoader } from "../utils/ResourceLoader";
 import Logger from "../services/LoggerService";
-import { isDesktop, isProduction } from "../utils/PlatformUtils";
+import { isDesktop, isEmbed, isProduction } from "../utils/PlatformUtils";
 import type {
   PositionManagerOptionsLike,
   RenderQualitySettingsLike,
@@ -149,8 +149,9 @@ const SceneConfig: SceneConfigData = {
 };
 
 /**
- * Resolve resource URLs for extension mode
- * In extension mode, URLs must be fetched via ExtensionBridge
+ * Resolve resource URLs for runtime environments that cannot use root-relative public paths as-is.
+ * Extension mode uses ExtensionBridge, desktop production rewrites to packaged assets,
+ * and embed mode resolves relative to the emitted embed bundle.
  * @param {Object} config - Configuration object
  * @returns {Promise<Object>} Configuration with resolved URLs
  */
@@ -164,7 +165,7 @@ export async function resolveResourceURLs(
   );
 
   const needsResolution =
-    resourceLoader.isExtensionMode() || (isDesktop && isProduction);
+    resourceLoader.isExtensionMode() || isEmbed || (isDesktop && isProduction);
 
   if (!needsResolution) {
     Logger.log("sceneConfig", "Dev/Web mode - using paths as-is");
@@ -173,7 +174,7 @@ export async function resolveResourceURLs(
 
   Logger.log(
     "sceneConfig",
-    `${isDesktop && isProduction ? "Desktop Production" : "Extension"} mode - resolving URLs...`,
+    `${isDesktop && isProduction ? "Desktop Production" : isEmbed ? "Embed" : "Extension"} mode - resolving URLs...`,
   );
   const resolvedConfig = { ...config };
 

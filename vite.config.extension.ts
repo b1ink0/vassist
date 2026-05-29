@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
       __EXTENSION_MODE__: JSON.stringify(true),
       __ANDROID_MODE__: JSON.stringify(false),
       __DESKTOP_MODE__: JSON.stringify(false),
+      __EMBED_MODE__: JSON.stringify(false),
       __DEV_MODE__: JSON.stringify(!isProduction),
       __PROD_MODE__: JSON.stringify(isProduction),
     },

@@ -14,6 +14,7 @@ import { useRefreshAndroidApi } from "./hooks/useAndroidStore";
 import { useRefreshDesktopApi } from "./hooks/useDesktopStore";
 import {
   isAndroid,
+  isEmbed,
   isInputWindow,
   isScreenPicker,
 } from "./utils/PlatformUtils";
@@ -22,14 +23,17 @@ import { vassistTestFlags } from "./testing/runtime";
 
 interface AppWithSetupProps {
   mode?: string;
-  deferSetupUntilStarted?: boolean;
-  setupStarted?: boolean;
-  onStartSetup?: () => void;
+  showDeferredSetup?: boolean;
+  onStartSetup?: (() => void) | undefined;
+  onMinimizeSetup?: (() => void) | undefined;
+  forcePortraitWhileDeferred?: boolean;
 }
 
 interface AppProps {
   mode?: string;
   isWallpaperMode?: boolean;
+  embedded?: boolean;
+  deferSetupUntilStarted?: boolean;
 }
 
 function StoreBootstrap({ children }: { children: ReactNode }) {
@@ -76,13 +80,13 @@ const LazyAndroidBackground = lazy(
  */
 function AppWithSetup({
   mode = "development",
-  deferSetupUntilStarted = false,
-  setupStarted = true,
+  showDeferredSetup = false,
   onStartSetup,
+  onMinimizeSetup,
+  forcePortraitWhileDeferred = false,
 }: AppWithSetupProps) {
   const { setupCompleted, isLoading } = useSetup();
-  const requireSetupOnChatClick =
-    deferSetupUntilStarted && !setupStarted && !setupCompleted;
+  const requireSetupOnChatClick = showDeferredSetup && !setupCompleted;
   const appContentProps = onStartSetup ? { onRequireSetup: onStartSetup } : {};
 
   if (isLoading) {
@@ -90,14 +94,14 @@ function AppWithSetup({
   }
 
   if (!setupCompleted) {
-    if (deferSetupUntilStarted && !setupStarted) {
+    if (showDeferredSetup) {
       return (
         <Suspense fallback={<LoadingIndicator isVisible={true} />}>
           <LazyAppContent
             mode={mode}
             requireSetupOnChatClick={requireSetupOnChatClick}
             {...appContentProps}
-            forcePortraitMode={true}
+            forcePortraitMode={forcePortraitWhileDeferred}
           />
         </Suspense>
       );
@@ -105,7 +109,7 @@ function AppWithSetup({
 
     return (
       <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-        <LazySetupWizard />
+        <LazySetupWizard onMinimizeSetup={onMinimizeSetup} />
       </Suspense>
     );
   }
@@ -144,6 +148,21 @@ function isWallpaperMode() {
   return mode !== "app";
 }
 
+function isEmbeddedModeEnabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const embedParam = params.get("embed");
+
+  if (embedParam === null) {
+    return false;
+  }
+
+  return !["0", "false", "no", "off"].includes(embedParam.toLowerCase());
+}
+
 function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
   const { setupCompleted, isLoading } = useSetup();
   const launchHandler =
@@ -165,8 +184,9 @@ function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
 function App({
   mode = "development",
   isWallpaperMode: explicitWallpaperMode,
+  embedded = false,
+  deferSetupUntilStarted,
 }: AppProps) {
-  const [devSetupStarted, setDevSetupStarted] = useState(false);
   const shouldRenderCameraPreview =
     !vassistTestFlags.enabled || !vassistTestFlags.disableCamera;
 
@@ -176,6 +196,21 @@ function App({
     : isAndroid
       ? "android"
       : mode;
+  const isEmbeddedDevelopmentMode =
+    actualMode === "development" &&
+    (embedded || isEmbed || isEmbeddedModeEnabled());
+  const defaultDeferredSetup =
+    actualMode === "development"
+      ? (deferSetupUntilStarted ?? !isEmbeddedDevelopmentMode)
+      : false;
+  const defaultForcePortraitWhileDeferred =
+    actualMode === "development" && !isEmbeddedDevelopmentMode;
+  const [showDeferredSetup, setShowDeferredSetup] =
+    useState(defaultDeferredSetup);
+
+  useEffect(() => {
+    setShowDeferredSetup(defaultDeferredSetup);
+  }, [defaultDeferredSetup]);
 
   if (actualMode === "android") {
     if (
@@ -205,7 +240,12 @@ function App({
               <Suspense fallback={null}>
                 <LazyAndroidBackground />
               </Suspense>
-              <AppWithSetup mode="android" />
+              <AppWithSetup
+                mode="android"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+              />
               {shouldRenderCameraPreview && (
                 <Suspense fallback={null}>
                   <LazyVideoPreview service={CameraService} type="camera" />
@@ -264,7 +304,12 @@ function App({
               <LazyDesktopWindowControls />
             </Suspense>
             <div className="relative w-full h-screen overflow-hidden">
-              <AppWithSetup mode="desktop" />
+              <AppWithSetup
+                mode="desktop"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+              />
               <Suspense fallback={null}>
                 {shouldRenderCameraPreview && (
                   <LazyVideoPreview service={CameraService} type="camera" />
@@ -285,16 +330,17 @@ function App({
         <AnimationProvider>
           {actualMode === "development" ? (
             <div className="relative w-full h-screen overflow-hidden">
-              {!vassistTestFlags.enabled && (
+              {!vassistTestFlags.enabled || !isEmbeddedDevelopmentMode ? (
                 <DevelopmentDemoSite
-                  onStartSetup={() => setDevSetupStarted(true)}
+                  onStartSetup={() => setShowDeferredSetup(false)}
                 />
-              )}
+              ) : null}
               <AppWithSetup
                 mode="development"
-                deferSetupUntilStarted={!vassistTestFlags.enabled}
-                setupStarted={vassistTestFlags.enabled || devSetupStarted}
-                onStartSetup={() => setDevSetupStarted(true)}
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+                forcePortraitWhileDeferred={defaultForcePortraitWhileDeferred}
               />
               <Suspense fallback={null}>
                 {shouldRenderCameraPreview && (
@@ -305,7 +351,12 @@ function App({
             </div>
           ) : (
             <>
-              <AppWithSetup mode="extension" />
+              <AppWithSetup
+                mode="extension"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+              />
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
                 {shouldRenderCameraPreview && (
                   <LazyVideoPreview service={CameraService} type="camera" />

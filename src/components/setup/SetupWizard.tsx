@@ -19,9 +19,19 @@ import TTSProviderStep from "./steps/TTSProviderStep";
 import AIFeaturesOverviewStep from "./steps/AIFeaturesOverviewStep";
 // import TutorialStep from './steps/TutorialStep'; // Disabled - no GIFs yet
 
-const SetupWizard = () => {
-  const { currentStep, totalSteps, nextStep, previousStep, completeSetup } =
-    useSetup();
+interface SetupWizardProps {
+  onMinimizeSetup?: (() => void) | undefined;
+}
+
+const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
+  const {
+    currentStep,
+    totalSteps,
+    nextStep,
+    previousStep,
+    completeSetup,
+    completeSetupWithDefaults,
+  } = useSetup();
 
   // Reference to content area for scrolling
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -82,11 +92,19 @@ const SetupWizard = () => {
   const handleNextClick = () => {
     if (isLastStep) {
       // On last step (AI Features Overview), complete setup
-      completeSetup();
+      void completeSetup();
     } else {
       // Regular next step
       nextStep();
     }
+  };
+
+  const handleSkipSetup = () => {
+    void completeSetupWithDefaults();
+  };
+
+  const handleMinimizeSetup = () => {
+    onMinimizeSetup?.();
   };
 
   return (
@@ -159,7 +177,7 @@ const SetupWizard = () => {
             "rounded-b-xl p-3 sm:p-4 flex-shrink-0",
           )}
         >
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Previous button */}
             <Button
               onClick={previousStep}
@@ -180,6 +198,28 @@ const SetupWizard = () => {
               <Icon name="arrow-left" size={16} />
               <span className="hidden sm:inline">Previous</span>
             </Button>
+
+            <div className="flex items-center gap-2 ml-auto sm:ml-0">
+              <Button
+                variant="ghost"
+                onClick={handleMinimizeSetup}
+                className={cn(
+                  "px-3 sm:px-4 py-2 text-sm font-medium text-white",
+                )}
+              >
+                Minimize Setup
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={handleSkipSetup}
+                className={cn(
+                  "px-3 sm:px-4 py-2 text-sm font-medium text-white",
+                )}
+              >
+                Skip Setup
+              </Button>
+            </div>
 
             {/* Next button */}
             <Button

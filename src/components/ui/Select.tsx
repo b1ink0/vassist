@@ -4,7 +4,7 @@ import { Select as BaseSelect } from "@base-ui/react/select";
 import type { SelectHTMLAttributes } from "react";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
-import { isExtension } from "../../utils/PlatformUtils";
+import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
 
 const selectVariants = cva(
   "glass-input w-full min-h-[36px] pr-11 text-left [font-family:inherit]",
@@ -84,6 +84,9 @@ const Select = ({
   portalContainer,
   "data-testid": dataTestId,
 }: SelectProps) => {
+  const [portalAnchor, setPortalAnchor] = React.useState<HTMLDivElement | null>(
+    null,
+  );
   const grouped = Array.isArray(groups) && groups.length > 0;
   const optionItems = React.useMemo(() => {
     if (grouped) {
@@ -107,20 +110,8 @@ const Select = ({
 
   const selectedValue = isControlled ? String(value ?? "") : internalValue;
   const resolvedPortalContainer = React.useMemo(() => {
-    if (portalContainer !== undefined) {
-      return portalContainer;
-    }
-
-    if (!isExtension || typeof document === "undefined") {
-      return undefined;
-    }
-
-    const shadowRoot = document.getElementById(
-      "virtual-assistant-extension-root",
-    )?.shadowRoot;
-
-    return shadowRoot?.getElementById("react-root") ?? shadowRoot ?? undefined;
-  }, [portalContainer]);
+    return resolvePortalContainer(portalContainer, portalAnchor);
+  }, [portalAnchor, portalContainer]);
 
   const triggerChange = (nextValue: string | null): void => {
     const resolvedValue = nextValue ?? "";
@@ -163,109 +154,113 @@ const Select = ({
     : cn(selectVariants({ variant }), "relative", className);
 
   return (
-    <BaseSelect.Root
-      value={selectedValue || undefined}
-      onValueChange={triggerChange}
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={(nextOpen) => onOpenChange?.(nextOpen)}
-      disabled={disabled}
-      name={name}
-      required={required}
-    >
-      <BaseSelect.Trigger
-        className={triggerClassName}
-        render={trigger}
-        data-testid={dataTestId}
+    <div ref={setPortalAnchor} style={{ display: "contents" }}>
+      <BaseSelect.Root
+        value={selectedValue || undefined}
+        onValueChange={triggerChange}
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={(nextOpen) => onOpenChange?.(nextOpen)}
+        disabled={disabled}
+        name={name}
+        required={required}
       >
-        {!trigger && (
-          <>
-            <BaseSelect.Value
-              className={cn("block truncate pr-2", textClass)}
-              placeholder={placeholder || "Select"}
-            />
-            <BaseSelect.Icon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70">
-              <Icon name="chevron-down" size={16} />
-            </BaseSelect.Icon>
-          </>
-        )}
-      </BaseSelect.Trigger>
-
-      <BaseSelect.Portal container={resolvedPortalContainer}>
-        <BaseSelect.Positioner
-          side={side}
-          sideOffset={sideOffset}
-          align={align}
-          alignItemWithTrigger={false}
-          className={cn(
-            "z-[10040] outline-none [font-family:inherit]",
-            positionerClassName,
-          )}
+        <BaseSelect.Trigger
+          className={triggerClassName}
+          render={trigger}
+          data-testid={dataTestId}
         >
-          <BaseSelect.Popup
+          {!trigger && (
+            <>
+              <BaseSelect.Value
+                className={cn("block truncate pr-2", textClass)}
+                placeholder={placeholder || "Select"}
+              />
+              <BaseSelect.Icon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70">
+                <Icon name="chevron-down" size={16} />
+              </BaseSelect.Icon>
+            </>
+          )}
+        </BaseSelect.Trigger>
+
+        <BaseSelect.Portal container={resolvedPortalContainer}>
+          <BaseSelect.Positioner
+            side={side}
+            sideOffset={sideOffset}
+            align={align}
+            alignItemWithTrigger={false}
             className={cn(
-              "rounded-xl border p-1 shadow-xl backdrop-blur-[12px] [font-family:inherit]",
-              popupClass,
-              popupClassName,
+              "z-[10040] outline-none [font-family:inherit]",
+              positionerClassName,
             )}
           >
-            <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center text-white/50">
-              <Icon name="chevron-up" size={16} />
-            </BaseSelect.ScrollUpArrow>
-            <BaseSelect.List
+            <BaseSelect.Popup
               className={cn(
-                "max-h-64 min-w-[var(--anchor-width)] overflow-y-auto scrollbar-glass [font-family:inherit]",
-                listClassName,
+                "rounded-xl border p-1 shadow-xl backdrop-blur-[12px] [font-family:inherit]",
+                popupClass,
+                popupClassName,
               )}
             >
-              {grouped
-                ? groups.map((group) => (
-                    <React.Fragment key={group.label}>
-                      <div
-                        className={cn(
-                          "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                          groupLabelClass,
-                        )}
-                      >
-                        {group.label}
-                      </div>
-                      {group.options.map((opt) => (
-                        <BaseSelect.Item
-                          key={`${group.label}-${opt.value}`}
-                          value={String(opt.value)}
-                          disabled={opt.disabled}
-                          className={itemClass}
+              <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center text-white/50">
+                <Icon name="chevron-up" size={16} />
+              </BaseSelect.ScrollUpArrow>
+              <BaseSelect.List
+                className={cn(
+                  "max-h-64 min-w-[var(--anchor-width)] overflow-y-auto scrollbar-glass [font-family:inherit]",
+                  listClassName,
+                )}
+              >
+                {grouped
+                  ? groups.map((group) => (
+                      <React.Fragment key={group.label}>
+                        <div
+                          className={cn(
+                            "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                            groupLabelClass,
+                          )}
                         >
-                          <BaseSelect.ItemIndicator className={indicatorClass}>
-                            <Icon name="check" size={16} />
-                          </BaseSelect.ItemIndicator>
-                          <BaseSelect.ItemText className="truncate">
-                            {opt.label}
-                          </BaseSelect.ItemText>
-                        </BaseSelect.Item>
-                      ))}
-                    </React.Fragment>
-                  ))
-                : optionItems.map((opt) => (
-                    <BaseSelect.Item
-                      key={opt.value}
-                      value={String(opt.value)}
-                      disabled={opt.disabled}
-                      className={singleItemClass}
-                    >
-                      <BaseSelect.ItemText className="truncate">
-                        {opt.label}
-                      </BaseSelect.ItemText>
-                      <BaseSelect.ItemIndicator className={indicatorClass}>
-                        <Icon name="check" size={16} />
-                      </BaseSelect.ItemIndicator>
-                    </BaseSelect.Item>
-                  ))}
-            </BaseSelect.List>
-          </BaseSelect.Popup>
-        </BaseSelect.Positioner>
-      </BaseSelect.Portal>
-    </BaseSelect.Root>
+                          {group.label}
+                        </div>
+                        {group.options.map((opt) => (
+                          <BaseSelect.Item
+                            key={`${group.label}-${opt.value}`}
+                            value={String(opt.value)}
+                            disabled={opt.disabled}
+                            className={itemClass}
+                          >
+                            <BaseSelect.ItemIndicator
+                              className={indicatorClass}
+                            >
+                              <Icon name="check" size={16} />
+                            </BaseSelect.ItemIndicator>
+                            <BaseSelect.ItemText className="truncate">
+                              {opt.label}
+                            </BaseSelect.ItemText>
+                          </BaseSelect.Item>
+                        ))}
+                      </React.Fragment>
+                    ))
+                  : optionItems.map((opt) => (
+                      <BaseSelect.Item
+                        key={opt.value}
+                        value={String(opt.value)}
+                        disabled={opt.disabled}
+                        className={singleItemClass}
+                      >
+                        <BaseSelect.ItemText className="truncate">
+                          {opt.label}
+                        </BaseSelect.ItemText>
+                        <BaseSelect.ItemIndicator className={indicatorClass}>
+                          <Icon name="check" size={16} />
+                        </BaseSelect.ItemIndicator>
+                      </BaseSelect.Item>
+                    ))}
+              </BaseSelect.List>
+            </BaseSelect.Popup>
+          </BaseSelect.Positioner>
+        </BaseSelect.Portal>
+      </BaseSelect.Root>
+    </div>
   );
 };
 
