@@ -1,59 +1,43 @@
-# Chat History and Branches
+# Saved Chats and Branches
 
-Saved chats and branches keep older conversations, alternate replies, and message revisions in one place.
+VAssist saves every conversation automatically. You can browse them, search them, continue old ones, and keep multiple versions of any reply without losing anything.
 
-## Open and search saved chats
+## How conversations are saved
 
-- The `Chat History` list lives inside the main chat view.
-- It loads recent chats first and keeps loading more as you scroll.
-- The search field lets you filter saved chats quickly instead of scrolling through everything.
+Each time you send your first message in a blank session, a new chat is created. From then on, everything in that session is saved as you go. No manual save, no export needed. Conversations start as **Untitled Chat** until you rename them.
 
-If you have not named a conversation yet, VAssist falls back to `Untitled Chat` until you rename it.
+## Opening the history panel
 
-## Rename or delete a conversation
+The **Chat History** panel lives inside the main chat view. Open it from the controls at the top of the chat window. It loads your most recent conversations first and keeps loading more as you scroll down.
 
-- Rename a chat when you want the history list to be easier to scan later.
-- Delete a chat when you no longer want it in saved history.
-- The history list refreshes after edit and delete actions so you can keep working without reopening it.
+- **Search**: filters by title or message content as you type
+- **Rename**: edit a chat's title inline from the list
+- **Delete**: removes the conversation from the list immediately
+- **Select**: reopens that chat so you can continue it
 
-## Return to an older conversation
+## Starting a new conversation
 
-Selecting a saved chat reopens that conversation in the main chat view so you can continue it instead of starting over.
+To start fresh, open the history panel and create a new chat from the controls there. The blank session starts empty and auto-saves once you send your first message.
 
-This is useful when you keep separate chats for different tasks instead of putting everything into one long thread.
+## Branches
 
-## Branches let you keep more than one answer
+When you hit **Regenerate response**, VAssist doesn't overwrite the previous reply. It saves both as separate branches on that message. Navigate between them with the branch controls that appear below the message.
 
-`Regenerate response` does not force you to lose the first answer. When a message has more than one generated reply, VAssist keeps those alternate responses as branches.
+| Control             | What it does                              |
+| ------------------- | ----------------------------------------- |
+| Previous branch     | Shows an earlier reply for that message   |
+| Next branch         | Shows a later reply for that message      |
+| Regenerate response | Creates a new branch from the same prompt |
 
-| Branch action | What it does |
-| --- | --- |
-| Previous branch | Moves to an earlier saved answer for the same point in the conversation. |
-| Next branch | Moves to a later saved answer for the same point in the conversation. |
-| Regenerate response | Creates another branch from the same prompt state. |
+This is useful when the first reply isn't quite right and you want to compare a few takes before continuing. The conversation after a branch starts from whichever branch you have selected.
 
-Branches make tone, content, and quality comparisons easy without copying responses into a separate note.
+## Editing your messages
 
-## Edit and resend your own message
-
-- Your own messages can be edited after sending.
-- When you edit, you can also remove attached images or attached audio before saving the change.
-- This is helpful when the original prompt was close but not quite right and you want the next answer to stay in the same thread.
-
-## Copy and replay assistant messages
-
-- `Copy message` is there for quickly moving an answer elsewhere.
-- If TTS is enabled, assistant replies can also be replayed with the message-level speech control.
-
-## Best ways to use history in practice
-
-- Keep one chat per topic when you want cleaner history.
-- Use regeneration and branches when you are comparing answers from the same prompt.
-- Rename chats once they become important enough that you know you will come back to them later.
+You can edit any message you sent. When you do, you can also remove attached images or audio before saving the change. The conversation continues from the edited version.
 
 ## Related guides
 
 <div class="doc-link-list">
-  <a href="/guide/chat-and-voice">Open chat and voice guide</a>
-  <a href="/guide/ai-toolbar">Open AI toolbar guide</a>
+  <a href="/guide/chat-and-voice">Chat and voice →</a>
+  <a href="/guide/ai-toolbar">AI toolbar →</a>
 </div>

@@ -1,16 +1,16 @@
 # Storage and Data
 
-VAssist stores both lightweight configuration and heavier user assets. The exact storage layer depends on the runtime and the type of data being saved.
+VAssist stores lightweight config and heavier user assets. The exact storage layer depends on runtime and data type.
 
 ## Main data families
 
-| Data family | Examples |
-| --- | --- |
-| Config | UI, LLM, TTS, STT, and AI feature settings |
-| Chat history | Messages, linked attachments, temporary or persistent sessions |
-| Visual assets | Models, stages, motions, emotes, backgrounds |
-| Voice assets | Saved reference voices and related metadata |
-| Local models | Desktop-local and Android-local model files |
+| Data family   | Examples                                                       |
+| ------------- | -------------------------------------------------------------- |
+| Config        | UI, LLM, TTS, STT, and AI feature settings                     |
+| Chat history  | Messages, linked attachments, temporary or persistent sessions |
+| Visual assets | Models, stages, motions, emotes, backgrounds                   |
+| Voice assets  | Saved reference voices and related metadata                    |
+| Local models  | Desktop-local and Android-local model files                    |
 
 ## Backup-visible categories
 
@@ -44,4 +44,4 @@ Android local models and related assets are managed through the Android runtime 
 
 ## Why backup matters
 
-Because VAssist mixes configuration, media, and model-related assets, backup and restore is not just convenience. It is the only built-in way to move a complete personalized setup without manually re-importing every model, motion, emote, voice, or background.
+VAssist mixes config, media, and model assets. Backup/restore is the only built-in way to move a complete setup between machines without manually re-importing every model, motion, emote, voice, or background.

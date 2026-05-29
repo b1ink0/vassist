@@ -5,40 +5,40 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 132
-- Files: 431
-- Text files counted for metrics: 347
-- Total text lines: 122542
+- Files: 432
+- Text files counted for metrics: 348
+- Total text lines: 123014
 - Code files counted for metrics: 264
 - Total code lines: 112394
 
 ## Line Counts by File Type
 
-| File Type | Extensions | Files | Lines |
-| --- | --- | ---: | ---: |
-| Batch Script | .bat | 1 | 94 |
-| C and C++ | .c, .cc, .cpp, .h, .hpp | 6 | 1285 |
-| CSS | .css, .scss, .less | 5 | 1275 |
-| HTML | .html | 4 | 73 |
-| Java | .java | 2 | 44 |
-| Kotlin | .kt | 13 | 6485 |
-| Shell Script | (no extension) | 2 | 255 |
-| TSX | .tsx | 86 | 43823 |
-| TypeScript | .ts, .mts, .cts | 145 | 59060 |
-| Gradle | .gradle | 7 | 242 |
-| JSON | .json | 13 | 400 |
-| Markdown | .md | 29 | 3083 |
-| Other Text | mixed | 7 | 2236 |
-| Plain Text | (no extension) | 10 | 3531 |
-| Properties | .properties | 2 | 29 |
-| SVG | .svg | 3 | 232 |
-| XML | .xml | 12 | 395 |
+| File Type    | Extensions              | Files | Lines |
+| ------------ | ----------------------- | ----: | ----: |
+| Batch Script | .bat                    |     1 |    94 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1285 |
+| CSS          | .css, .scss, .less      |     5 |  1275 |
+| HTML         | .html                   |     4 |    73 |
+| Java         | .java                   |     2 |    44 |
+| Kotlin       | .kt                     |    13 |  6485 |
+| Shell Script | (no extension)          |     2 |   255 |
+| TSX          | .tsx                    |    86 | 43823 |
+| TypeScript   | .ts, .mts, .cts         |   145 | 59060 |
+| Gradle       | .gradle                 |     7 |   242 |
+| JSON         | .json                   |    13 |   400 |
+| Markdown     | .md                     |    29 |  3445 |
+| Other Text   | mixed                   |     7 |  2236 |
+| Plain Text   | (no extension)          |    10 |  3531 |
+| Properties   | .properties             |     2 |    29 |
+| SVG          | .svg                    |     4 |   342 |
+| XML          | .xml                    |    12 |   395 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
 - android/: 52 directories, 74 files
 - android-src/: 1 directories, 3 files
-- documentation/: 10 directories, 38 files
+- documentation/: 10 directories, 39 files
 - electron/: 13 directories, 48 files
 - extension/: 6 directories, 19 files
 - public/: 5 directories, 19 files
@@ -231,17 +231,18 @@ vassist/
 │   │   │   ├── desktop.md
 │   │   │   └── extension.md
 │   │   ├── public/
-│   │   │   └── assets/
-│   │   │       ├── chat.png
-│   │   │       ├── companion.png
-│   │   │       ├── dictation.png
-│   │   │       ├── language_detector.png
-│   │   │       ├── overview.gif
-│   │   │       ├── rewrite.png
-│   │   │       ├── summarize.png
-│   │   │       ├── toolbars.png
-│   │   │       ├── translate.png
-│   │   │       └── writer.png
+│   │   │   ├── assets/
+│   │   │   │   ├── chat.png
+│   │   │   │   ├── companion.png
+│   │   │   │   ├── dictation.png
+│   │   │   │   ├── language_detector.png
+│   │   │   │   ├── overview.gif
+│   │   │   │   ├── rewrite.png
+│   │   │   │   ├── summarize.png
+│   │   │   │   ├── toolbars.png
+│   │   │   │   ├── translate.png
+│   │   │   │   └── writer.png
+│   │   │   └── VA.svg
 │   │   ├── settings/
 │   │   │   ├── ai-features.md
 │   │   │   ├── index.md

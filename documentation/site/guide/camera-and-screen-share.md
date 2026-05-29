@@ -1,55 +1,36 @@
 # Camera and Screen Share
 
-Desktop builds of VAssist can work with more than plain text. Chat can also use microphone input, live camera, screen share, and draggable media previews.
+On desktop, VAssist can pull in camera and screen share alongside chat. This page covers microphone selection, camera input, screen sharing, and the floating previews.
 
-## What belongs here
+## Attaching media to chat
 
-- Microphone selection for voice conversation.
-- Camera input for live visual context.
-- Screen sharing from a chosen monitor or app window.
-- Floating previews that stay on screen while you continue working.
+The chat input takes more than text. Add images, audio files, or drag anything straight into the input. It's usually faster than using the file picker.
 
-## Attach images, audio, and dragged content
+## Microphone and camera
 
-The chat input accepts more than typed text.
+- Pick a specific microphone in the chat view instead of using the system default.
+- On desktop, you can also select and switch camera devices.
 
-- Add images when you want the model to see a screenshot, photo, or other visual reference.
-- Add audio when you want the conversation to include a recording.
-- Drag text, images, or audio straight into the chat when that is faster than browsing for files.
+## Screen share (desktop only)
 
-## Microphone and camera basics
+Start screen sharing and VAssist opens a picker:
 
-- Pick the microphone you want instead of relying on the system default.
-- On desktop, you can also choose and switch camera devices.
-- Camera state stays aligned with what the main chat is doing.
+- **Screens**: whole display capture
+- **Windows**: individual app window capture
 
-## Screen share on desktop
+Pick a source, hit **Share**, and the capture starts.
 
-When you start screen sharing on desktop, VAssist opens a share picker with two groups:
+## Floating previews
 
-- `Screens` for whole displays
-- `Windows` for individual app windows
+Camera and screen share both show as draggable floating windows. Move them wherever they're not in the way. Camera previews let you cycle between connected cameras. Screen previews are wider since they're meant for window and display content.
 
-From there you choose a source and either `Share` or `Cancel`.
+## During voice mode
 
-## Draggable live previews
-
-Camera and screen share both use floating preview windows.
-
-- You can drag them to a better position instead of keeping them fixed.
-- The previews stay inside the app window bounds.
-- Camera preview supports cycling through cameras when more than one device is available.
-- Screen previews are wider than camera previews because they are meant for window and display content.
-
-## During voice conversation
-
-Voice conversation still owns the main microphone loop, but desktop capture tools can sit beside it when you need a more multimodal session.
-
-When voice mode ends, VAssist also shuts down desktop camera and screen share sessions so those extra capture sources do not stay running by accident.
+Voice mode owns the mic loop, but camera and screen share can run alongside it for a more multimodal session. When voice mode ends, VAssist cleans up camera and screen share sessions automatically.
 
 ## Related guides
 
 <div class="doc-link-list">
-  <a href="/guide/chat-and-voice">Open chat and voice guide</a>
-  <a href="/platforms/desktop">Open desktop platform guide</a>
+  <a href="/guide/chat-and-voice">Chat and voice →</a>
+  <a href="/platforms/desktop">Desktop →</a>
 </div>

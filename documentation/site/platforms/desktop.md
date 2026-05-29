@@ -1,22 +1,15 @@
 # Desktop
 
-Desktop is the most complete local VAssist runtime: local GGUF models, local speech, camera and screen share, tray access, and direct control over runtime files and model downloads.
+Desktop is the most capable VAssist runtime. You get local GGUF models, local GPT-SoVITS speech, local Whisper transcription, camera and screen share, tray access, and direct control over runtime files.
 
-## What desktop is best at
+## What's different on desktop
 
-- running local LLMs through the built-in desktop runtime
-- running local GPT-SoVITS speech and local Whisper transcription
-- combining chat with microphone, camera, and screen share
-- staying available from the tray even when the main window is hidden
-
-## What feels different on desktop
-
-| Desktop feature | Why it matters |
-| --- | --- |
-| Main floating window | Keeps the assistant visible as a standalone app instead of attaching it to one browser tab. |
-| Separate input window | Lets desktop use a lighter always-available input window while still feeding the same main chat. |
-| Tray controls | You can hide VAssist without quitting it, then bring it back instantly from the tray. |
-| Screen picker | Desktop can choose between full displays and individual app windows for screen share. |
+| Desktop feature        | Why it matters                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Main floating window   | Keeps the assistant visible as a standalone app instead of attaching it to one browser tab.                 |
+| Separate input window  | Lets desktop use a lighter always-available input window while still feeding the same main chat.            |
+| Tray controls          | You can hide VAssist without quitting it, then bring it back instantly from the tray.                       |
+| Screen picker          | Desktop can choose between full displays and individual app windows for screen share.                       |
 | Local service managers | Desktop can install and manage local AI runtimes that do not exist in the same form on the extension build. |
 
 ## Local AI on desktop
@@ -36,16 +29,10 @@ Desktop is the most complete local VAssist runtime: local GGUF models, local spe
 - Screen share opens a picker for full displays or individual windows.
 - Camera and screen sessions are cleaned up when voice mode ends so they do not stay open by accident.
 
-## Desktop fits best when
-
-- A strong local setup matters more than browser integration.
-- Screen share, camera, local GGUF models, or GPT-SoVITS voice cloning are part of normal use.
-- The app should stay available from the tray instead of living in one browser tab.
-
 ## Related pages
 
 <div class="doc-link-list">
-	<a href="/getting-started/installation">Open installation guide</a>
-	<a href="/guide/camera-and-screen-share">Open camera and screen share guide</a>
-	<a href="/architecture/ai-and-media-stack">Open AI and media stack reference</a>
+	<a href="/getting-started/installation">Installation guide →</a>
+	<a href="/guide/camera-and-screen-share">Camera and screen share →</a>
+	<a href="/architecture/ai-and-media-stack">AI and media stack →</a>
 </div>

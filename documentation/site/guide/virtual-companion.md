@@ -1,59 +1,86 @@
 # Virtual Companion
 
-The virtual companion is the live character layer that stays visible beside chat and page tools. It is not just decoration. It can react while you chat, switch avatars and stages, play emotes, and expose camera controls directly from the live interface.
+The live 3D companion sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars, stages, and motions on the fly from the floating controls without touching Settings.
 
 <figure class="doc-figure">
 	<img src="/assets/companion.png" alt="Virtual companion with live avatar controls visible." />
-	<figcaption>The companion can stay visible while you work, or you can switch to chat-only mode when you want a lighter interface.</figcaption>
+	<figcaption>The companion stays visible while you work. Or switch to chat-only mode and skip the 3D view entirely.</figcaption>
 </figure>
 
-## What the companion does during normal use
+## What it does while you use VAssist
 
-- Shows the current avatar and stage.
-- Reacts with animation states such as idle, thinking, talking, walking, and celebration-style motion categories.
-- Uses lip sync during spoken playback when the current TTS setup supports it.
-- Can show a short floating chat bubble near the model.
-- Plays emotes that can combine motion, audio, and camera data.
+- Renders the current avatar and stage.
+- Switches between animation states: idle, thinking, talking, walking, celebration.
+- Lip-syncs during spoken reply playback when your TTS setup supports it.
+- Displays short assistant output in a floating chat bubble near the model.
+- Plays emotes: combinations of motion, audio, and optional camera movement.
 
-## Live controls around the companion
+## The floating button cluster
 
-The floating control cluster is the fastest way to change what you see without opening the full settings tab.
+When the avatar is visible and chat is closed, a vertical stack of buttons sits near the companion:
 
-| Control | What it does |
-| --- | --- |
-| Avatar list | Opens the live avatar picker with `VAssist Default` plus any uploaded models. |
-| Stage button | Switches the same picker between avatar selection and stage selection, including `No Stage`. |
-| Emote button | Opens the live emote list so you can trigger an emote immediately. |
-| 2D / 3D toggle | Switches between the simpler 2D framing and freer 3D camera behavior. |
-| Reset Camera Position | Returns the camera framing to its default state. |
-| Lock / Unlock Camera | Freezes or frees camera movement. |
-| Position Saving | Turns remembered camera positioning on or off. |
+| Button        | Icon                             | What it does                                                                                                     |
+| ------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Chat button   | AI spark (or X to close)         | Opens the chat. Drag to reposition when in chat-only mode. Shows attachment icon when a file is dragged over it. |
+| Zoom control  | + / - / reset                    | Zooms the companion view in or out, and resets back to default size.                                             |
+| Avatar button | person outline                   | Opens the avatar and stage picker panel.                                                                         |
+| Emote button  | music note (spins while playing) | Opens the emote list.                                                                                            |
+| Reload button | refresh arrow                    | Reloads the page.                                                                                                |
 
-## Move and frame the model
+These buttons hide when the chat is open.
 
-- On runtimes that allow free placement, you can drag the companion to a better on-screen position.
-- If you use `Last Location (Remember Position)`, VAssist restores the most recently saved location instead of snapping back to a fixed preset.
-- `Portrait Mode` tightens the framing to an upper-body view.
-- Standard mode keeps the broader full-body framing.
+## Switching avatars and stages
 
-## Chat bubble and playback bar
+Click the **avatar button** to open the picker panel. It lists all your imported models starting with **VAssist Default**.
 
-- The chat bubble appears near the model for short assistant output and then hides itself after a short delay.
-- The emote playback bar can show progress, pause or resume playback, and optionally show current and total time.
-- These playback helpers are useful when an emote is more than a quick reaction and you want manual control.
+- Click any model to switch immediately. A check mark shows the current selection.
+- Click the **stage icon** (box) in the camera controls row below the list to switch the panel to stage selection. Click the **person icon** to switch back to avatars.
+- **No Stage** renders the avatar with no background.
 
-## Chat-only mode is always an option
+## Camera controls (below the avatar list)
 
-If you turn avatar loading off, VAssist still works. The interface simply becomes chat-first instead of companion-first. In that mode, the chat position setting matters more than the avatar position or stage.
+When the avatar panel is open, a row of small buttons appears below the model list:
 
-## Android wallpaper note
+| Button                                               | What it does                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| 2D / 3D (highlighted when 3D)                        | Toggles between flat 2D framing and a free 3D camera.                    |
+| Reset camera (refresh icon)                          | Snaps the camera back to its default position.                           |
+| Lock / Unlock (lock icon, highlighted when unlocked) | Freezes or releases camera movement.                                     |
+| Pin position (pin icon, highlighted when saving)     | Saves dragged camera placement across sessions. Turn off to stop saving. |
+| Stage toggle (box / person icon)                     | Switches the panel between the avatar list and stage list.               |
 
-Android can use the companion as a live wallpaper view. That changes the role of the companion from a side element into the main visual layer, but it still uses the same model, stage, motion, and emote library underneath.
+## Playing emotes
+
+Click the **emote button** (music note) to open the emote panel.
+
+1. Use the **category dropdown** at the top to filter by category.
+2. Click any emote name to play it immediately. A spinning icon marks the currently playing emote.
+3. Click the emote button again to close the panel. The emote keeps playing in the background.
+
+The emote panel also shows an auto-play toggle and category selector so the companion plays emotes automatically during matching animation states.
+
+## Emote playback bar
+
+When an emote is playing, a progress bar appears near the companion showing elapsed time and duration. You can pause, resume, or stop from there.
+
+## Positioning and framing
+
+- Drag the companion to reposition it on supported runtimes.
+- Turn on **Pin position** (pin icon in camera controls) to remember where you dragged it. Turn it off and the companion resets to the preset position on next load.
+- **Portrait Mode** (Settings → 3D) crops to an upper-body framing. Standard mode shows the full body.
+
+## Chat-only mode
+
+If you turn the avatar off, VAssist keeps working. It just becomes a chat-first interface. The **Chat Window Position** setting in Settings → UI controls where the chat sits in that mode.
+
+## Android live wallpaper
+
+On Android, the companion can run as a live wallpaper. It's the same model, motions, and emote library, just rendered as a wallpaper view instead of an in-app overlay. Do setup in the main app first. The wallpaper reads those saved settings.
 
 ## Related guides
 
 <div class="doc-link-list">
-	<a href="/guide/avatar-motions-and-emotes">Open avatar, motions, and emotes guide</a>
-	<a href="/settings/three-d">Open 3D settings reference</a>
-	<a href="/guide/chat-and-voice">Open chat and voice guide</a>
+	<a href="/guide/avatar-motions-and-emotes">Avatar, motions, and emotes →</a>
+	<a href="/guide/chat-and-voice">Chat and voice →</a>
+	<a href="/settings/three-d">3D settings →</a>
 </div>

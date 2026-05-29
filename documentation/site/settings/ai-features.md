@@ -1,86 +1,111 @@
 # AI Features Settings
 
-The AI+ tab controls the higher-level tools that sit on top of the chosen LLM provider. It does not replace the main LLM selection. Instead, it turns extra tools on or off and exposes test actions for each one.
+Settings → AI+ controls the higher-level tools built on top of the active LLM. These are independent of provider selection. They just enable or disable extra capabilities.
 
-## Common pattern
+Each feature has a toggle, a test action, and a result area. Disable any feature you don't use to keep the toolbar clean.
 
-Every feature block follows the same pattern:
+## Translator
 
-| Element | Behavior |
-| --- | --- |
-| Feature switch | Enables or disables that feature independently of the others. |
-| Feature summary | Describes what the feature enables. |
-| Test action | Runs a provider-backed test call when testing is enabled in Settings. |
-| Clear action | Clears the last shown test result. |
-| Result area | Shows success, loading, or error output for the latest test. |
+The Translator powers the **Translate** action in the AI toolbar. When you select text on any page and open the toolbar, Translate sends it to the active LLM and returns a translation in your target language.
 
-## Feature-by-feature controls
+**To set up translation:**
 
-### Translator
+1. Make sure **Translator** is toggled on.
+2. Set **Default Translation Language** to your usual target language (e.g., `es` for Spanish, `ja` for Japanese).
+3. Click **Test**. It translates `Hello, how are you?` into your selected language. If the result looks right, translation is working.
+4. Select text anywhere on a page, open the AI toolbar, and use the Translate action.
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Translator toggle | On | Enables translation actions across the assistant UI. |
-| Default Translation Language | `en` | Chooses the target language used by the test flow and by default translation behavior. |
-| Test | N/A | Translates the built-in sample sentence `Hello, how are you?` from English into the selected target language. |
-| Clear | N/A | Clears the last translation result. |
+If translation isn't appearing in the toolbar, check that the toggle is on here.
 
-### Language Detector
+| Control                      | Default | Behavior                                                           |
+| ---------------------------- | ------- | ------------------------------------------------------------------ |
+| Translator                   | On      | Enable translation actions across the UI.                          |
+| Default Translation Language | `en`    | Target language for the test and for default translation behavior. |
+| Test                         | -       | Translates `Hello, how are you?` into the selected language.       |
+| Clear                        | -       | Clears the last result.                                            |
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Language Detector toggle | On | Enables language detection features. |
-| Test Text | `Bonjour, comment allez-vous?` | Sample text used for the detection test. |
-| Test | N/A | Runs detection and reports the detected language plus confidence when available. |
-| Clear | N/A | Clears the last detection result. |
+## Language Detector
 
-### Summarizer
+Language Detector identifies what language a text sample is written in. It runs before translation to detect the source language automatically, so translation doesn't need you to specify it manually.
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Summarizer toggle | On | Enables summary generation actions. |
-| Test | N/A | Runs a summary against the built-in AI paragraph sample. |
-| Clear | N/A | Clears the last summary result. |
+**To enable and test:**
 
-The current config defaults used by the summarizer logic are:
+1. Toggle **Language Detector** on.
+2. Click **Test**. It runs detection on the built-in French sample (`Bonjour, comment allez-vous?`) and shows the detected language and confidence score.
+3. To test with your own text, edit the **Test Text** field before clicking Test.
 
-| Setting | Default |
-| --- | --- |
-| Summary type | `tldr` |
-| Output format | `plain-text` |
-| Length | `medium` |
+Language Detector works silently in the background. You don't interact with it directly beyond enabling it.
 
-### Text Rewriter
+| Control           | Default                        | Behavior                                                              |
+| ----------------- | ------------------------------ | --------------------------------------------------------------------- |
+| Language Detector | On                             | Enable language detection.                                            |
+| Test Text         | `Bonjour, comment allez-vous?` | Sample used for the detection test.                                   |
+| Test              | -                              | Detects language and shows the result with confidence when available. |
+| Clear             | -                              | Clears the last result.                                               |
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Text Rewriter toggle | On | Enables rewrite actions for existing text. |
-| Test | N/A | Rewrites the built-in sample sentence using a more formal tone. |
-| Clear | N/A | Clears the last rewrite result. |
+## Summarizer
 
-### Content Writer
+The Summarizer powers the **Summarize** action in the AI toolbar. Select a block of text, open the toolbar, and Summarize generates a TL;DR-style condensed version.
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Content Writer toggle | On | Enables prompt-to-content writing actions. |
-| Test | N/A | Generates a short paragraph about AI benefits using the built-in sample prompt. |
-| Clear | N/A | Clears the last generated result. |
+**To enable and test:**
+
+1. Toggle **Summarizer** on.
+2. Click **Test**. It summarizes a built-in sample paragraph using the active LLM. If a condensed result appears, summarization is working.
+3. Select a block of text on any page, open the AI toolbar, and use the Summarize action.
+
+Summarizer uses TL;DR style, plain text output, medium length by default.
+
+| Control    | Default | Behavior                                  |
+| ---------- | ------- | ----------------------------------------- |
+| Summarizer | On      | Enable summary generation.                |
+| Test       | -       | Summarizes the built-in sample paragraph. |
+| Clear      | -       | Clears the last result.                   |
+
+Summarizer defaults: type `tldr`, format `plain-text`, length `medium`.
+
+## Text Rewriter
+
+Text Rewriter powers the **Rewrite** action in the AI toolbar. Select text, open the toolbar, and Rewrite rephrases it in a different tone or style while keeping the meaning.
+
+**To enable and test:**
+
+1. Toggle **Text Rewriter** on.
+2. Click **Test**. It rewrites the built-in sample sentence in a more formal tone. If the result looks like a reworded version, rewriting is working.
+3. Select text on any page, open the toolbar, and use the Rewrite action.
+
+| Control       | Default | Behavior                                                     |
+| ------------- | ------- | ------------------------------------------------------------ |
+| Text Rewriter | On      | Enable rewrite actions for existing text.                    |
+| Test          | -       | Rewrites the built-in sample sentence in a more formal tone. |
+| Clear         | -       | Clears the last result.                                      |
+
+## Content Writer
+
+Content Writer powers the **Write** action in the AI toolbar. When you're focused on a text field, the toolbar can show a Write option. You provide a prompt and the LLM generates text and inserts it.
+
+**To enable and test:**
+
+1. Toggle **Content Writer** on.
+2. Click **Test**. It generates a short paragraph about AI benefits from a built-in prompt. If a generated paragraph appears, content writing is working.
+3. Click into any editable text field on a page, open the toolbar (Show on Input Focus must be on in UI settings), and use the Write action.
+
+| Control        | Default | Behavior                                                                     |
+| -------------- | ------- | ---------------------------------------------------------------------------- |
+| Content Writer | On      | Enable prompt-to-content writing.                                            |
+| Test           | -       | Generates a short paragraph about AI benefits from a built-in sample prompt. |
+| Clear          | -       | Clears the last result.                                                      |
 
 ## Chrome AI feature flags
 
-When Chrome AI is the current LLM provider and your Chrome version still needs extra AI feature flags, an additional warning message appears.
+When Chrome AI is the active LLM provider and your Chrome version needs extra flags, a warning block appears with copy buttons for each required flag.
 
-### Flags shown here
+| Flag                                | Required for                    |
+| ----------------------------------- | ------------------------------- |
+| `translation-api`                   | Browser-side translation        |
+| `language-detection-api`            | Browser-side language detection |
+| `summarization-api-for-gemini-nano` | Browser-side summarization      |
+| `rewriter-api`                      | Browser-side rewriting          |
 
-| Flag | Why it is shown |
-| --- | --- |
-| `translation-api` | Required for browser-side translation features |
-| `language-detection-api` | Required for browser-side language detection |
-| `summarization-api-for-gemini-nano` | Required for browser-side summarization |
-| `rewriter-api` | Required for browser-side rewriting |
-
-Each flag row includes a `Copy Flag URL` button, and the page also shows step-by-step instructions to enable the flags and relaunch Chrome.
-
-## Missing or inactive tools
-
-If toolbar actions such as Translate, Summarize, Rewrite, or Writer-style generation appear to be missing or inactive, check the AI+ tab after verifying the main LLM provider.
+::: tip
+If toolbar actions like Translate, Summarize, or Rewrite aren't appearing or working, check this tab and verify the feature toggle is on.
+:::

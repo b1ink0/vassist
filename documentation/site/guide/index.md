@@ -1,60 +1,69 @@
-# Use VAssist
+# Using VAssist
 
-After setup, most people use VAssist in three ways:
+Three ways you'll end up using VAssist day-to-day:
 
-- full chat when the request needs context, attachments, or a saved conversation
-- the AI toolbar when the job starts from text, an input field, or an image already on the page
-- the live companion when they want the avatar visible and interactive while they work
+- **Full chat**: when you need a real conversation, attachments, or want to save it for later
+- **AI toolbar**: when the job is right in front of you on the page (selected text, an input field, an image)
+- **Live companion**: when you want the avatar visible and interactive while you work
 
-## Chat and input
+::: tip Just finished setup?
+Start with **Chat and voice**. It covers what you'll see first and how to get your first conversation going.
+:::
+
+## Chat
 
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./chat-and-voice">
     <h3>Chat and voice</h3>
-    <p>Use the main conversation view for typed chat, attachments, spoken replies, voice conversation, and message actions.</p>
-    <p class="doc-card-cta">Open chat guide</p>
+    <p>Typed chat, file attachments, voice mode, message actions, system prompts, and what the AI persona controls.</p>
+    <p class="doc-card-cta">Chat guide →</p>
   </a>
   <a class="doc-card doc-card-link" href="./chat-history-and-branches">
     <h3>Saved chats and branches</h3>
-    <p>Return to older chats, search them, rename them, delete them, and compare alternate replies without losing the original answer.</p>
-    <p class="doc-card-cta">Open history guide</p>
-  </a>
-  <a class="doc-card doc-card-link" href="./camera-and-screen-share">
-    <h3>Camera and screen share</h3>
-    <p>Bring microphone, camera, and desktop capture into the chat flow when you need more than plain text.</p>
-    <p class="doc-card-cta">Open capture guide</p>
+    <p>How conversations are saved, how to browse and continue old ones, and how branched replies work.</p>
+    <p class="doc-card-cta">History guide →</p>
   </a>
 </div>
 
-## Work directly on the page
+## On-page tools
 
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./ai-toolbar">
     <h3>AI toolbar</h3>
-    <p>Rewrite, summarize, translate, dictate, inspect images, and move fast on the current page without switching into the full chat window.</p>
-    <p class="doc-card-cta">Open toolbar guide</p>
+    <p>Rewrite, summarize, translate, dictate, and analyze images directly on the current page, without opening chat.</p>
+    <p class="doc-card-cta">Toolbar guide →</p>
   </a>
 </div>
 
-## Keep the companion visible
+## Companion
 
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./virtual-companion">
     <h3>Virtual companion</h3>
-    <p>Use the floating avatar, live controls, chat bubble, and stage or camera controls while you work.</p>
-    <p class="doc-card-cta">Open companion guide</p>
+    <p>The floating avatar: live controls, chat bubble, stage switching, emote playback, and positioning.</p>
+    <p class="doc-card-cta">Companion guide →</p>
   </a>
   <a class="doc-card doc-card-link" href="./avatar-motions-and-emotes">
     <h3>Avatar, motions, and emotes</h3>
-    <p>Import models and stages, manage motion libraries, and build reusable emotes from audio, motion, and camera data.</p>
-    <p class="doc-card-cta">Open customization guide</p>
+    <p>Import PMX models and stages, manage VMD motion libraries, build emotes from audio, motion, and camera data.</p>
+    <p class="doc-card-cta">Customization guide →</p>
   </a>
 </div>
 
-## Need exact settings or platform differences?
+## Desktop capture
+
+<div class="doc-grid">
+  <a class="doc-card doc-card-link" href="./camera-and-screen-share">
+    <h3>Camera and screen share</h3>
+    <p>Pull microphone, camera, and desktop capture into chat. Desktop only.</p>
+    <p class="doc-card-cta">Capture guide →</p>
+  </a>
+</div>
+
+## Other references
 
 <div class="doc-link-list">
-  <a href="/settings/">Open settings reference</a>
-  <a href="/platforms/desktop">Open platform guides</a>
-  <a href="/getting-started/setup-wizard">Open setup guide</a>
+  <a href="/settings/">Settings reference →</a>
+  <a href="/platforms/desktop">Platform differences →</a>
+  <a href="/getting-started/setup-wizard">Setup guide →</a>
 </div>

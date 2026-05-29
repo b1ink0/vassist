@@ -1,82 +1,63 @@
 # Avatar, Motions, and Emotes
 
-The 3D settings tab controls how the companion looks and moves. It manages the companion's MMD-style assets, including PMX or BPMX models, PMX stages, VMD or BVMD motions, portrait framing, and emote assets.
+Settings → 3D is where you manage everything that shapes how the companion looks and moves: MMD-style models and stages, VMD motions, and emotes. It's split into five sub-tabs.
 
-## The five parts of 3D settings
-
-| Sub-tab | What it is for |
-| --- | --- |
-| Display | Turn the avatar on or off, reload it, switch portrait mode, and choose a saved position preset. |
-| Performance | Balance physics, frame rate, and render quality against device performance. |
-| Models | Import PMX avatar models and PMX stages, then choose defaults and fine-tune parts. |
-| Animations | Import VMD motions and decide which categories they can play in. |
-| Emotes | Build reusable reactions that combine audio, motion, and optional camera data. |
+| Sub-tab     | What's here                                                |
+| ----------- | ---------------------------------------------------------- |
+| Display     | Avatar on/off, reload, portrait mode, position preset      |
+| Performance | Physics, frame rate cap, render quality                    |
+| Models      | Import and manage PMX avatar models and PMX stages         |
+| Animations  | Import VMD motions, assign them to animation categories    |
+| Emotes      | Build named reactions from audio, motion, and camera clips |
 
 ## Models and stages
 
-- Upload zipped PMX model packages for custom avatars.
-- Upload zipped PMX stage packages when you want a custom scene instead of the default stage.
-- Use `VAssist Default` when you want to go back to the bundled avatar.
-- Use `No Stage` when you want the avatar without a custom stage.
-- Rename, delete, or set a default model or stage directly from the saved asset list.
+Upload models and stages as zipped PMX packages. Once imported, you can rename, delete, set a default, or expand a model to toggle individual textures and mesh parts.
 
-Both built-in and custom models can also expose texture and mesh-part toggles when you want more detailed visual control.
+- **VAssist Default**: the bundled avatar, always available
+- **No Stage**: renders the avatar without any background stage
+- Custom models replace the default when you mark one as the default
 
-## Display and camera setup
+## Display and camera
 
-- `Enable Avatar` decides whether the companion loads at all.
-- `Reload Avatar` reapplies model and scene changes immediately.
-- `Portrait Mode` switches to the tighter upper-body framing.
-- `Clipping Height` changes how aggressively portrait mode crops the model.
-- `Character Position` includes `Last Location (Remember Position)` when you want dragged placement to stick.
+- **Enable Avatar**: if this is off, VAssist runs as chat-only
+- **Reload Avatar**: applies any model/scene changes without restarting
+- **Portrait Mode**: upper-body crop instead of full body. **Clipping Height** adjusts how aggressively it crops.
+- **Character Position**: includes **Last Location** so dragged placement sticks across restarts
 
-Live 2D and 3D camera switching is available from the companion controls while you use the app. The settings tab is where you define the default behavior and persistent placement rules.
+You can also switch between 2D and 3D camera modes from the live companion controls without touching Settings.
 
-## Performance controls
+## Performance
 
-Performance matters more once you start using heavier models, stages, physics, or higher quality post-processing.
+Physics (hair, cloth), frame rate cap, and render quality are here. The defaults are reasonable for most machines. If the avatar is noticeably slow, drop the render quality or cap the frame rate first.
 
-- Turn physics on or off.
-- Choose the physics engine.
-- Set a frame-rate cap.
-- Use a built-in quality preset or open the full custom quality block.
-
-Custom quality lets you tune anti-aliasing, bloom, contrast, exposure, saturation, and related post-processing settings.
+Setting Render Quality to **Custom** unlocks individual controls for anti-aliasing (MSAA), FXAA, bloom, contrast, exposure, and saturation.
 
 ## Custom motions
 
-- Upload one or more VMD files into the motion library.
-- Rename or delete motions later.
-- Assign imported motions to playback categories such as `idle`, `thinking`, `celebrating`, `walking`, or `talking`.
-- Enable or disable built-in and custom animations per category.
+Import VMD files into the motion library, then assign them to animation categories: `idle`, `thinking`, `celebrating`, `walking`, or `talking`. Each category can hold multiple motions. The companion picks from them randomly during the matching state.
 
-VAssist prevents you from disabling the last remaining animation in a category, so a category never ends up empty by mistake.
+::: tip
+VAssist won't let you disable the last remaining motion in a category, so you can't accidentally leave a category empty.
+:::
 
 ## Emotes
 
-Emotes are the most expressive asset type because they can combine more than one kind of media.
+An emote is a named, triggerable reaction that can combine:
 
-| Emote part | What it adds |
-| --- | --- |
-| Audio | The sound that should play with the emote. |
-| Motion | The VMD motion clip that drives the character. |
-| Camera | An optional VMD camera variant for a more directed presentation. |
+| Part   | What it contributes                                           |
+| ------ | ------------------------------------------------------------- |
+| Audio  | Sound that plays with the emote                               |
+| Motion | The VMD clip that drives the character                        |
+| Camera | An optional VMD camera clip for a more cinematic presentation |
 
-You can create emotes one by one or import them in bulk from a ZIP package.
+Create them one by one, or bulk-import from a ZIP. Once they're in the library you can trigger them from the live emote panel. You can also assign categories so emotes fire automatically during matching animation states.
 
-## Managing the emote library
-
-- Give emotes names and categories.
-- Filter the library by category.
-- Hide an emote without deleting it.
-- Delete one emote or clear all emotes in the current filtered category.
-- Assign auto-play categories so certain emotes can be used automatically during matching states.
-
-Once an emote is in the library, you can trigger it from the live emote panel while using the companion.
+Library management: name, category, hide without deleting, delete one, or clear a whole category.
 
 ## Related guides
 
 <div class="doc-link-list">
-  <a href="/guide/virtual-companion">Open virtual companion guide</a>
-  <a href="/settings/three-d">Open 3D settings reference</a>
+  <a href="/guide/virtual-companion">Virtual companion →</a>
+  <a href="/settings/three-d">3D settings reference →</a>
 </div>

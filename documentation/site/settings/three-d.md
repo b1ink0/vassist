@@ -1,149 +1,197 @@
 # 3D Settings
 
-The 3D tab is split into five sub-tabs in this order: Display, Performance, Models, Animations, and Emotes. It owns everything related to the Babylon-rendered companion, from whether the avatar loads at all to how PMX models, motions, stages, and emotes are stored.
+Settings → 3D has five sub-tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. It covers the companion's entire visual layer: models, stages, motions, emotes, and display settings.
 
-## Display sub-tab
+## Display
 
-| Control | Default | Visibility | Behavior |
-| --- | --- | --- | --- |
-| Enable Avatar | On | All runtimes | Turns the rendered companion on or off. When off, the app falls back to chat-only mode. |
-| Reload Avatar | N/A | Only when Enable Avatar is on | Reloads the scene so model or scene configuration changes are applied immediately. |
-| Portrait Mode | Off | Only when Enable Avatar is on | Switches from full-body framing to a tighter upper-body portrait framing. |
-| Clipping Height | Model preset dependent | Only when Portrait Mode is on | Moves the portrait clipping plane. Lower values show more body. Higher values crop more aggressively. |
-| Character Position | Runtime preset | Only on shared web or extension-style runtimes where manual selection is allowed | Selects a preset position, including `Last Location` to restore the most recently dragged position. |
+**Portrait mode** crops the view to upper-body framing. Use **Clipping Height** to adjust how much of the body is visible. Lower values show more. Higher values crop tighter. You can switch portrait mode on and off without reloading the avatar.
 
-## Performance sub-tab
+**Character Position** controls where the companion sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
 
-| Control | Default | Visibility | Behavior |
-| --- | --- | --- | --- |
-| Physics Simulation | On | All runtimes | Enables or disables hair, cloth, and similar physics reactions. |
-| Physics Engine | Bullet | Only when Physics Simulation is on | Chooses `Bullet Physics (Recommended)` or `Havok Physics`. |
-| Frame Rate Limit | `60 FPS` | All runtimes | Caps rendering at `15`, `24`, `30`, `60`, `90`, or `Native`. `Native` warns about high-refresh monitors. |
-| Render Quality | Medium | All runtimes | Selects `Low`, `Medium`, `High`, `Ultra`, or `Custom`. |
+| Control            | Default        | Behavior                                                                                          |
+| ------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
+| Enable Avatar      | On             | Turns the 3D companion on or off. When off, the app falls back to chat-only mode.                 |
+| Reload Avatar      | -              | Only when avatar is on. Reloads the scene immediately.                                            |
+| Portrait Mode      | Off            | Only when avatar is on. Switches to tighter upper-body framing.                                   |
+| Clipping Height    | Model preset   | Only when Portrait Mode is on. Lower values show more body. Higher values crop more aggressively. |
+| Character Position | Runtime preset | Only on web/extension runtimes. Preset placements including `Last Location`.                      |
+
+## Performance
+
+If the companion runs slowly or drops frames, work through this list in order. Each step has a bigger impact than the next:
+
+1. **Render Quality** → drop to **Low**. This is usually the biggest single win.
+2. **Frame Rate Limit** → cap at `30 FPS`. The companion still looks smooth at 30.
+3. **Physics Simulation** → turn off. Hair and cloth physics are expensive.
+4. If you're on **Custom** quality: drop **Anti-Aliasing (MSAA)** to `1x` and turn off **Bloom Effect**.
+
+| Control            | Default  | Behavior                                                                               |
+| ------------------ | -------- | -------------------------------------------------------------------------------------- |
+| Physics Simulation | On       | Enables hair and cloth physics reactions.                                              |
+| Physics Engine     | Bullet   | `Bullet Physics (Recommended)` or `Havok Physics`. Only when Physics is on.            |
+| Frame Rate Limit   | `60 FPS` | `15`, `24`, `30`, `60`, `90`, or `Native`. `Native` warns about high-refresh monitors. |
+| Render Quality     | Medium   | `Low`, `Medium`, `High`, `Ultra`, or `Custom`.                                         |
 
 ### Render quality presets
 
-| Preset | Intended effect |
-| --- | --- |
-| Low | Minimal effects, highest performance |
-| Medium | Balanced quality, subtle bloom |
-| High | Better edges and soft glow |
-| Ultra | Highest built-in quality with stronger anti-aliasing |
-| Custom | Reveals every advanced post-processing control |
+| Preset | Effect                                             |
+| ------ | -------------------------------------------------- |
+| Low    | Minimal effects, highest performance               |
+| Medium | Balanced quality, subtle bloom                     |
+| High   | Better edges and soft glow                         |
+| Ultra  | Strongest built-in quality with full anti-aliasing |
+| Custom | Exposes every post-processing control individually |
 
 ### Custom quality controls
 
-When Render Quality is set to `Custom`, the following controls appear:
-
+::: details Expand custom quality controls
 | Control | Default | Behavior |
 | --- | --- | --- |
-| Anti-Aliasing (MSAA) | `2x` | Selects `1x`, `2x`, `4x`, or `8x`. Higher values cost more GPU time. |
-| FXAA | On | Adds fast anti-aliasing without requiring MSAA. |
-| Bloom Effect | On | Enables glow on bright areas. Turning it off hides all bloom-specific sliders. |
-| Bloom Threshold | `0.9` | Higher values make only the brightest areas glow. |
-| Bloom Intensity | `0.2` | Controls how strong the bloom effect is. |
-| Bloom Scale | `0.5` | Controls the bloom contribution scale. |
-| Bloom Kernel Size | `32` | Chooses `16`, `32`, `48`, or `64` for tighter or wider glow. |
-| Contrast | `1.2` | Adjusts final image contrast. |
-| Exposure | `1.05` | Adjusts final image brightness. |
-| Saturation | `15` | Adjusts final color richness from `-50` to `50`. |
-| Reset to Defaults | N/A | Restores the full custom-quality block to the built-in defaults listed above. |
+| Anti-Aliasing (MSAA) | `2x` | `1x`, `2x`, `4x`, or `8x`. Higher values cost more GPU. |
+| FXAA | On | Fast anti-aliasing without MSAA overhead. |
+| Bloom Effect | On | Glow on bright areas. Turning it off hides all bloom sliders. |
+| Bloom Threshold | `0.9` | How bright an area needs to be to bloom. |
+| Bloom Intensity | `0.2` | Bloom strength. |
+| Bloom Scale | `0.5` | Bloom contribution scale. |
+| Bloom Kernel Size | `32` | `16`, `32`, `48`, or `64` for tighter or wider glow. |
+| Contrast | `1.2` | Final image contrast. |
+| Exposure | `1.05` | Final image brightness. |
+| Saturation | `15` | Color richness, -50 to 50. |
+| Reset to Defaults | - | Restores all custom-quality controls to the values above. |
+:::
 
-## Models sub-tab
+## Models
 
-The Models sub-tab combines character model management and stage management in one scrollable page.
+Manages character models and stages together.
 
-### Custom models
+### Adding a custom avatar
 
-| Control | Behavior |
-| --- | --- |
-| Upload PMX Model (ZIP) | Imports a zipped PMX model package. Upload state shows progress text while running and an error panel if parsing fails. |
-| `VAssist Default` entry | Represents the built-in bundled model. Its toggle becomes active when no custom model is marked as default. |
-| Default model settings chevron | Expands grouped texture and mesh-part controls for the built-in model. |
-| Texture buttons | Toggle individual detected textures on or off, grouped by texture type. |
-| Mesh part buttons | Toggle individual detected mesh parts on or off, grouped by category. |
-| Custom model row | Shows model name and file size. |
-| Custom model rename | Inline name editing with save and cancel actions. |
-| Custom model delete | Removes the stored model package. |
-| Custom model default toggle | Marks that model as the active default avatar. |
-| Custom model settings chevron | Expands texture and mesh-part toggles for that specific uploaded model. |
+Models must be packaged as a ZIP file. The ZIP must contain the `.pmx` file plus every texture image it references. The PMX file embeds relative paths to its textures, so those textures need to exist at the same relative paths inside the ZIP. Standard MMD model packages already have this structure. If you downloaded an MMD model, zip the whole folder as-is.
 
-### Custom stages
+**Typical ZIP structure:**
 
-| Control | Behavior |
-| --- | --- |
-| Upload PMX Stage (ZIP) | Imports a zipped stage package with progress and error feedback. |
-| No Stage default row | Appears when no custom stages are installed and keeps the default stage active. |
-| Custom stage row | Shows name and size for each saved stage. |
-| Stage rename | Inline editing with save and cancel controls. |
-| Stage delete | Removes the saved stage asset. |
-| Stage default toggle | Marks the selected stage as the default active stage. |
+```
+MyModel.pmx
+tex/
+  body.png
+  face.png
+  hair.png
+```
 
-## Animations sub-tab
+If textures are missing from the ZIP the import will still succeed but the model will render with gray or transparent surfaces where textures should be.
 
-The Animations sub-tab combines the uploaded motion library with the category-based playback manager.
+1. Hit **Upload PMX Model (ZIP)** and select your file.
+2. Wait for the import. If something is wrong with the package, an error panel will tell you what's missing.
+3. Find the new model in the list, toggle it as **default**.
+4. Go back to **Display** and hit **Reload Avatar** (or use the Reload button in the companion's live controls).
 
-### Custom animation library
+The built-in **VAssist Default** model is always available as a fallback. It stays in the list even when a custom model is active.
 
-| Control | Behavior |
-| --- | --- |
-| Upload VMD Animations | Accepts one or more VMD files in one import action. |
-| Upload progress and error panels | Show import progress text or parser failure details. |
-| Motion row | Displays the motion name and file size. |
-| Motion rename | Inline editing with save and cancel controls. |
-| Motion delete | Removes the imported motion from storage. |
-| Motion category chevron | Opens per-motion category toggles. |
-| Animation Categories inside a motion | Lets one imported motion be enabled for `idle`, `thinking`, `celebrating`, `walking`, or `talking`. |
+To control which parts of a model are visible (hide accessories, swap textures, etc.), expand the model's settings chevron. Textures and mesh parts are each listed individually with toggles.
 
-### Animation Management
+### Character models
 
-The lower half of the tab opens one category section per animation bucket. The current categories are:
+| Control                | Behavior                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| Upload PMX Model (ZIP) | Import a zipped PMX package. Shows progress and an error panel if parsing fails. |
+| `VAssist Default`      | Built-in model. Active when no custom model is set as default.                   |
+| Settings chevron       | Expands texture and mesh-part toggles for that model.                            |
+| Texture buttons        | Toggle individual textures on/off, grouped by type.                              |
+| Mesh part buttons      | Toggle individual mesh parts on/off, grouped by category.                        |
+| Custom model row       | Shows name and file size. Supports rename, delete, and default toggle.           |
 
-- `idle`
-- `thinking`
-- `celebrating`
-- `walking`
-- `talking`
+### Adding a custom stage
 
-Each category section shows:
+Same structure as avatar model ZIPs: a `.pmx` stage file plus all its texture images at the correct relative paths. Hit **Upload PMX Stage (ZIP)** to import, then toggle it as default.
 
-| Section element | Behavior |
-| --- | --- |
-| Category header | Displays enabled counts for built-in and custom animations. |
-| Default Animations list | Lets the user enable or disable built-in animations in that category. |
-| Custom Animations list | Lets the user enable or disable imported motions assigned to that category. |
-| Last-enabled protection | The UI disables the toggle if turning it off would leave the category with no enabled animations. |
+Select **No Stage** to render the avatar against a transparent or neutral background.
 
-## Emotes sub-tab
+### Stages
 
-Emotes combine audio, motion, and optional camera data into a reusable reaction asset.
+| Control                | Behavior                                                          |
+| ---------------------- | ----------------------------------------------------------------- |
+| Upload PMX Stage (ZIP) | Import a zipped stage. Shows progress and error feedback.         |
+| No Stage row           | Default when no custom stages are installed.                      |
+| Stage row              | Shows name and size. Supports rename, delete, and default toggle. |
 
-### Emote creation and bulk import
+## Animations
 
-| Control | Behavior |
-| --- | --- |
-| Emote Name | Required for manual emote creation. |
-| Categories (comma separated) | Adds one or more custom category tags to the emote metadata. |
-| Import ZIP Package | Bulk-imports multiple emotes from a ZIP archive. |
-| Upload Audio | Selects the emote audio source. |
-| Upload Motion | Selects the VMD motion file for the emote. |
-| Upload Camera (Optional) | Adds optional VMD camera animation data. |
-| Upload Emote | Starts manual emote creation and shows success or error feedback after the upload finishes. |
+Combines the motion library with the category-based playback manager. Imported motions don't play until you assign them to at least one animation category.
 
-### Emote library controls
+### Importing motions and assigning categories
 
-| Control | Behavior |
-| --- | --- |
-| Category filter dropdown | Filters the list to `all` emotes or a specific category. |
-| Delete filtered button | Deletes every emote in the current filter scope. |
-| Emote row rename | Inline name edit with save and cancel actions. |
-| Emote delete | Removes the saved emote asset. |
-| Emote visibility toggle | Shows or hides the emote from the emote panel without deleting it. |
-| Emote category chevron | Opens auto-play category assignment toggles. |
-| Auto-play Categories | Lets the emote participate in `general`, `idle`, `thinking`, `celebrating`, `walking`, or `talking` auto-play buckets. |
+VMD files do not need to be zipped. Select the `.vmd` files directly. You can pick multiple files in one go.
 
-## Platform notes
+1. Hit **Upload VMD Animations** and pick one or more `.vmd` files. You can import multiple at once.
+2. After upload, find a motion in the list and expand its **category chevron**.
+3. Toggle on the animation categories this motion should be used in: `idle`, `thinking`, `celebrating`, `walking`, or `talking`.
 
-- Desktop and Android use runtime-specific position overrides, so the same preset can look larger or more centered there than it does in the shared web view.
-- Manual position selection is mainly meaningful outside native desktop and Android builds.
-- Android wallpaper mode makes the 3D tab especially visible because the companion becomes the main visual layer instead of a secondary panel.
+You can assign the same motion to multiple categories. The companion randomly picks from all enabled motions in a category, so adding more variety means more natural-looking behavior. The default built-in animations stay as a baseline. VAssist won't let you disable the last remaining motion in any category.
+
+The **Animation Management** section below the library lets you enable or disable individual built-in and custom motions per category without re-importing them.
+
+### Motion library
+
+| Control               | Behavior                                                                       |
+| --------------------- | ------------------------------------------------------------------------------ |
+| Upload VMD Animations | Import one or more VMD files at once.                                          |
+| Motion row            | Name, size, rename, delete.                                                    |
+| Category chevron      | Opens per-motion category assignment.                                          |
+| Animation Categories  | Assign a motion to `idle`, `thinking`, `celebrating`, `walking`, or `talking`. |
+
+### Animation management
+
+One category section per bucket: `idle`, `thinking`, `celebrating`, `walking`, `talking`.
+
+| Section element         | Behavior                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Category header         | Shows enabled counts for built-in and custom animations.                     |
+| Default Animations      | Enable or disable built-in animations in that category.                      |
+| Custom Animations       | Enable or disable imported motions assigned to that category.                |
+| Last-enabled protection | The toggle disables itself if turning it off would leave the category empty. |
+
+## Emotes
+
+Emotes are named, triggerable reactions. Each one plays a sound, runs a VMD motion on the avatar, and optionally moves the camera. You trigger them from the live emote panel in the companion controls.
+
+### Creating an emote
+
+You need at least an audio file and a VMD motion file. Camera data is optional but adds a cinematic touch.
+
+1. Give the emote a **name**. This is how it shows up in the panel.
+2. Optionally add **categories** (comma-separated tags) to group related emotes together in the filter.
+3. Upload the **audio** file.
+4. Upload the **motion** VMD file.
+5. Optionally upload a **camera** VMD file.
+6. Hit **Upload Emote**.
+
+To import many emotes at once from a collection, use **Import ZIP Package** instead of creating them one by one.
+
+Once an emote is in the library:
+
+- Use **category filter** to find it by tag
+- Toggle **visibility** to hide an emote from the panel without deleting it. Useful for keeping a library clean without losing assets
+- Open the **category chevron** to set it as an **auto-play** emote in one of the animation states (`general`, `idle`, `thinking`, `celebrating`, `walking`, `talking`). The companion will play it automatically during that state
+
+### Emote creation controls
+
+| Control            | Behavior                                             |
+| ------------------ | ---------------------------------------------------- |
+| Emote Name         | Required.                                            |
+| Categories         | Comma-separated custom category tags.                |
+| Import ZIP Package | Bulk-imports multiple emotes from a ZIP archive.     |
+| Upload Audio       | Audio source for the emote.                          |
+| Upload Motion      | VMD motion file.                                     |
+| Upload Camera      | Optional VMD camera animation.                       |
+| Upload Emote       | Starts creation and shows success or error feedback. |
+
+### Emote library
+
+| Control              | Behavior                                                               |
+| -------------------- | ---------------------------------------------------------------------- |
+| Category filter      | Filter list to `all` or a specific category.                           |
+| Delete filtered      | Delete every emote in the current filter scope.                        |
+| Emote row            | Rename, delete, or toggle visibility.                                  |
+| Visibility toggle    | Hides/shows the emote in the emote panel without deleting it.          |
+| Category chevron     | Opens auto-play category assignment.                                   |
+| Auto-play Categories | `general`, `idle`, `thinking`, `celebrating`, `walking`, or `talking`. |

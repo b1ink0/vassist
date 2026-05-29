@@ -1,72 +1,133 @@
 # Chat and Voice
 
-The main chat combines typed conversation, attachments, voice conversation, spoken reply playback, and companion reactions after setup.
+The chat window is where full conversations happen: typed or spoken, with attachments, and saved history.
 
 <figure class="doc-figure">
 	<img src="/assets/chat.png" alt="VAssist chat interface with message history and chat input visible." />
-	<figcaption>The full chat view is where longer conversations, attachments, voice conversation, and saved history live.</figcaption>
+	<figcaption>The full chat view: messages, attachments, voice mode, and history all in one place.</figcaption>
 </figure>
 
-## Open the main chat
+## Opening chat
 
-- The floating chat control opens the full conversation view instead of the quicker page tools.
-- If you set a keyboard shortcut for `Open Chat`, you can launch the same chat view without clicking through the UI.
-- If the avatar is disabled, VAssist falls back to a chat-first shell and uses the chat window position setting instead of the model position.
-- Desktop can also work with a separate input window, but it still feeds the same main chat.
+- Click the floating **chat button** (AI spark icon) to open the chat view.
+- On desktop, a lightweight input window is also available separately from the main window.
+- If the avatar is off, VAssist opens in chat layout by default.
 
-## Send a message with or without media
+## Starting and continuing conversations
 
-1. Type in the chat input.
-2. Add images or audio when you want the model to work from attached media as well as text.
-3. Drag text, images, or audio into the chat when that is faster than browsing for files.
-4. Send the request and watch the answer stream in.
+Each time you send your first message in a blank session, VAssist creates a new conversation and saves it automatically.
 
-The chat input is built for mixed requests, so you do not have to choose between plain text and media-first conversations.
+To reopen an old conversation, click **Chat History** (clock icon, bottom-left of the chat window) to browse saved chats. Select any entry to pick up where you left off.
 
-## What you can do while a reply is coming in
+[Saved chats and branches](/guide/chat-history-and-branches)
 
-- Watch the response stream in instead of waiting for the full answer at the end.
-- Let the current TTS provider speak the response when speech output is enabled.
-- Keep typing, attach more media, or move to another saved chat without leaving the main chat view.
-- If `Smooth Response Animation` is enabled, the chat shell animates as streaming text grows.
+## Chat window controls
 
-## Message actions you will use often
+The bottom bar of the chat window has three groups of buttons.
 
-| Action | What it does |
-| --- | --- |
-| Copy message | Copies the current message text. |
-| Edit message | Lets you change your own sent message and keep or remove attached images and audio before resending. |
-| Regenerate response | Creates another assistant answer from the same point in the conversation. |
-| Play or stop TTS | Replays the assistant message through the active speech provider when TTS is enabled. |
-| Previous branch / Next branch | Moves between alternate replies when a message has more than one generated branch. |
+**Left**
 
-This branch system matters when you are comparing answers instead of throwing the previous one away.
+| Button       | Icon  | What it does             |
+| ------------ | ----- | ------------------------ |
+| Settings     | gear  | Opens settings inline.   |
+| Chat History | clock | Opens the history panel. |
 
-## Voice conversation mode
+**Center**
 
-- Turn on `Voice Mode` when you want a spoken back-and-forth instead of typing every turn.
-- VAssist records microphone audio, sends it through the active STT provider, forwards the transcript to the current LLM, and can speak the reply through the active TTS provider.
-- You can stop voice mode, interrupt speech, or go back to typed chat at any time.
-- Voice quality depends mostly on the providers and models you chose in setup or settings, not on the chat shell itself.
+| Button   | Icon                     | What it does                                                        |
+| -------- | ------------------------ | ------------------------------------------------------------------- |
+| Stop     | square (red when active) | Stops AI generation or TTS playback mid-stream.                     |
+| New Chat | plus                     | Starts a blank conversation. The current one is saved.              |
+| Close    | X                        | Closes the chat panel. Only shown when the 3D companion is visible. |
 
-## Device controls inside chat
+**Right**
 
-- Choose the microphone you want to use instead of relying on the system default.
-- On desktop, you can also work with a camera source and screen share from the chat view.
-- Camera and screen previews stay visible as floating live previews while you work.
+| Button                | Icon                                | What it does                                              |
+| --------------------- | ----------------------------------- | --------------------------------------------------------- |
+| Hide / Show character | eye-off / eye                       | Hides or shows the 3D companion without closing chat.     |
+| Temp mode             | pin icon (star when active, yellow) | When active, the current session is not saved to history. |
 
-The full capture guide is covered in [Camera and Screen Share](/guide/camera-and-screen-share).
+## Typing and attaching files
 
-## Companion feedback while you chat
+Type in the text area. The toolbar sits below it:
 
-- If the companion is enabled, short assistant output can appear in the floating chat bubble near the model.
-- Spoken output can drive lip sync and companion state changes.
-- If an emote is active, the playback bar can show progress, pause or resume playback, and optionally show time labels.
+| Button     | State                                               | What it does                                                      |
+| ---------- | --------------------------------------------------- | ----------------------------------------------------------------- |
+| Image      | Blue with count when attached                       | Opens a file picker to attach images.                             |
+| Audio      | Purple with count when attached                     | Opens a file picker to attach audio files.                        |
+| Mic        | Red pulse when recording, hourglass when processing | Records a voice clip and attaches it as audio. Tap again to stop. |
+| Voice Mode | Phone icon                                          | Switches to hands-free voice conversation mode.                   |
+| Close      | X                                                   | Closes the input area.                                            |
+| Send       | Paper plane, disabled when nothing to send          | Sends the message.                                                |
+
+You can also **drag and drop** images or audio files directly onto the input area.
+
+## While a reply is coming in
+
+Responses stream in as they are generated. While streaming:
+
+- The **Stop** button (center of the bottom bar) cancels generation or TTS at any point.
+- If TTS is on, the reply is spoken as it streams.
+- You can keep typing while the reply comes in. Sending a new message will not interrupt the current one.
+- **Smooth Response Animation** (Settings and UI) controls whether the container height animates as text grows.
+
+## Message actions
+
+Hover or tap a message to see its action menu:
+
+| Action                 | What it does                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| Copy                   | Copies the message text.                                                           |
+| Edit                   | Edits your sent message and resends. You can also remove attachments from here.    |
+| Regenerate             | Generates another reply from the same prompt. Both versions are saved as branches. |
+| Play / Stop TTS        | Replays an assistant message through your TTS provider.                            |
+| Previous / Next branch | Steps through alternate replies for that message.                                  |
+
+## Voice mode
+
+Voice mode replaces the text input with a live conversation bar. Tap the **phone icon** to start.
+
+When voice mode is active the bar shows:
+
+- A status label that changes as the conversation progresses: **Listening**, **Thinking**, **Speaking**.
+- **Interrupt** button (hand-stop icon, red) when the assistant is speaking. Tap it to cut the reply short.
+
+The right side of the voice mode bar has these controls:
+
+| Control                                              | What it does                                                                                                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mic selector (microphone + arrow)                    | Picks which microphone to use. Dropdown lists all detected devices.                                                                                         |
+| Image attach (image icon, blue when attached)        | Attaches an image to the next voice message.                                                                                                                |
+| Camera (camera icon, green + pulse when active)      | Starts a camera feed. A draggable preview floats alongside the chat. Select a specific camera from the arrow dropdown next to it. Not available on Android. |
+| Screen share (screen icon, blue + pulse when active) | Starts a screen share session. A draggable preview appears. Not available on Android.                                                                       |
+| Close (X)                                            | Exits voice mode and returns to typing.                                                                                                                     |
+
+Speak naturally. VAssist transcribes what you say, sends it, gets a reply, and speaks it back. Then it returns to **Listening** and waits for you again.
+
+If you start talking while the assistant is still speaking, Voice Activity Detection (VAD) automatically detects your voice and interrupts the current reply. You do not need to tap the interrupt button for this. Just speak.
+
+::: info
+Camera and screen share are available in voice mode on desktop and the browser extension. They are not available on Android.
+:::
+
+::: info
+Voice quality depends on your STT and TTS provider setup. If transcription or speech output is not working, check Settings and STT and Settings and TTS.
+:::
+
+## AI persona and system prompts
+
+The AI behavior is controlled by the active **system prompt profile** in Settings and LLM and Profiles. The default is a general assistant. You can create your own: a coding assistant, a writing partner, a specific character. Changes apply to the next message.
+
+## Companion reactions during chat
+
+- Spoken output drives lip sync and can shift the companion animation state.
+- If an emote is playing, a progress bar shows in the companion area.
 
 ## Related guides
 
 <div class="doc-link-list">
-	<a href="/guide/chat-history-and-branches">Open chat history and branches</a>
-	<a href="/guide/ai-toolbar">Open AI toolbar guide</a>
-	<a href="/guide/virtual-companion">Open virtual companion guide</a>
+	<a href="/guide/chat-history-and-branches">Saved chats and branches →</a>
+	<a href="/guide/ai-toolbar">AI toolbar →</a>
+	<a href="/guide/virtual-companion">Virtual companion →</a>
+	<a href="/guide/camera-and-screen-share">Camera and screen share →</a>
 </div>

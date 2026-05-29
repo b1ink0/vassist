@@ -1,385 +1,280 @@
 # Set Up VAssist
 
-The setup wizard appears the first time you open VAssist. It walks you through the main choices that shape the app before you start using it.
+The setup wizard runs on first launch and covers five screens: companion mode, AI provider, voice, and extra tools. Most people are done in under five minutes if they stick with the defaults for their platform.
 
-By the time you finish, VAssist is ready to use with your preferred companion, AI service, voice settings, and extra tools.
+::: info Android wallpaper
+If you're on Android and plan to use the live wallpaper, do setup in the main app first. The wallpaper reads its settings from the app.
+:::
 
-Android live wallpaper mode reads the choices saved in the main app. Setup happens in the main Android app first, not inside the wallpaper view.
+## Overview
 
-<div class="media-placeholder">
-	<strong>GIF placeholder</strong>
-	<span>Complete five-step setup flow from Welcome to Finish.</span>
-</div>
-
-## What you will go through
-
-You move through five screens in order.
-
-| Step | What you choose |
-| --- | --- |
-| Welcome | Intro, documentation link, and Chrome AI help where it applies |
-| Virtual Companion | Whether the avatar is on, which display mode it uses, and position choices in browser or extension installs |
-| AI Configuration | Your main AI service, with different local, browser, or cloud choices depending on platform |
-| Voice | Separate speech output and speech input choices, each with their own provider list |
-| AI+ Features | Optional tools such as Translate, Summarize, Rewrite, and Writer |
+| Step              | What you configure                                                 |
+| ----------------- | ------------------------------------------------------------------ |
+| Welcome           | Intro and docs link. Chrome builds show Chrome AI guidance here.   |
+| Virtual Companion | Avatar on/off, display mode, position (browser/extension installs) |
+| AI Configuration  | Your main AI provider                                              |
+| Voice             | Speech output (TTS) and speech input (STT) separately              |
+| AI+ Features      | Optional tools: translate, summarize, rewrite, write               |
 
 ## 1. Welcome
 
-The first screen is a quick introduction. It introduces VAssist, links out to the docs, and can show Chrome AI setup help when you are using a browser or extension install.
-
-<div class="media-placeholder">
-	<strong>Screenshot placeholder</strong>
-	<span>Welcome screen with the docs link and any Chrome AI guidance.</span>
-</div>
+Just an intro screen. Links to the docs and, on Chrome, shows any Chrome AI setup guidance that applies to your browser. Hit Next.
 
 ## 2. Virtual Companion
 
-This step decides whether VAssist opens with the animated companion or a chat-first layout.
+Pick whether you want the 3D companion or a chat-first layout.
 
-- Turn the avatar on or off.
-- Choose Standard Mode or Portrait Mode when the avatar is enabled.
-- In browser or extension installs, choose where the companion appears on your screen.
-- If you turn the avatar off, VAssist continues as a chat-focused experience.
+- **Avatar on**: choose Standard Mode (full body) or Portrait Mode (upper body crop). Browser and extension installs also let you pick a starting screen position.
+- **Avatar off**: VAssist runs as a chat window, no 3D rendering.
 
-<div class="media-placeholder">
-	<strong>Screenshot placeholder</strong>
-	<span>Virtual companion step with avatar, display mode, and position choices.</span>
-</div>
+You can change all of this later in Settings → 3D.
 
 ## 3. AI Configuration
 
-This step decides which AI service handles chat and most AI actions.
+This is the most involved step. Pick one AI provider and finish only the fields it shows you.
 
-Choose one AI service here, then finish only the fields shown for that choice.
+### Which provider should I start with?
 
-### Fastest way through this screen
+| Platform            | Default pick         | Switch if                                                       |
+| ------------------- | -------------------- | --------------------------------------------------------------- |
+| Android             | Android Local        | You already have OpenAI or Ollama set up                        |
+| Desktop             | Desktop Local        | You'd rather use a cloud provider, or Ollama is already running |
+| Browser / extension | Chrome AI (if ready) | Chrome AI isn't available yet, or you prefer OpenAI / Ollama    |
 
-| Platform | Keep this selected first | Switch only if |
-| --- | --- | --- |
-| Android | Android Local | You already plan to use OpenAI or Ollama instead of the on-device model |
-| Desktop | Desktop Local | You want cloud setup now, or you already run Ollama |
-| Browser or extension | Chrome AI if it is ready | Chrome AI is unavailable, still blocked by browser setup, or you already prefer OpenAI or Ollama |
+### What each provider asks you to do
 
-### Use this order
+| Provider      | What the wizard shows                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| Android Local | Ready state, model label, Test Connection, endpoint field in Advanced Settings             |
+| Desktop Local | Backend picker, install status, Install button, progress bar, Test Connection              |
+| Chrome AI     | Status, required Chrome flags, Start Model Download, Refresh Status, Chrome internal links |
+| OpenAI        | API key field, Test Connection                                                             |
+| Ollama        | Endpoint, model name, Test Connection                                                      |
 
-1. Start with the default option already selected for your platform.
-2. Finish the install, flag, or download work shown for that provider.
-3. Fill only the fields shown for that provider.
-4. Run `Test Connection` when that button is available.
-5. If the local or browser path is still not ready and you need to keep moving, switch to OpenAI or Ollama for now.
+### Android Local
 
-### What this screen can actually ask you to do
-
-| Choice | What the wizard may show |
-| --- | --- |
-| Android Local | A ready state, a model label, `Test Connection`, and an endpoint field in Advanced Settings |
-| Desktop Local | A runtime-backend picker, backend install status, an `Install` button, backend progress, and `Test Connection` |
-| Chrome AI | Status, required Chrome flags, `Start Model Download`, `Refresh Status`, and a link to Chrome internal pages |
-| OpenAI | API key field and `Test Connection` |
-| Ollama | Endpoint, model name, and `Test Connection` |
-
-### What each choice means during setup
-
-#### Android Local
-
-Android Local is the normal first choice on Android. It is the built-in on-device model path shown in the wizard as Qwen3-0.6B.
+The default on Android. Runs Qwen3-0.6B-Q4 on-device.
 
 1. Leave `Android Local` selected.
-2. Run `Test Connection`.
-3. Continue if it responds.
+2. Hit **Test Connection**.
+3. Continue when it responds.
 
-The wizard shows this path as ready to use and labels it as Qwen3-0.6B-Q4, optimized for mobile. The endpoint field only matters when the Android-local service is exposed somewhere other than the default local address.
+The Advanced Settings endpoint field only matters if you've changed the default local address.
 
-#### Desktop Local
+### Desktop Local
 
-Desktop Local is the normal first choice on desktop. It is the built-in local model path based on llama.cpp through the Electron runtime.
+The default on desktop. Uses llama.cpp through the Electron runtime.
 
 1. Leave `Desktop Local` selected.
-2. Open `Runtime Backend` and decide whether to stay on `auto` or choose a specific backend.
-3. Keep `auto` for the first pass if you are not sure which backend fits your machine.
-4. Choose a specific backend only when you already know the hardware match:
-	- `cpu` for CPU-only fallback or troubleshooting
-	- `cuda` for NVIDIA GPUs
-	- `vulkan` for AMD GPUs or other Vulkan-capable GPUs
-	- `metal` for macOS systems that support Metal
-5. If you choose a specific backend and it says it is not installed, press `Install` and wait for the progress bar to finish.
-6. Run `Test Connection`.
-7. Continue once it responds.
+2. Open **Runtime Backend** and pick your backend:
+   - `auto`: safest first pick, lets the runtime figure it out
+   - `cpu`: CPU only, slowest, but works everywhere
+   - `cuda`: NVIDIA GPUs
+   - `vulkan`: AMD GPUs or other Vulkan-capable hardware
+   - `metal`: macOS (Apple Silicon and supported Intel Macs)
+3. If the backend needs installing, hit **Install** and wait for it to finish.
+4. Hit **Test Connection**.
+5. Continue when it responds.
 
-Not every machine shows every backend as usable. Unsupported choices can be hidden or disabled by the runtime check. `auto` is the safest first pass when you do not want to choose a backend manually.
+::: tip
+`auto` is fine for a first pass. You can switch backends later in Settings → LLM if you want to tune things.
+:::
 
-The setup wizard covers the compute backend, but the full GGUF model library is managed later in Settings, where you can import or download models. Plan for extra disk space there as well, because the backend install and at least one local GGUF model are separate pieces.
+The backend install and the GGUF model library are separate. After setup, go to Settings → LLM → Desktop Local to download or import models.
 
-The advanced fields such as Temperature, Max Tokens, Context Size, GPU Layers, and Threads can stay at their defaults during setup.
+Advanced fields (Temperature, Max Tokens, Context Size, GPU Layers, Threads) can all stay at defaults during setup.
 
-#### Chrome AI
+### Chrome AI
 
-Chrome AI is the simplest browser-side choice when the browser already supports it. No API key is needed.
+Browser-native Gemini Nano. No API key needed, but it requires a recent Chrome build and specific flags.
 
-1. Keep `Chrome AI` selected if the wizard says it is ready, downloadable, or still checking.
-2. If the `Required Chrome Flags` block is shown, enable these flags and restart Chrome:
-	- `chrome://flags/#optimization-guide-on-device-model` = `Enabled BypassPerfRequirement`
-	- `chrome://flags/#prompt-api-for-gemini-nano` = `Enabled`
-	- `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` = `Enabled`
-3. Open `chrome://components` and let Chrome download `Optimization Guide On Device Model` if it is still missing.
-4. If the status says a model download is available, press `Start Model Download`.
-5. If the download keeps running in the background, check `chrome://on-device-internals/` and use `Refresh Status` in the wizard.
-6. Continue once the status says Chrome AI is ready.
+1. Keep `Chrome AI` if the wizard shows it as ready or downloadable.
+2. If the **Required Chrome Flags** block appears, enable these flags and restart Chrome:
 
-Chrome AI requires a current Chrome build. The setup UI calls out Chrome 138 or later when the browser is too old.
+::: details Chrome AI required flags
 
-If Chrome AI is still not ready and setup needs to finish now, switch to OpenAI or Ollama instead of staying blocked on browser setup.
+- `chrome://flags/#optimization-guide-on-device-model` → `Enabled BypassPerfRequirement`
+- `chrome://flags/#prompt-api-for-gemini-nano` → `Enabled`
+- `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` → `Enabled`
+  :::
 
-#### OpenAI
+3. After restarting Chrome, go to `chrome://components` and let Chrome download **Optimization Guide On Device Model** if it's still missing.
+4. Hit **Start Model Download** if the wizard offers it.
+5. If the download keeps running in the background, check `chrome://on-device-internals/` and use **Refresh Status** in the wizard.
+6. Continue when status shows Chrome AI is ready.
 
-OpenAI is the simplest cloud choice in setup.
+Chrome AI requires Chrome 138 or later. If it's still blocked and you need to move on, switch to OpenAI or Ollama.
 
-1. Switch to `OpenAI` if you already have an API key and want the fastest remote setup path.
-2. Paste the API key.
-3. Run `Test Connection`.
-4. Continue once it succeeds.
+### OpenAI
 
-Model selection and finer tuning can wait until Settings.
+1. Switch to `OpenAI`.
+2. Paste your API key.
+3. Hit **Test Connection**.
+4. Continue when it succeeds.
 
-#### Ollama
+Model selection and token limits are in Settings → LLM.
 
-Ollama is the simplest choice when Ollama is already running on your machine or another machine you can reach.
+### Ollama
 
-1. Switch to `Ollama` if you already run an Ollama server.
-2. Leave the server address on `http://localhost:11434` if Ollama is running on the same machine.
-3. Replace `llama2` with the model you actually have installed if needed.
-4. Run `Test Connection`.
-5. Continue once it succeeds.
+1. Switch to `Ollama`.
+2. Leave the endpoint as `http://localhost:11434` if Ollama is on the same machine.
+3. Update the model name if needed (replace `llama2` with what you actually have installed).
+4. Hit **Test Connection**.
+5. Continue when it succeeds.
 
-Change the server address only when Ollama is not running on the same machine as VAssist.
-
-<div class="media-placeholder">
-	<strong>Screenshot placeholder</strong>
-	<span>AI service choices with one option expanded and its setup details visible.</span>
-</div>
+Change the endpoint only if Ollama is running on a different machine.
 
 ## 4. Voice
 
-Voice setup is split into two separate parts in the same screen:
+Voice is split into two sections: TTS (spoken replies) at the top, and STT (microphone input) below. They're independent. You can have both on, one on, or both off.
 
-- Text-to-Speech at the top for spoken replies
-- Speech-to-Text underneath for microphone input
+::: tip
+`Disabled` is always a valid choice for either side. You can enable and configure voice later in Settings → TTS and Settings → STT.
+:::
 
-You can finish setup with both on, only one on, or both off.
+### Quick defaults by platform
 
-### Fastest way through this screen
+| Platform            | TTS (spoken replies) | STT (mic input)      |
+| ------------------- | -------------------- | -------------------- |
+| Android             | Android Local        | Android Local        |
+| Desktop             | Desktop Local        | Desktop Local        |
+| Browser / extension | Kokoro               | Chrome AI (if ready) |
 
-| Platform | Spoken replies | Microphone input |
-| --- | --- | --- |
-| Android | Keep `Android Local` | Keep `Android Local` |
-| Desktop | Keep `Desktop Local` for local voice; otherwise use `Disabled` or `OpenAI TTS` | Keep `Desktop Local` for local voice input; otherwise use `Disabled` or `OpenAI Whisper` |
-| Browser or extension | Keep `Kokoro TTS` | Keep `Chrome AI` if it is ready; otherwise use `Disabled` or `OpenAI Whisper` |
+### What each choice asks you to do
 
-### Use this order
+| Provider                | What the wizard shows                                                           |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| Android Local TTS / STT | Ready state, endpoint in Advanced Settings                                      |
+| Desktop Local TTS       | GPT-SoVITS install, backend picker, install log, reference voice form           |
+| Desktop Local STT       | Whisper setup, Initialize/Verify buttons, setup log, model and language pickers |
+| Kokoro TTS              | Voice picker, speed, backend, Initialize Model, status, Test Voice              |
+| Chrome AI STT           | Status, required flags, Start Model Download, output language, Refresh Status   |
 
-1. Decide whether you want spoken replies right now.
-2. Decide whether you want microphone input right now.
-3. Set either side to `Disabled` if that part can wait.
-4. If you keep the default platform choice, finish only the setup work shown for that provider.
-5. If you switch to a cloud or server option, fill the required fields and test it.
+---
 
-### What this screen can actually ask you to do
-
-| Choice | What the setup wizard shows |
-| --- | --- |
-| Android Local TTS and STT | A ready state and an endpoint field in Advanced Settings |
-| Desktop Local TTS | GPT-SoVITS install status, backend picker, install log, and the reference-voice form |
-| Desktop Local STT | Whisper setup status, `Initialize` or `Verify` buttons, a setup log, model choice, and language choice |
-| Kokoro TTS | Voice choice, speed, backend choice, `Initialize Model`, status, and `Test Voice` |
-| Chrome AI STT | Status, required flags, `Start Model Download`, output language, and `Refresh Status` |
-
-The first-launch wizard is a first-pass setup screen, not the full model manager. Some Android-local download and cleanup controls live later in Settings instead of inside this step.
-
-### Spoken replies
+### Spoken replies (TTS)
 
 #### Android Local TTS
 
-Android Local TTS is the normal first choice on Android. It is the built-in VITS voice path.
-
 1. Leave `Android Local` selected.
-2. Continue if it already looks ready.
-3. Open Advanced Settings only if the Android-local endpoint changed.
+2. Continue if it looks ready.
+3. Advanced Settings only matters if the endpoint changed.
 
-In the setup wizard, this card does not expose the Android model download button. It only shows the ready state and endpoint field.
+The VITS model download, speaker selection, and speed are all in Settings → TTS if you need them.
 
-If Android speech is missing later, open Settings and download or re-download the VITS model there. The Android TTS settings screen exposes the VITS download flow at about `~145 MB`, with about `~152 MB` freed again if you delete it later.
+#### Desktop Local TTS (GPT-SoVITS)
 
-Speaker selection and speed tuning are also handled later in Settings.
+1. Leave `Desktop Local` selected.
+2. Choose a PyTorch backend:
+   - `auto` for the first pass
+   - `cpu`, `cuda`, `rocm`, `sycl`, or `metal` if you know your hardware
+3. Hit **Install GPT-SoVITS** (or **Re-install** if it's partially broken).
+4. Wait for the install log to finish.
+5. Add a reference voice:
+   - a name for the voice
+   - the exact words spoken in the audio sample
+   - the language of that sample
+   - a clip between 3 and 10 seconds (MP3, WAV, or M4A)
+6. Save it and keep it selected.
 
-#### Desktop Local TTS
-
-Desktop Local TTS is the local desktop speech path. It uses GPT-SoVITS and supports reference-voice setup.
-
-1. Leave `Desktop Local` selected for local speech.
-2. Choose a `PyTorch Backend`:
-	- `auto` for the safest first pass
-	- `cpu` for CPU-only fallback
-	- `cuda` for NVIDIA GPUs
-	- `rocm` for AMD GPUs
-	- `sycl` for Intel GPU or XPU setups
-	- `metal` for Apple Silicon
-3. Press `Install GPT-SoVITS` if it is not ready, or `Re-install` if the setup is partial or damaged.
-4. Watch the installation log and wait for it to finish.
-5. Add one reference voice:
-	- a voice name
-	- the exact words spoken in the sample
-	- the spoken language
-	- one MP3, WAV, or M4A clip
-6. Keep the sample short. The voice uploader validates clips between 3 and 10 seconds.
-7. Save that voice and keep it selected.
-
-The installer can pull in a Python runtime, the selected PyTorch backend, GPT-SoVITS models, and the rest of the required dependencies. The setup UI estimates about `~5GB` of disk space and `10-30 minutes`, with GPU builds taking the largest share.
-
-Unsupported backend choices fall back automatically when the desktop setup cannot use them.
-
-If voice cloning can wait, switching to `Disabled` or `OpenAI TTS` is the faster way through setup.
-
-#### Disabled TTS
-
-`Disabled` turns spoken replies off and keeps the rest of the app working normally. Pick this when text chat matters more than voice on the first pass.
+::: warning Install time
+The GPT-SoVITS install pulls Python, PyTorch, the models, and dependencies. Expect around 5 GB of disk space and 10–30 minutes depending on your connection and whether you're using a GPU backend.
+:::
 
 #### Kokoro TTS
 
-Kokoro is the normal first choice for spoken replies in the browser and extension. It is also available on desktop.
+Kokoro runs in the browser with no server needed.
 
 1. Leave `Kokoro TTS` selected.
 2. Pick a voice.
-3. Leave the backend on `Auto` for the first pass.
-4. Initialize the model and wait for the download to finish.
-5. Run the voice test before continuing.
+3. Leave backend on `Auto`.
+4. Hit **Initialize Model** and wait for the download.
+5. Run the voice test.
 
-`WebGPU` is the faster backend and the larger download at about `~350 MB`. `WASM` is the slower but smaller and more compatible fallback at about `~86 MB`.
-
-If WebGPU causes lag, broken audio, or garbled speech, switch to `WASM`.
+Backend options: `WebGPU` is faster (~350 MB download). `WASM` is smaller (~86 MB) and more stable on weaker hardware. Switch to WASM if WebGPU gives you garbled or broken audio.
 
 #### OpenAI TTS
 
-OpenAI TTS is the fastest remote speech option when you already use OpenAI.
-
 1. Switch to `OpenAI TTS`.
-2. Paste the API key.
+2. Paste your API key.
 3. Pick a model and voice.
-4. Run the test button.
-5. Continue once it sounds right.
+4. Hit the test button.
 
 #### OpenAI-Compatible TTS
 
-OpenAI-Compatible TTS is only for setups that already have a compatible speech server.
+For setups that already have a compatible speech server running.
 
 1. Enter the endpoint URL.
-2. Add the API key if the server uses one.
-3. Enter the model and voice name expected by that server.
-4. Run the test button.
+2. API key if the server needs one.
+3. Model and voice name.
+4. Test it.
 
-### Microphone input
+---
+
+### Microphone input (STT)
 
 #### Android Local STT
 
-Android Local STT is the normal first choice on Android. It is the built-in Whisper transcription path.
-
 1. Leave `Android Local` selected.
-2. Continue if it already looks ready.
-3. Open Advanced Settings only if the Android-local endpoint changed.
+2. Continue if it looks ready.
+3. Advanced Settings only matters if the endpoint changed.
 
-In the setup wizard, this card does not expose the Android Whisper download button. It only shows the ready state and endpoint field.
-
-If Android speech input is missing later, open Settings and download or re-download the Whisper model there. The Android STT settings screen exposes that download flow at about `~99 MB`.
+The Whisper model download and language picker are in Settings → STT.
 
 #### Desktop Local STT
 
-Desktop Local STT is the local desktop speech-recognition path. It uses Whisper through the desktop runtime.
-
-1. Leave `Desktop Local` selected for local microphone input.
-2. Pick a Whisper model before you start the setup.
-3. Press `Initialize Whisper` or `Complete Whisper Setup`.
-4. Use `Verify` if you want the wizard to check the installation again.
-5. Wait for the setup log to finish.
-6. Pick the transcription language.
-7. Continue once the local service is ready.
-
-The Whisper setup pulls in the local runtime pieces plus the model you chose. `tiny` and `tiny.en` are the lighter first-pass choices. `base` and `base.en` use more storage and usually give better accuracy.
-
-`tiny` is the smallest multilingual option. `base` is larger but more accurate. `tiny.en` and `base.en` are the English-only variants.
-
-Leave endpoint and CPU thread settings at their defaults unless you are troubleshooting.
-
-#### Disabled STT
-
-`Disabled` keeps setup text-only. Pick this when you are typing for now and do not need microphone input on the first pass.
+1. Leave `Desktop Local` selected.
+2. Pick a Whisper model:
+   - `tiny` / `tiny.en`: faster, smaller, good enough for most uses
+   - `base` / `base.en`: more accurate, larger download
+   - `.en` variants are English-only but slightly faster
+3. Hit **Initialize Whisper** (or **Complete Whisper Setup**).
+4. Wait for the setup log.
+5. Pick a transcription language (or leave on auto-detect).
+6. Continue when the service is ready.
 
 #### Chrome AI STT
 
-Chrome AI STT is the normal first browser-side choice when Chrome already supports it.
+1. Keep `Chrome AI` if status shows it as ready or downloadable.
+2. Pick an output language.
+3. If flags are missing, enable them and restart Chrome:
 
-1. Keep `Chrome AI` selected if status shows that it is ready or downloadable.
-2. Choose the transcription output language.
-3. Enable the required flags and restart Chrome if the flags section says they are still missing:
-	- `chrome://flags/#optimization-guide-on-device-model`
-	- `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input`
-4. Open `chrome://components` if Chrome still needs the Gemini Nano component.
-5. Press `Start Model Download` if the wizard offers it.
-6. Use `chrome://on-device-internals/` plus `Refresh Status` if the download appears to continue in the background.
+::: details Chrome AI STT required flags
 
-If Chrome AI is still blocked and setup needs to finish now, switch to `Disabled` or `OpenAI Whisper` instead of staying stuck here.
+- `chrome://flags/#optimization-guide-on-device-model`
+- `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input`
+  :::
+
+4. Use `chrome://on-device-internals/` plus **Refresh Status** if the download stalls in the background.
+
+If Chrome AI is still blocked, switch to `Disabled` or `OpenAI Whisper`.
 
 #### OpenAI Whisper
 
-OpenAI Whisper is the simplest remote speech-input option when you already use OpenAI.
-
 1. Switch to `OpenAI Whisper`.
-2. Paste the API key.
+2. Paste your API key.
 3. Pick the remote model.
-4. Continue once the connection looks right.
+4. Continue.
 
 #### OpenAI-Compatible STT
 
-OpenAI-Compatible STT is for setups that already have a compatible transcription server.
-
 1. Enter the endpoint URL.
-2. Add the API key if the server uses one.
-3. Enter the model name.
-4. Pick the input language or leave it on auto-detect.
-
-### Before you continue
-
-- TTS and STT are separate choices. They do not have to come from the same provider.
-- The default platform choices are the fastest first pass in most cases.
-- `Disabled` is the right choice whenever one side of voice can wait until later.
-- Android-local download, delete, and deeper tuning controls are fuller in Settings than they are in this wizard.
-- Fine tuning and extra testing can happen later in Settings.
-- [AI and Media Stack](/architecture/ai-and-media-stack) explains what the short provider names map to behind the scenes.
-
-<div class="media-placeholder">
-	<strong>GIF placeholder</strong>
-	<span>Voice step showing both the TTS section and the STT section with one provider open on each side.</span>
-</div>
+2. API key if needed.
+3. Model name.
+4. Language (or leave on auto-detect).
 
 ## 5. AI+ Features
 
-The last step controls the extra tools that sit on top of your main AI service.
+Five optional tools that sit on top of your main AI provider:
 
-- Translator for turning text into another language.
-- Language detector for identifying the language of text.
-- Summarizer for shortening longer text.
-- Text rewriter for changing tone, style, or wording.
-- Content writer for creating new text from a prompt.
+- **Translator**: translate selected text
+- **Language Detector**: identify what language something is
+- **Summarizer**: shorten longer passages
+- **Text Rewriter**: rephrase, adjust tone, fix grammar
+- **Content Writer**: generate new text from a prompt
 
-Any of these can stay off for a simpler setup. They can all be changed later in Settings.
+All of these can be toggled off for a simpler start and re-enabled later in Settings → AI+.
 
-<div class="media-placeholder">
-	<strong>Screenshot placeholder</strong>
-	<span>Final AI+ feature toggles and the Finish button.</span>
-</div>
+## Done
 
-## When setup is done
-
-Finishing setup saves your choices and opens the normal VAssist interface.
-
-## Run setup again later
-
-To run first-launch choices again, open Settings, go to the UI tab, and select Start Setup Wizard Again.
+Finishing setup saves your configuration and opens the main interface. If you ever want to redo these choices, go to **Settings → UI → Start Setup Wizard Again**.

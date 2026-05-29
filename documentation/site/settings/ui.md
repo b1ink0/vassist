@@ -1,96 +1,147 @@
 # UI Settings
 
-The UI tab controls the shell around the assistant rather than the AI providers themselves. It is where users reset onboarding, change visual behavior, control the toolbar, manage backups, and enable debugging helpers.
+Settings → UI controls the shell around the assistant: themes, toolbar behavior, shortcuts, backups, and developer tools.
 
-## Always-visible actions
+## General actions
 
-| Control | Visibility | Behavior |
-| --- | --- | --- |
-| View Documentation | All runtimes | Opens the published documentation site in a new tab or external browser. |
-| Start Setup Wizard Again | All runtimes | Clears setup completion state, re-runs onboarding, and reloads the app afterward. |
+These two buttons are always visible at the top of the UI tab regardless of any other setting.
 
-## Extension-only behavior
+| Control                  | Behavior                                               |
+| ------------------------ | ------------------------------------------------------ |
+| View Documentation       | Opens the docs in a new tab or external browser.       |
+| Start Setup Wizard Again | Resets onboarding state and relaunches the setup flow. |
 
-| Control | Default | Visibility | Behavior |
-| --- | --- | --- | --- |
-| Auto-load on Every Page | On | Extension runtime only | Automatically injects VAssist on every supported page. When off, the user must click the extension entry point manually on each page. |
+## Extension-only
 
-## Interface appearance and chat shell
+**Auto-load on Every Page** controls whether VAssist activates automatically when you open a tab. When it's on (the default), the assistant appears on every page without you having to do anything. Turn it off if you want to decide manually which pages get the assistant. Click the extension icon yourself to activate it on that tab.
 
-| Control | Default | Visibility | Behavior |
-| --- | --- | --- | --- |
-| Use Colored Icons | Off | All runtimes | Switches icons from monochrome gray to color. |
-| Toolbar Only | Off | Only when Use Colored Icons is on | Limits icon colorization to the AI toolbar instead of coloring icons everywhere. |
-| Chat Window Position | `bottom-right` on shared web or extension runtimes, `bottom-center` on desktop and Android | Only when the avatar is disabled and the runtime allows manual placement | Chooses a preset placement for the chat-first shell. Includes `Last Location` so the previous dragged position is restored. |
-| Smooth Response Animation | Off | All runtimes | Animates container height while streaming assistant output. The UI warns that this can cost performance on lower-end devices. |
-| Show Emote Duration Bar | On | All runtimes | Shows the playback progress bar while an emote is active. |
-| Show Emote Time Labels | On | Only when Show Emote Duration Bar is on | Adds current time and total duration labels above the emote progress bar. |
-| Application Theme | Adaptive | All runtimes | Sets the assistant shell theme. User-facing choices are Adaptive, Light, and Dark. |
-| Detection Accuracy | `5` | Only when Application Theme is set to Adaptive | Changes the background sampling grid size from `3` to `10`. Higher values read more sample points from the page background for theme detection. |
+| Control                 | Default | Behavior                                                                                              |
+| ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| Auto-load on Every Page | On      | When on, VAssist injects automatically. When off, you click the extension icon manually on each page. |
 
-### Adaptive theme behavior
+## Appearance and chat shell
 
-Adaptive mode samples the current page background and swaps the assistant shell toward a higher-contrast presentation automatically. The setting only affects the assistant UI layer, not the website or native host around it.
+**Changing the theme:** Set **Application Theme** to `Light` or `Dark` for a fixed appearance. `Adaptive` is the default: it samples the page background and picks higher-contrast colors so the assistant stays readable on any website. Adaptive only affects the assistant panel, not the surrounding page.
 
-## Android-only background controls
+**Repositioning the chat window:** **Chat Window Position** sets where the panel sits when the 3D avatar is off. Pick any preset to snap to a corner. Set it to `Last Location` and wherever you drag the panel is remembered across reloads, useful if you always want it in a specific spot on a specific page.
 
-Android adds a background management block that is not shown on desktop or extension builds.
+**Colored icons:** Turn on **Use Colored Icons** to switch from the default monochrome icons to color versions throughout the UI. If you only want that on the AI toolbar and not everywhere, also enable **Toolbar Only**.
 
-| Control group | Behavior |
-| --- | --- |
-| Custom background upload | Imports image assets such as JPEG, PNG, WebP, or GIF backgrounds. |
-| Activate background | Marks one uploaded background as the active Android background. |
-| Clear active background | Removes the current custom background without deleting the saved asset library. |
-| Delete background asset | Permanently removes stored background files from Android storage. |
+**Performance:** **Smooth Response Animation** animates the chat window height as responses stream in. It looks polished but can cause jitter on slower devices. Leave it off if anything feels sluggish.
+
+| Control                   | Default                                                           | Behavior                                                                                                                         |
+| ------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Use Colored Icons         | Off                                                               | Switches icons from monochrome to color.                                                                                         |
+| Toolbar Only              | Off                                                               | Only when Colored Icons is on. Restricts colorization to the AI toolbar.                                                         |
+| Chat Window Position      | `bottom-right` (web/extension), `bottom-center` (desktop/Android) | Only when the avatar is off and the runtime allows placement. Includes `Last Location` to restore the previous dragged position. |
+| Smooth Response Animation | Off                                                               | Animates the container height while responses stream. Can cost performance on slower devices.                                    |
+| Show Emote Duration Bar   | On                                                                | Shows a playback progress bar while an emote plays.                                                                              |
+| Show Emote Time Labels    | On                                                                | Only when Duration Bar is on. Adds current time and total duration labels above the bar.                                         |
+| Application Theme         | Adaptive                                                          | `Adaptive`, `Light`, or `Dark`.                                                                                                  |
+| Detection Accuracy        | `5`                                                               | Only when Theme is Adaptive. Grid size for background sampling, 3–10. Higher = more sample points.                               |
+
+::: info
+Adaptive theme only affects the assistant UI layer, not the website or native host around it.
+:::
+
+## Android backgrounds
+
+Manages wallpaper assets behind the companion on Android.
+
+**To add a background:**
+
+1. Tap the upload button and pick a JPEG, PNG, WebP, or GIF file.
+2. Once uploaded it appears in the list. Tap it to set it as the active background.
+
+**To switch or remove the active background:** Tap a different image to switch, or use **Clear active background** to remove it without deleting the file. To delete a background from storage entirely, tap **Delete background asset** on that item.
+
+| Control                  | Behavior                                                   |
+| ------------------------ | ---------------------------------------------------------- |
+| Custom background upload | Import JPEG, PNG, WebP, or GIF.                            |
+| Activate background      | Set one uploaded image as the active background.           |
+| Clear active background  | Remove the active background without deleting the library. |
+| Delete background asset  | Permanently delete a stored asset.                         |
 
 ## AI Toolbar
 
-| Control | Default | Visibility | Behavior |
-| --- | --- | --- | --- |
-| Enable AI Toolbar | On | All runtimes | Enables the floating in-page toolbar for selected text and related quick actions. |
-| Show on Input Focus | On | Only when Enable AI Toolbar is on | Shows the toolbar and dictation helpers when the user focuses an editable text field. |
-| Show on Image Hover | On | Only when Enable AI Toolbar is on | Shows image analysis affordances when hovering supported images. |
+The AI Toolbar is the floating popup that appears when you select text on a page. It offers translate, summarize, rewrite, and other one-click AI actions. It also appears near input fields and images depending on the toggles here.
+
+- Turn off **Enable AI Toolbar** entirely if you don't want the popup at all.
+- **Show on Input Focus** shows dictation helpers when you click into a text field. Turn it off if the toolbar appearing on every input field is distracting.
+- **Show on Image Hover** shows image-analysis affordances when you hover an image. Turn it off if you rarely use image actions.
+
+What actions the toolbar offers is controlled by the AI+ settings tab, not here.
+
+| Control             | Default | Behavior                                                                      |
+| ------------------- | ------- | ----------------------------------------------------------------------------- |
+| Enable AI Toolbar   | On      | The floating in-page toolbar for selected text and quick actions.             |
+| Show on Input Focus | On      | Only when toolbar is on. Shows dictation helpers when you focus a text field. |
+| Show on Image Hover | On      | Only when toolbar is on. Shows image analysis affordances on hover.           |
 
 ## Keyboard shortcuts
 
-Keyboard shortcuts are hidden on Android. On other runtimes, the editor exposes these fields as one bundle:
+Hidden on Android. On desktop and web, you can assign global hotkeys for three actions.
 
-| Shortcut field | Default | Behavior |
-| --- | --- | --- |
-| Enabled | Off | Master switch for shortcut handling. |
-| Open Chat | Empty | Opens the assistant chat view. |
-| Toggle Mode | Empty | Switches between supported interaction modes. |
-| Toggle Visibility | Empty | Hides or reveals the assistant UI. |
+**To set a shortcut:**
+
+1. Make sure **Enabled** is toggled on. If the master switch is off, no shortcuts will fire even if fields are filled in.
+2. Click inside the field for the action you want (Open Chat, Toggle Mode, or Toggle Visibility).
+3. Press the key combination you want (e.g., `Ctrl+Shift+A`). The field captures your next keypress immediately.
+4. The shortcut saves automatically.
+
+**To clear a shortcut:** Click the field and press Backspace. An empty field means no shortcut for that action.
+
+| Shortcut          | Default | Behavior                             |
+| ----------------- | ------- | ------------------------------------ |
+| Enabled           | Off     | Master switch for shortcut handling. |
+| Open Chat         | Empty   | Opens the chat view.                 |
+| Toggle Mode       | Empty   | Switches between interaction modes.  |
+| Toggle Visibility | Empty   | Hides or shows the assistant UI.     |
 
 ## Backup and restore
 
-The UI tab owns export and import because backups span almost every user-facing storage area in the app.
+Backups cover everything: settings, chat history, custom models, motions, emotes, voices, and more, all in a single ZIP file.
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Selective Export/Import | Off | When off, export and import always include everything. When on, the user chooses which data domains are included. |
-| Export | N/A | Builds a ZIP archive and downloads it with a timestamped filename. |
-| Import | N/A | Opens a ZIP picker, imports a VAssist backup, then reloads the app after success. |
-| Status text | Empty until used | Shows progress such as preparing backup, importing backup, success, or validation failure. |
+**To export a backup:**
 
-### Selective backup categories
+1. Click **Export**. The app builds the ZIP and downloads it with a timestamped filename automatically.
+2. If you only want specific categories (e.g., just chat history and voices), turn on **Selective Export/Import** first, check which categories to include, then click Export.
 
-| Category | Included data |
-| --- | --- |
-| Config | UI, AI, TTS, and STT configuration keys |
-| Settings | General app settings namespace |
-| Data / Presets | Generic app records and preset-like data |
-| Chat History | Conversations and attached media references |
-| Models | Avatar model files |
-| Motions | Custom motion files |
-| Emotes | Audio-motion emote bundles |
-| Stages | Stage model files |
-| Voices | Saved GPT-SoVITS reference voices |
-| Backgrounds | Custom background assets |
-| Other Files | Remaining file-backed records not covered above |
+**To restore on a new machine:**
+
+1. If your backup was a full export, click **Import** and pick the ZIP file. It imports everything and reloads the app.
+2. If you want to import only certain categories from the backup, turn on **Selective Export/Import** first, then Import. You can pick which sections to bring in.
+3. The app reloads automatically when the import finishes.
+
+**Status** shows what's happening during export/import and displays any errors.
+
+| Control                 | Default          | Behavior                                                                                                       |
+| ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Selective Export/Import | Off              | When on, you choose which data categories are included. When off, export and import always include everything. |
+| Export                  | -                | Builds a ZIP archive and downloads it with a timestamped filename.                                             |
+| Import                  | -                | Opens a ZIP picker, imports the backup, then reloads the app.                                                  |
+| Status                  | Empty until used | Shows progress or error messages during export/import.                                                         |
+
+### Backup categories
+
+| Category       | What's included                     |
+| -------------- | ----------------------------------- |
+| Config         | UI, AI, TTS, STT configuration keys |
+| Settings       | General app settings namespace      |
+| Data / Presets | Generic app records and preset data |
+| Chat History   | Conversations and media references  |
+| Models         | Avatar model files                  |
+| Motions        | Custom motion files                 |
+| Emotes         | Audio-motion emote bundles          |
+| Stages         | Stage model files                   |
+| Voices         | GPT-SoVITS reference voices         |
+| Backgrounds    | Custom background assets            |
+| Other Files    | Remaining file-backed records       |
 
 ## Developer tools
 
-| Control | Default | Behavior |
-| --- | --- | --- |
-| Enable Developer Tools | Off | Shows the draggable debug panel used for testing animation behavior, positioning, and scene diagnostics. |
+Turning on **Enable Developer Tools** reveals a draggable debug panel. Only useful if you're testing animation playback, scene diagnostics, or positioning behavior. Leave it off otherwise.
+
+| Control                | Default | Behavior                                                                                   |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| Enable Developer Tools | Off     | Reveals a draggable debug panel for testing animation, positioning, and scene diagnostics. |
