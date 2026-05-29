@@ -9,14 +9,13 @@ import {
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
 import { BackgroundThemeModes, PositionPresets } from "../../config/uiConfig";
-import ExtensionBridge from "../../utils/ExtensionBridge";
 import Toggle from "../common/Toggle";
 import ShortcutsConfig from "../common/ShortcutsConfig";
 import { useSetup } from "../../contexts/SetupContext";
 import { useRef, useState, type ChangeEvent } from "react";
 import Icon from "../icons/Icon";
 import Logger from "../../services/LoggerService";
-import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import { isAndroid, isDesktop, isExtension } from "../../utils/PlatformUtils";
 import BackgroundSettings from "./BackgroundSettings";
 import appDataBackupService, {
   type BackupSelection,
@@ -61,8 +60,6 @@ const UISettings = ({
   const [backupStatus, setBackupStatus] = useState("");
   const backupImportInputRef = useRef<HTMLInputElement | null>(null);
   const allowPositionSelection = !isAndroid && !isDesktop;
-
-  const isExtensionMode = ExtensionBridge.isExtensionMode();
 
   const handleResetSetup = async () => {
     if (isResetting) return;
@@ -216,7 +213,7 @@ const UISettings = ({
       </Card>
 
       {/* Auto-load on All Pages Toggle - Extension mode only */}
-      {isExtensionMode && (
+      {isExtension && (
         <SettingsRow
           label="Auto-load on Every Page"
           description={

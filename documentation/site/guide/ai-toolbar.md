@@ -108,6 +108,12 @@ Results appear in the toolbar's output area before you do anything with them:
 | Speak                  | Reads the result aloud (when TTS is available)                            |
 | Target language picker | Appears on translation results. Switch output language without rerunning. |
 
+## Add to Chat
+
+**Add to Chat** sends the selected content directly to the chat window without running any AI action first. The selected text or the image you hovered appears in the chat input as context, and the chat opens so you can type a follow-up question or continue the conversation from there.
+
+It appears on text selections (when the toolbar is not showing from an input-focus dictation trigger) and on image hover. Use it when you want to bring something from the page into a longer conversation rather than running a one-shot action in the toolbar.
+
 ## Toolbar vs full chat
 
 Use the toolbar for anything that starts from something already on the page. Use full chat when the request is multi-step, needs more context, or belongs in a saved conversation.

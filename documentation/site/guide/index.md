@@ -33,6 +33,11 @@ Start with **Chat and voice**. It covers what you'll see first and how to get yo
     <p>Rewrite, summarize, translate, dictate, and analyze images directly on the current page, without opening chat.</p>
     <p class="doc-card-cta">Toolbar guide →</p>
   </a>
+  <a class="doc-card doc-card-link" href="./page-context">
+    <h3>Page context</h3>
+    <p>In the browser, VAssist automatically reads relevant parts of the current page and includes them in your messages when needed.</p>
+    <p class="doc-card-cta">Page context →</p>
+  </a>
 </div>
 
 ## Companion
@@ -40,7 +45,7 @@ Start with **Chat and voice**. It covers what you'll see first and how to get yo
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./virtual-companion">
     <h3>Virtual companion</h3>
-    <p>The floating avatar: live controls, chat bubble, stage switching, emote playback, and positioning.</p>
+    <p>The floating avatar: live controls, stage switching, emote playback, and positioning.</p>
     <p class="doc-card-cta">Companion guide →</p>
   </a>
   <a class="doc-card doc-card-link" href="./avatar-motions-and-emotes">
