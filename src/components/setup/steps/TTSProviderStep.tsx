@@ -514,7 +514,7 @@ const TTSProviderStep = ({
       iconName: "x",
       recommended: false,
       pros: ["No resource usage", "Faster performance", "Text-only mode"],
-      cons: ["No voice output", "Silent virtual companion"],
+      cons: ["No voice output", "Silent Live Assistant"],
       requirements: "None",
     },
     // Kokoro - only on non-Android
@@ -953,9 +953,9 @@ const TTSProviderStep = ({
             <div className="space-y-2 text-sm text-white/90">
               <p className="font-semibold">Text-to-Speech Disabled</p>
               <p className="text-white/70">
-                The virtual companion will be silent. You can still use all
-                other features, but AI responses won't be spoken aloud. You can
-                enable TTS later in Settings.
+                The Live Assistant will be silent. You can still use all other
+                features, but AI responses won't be spoken aloud. You can enable
+                TTS later in Settings.
               </p>
             </div>
           </div>

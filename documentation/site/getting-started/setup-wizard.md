@@ -1,6 +1,6 @@
 # Set Up VAssist
 
-The setup wizard runs on first launch and covers five screens: companion mode, AI provider, voice, and extra tools. Most people are done in under five minutes if they stick with the defaults for their platform.
+The setup wizard runs on first launch and covers five screens: Live Assistant mode, AI provider, voice, and extra tools. Most people are done in under five minutes if they stick with the defaults for their platform.
 
 ::: info Android wallpaper
 If you're on Android and plan to use the live wallpaper, do setup in the main app first. The wallpaper reads its settings from the app.
@@ -8,21 +8,21 @@ If you're on Android and plan to use the live wallpaper, do setup in the main ap
 
 ## Overview
 
-| Step              | What you configure                                                 |
-| ----------------- | ------------------------------------------------------------------ |
-| Welcome           | Intro and docs link. Chrome builds show Chrome AI guidance here.   |
-| Virtual Companion | Avatar on/off, display mode, position (browser/extension installs) |
-| AI Configuration  | Your main AI provider                                              |
-| Voice             | Speech output (TTS) and speech input (STT) separately              |
-| AI+ Features      | Optional tools: translate, summarize, rewrite, write               |
+| Step             | What you configure                                                 |
+| ---------------- | ------------------------------------------------------------------ |
+| Welcome          | Intro and docs link. Chrome builds show Chrome AI guidance here.   |
+| Live Assistant   | Avatar on/off, display mode, position (browser/extension installs) |
+| AI Configuration | Your main AI provider                                              |
+| Voice            | Speech output (TTS) and speech input (STT) separately              |
+| AI+ Features     | Optional tools: translate, summarize, rewrite, write               |
 
 ## 1. Welcome
 
 Just an intro screen. Links to the docs and, on Chrome, shows any Chrome AI setup guidance that applies to your browser. Hit Next.
 
-## 2. Virtual Companion
+## 2. Live Assistant
 
-Pick whether you want the 3D companion or a chat-first layout.
+Pick whether you want the 3D Live Assistant or a chat-first layout.
 
 - **Avatar on**: choose Standard Mode (full body) or Portrait Mode (upper body crop). Browser and extension installs also let you pick a starting screen position.
 - **Avatar off**: VAssist runs as a chat window, no 3D rendering.

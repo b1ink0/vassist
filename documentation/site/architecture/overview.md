@@ -4,19 +4,19 @@ Reference for the repository layout, runtime boundaries, storage model, and AI o
 
 ## Reference pages
 
-| Page                                                         | What it is for                                                                           |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| [AI and Media Stack](/architecture/ai-and-media-stack)       | The engines, provider backends, and file formats behind chat, speech, and the companion. |
-| [Storage and Data](/architecture/storage-and-data)           | What kinds of data VAssist saves and why backup matters.                                 |
-| [Repository Map](/architecture/repository-map)               | A quick folder guide for contributors.                                                   |
-| [Repository Tree and Metrics](/architecture/repository-tree) | File and directory totals, line counts by file type, and the full generated tree.        |
+| Page                                                         | What it is for                                                                                |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| [AI and Media Stack](/architecture/ai-and-media-stack)       | The engines, provider backends, and file formats behind chat, speech, and the Live Assistant. |
+| [Storage and Data](/architecture/storage-and-data)           | What kinds of data VAssist saves and why backup matters.                                      |
+| [Repository Map](/architecture/repository-map)               | A quick folder guide for contributors.                                                        |
+| [Repository Tree and Metrics](/architecture/repository-tree) | File and directory totals, line counts by file type, and the full generated tree.             |
 
 ## Key libraries
 
 | Area                | Library              | Notes                                                  |
 | ------------------- | -------------------- | ------------------------------------------------------ |
 | UI framework        | React 19             | Shared across all platforms                            |
-| 3D rendering        | `@babylonjs/core` v8 | WebGL rendering for the companion                      |
+| 3D rendering        | `@babylonjs/core` v8 | WebGL rendering for the Live Assistant                 |
 | MMD support         | `babylon-mmd` v1     | PMX/VMD loading and playback on top of BabylonJS       |
 | Physics             | `@babylonjs/havok`   | Cloth and hair simulation                              |
 | VAD                 | `@ricky0123/vad-web` | Silero VAD v5, voice activity detection                |
@@ -57,7 +57,7 @@ The UI is consistent across platforms, but the implementation behind each action
 - setup wizard
 - chat and voice
 - AI toolbar
-- virtual companion and Babylon scene
+- Live Assistant and Babylon scene
 - settings and provider configuration
 
 ## Runtime-heavy systems

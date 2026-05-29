@@ -1,15 +1,15 @@
 # Extension
 
-The browser extension injects VAssist into normal web pages. The companion, chat, and toolbar are right there while you browse. You don't leave the current tab to use them.
+The browser extension injects VAssist into normal web pages. The Live Assistant, chat, and toolbar are right there while you browse. You don't leave the current tab to use them.
 
 ## What's different in the extension
 
-| Extension behavior                                   | Why it matters                                                                               |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Injection happens per tab                            | VAssist appears inside the current page instead of living in its own desktop window.         |
-| Auto-load can be turned off                          | You can require manual start if you do not want VAssist injected into every supported page.  |
-| The UI is isolated from page styling                 | The extension tries to avoid breaking when the site has aggressive CSS.                      |
-| Background and offscreen contexts do privileged work | Audio, model, and browser-extension work can keep running without blocking the visible page. |
+| Extension behavior                                   | Why it matters                                                                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Injection happens per tab                            | VAssist appears inside the current page instead of living in its own desktop window.                                                      |
+| Auto-load can be turned off                          | You can require manual start if you do not want VAssist injected into every supported page.                                               |
+| The UI is isolated from page styling                 | The extension tries to avoid breaking when the site has aggressive CSS.                                                                   |
+| Background and offscreen contexts do privileged work | Audio, model, and browser-extension work can keep running without blocking the visible page.                                              |
 | Page context is automatically read                   | When you ask a question that relates to the current page, VAssist extracts the relevant part and includes it in your query automatically. |
 
 ## Page context

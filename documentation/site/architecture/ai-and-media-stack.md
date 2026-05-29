@@ -1,6 +1,6 @@
 # AI and Media Stack
 
-A map of the AI backends, speech engines, and companion asset formats VAssist uses.
+A map of the AI backends, speech engines, and Live Assistant asset formats VAssist uses.
 
 ## Language models
 
@@ -47,23 +47,23 @@ All platforms use [`@ricky0123/vad-web`](https://github.com/ricky0123/vad) runni
 - In voice conversation mode, VAD also watches for speech while the assistant is replying. If it detects confirmed human voice during playback, it automatically interrupts TTS and starts recording the new input.
 - VAD runs inside the shared audio worker alongside Kokoro so it does not block the main thread.
 
-## 3D companion engine
+## Live Assistant engine
 
-The live companion is rendered using [BabylonJS](https://www.babylonjs.com/) (`@babylonjs/core` v8) with two additional layers:
+The Live Assistant is rendered using [BabylonJS](https://www.babylonjs.com/) (`@babylonjs/core` v8) with two additional layers:
 
 | Layer                           | Package                                                       | What it adds                                                                           |
 | ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | MMD model and animation support | [`babylon-mmd`](https://github.com/noname0310/babylon-mmd) v1 | PMX and BPMX model loading, VMD and BVMD motion playback, morph targets, physics bones |
 | Physics                         | `@babylonjs/havok`                                            | Havok physics engine for cloth, hair, and accessory simulation on supported models     |
 
-## Companion formats and assets
+## Live Assistant formats and assets
 
-VAssist uses MMD-style asset formats for the live companion.
+VAssist uses MMD-style asset formats for the Live Assistant.
 
 | Asset type           | What it is used for                                                           |
 | -------------------- | ----------------------------------------------------------------------------- |
 | PMX and BPMX models  | Avatar and stage geometry                                                     |
-| PMX stages           | Background scenes for the companion                                           |
+| PMX stages           | Background scenes for the Live Assistant                                      |
 | VMD and BVMD motions | Animation clips used for idle, talking, thinking, and other motion categories |
 | Emotes               | Named combinations of audio, motion, and optional camera movement             |
 
@@ -76,9 +76,9 @@ VAssist uses MMD-style asset formats for the live companion.
 
 ## Speech-driven animation
 
-- The companion can use spoken output for lip sync.
+- The Live Assistant can use spoken output for lip sync.
 - VAssist also contains worker-side helpers for generating VMD motion data from audio and converting it into BVMD when needed.
-- That is why the speech stack and the companion stack are connected in the codebase even though they look like separate features in the UI.
+- That is why the speech stack and the Live Assistant stack are connected in the codebase even though they look like separate features in the UI.
 
 ## Where to read next
 

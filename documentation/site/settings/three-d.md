@@ -1,16 +1,16 @@
 # 3D Settings
 
-Settings → 3D has five sub-tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. It covers the companion's entire visual layer: models, stages, motions, emotes, and display settings.
+Settings → 3D has five sub-tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. It covers the Live Assistant's entire visual layer: models, stages, motions, emotes, and display settings.
 
 ## Display
 
 **Portrait mode** crops the view to upper-body framing. Use **Clipping Height** to adjust how much of the body is visible. Lower values show more. Higher values crop tighter. You can switch portrait mode on and off without reloading the avatar.
 
-**Character Position** controls where the companion sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
+**Character Position** controls where the Live Assistant sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
 
 | Control            | Default        | Behavior                                                                                          |
 | ------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
-| Enable Avatar      | On             | Turns the 3D companion on or off. When off, the app falls back to chat-only mode.                 |
+| Enable Avatar      | On             | Turns the Live Assistant on or off. When off, the app falls back to chat-only mode.               |
 | Reload Avatar      | -              | Only when avatar is on. Reloads the scene immediately.                                            |
 | Portrait Mode      | Off            | Only when avatar is on. Switches to tighter upper-body framing.                                   |
 | Clipping Height    | Model preset   | Only when Portrait Mode is on. Lower values show more body. Higher values crop more aggressively. |
@@ -18,10 +18,10 @@ Settings → 3D has five sub-tabs: **Display**, **Performance**, **Models**, **A
 
 ## Performance
 
-If the companion runs slowly or drops frames, work through this list in order. Each step has a bigger impact than the next:
+If the Live Assistant runs slowly or drops frames, work through this list in order. Each step has a bigger impact than the next:
 
 1. **Render Quality** → drop to **Low**. This is usually the biggest single win.
-2. **Frame Rate Limit** → cap at `30 FPS`. The companion still looks smooth at 30.
+2. **Frame Rate Limit** → cap at `30 FPS`. The Live Assistant still looks smooth at 30.
 3. **Physics Simulation** → turn off. Hair and cloth physics are expensive.
 4. If you're on **Custom** quality: drop **Anti-Aliasing (MSAA)** to `1x` and turn off **Bloom Effect**.
 
@@ -83,7 +83,7 @@ If textures are missing from the ZIP the import will still succeed but the model
 1. Hit **Upload PMX Model (ZIP)** and select your file.
 2. Wait for the import. If something is wrong with the package, an error panel will tell you what's missing.
 3. Find the new model in the list, toggle it as **default**.
-4. Go back to **Display** and hit **Reload Avatar** (or use the Reload button in the companion's live controls).
+4. Go back to **Display** and hit **Reload Avatar** (or use the Reload button in the Live Assistant controls).
 
 The built-in **VAssist Default** model is always available as a fallback. It stays in the list even when a custom model is active.
 
@@ -126,7 +126,7 @@ VMD files do not need to be zipped. Select the `.vmd` files directly. You can pi
 2. After upload, find a motion in the list and expand its **category chevron**.
 3. Toggle on the animation categories this motion should be used in: `idle`, `thinking`, `celebrating`, `walking`, or `talking`.
 
-You can assign the same motion to multiple categories. The companion randomly picks from all enabled motions in a category, so adding more variety means more natural-looking behavior. The default built-in animations stay as a baseline. VAssist won't let you disable the last remaining motion in any category.
+You can assign the same motion to multiple categories. The Live Assistant randomly picks from all enabled motions in a category, so adding more variety means more natural-looking behavior. The default built-in animations stay as a baseline. VAssist won't let you disable the last remaining motion in any category.
 
 The **Animation Management** section below the library lets you enable or disable individual built-in and custom motions per category without re-importing them.
 
@@ -152,7 +152,7 @@ One category section per bucket: `idle`, `thinking`, `celebrating`, `walking`, `
 
 ## Emotes
 
-Emotes are named, triggerable reactions. Each one plays a sound, runs a VMD motion on the avatar, and optionally moves the camera. You trigger them from the live emote panel in the companion controls.
+Emotes are named, triggerable reactions. Each one plays a sound, runs a VMD motion on the avatar, and optionally moves the camera. You trigger them from the live emote panel in the Live Assistant controls.
 
 ### Creating an emote
 
@@ -171,7 +171,7 @@ Once an emote is in the library:
 
 - Use **category filter** to find it by tag
 - Toggle **visibility** to hide an emote from the panel without deleting it. Useful for keeping a library clean without losing assets
-- Open the **category chevron** to set it as an **auto-play** emote in one of the animation states (`general`, `idle`, `thinking`, `celebrating`, `walking`, `talking`). The companion will play it automatically during that state
+- Open the **category chevron** to set it as an **auto-play** emote in one of the animation states (`general`, `idle`, `thinking`, `celebrating`, `walking`, `talking`). The Live Assistant will play it automatically during that state
 
 ### Emote creation controls
 

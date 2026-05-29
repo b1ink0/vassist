@@ -4,7 +4,7 @@ Three ways you'll end up using VAssist day-to-day:
 
 - **Full chat**: when you need a real conversation, attachments, or want to save it for later
 - **AI toolbar**: when the job is right in front of you on the page (selected text, an input field, an image)
-- **Live companion**: when you want the avatar visible and interactive while you work
+- **Live Assistant**: when you want the on-screen assistant avatar visible and interactive while you work
 
 ::: tip Just finished setup?
 Start with **Chat and voice**. It covers what you'll see first and how to get your first conversation going.
@@ -40,13 +40,13 @@ Start with **Chat and voice**. It covers what you'll see first and how to get yo
   </a>
 </div>
 
-## Companion
+## Live Assistant
 
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./virtual-companion">
-    <h3>Virtual companion</h3>
-    <p>The floating avatar: live controls, stage switching, emote playback, and positioning.</p>
-    <p class="doc-card-cta">Companion guide →</p>
+    <h3>Live Assistant</h3>
+    <p>The floating on-screen assistant: live controls, stage switching, emote playback, and positioning.</p>
+    <p class="doc-card-cta">Live Assistant guide →</p>
   </a>
   <a class="doc-card doc-card-link" href="./avatar-motions-and-emotes">
     <h3>Avatar, motions, and emotes</h3>

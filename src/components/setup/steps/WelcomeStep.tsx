@@ -36,7 +36,7 @@ const WelcomeStep = ({ isLightBackground: _isLightBackground = false }) => {
           Quick Start
         </h1>
         <p className="text-sm sm:text-base text-white/90 max-w-md mx-auto px-2 md:px-4">
-          Welcome to your AI Virtual Companion
+          Welcome to your AI Assistant
         </p>
       </div>
 

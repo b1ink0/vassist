@@ -71,7 +71,7 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
       case 1:
         return "Welcome";
       case 2:
-        return "Virtual Companion";
+        return "Live Assistant";
       case 3:
         return "AI Configuration";
       case 4:

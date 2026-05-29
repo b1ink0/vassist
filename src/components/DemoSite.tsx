@@ -12,7 +12,7 @@ const platformCards = [
   {
     title: "Android App",
     subtitle: "On-device local AI",
-    body: "Local LLM via llama.cpp and on-device STT/TTS via sherpa-onnx (whisper-tiny.en + vits-vctk). Live wallpaper mode runs the companion avatar on your Android home screen.",
+    body: "Local LLM via llama.cpp and on-device STT/TTS via sherpa-onnx (whisper-tiny.en + vits-vctk). Live wallpaper mode runs the Live Assistant avatar on your Android home screen.",
   },
   {
     title: "Desktop App",
@@ -25,7 +25,7 @@ const capabilityRows = [
   {
     label: "Avatar + Chat",
     value:
-      "3D PMX companion with VMD motions and audio-driven lipsync. Full chat with streaming, attachments, page context injection, and history branching.",
+      "3D PMX Live Assistant with VMD motions and audio-driven lipsync. Full chat with streaming, attachments, page context injection, and history branching.",
   },
   {
     label: "AI Toolbar",
@@ -53,24 +53,24 @@ const principles = [
   "Extension, Android, and Desktop share one React codebase and one setup flow.",
   "Android and Desktop default to local providers no cloud dependency required.",
   "The AI toolbar activates on text selection without disrupting page context.",
-  "Companion uses PMX models, VMD motions, and audio-driven lipsync.",
+  "Live Assistant uses PMX models, VMD motions, and audio-driven lipsync.",
 ];
 
 const companionAssets = [
   {
     title: "PMX Models",
     subtitle: "Custom avatar",
-    body: "Upload any PMX model file to replace the default companion. Full bone hierarchy and physics support via the babylon-mmd pipeline. The model you load becomes your persistent avatar across all runtimes.",
+    body: "Upload any PMX model file to replace the default Live Assistant. Full bone hierarchy and physics support via the babylon-mmd pipeline. The model you load becomes your persistent avatar across all runtimes.",
   },
   {
     title: "PMX Stages",
     subtitle: "Custom environment",
-    body: "Load a PMX stage as the companion background. Any MMD-compatible stage file works. Swap stages independently from the avatar without reloading the scene.",
+    body: "Load a PMX stage as the Live Assistant background. Any MMD-compatible stage file works. Swap stages independently from the avatar without reloading the scene.",
   },
   {
     title: "VMD Motions",
     subtitle: "Custom animation library",
-    body: "Import VMD animation files and assign them to categories. Control which motions are enabled per state idle, talking, reacting. The companion cycles through your motion library during normal use.",
+    body: "Import VMD animation files and assign them to categories. Control which motions are enabled per state idle, talking, reacting. The Live Assistant cycles through your motion library during normal use.",
   },
   {
     title: "Emotes",
@@ -103,7 +103,7 @@ const companionTechRows = [
   {
     label: "Android wallpaper",
     value:
-      "The companion can be applied as a live wallpaper on Android via the in-app setup flow the avatar runs on your home screen with full motion and lipsync",
+      "The Live Assistant can be applied as a live wallpaper on Android via the in-app setup flow. The avatar runs on your home screen with full motion and lipsync.",
   },
 ];
 
@@ -287,7 +287,7 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
         </div>
       </section>
 
-      {/* ── Virtual Companion ── */}
+      {/* ── Live Assistant ── */}
       <section id="companion" className={sectionClass}>
         <div className="flex items-end justify-between gap-4 mb-2">
           <div>
@@ -295,15 +295,16 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
               Babylon.js + babylon-mmd
             </p>
             <h2 className="text-2xl sm:text-4xl font-semibold tracking-[-0.01em]">
-              Virtual Companion
+              Live Assistant
             </h2>
           </div>
         </div>
 
         <p className="mt-4 mb-10 text-white/70 max-w-2xl text-sm sm:text-base leading-relaxed">
-          The companion is a fully customizable 3D avatar that reacts to voice,
-          chat, and emotes in real time. Every asset model, stage, animations,
-          emotes is replaceable from settings. Nothing is locked to a default.
+          The Live Assistant is a fully customizable 3D avatar that reacts to
+          voice, chat, and emotes in real time. Every asset model, stage,
+          animations, emotes is replaceable from settings. Nothing is locked to
+          a default.
         </p>
 
         {/* Asset type cards */}
@@ -355,10 +356,11 @@ const DemoSite = ({ onLaunchAssistant }: DemoSiteProps) => {
               Live Wallpaper Mode
             </h3>
             <p className="mt-2 text-sm sm:text-base text-white/70 leading-relaxed">
-              Apply your configured PMX companion as an Android live wallpaper
-              directly from the in-app setup flow. The avatar runs on your home
-              screen with full VMD motion playback and audio-driven lipsync —
-              using the same local sherpa-onnx stack as the app itself.
+              Apply your configured PMX Live Assistant as an Android live
+              wallpaper directly from the in-app setup flow. The avatar runs on
+              your home screen with full VMD motion playback and audio-driven
+              lipsync — using the same local sherpa-onnx stack as the app
+              itself.
             </p>
           </div>
           <div className="flex-shrink-0">

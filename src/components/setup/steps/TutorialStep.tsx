@@ -22,9 +22,9 @@ const TutorialStep = ({ isLightBackground: _isLightBackground = false }) => {
       icon: "mic",
     },
     {
-      title: "Virtual Character",
+      title: "Live Assistant",
       description:
-        "Interact with your animated character companion in real-time",
+        "Interact with your animated on-screen assistant in real-time",
       gifPath: "/tutorials/character.gif",
       icon: "user",
     },

@@ -69,7 +69,7 @@ Some extension features use Chrome's built-in AI (Gemini Nano). Those require a 
 
 ## After installing
 
-VAssist opens the setup wizard on first launch. That's where you choose your AI provider, voice options, and companion mode. See the [setup guide →](/getting-started/setup-wizard).
+VAssist opens the setup wizard on first launch. That's where you choose your AI provider, voice options, and Live Assistant mode. See the [setup guide →](/getting-started/setup-wizard).
 
 ## Building from source
 

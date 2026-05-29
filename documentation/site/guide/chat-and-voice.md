@@ -34,17 +34,17 @@ The bottom bar of the chat window has three groups of buttons.
 
 **Center**
 
-| Button   | Icon                     | What it does                                                        |
-| -------- | ------------------------ | ------------------------------------------------------------------- |
-| Stop     | square (red when active) | Stops AI generation or TTS playback mid-stream.                     |
-| New Chat | plus                     | Starts a blank conversation. The current one is saved.              |
-| Close    | X                        | Closes the chat panel. Only shown when the 3D companion is visible. |
+| Button   | Icon                     | What it does                                                          |
+| -------- | ------------------------ | --------------------------------------------------------------------- |
+| Stop     | square (red when active) | Stops AI generation or TTS playback mid-stream.                       |
+| New Chat | plus                     | Starts a blank conversation. The current one is saved.                |
+| Close    | X                        | Closes the chat panel. Only shown when the Live Assistant is visible. |
 
 **Right**
 
 | Button                | Icon                                | What it does                                              |
 | --------------------- | ----------------------------------- | --------------------------------------------------------- |
-| Hide / Show character | eye-off / eye                       | Hides or shows the 3D companion without closing chat.     |
+| Hide / Show character | eye-off / eye                       | Hides or shows the Live Assistant without closing chat.   |
 | Temp mode             | pin icon (star when active, yellow) | When active, the current session is not saved to history. |
 
 ## Typing and attaching files
@@ -118,16 +118,16 @@ Voice quality depends on your STT and TTS provider setup. If transcription or sp
 
 The AI behavior is controlled by the active **system prompt profile** in Settings and LLM and Profiles. The default is a general assistant. You can create your own: a coding assistant, a writing partner, a specific character. Changes apply to the next message.
 
-## Companion reactions during chat
+## Live Assistant reactions during chat
 
-- Spoken output drives lip sync and can shift the companion animation state.
-- If an emote is playing, a progress bar shows in the companion area.
+- Spoken output drives lip sync and can shift the Live Assistant animation state.
+- If an emote is playing, a progress bar shows in the Live Assistant area.
 
 ## Related guides
 
 <div class="doc-link-list">
 	<a href="/guide/chat-history-and-branches">Saved chats and branches →</a>
 	<a href="/guide/ai-toolbar">AI toolbar →</a>
-	<a href="/guide/virtual-companion">Virtual companion →</a>
+	<a href="/guide/virtual-companion">Live Assistant →</a>
 	<a href="/guide/camera-and-screen-share">Camera and screen share →</a>
 </div>

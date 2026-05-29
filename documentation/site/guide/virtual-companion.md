@@ -1,10 +1,10 @@
-# Virtual Companion
+# Live Assistant
 
-The live 3D companion sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars, stages, and motions on the fly from the floating controls without touching Settings.
+The live 3D assistant sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars, stages, and motions on the fly from the floating controls without touching Settings.
 
 <figure class="doc-figure">
-	<img src="/assets/companion.png" alt="Virtual companion with live avatar controls visible." />
-	<figcaption>The companion stays visible while you work. Or switch to chat-only mode and skip the 3D view entirely.</figcaption>
+	<img src="/assets/companion.png" alt="Live Assistant with live avatar controls visible." />
+	<figcaption>The Live Assistant stays visible while you work. Or switch to chat-only mode and skip the 3D view entirely.</figcaption>
 </figure>
 
 ## What it does while you use VAssist
@@ -17,12 +17,12 @@ The live 3D companion sits alongside the chat and page tools. It animates, react
 
 ## The floating button cluster
 
-When the avatar is visible and chat is closed, a vertical stack of buttons sits near the companion:
+When the avatar is visible and chat is closed, a vertical stack of buttons sits near the Live Assistant:
 
 | Button        | Icon                             | What it does                                                                                                     |
 | ------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Chat button   | AI spark (or X to close)         | Opens the chat. Drag to reposition when in chat-only mode. Shows attachment icon when a file is dragged over it. |
-| Zoom control  | + / - / reset                    | Zooms the companion view in or out, and resets back to default size.                                             |
+| Zoom control  | + / - / reset                    | Zooms the Live Assistant view in or out, and resets back to default size.                                        |
 | Avatar button | person outline                   | Opens the avatar and stage picker panel.                                                                         |
 | Emote button  | music note (spins while playing) | Opens the emote list.                                                                                            |
 | Reload button | refresh arrow                    | Reloads the page.                                                                                                |
@@ -57,16 +57,16 @@ Click the **emote button** (music note) to open the emote panel.
 2. Click any emote name to play it immediately. A spinning icon marks the currently playing emote.
 3. Click the emote button again to close the panel. The emote keeps playing in the background.
 
-The emote panel also shows an auto-play toggle and category selector so the companion plays emotes automatically during matching animation states.
+The emote panel also shows an auto-play toggle and category selector so the Live Assistant plays emotes automatically during matching animation states.
 
 ## Emote playback bar
 
-When an emote is playing, a progress bar appears near the companion showing elapsed time and duration. You can pause, resume, or stop from there.
+When an emote is playing, a progress bar appears near the Live Assistant showing elapsed time and duration. You can pause, resume, or stop from there.
 
 ## Positioning and framing
 
-- Drag the companion to reposition it on supported runtimes.
-- Turn on **Pin position** (pin icon in camera controls) to remember where you dragged it. Turn it off and the companion resets to the preset position on next load.
+- Drag the Live Assistant to reposition it on supported runtimes.
+- Turn on **Pin position** (pin icon in camera controls) to remember where you dragged it. Turn it off and the Live Assistant resets to the preset position on next load.
 - **Portrait Mode** (Settings → 3D) crops to an upper-body framing. Standard mode shows the full body.
 
 ## Chat-only mode
@@ -75,7 +75,7 @@ If you turn the avatar off, VAssist keeps working. It just becomes a chat-first 
 
 ## Android live wallpaper
 
-On Android, the companion can run as a live wallpaper. It's the same model, motions, and emote library, just rendered as a wallpaper view instead of an in-app overlay. Do setup in the main app first. The wallpaper reads those saved settings.
+On Android, the Live Assistant can run as a live wallpaper. It's the same model, motions, and emote library, just rendered as a wallpaper view instead of an in-app overlay. Do setup in the main app first. The wallpaper reads those saved settings.
 
 ## Related guides
 

@@ -46,7 +46,7 @@ Adaptive theme only affects the assistant UI layer, not the website or native ho
 
 ## Android backgrounds
 
-Manages wallpaper assets behind the companion on Android.
+Manages wallpaper assets behind the Live Assistant on Android.
 
 **To add a background:**
 

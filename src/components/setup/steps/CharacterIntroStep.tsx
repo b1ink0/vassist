@@ -126,10 +126,10 @@ const CharacterIntroStep = ({
     <div className="setup-step character-intro-step">
       <div className="step-header mb-8">
         <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
-          Virtual Companion
+          Live Assistant
         </h2>
         <p className="text-white/90">
-          Choose how you want to interact with your AI companion
+          Choose how you want to interact with your on-screen AI assistant
         </p>
       </div>
 

@@ -1,10 +1,10 @@
 # Start Here
 
-VAssist is an AI assistant that runs on desktop, Android, and as a browser extension. It has three main parts: a full chat window, on-page tools that appear when you select text or focus an input, and an animated 3D companion.
+VAssist is an AI assistant that runs on desktop, Android, and as a browser extension. It has three main parts: a full chat window, on-page tools that appear when you select text or focus an input, and an animated 3D Live Assistant that stays visible while you work.
 
 <figure class="doc-figure">
-  <img src="/assets/overview.gif" alt="VAssist overview showing chat, toolbar, and companion use." />
-  <figcaption>Chat, the toolbar, and the companion: the three main ways you'll actually use VAssist.</figcaption>
+  <img src="/assets/overview.gif" alt="VAssist overview showing chat, toolbar, and Live Assistant use." />
+  <figcaption>Chat, the toolbar, and the Live Assistant: the three main ways you'll actually use VAssist.</figcaption>
 </figure>
 
 ::: tip Haven't tried it yet?
@@ -21,12 +21,12 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser with no in
   </a>
   <a class="doc-card doc-card-link" href="./getting-started/setup-wizard">
     <h3>First-run setup</h3>
-    <p>The setup wizard runs on first launch. It connects your AI provider, voice input, voice output, and picks a companion mode.</p>
+    <p>The setup wizard runs on first launch. It connects your AI provider, voice input, voice output, and picks a Live Assistant mode.</p>
     <p class="doc-card-cta">Setup guide →</p>
   </a>
   <a class="doc-card doc-card-link" href="./guide/">
     <h3>Using VAssist</h3>
-    <p>Once setup is done: chat, toolbar, voice, the companion, and everything in between.</p>
+    <p>Once setup is done: chat, toolbar, voice, the Live Assistant, and everything in between.</p>
     <p class="doc-card-cta">Usage guides →</p>
   </a>
 </div>
@@ -47,11 +47,11 @@ Select text on any page and a small toolbar appears next to it. Rewrite, summari
 
 - [AI toolbar guide](/guide/ai-toolbar)
 
-### Live companion
+### Live Assistant
 
-A 3D animated character that stays visible while you work. It reacts during chat, lip-syncs during voice playback, and you can swap models, stages, and motions. On Android it can run as a live wallpaper.
+A 3D animated assistant that stays visible while you work. It reacts during chat, lip-syncs during voice playback, and you can swap models, stages, and motions. On Android it can run as a live wallpaper.
 
-- [Virtual companion](/guide/virtual-companion): the floating avatar, controls, chat bubble
+- [Live Assistant](/guide/virtual-companion): the floating avatar, controls, chat bubble
 - [Avatar, motions, and emotes](/guide/avatar-motions-and-emotes): importing MMD models, VMD motions, emote libraries
 
 ## Looking for something specific?

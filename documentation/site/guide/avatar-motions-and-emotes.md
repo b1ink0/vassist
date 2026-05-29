@@ -1,6 +1,6 @@
 # Avatar, Motions, and Emotes
 
-Settings → 3D is where you manage everything that shapes how the companion looks and moves: MMD-style models and stages, VMD motions, and emotes. It's split into five sub-tabs.
+Settings → 3D is where you manage everything that shapes how the Live Assistant looks and moves: MMD-style models and stages, VMD motions, and emotes. It's split into five sub-tabs.
 
 | Sub-tab     | What's here                                                |
 | ----------- | ---------------------------------------------------------- |
@@ -25,7 +25,7 @@ Upload models and stages as zipped PMX packages. Once imported, you can rename, 
 - **Portrait Mode**: upper-body crop instead of full body. **Clipping Height** adjusts how aggressively it crops.
 - **Character Position**: includes **Last Location** so dragged placement sticks across restarts
 
-You can also switch between 2D and 3D camera modes from the live companion controls without touching Settings.
+You can also switch between 2D and 3D camera modes from the Live Assistant controls without touching Settings.
 
 ## Performance
 
@@ -35,7 +35,7 @@ Setting Render Quality to **Custom** unlocks individual controls for anti-aliasi
 
 ## Custom motions
 
-Import VMD files into the motion library, then assign them to animation categories: `idle`, `thinking`, `celebrating`, `walking`, or `talking`. Each category can hold multiple motions. The companion picks from them randomly during the matching state.
+Import VMD files into the motion library, then assign them to animation categories: `idle`, `thinking`, `celebrating`, `walking`, or `talking`. Each category can hold multiple motions. The Live Assistant picks from them randomly during the matching state.
 
 ::: tip
 VAssist won't let you disable the last remaining motion in a category, so you can't accidentally leave a category empty.
@@ -58,6 +58,6 @@ Library management: name, category, hide without deleting, delete one, or clear 
 ## Related guides
 
 <div class="doc-link-list">
-  <a href="/guide/virtual-companion">Virtual companion →</a>
+  <a href="/guide/virtual-companion">Live Assistant →</a>
   <a href="/settings/three-d">3D settings reference →</a>
 </div>
