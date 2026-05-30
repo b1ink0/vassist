@@ -6,7 +6,19 @@ import CameraService from "./services/CameraService";
 import ScreenShareService from "./services/ScreenShareService";
 import DemoSite from "./components/DemoSite";
 import LoadingIndicator from "./components/common/LoadingIndicator";
+import { AppRuntimeProvider } from "./contexts/AppRuntimeContext";
+import type { AppStore } from "./stores/createAppStore";
 import { SetupProvider, useSetup } from "./contexts/SetupContext";
+import {
+  normalizeVAssistEmbedConfig,
+  type ResolvedVAssistEmbedConfig,
+  type VAssistEmbedConfig,
+} from "./embed/config";
+import { getVAssistThemeRootAttributes } from "./embed/theme";
+import {
+  setActiveEmbedHostId,
+  setEmbedConfig as setRuntimeEmbedConfig,
+} from "./embed/runtimeStore";
 import { AnimationProvider } from "./contexts/AnimationContext";
 import { useInitializeAppStore } from "./hooks/bootstrap/useInitializeAppStore";
 import { useInitializeConfigStore } from "./hooks/bootstrap/useInitializeConfigStore";
@@ -18,7 +30,14 @@ import {
   isInputWindow,
   isScreenPicker,
 } from "./utils/PlatformUtils";
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { vassistTestFlags } from "./testing/runtime";
 
 interface AppWithSetupProps {
@@ -27,6 +46,7 @@ interface AppWithSetupProps {
   onStartSetup?: (() => void) | undefined;
   onMinimizeSetup?: (() => void) | undefined;
   forcePortraitWhileDeferred?: boolean;
+  embedConfig: ResolvedVAssistEmbedConfig;
 }
 
 interface AppProps {
@@ -34,11 +54,37 @@ interface AppProps {
   isWallpaperMode?: boolean;
   embedded?: boolean;
   deferSetupUntilStarted?: boolean;
+  embedConfig?: VAssistEmbedConfig;
+  onStoreReady?: ((store: AppStore) => void) | undefined;
 }
 
-function StoreBootstrap({ children }: { children: ReactNode }) {
-  useInitializeConfigStore();
-  useInitializeAppStore();
+function StoreBootstrap({
+  children,
+  embedConfig,
+  onStoreReady,
+}: {
+  children: ReactNode;
+  embedConfig: ResolvedVAssistEmbedConfig;
+  onStoreReady?: ((store: AppStore) => void) | undefined;
+}) {
+  return (
+    <AppRuntimeProvider onStoreReady={onStoreReady}>
+      <StoreBootstrapInner embedConfig={embedConfig}>
+        {children}
+      </StoreBootstrapInner>
+    </AppRuntimeProvider>
+  );
+}
+
+function StoreBootstrapInner({
+  children,
+  embedConfig,
+}: {
+  children: ReactNode;
+  embedConfig: ResolvedVAssistEmbedConfig;
+}) {
+  useInitializeConfigStore(embedConfig);
+  useInitializeAppStore(embedConfig);
 
   const refreshDesktopApi = useRefreshDesktopApi();
   const refreshAndroidApi = useRefreshAndroidApi();
@@ -48,7 +94,32 @@ function StoreBootstrap({ children }: { children: ReactNode }) {
     refreshAndroidApi();
   }, [refreshAndroidApi, refreshDesktopApi]);
 
-  return <>{children}</>;
+  useEffect(() => {
+    setRuntimeEmbedConfig(embedConfig, embedConfig.mount.hostId);
+    setActiveEmbedHostId(embedConfig.mount.hostId);
+  }, [embedConfig]);
+
+  const themeRoot = useMemo(
+    () => getVAssistThemeRootAttributes(embedConfig),
+    [embedConfig],
+  );
+
+  return (
+    <div
+      className="vassist-theme-root"
+      data-vassist-host-id={embedConfig.mount.hostId}
+      data-vassist-theme-mode={themeRoot.mode}
+      data-vassist-surface-style={themeRoot.surfaceStyle}
+      style={themeRoot.style}
+      onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+      onPointerDownCapture={() =>
+        setActiveEmbedHostId(embedConfig.mount.hostId)
+      }
+      onFocusCapture={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+    >
+      {children}
+    </div>
+  );
 }
 
 const LazyAppContent = lazy(() => import("./components/AppContent"));
@@ -84,6 +155,7 @@ function AppWithSetup({
   onStartSetup,
   onMinimizeSetup,
   forcePortraitWhileDeferred = false,
+  embedConfig,
 }: AppWithSetupProps) {
   const { setupCompleted, isLoading } = useSetup();
   const requireSetupOnChatClick = showDeferredSetup && !setupCompleted;
@@ -102,6 +174,7 @@ function AppWithSetup({
             requireSetupOnChatClick={requireSetupOnChatClick}
             {...appContentProps}
             forcePortraitMode={forcePortraitWhileDeferred}
+            embedConfig={embedConfig}
           />
         </Suspense>
       );
@@ -120,6 +193,7 @@ function AppWithSetup({
         mode={mode}
         requireSetupOnChatClick={requireSetupOnChatClick}
         {...appContentProps}
+        embedConfig={embedConfig}
       />
     </Suspense>
   );
@@ -186,9 +260,22 @@ function App({
   isWallpaperMode: explicitWallpaperMode,
   embedded = false,
   deferSetupUntilStarted,
+  embedConfig,
+  onStoreReady,
 }: AppProps) {
   const shouldRenderCameraPreview =
     !vassistTestFlags.enabled || !vassistTestFlags.disableCamera;
+
+  const resolvedEmbedConfig = useMemo(
+    () =>
+      normalizeVAssistEmbedConfig(
+        embedConfig ??
+          (deferSetupUntilStarted
+            ? { shell: { deferSetupUntilStarted } }
+            : undefined),
+      ),
+    [deferSetupUntilStarted, embedConfig],
+  );
 
   // Determine actual mode based on build-time constants and props
   const actualMode = __DESKTOP_MODE__
@@ -199,12 +286,24 @@ function App({
   const isEmbeddedDevelopmentMode =
     actualMode === "development" &&
     (embedded || isEmbed || isEmbeddedModeEnabled());
+  const shouldDeferEmbeddedSetup = isEmbeddedDevelopmentMode
+    ? resolvedEmbedConfig.shell.deferSetupUntilStarted
+    : false;
   const defaultDeferredSetup =
     actualMode === "development"
-      ? (deferSetupUntilStarted ?? !isEmbeddedDevelopmentMode)
+      ? isEmbeddedDevelopmentMode
+        ? shouldDeferEmbeddedSetup
+        : (deferSetupUntilStarted ?? !isEmbeddedDevelopmentMode)
       : false;
   const defaultForcePortraitWhileDeferred =
-    actualMode === "development" && !isEmbeddedDevelopmentMode;
+    actualMode === "development"
+      ? isEmbeddedDevelopmentMode
+        ? resolvedEmbedConfig.shell.forcePortraitMode
+        : !isEmbeddedDevelopmentMode
+      : false;
+  const developmentContainerClass = isEmbeddedDevelopmentMode
+    ? "relative h-full w-full overflow-visible"
+    : "relative w-full h-screen overflow-hidden";
   const [showDeferredSetup, setShowDeferredSetup] =
     useState(defaultDeferredSetup);
 
@@ -219,7 +318,10 @@ function App({
         : isWallpaperMode()
     ) {
       return (
-        <StoreBootstrap>
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
           <AnimationProvider>
             <div className="relative w-full h-screen overflow-hidden bg-transparent">
               <Suspense fallback={null}>
@@ -233,8 +335,11 @@ function App({
     }
 
     return (
-      <StoreBootstrap>
-        <SetupProvider>
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
           <AnimationProvider>
             <div className="relative w-full h-screen overflow-hidden">
               <Suspense fallback={null}>
@@ -245,6 +350,7 @@ function App({
                 showDeferredSetup={showDeferredSetup}
                 onStartSetup={() => setShowDeferredSetup(false)}
                 onMinimizeSetup={() => setShowDeferredSetup(true)}
+                embedConfig={resolvedEmbedConfig}
               />
               {shouldRenderCameraPreview && (
                 <Suspense fallback={null}>
@@ -261,7 +367,10 @@ function App({
   if (actualMode === "desktop") {
     if (isScreenPicker) {
       return (
-        <StoreBootstrap>
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
           <Suspense fallback={<LoadingIndicator isVisible={true} />}>
             <LazyDesktopScreenShareDialog />
           </Suspense>
@@ -271,7 +380,10 @@ function App({
 
     if (isInputWindow) {
       return (
-        <StoreBootstrap>
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
           <Suspense fallback={null}>
             <LazyDesktopWindowInteractivityBridge />
           </Suspense>
@@ -281,6 +393,7 @@ function App({
               onClose={() => {}}
               onVoiceTranscription={() => {}}
               onVoiceMode={() => {}}
+              embedConfig={resolvedEmbedConfig}
             />
           </Suspense>
           <Suspense fallback={null}>
@@ -294,8 +407,11 @@ function App({
     }
 
     return (
-      <StoreBootstrap>
-        <SetupProvider>
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
           <AnimationProvider>
             <Suspense fallback={null}>
               <LazyDesktopWindowInteractivityBridge />
@@ -309,6 +425,7 @@ function App({
                 showDeferredSetup={showDeferredSetup}
                 onStartSetup={() => setShowDeferredSetup(false)}
                 onMinimizeSetup={() => setShowDeferredSetup(true)}
+                embedConfig={resolvedEmbedConfig}
               />
               <Suspense fallback={null}>
                 {shouldRenderCameraPreview && (
@@ -325,11 +442,14 @@ function App({
 
   // Development and Extension modes
   return (
-    <StoreBootstrap>
-      <SetupProvider>
+    <StoreBootstrap
+      embedConfig={resolvedEmbedConfig}
+      onStoreReady={onStoreReady}
+    >
+      <SetupProvider embedConfig={resolvedEmbedConfig}>
         <AnimationProvider>
           {actualMode === "development" ? (
-            <div className="relative w-full h-screen overflow-hidden">
+            <div className={developmentContainerClass}>
               {!vassistTestFlags.enabled || !isEmbeddedDevelopmentMode ? (
                 <DevelopmentDemoSite
                   onStartSetup={() => setShowDeferredSetup(false)}
@@ -341,6 +461,7 @@ function App({
                 onStartSetup={() => setShowDeferredSetup(false)}
                 onMinimizeSetup={() => setShowDeferredSetup(true)}
                 forcePortraitWhileDeferred={defaultForcePortraitWhileDeferred}
+                embedConfig={resolvedEmbedConfig}
               />
               <Suspense fallback={null}>
                 {shouldRenderCameraPreview && (
@@ -356,6 +477,7 @@ function App({
                 showDeferredSetup={showDeferredSetup}
                 onStartSetup={() => setShowDeferredSetup(false)}
                 onMinimizeSetup={() => setShowDeferredSetup(true)}
+                embedConfig={resolvedEmbedConfig}
               />
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
                 {shouldRenderCameraPreview && (

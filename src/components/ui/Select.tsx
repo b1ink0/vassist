@@ -132,23 +132,34 @@ const Select = ({
     onChange(syntheticEvent);
   };
 
-  const textClass = variant === "dark" ? "glass-text" : "glass-text-black";
+  const textClass =
+    variant === "dark"
+      ? "vassist-inverse-text-primary"
+      : "vassist-text-primary";
   const popupClass =
     variant === "dark"
-      ? "glass-container-dark border-white/20"
-      : "glass-container border-white/15";
+      ? "vassist-popup-surface-inverse"
+      : "vassist-popup-surface";
   const groupLabelClass =
-    variant === "dark" ? "text-white/55" : "text-white/45";
+    variant === "dark"
+      ? "vassist-select-group-label-inverse"
+      : "vassist-select-group-label";
   const itemClass =
     variant === "dark"
-      ? "group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/92 outline-none transition-colors data-[highlighted]:bg-white/12 data-[disabled]:opacity-40"
-      : "group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/85 outline-none transition-colors data-[highlighted]:bg-white/10 data-[disabled]:opacity-40";
+      ? "vassist-select-item-inverse group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
+      : "vassist-select-item group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
   const singleItemClass =
     variant === "dark"
-      ? "group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-white/92 outline-none transition-colors data-[highlighted]:bg-white/12 data-[disabled]:opacity-40"
-      : "group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-white/85 outline-none transition-colors data-[highlighted]:bg-white/10 data-[disabled]:opacity-40";
+      ? "vassist-select-item-single-inverse group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
+      : "vassist-select-item-single group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
   const indicatorClass =
-    variant === "dark" ? "w-4 text-white/85" : "w-4 text-white/75";
+    variant === "dark"
+      ? "vassist-select-indicator-inverse w-4"
+      : "vassist-select-indicator w-4";
+  const triggerIconClass =
+    variant === "dark"
+      ? "vassist-inverse-text-secondary"
+      : "vassist-text-secondary";
   const triggerClassName = trigger
     ? className
     : cn(selectVariants({ variant }), "relative", className);
@@ -176,7 +187,12 @@ const Select = ({
                 className={cn("block truncate pr-2", textClass)}
                 placeholder={placeholder || "Select"}
               />
-              <BaseSelect.Icon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70">
+              <BaseSelect.Icon
+                className={cn(
+                  "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2",
+                  triggerIconClass,
+                )}
+              >
                 <Icon name="chevron-down" size={16} />
               </BaseSelect.Icon>
             </>
@@ -196,12 +212,12 @@ const Select = ({
           >
             <BaseSelect.Popup
               className={cn(
-                "rounded-xl border p-1 shadow-xl backdrop-blur-[12px] [font-family:inherit]",
+                "rounded-xl border p-1 shadow-xl [font-family:inherit]",
                 popupClass,
                 popupClassName,
               )}
             >
-              <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center text-white/50">
+              <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center vassist-text-muted">
                 <Icon name="chevron-up" size={16} />
               </BaseSelect.ScrollUpArrow>
               <BaseSelect.List

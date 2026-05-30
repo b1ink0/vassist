@@ -1,41 +1,39 @@
-/**
- * Resource Loader Utility
- * Handles loading assets in both dev and extension modes
- * Uses chrome-extension:// URLs in extension mode, relative paths in dev mode
- */
-
+import { getEmbedConfig } from "../embed/runtimeStore";
 import Logger from "../services/LoggerService";
 import { isDesktop, isEmbed, isProduction } from "./PlatformUtils";
+import type {
+  ResourceLoaderAdapterLike,
+  ResourceLoaderSelection,
+} from "./resource-loader/types";
 
-class ResourceLoader {
+export type { ResourceLoaderAdapterLike, ResourceLoaderSelection };
+
+export class DefaultResourceLoader implements ResourceLoaderAdapterLike {
   private isExtension: boolean;
 
   constructor() {
-    this.isExtension = this._detectExtensionMode();
+    this.isExtension = this.detectExtensionMode();
   }
 
-  /**
-   * Detect if running in extension context
-   * @returns {boolean} True if extension mode
-   */
-  _detectExtensionMode(): boolean {
-    // Check if the current script was loaded from a chrome-extension:// URL
-    // When running as extension, import.meta.url will be chrome-extension://...
-    // In dev mode with Vite, it will be http://localhost:5173/...
-    const isExtension = import.meta.url.startsWith("chrome-extension://");
-    return isExtension;
+  private detectExtensionMode(): boolean {
+    return import.meta.url.startsWith("chrome-extension://");
   }
 
-  /**
-   * Explicitly set extension mode
-   * @param {boolean} isExtension - True for extension mode, false for dev mode
-   */
   setMode(isExtension: boolean): void {
     this.isExtension = isExtension;
     Logger.log(
       "ResourceLoader",
       `Mode set to: ${this.isExtension ? "Extension" : "Development"}`,
     );
+  }
+
+  private getModuleDirectoryUrl(): string {
+    const currentModuleUrl = import.meta.url;
+    const lastSlashIndex = currentModuleUrl.lastIndexOf("/");
+
+    return lastSlashIndex === -1
+      ? currentModuleUrl
+      : currentModuleUrl.slice(0, lastSlashIndex + 1);
   }
 
   private normalizeRuntimePath(path: string): string | null {
@@ -56,13 +54,10 @@ class ResourceLoader {
       return null;
     }
 
-    // Keep this as a runtime URL resolution. Vite rewrites direct
-    // new URL(dynamic, import.meta.url) calls into a static asset map,
-    // which turns unknown public paths into "undefined".
     const URLConstructor = URL;
     return new URLConstructor(
       `../${normalizedPath}`,
-      import.meta.url,
+      this.getModuleDirectoryUrl(),
     ).toString();
   }
 
@@ -70,11 +65,6 @@ class ResourceLoader {
     return this.resolveEmbedRuntimeUrl(path);
   }
 
-  /**
-   * Get URL for a resource file
-   * @param {string} path - Relative path to resource (e.g., 'res/models/model.pmx')
-   * @returns {string|Promise<string>} - Full URL to resource
-   */
   getURL(path: string): string {
     const runtimeUrl = this.resolveRuntimeUrl(path);
     if (runtimeUrl) {
@@ -82,108 +72,67 @@ class ResourceLoader {
     }
 
     if (!this.isExtension) {
-      // In dev mode, use relative path from public folder
-      // Vite serves public folder at root
       return path.startsWith("/") ? path : `/${path}`;
     }
 
-    // Extension mode - request URL from content script via ExtensionBridge
-    // Content script has access to chrome.runtime.getURL, we don't
-    // Import here to avoid circular dependency
     void import("./ExtensionBridge").then(({ extensionBridge }) => {
       return extensionBridge.getResourceURL(path);
     });
 
-    // For now, return a promise that will resolve to the URL
-    // This makes the function async in extension mode
     Logger.warn(
       "ResourceLoader",
-      "getURL in extension mode - this should use async getURLAsync instead",
+      "getURL in extension mode should use getURLAsync for host-aware resolution",
     );
-    return `/${path}`; // Temporary fallback
+    return `/${path}`;
   }
 
-  /**
-   * Get URL for a resource file (async version for extension mode)
-   * @param {string} path - Relative path to resource
-   * @returns {Promise<string>} - Full URL to resource
-   */
   async getURLAsync(path: string): Promise<string> {
     if (!this.isExtension) {
       if (path.startsWith("blob:") || path.includes("://")) {
         return path;
       }
+
       const runtimeUrl = this.resolveRuntimeUrl(path);
       if (runtimeUrl) {
         return runtimeUrl;
       }
+
       if (isDesktop && isProduction) {
         if (path.startsWith("res/")) {
           return `../${path}`;
         }
         return path.startsWith("/") ? path.substring(1) : path;
-      } else {
-        return path.startsWith("/") ? path : `/${path}`;
       }
+
+      return path.startsWith("/") ? path : `/${path}`;
     }
 
-    // Extension mode - request URL from content script via ExtensionBridge
     const { extensionBridge } = await import("./ExtensionBridge");
     return extensionBridge.getResourceURL(path);
   }
 
-  /**
-   * Get URL for a model file (.pmx, .pmd)
-   * @param {string} filename - Model filename
-   * @returns {string} - Full URL to model
-   */
   getModelURL(filename: string): string {
     return this.getURL(`res/models/${filename}`);
   }
 
-  /**
-   * Get URL for an animation file (.bvmd, .vmd)
-   * @param {string} filename - Animation filename
-   * @returns {string} - Full URL to animation
-   */
   getAnimationURL(filename: string): string {
     return this.getURL(`res/animations/${filename}`);
   }
 
-  /**
-   * Get URL for a texture file
-   * @param {string} filename - Texture filename
-   * @returns {string} - Full URL to texture
-   */
   getTextureURL(filename: string): string {
     return this.getURL(`res/textures/${filename}`);
   }
 
-  /**
-   * Get URL for a private test resource
-   * @param {string} type - Resource type (models, animations, etc.)
-   * @param {string} filename - Filename
-   * @returns {string} - Full URL to resource
-   */
   getPrivateTestURL(type: string, filename: string): string {
     return this.getURL(`res/private_test/${type}/${filename}`);
   }
 
-  /**
-   * Check if running in extension mode
-   * @returns {boolean} - True if extension mode
-   */
   isExtensionMode(): boolean {
     return this.isExtension;
   }
 
-  /**
-   * Load JSON configuration file
-   * @param {string} path - Path to JSON file
-   * @returns {Promise<Object>} - Parsed JSON data
-   */
   async loadJSON<T = Record<string, unknown>>(path: string): Promise<T> {
-    const url = this.getURL(path);
+    const url = await this.getURLAsync(path);
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -195,13 +144,8 @@ class ResourceLoader {
     return response.json() as Promise<T>;
   }
 
-  /**
-   * Load text file
-   * @param {string} path - Path to text file
-   * @returns {Promise<string>} - File contents
-   */
   async loadText(path: string): Promise<string> {
-    const url = this.getURL(path);
+    const url = await this.getURLAsync(path);
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -213,13 +157,8 @@ class ResourceLoader {
     return response.text();
   }
 
-  /**
-   * Load binary file
-   * @param {string} path - Path to binary file
-   * @returns {Promise<ArrayBuffer>} - File contents as ArrayBuffer
-   */
   async loadBinary(path: string): Promise<ArrayBuffer> {
-    const url = this.getURL(path);
+    const url = await this.getURLAsync(path);
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -231,17 +170,101 @@ class ResourceLoader {
     return response.arrayBuffer();
   }
 
-  /**
-   * Preload multiple resources
-   * @param {Array<string>} paths - Array of resource paths
-   * @returns {Promise<Array>} - Array of loaded resources
-   */
   async preloadResources(paths: string[]): Promise<ArrayBuffer[]> {
-    const promises = paths.map((path: string) => this.loadBinary(path));
-    return Promise.all(promises);
+    return Promise.all(paths.map((path) => this.loadBinary(path)));
   }
 }
 
-// Export singleton instance
-export const resourceLoader = new ResourceLoader();
+const builtinResourceLoader = new DefaultResourceLoader();
+const registeredResourceLoaders = new Map<string, ResourceLoaderAdapterLike>([
+  ["default", builtinResourceLoader],
+  ["builtin", builtinResourceLoader],
+]);
+
+let defaultResourceLoaderSelection: ResourceLoaderSelection = "default";
+
+export function registerResourceLoader(
+  name: string,
+  loader: ResourceLoaderAdapterLike,
+): void {
+  registeredResourceLoaders.set(name, loader);
+}
+
+export function getRegisteredResourceLoader(
+  name: string,
+): ResourceLoaderAdapterLike | undefined {
+  return registeredResourceLoaders.get(name);
+}
+
+export function listRegisteredResourceLoaders(): string[] {
+  return Array.from(registeredResourceLoaders.keys());
+}
+
+export function resolveResourceLoader(
+  selection?: ResourceLoaderSelection,
+): ResourceLoaderAdapterLike {
+  const resolvedSelection = selection ?? defaultResourceLoaderSelection;
+
+  if (typeof resolvedSelection === "string") {
+    const loader = registeredResourceLoaders.get(resolvedSelection);
+    if (!loader) {
+      throw new Error(`Unknown resource loader: ${resolvedSelection}`);
+    }
+    return loader;
+  }
+
+  return resolvedSelection;
+}
+
+export function setDefaultResourceLoader(
+  selection: ResourceLoaderSelection,
+): void {
+  defaultResourceLoaderSelection = selection;
+}
+
+function getConfiguredResourceLoader(): ResourceLoaderAdapterLike {
+  return resolveResourceLoader(getEmbedConfig().assets.resourceLoader);
+}
+
+export const resourceLoader: ResourceLoaderAdapterLike = {
+  setMode(isExtension: boolean) {
+    getConfiguredResourceLoader().setMode?.(isExtension);
+  },
+  getURL(path: string) {
+    return getConfiguredResourceLoader().getURL(path);
+  },
+  getURLAsync(path: string) {
+    return getConfiguredResourceLoader().getURLAsync(path);
+  },
+  getModelURL(filename: string) {
+    return getConfiguredResourceLoader().getModelURL(filename);
+  },
+  getAnimationURL(filename: string) {
+    return getConfiguredResourceLoader().getAnimationURL(filename);
+  },
+  getTextureURL(filename: string) {
+    return getConfiguredResourceLoader().getTextureURL(filename);
+  },
+  getPrivateTestURL(type: string, filename: string) {
+    return getConfiguredResourceLoader().getPrivateTestURL(type, filename);
+  },
+  isExtensionMode() {
+    return getConfiguredResourceLoader().isExtensionMode();
+  },
+  loadJSON<T = Record<string, unknown>>(path: string) {
+    return getConfiguredResourceLoader().loadJSON<T>(path);
+  },
+  loadText(path: string) {
+    return getConfiguredResourceLoader().loadText(path);
+  },
+  loadBinary(path: string) {
+    return getConfiguredResourceLoader().loadBinary(path);
+  },
+  preloadResources(paths: string[]) {
+    return getConfiguredResourceLoader().preloadResources(paths);
+  },
+};
+
+export { builtinResourceLoader };
+
 export default resourceLoader;

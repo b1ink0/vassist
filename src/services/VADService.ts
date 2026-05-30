@@ -63,14 +63,14 @@ class VADService {
   }
 
   private resolveEmbedAssetBasePath(): string {
-    return new URL("./", import.meta.url).toString();
+    return new URL("../assets/", import.meta.url).toString();
   }
 
   private resolveOnnxWasmPathOverrides(
     baseAssetPath: string,
   ): OnnxWasmPathOverrides {
-    // ORT accepts explicit .mjs/.wasm URLs here. Using file overrides avoids
-    // malformed requests like /assets/undefined when locateFile() receives no filename.
+    // ORT accepts explicit .mjs/.wasm URLs here. Using absolute file overrides keeps
+    // package consumers pinned to dist/assets even when the runtime entry lives in dist/chunks.
     return {
       mjs: `${baseAssetPath}${ORT_WASM_MODULE_FILENAME}`,
       wasm: `${baseAssetPath}${ORT_WASM_BINARY_FILENAME}`,

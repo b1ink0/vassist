@@ -111,6 +111,8 @@ export interface SceneAnimationConfigLike {
   transitionFrames?: number;
   loop?: boolean;
   loopTransition?: boolean;
+  weight?: number;
+  metadata?: Record<string, unknown>;
   disableBlinking?: boolean;
   [key: string]: unknown;
 }
@@ -118,6 +120,7 @@ export interface SceneAnimationConfigLike {
 export interface SceneBuildConfig {
   enableModelLoading?: boolean;
   modelUrl: string;
+  stageUrl?: string | null;
   customModelFile?: File;
   modelId?: string;
   modelFileName?: string;

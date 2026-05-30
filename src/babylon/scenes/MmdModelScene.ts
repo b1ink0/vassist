@@ -918,6 +918,7 @@ export const buildMmdModelScene = async (
   // ========================================
 
   const modelSource = finalConfig.customModelFile ?? finalConfig.modelUrl;
+
   Logger.log(
     "MmdModelScene",
     "Loading model from:",
@@ -1042,50 +1043,86 @@ export const buildMmdModelScene = async (
 
   let stageMesh: Mesh | null = null;
 
+  const loadStageFromSource = async (
+    stageSource: string,
+    stageLabel: string,
+  ): Promise<Mesh> => {
+    const stageResult = await LoadAssetContainerAsync(stageSource, scene, {
+      pluginExtension: ".bpmx",
+      pluginOptions: {
+        mmdmodel: {
+          materialBuilder: materialBuilder,
+          boundingBoxMargin: 60,
+          loggingEnabled: true,
+        },
+      },
+      onProgress: (event) => {
+        if (event.lengthComputable) {
+          const progress = (event.loaded / event.total) * 100;
+          Logger.log("MmdModelScene", `Stage loading: ${progress.toFixed(1)}%`);
+        }
+      },
+    });
+
+    Logger.log("MmdModelScene", "Stage loaded, adding to scene...");
+
+    stageResult.addAllToScene();
+    const loadedStageMesh = (stageResult.meshes[0] as Mesh | undefined) ?? null;
+    if (!loadedStageMesh) {
+      throw new Error(
+        `Stage \"${stageLabel}\" loaded but no root mesh was returned`,
+      );
+    }
+
+    return loadedStageMesh;
+  };
+
   try {
-    // Get default stage from storage
-    const defaultStage = await stageStorageService.getDefaultStage();
+    if (finalConfig.stageUrl === null) {
+      Logger.log(
+        "MmdModelScene",
+        "Stage loading skipped by embed configuration",
+      );
+    } else if (finalConfig.stageUrl) {
+      Logger.log(
+        "MmdModelScene",
+        `Loading embed-configured stage: ${finalConfig.stageUrl}`,
+      );
 
-    if (defaultStage && defaultStage.stageData) {
-      Logger.log("MmdModelScene", `Loading stage: ${defaultStage.name}`);
+      stageMesh = await loadStageFromSource(
+        finalConfig.stageUrl,
+        "embed-configured stage",
+      );
+    } else {
+      const defaultStage = await stageStorageService.getDefaultStage();
 
-      // Create blob URL from stage data
-      const stageBlob = defaultStage.stageData;
-      const stageBlobUrl = URL.createObjectURL(stageBlob);
+      if (defaultStage && defaultStage.stageData) {
+        Logger.log("MmdModelScene", `Loading stage: ${defaultStage.name}`);
 
-      // Load stage model
-      const stageResult = await LoadAssetContainerAsync(stageBlobUrl, scene, {
-        pluginExtension: ".bpmx",
-        pluginOptions: {
-          mmdmodel: {
-            materialBuilder: materialBuilder,
-            boundingBoxMargin: 60,
-            loggingEnabled: true,
-          },
-        },
-        onProgress: (event) => {
-          if (event.lengthComputable) {
-            const progress = (event.loaded / event.total) * 100;
-            Logger.log(
-              "MmdModelScene",
-              `Stage loading: ${progress.toFixed(1)}%`,
-            );
-          }
-        },
-      });
+        const stageBlobUrl = URL.createObjectURL(defaultStage.stageData);
 
-      // Clean up blob URL
-      URL.revokeObjectURL(stageBlobUrl);
+        try {
+          stageMesh = await loadStageFromSource(
+            stageBlobUrl,
+            defaultStage.name,
+          );
+        } finally {
+          URL.revokeObjectURL(stageBlobUrl);
+        }
 
-      Logger.log("MmdModelScene", "Stage loaded, adding to scene...");
-
-      // Add stage to scene
-      stageResult.addAllToScene();
-      stageMesh = (stageResult.meshes[0] as Mesh | undefined) ?? null;
-      if (!stageMesh) {
-        throw new Error("Stage loaded but no root mesh was returned");
+        Logger.log(
+          "MmdModelScene",
+          `✓ Stage "${defaultStage.name}" loaded successfully`,
+        );
+      } else {
+        Logger.log(
+          "MmdModelScene",
+          "No default stage selected, using default ground plane",
+        );
       }
+    }
 
+    if (stageMesh) {
       // Setup stage shadows
       if (finalConfig.enableShadows && shadowGenerator) {
         const stageMetadata = stageMesh.metadata as
@@ -1111,16 +1148,6 @@ export const buildMmdModelScene = async (
         scene.metadata.defaultGround.setEnabled(false);
         Logger.log("MmdModelScene", "Default ground hidden (stage is active)");
       }
-
-      Logger.log(
-        "MmdModelScene",
-        `✓ Stage "${defaultStage.name}" loaded successfully`,
-      );
-    } else {
-      Logger.log(
-        "MmdModelScene",
-        "No default stage selected, using default ground plane",
-      );
     }
   } catch (error) {
     Logger.error("MmdModelScene", "Failed to load stage:", error);

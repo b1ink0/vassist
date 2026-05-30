@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 132
-- Files: 432
-- Text files counted for metrics: 348
-- Total text lines: 123014
-- Code files counted for metrics: 264
-- Total code lines: 112394
+- Directories: 141
+- Files: 464
+- Text files counted for metrics: 380
+- Total text lines: 127330
+- Code files counted for metrics: 291
+- Total code lines: 116328
 
 ## Line Counts by File Type
 
@@ -17,18 +17,18 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1285 |
-| CSS          | .css, .scss, .less      |     5 |  1275 |
+| CSS          | .css, .scss, .less      |     5 |  1435 |
 | HTML         | .html                   |     4 |    73 |
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   255 |
-| TSX          | .tsx                    |    86 | 43823 |
-| TypeScript   | .ts, .mts, .cts         |   145 | 59060 |
+| TSX          | .tsx                    |    94 | 45469 |
+| TypeScript   | .ts, .mts, .cts         |   164 | 61188 |
 | Gradle       | .gradle                 |     7 |   242 |
-| JSON         | .json                   |    13 |   400 |
-| Markdown     | .md                     |    29 |  3445 |
+| JSON         | .json                   |    17 |   545 |
+| Markdown     | .md                     |    30 |  3606 |
 | Other Text   | mixed                   |     7 |  2236 |
-| Plain Text   | (no extension)          |    10 |  3531 |
+| Plain Text   | (no extension)          |    10 |  3607 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   395 |
@@ -38,12 +38,14 @@ VAssist repository tree and file metrics.
 - .husky/: 1 directories, 1 files
 - android/: 52 directories, 74 files
 - android-src/: 1 directories, 3 files
-- documentation/: 10 directories, 39 files
+- documentation/: 10 directories, 40 files
 - electron/: 13 directories, 48 files
+- embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
+- packages/: 5 directories, 12 files
 - public/: 5 directories, 19 files
-- src/: 42 directories, 201 files
-- tools/: 2 directories, 4 files
+- src/: 45 directories, 214 files
+- tools/: 2 directories, 5 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
@@ -62,11 +64,15 @@ VAssist repository tree and file metrics.
 - tsconfig.electron.json: file
 - tsconfig.extension.json: file
 - tsconfig.json: file
+- tsconfig.package.embed.types.json: file
+- tsconfig.package.react.types.json: file
 - tsconfig.tools.json: file
 - vercel.json: file
 - vite.config.android.ts: file
 - vite.config.desktop.ts: file
 - vite.config.extension.ts: file
+- vite.config.package.embed.ts: file
+- vite.config.package.react.ts: file
 - vite.config.ts: file
 
 ## Full Tree
@@ -225,6 +231,7 @@ vassist/
 │   │   │   ├── chat-and-voice.md
 │   │   │   ├── chat-history-and-branches.md
 │   │   │   ├── index.md
+│   │   │   ├── page-context.md
 │   │   │   └── virtual-companion.md
 │   │   ├── platforms/
 │   │   │   ├── android.md
@@ -315,6 +322,8 @@ vassist/
 │   ├── index.html
 │   ├── main.tsx
 │   └── preload.ts
+├── embed/
+│   └── main.tsx
 ├── extension/
 │   ├── background/
 │   │   ├── BackgroundBridge.ts
@@ -340,6 +349,23 @@ vassist/
 │   │   ├── MessageBridge.ts
 │   │   └── MessageTypes.ts
 │   └── manifest.json
+├── packages/
+│   ├── embed/
+│   │   ├── src/
+│   │   │   ├── chat-toolbar.ts
+│   │   │   ├── chat.ts
+│   │   │   ├── full.ts
+│   │   │   ├── index.ts
+│   │   │   └── toolbar.ts
+│   │   └── package.json
+│   └── react/
+│       ├── src/
+│       │   ├── chat-toolbar.tsx
+│       │   ├── chat.tsx
+│       │   ├── full.tsx
+│       │   ├── index.tsx
+│       │   └── toolbar.tsx
+│       └── package.json
 ├── public/
 │   ├── res/
 │   │   └── assets/
@@ -388,6 +414,7 @@ vassist/
 │   │   │   └── AndroidBackground.tsx
 │   │   ├── assistant/
 │   │   │   ├── BabylonScene.tsx
+│   │   │   ├── LiveAssistantShell.tsx
 │   │   │   └── VirtualAssistant.tsx
 │   │   ├── chat/
 │   │   │   ├── ChatBubble.tsx
@@ -492,7 +519,12 @@ vassist/
 │   │   └── uiConfig.ts
 │   ├── contexts/
 │   │   ├── AnimationContext.tsx
+│   │   ├── AppRuntimeContext.tsx
 │   │   └── SetupContext.tsx
+│   ├── embed/
+│   │   ├── config.ts
+│   │   ├── runtimeStore.ts
+│   │   └── theme.ts
 │   ├── hooks/
 │   │   ├── app/
 │   │   │   ├── useAssistant.ts
@@ -564,12 +596,18 @@ vassist/
 │   │   ├── VoiceStorageService.ts
 │   │   └── WriterService.ts
 │   ├── storage/
+│   │   ├── adapters/
+│   │   │   ├── DexieStorageAdapter.ts
+│   │   │   ├── MemoryStorageAdapter.ts
+│   │   │   └── types.ts
 │   │   ├── DatabaseSchema.ts
 │   │   ├── index.ts
 │   │   ├── StorageAdapter.ts
+│   │   ├── StorageAdapterRegistry.ts
 │   │   └── StorageManager.ts
 │   ├── stores/
 │   │   ├── createAnimationStore.ts
+│   │   ├── createAppStore.ts
 │   │   ├── createSetupStore.ts
 │   │   ├── storeUtils.ts
 │   │   ├── useAndroidStore.ts
@@ -587,12 +625,16 @@ vassist/
 │   │   ├── env.d.ts
 │   │   └── gpt-sovits-bootstrap.d.ts
 │   ├── utils/
+│   │   ├── resource-loader/
+│   │   │   └── types.ts
 │   │   ├── BackgroundDetector.ts
 │   │   ├── cn.ts
 │   │   ├── debounce.ts
 │   │   ├── ExtensionBridge.ts
 │   │   ├── PlatformUtils.ts
+│   │   ├── resolvePortalContainer.ts
 │   │   ├── ResourceLoader.ts
+│   │   ├── VAssistDomIds.ts
 │   │   └── ZipExtractor.ts
 │   ├── workers/
 │   │   ├── shared/
@@ -612,7 +654,8 @@ vassist/
 │   │   ├── android-models-plugin.ts
 │   │   ├── extension-plugins.ts
 │   │   └── vad-assets-plugin.ts
-│   └── create-node-llama-runtime-core.ts
+│   ├── create-node-llama-runtime-core.ts
+│   └── write-package-type-entries.ts
 ├── .gitignore
 ├── .prettierignore
 ├── .prettierrc.json
@@ -631,10 +674,14 @@ vassist/
 ├── tsconfig.electron.json
 ├── tsconfig.extension.json
 ├── tsconfig.json
+├── tsconfig.package.embed.types.json
+├── tsconfig.package.react.types.json
 ├── tsconfig.tools.json
 ├── vercel.json
 ├── vite.config.android.ts
 ├── vite.config.desktop.ts
 ├── vite.config.extension.ts
+├── vite.config.package.embed.ts
+├── vite.config.package.react.ts
 └── vite.config.ts
 ```

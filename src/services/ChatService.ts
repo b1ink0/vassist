@@ -64,13 +64,12 @@ type ImportTreeData = {
   [key: string]: unknown;
 };
 
-class ChatService {
+export class ChatService {
   private tree: ChatNode;
   private activePath: string[];
   private maxMessages: number;
 
   constructor() {
-    // Tree structure
     this.tree = this._createRoot();
     this.activePath = ["root"]; // IDs of messages in current conversation
 
@@ -657,5 +656,6 @@ class ChatService {
   }
 }
 
-// Export singleton instance
-export default new ChatService();
+const chatService = new ChatService();
+
+export default chatService;

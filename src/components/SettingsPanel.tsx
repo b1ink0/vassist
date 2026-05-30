@@ -2,7 +2,11 @@
  * @fileoverview Settings panel component with tabbed interface for UI, LLM, TTS, STT, and AI features configuration.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import type {
+  ResolvedVAssistEmbedConfig,
+  VAssistSettingsTabId,
+} from "../embed/config";
 import { Icon } from "./icons";
 import { cn } from "../utils/cn";
 import TabBar from "./ui/TabBar";
@@ -34,11 +38,12 @@ import {
 import { useUIConfigSaved } from "../hooks/config/useConfigUI";
 import Logger from "../services/LoggerService";
 
-type SettingsTabId = "ui" | "3d" | "llm" | "tts" | "stt" | "ai-plus";
+type SettingsTabId = VAssistSettingsTabId;
 
 interface SettingsPanelProps {
   onClose: () => void;
   isLightBackground: boolean;
+  embedConfig: ResolvedVAssistEmbedConfig;
   animationClass?: string;
   onRequestDeleteModelDialog?: (modelId: string) => void;
   onRequestDeleteMotionDialog?: (motionId: string) => void;
@@ -72,6 +77,7 @@ interface SettingsPanelProps {
 const SettingsPanel = ({
   onClose,
   isLightBackground,
+  embedConfig,
   animationClass = "",
   onRequestDeleteModelDialog,
   onRequestDeleteMotionDialog,
@@ -133,6 +139,128 @@ const SettingsPanel = ({
       setTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
     }
   }, [activeTab]);
+
+  const visibleTabs = useMemo(
+    () =>
+      [
+        {
+          id: "ui" as const,
+          label: "UI",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4",
+          content: (
+            <UISettings
+              isLightBackground={isLightBackground}
+              {...(onRequestResetSetupDialog
+                ? { onRequestResetSetupDialog }
+                : {})}
+              {...(onRequestSettingsErrorDialog
+                ? { onRequestSettingsErrorDialog }
+                : {})}
+            />
+          ),
+        },
+        {
+          id: "3d" as const,
+          label: "3D",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
+          content: (
+            <ThreeDSettings
+              isLightBackground={isLightBackground}
+              {...(onRequestDeleteModelDialog
+                ? { onRequestDeleteModelDialog }
+                : {})}
+              {...(onRequestDeleteMotionDialog
+                ? { onRequestDeleteMotionDialog }
+                : {})}
+              {...(onRequestDeleteStageDialog
+                ? { onRequestDeleteStageDialog }
+                : {})}
+              {...(onRequestDeleteEmoteDialog
+                ? { onRequestDeleteEmoteDialog }
+                : {})}
+              {...(onRequestSettingsErrorDialog
+                ? { onRequestSettingsErrorDialog }
+                : {})}
+              refreshTrigger={refreshTrigger}
+            />
+          ),
+        },
+        {
+          id: "llm" as const,
+          label: "LLM",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
+          content: (
+            <LLMSettings
+              isLightBackground={isLightBackground}
+              hasChromeAI={hasChromeAI}
+              onRequestDeleteLLMModel={onRequestDeleteLLMModel}
+              refreshTrigger={refreshTrigger}
+            />
+          ),
+        },
+        {
+          id: "tts" as const,
+          label: "TTS",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
+          content: (
+            <TTSSettings
+              isLightBackground={isLightBackground}
+              onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+              refreshTrigger={refreshTrigger}
+            />
+          ),
+        },
+        {
+          id: "stt" as const,
+          label: "STT",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
+          content: (
+            <STTSettings
+              isLightBackground={isLightBackground}
+              hasChromeAI={hasChromeAI}
+            />
+          ),
+        },
+        {
+          id: "ai-plus" as const,
+          label: "AI+",
+          className:
+            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
+          content: <AIFeaturesSettings isLightBackground={isLightBackground} />,
+        },
+      ].filter((tab) => !embedConfig.settings.hiddenTabs.includes(tab.id)),
+    [
+      embedConfig.settings.hiddenTabs,
+      hasChromeAI,
+      isLightBackground,
+      onRequestDeleteEmoteDialog,
+      onRequestDeleteLLMModel,
+      onRequestDeleteModelDialog,
+      onRequestDeleteMotionDialog,
+      onRequestDeleteStageDialog,
+      onRequestDeleteVoiceDialog,
+      onRequestResetSetupDialog,
+      onRequestSettingsErrorDialog,
+      refreshTrigger,
+    ],
+  );
+
+  useEffect(() => {
+    if (visibleTabs.length === 0) {
+      return;
+    }
+
+    if (visibleTabs.some((tab) => tab.id === activeTab)) {
+      return;
+    }
+
+    setActiveTab(visibleTabs[0]?.id ?? "ui");
+  }, [activeTab, visibleTabs]);
 
   const getActiveStatus = () => {
     if (activeTab === "ui") {
@@ -223,6 +351,10 @@ const SettingsPanel = ({
   };
 
   const activeStatus = getActiveStatus();
+  const activeTabIndex = Math.max(
+    visibleTabs.findIndex((tab) => tab.id === activeTab),
+    0,
+  );
 
   /**
    * Handles dismissal of status messages for LLM, TTS, or STT tabs.
@@ -302,14 +434,7 @@ const SettingsPanel = ({
           }}
         />
         <TabBar
-          tabs={[
-            { id: "ui", label: "UI" },
-            { id: "3d", label: "3D" },
-            { id: "llm", label: "LLM" },
-            { id: "tts", label: "TTS" },
-            { id: "stt", label: "STT" },
-            { id: "ai-plus", label: "AI+" },
-          ]}
+          tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
           activeTab={activeTab}
           onTabChange={(tabId) => setActiveTab(tabId as SettingsTabId)}
           tabsRef={tabsRef}
@@ -318,92 +443,37 @@ const SettingsPanel = ({
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <div
-          className="absolute inset-0 flex transition-transform duration-300 ease-out"
-          style={{
-            transform: `translateX(-${["ui", "3d", "llm", "tts", "stt", "ai-plus"].indexOf(activeTab) * 100}%)`,
-          }}
-        >
-          <div
-            data-testid="settings-tab-ui"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
-          >
-            <UISettings
-              isLightBackground={isLightBackground}
-              {...(onRequestResetSetupDialog
-                ? { onRequestResetSetupDialog }
-                : {})}
-              {...(onRequestSettingsErrorDialog
-                ? { onRequestSettingsErrorDialog }
-                : {})}
-            />
+        {visibleTabs.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/70">
+            Settings are managed by the host application.
           </div>
+        ) : (
+          <div
+            className="absolute inset-0 flex transition-transform duration-300 ease-out"
+            style={{
+              transform: `translateX(-${activeTabIndex * 100}%)`,
+            }}
+          >
+            {visibleTabs.map((tab) => {
+              const tabIsReadOnly = embedConfig.settings.readOnlyTabs.includes(
+                tab.id,
+              );
 
-          <div
-            data-testid="settings-tab-3d"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass"
-          >
-            <ThreeDSettings
-              isLightBackground={isLightBackground}
-              {...(onRequestDeleteModelDialog
-                ? { onRequestDeleteModelDialog }
-                : {})}
-              {...(onRequestDeleteMotionDialog
-                ? { onRequestDeleteMotionDialog }
-                : {})}
-              {...(onRequestDeleteStageDialog
-                ? { onRequestDeleteStageDialog }
-                : {})}
-              {...(onRequestDeleteEmoteDialog
-                ? { onRequestDeleteEmoteDialog }
-                : {})}
-              {...(onRequestSettingsErrorDialog
-                ? { onRequestSettingsErrorDialog }
-                : {})}
-              refreshTrigger={refreshTrigger}
-            />
+              return (
+                <div key={tab.id} className={cn(tab.className, "relative")}>
+                  {tab.content}
+                  {tabIsReadOnly ? (
+                    <div className="absolute inset-0 z-10 flex items-start justify-end bg-slate-950/35 backdrop-blur-[1px] pointer-events-auto">
+                      <div className="m-4 rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white/80 shadow-lg">
+                        Managed by host
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-
-          <div
-            data-testid="settings-tab-llm"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass"
-          >
-            <LLMSettings
-              isLightBackground={isLightBackground}
-              hasChromeAI={hasChromeAI}
-              onRequestDeleteLLMModel={onRequestDeleteLLMModel}
-              refreshTrigger={refreshTrigger}
-            />
-          </div>
-
-          <div
-            data-testid="settings-tab-tts"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
-          >
-            <TTSSettings
-              isLightBackground={isLightBackground}
-              onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
-              refreshTrigger={refreshTrigger}
-            />
-          </div>
-
-          <div
-            data-testid="settings-tab-stt"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
-          >
-            <STTSettings
-              isLightBackground={isLightBackground}
-              hasChromeAI={hasChromeAI}
-            />
-          </div>
-
-          <div
-            data-testid="settings-tab-ai-plus"
-            className="flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4"
-          >
-            <AIFeaturesSettings isLightBackground={isLightBackground} />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@
 import {
   useState,
   useEffect,
+  useCallback,
   useRef,
   memo,
   type ChangeEvent,
@@ -14,7 +15,7 @@ import {
 import { Icon } from "../icons";
 import { Button, Input } from "../ui";
 import { cn } from "../../utils/cn";
-import chatHistoryService from "../../services/ChatHistoryService";
+import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
 import Logger from "../../services/LoggerService";
 
 interface ChatHistoryMessage {
@@ -65,6 +66,7 @@ const ChatHistoryPanel = ({
   onRequestDeleteDialog = null,
   refreshTrigger = 0,
 }: ChatHistoryPanelProps) => {
+  const { chatHistoryService } = useAppRuntimeServices();
   const [displayedChats, setDisplayedChats] = useState<ChatHistoryItem[]>([]);
   const [filteredChats, setFilteredChats] = useState<ChatHistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -83,27 +85,10 @@ const ChatHistoryPanel = ({
   const LOAD_SIZE = 5;
   const LOAD_THRESHOLD = 300;
 
-  useEffect(() => {
-    loadInitialChats();
-  }, []);
-
-  // Reload chats when refreshTrigger changes (after edit/delete operations)
-  useEffect(() => {
-    if (refreshTrigger > 0) {
-      loadInitialChats();
-    }
-  }, [refreshTrigger]);
-
-  useEffect(() => {
-    if (scrollRef.current && displayedChats.length > 0) {
-      prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-    }
-  }, [displayedChats.length]);
-
   /**
    * Loads initial batch of chats.
    */
-  const loadInitialChats = async () => {
+  const loadInitialChats = useCallback(async () => {
     try {
       setIsLoading(true);
       const initialChats = await chatHistoryService.getAllChats(WINDOW_SIZE, 0);
@@ -117,7 +102,24 @@ const ChatHistoryPanel = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [chatHistoryService]);
+
+  useEffect(() => {
+    void loadInitialChats();
+  }, [loadInitialChats]);
+
+  // Reload chats when refreshTrigger changes (after edit/delete operations)
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      void loadInitialChats();
+    }
+  }, [loadInitialChats, refreshTrigger]);
+
+  useEffect(() => {
+    if (scrollRef.current && displayedChats.length > 0) {
+      prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+    }
+  }, [displayedChats.length]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -135,7 +137,7 @@ const ChatHistoryPanel = ({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, displayedChats]);
+  }, [chatHistoryService, displayedChats, searchQuery]);
 
   useEffect(() => {
     if (!scrollRef.current) return;

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
+import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
 import Logger from "../../services/LoggerService";
 import VoiceConversationService, {
   ConversationStates,
 } from "../../services/VoiceConversationService";
 import { TTSServiceProxy } from "../../services/proxies";
-import { useAppStore } from "../../stores/useAppStore";
+import { useAppStore, useAppStoreApi } from "../../stores/useAppStore";
 import { useConfigStore } from "../../stores/useConfigStore";
 import { useDesktopStore } from "../../stores/useDesktopStore";
 import {
@@ -33,7 +34,10 @@ const parseKeyEvent = (event: KeyboardEvent): string | null => {
   return [...modifiers, mainKey].join("+");
 };
 
-export function useInitializeAppStore() {
+export function useInitializeAppStore(
+  embedConfig?: ResolvedVAssistEmbedConfig,
+) {
+  const appStore = useAppStoreApi();
   const api = useDesktopStore((state) => state.api);
   const isVoiceMode = useAppStore((state) => state.isVoiceMode);
   const isAssistantReady = useAppStore((state) => state.isAssistantReady);
@@ -83,7 +87,7 @@ export function useInitializeAppStore() {
     }
 
     const timer = setTimeout(() => {
-      useAppStore.setState({
+      appStore.setState({
         isAssistantReady: true,
         isChatUIReady: true,
       });
@@ -91,7 +95,12 @@ export function useInitializeAppStore() {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [isConfigLoading, uiConfig.enableModelLoading]);
+  }, [
+    appStore,
+    embedConfig?.features.liveAssistant3d,
+    isConfigLoading,
+    uiConfig.enableModelLoading,
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -115,7 +124,7 @@ export function useInitializeAppStore() {
     }
 
     const handleStateChange = (state: string) => {
-      useAppStore.setState({
+      appStore.setState({
         isSpeaking: state === ConversationStates.SPEAKING,
       });
     };
@@ -125,7 +134,7 @@ export function useInitializeAppStore() {
     return () => {
       VoiceConversationService.setStateChangeCallback(null);
     };
-  }, []);
+  }, [appStore]);
 
   useEffect(() => {
     if (isVoiceMode) {
@@ -134,13 +143,13 @@ export function useInitializeAppStore() {
 
     const interval = setInterval(() => {
       const isPlaying = TTSServiceProxy.isCurrentlyPlaying();
-      useAppStore.setState((state) =>
+      appStore.setState((state) =>
         state.isSpeaking === isPlaying ? state : { isSpeaking: isPlaying },
       );
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isVoiceMode]);
+  }, [appStore, isVoiceMode]);
 
   useEffect(() => {
     if (isDesktop || !uiConfig?.shortcuts?.enabled) {
@@ -159,13 +168,19 @@ export function useInitializeAppStore() {
       }
 
       if (shortcuts.openChat && combo === shortcuts.openChat) {
+        if (embedConfig && !embedConfig.features.chat) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
-        useAppStore.getState().toggleChat();
+        appStore.getState().toggleChat();
         return;
       }
 
       if (shortcuts.toggleMode && combo === shortcuts.toggleMode) {
+        if (embedConfig && !embedConfig.features.liveAssistant3d) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         const configStore = useConfigStore.getState();
@@ -179,7 +194,7 @@ export function useInitializeAppStore() {
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [uiConfig?.shortcuts?.enabled]);
+  }, [embedConfig, uiConfig?.shortcuts?.enabled]);
 
   useEffect(() => {
     if (!isDesktop || !api?.shortcuts || isInputWindow) {
@@ -198,10 +213,16 @@ export function useInitializeAppStore() {
     }
 
     const cleanupOpenChat = api.shortcuts.onOpenChat(() => {
-      useAppStore.getState().toggleChat();
+      if (embedConfig && !embedConfig.features.chat) {
+        return;
+      }
+      appStore.getState().toggleChat();
     });
 
     const cleanupToggleModel = api.shortcuts.onToggleModel(() => {
+      if (embedConfig && !embedConfig.features.liveAssistant3d) {
+        return;
+      }
       const configStore = useConfigStore.getState();
       const newValue = !configStore.uiConfig.enableModelLoading;
       configStore.updateUIConfig("enableModelLoading", newValue, {
@@ -214,5 +235,5 @@ export function useInitializeAppStore() {
       cleanupOpenChat?.();
       cleanupToggleModel?.();
     };
-  }, [api, uiConfig?.shortcuts]);
+  }, [api, appStore, embedConfig, uiConfig?.shortcuts]);
 }

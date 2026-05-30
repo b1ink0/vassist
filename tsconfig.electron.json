@@ -12,6 +12,6 @@
     "dist-desktop",
     "build",
     "node_modules",
-    "electron/server/gpt-sovits/python/**"
+    "electron/server/gpt-sovits/**"
   ]
 }

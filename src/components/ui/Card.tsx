@@ -5,8 +5,8 @@ import { cn } from "../../utils/cn";
 const cardVariants = cva("rounded-lg border", {
   variants: {
     variant: {
-      default: "bg-white/5 border-white/10",
-      elevated: "bg-white/10 border-white/20",
+      default: "vassist-card-surface",
+      elevated: "vassist-card-surface-elevated",
       none: "bg-transparent border-transparent",
     },
     padding: {

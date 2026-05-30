@@ -5,6 +5,7 @@
 import { createContext, useContext, useRef, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import type { ResolvedVAssistEmbedConfig } from "../embed/config";
 import {
   createSetupStore,
   type SetupStore,
@@ -15,13 +16,14 @@ const SetupStoreContext = createContext<SetupStore | null>(null);
 
 interface SetupProviderProps {
   children: ReactNode;
+  embedConfig?: ResolvedVAssistEmbedConfig;
 }
 
-export function SetupProvider({ children }: SetupProviderProps) {
+export function SetupProvider({ children, embedConfig }: SetupProviderProps) {
   const storeRef = useRef<SetupStore | null>(null);
 
   if (!storeRef.current) {
-    storeRef.current = createSetupStore();
+    storeRef.current = createSetupStore(embedConfig);
   }
 
   return (

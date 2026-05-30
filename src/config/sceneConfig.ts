@@ -8,6 +8,11 @@
  */
 
 import { resourceLoader } from "../utils/ResourceLoader";
+import {
+  normalizeOptionalEmbedAssetBaseUrl,
+  normalizeOptionalEmbedAssetValue,
+} from "../embed/config";
+import { getEmbedConfig } from "../embed/runtimeStore";
 import Logger from "../services/LoggerService";
 import { isDesktop, isEmbed, isProduction } from "../utils/PlatformUtils";
 import type {
@@ -18,6 +23,7 @@ import type {
 interface SceneConfigData {
   enableModelLoading: boolean;
   modelUrl: string;
+  stageUrl?: string | null;
   customModelFile?: File;
   cameraAnimationUrl: string;
   enableCameraAnimation: boolean;
@@ -110,6 +116,28 @@ const RenderQualityPresetsAndroid: RenderQualityPresetMap = {
   ultra: { ...RenderQualityPresets.ultra, samples: 4 },
 };
 
+const resolveEmbedAssetUrl = (
+  assetPath: string | null | undefined,
+  assetBaseUrl: string | undefined,
+): string | null => {
+  const normalizedAssetPath = normalizeOptionalEmbedAssetValue(assetPath);
+  if (!normalizedAssetPath) {
+    return null;
+  }
+
+  const normalizedAssetBaseUrl =
+    normalizeOptionalEmbedAssetBaseUrl(assetBaseUrl);
+  if (!normalizedAssetBaseUrl) {
+    return normalizedAssetPath;
+  }
+
+  try {
+    return new URL(normalizedAssetPath, normalizedAssetBaseUrl).toString();
+  } catch {
+    return normalizedAssetPath;
+  }
+};
+
 export function getRenderQualityPresets(
   isAndroid = false,
 ): RenderQualityPresetMap {
@@ -183,6 +211,11 @@ export async function resolveResourceURLs(
     Logger.log("sceneConfig", "Resolved modelUrl:", resolvedConfig.modelUrl);
   }
 
+  if (config.stageUrl && !config.stageUrl.startsWith("blob:")) {
+    resolvedConfig.stageUrl = await resourceLoader.getURLAsync(config.stageUrl);
+    Logger.log("sceneConfig", "Resolved stageUrl:", resolvedConfig.stageUrl);
+  }
+
   if (
     config.cameraAnimationUrl &&
     !config.cameraAnimationUrl.startsWith("blob:")
@@ -207,7 +240,30 @@ export async function resolveResourceURLs(
  * @returns {Object} Scene configuration
  */
 export function getSceneConfig(): SceneConfigData {
-  return { ...SceneConfig };
+  const config = { ...SceneConfig };
+  const embedConfig = getEmbedConfig();
+  const embedModelUrl = resolveEmbedAssetUrl(
+    embedConfig.assets.modelUrl,
+    embedConfig.assets.assetBaseUrl,
+  );
+  const hasEmbedStageOverride = embedConfig.assets.stageUrl !== undefined;
+  const embedStageUrl = resolveEmbedAssetUrl(
+    embedConfig.assets.stageUrl,
+    embedConfig.assets.assetBaseUrl,
+  );
+
+  if (embedModelUrl) {
+    config.modelUrl = embedModelUrl;
+    config.modelId = "embed_config_model";
+    config.modelFileName = embedModelUrl.split("/").pop() || "embed-model";
+    delete config.customModelFile;
+  }
+
+  if (hasEmbedStageOverride) {
+    config.stageUrl = embedStageUrl;
+  }
+
+  return config;
 }
 
 /**
@@ -220,6 +276,23 @@ export function getSceneConfig(): SceneConfigData {
  */
 export async function getSceneConfigAsync(): Promise<SceneConfigData> {
   const config = getSceneConfig();
+  const embedConfig = getEmbedConfig();
+  const embedModelUrl = resolveEmbedAssetUrl(
+    embedConfig.assets.modelUrl,
+    embedConfig.assets.assetBaseUrl,
+  );
+
+  if (embedModelUrl) {
+    Logger.log(
+      "sceneConfig",
+      "Using embed-configured model URL:",
+      embedModelUrl,
+    );
+    config.modelUrl = embedModelUrl;
+    config.modelId = "embed_config_model";
+    config.modelFileName = embedModelUrl.split("/").pop() || "embed-model";
+    return resolveResourceURLs(config);
+  }
 
   try {
     const { modelStorageService } =

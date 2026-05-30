@@ -13,6 +13,8 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
+import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
+import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
 import { Icon } from "../icons";
 import { Button } from "../ui";
 import { cn } from "../../utils/cn";
@@ -25,7 +27,6 @@ import SettingsPanel from "../SettingsPanel";
 import ChatHistoryPanel from "./ChatHistoryPanel";
 import Dialog from "../common/Dialog";
 import ChatMessage from "./ChatMessage";
-import chatHistoryService from "../../services/ChatHistoryService";
 import { modelStorageService } from "../../services/ModelStorageService";
 import { motionStorageService } from "../../services/MotionStorageService";
 import { stageStorageService } from "../../services/StageStorageService";
@@ -73,6 +74,7 @@ import type { ComponentType } from "react";
 
 interface ChatContainerProps {
   modelDisabled?: boolean;
+  embedConfig: ResolvedVAssistEmbedConfig;
   onDragDrop?: (data: {
     text?: string;
     images?: string[];
@@ -280,8 +282,10 @@ const ANDROID_CHAT_TOP_OFFSET = 32;
  */
 const ChatContainer = ({
   modelDisabled = false,
+  embedConfig,
   onDragDrop,
 }: ChatContainerProps) => {
+  const { chatHistoryService } = useAppRuntimeServices();
   const positionManagerRef = usePositionManagerRef();
   const messages = useChatMessages();
   const isVisible = useIsChatContainerVisible();
@@ -395,6 +399,9 @@ const ChatContainer = ({
     useState(false);
   const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+  const settingsEnabled = embedConfig.features.settings;
+  const historyEnabled = embedConfig.features.history;
+  const liveAssistantEnabled = embedConfig.features.liveAssistant3d;
 
   const streamedMessageIdsRef = useRef<Set<string>>(new Set());
 
@@ -405,6 +412,18 @@ const ChatContainer = ({
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
   }, [buttonPosition]);
+
+  useEffect(() => {
+    if (!settingsEnabled && isSettingsPanelOpen) {
+      setIsSettingsPanelOpen(false);
+    }
+  }, [isSettingsPanelOpen, setIsSettingsPanelOpen, settingsEnabled]);
+
+  useEffect(() => {
+    if (!historyEnabled && isHistoryPanelOpen) {
+      setIsHistoryPanelOpen(false);
+    }
+  }, [historyEnabled, isHistoryPanelOpen, setIsHistoryPanelOpen]);
 
   useDesktopWindowResize();
 
@@ -885,7 +904,7 @@ const ChatContainer = ({
         Logger.error("ChatContainer", "Failed to update chat title:", error);
       }
     },
-    [],
+    [chatHistoryService],
   );
 
   const handleEditDialogCancel = useCallback(() => {
@@ -901,23 +920,26 @@ const ChatContainer = ({
     setDeletingChatId(chatId);
   }, []);
 
-  const handleDeleteDialogConfirm = useCallback(async (chatId: string) => {
-    try {
-      await chatHistoryService.deleteChat(chatId);
-      Logger.log("ChatContainer", "Deleted chat:", chatId);
+  const handleDeleteDialogConfirm = useCallback(
+    async (chatId: string) => {
+      try {
+        await chatHistoryService.deleteChat(chatId);
+        Logger.log("ChatContainer", "Deleted chat:", chatId);
 
-      // Trigger chat history panel refresh
-      setHistoryRefreshTrigger((prev) => prev + 1);
+        // Trigger chat history panel refresh
+        setHistoryRefreshTrigger((prev) => prev + 1);
 
-      setIsDeleteDialogClosing(true);
-      setTimeout(() => {
-        setDeletingChatId(null);
-        setIsDeleteDialogClosing(false);
-      }, 200);
-    } catch (error) {
-      Logger.error("ChatContainer", "Failed to delete chat:", error);
-    }
-  }, []);
+        setIsDeleteDialogClosing(true);
+        setTimeout(() => {
+          setDeletingChatId(null);
+          setIsDeleteDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete chat:", error);
+      }
+    },
+    [chatHistoryService],
+  );
 
   const handleDeleteDialogCancel = useCallback(() => {
     setIsDeleteDialogClosing(true);
@@ -1844,42 +1866,46 @@ const ChatContainer = ({
         <div className="relative flex items-center justify-between gap-2 pb-1">
           {/* LEFT: Settings + History */}
           <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
-              size="icon"
-              variant={isLightBackground ? "dark" : "default"}
-              className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title="Settings"
+            {settingsEnabled ? (
+              <Button
+                onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+                size="icon"
+                variant={isLightBackground ? "dark" : "default"}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title="Settings"
               aria-label="Settings"
               data-testid="settings-toggle-button"
-            >
-              <span
-                className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-base leading-none flex items-center justify-center",
-                )}
               >
-                <Icon name="settings" size={16} />
-              </span>
-            </Button>
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-base leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name="settings" size={16} />
+                </span>
+              </Button>
+            ) : null}
 
-            <Button
-              onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
-              size="icon"
-              variant={isLightBackground ? "dark" : "default"}
-              className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title="Chat history"
-              aria-label="Chat history"
-            >
-              <span
-                className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-lg leading-none flex items-center justify-center",
-                )}
+            {historyEnabled ? (
+              <Button
+                onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+                size="icon"
+                variant={isLightBackground ? "dark" : "default"}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title="Chat history"
+                aria-label="Chat history"
               >
-                <Icon name="history" size={16} />
-              </span>
-            </Button>
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name="history" size={16} />
+                </span>
+              </Button>
+            ) : null}
           </div>
 
           {/* CENTER: Stop + Add Chat + Close (grouped) */}
@@ -1954,63 +1980,71 @@ const ChatContainer = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              onClick={() =>
-                updateUIConfig(
-                  "enableModelLoading",
-                  !uiConfig.enableModelLoading,
-                )
-              }
-              size="icon"
-              variant={isLightBackground ? "dark" : "default"}
-              className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title={
-                uiConfig.enableModelLoading
-                  ? "Hide character"
-                  : "Show character"
-              }
-            >
-              <span
-                className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-lg leading-none flex items-center justify-center",
-                )}
+            {liveAssistantEnabled ? (
+              <Button
+                onClick={() =>
+                  updateUIConfig(
+                    "enableModelLoading",
+                    !uiConfig.enableModelLoading,
+                  )
+                }
+                size="icon"
+                variant={isLightBackground ? "dark" : "default"}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title={
+                  uiConfig.enableModelLoading
+                    ? "Hide character"
+                    : "Show character"
+                }
               >
-                <Icon
-                  name={uiConfig.enableModelLoading ? "eye-off" : "eye"}
-                  size={18}
-                />
-              </span>
-            </Button>
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon
+                    name={uiConfig.enableModelLoading ? "eye-off" : "eye"}
+                    size={18}
+                  />
+                </span>
+              </Button>
+            ) : null}
 
-            <Button
-              onClick={() => setIsTempChat(!isTempChat)}
-              size="icon"
-              variant={
-                isTempChat ? "default" : isLightBackground ? "dark" : "default"
-              }
-              className={cn(
-                isTempChat &&
-                  (isLightBackground
-                    ? "bg-yellow-300/40 border-yellow-400/60"
-                    : "bg-yellow-500/40 border-yellow-500/60"),
-                isClosing ? "animate-fade-out" : "animate-fade-in",
-              )}
-              title={
-                isTempChat
-                  ? "Disable temp mode - chat will be saved"
-                  : "Enable temp mode - chat won't be saved"
-              }
-            >
-              <span
+            {historyEnabled ? (
+              <Button
+                onClick={() => setIsTempChat(!isTempChat)}
+                size="icon"
+                variant={
+                  isTempChat
+                    ? "default"
+                    : isLightBackground
+                      ? "dark"
+                      : "default"
+                }
                 className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-lg leading-none flex items-center justify-center",
+                  isTempChat &&
+                    (isLightBackground
+                      ? "bg-yellow-300/40 border-yellow-400/60"
+                      : "bg-yellow-500/40 border-yellow-500/60"),
+                  isClosing ? "animate-fade-out" : "animate-fade-in",
                 )}
+                title={
+                  isTempChat
+                    ? "Disable temp mode - chat will be saved"
+                    : "Enable temp mode - chat won't be saved"
+                }
               >
-                <Icon name={isTempChat ? "star" : "pin"} size={18} />
-              </span>
-            </Button>
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name={isTempChat ? "star" : "pin"} size={18} />
+                </span>
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -2170,11 +2204,12 @@ const ChatContainer = ({
         </div>
 
         {/* Settings Panel - renders inside ChatContainer */}
-        {isSettingsPanelOpen && (
+        {settingsEnabled && isSettingsPanelOpen && (
           <div className="absolute inset-0 z-10">
             <SettingsPanel
               onClose={handleSettingsPanelClose}
               isLightBackground={isLightBackground}
+              embedConfig={embedConfig}
               animationClass={
                 isSettingsPanelClosing
                   ? "animate-fade-out"
@@ -2194,7 +2229,7 @@ const ChatContainer = ({
         )}
 
         {/* Chat History Panel - renders inside ChatContainer */}
-        {isHistoryPanelOpen && (
+        {historyEnabled && isHistoryPanelOpen && (
           <div className="absolute inset-0 z-10">
             <TypedChatHistoryPanel
               isLightBackground={isLightBackground}

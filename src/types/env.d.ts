@@ -1,23 +1,13 @@
+import type { VAssistEmbedApi, VAssistEmbedConfig } from "../embed/config";
+
 /**
  * @fileoverview Global environment variable type declarations
  */
 
 declare global {
   interface Window {
-    VAssistEmbed?: {
-      inject: (options?: {
-        target?: string | HTMLElement | null;
-        hostId?: string;
-        deferSetupUntilStarted?: boolean;
-      }) => HTMLElement;
-      remove: (hostId?: string) => void;
-    };
-    VAssistEmbedConfig?: {
-      target?: string | HTMLElement | null;
-      hostId?: string;
-      deferSetupUntilStarted?: boolean;
-      autoInject?: boolean;
-    };
+    VAssistEmbed?: VAssistEmbedApi;
+    VAssistEmbedConfig?: VAssistEmbedConfig;
   }
 
   /**

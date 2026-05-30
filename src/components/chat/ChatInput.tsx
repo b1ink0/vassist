@@ -14,6 +14,10 @@ import {
   type KeyboardEvent,
   type ClipboardEvent,
 } from "react";
+import {
+  normalizeVAssistEmbedConfig,
+  type ResolvedVAssistEmbedConfig,
+} from "../../embed/config";
 import { STTServiceProxy } from "../../services/proxies";
 import { TTSServiceProxy } from "../../services/proxies";
 import VoiceConversationService, {
@@ -63,6 +67,7 @@ interface ChatInputProps {
   onClose?: () => void;
   onVoiceTranscription?: (text: string, images: string[] | null) => void;
   onVoiceMode?: (enabled: boolean) => void;
+  embedConfig?: ResolvedVAssistEmbedConfig;
 }
 
 interface MicStateLike {
@@ -120,7 +125,10 @@ const useDesktopWindowResizeTyped = useDesktopWindowResize as unknown as (
  * @returns {JSX.Element} Chat input component
  */
 const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
-  ({ onSend, onClose, onVoiceTranscription, onVoiceMode }, ref) => {
+  (
+    { onSend, onClose, onVoiceTranscription, onVoiceMode, embedConfig },
+    ref,
+  ) => {
     const isVisible = useIsChatInputVisible();
     const pendingDropData = usePendingDropData();
     const { setPendingDropData } = useChatActions();
@@ -129,6 +137,15 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     const uiConfig = useUIConfig();
     const api = useDesktopApi();
+    const resolvedEmbedConfig = embedConfig ?? normalizeVAssistEmbedConfig();
+    const voiceInputEnabled = resolvedEmbedConfig.features.voiceInput;
+    const voiceCallEnabled = resolvedEmbedConfig.features.voiceCall;
+    const cameraEnabled =
+      voiceCallEnabled && resolvedEmbedConfig.features.camera;
+    const screenShareEnabled =
+      voiceCallEnabled &&
+      resolvedEmbedConfig.features.screenShare &&
+      !isAndroid;
 
     // Local state for input window (synced from main window)
     const [localPendingDropData, setLocalPendingDropData] =
@@ -190,6 +207,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
+
+    useEffect(() => {
+      if (!voiceCallEnabled && isVoiceMode) {
+        VoiceConversationService.stop();
+        setIsVoiceMode(false);
+        setVoiceState(ConversationStates.IDLE);
+      }
+    }, [isVoiceMode, voiceCallEnabled]);
 
     const [attachedImages, setAttachedImages] = useState<AttachmentItem[]>([]);
     const [attachedAudios, setAttachedAudios] = useState<AttachmentItem[]>([]);
@@ -657,6 +682,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     // Initialize microphone service and subscribe to device changes
     useEffect(() => {
+      if (!voiceInputEnabled && !voiceCallEnabled) {
+        return;
+      }
+
       if (isDesktop && isInputWindow) {
         return;
       }
@@ -690,10 +719,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       return () => {
         unsubscribe();
       };
-    }, [api]);
+    }, [api, voiceCallEnabled, voiceInputEnabled]);
 
     // Initialize camera service
     useEffect(() => {
+      if (!cameraEnabled) {
+        return;
+      }
+
       Logger.log(
         "ChatInput",
         "Camera initialization useEffect triggered, isInputWindow:",
@@ -799,10 +832,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       initDevices();
 
       return unsubscribe;
-    }, [api, isDesktopInputWindow]);
+    }, [api, cameraEnabled, isDesktopInputWindow]);
 
     // Initialize screen share service
     useEffect(() => {
+      if (!screenShareEnabled) {
+        return;
+      }
+
       Logger.log(
         "ChatInput",
         "Screen share initialization useEffect triggered, isInputWindow:",
@@ -879,10 +916,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       initScreenShare();
 
       return unsubscribe;
-    }, [api, isDesktopInputWindow]);
+    }, [api, isDesktopInputWindow, screenShareEnabled]);
 
     // Listen for camera control IPC messages
     useEffect(() => {
+      if (!cameraEnabled) {
+        return;
+      }
+
       if (!isDesktop || isInputWindow || !api?.ipc) {
         return;
       }
@@ -920,9 +961,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         unsubscribeToggle?.();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [api, isInputWindow, isCameraActive]);
+    }, [api, cameraEnabled, isInputWindow, isCameraActive]);
 
     useEffect(() => {
+      if (!voiceCallEnabled) {
+        return;
+      }
+
       const handleStartVoiceMode = async () => {
         if (!isVoiceMode && effectiveIsVisible) {
           Logger.log("ChatInput", "External voice mode start requested");
@@ -978,6 +1023,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       onVoiceMode,
       api,
       isDesktopInputWindow,
+      voiceCallEnabled,
     ]);
 
     /**
@@ -1471,6 +1517,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         return;
       }
 
+      if (!voiceCallEnabled) {
+        return;
+      }
+
       if (!STTServiceProxy.isConfigured()) {
         setRecordingError(
           "STT not configured. Please configure in Control Panel.",
@@ -1572,6 +1622,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      * Handles camera device selection
      */
     const handleCameraSelect = async (deviceId: string | null) => {
+      if (!cameraEnabled) {
+        return;
+      }
+
       Logger.log("ChatInput", "Camera selected:", deviceId);
 
       if (isDesktopInputWindow && api?.ipc) {
@@ -1585,6 +1639,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      * Handles camera button click (toggle on/off)
      */
     const handleCameraClick = async () => {
+      if (!cameraEnabled) {
+        return;
+      }
+
       try {
         Logger.log(
           "ChatInput",
@@ -1618,6 +1676,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      * Handles screen share button click (toggle on/off)
      */
     const handleScreenShareClick = async () => {
+      if (!screenShareEnabled) {
+        return;
+      }
+
       try {
         Logger.log(
           "ChatInput",
@@ -1650,6 +1712,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      * Handles microphone button click for voice recording.
      */
     const handleMicClick = async () => {
+      if (!voiceInputEnabled) {
+        return;
+      }
+
       if (isDesktopInputWindow && api?.ipc) {
         setRecordingError("");
         setIsProcessingRecording(true);
@@ -2089,56 +2155,59 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       )}
                     </Button>
 
-                    <div className="relative flex items-center gap-1">
-                      <Button
-                        type="button"
-                        data-testid="chat-voice-camera-toggle-button"
-                        onClick={handleCameraClick}
-                        variant="unstyled"
-                        className={iconButtonClass({
-                          active: isCameraActive,
-                          activeClassName: "text-green-400",
-                          pulse: isCameraActive,
-                        })}
-                        title={isCameraActive ? "Stop Camera" : "Start Camera"}
-                      >
-                        <Icon
-                          name="camera"
-                          size={16}
-                          className="text-current"
-                        />
-                      </Button>
+                    {cameraEnabled ? (
+                      <div className="relative flex items-center gap-1">
+                        <Button
+                          type="button"
+                          data-testid="chat-voice-camera-toggle-button"
+                          onClick={handleCameraClick}
+                          variant="unstyled"
+                          className={iconButtonClass({
+                            active: isCameraActive,
+                            activeClassName: "text-green-400",
+                            pulse: isCameraActive,
+                          })}
+                          title={
+                            isCameraActive ? "Stop Camera" : "Start Camera"
+                          }
+                        >
+                          <Icon
+                            name="camera"
+                            size={16}
+                            className="text-current"
+                          />
+                        </Button>
 
-                      <Select
-                        value={selectedCameraId || ""}
-                        onChange={(event) => {
-                          void handleCameraSelect(event.target.value || null);
-                        }}
-                        variant={isLightBackground ? "dark" : "default"}
-                        options={cameraDeviceOptions}
-                        side="top"
-                        align="end"
-                        listClassName="min-w-[250px]"
-                        trigger={
-                          <Button
-                            type="button"
+                        <Select
+                          value={selectedCameraId || ""}
+                          onChange={(event) => {
+                            void handleCameraSelect(event.target.value || null);
+                          }}
+                          variant={isLightBackground ? "dark" : "default"}
+                          options={cameraDeviceOptions}
+                          side="top"
+                          align="end"
+                          listClassName="min-w-[250px]"
+                          trigger={
+                            <Button
+                              type="button"
                             data-testid="chat-voice-camera-select"
-                            variant="unstyled"
-                            className={iconButtonClass()}
-                            title="Select Camera"
-                          >
-                            <Icon
-                              name="chevron-down"
-                              size={14}
-                              className="text-current"
-                            />
-                          </Button>
-                        }
-                      />
-                    </div>
+                              variant="unstyled"
+                              className={iconButtonClass()}
+                              title="Select Camera"
+                            >
+                              <Icon
+                                name="chevron-down"
+                                size={14}
+                                className="text-current"
+                              />
+                            </Button>
+                          }
+                        />
+                      </div>
+                    ) : null}
 
-                    {/* Screen Share button (Chrome-based platforms) */}
-                    {!isAndroid && (
+                    {screenShareEnabled ? (
                       <Button
                         type="button"
                         data-testid="chat-voice-screen-share-button"
@@ -2165,7 +2234,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           className="text-current"
                         />
                       </Button>
-                    )}
+                    ) : null}
 
                     <Button
                       type="button"
@@ -2267,58 +2336,62 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         )}
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleMicClick}
-                        data-testid="chat-voice-input-button"
-                        disabled={isProcessingRecording}
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                          isProcessingRecording
-                            ? "text-yellow-400"
-                            : isRecording
-                              ? "text-red-400 animate-pulse"
+                      {voiceInputEnabled ? (
+                        <button
+                          type="button"
+                          onClick={handleMicClick}
+                          data-testid="chat-voice-input-button"
+                          disabled={isProcessingRecording}
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
+                            isProcessingRecording
+                              ? "text-yellow-400"
+                              : isRecording
+                                ? "text-red-400 animate-pulse"
+                                : isLightBackground
+                                  ? "glass-text"
+                                  : "glass-text-black",
+                          )}
+                          title={
+                            isProcessingRecording
+                              ? "Processing..."
+                              : isRecording
+                                ? "Stop Recording"
+                                : "Voice Input"
+                          }
+                        >
+                          <Icon
+                            name={
+                              isProcessingRecording
+                                ? "hourglass"
+                                : isRecording
+                                  ? "record"
+                                  : "microphone"
+                            }
+                            size={18}
+                          />
+                        </button>
+                      ) : null}
+
+                      {voiceCallEnabled ? (
+                        <button
+                          type="button"
+                          onClick={handleVoiceModeToggle}
+                          data-testid="chat-voice-mode-button"
+                          disabled={isRecording || isProcessingRecording}
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
+                            isRecording || isProcessingRecording
+                              ? "opacity-50 cursor-not-allowed"
                               : isLightBackground
                                 ? "glass-text"
                                 : "glass-text-black",
-                        )}
-                        title={
-                          isProcessingRecording
-                            ? "Processing..."
-                            : isRecording
-                              ? "Stop Recording"
-                              : "Voice Input"
-                        }
-                      >
-                        <Icon
-                          name={
-                            isProcessingRecording
-                              ? "hourglass"
-                              : isRecording
-                                ? "record"
-                                : "microphone"
-                          }
-                          size={18}
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleVoiceModeToggle}
-                        data-testid="chat-voice-mode-button"
-                        disabled={isRecording || isProcessingRecording}
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                          isRecording || isProcessingRecording
-                            ? "opacity-50 cursor-not-allowed"
-                            : isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black",
-                        )}
-                        title="Voice Mode"
-                      >
-                        <Icon name="phone" size={18} />
-                      </button>
+                          )}
+                          title="Voice Mode"
+                        >
+                          <Icon name="phone" size={18} />
+                        </button>
+                      ) : null}
 
                       <button
                         type="button"

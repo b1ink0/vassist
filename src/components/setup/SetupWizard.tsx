@@ -109,7 +109,7 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden pointer-events-auto"
       data-setup-wizard
       data-testid="setup-wizard"
     >
@@ -119,7 +119,7 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
       {/* Main setup container */}
       <div
         ref={containerRef}
-        className="relative w-full max-w-3xl h-[95vh] mx-2 sm:mx-4 flex flex-col z-10"
+        className="relative z-10 flex h-[95vh] w-full max-w-3xl flex-col pointer-events-auto mx-2 sm:mx-4"
       >
         {/* Compact Header */}
         <div

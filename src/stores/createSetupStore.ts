@@ -1,5 +1,10 @@
 import type * as React from "react";
 import { createStore } from "zustand/vanilla";
+import {
+  hasManagedProviderConfig,
+  shouldSkipSetupForEmbed,
+  type ResolvedVAssistEmbedConfig,
+} from "../embed/config";
 import StorageServiceProxy from "../services/proxies/StorageServiceProxy";
 import Logger from "../services/LoggerService";
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
@@ -139,6 +144,70 @@ const cloneDefaultSetupState = (): SetupStateSnapshot => ({
   setupData: structuredClone(DEFAULT_SETUP_STATE.setupData),
 });
 
+const applyEmbedConfigToSetupSnapshot = (
+  snapshot: SetupStateSnapshot,
+  embedConfig?: ResolvedVAssistEmbedConfig,
+): SetupStateSnapshot => {
+  if (!embedConfig) {
+    return snapshot;
+  }
+
+  const nextSnapshot: SetupStateSnapshot = {
+    ...snapshot,
+    completedSteps: [...snapshot.completedSteps],
+    setupData: structuredClone(snapshot.setupData),
+  };
+
+  if (!embedConfig.features.liveAssistant3d) {
+    nextSnapshot.setupData.ui.enableModelLoading = false;
+  }
+
+  if (!embedConfig.features.aiToolbar) {
+    nextSnapshot.setupData.ui.enableAIToolbar = false;
+  }
+
+  if (!embedConfig.features.voiceOutput) {
+    nextSnapshot.setupData.tts.enabled = false;
+  }
+
+  if (!embedConfig.features.voiceInput && !embedConfig.features.voiceCall) {
+    nextSnapshot.setupData.stt.enabled = false;
+  }
+
+  if (embedConfig.providers.ai?.provider) {
+    nextSnapshot.setupData.llm.provider = String(
+      embedConfig.providers.ai.provider,
+    );
+  }
+
+  if (embedConfig.providers.tts?.provider) {
+    nextSnapshot.setupData.tts.provider = String(
+      embedConfig.providers.tts.provider,
+    );
+  }
+
+  if (embedConfig.providers.stt?.provider) {
+    nextSnapshot.setupData.stt.provider = String(
+      embedConfig.providers.stt.provider,
+    );
+  }
+
+  if (
+    shouldSkipSetupForEmbed(embedConfig) ||
+    (embedConfig.setup.mode === "deferred" &&
+      hasManagedProviderConfig(embedConfig))
+  ) {
+    nextSnapshot.setupCompleted = true;
+    nextSnapshot.currentStep = TOTAL_SETUP_STEPS;
+    nextSnapshot.completedSteps = Array.from(
+      { length: TOTAL_SETUP_STEPS },
+      (_, index) => index + 1,
+    );
+  }
+
+  return nextSnapshot;
+};
+
 const isCorruptedSetupState = (value: unknown) => {
   if (!value || typeof value !== "object") {
     return false;
@@ -196,7 +265,7 @@ const updateSetupDataAtPath = (
   return updated as SetupData;
 };
 
-export const createSetupStore = () => {
+export const createSetupStore = (embedConfig?: ResolvedVAssistEmbedConfig) => {
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let hasLoaded = false;
 
@@ -264,7 +333,10 @@ export const createSetupStore = () => {
               "setupState",
             )) as SetupStateSnapshot | null;
 
-            savedState = loadedState || cloneDefaultSetupState();
+            savedState = applyEmbedConfigToSetupSnapshot(
+              loadedState || cloneDefaultSetupState(),
+              embedConfig,
+            );
 
             if (isCorruptedSetupState(savedState)) {
               Logger.error(
@@ -272,10 +344,13 @@ export const createSetupStore = () => {
                 "CORRUPTED DATA DETECTED: setupState contains uiConfig fields!",
                 savedState,
               );
-              savedState = {
-                ...cloneDefaultSetupState(),
-                setupCompleted: true,
-              };
+              savedState = applyEmbedConfigToSetupSnapshot(
+                {
+                  ...cloneDefaultSetupState(),
+                  setupCompleted: true,
+                },
+                embedConfig,
+              );
             }
 
             Logger.log(
@@ -301,18 +376,26 @@ export const createSetupStore = () => {
                 "Failed to load setup state after all retries:",
                 error,
               );
-              savedState = {
-                ...cloneDefaultSetupState(),
-                setupCompleted: true,
-              };
+              savedState = applyEmbedConfigToSetupSnapshot(
+                {
+                  ...cloneDefaultSetupState(),
+                  setupCompleted: true,
+                },
+                embedConfig,
+              );
             }
           }
         }
 
-        const snapshot = savedState || {
-          ...cloneDefaultSetupState(),
-          setupCompleted: true,
-        };
+        const snapshot =
+          savedState ||
+          applyEmbedConfigToSetupSnapshot(
+            {
+              ...cloneDefaultSetupState(),
+              setupCompleted: true,
+            },
+            embedConfig,
+          );
 
         set({
           isLoading: false,
@@ -327,10 +410,13 @@ export const createSetupStore = () => {
           "Unexpected error in loadSetupState:",
           error,
         );
-        const snapshot = {
-          ...cloneDefaultSetupState(),
-          setupCompleted: true,
-        };
+        const snapshot = applyEmbedConfigToSetupSnapshot(
+          {
+            ...cloneDefaultSetupState(),
+            setupCompleted: true,
+          },
+          embedConfig,
+        );
         set({
           isLoading: false,
           setupCompleted: snapshot.setupCompleted,
@@ -348,7 +434,10 @@ export const createSetupStore = () => {
       setupCompleted: true,
       currentStep: 1,
       completedSteps: [],
-      setupData: cloneDefaultSetupState().setupData,
+      setupData: applyEmbedConfigToSetupSnapshot(
+        cloneDefaultSetupState(),
+        embedConfig,
+      ).setupData,
       totalSteps: TOTAL_SETUP_STEPS,
       goToStep: (step) => {
         if (step < 1 || step > TOTAL_SETUP_STEPS) {
@@ -421,7 +510,10 @@ export const createSetupStore = () => {
       },
       completeSetupWithDefaults: async () => {
         try {
-          const defaultSetupData = cloneDefaultSetupState().setupData;
+          const defaultSetupData = applyEmbedConfigToSetupSnapshot(
+            cloneDefaultSetupState(),
+            embedConfig,
+          ).setupData;
           Logger.log(
             "SetupStore",
             "Completing setup with default data:",
@@ -440,7 +532,10 @@ export const createSetupStore = () => {
       resetSetup: async () => {
         try {
           Logger.log("SetupStore", "Resetting setup...");
-          const snapshot = cloneDefaultSetupState();
+          const snapshot = applyEmbedConfigToSetupSnapshot(
+            cloneDefaultSetupState(),
+            embedConfig,
+          );
           set({
             setupCompleted: snapshot.setupCompleted,
             currentStep: snapshot.currentStep,

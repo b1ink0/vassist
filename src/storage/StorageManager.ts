@@ -5,8 +5,12 @@
  * Works seamlessly across dev and extension modes.
  */
 
-import { storageAdapter } from "./StorageAdapter";
-import type { StorageStats } from "./DatabaseSchema";
+import {
+  getDefaultStorageAdapter,
+  resolveStorageAdapter,
+  type StorageAdapterSelection,
+} from "./StorageAdapterRegistry";
+import type { StorageAdapterLike, StorageStats } from "./StorageAdapter";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -143,7 +147,7 @@ const CONFIG_VALIDATORS: Record<string, ConfigValidator> = {
 };
 
 export class StorageManager {
-  private adapter = storageAdapter;
+  private adapter: StorageAdapterLike;
 
   public config: ConfigNamespace;
   public settings: SettingsNamespace;
@@ -151,9 +155,12 @@ export class StorageManager {
   public chat: ChatNamespace;
   public files: FilesNamespace;
   public data: DataNamespace;
-  public db = this.adapter;
+  public db: StorageAdapterLike;
 
-  constructor() {
+  constructor(adapter: StorageAdapterLike = getDefaultStorageAdapter()) {
+    this.adapter = adapter;
+    this.db = this.adapter;
+
     // Namespace for configuration storage (replaces old StorageManager)
     this.config = {
       save: (key: string, value: unknown) => this._configSave(key, value),
@@ -231,6 +238,18 @@ export class StorageManager {
    */
   async getStats(): Promise<StorageStats> {
     return await this.adapter.getStats();
+  }
+
+  async clearAll(): Promise<boolean> {
+    await Promise.all([
+      this.config.clear(),
+      this.settings.clear(),
+      this.cache.clear(),
+      this.chat.clear(),
+      this.files.clear(),
+      this.data.clear(),
+    ]);
+    return true;
   }
 
   private async _configSave(key: string, value: unknown): Promise<boolean> {
@@ -559,7 +578,15 @@ export class StorageManager {
   }
 }
 
+export function createStorageManager(
+  adapter?: StorageAdapterSelection | StorageAdapterLike,
+): StorageManager {
+  return new StorageManager(
+    adapter ? resolveStorageAdapter(adapter) : getDefaultStorageAdapter(),
+  );
+}
+
 // Export singleton instance
-export const storageManager = new StorageManager();
+export const storageManager = createStorageManager();
 
 export default storageManager;

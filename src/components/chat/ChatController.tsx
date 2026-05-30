@@ -18,7 +18,13 @@ import ChatInput from "./ChatInput";
 import ChatContainer from "./ChatContainer";
 import AIToolbar from "../toolbar/AIToolbar";
 import { InputWindowManager } from "../desktop/InputWindowManager";
-import ChatService from "../../services/ChatService";
+import {
+  type ResolvedVAssistEmbedConfig,
+  type VAssistMessageEventPayload,
+} from "../../embed/config";
+import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
+import { emitEmbedHostEvent } from "../../embed/runtimeStore";
+import { toChatMessageItems } from "../../stores/createAppStore";
 import {
   AIServiceProxy,
   TTSServiceProxy,
@@ -31,7 +37,6 @@ import VoiceConversationService, {
 } from "../../services/VoiceConversationService";
 import { DefaultAIConfig, DefaultTTSConfig } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
-import chatHistoryService from "../../services/ChatHistoryService";
 import {
   useAssistantRef,
   useIsAssistantReady,
@@ -65,6 +70,7 @@ interface ChatControllerProps {
   modelDisabled?: boolean;
   requireSetupOnChatClick?: boolean;
   onRequireSetup?: () => void;
+  embedConfig: ResolvedVAssistEmbedConfig;
 }
 
 interface AssistantHandle {
@@ -268,13 +274,13 @@ interface ChatInputProps {
     skipForward?: boolean,
   ) => Promise<void> | void;
   onVoiceMode: (active: boolean) => Promise<void> | void;
+  embedConfig?: ResolvedVAssistEmbedConfig;
 }
 
 const aiService = AIServiceProxy as unknown as AIServiceLike;
 const ttsService = TTSServiceProxy as unknown as TTSServiceLike;
 const sttService = STTServiceProxy as unknown as STTServiceLike;
 const storageService = StorageServiceProxy as unknown as StorageServiceLike;
-const chatService = ChatService as unknown as ChatServiceLike;
 const documentInteractionService =
   DocumentInteractionService as unknown as DocumentInteractionServiceLike;
 const voiceConversationService =
@@ -283,7 +289,6 @@ const microphoneService = MicrophoneService as unknown as MicrophoneServiceLike;
 const cameraService = CameraService as unknown as CameraServiceLike;
 const screenShareService =
   ScreenShareService as unknown as ScreenShareServiceLike;
-const historyService = chatHistoryService as unknown as ChatHistoryServiceLike;
 const ChatInputTyped = ChatInput as unknown as ForwardRefExoticComponent<
   ChatInputProps & RefAttributes<HTMLElement>
 >;
@@ -294,6 +299,20 @@ const getErrorMessage = (error: unknown): string => {
   }
   return String(error);
 };
+
+const toHostMessagePayload = (
+  message: ChatMessageLike,
+): VAssistMessageEventPayload => ({
+  messageId: message.id,
+  role: message.role,
+  content: message.content,
+  ...(Array.isArray(message.images) && message.images.length > 0
+    ? { images: message.images }
+    : {}),
+  ...(Array.isArray(message.audios) && message.audios.length > 0
+    ? { audios: message.audios }
+    : {}),
+});
 
 /**
  * Main chat controller component.
@@ -307,13 +326,17 @@ const ChatController = ({
   modelDisabled = false,
   requireSetupOnChatClick = false,
   onRequireSetup,
+  embedConfig,
 }: ChatControllerProps) => {
+  const { chatService, chatHistoryService } = useAppRuntimeServices();
   const api = useDesktopApi() as DesktopApiForChatController | null;
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
   const inputWindowSttRecordingRef = useRef(false);
   const inputWindowSttProcessingRef = useRef(false);
+  const historyService =
+    chatHistoryService as unknown as ChatHistoryServiceLike;
 
   const appAssistantRef = useAssistantRef();
   const isAssistantReady = useIsAssistantReady();
@@ -336,9 +359,53 @@ const ChatController = ({
   const { setIsVoiceMode, setIsSpeaking } = usePlaybackActions();
   const { regenerateWithStreamingRef, editWithStreamingRef } =
     useToolingActions();
+  const previousChatOpenRef = useRef(false);
+  const seenMessageIdsRef = useRef<Set<string>>(
+    new Set(chatMessages.map((message) => message.id)),
+  );
+  const chatEnabled = embedConfig.features.chat;
+  const toolbarEnabled = embedConfig.features.aiToolbar;
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;
+
+  useEffect(() => {
+    const isChatOpen = isChatContainerVisible || isChatInputVisible;
+
+    if (isChatOpen === previousChatOpenRef.current) {
+      return;
+    }
+
+    previousChatOpenRef.current = isChatOpen;
+    emitEmbedHostEvent(
+      isChatOpen ? "open" : "close",
+      undefined,
+      embedConfig.mount.hostId,
+    );
+  }, [embedConfig.mount.hostId, isChatContainerVisible, isChatInputVisible]);
+
+  useEffect(() => {
+    const seenIds = seenMessageIdsRef.current;
+    const newMessages = chatMessages.filter(
+      (message) => !seenIds.has(message.id),
+    );
+
+    if (newMessages.length === 0) {
+      return;
+    }
+
+    for (const message of newMessages) {
+      seenIds.add(message.id);
+
+      const payload = toHostMessagePayload(message);
+      emitEmbedHostEvent("message", payload, embedConfig.mount.hostId);
+      emitEmbedHostEvent(
+        message.role === "assistant" ? "message-received" : "message-sent",
+        payload,
+        embedConfig.mount.hostId,
+      );
+    }
+  }, [chatMessages, embedConfig.mount.hostId]);
 
   const canUseAssistant = useCallback((): boolean => {
     return assistantRef.current?.isReady?.() === true;
@@ -361,7 +428,7 @@ const ChatController = ({
         "assistant",
         "Error: AI not configured. Please configure in Control Panel.",
       );
-      setChatMessages([...chatService.getMessages()]);
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
       voiceConversationService.changeState(ConversationStates.LISTENING);
@@ -610,7 +677,7 @@ const ChatController = ({
         } else {
           chatService.addMessage("assistant", fullResponse);
         }
-        setChatMessages([...chatService.getMessages()]);
+        setChatMessages(toChatMessageItems(chatService.getMessages()));
 
         if (
           !ttsEnabled &&
@@ -665,7 +732,7 @@ const ChatController = ({
       Logger.error("ChatController", "Voice AI error:", result.error);
       const voiceErrorMessage = getErrorMessage(result.error);
       chatService.addMessage("assistant", `Error: ${voiceErrorMessage}`);
-      setChatMessages([...chatService.getMessages()]);
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
       voiceConversationService.changeState(ConversationStates.LISTENING);
       if (canUseAssistant()) {
         assistantRef.current?.idle();
@@ -723,7 +790,13 @@ const ChatController = ({
 
     streamAbortControllerRef.current = null;
     setIsProcessing(false);
-  }, [setIsProcessing, setChatMessages, assistantRef, canUseAssistant]);
+  }, [
+    setIsProcessing,
+    setChatMessages,
+    assistantRef,
+    canUseAssistant,
+    chatService,
+  ]);
 
   const handleVoiceTranscription = useCallback(
     async (
@@ -768,11 +841,11 @@ const ChatController = ({
 
       // Add message and process
       chatService.addMessage("user", text, images, null);
-      setChatMessages(chatService.getMessages());
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
 
       await handleVoiceAIResponse();
     },
-    [setChatMessages, handleVoiceAIResponse, api],
+    [setChatMessages, handleVoiceAIResponse, api, chatService],
   );
 
   const handleVoiceModeChange = useCallback(
@@ -849,7 +922,7 @@ const ChatController = ({
         Logger.error("ChatController", "Failed to mark as temp:", error);
       });
     }
-  }, [isTempChat, currentChatId]);
+  }, [currentChatId, historyService, isTempChat]);
 
   /**
    * Desktop: Listen for voice events from input window via IPC
@@ -1258,12 +1331,17 @@ const ChatController = ({
    * Handles chat button click to toggle chat visibility.
    */
   const handleChatButtonClick = useCallback(() => {
+    if (!chatEnabled) {
+      return;
+    }
+
     Logger.log("ChatController", "Chat button clicked");
     if (requireSetupOnChatClick) {
       Logger.log(
         "ChatController",
         "Setup required before chat - opening setup wizard",
       );
+      emitEmbedHostEvent("require-setup", undefined, embedConfig.mount.hostId);
       onRequireSetup?.();
       return;
     }
@@ -1287,6 +1365,8 @@ const ChatController = ({
       }
     }
   }, [
+    chatEnabled,
+    embedConfig.mount.hostId,
     requireSetupOnChatClick,
     onRequireSetup,
     isChatContainerVisible,
@@ -1299,6 +1379,10 @@ const ChatController = ({
    * Handles chat open from drag-drop.
    */
   const handleChatOpen = useCallback(() => {
+    if (!chatEnabled) {
+      return;
+    }
+
     if (!isChatInputVisible || !isChatContainerVisible) {
       Logger.log("ChatController", "Opening chat from drag-drop");
       setIsChatInputVisible(true);
@@ -1317,12 +1401,17 @@ const ChatController = ({
     isChatContainerVisible,
     setIsChatInputVisible,
     setIsChatContainerVisible,
+    chatEnabled,
   ]);
 
   /**
    * Listens for open chat from drag events.
    */
   useEffect(() => {
+    if (!chatEnabled) {
+      return;
+    }
+
     const handleOpenChatFromDrag = () => {
       handleChatOpen();
     };
@@ -1332,9 +1421,10 @@ const ChatController = ({
     return () => {
       window.removeEventListener("openChatFromDrag", handleOpenChatFromDrag);
     };
-  }, [handleChatOpen]);
+  }, [chatEnabled, handleChatOpen]);
 
   useEffect(() => {
+    if (!chatEnabled) return;
     if (!isAndroid || !modelDisabled) return;
     if (!isAssistantReady) return;
     if (hasAutoOpenedAndroidChatRef.current) return;
@@ -1354,6 +1444,7 @@ const ChatController = ({
     isChatInputVisible,
     setIsChatInputVisible,
     setIsChatContainerVisible,
+    chatEnabled,
   ]);
 
   /**
@@ -1704,7 +1795,7 @@ const ChatController = ({
           );
           chatService.addMessage("assistant", fullResponse);
         }
-        setChatMessages([...chatService.getMessages()]);
+        setChatMessages(toChatMessageItems(chatService.getMessages()));
 
         if (
           !ttsEnabled &&
@@ -1765,7 +1856,7 @@ const ChatController = ({
 
       // Add error message to chat
       chatService.addMessage("assistant", `Error: ${errorMessage}`);
-      setChatMessages([...chatService.getMessages()]);
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
 
       // Clean up TTS and event listeners
       ttsService.stopPlayback();
@@ -1851,7 +1942,7 @@ const ChatController = ({
     }
 
     chatService.addMessage("user", message, images, audios);
-    setChatMessages(chatService.getMessages());
+    setChatMessages(toChatMessageItems(chatService.getMessages()));
 
     setIsProcessing(true);
 
@@ -1862,7 +1953,7 @@ const ChatController = ({
         "assistant",
         "Error: AI not configured. Please configure in Control Panel.",
       );
-      setChatMessages([...chatService.getMessages()]);
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
       setIsProcessing(false);
       return;
     }
@@ -1902,8 +1993,8 @@ const ChatController = ({
 
         await historyService.saveChat({
           chatId,
-          chatService: ChatService,
-          messages: chatService.getMessages(),
+          chatService,
+          messages: toChatMessageItems(chatService.getMessages()),
           isTemp: false,
           metadata: {
             sourceUrl,
@@ -2203,40 +2294,46 @@ const ChatController = ({
       {isDesktop && <InputWindowManager />}
 
       {/* AI Toolbar - appears on text/image selection */}
-      <AIToolbar />
+      {toolbarEnabled ? <AIToolbar /> : null}
 
-      {/* Chat Button visibility logic:
-          - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
-          - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
-      <ChatButton
-        onClick={handleChatButtonClick}
-        isVisible={
-          modelDisabled
-            ? true
-            : isAssistantReady &&
-              !(isChatContainerVisible || isChatInputVisible)
-        }
-        modelDisabled={modelDisabled}
-        isChatOpen={isChatContainerVisible || isChatInputVisible}
-        chatInputRef={chatInputRef}
-      />
+      {chatEnabled ? (
+        <>
+          {/* Chat Button visibility logic:
+              - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
+              - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
+          <ChatButton
+            onClick={handleChatButtonClick}
+            isVisible={
+              modelDisabled
+                ? true
+                : isAssistantReady &&
+                  !(isChatContainerVisible || isChatInputVisible)
+            }
+            modelDisabled={modelDisabled}
+            isChatOpen={isChatContainerVisible || isChatInputVisible}
+            chatInputRef={chatInputRef}
+          />
 
-      {/* Chat Input - bottom screen */}
-      {!isDesktop && (
-        <ChatInputTyped
-          ref={chatInputRef}
-          onSend={handleMessageSend}
-          onClose={handleChatInputClose}
-          onVoiceTranscription={handleVoiceTranscription}
-          onVoiceMode={handleVoiceModeChange}
-        />
-      )}
+          {/* Chat Input - bottom screen */}
+          {!isDesktop && (
+            <ChatInputTyped
+              ref={chatInputRef}
+              onSend={handleMessageSend}
+              onClose={handleChatInputClose}
+              onVoiceTranscription={handleVoiceTranscription}
+              onVoiceMode={handleVoiceModeChange}
+              embedConfig={embedConfig}
+            />
+          )}
 
-      {/* Chat Container - message bubbles */}
-      <ChatContainer
-        modelDisabled={modelDisabled}
-        onDragDrop={handleDragDrop}
-      />
+          {/* Chat Container - message bubbles */}
+          <ChatContainer
+            modelDisabled={modelDisabled}
+            onDragDrop={handleDragDrop}
+            embedConfig={embedConfig}
+          />
+        </>
+      ) : null}
     </>
   );
 };

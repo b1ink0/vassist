@@ -120,7 +120,7 @@ const Dialog = ({
   return (
     <div
       className={cn(
-        "absolute inset-0 flex items-center justify-center z-50 p-6 bg-black/50",
+        "vassist-modal-backdrop absolute inset-0 flex items-center justify-center z-50 p-6",
         animationClass,
       )}
       onClick={handleBackdropClick}
@@ -132,14 +132,18 @@ const Dialog = ({
         )}
         onClick={handleDialogClick}
       >
-        <h3 className="text-lg font-semibold mb-2 text-white">{title}</h3>
+        <h3 className="vassist-text-primary text-lg font-semibold mb-2">
+          {title}
+        </h3>
 
-        {message && <p className="text-sm mb-6 text-white/80">{message}</p>}
+        {message && (
+          <p className="vassist-text-secondary text-sm mb-6">{message}</p>
+        )}
 
         {/* Error message */}
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30">
-            <p className="text-sm text-red-200">{errorMessage}</p>
+          <div className="vassist-dialog-error mb-4 p-3 rounded-lg">
+            <p className="vassist-text-primary text-sm">{errorMessage}</p>
           </div>
         )}
 
@@ -150,7 +154,7 @@ const Dialog = ({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={inputPlaceholder}
-            className="w-full px-3 py-2 rounded-lg mb-4 border bg-white/10 border-white/20 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+            className="glass-input w-full mb-4"
             maxLength={inputMaxLength}
             autoFocus
             disabled={isProcessing}

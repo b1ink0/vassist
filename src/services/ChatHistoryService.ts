@@ -15,7 +15,8 @@
 
 import storageServiceProxy from "./proxies/StorageServiceProxy";
 import AIServiceProxy from "./proxies/AIServiceProxy";
-import ChatService from "./ChatService";
+import defaultChatService from "./ChatService";
+import type { ChatService as ChatServiceInstance } from "./ChatService";
 import Logger from "./LoggerService";
 
 type ChatMessage = {
@@ -70,23 +71,31 @@ type SaveChatInput = {
   metadata?: Record<string, unknown>;
 };
 
-class ChatHistoryService {
+interface ChatHistoryServiceDependencies {
+  storageProxy?: typeof storageServiceProxy;
+  aiService?: typeof AIServiceProxy;
+  chatService?: ChatServiceInstance;
+}
+
+export class ChatHistoryService {
   private cache: {
     chats: Map<string, ChatRecord>;
     titles: Map<string, string>;
   };
   private storageProxy: typeof storageServiceProxy;
   private aiService: typeof AIServiceProxy;
+  private chatService: ChatServiceInstance;
   private MAX_TITLE_CACHE: number;
 
-  constructor() {
+  constructor(dependencies: ChatHistoryServiceDependencies = {}) {
     this.cache = {
       chats: new Map(), // Cache for loaded chats
       titles: new Map(), // Cache for generated titles
     };
-    this.storageProxy = storageServiceProxy;
+    this.storageProxy = dependencies.storageProxy ?? storageServiceProxy;
     // Use proxy in extension mode, direct service in dev mode
-    this.aiService = AIServiceProxy;
+    this.aiService = dependencies.aiService ?? AIServiceProxy;
+    this.chatService = dependencies.chatService ?? defaultChatService;
     this.MAX_TITLE_CACHE = 100;
   }
 
@@ -451,7 +460,7 @@ class ChatHistoryService {
       };
 
       // Import tree into ChatService
-      ChatService.importTree(restored.chatService);
+      this.chatService.importTree(restored.chatService);
       restored.chatServiceData = restored.chatService;
 
       Logger.log("ChatHistoryService", "Restored chat service tree");
@@ -464,7 +473,7 @@ class ChatHistoryService {
         ),
       };
 
-      ChatService.importTree(restored.chatService);
+      this.chatService.importTree(restored.chatService);
       restored.chatServiceData = restored.chatService;
 
       Logger.log(

@@ -16,6 +16,12 @@
  * Now we don't need this since categories are just the keys in AnimationRegistry
  */
 import Logger from "../services/LoggerService";
+import {
+  normalizeOptionalEmbedAssetBaseUrl,
+  normalizeOptionalEmbedAssetValue,
+} from "../embed/config";
+import { getEmbedConfig } from "../embed/runtimeStore";
+import type { SceneAnimationConfigLike } from "../babylon/types";
 export const AnimationCategory = {
   IDLE: "idle",
   THINKING: "thinking",
@@ -407,7 +413,7 @@ export const AnimationRegistry = {
       },
     },
   ],
-};
+} satisfies Record<string, SceneAnimationConfigLike[]>;
 
 type AnimationCategoryName = keyof typeof AnimationRegistry;
 type AssistantStateValue = (typeof AssistantState)[keyof typeof AssistantState];
@@ -416,12 +422,84 @@ function hasOwnKey<T extends object>(obj: T, key: PropertyKey): key is keyof T {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+const resolveEmbedAssetUrl = (
+  assetPath: string | null | undefined,
+  assetBaseUrl: string | undefined,
+): string | null => {
+  const normalizedAssetPath = normalizeOptionalEmbedAssetValue(assetPath);
+  if (!normalizedAssetPath) {
+    return null;
+  }
+
+  const normalizedAssetBaseUrl =
+    normalizeOptionalEmbedAssetBaseUrl(assetBaseUrl);
+  if (!normalizedAssetBaseUrl) {
+    return normalizedAssetPath;
+  }
+
+  try {
+    return new URL(normalizedAssetPath, normalizedAssetBaseUrl).toString();
+  } catch {
+    return normalizedAssetPath;
+  }
+};
+
+const joinAssetPath = (basePath: string, fileName: string): string => {
+  try {
+    return new URL(
+      fileName,
+      basePath.endsWith("/") ? basePath : `${basePath}/`,
+    ).toString();
+  } catch {
+    return `${basePath.replace(/\/+$/, "")}/${fileName}`;
+  }
+};
+
+const resolveMotionPackFilePath = (filePath: string): string => {
+  const { motionPack, assetBaseUrl } = getEmbedConfig().assets;
+  const normalizedMotionPack = normalizeOptionalEmbedAssetValue(motionPack);
+
+  if (!normalizedMotionPack) {
+    return filePath;
+  }
+
+  const fileName = filePath.split("/").pop();
+  if (!fileName) {
+    return filePath;
+  }
+
+  const resolvedBasePath =
+    resolveEmbedAssetUrl(normalizedMotionPack, assetBaseUrl) ??
+    normalizedMotionPack;
+
+  return joinAssetPath(resolvedBasePath, fileName);
+};
+
+const withResolvedAnimationPath = (
+  animation: SceneAnimationConfigLike,
+): SceneAnimationConfigLike => {
+  if (!animation.filePath) {
+    return animation;
+  }
+
+  const resolvedFilePath = resolveMotionPackFilePath(animation.filePath);
+
+  if (resolvedFilePath === animation.filePath) {
+    return animation;
+  }
+
+  return {
+    ...animation,
+    filePath: resolvedFilePath,
+  };
+};
+
 /**
  * Get all animations (flattened from all categories)
  * @returns {Array} Array of all animation configs
  */
-export function getAllAnimations() {
-  return Object.values(AnimationRegistry).flat();
+export function getAllAnimations(): SceneAnimationConfigLike[] {
+  return Object.values(AnimationRegistry).flat().map(withResolvedAnimationPath);
 }
 
 /**
@@ -430,17 +508,21 @@ export function getAllAnimations() {
  * @param {string} category - Animation type ('idle', 'thinking', 'walking', 'celebrating', 'talking', etc.)
  * @returns {Array} Array of default animation configs
  */
-export function getAnimationsByCategory(category: string) {
+export function getAnimationsByCategory(
+  category: string,
+): SceneAnimationConfigLike[] {
   if (!hasOwnKey(AnimationRegistry, category)) {
     return [];
   }
-  return AnimationRegistry[category];
+  return AnimationRegistry[category].map(withResolvedAnimationPath);
 }
 
 /**
  * Alias for getAnimationsByCategory (for clarity)
  */
-export function getDefaultAnimationsByCategory(category: string) {
+export function getDefaultAnimationsByCategory(
+  category: string,
+): SceneAnimationConfigLike[] {
   return getAnimationsByCategory(category);
 }
 
@@ -449,7 +531,7 @@ export function getDefaultAnimationsByCategory(category: string) {
  * @param {string} id - Animation ID
  * @returns {Object|null} Animation config or null if not found
  */
-export function getAnimationById(id: string) {
+export function getAnimationById(id: string): SceneAnimationConfigLike | null {
   return getAllAnimations().find((anim) => anim.id === id) || null;
 }
 
@@ -459,11 +541,13 @@ export function getAnimationById(id: string) {
  * @param {string} category - Category name ('idle', 'thinking', 'walking', etc.)
  * @returns {Object|null} Random animation config or null if category empty
  */
-export function getRandomAnimation(category: string) {
+export function getRandomAnimation(
+  category: string,
+): SceneAnimationConfigLike | null {
   const animations = getAnimationsByCategory(category);
   if (animations.length === 0) return null;
   const randomIndex = Math.floor(Math.random() * animations.length);
-  return animations[randomIndex];
+  return animations[randomIndex] ?? null;
 }
 
 /**

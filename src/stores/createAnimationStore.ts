@@ -78,7 +78,11 @@ export const createAnimationStore = () => {
             set({ configSaved: false });
           }, 2000);
         } catch (error) {
-          Logger.error("AnimationStore", "Failed to save animation config:", error);
+          Logger.error(
+            "AnimationStore",
+            "Failed to save animation config:",
+            error,
+          );
         }
       }, 500);
     };
@@ -101,9 +105,16 @@ export const createAnimationStore = () => {
           "Disabled animations config loaded:",
           config?.disabledDefaultAnimations,
         );
-        Logger.log("AnimationStore", `Loaded ${customs.length} custom animations`);
+        Logger.log(
+          "AnimationStore",
+          `Loaded ${customs.length} custom animations`,
+        );
       } catch (error) {
-        Logger.error("AnimationStore", "Failed to load animation config:", error);
+        Logger.error(
+          "AnimationStore",
+          "Failed to load animation config:",
+          error,
+        );
         set({ isLoading: false });
       } finally {
         hasLoaded = true;
@@ -119,29 +130,18 @@ export const createAnimationStore = () => {
         const defaultAnims = getDefaultAnimationsByCategory(category);
         const { disabledDefaultAnimations, customAnimations } = get();
         const enabledDefaults: EnabledAnimation[] = defaultAnims
-          .filter((anim: { id: string }) => !disabledDefaultAnimations[anim.id])
-          .map(
-            (anim: {
-              id: string;
-              name: string;
-              filePath: string;
-              loop?: boolean;
-              loopTransition?: boolean;
-              transitionFrames?: number;
-              weight?: number;
-              metadata?: Record<string, unknown>;
-            }) => ({
-              id: anim.id,
-              name: anim.name,
-              filePath: anim.filePath,
-              isCustom: false,
-              loop: anim.loop ?? false,
-              loopTransition: anim.loopTransition ?? false,
-              transitionFrames: anim.transitionFrames ?? 30,
-              weight: anim.weight ?? 1.0,
-              metadata: anim.metadata ?? {},
-            }),
-          );
+          .filter((anim) => !disabledDefaultAnimations[anim.id])
+          .map((anim) => ({
+            id: anim.id,
+            name: anim.name,
+            filePath: anim.filePath ?? null,
+            isCustom: false,
+            loop: anim.loop ?? false,
+            loopTransition: anim.loopTransition ?? false,
+            transitionFrames: anim.transitionFrames ?? 30,
+            weight: anim.weight ?? 1.0,
+            metadata: anim.metadata ?? {},
+          }));
 
         const enabledCustom = customAnimations
           .filter(
@@ -188,7 +188,9 @@ export const createAnimationStore = () => {
       },
       toggleCustomAnimation: async (motionId, category, isEnabled) => {
         try {
-          const motion = get().customAnimations.find((item) => item.id === motionId);
+          const motion = get().customAnimations.find(
+            (item) => item.id === motionId,
+          );
           if (!motion) {
             throw new Error(`Motion ${motionId} not found`);
           }
@@ -218,7 +220,11 @@ export const createAnimationStore = () => {
             `Custom animation ${motionId} ${isEnabled ? "enabled" : "disabled"} for category ${category}`,
           );
         } catch (error) {
-          Logger.error("AnimationStore", "Failed to toggle custom animation:", error);
+          Logger.error(
+            "AnimationStore",
+            "Failed to toggle custom animation:",
+            error,
+          );
           throw error;
         }
       },
@@ -231,10 +237,15 @@ export const createAnimationStore = () => {
             `Reloaded ${customs.length} custom animations`,
           );
         } catch (error) {
-          Logger.error("AnimationStore", "Failed to reload custom animations:", error);
+          Logger.error(
+            "AnimationStore",
+            "Failed to reload custom animations:",
+            error,
+          );
         }
       },
-      hasEnabledAnimation: (category) => get().getEnabledAnimations(category).length > 0,
+      hasEnabledAnimation: (category) =>
+        get().getEnabledAnimations(category).length > 0,
       getEnabledCounts: (category) => {
         const defaultAnims = getDefaultAnimationsByCategory(category);
         const { disabledDefaultAnimations, customAnimations } = get();

@@ -9,9 +9,9 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.join(__dirname, "..", "..");
 
 /**
- * Plugin to copy @ricky0123/vad-web assets to build output
- * Copies worklet, ONNX models, and ONNX Runtime WASM files to assets/ folder
- * Also serves them during dev mode
+ * Plugin to copy runtime assets required by packaged builds.
+ * Copies VAD worklet/ONNX assets to assets/ and mirrors public/res into dist/res.
+ * Also serves VAD assets during dev mode.
  * @param {string} outDir - Output directory (e.g., 'dist', 'dist-desktop', 'dist-android', 'dist-extension')
  */
 export function vadAssetsPlugin(outDir: string): Plugin {
@@ -105,6 +105,8 @@ export function vadAssetsPlugin(outDir: string): Plugin {
       );
 
       const distDir = path.join(rootDir, outDir, "assets");
+      const publicResPath = path.join(rootDir, "public", "res");
+      const runtimeResDir = path.join(rootDir, outDir, "res");
 
       // Ensure assets directory exists
       if (!fs.existsSync(distDir)) {
@@ -148,6 +150,11 @@ export function vadAssetsPlugin(outDir: string): Plugin {
           fs.copyFileSync(srcFile, destFile);
           console.log(`[vad-assets] ✓ Copied ${file}`);
         });
+      }
+
+      if (fs.existsSync(publicResPath)) {
+        fs.cpSync(publicResPath, runtimeResDir, { recursive: true });
+        console.log(`[vad-assets] ✓ Copied public/res to ${outDir}/res`);
       }
 
       console.log("[vad-assets] VAD assets copied successfully");

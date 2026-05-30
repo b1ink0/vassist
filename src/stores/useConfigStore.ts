@@ -27,6 +27,8 @@ import {
   validateTTSConfig,
 } from "../config/aiConfig";
 import { DefaultUIConfig, type UIConfig } from "../config/uiConfig";
+import { mergeDeep, type ResolvedVAssistEmbedConfig } from "../embed/config";
+import { getEmbedConfig } from "../embed/runtimeStore";
 import Logger from "../services/LoggerService";
 import { isDesktop } from "../utils/PlatformUtils";
 import {
@@ -137,7 +139,9 @@ export interface ConfigStoreState {
   sttTesting: boolean;
   chromeAiStatus: ChromeAiStatus;
   kokoroStatus: KokoroStatus;
-  hydrateConfigStore: () => Promise<void>;
+  hydrateConfigStore: (
+    embedConfig?: ResolvedVAssistEmbedConfig,
+  ) => Promise<void>;
   updateUIConfig: (
     path: string,
     value: unknown,
@@ -541,6 +545,108 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
     ttsConfig,
     sttConfig,
     uiConfig,
+  };
+};
+
+const applyEmbedUiPolicy = (
+  uiConfig: UIConfig,
+  embedConfig?: ResolvedVAssistEmbedConfig,
+): UIConfig => {
+  if (!embedConfig) {
+    return uiConfig;
+  }
+
+  const nextUiConfig = mergeDeep(uiConfig, {});
+
+  if (!embedConfig.features.liveAssistant3d) {
+    nextUiConfig.enableModelLoading = false;
+  }
+
+  if (!embedConfig.features.aiToolbar) {
+    nextUiConfig.enableAIToolbar = false;
+  }
+
+  if (!embedConfig.features.chat) {
+    nextUiConfig.shortcuts.enabled = false;
+  }
+
+  if (embedConfig.theme.mode !== "adaptive") {
+    nextUiConfig.backgroundDetection.mode = embedConfig.theme.mode;
+    nextUiConfig.backgroundDetection.showDebug = false;
+  }
+
+  return nextUiConfig;
+};
+
+const applyEmbedConfigToConfigs = (
+  configs: {
+    uiConfig: UIConfig;
+    aiConfig: AIConfig;
+    ttsConfig: TTSConfig;
+    sttConfig: STTConfig;
+  },
+  embedConfig?: ResolvedVAssistEmbedConfig,
+) => {
+  if (!embedConfig) {
+    return configs;
+  }
+
+  let nextAiConfig = configs.aiConfig;
+  let nextTtsConfig = configs.ttsConfig;
+  let nextSttConfig = configs.sttConfig;
+
+  if (embedConfig.providers.ai) {
+    nextAiConfig = normalizeAIConfig(
+      mergeDeep(
+        configs.aiConfig,
+        embedConfig.providers.ai,
+      ) as Partial<AIConfig>,
+    );
+  }
+
+  if (embedConfig.providers.tts) {
+    nextTtsConfig = normalizeTTSConfig(
+      mergeDeep(
+        configs.ttsConfig,
+        embedConfig.providers.tts,
+      ) as Partial<TTSConfig>,
+    );
+  }
+
+  if (embedConfig.providers.stt) {
+    nextSttConfig = normalizeSTTConfig(
+      mergeDeep(
+        configs.sttConfig,
+        embedConfig.providers.stt,
+      ) as Partial<STTConfig>,
+    );
+  }
+
+  if (!embedConfig.features.voiceOutput) {
+    nextTtsConfig = {
+      ...nextTtsConfig,
+      enabled: false,
+    };
+  }
+
+  if (!embedConfig.features.voiceInput && !embedConfig.features.voiceCall) {
+    nextSttConfig = {
+      ...nextSttConfig,
+      enabled: false,
+    };
+  }
+
+  const synced = syncDesktopLocalEndpoints(
+    nextAiConfig,
+    nextTtsConfig,
+    nextSttConfig,
+  );
+
+  return {
+    uiConfig: applyEmbedUiPolicy(configs.uiConfig, embedConfig),
+    aiConfig: synced.aiConfig,
+    ttsConfig: synced.ttsConfig,
+    sttConfig: synced.sttConfig,
   };
 };
 
@@ -987,10 +1093,12 @@ export const useConfigStore = create<ConfigStoreState>()(
       sttTesting: false,
       chromeAiStatus: defaultChromeAiStatus(),
       kokoroStatus: defaultKokoroStatus(),
-      hydrateConfigStore: async () => {
+      hydrateConfigStore: async (embedConfigOverride) => {
         if (get().hasHydrated && !get().isConfigLoading) {
           return;
         }
+
+        const effectiveEmbedConfig = embedConfigOverride ?? getEmbedConfig();
 
         set((state) => {
           state.isConfigLoading = true;
@@ -1025,23 +1133,31 @@ export const useConfigStore = create<ConfigStoreState>()(
             )) as Partial<STTConfig> | null,
           );
 
-          const synced = syncDesktopLocalEndpoints(
-            savedAiConfig,
-            savedTtsConfig,
-            savedSttConfig,
+          const appliedConfigs = applyEmbedConfigToConfigs(
+            {
+              uiConfig: mergedUiConfig,
+              aiConfig: savedAiConfig,
+              ttsConfig: savedTtsConfig,
+              sttConfig: savedSttConfig,
+            },
+            effectiveEmbedConfig,
           );
-          savedAiConfig = synced.aiConfig;
-          savedTtsConfig = synced.ttsConfig;
-          savedSttConfig = synced.sttConfig;
+          savedAiConfig = appliedConfigs.aiConfig;
+          savedTtsConfig = appliedConfigs.ttsConfig;
+          savedSttConfig = appliedConfigs.sttConfig;
 
           set((state) => {
-            state.uiConfig = mergedUiConfig;
+            state.uiConfig = appliedConfigs.uiConfig;
             state.aiConfig = savedAiConfig;
             state.ttsConfig = savedTtsConfig;
             state.sttConfig = savedSttConfig;
           });
 
-          Logger.log("ConfigStore", "UI config loaded:", mergedUiConfig);
+          Logger.log(
+            "ConfigStore",
+            "UI config loaded:",
+            appliedConfigs.uiConfig,
+          );
 
           try {
             await configureAIAndFeatureServices(savedAiConfig);
@@ -1317,11 +1433,9 @@ export const useConfigStore = create<ConfigStoreState>()(
         });
       },
       applySetupData: async (setupData) => {
-        const built = buildConfigsFromSetupData(setupData);
-        const synced = syncDesktopLocalEndpoints(
-          built.aiConfig,
-          built.ttsConfig,
-          built.sttConfig,
+        const appliedConfigs = applyEmbedConfigToConfigs(
+          buildConfigsFromSetupData(setupData),
+          getEmbedConfig(),
         );
 
         clearSaveTimeout("ui");
@@ -1331,10 +1445,10 @@ export const useConfigStore = create<ConfigStoreState>()(
         clearAllConfigPathDebouncers();
 
         set((state) => {
-          state.uiConfig = built.uiConfig;
-          state.aiConfig = synced.aiConfig;
-          state.ttsConfig = synced.ttsConfig;
-          state.sttConfig = synced.sttConfig;
+          state.uiConfig = appliedConfigs.uiConfig;
+          state.aiConfig = appliedConfigs.aiConfig;
+          state.ttsConfig = appliedConfigs.ttsConfig;
+          state.sttConfig = appliedConfigs.sttConfig;
           state.uiConfigError = "";
           state.aiConfigError = "";
           state.ttsConfigError = "";
@@ -1346,9 +1460,9 @@ export const useConfigStore = create<ConfigStoreState>()(
         await saveTTSConfigInternal(false);
         await saveSTTConfigInternal(false);
         await syncDesktopServerForProviders(
-          synced.aiConfig,
-          synced.ttsConfig,
-          synced.sttConfig,
+          appliedConfigs.aiConfig,
+          appliedConfigs.ttsConfig,
+          appliedConfigs.sttConfig,
         );
       },
       checkChromeAIAvailability: async () => {

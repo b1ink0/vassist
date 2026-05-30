@@ -57,6 +57,7 @@ interface KokoroStatusState {
 }
 
 interface TTSPersistedData {
+  enabled?: boolean;
   provider?: string;
   kokoro?: KokoroConfigState;
   openai?: {
@@ -87,6 +88,7 @@ interface TTSPersistedData {
 }
 
 interface STTPersistedData {
+  enabled?: boolean;
   provider?: string;
 }
 

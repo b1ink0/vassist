@@ -1,12 +1,17 @@
 import { useEffect, useRef } from "react";
+import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
 import { TTSProviders } from "../../config/aiConfig";
 import Logger from "../../services/LoggerService";
 import { TTSServiceProxy } from "../../services/proxies";
 import { useConfigStore } from "../../stores/useConfigStore";
 
-export function useInitializeConfigStore() {
+export function useInitializeConfigStore(
+  embedConfig?: ResolvedVAssistEmbedConfig,
+) {
   const startedRef = useRef(false);
-  const hydrateConfigStore = useConfigStore((state) => state.hydrateConfigStore);
+  const hydrateConfigStore = useConfigStore(
+    (state) => state.hydrateConfigStore,
+  );
   const hasHydrated = useConfigStore((state) => state.hasHydrated);
   const ttsEnabled = useConfigStore((state) => state.ttsConfig.enabled);
   const ttsProvider = useConfigStore((state) => state.ttsConfig.provider);
@@ -20,8 +25,8 @@ export function useInitializeConfigStore() {
     }
 
     startedRef.current = true;
-    void hydrateConfigStore();
-  }, [hydrateConfigStore]);
+    void hydrateConfigStore(embedConfig);
+  }, [embedConfig, hydrateConfigStore]);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -40,7 +45,10 @@ export function useInitializeConfigStore() {
 
     const checkAndAutoInit = async () => {
       try {
-        Logger.log("ConfigBootstrap", "Pre-initializing Kokoro before scene loads...");
+        Logger.log(
+          "ConfigBootstrap",
+          "Pre-initializing Kokoro before scene loads...",
+        );
         useConfigStore.setState((state) => ({
           kokoroStatus: {
             ...state.kokoroStatus,
@@ -57,7 +65,10 @@ export function useInitializeConfigStore() {
         if (!kokoroStatus.initialized && !kokoroStatus.initializing) {
           Logger.log("ConfigBootstrap", "Initializing Kokoro model...");
           await useConfigStore.getState().initializeKokoro();
-          Logger.log("ConfigBootstrap", "Kokoro initialization complete with warmup");
+          Logger.log(
+            "ConfigBootstrap",
+            "Kokoro initialization complete with warmup",
+          );
         } else if (kokoroStatus.initialized) {
           Logger.log(
             "ConfigBootstrap",
@@ -70,7 +81,11 @@ export function useInitializeConfigStore() {
           }
         }
       } catch (error) {
-        Logger.error("ConfigBootstrap", "Kokoro pre-initialization failed:", error);
+        Logger.error(
+          "ConfigBootstrap",
+          "Kokoro pre-initialization failed:",
+          error,
+        );
       } finally {
         if (!cancelled) {
           useConfigStore.setState((state) => ({

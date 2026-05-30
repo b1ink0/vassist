@@ -1,5 +1,7 @@
 import type { VAssistTestApi } from "./testing/testBridge";
 
+import type { VAssistEmbedApi, VAssistEmbedConfig } from "./embed/config";
+
 /**
  * Build-time environment constants
  * These are injected by Vite at build time via the `define` option
@@ -22,20 +24,8 @@ interface ImportMeta {
 
 declare global {
   interface Window {
-    VAssistEmbed?: {
-      inject: (options?: {
-        target?: string | HTMLElement | null;
-        hostId?: string;
-        deferSetupUntilStarted?: boolean;
-      }) => HTMLElement;
-      remove: (hostId?: string) => void;
-    };
-    VAssistEmbedConfig?: {
-      target?: string | HTMLElement | null;
-      hostId?: string;
-      deferSetupUntilStarted?: boolean;
-      autoInject?: boolean;
-    };
+    VAssistEmbed?: VAssistEmbedApi;
+    VAssistEmbedConfig?: VAssistEmbedConfig;
   }
 
   /**
