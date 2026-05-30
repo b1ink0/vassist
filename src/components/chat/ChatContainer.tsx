@@ -13,7 +13,15 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
+import type {
+  ResolvedVAssistEmbedConfig,
+  VAssistOpenSettingsOptions,
+  VAssistSettingsTargetId,
+} from "../../embed/config";
+import { getBrandedLabel } from "../../embed/branding";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { getHostCommandEventName } from "../../embed/hostCommands";
+import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
 import { Icon } from "../icons";
 import { Button } from "../ui";
@@ -285,6 +293,8 @@ const ChatContainer = ({
   embedConfig,
   onDragDrop,
 }: ChatContainerProps) => {
+  const { hostId } = useEmbedHost();
+  const reactCustomizations = useVAssistReactCustomizations(hostId);
   const { chatHistoryService } = useAppRuntimeServices();
   const positionManagerRef = usePositionManagerRef();
   const messages = useChatMessages();
@@ -399,6 +409,11 @@ const ChatContainer = ({
     useState(false);
   const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+  const [requestedSettingsView, setRequestedSettingsView] =
+    useState<VAssistOpenSettingsOptions | null>(null);
+  const [, setActiveSettingsTarget] = useState<VAssistSettingsTargetId | null>(
+    null,
+  );
   const settingsEnabled = embedConfig.features.settings;
   const historyEnabled = embedConfig.features.history;
   const liveAssistantEnabled = embedConfig.features.liveAssistant3d;
@@ -424,6 +439,32 @@ const ChatContainer = ({
       setIsHistoryPanelOpen(false);
     }
   }, [historyEnabled, isHistoryPanelOpen, setIsHistoryPanelOpen]);
+
+  useEffect(() => {
+    const handleOpenSettings = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !settingsEnabled) {
+        return;
+      }
+
+      setRequestedSettingsView(
+        (event.detail as VAssistOpenSettingsOptions | null | undefined) ?? {},
+      );
+      setIsHistoryPanelOpen(false);
+      setIsSettingsPanelOpen(true);
+    };
+
+    window.addEventListener(
+      getHostCommandEventName(hostId, "open-settings"),
+      handleOpenSettings,
+    );
+
+    return () => {
+      window.removeEventListener(
+        getHostCommandEventName(hostId, "open-settings"),
+        handleOpenSettings,
+      );
+    };
+  }, [hostId, setIsHistoryPanelOpen, setIsSettingsPanelOpen, settingsEnabled]);
 
   useDesktopWindowResize();
 
@@ -1252,6 +1293,7 @@ const ChatContainer = ({
     setTimeout(() => {
       setIsSettingsPanelOpen(false);
       setIsSettingsPanelClosing(false);
+      setRequestedSettingsView(null);
     }, 200);
   }, [setIsSettingsPanelOpen]);
 
@@ -1763,6 +1805,65 @@ const ChatContainer = ({
     return null;
 
   const ttsEnabled = ttsConfig.enabled;
+  const customHeaderActions = reactCustomizations.renderHeaderActions?.({
+    hostId,
+  });
+  const customFooterContent = reactCustomizations.renderFooterContent?.({
+    hostId,
+  });
+  const customEmptyState = reactCustomizations.renderEmptyState?.({
+    hostId,
+  });
+  const settingsLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.settings",
+    "Settings",
+  );
+  const historyLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.history",
+    "Chat history",
+  );
+  const stopLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.stop",
+    "Stop generation",
+  );
+  const newChatLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.new",
+    "Start new chat",
+  );
+  const closeLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.close",
+    "Close chat",
+  );
+  const showCharacterLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.showCharacter",
+    "Show character",
+  );
+  const hideCharacterLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.hideCharacter",
+    "Hide character",
+  );
+  const tempEnabledLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.tempEnable",
+    "Enable temp mode - chat won't be saved",
+  );
+  const tempDisabledLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.tempDisable",
+    "Disable temp mode - chat will be saved",
+  );
+  const emptyStateDescription = getBrandedLabel(
+    embedConfig,
+    "chat.emptyState.description",
+    "Type a message below to begin chatting with your AI assistant",
+  );
   const androidChatInputHeight =
     chatInputRef?.current?.getBoundingClientRect().height || 140;
   const androidContainerHeight = Math.max(
@@ -1862,6 +1963,12 @@ const ChatContainer = ({
           </div>
         </div>
 
+        {customHeaderActions ? (
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+            {customHeaderActions}
+          </div>
+        ) : null}
+
         {/* Action buttons at BOTTOM - reorganized: left/center/right layout */}
         <div className="relative flex items-center justify-between gap-2 pb-1">
           {/* LEFT: Settings + History */}
@@ -1872,9 +1979,9 @@ const ChatContainer = ({
                 size="icon"
                 variant={isLightBackground ? "dark" : "default"}
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title="Settings"
-              aria-label="Settings"
-              data-testid="settings-toggle-button"
+                title={settingsLabel}
+                aria-label="Settings"
+                data-testid="settings-toggle-button"
               >
                 <span
                   className={cn(
@@ -1893,7 +2000,7 @@ const ChatContainer = ({
                 size="icon"
                 variant={isLightBackground ? "dark" : "default"}
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title="Chat history"
+                title={historyLabel}
                 aria-label="Chat history"
               >
                 <span
@@ -1926,7 +2033,7 @@ const ChatContainer = ({
               className={isClosing ? "animate-fade-out" : "animate-fade-in"}
               title={
                 isGenerating
-                  ? "Stop generation"
+                  ? stopLabel
                   : isSpeaking || loadingMessageIndex !== null
                     ? "Stop TTS"
                     : "Nothing to stop"
@@ -1947,7 +2054,7 @@ const ChatContainer = ({
               size="icon"
               variant={isLightBackground ? "dark" : "default"}
               className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title="Start new chat"
+              title={newChatLabel}
             >
               <span
                 className={cn(
@@ -1965,7 +2072,7 @@ const ChatContainer = ({
                 size="icon"
                 variant={isLightBackground ? "dark" : "default"}
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title="Close chat"
+                title={closeLabel}
               >
                 <span
                   className={cn(
@@ -1993,8 +2100,8 @@ const ChatContainer = ({
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
                 title={
                   uiConfig.enableModelLoading
-                    ? "Hide character"
-                    : "Show character"
+                    ? hideCharacterLabel
+                    : showCharacterLabel
                 }
               >
                 <span
@@ -2029,11 +2136,7 @@ const ChatContainer = ({
                       : "bg-yellow-500/40 border-yellow-500/60"),
                   isClosing ? "animate-fade-out" : "animate-fade-in",
                 )}
-                title={
-                  isTempChat
-                    ? "Disable temp mode - chat will be saved"
-                    : "Enable temp mode - chat won't be saved"
-                }
+                title={isTempChat ? tempDisabledLabel : tempEnabledLabel}
               >
                 <span
                   className={cn(
@@ -2047,6 +2150,10 @@ const ChatContainer = ({
             ) : null}
           </div>
         </div>
+
+        {customFooterContent ? (
+          <div className="relative z-10 px-1">{customFooterContent}</div>
+        ) : null}
 
         {/* Messages container */}
         <div
@@ -2089,29 +2196,34 @@ const ChatContainer = ({
             className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth"
           >
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-6">
-                <div
-                  className={cn(
-                    "glass-container",
-                    isLightBackground && "glass-container-dark",
-                    "px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center",
-                    isClosing ? "animate-fade-out" : "animate-fade-in",
-                  )}
-                >
-                  <div className="w-full flex justify-center items-center text-6xl mb-4">
-                    <Icon name="chat" size={18} />
-                  </div>
-                  <p
+              customEmptyState ? (
+                <div className="flex flex-col items-center justify-center h-full gap-6">
+                  {customEmptyState}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-6">
+                  <div
                     className={cn(
-                      isLightBackground ? "glass-text" : "glass-text-black",
-                      "text-sm opacity-70",
+                      "glass-container",
+                      isLightBackground && "glass-container-dark",
+                      "px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center",
+                      isClosing ? "animate-fade-out" : "animate-fade-in",
                     )}
                   >
-                    Type a message below to begin chatting with your AI
-                    assistant
-                  </p>
+                    <div className="w-full flex justify-center items-center text-6xl mb-4">
+                      <Icon name="chat" size={18} />
+                    </div>
+                    <p
+                      className={cn(
+                        isLightBackground ? "glass-text" : "glass-text-black",
+                        "text-sm opacity-70",
+                      )}
+                    >
+                      {emptyStateDescription}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )
             ) : (
               <>
                 {messages.map((msg, index) => {
@@ -2210,6 +2322,8 @@ const ChatContainer = ({
               onClose={handleSettingsPanelClose}
               isLightBackground={isLightBackground}
               embedConfig={embedConfig}
+              requestedView={requestedSettingsView}
+              onActiveTargetChange={setActiveSettingsTarget}
               animationClass={
                 isSettingsPanelClosing
                   ? "animate-fade-out"

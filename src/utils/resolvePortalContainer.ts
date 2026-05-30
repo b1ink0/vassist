@@ -14,6 +14,16 @@ export function resolvePortalContainer(
     return undefined;
   }
 
+  const ownerElement =
+    ownerNode instanceof Element ? ownerNode : ownerNode.parentElement;
+  const themedAncestor = ownerElement?.closest<HTMLElement>(
+    ".vassist-theme-root",
+  );
+
+  if (themedAncestor) {
+    return themedAncestor;
+  }
+
   const rootNode = ownerNode.getRootNode();
   if (typeof ShadowRoot === "undefined" || !(rootNode instanceof ShadowRoot)) {
     return undefined;

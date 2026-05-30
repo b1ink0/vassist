@@ -19,6 +19,7 @@ import {
   setActiveEmbedHostId,
   setEmbedConfig as setRuntimeEmbedConfig,
 } from "./embed/runtimeStore";
+import { EmbedHostProvider } from "./embed/EmbedHostContext";
 import { AnimationProvider } from "./contexts/AnimationContext";
 import { useInitializeAppStore } from "./hooks/bootstrap/useInitializeAppStore";
 import { useInitializeConfigStore } from "./hooks/bootstrap/useInitializeConfigStore";
@@ -105,20 +106,22 @@ function StoreBootstrapInner({
   );
 
   return (
-    <div
-      className="vassist-theme-root"
-      data-vassist-host-id={embedConfig.mount.hostId}
-      data-vassist-theme-mode={themeRoot.mode}
-      data-vassist-surface-style={themeRoot.surfaceStyle}
-      style={themeRoot.style}
-      onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
-      onPointerDownCapture={() =>
-        setActiveEmbedHostId(embedConfig.mount.hostId)
-      }
-      onFocusCapture={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
-    >
-      {children}
-    </div>
+    <EmbedHostProvider embedConfig={embedConfig}>
+      <div
+        className="vassist-theme-root"
+        data-vassist-host-id={embedConfig.mount.hostId}
+        data-vassist-theme-mode={themeRoot.mode}
+        data-vassist-surface-style={themeRoot.surfaceStyle}
+        style={themeRoot.style}
+        onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+        onPointerDownCapture={() =>
+          setActiveEmbedHostId(embedConfig.mount.hostId)
+        }
+        onFocusCapture={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+      >
+        {children}
+      </div>
+    </EmbedHostProvider>
   );
 }
 

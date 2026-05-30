@@ -448,6 +448,7 @@ const UISettings = ({
         <h4 className="text-sm font-semibold text-white mb-3">AI Toolbar</h4>
 
         <SettingsRow
+          targetId="ui.aiToolbar.enabled"
           label="Enable AI Toolbar"
           description="Show toolbar when selecting text with Summarize, Translate, and Add to Chat actions"
         >
@@ -460,6 +461,7 @@ const UISettings = ({
         {uiConfig.enableAIToolbar !== false && (
           <>
             <SettingsRow
+              targetId="ui.aiToolbar.showOnInputFocus"
               className="mt-3"
               label="Show on Input Focus"
               description="Automatically show toolbar with dictation when clicking on any text input field or editable area"
@@ -473,6 +475,7 @@ const UISettings = ({
             </SettingsRow>
 
             <SettingsRow
+              targetId="ui.aiToolbar.showOnImageHover"
               className="mt-3"
               label="Show on Image Hover"
               description="Automatically show toolbar with image analysis actions when hovering over any image"

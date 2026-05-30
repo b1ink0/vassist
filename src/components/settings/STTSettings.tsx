@@ -325,7 +325,7 @@ const STTSettings = ({
 
       {/* Enable STT Toggle */}
       <Card variant="default">
-        <SettingsRow label="Enable Speech-to-Text">
+        <SettingsRow label="Enable Speech-to-Text" targetId="stt.enabled">
           <Toggle
             id="enable-stt"
             data-testid="toggle-enable-stt"
@@ -337,19 +337,18 @@ const STTSettings = ({
 
       {/* Provider Selection */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Provider
-        </label>
-        <Select
-          value={sttConfig.provider}
-          onChange={(e) => updateSTTConfig("provider", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          disabled={!sttConfig.enabled}
-          options={Object.entries(availableProviders).map(([key, value]) => ({
-            value,
-            label: key,
-          }))}
-        />
+        <SettingsRow label="Provider" targetId="stt.provider.select">
+          <Select
+            value={sttConfig.provider}
+            onChange={(e) => updateSTTConfig("provider", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            disabled={!sttConfig.enabled}
+            options={Object.entries(availableProviders).map(([key, value]) => ({
+              value,
+              label: key,
+            }))}
+          />
+        </SettingsRow>
         {isAndroid && (
           <p className="text-xs text-white/50">
             Using native Android STT via local Whisper model

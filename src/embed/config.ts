@@ -1,4 +1,5 @@
 import type { AIConfig, STTConfig, TTSConfig } from "../config/aiConfig";
+import type { UIConfig } from "../config/uiConfig";
 import type { StorageAdapterSelection } from "../storage/StorageAdapterRegistry";
 import type { ResourceLoaderSelection } from "../utils/resource-loader/types";
 
@@ -24,11 +25,21 @@ export type VAssistProviderMode =
   | "host-managed";
 export type VAssistStorageMode = "default" | "namespaced" | "memory" | "host";
 export type VAssistAssetPreset = "default" | "none" | "host";
-export type VAssistTransportMode = "builtin" | "openai-compatible" | "custom";
+export type VAssistTransportMode =
+  | "builtin"
+  | "openai-compatible"
+  | "custom"
+  | "host-bridge";
 export type VAssistThemeMode = "adaptive" | "light" | "dark";
 export type VAssistThemeSurfaceStyle = "glass" | "flat";
 export type VAssistStorageAdapter = StorageAdapterSelection;
 export type VAssistResourceLoader = ResourceLoaderSelection;
+export type VAssistPortalContainerId = "overlays" | "popovers" | "canvas";
+export type VAssistPortalContainerTarget =
+  | string
+  | HTMLElement
+  | ShadowRoot
+  | null;
 export type VAssistSettingsTabId =
   | "ui"
   | "3d"
@@ -47,6 +58,265 @@ export type VAssistFeatureName =
   | "liveAssistant3d"
   | "camera"
   | "screenShare";
+
+export type VAssistSettingsSubTabId =
+  | "llm.provider"
+  | "llm.routing"
+  | "llm.profiles";
+
+export type VAssistSettingsSectionId =
+  | "ui.appearance"
+  | "ui.aiToolbar"
+  | "ui.storage"
+  | "ui.developer"
+  | "llm.provider"
+  | "llm.routing"
+  | "llm.profiles"
+  | "tts.provider"
+  | "tts.remoteProfiles"
+  | "stt.provider"
+  | "stt.remoteProfiles"
+  | "ai-plus.translator"
+  | "ai-plus.languageDetector"
+  | "ai-plus.summarizer"
+  | "ai-plus.rewriter"
+  | "ai-plus.writer";
+
+export type VAssistSettingsFieldId =
+  | "ui.aiToolbar.enabled"
+  | "ui.aiToolbar.showOnInputFocus"
+  | "ui.aiToolbar.showOnImageHover"
+  | "llm.provider.select"
+  | "llm.openai.apiKey"
+  | "llm.openai.model"
+  | "llm.ollama.endpoint"
+  | "llm.ollama.apiKey"
+  | "llm.ollama.model"
+  | "llm.routing.visionModel"
+  | "llm.routing.routerModel"
+  | "tts.enabled"
+  | "tts.provider.select"
+  | "tts.openai.apiKey"
+  | "tts.openai.model"
+  | "tts.openaiCompatible.endpoint"
+  | "tts.openaiCompatible.apiKey"
+  | "tts.openaiCompatible.model"
+  | "tts.gptsovitsRemote.endpoint"
+  | "tts.gptsovitsRemote.model"
+  | "stt.enabled"
+  | "stt.provider.select"
+  | "stt.openai.apiKey"
+  | "stt.openai.model"
+  | "stt.openaiCompatible.endpoint"
+  | "stt.openaiCompatible.apiKey"
+  | "stt.openaiCompatible.model";
+
+export type VAssistSettingsTargetId =
+  | VAssistSettingsTabId
+  | VAssistSettingsSubTabId
+  | VAssistSettingsSectionId
+  | VAssistSettingsFieldId;
+
+export type VAssistToolbarActionId =
+  | "dictionary-define"
+  | "dictionary-synonyms"
+  | "dictionary-antonyms"
+  | "dictionary-pronunciation"
+  | "dictionary-examples"
+  | "rewrite-grammar"
+  | "rewrite-spelling"
+  | "rewrite-moreFormal"
+  | "rewrite-moreCasual"
+  | "rewrite-professional"
+  | "rewrite-shorter"
+  | "rewrite-longer"
+  | "rewrite-simplify"
+  | "rewrite-concise"
+  | "rewrite-clarity"
+  | "rewrite-custom"
+  | "write"
+  | "dictation"
+  | "summarize-tldr"
+  | "summarize-headline"
+  | "summarize-key-points"
+  | "summarize-teaser"
+  | "translate"
+  | "detect-language"
+  | "image-describe"
+  | "image-extract-text"
+  | "image-identify-objects"
+  | "add-to-chat";
+
+export type VAssistLabelId =
+  | "chat.emptyState.title"
+  | "chat.emptyState.description"
+  | "chat.action.settings"
+  | "chat.action.history"
+  | "chat.action.stop"
+  | "chat.action.new"
+  | "chat.action.close"
+  | "chat.action.hideCharacter"
+  | "chat.action.showCharacter"
+  | "chat.action.tempEnable"
+  | "chat.action.tempDisable"
+  | "chat.input.placeholder"
+  | "chat.input.send"
+  | "chat.input.close"
+  | "chat.input.closeVoiceMode"
+  | "history.title"
+  | "history.searchPlaceholder"
+  | "history.emptyState"
+  | "settings.title"
+  | "settings.managedByHost"
+  | "toolbar.dictionary"
+  | "toolbar.rewrite"
+  | "toolbar.write"
+  | "toolbar.dictate"
+  | "toolbar.summarize"
+  | "toolbar.translate"
+  | "toolbar.imageDescribe"
+  | "toolbar.addToChat"
+  | "toolbar.insert";
+
+export type VAssistBinaryLike = Blob | ArrayBuffer | Uint8Array | number[];
+
+export interface VAssistSettingsPolicy {
+  hidden?: VAssistSettingsTargetId[];
+  readOnly?: VAssistSettingsTargetId[];
+}
+
+export interface VAssistPortalContainersConfig {
+  overlays?: VAssistPortalContainerTarget;
+  popovers?: VAssistPortalContainerTarget;
+  canvas?: VAssistPortalContainerTarget;
+}
+
+export interface VAssistBrandingConfig {
+  appName?: string;
+  labelOverrides?: Partial<Record<VAssistLabelId, string>>;
+  iconOverrides?: Record<string, string>;
+}
+
+export interface VAssistBridgeAIMessage {
+  role: string;
+  content: unknown;
+  [key: string]: unknown;
+}
+
+export interface VAssistBridgeAIResult {
+  success: boolean;
+  response: string | null;
+  cancelled?: boolean;
+  error?: unknown;
+}
+
+export interface VAssistProviderBridgeAI {
+  configure?: (config: Record<string, unknown>) => Promise<unknown> | unknown;
+  isConfigured?: () => Promise<boolean> | boolean;
+  getCurrentProvider?: () => Promise<string | null> | string | null;
+  sendMessage: (request: {
+    messages: VAssistBridgeAIMessage[];
+    options?: Record<string, unknown>;
+    signal?: AbortSignal | null;
+    onStream?: ((chunk: string) => void) | null;
+  }) => Promise<VAssistBridgeAIResult>;
+  listModels?: (config: {
+    provider: "openai" | "ollama" | "android-local" | "desktop-local";
+    endpoint?: string;
+    apiKey?: string;
+  }) => Promise<{ models: string[]; error?: string }>;
+  testConnection?: () => Promise<boolean> | boolean;
+  abortRequest?: () => Promise<boolean> | boolean;
+}
+
+export interface VAssistProviderBridgeTTS {
+  configure?: (config: Record<string, unknown>) => Promise<unknown> | unknown;
+  isConfigured?: () => Promise<boolean> | boolean;
+  getCurrentProvider?: () => Promise<string | null> | string | null;
+  generateSpeech: (request: {
+    text: string;
+    generateLipSync?: boolean;
+  }) => Promise<{
+    audio: VAssistBinaryLike;
+    mimeType?: string;
+    bvmdUrl?: string | null;
+  } | null>;
+  testConnection?: (request?: { text?: string }) => Promise<boolean> | boolean;
+}
+
+export interface VAssistProviderBridgeSTT {
+  configure?: (config: Record<string, unknown>) => Promise<unknown> | unknown;
+  isConfigured?: () => Promise<boolean> | boolean;
+  transcribeAudio: (request: {
+    audio: VAssistBinaryLike;
+    mimeType?: string;
+  }) => Promise<string>;
+  testRecording?: (request?: {
+    duration?: number;
+    deviceId?: string | null;
+  }) => Promise<string | boolean> | string | boolean;
+}
+
+export interface VAssistProviderBridge {
+  ai?: VAssistProviderBridgeAI;
+  tts?: VAssistProviderBridgeTTS;
+  stt?: VAssistProviderBridgeSTT;
+}
+
+export interface VAssistOpenSettingsOptions {
+  tab?: VAssistSettingsTabId;
+  subTab?: VAssistSettingsSubTabId;
+  target?: VAssistSettingsTargetId;
+}
+
+export interface VAssistSetDraftOptions {
+  append?: boolean;
+  focus?: boolean;
+}
+
+export interface VAssistSendMessageInput {
+  content: string;
+  images?: string[];
+  audios?: string[];
+}
+
+export interface VAssistTriggerToolbarActionOptions {
+  prompt?: string;
+  targetLanguage?: string | null;
+  autoDetectSourceLanguage?: boolean;
+}
+
+export interface VAssistRuntimeSnapshotMessage {
+  id: string;
+  role: string;
+  content: string;
+  images?: string[];
+  audios?: string[];
+}
+
+export interface VAssistRuntimeSnapshot {
+  hostId: string;
+  shellMode: VAssistShellMode;
+  draft: string;
+  currentChatId: string | null;
+  isTempChat: boolean;
+  isProcessing: boolean;
+  isSpeaking: boolean;
+  isVoiceMode: boolean;
+  pendingDropData: boolean;
+  panels: {
+    chatInputOpen: boolean;
+    chatContainerOpen: boolean;
+    settingsOpen: boolean;
+    historyOpen: boolean;
+  };
+  messages: VAssistRuntimeSnapshotMessage[];
+  embedConfig: ResolvedVAssistEmbedConfig;
+  uiConfig: UIConfig;
+  aiConfig: AIConfig;
+  ttsConfig: TTSConfig;
+  sttConfig: STTConfig;
+}
 
 export interface VAssistMessageEventPayload {
   messageId: string;
@@ -97,6 +367,8 @@ export interface VAssistThemeEffects {
 export interface VAssistThemeConfig {
   mode?: VAssistThemeMode;
   surfaceStyle?: VAssistThemeSurfaceStyle;
+  fontFamily?: string;
+  monoFontFamily?: string;
   tokens?: VAssistThemeTokens;
   inverseTokens?: VAssistThemeTokens;
   effects?: VAssistThemeEffects;
@@ -109,6 +381,7 @@ export interface VAssistEmbedConfig {
     shadowRoot?: "open" | "closed" | false;
     autoInject?: boolean;
     runtimeIsolation?: VAssistRuntimeIsolationMode;
+    portalContainers?: VAssistPortalContainersConfig;
   };
   shell?: {
     mode?: VAssistShellMode;
@@ -120,6 +393,7 @@ export interface VAssistEmbedConfig {
     hiddenTabs?: VAssistSettingsTabId[];
     readOnlyTabs?: VAssistSettingsTabId[];
     hiddenFields?: string[];
+    policy?: VAssistSettingsPolicy;
   };
   setup?: {
     mode?: VAssistSetupMode;
@@ -148,7 +422,9 @@ export interface VAssistEmbedConfig {
   theme?: VAssistThemeConfig;
   transport?: {
     mode?: VAssistTransportMode;
+    bridge?: VAssistProviderBridge;
   };
+  branding?: VAssistBrandingConfig;
   hooks?: VAssistEmbedHooks;
 }
 
@@ -159,6 +435,7 @@ export interface ResolvedVAssistEmbedConfig {
     shadowRoot: "open" | "closed" | false;
     autoInject: boolean;
     runtimeIsolation: VAssistRuntimeIsolationMode;
+    portalContainers: VAssistPortalContainersConfig;
   };
   shell: {
     mode: VAssistShellMode;
@@ -170,6 +447,10 @@ export interface ResolvedVAssistEmbedConfig {
     hiddenTabs: VAssistSettingsTabId[];
     readOnlyTabs: VAssistSettingsTabId[];
     hiddenFields: string[];
+    policy: {
+      hidden: VAssistSettingsTargetId[];
+      readOnly: VAssistSettingsTargetId[];
+    };
   };
   setup: {
     mode: VAssistSetupMode;
@@ -198,6 +479,8 @@ export interface ResolvedVAssistEmbedConfig {
   theme: {
     mode: VAssistThemeMode;
     surfaceStyle: VAssistThemeSurfaceStyle;
+    fontFamily: string;
+    monoFontFamily: string;
     tokens: VAssistThemeTokens;
     inverseTokens: VAssistThemeTokens;
     effects: {
@@ -209,7 +492,9 @@ export interface ResolvedVAssistEmbedConfig {
   };
   transport: {
     mode: VAssistTransportMode;
+    bridge?: VAssistProviderBridge;
   };
+  branding: VAssistBrandingConfig;
   hooks: VAssistEmbedHooks;
 }
 
@@ -228,6 +513,15 @@ export interface VAssistEmbedApi {
     hostId?: string,
   ) => HTMLElement | null;
   openChat: () => void;
+  openSettings: (options?: VAssistOpenSettingsOptions) => void;
+  openHistory: () => void;
+  setDraftInput: (value: string, options?: VAssistSetDraftOptions) => void;
+  sendMessage: (input: VAssistSendMessageInput) => void;
+  triggerToolbarAction: (
+    action: VAssistToolbarActionId,
+    options?: VAssistTriggerToolbarActionOptions,
+  ) => void;
+  getRuntimeSnapshot: () => VAssistRuntimeSnapshot | null;
   closeChat: () => void;
   toggleVisibility: () => void;
   resetSession: () => void;
@@ -237,6 +531,15 @@ export interface VAssistEmbedElementHandle extends HTMLElement {
   setConfig: (config: VAssistEmbedConfig) => void;
   getConfig: () => ResolvedVAssistEmbedConfig;
   openChat: () => void;
+  openSettings: (options?: VAssistOpenSettingsOptions) => void;
+  openHistory: () => void;
+  setDraftInput: (value: string, options?: VAssistSetDraftOptions) => void;
+  sendMessage: (input: VAssistSendMessageInput) => void;
+  triggerToolbarAction: (
+    action: VAssistToolbarActionId,
+    options?: VAssistTriggerToolbarActionOptions,
+  ) => void;
+  getRuntimeSnapshot: () => VAssistRuntimeSnapshot | null;
   closeChat: () => void;
   toggleVisibility: () => void;
   resetSession: () => void;
@@ -250,6 +553,68 @@ export const VASSIST_SETTINGS_TABS: readonly VAssistSettingsTabId[] = [
   "tts",
   "stt",
   "ai-plus",
+];
+
+export const VASSIST_SETTINGS_SUB_TABS: readonly VAssistSettingsSubTabId[] = [
+  "llm.provider",
+  "llm.routing",
+  "llm.profiles",
+];
+
+export const VASSIST_SETTINGS_SECTIONS: readonly VAssistSettingsSectionId[] = [
+  "ui.appearance",
+  "ui.aiToolbar",
+  "ui.storage",
+  "ui.developer",
+  "llm.provider",
+  "llm.routing",
+  "llm.profiles",
+  "tts.provider",
+  "tts.remoteProfiles",
+  "stt.provider",
+  "stt.remoteProfiles",
+  "ai-plus.translator",
+  "ai-plus.languageDetector",
+  "ai-plus.summarizer",
+  "ai-plus.rewriter",
+  "ai-plus.writer",
+];
+
+export const VASSIST_SETTINGS_FIELDS: readonly VAssistSettingsFieldId[] = [
+  "ui.aiToolbar.enabled",
+  "ui.aiToolbar.showOnInputFocus",
+  "ui.aiToolbar.showOnImageHover",
+  "llm.provider.select",
+  "llm.openai.apiKey",
+  "llm.openai.model",
+  "llm.ollama.endpoint",
+  "llm.ollama.apiKey",
+  "llm.ollama.model",
+  "llm.routing.visionModel",
+  "llm.routing.routerModel",
+  "tts.enabled",
+  "tts.provider.select",
+  "tts.openai.apiKey",
+  "tts.openai.model",
+  "tts.openaiCompatible.endpoint",
+  "tts.openaiCompatible.apiKey",
+  "tts.openaiCompatible.model",
+  "tts.gptsovitsRemote.endpoint",
+  "tts.gptsovitsRemote.model",
+  "stt.enabled",
+  "stt.provider.select",
+  "stt.openai.apiKey",
+  "stt.openai.model",
+  "stt.openaiCompatible.endpoint",
+  "stt.openaiCompatible.apiKey",
+  "stt.openaiCompatible.model",
+];
+
+export const VASSIST_SETTINGS_TARGETS: readonly VAssistSettingsTargetId[] = [
+  ...VASSIST_SETTINGS_TABS,
+  ...VASSIST_SETTINGS_SUB_TABS,
+  ...VASSIST_SETTINGS_SECTIONS,
+  ...VASSIST_SETTINGS_FIELDS,
 ];
 
 const SHELL_FEATURE_DEFAULTS: Record<
@@ -393,6 +758,22 @@ const uniqueStrings = <T extends string>(
   return nextValues;
 };
 
+const DEFAULT_VASSIST_FONT_FAMILY =
+  "system-ui, Avenir, Helvetica, Arial, sans-serif";
+const DEFAULT_VASSIST_MONO_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+
+const normalizeOptionalFontFamily = (
+  value: string | undefined,
+): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue || undefined;
+};
+
 export function mergeDeep<T>(base: T, override?: DeepPartial<T> | null): T {
   if (override === undefined || override === null) {
     return cloneConfigValue(base);
@@ -476,6 +857,14 @@ export function normalizeVAssistEmbedConfig(
     VASSIST_SETTINGS_TABS,
   );
   const hiddenFields = uniqueStrings(config.settings?.hiddenFields);
+  const policyHidden = uniqueStrings(
+    config.settings?.policy?.hidden,
+    VASSIST_SETTINGS_TARGETS,
+  );
+  const policyReadOnly = uniqueStrings(
+    config.settings?.policy?.readOnly,
+    VASSIST_SETTINGS_TARGETS,
+  );
   const assetBaseUrl = normalizeOptionalEmbedAssetBaseUrl(
     config.assets?.assetBaseUrl,
   );
@@ -484,6 +873,12 @@ export function normalizeVAssistEmbedConfig(
   const motionPack = normalizeOptionalEmbedAssetValue(
     config.assets?.motionPack,
   );
+  const fontFamily =
+    normalizeOptionalFontFamily(config.theme?.fontFamily) ??
+    DEFAULT_VASSIST_FONT_FAMILY;
+  const monoFontFamily =
+    normalizeOptionalFontFamily(config.theme?.monoFontFamily) ??
+    DEFAULT_VASSIST_MONO_FONT_FAMILY;
 
   if (!features.liveAssistant3d && !hiddenTabs.includes("3d")) {
     hiddenTabs.push("3d");
@@ -493,12 +888,25 @@ export function normalizeVAssistEmbedConfig(
   const lockProviderSelection =
     config.providers?.lockProviderSelection ??
     providerMode !== "user-configurable";
+  const transportMode =
+    config.transport?.mode ??
+    (config.transport?.bridge ? "host-bridge" : "builtin");
 
   if (lockProviderSelection) {
     for (const tabId of ["llm", "tts", "stt"] as const) {
       if (!hiddenTabs.includes(tabId) && !readOnlyTabs.includes(tabId)) {
         readOnlyTabs.push(tabId);
       }
+    }
+  }
+
+  for (const legacyFieldId of hiddenFields) {
+    const typedFieldId = legacyFieldId as VAssistSettingsTargetId;
+    if (
+      VASSIST_SETTINGS_TARGETS.includes(typedFieldId) &&
+      !policyHidden.includes(typedFieldId)
+    ) {
+      policyHidden.push(typedFieldId);
     }
   }
 
@@ -511,6 +919,7 @@ export function normalizeVAssistEmbedConfig(
       shadowRoot: config.mount?.shadowRoot ?? "open",
       autoInject: config.mount?.autoInject ?? true,
       runtimeIsolation: config.mount?.runtimeIsolation ?? "shadow-root",
+      portalContainers: cloneConfigValue(config.mount?.portalContainers ?? {}),
     },
     shell: {
       mode: shellMode,
@@ -523,6 +932,10 @@ export function normalizeVAssistEmbedConfig(
       hiddenTabs,
       readOnlyTabs,
       hiddenFields,
+      policy: {
+        hidden: policyHidden,
+        readOnly: policyReadOnly,
+      },
     },
     setup: {
       mode: setupMode,
@@ -559,6 +972,8 @@ export function normalizeVAssistEmbedConfig(
     theme: {
       mode: config.theme?.mode ?? "adaptive",
       surfaceStyle: config.theme?.surfaceStyle ?? "glass",
+      fontFamily,
+      monoFontFamily,
       tokens: cloneConfigValue(config.theme?.tokens ?? {}),
       inverseTokens: cloneConfigValue(config.theme?.inverseTokens ?? {}),
       effects: {
@@ -574,8 +989,12 @@ export function normalizeVAssistEmbedConfig(
       },
     },
     transport: {
-      mode: config.transport?.mode ?? "builtin",
+      mode: transportMode,
+      ...(config.transport?.bridge !== undefined
+        ? { bridge: config.transport.bridge }
+        : {}),
     },
+    branding: cloneConfigValue(config.branding ?? {}),
     hooks: config.hooks ?? {},
   };
 }
@@ -584,6 +1003,10 @@ export function shouldSkipSetupForEmbed(
   config: ResolvedVAssistEmbedConfig,
 ): boolean {
   if (config.setup.mode === "hidden" || config.setup.mode === "custom") {
+    return true;
+  }
+
+  if (config.transport.mode === "host-bridge" && config.transport.bridge) {
     return true;
   }
 
@@ -599,6 +1022,7 @@ export function hasManagedProviderConfig(
   return !!(
     config.providers.ai ||
     config.providers.tts ||
-    config.providers.stt
+    config.providers.stt ||
+    config.transport.bridge
   );
 }

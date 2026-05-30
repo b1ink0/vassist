@@ -20,6 +20,10 @@ import {
   type AIConfig,
   type AIRemoteProviderProfile,
 } from "../../config/aiConfig";
+import type {
+  VAssistSettingsSubTabId,
+  VAssistSettingsTargetId,
+} from "../../embed/config";
 import { PromptConfig } from "../../config/promptConfig";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import { useAndroidApi } from "../../hooks/useAndroidStore";
@@ -128,6 +132,10 @@ interface LLMSettingsProps {
   hasChromeAI?: boolean;
   onRequestDeleteLLMModel?: ((modelName: string) => void) | undefined;
   refreshTrigger?: unknown;
+  requestedSubTab?: VAssistSettingsSubTabId | null;
+  onActiveTargetChange?:
+    | ((target: VAssistSettingsTargetId | null) => void)
+    | undefined;
 }
 
 type LLMSubTabId = "provider" | "routing" | "profiles";
@@ -1408,6 +1416,8 @@ const LLMSettings = ({
   hasChromeAI = false,
   onRequestDeleteLLMModel,
   refreshTrigger = 0,
+  requestedSubTab = null,
+  onActiveTargetChange,
 }: LLMSettingsProps) => {
   const chromeAiStatus = useChromeAIStatus();
   const { checkChromeAIAvailability, startChromeAIDownload } =
@@ -1606,6 +1616,14 @@ const LLMSettings = ({
 
   const llmSubTabOrder: LLMSubTabId[] = ["provider", "routing", "profiles"];
   const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>("provider");
+  const requestedLocalSubTab =
+    requestedSubTab === "llm.routing"
+      ? "routing"
+      : requestedSubTab === "llm.profiles"
+        ? "profiles"
+        : requestedSubTab === "llm.provider"
+          ? "provider"
+          : null;
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({
     left: 0,
     width: 0,
@@ -1625,6 +1643,18 @@ const LLMSettings = ({
     const { offsetLeft, offsetWidth } = activeTabElement;
     setSubTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
   }, [activeSubTab]);
+
+  useEffect(() => {
+    if (!requestedLocalSubTab || requestedLocalSubTab === activeSubTab) {
+      return;
+    }
+
+    setActiveSubTab(requestedLocalSubTab);
+  }, [activeSubTab, requestedLocalSubTab]);
+
+  useEffect(() => {
+    onActiveTargetChange?.(`llm.${activeSubTab}` as VAssistSettingsSubTabId);
+  }, [activeSubTab, onActiveTargetChange]);
 
   const renderProviderSettings = () => (
     <>
@@ -1676,18 +1706,17 @@ const LLMSettings = ({
       )}
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Provider
-        </label>
-        <Select
-          value={aiConfig.provider}
-          onChange={(e) => updateAIConfig("provider", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          options={Object.entries(availableProviders).map(([key, value]) => ({
-            value,
-            label: PROVIDER_LABELS[value] || key,
-          }))}
-        />
+        <SettingsRow label="Provider" targetId="llm.provider.select">
+          <Select
+            value={aiConfig.provider}
+            onChange={(e) => updateAIConfig("provider", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            options={Object.entries(availableProviders).map(([key, value]) => ({
+              value,
+              label: PROVIDER_LABELS[value] || key,
+            }))}
+          />
+        </SettingsRow>
       </div>
 
       {aiConfig.provider === "chrome-ai" && !hasChromeAI && (
@@ -1706,10 +1735,7 @@ const LLMSettings = ({
             isLightBackground={isLightBackground}
             provider="openai"
           />
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              API Key
-            </label>
+          <SettingsRow label="API Key" targetId="llm.openai.apiKey">
             <Input
               type="password"
               value={aiConfig.openai.apiKey}
@@ -1718,11 +1744,8 @@ const LLMSettings = ({
               variant={isLightBackground ? "dark" : "default"}
               className="w-full"
             />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Model
-            </label>
+          </SettingsRow>
+          <SettingsRow label="Model" targetId="llm.openai.model">
             <RemoteModelPicker
               value={aiConfig.openai.model}
               onChange={(value) => updateAIConfig("openai.model", value)}
@@ -1731,7 +1754,7 @@ const LLMSettings = ({
               apiKey={aiConfig.openai.apiKey}
               isLightBackground={isLightBackground}
             />
-          </div>
+          </SettingsRow>
           <ImageSupportToggle
             providerKey="openai"
             aiConfig={aiConfig}
@@ -1753,10 +1776,7 @@ const LLMSettings = ({
             isLightBackground={isLightBackground}
             provider="ollama"
           />
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Endpoint URL
-            </label>
+          <SettingsRow label="Endpoint URL" targetId="llm.ollama.endpoint">
             <Input
               type="text"
               value={aiConfig.ollama?.endpoint ?? ""}
@@ -1767,11 +1787,8 @@ const LLMSettings = ({
               variant={isLightBackground ? "dark" : "default"}
               className="w-full"
             />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Model
-            </label>
+          </SettingsRow>
+          <SettingsRow label="Model" targetId="llm.ollama.model">
             <RemoteModelPicker
               value={aiConfig.ollama?.model ?? ""}
               onChange={(value) => updateAIConfig("ollama.model", value)}
@@ -1780,7 +1797,7 @@ const LLMSettings = ({
               placeholder="llama2"
               isLightBackground={isLightBackground}
             />
-          </div>
+          </SettingsRow>
           <ImageSupportToggle
             providerKey="ollama"
             aiConfig={aiConfig}

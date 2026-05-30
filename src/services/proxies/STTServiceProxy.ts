@@ -65,12 +65,46 @@ class STTServiceProxy extends ServiceProxy {
     this.onRecordingStop = null;
   }
 
+  private isUsingBridgeTranscription(): boolean {
+    return this.isExtension || !!this.getHostTransportBridge()?.stt;
+  }
+
+  private async transcribeCapturedAudio(
+    audioData: number[],
+    mimeType: string,
+  ): Promise<string> {
+    const hostBridge = this.getHostTransportBridge()?.stt;
+    if (hostBridge) {
+      return await hostBridge.transcribeAudio({
+        audio: audioData,
+        mimeType,
+      });
+    }
+
+    const bridge = await this.waitForBridge();
+    if (!bridge) {
+      throw new Error("STTServiceProxy: Bridge not available");
+    }
+
+    const response = (await bridge.sendMessage(
+      MessageTypes.STT_TRANSCRIBE_AUDIO,
+      { audioBuffer: audioData, mimeType },
+      { timeout: 60000 },
+    )) as STTBridgeResponse;
+
+    return response.text || "";
+  }
+
   /**
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
   async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
+
+    if (this.getHostTransportBridge()?.stt) {
+      return;
+    }
 
     const configured = await this.isConfigured();
     if (configured) return;
@@ -98,6 +132,12 @@ class STTServiceProxy extends ServiceProxy {
    * @param {Object} config - STT configuration
    */
   async configure(config: Record<string, unknown>): Promise<boolean> {
+    const hostBridge = this.getHostTransportBridge()?.stt;
+    if (hostBridge) {
+      await hostBridge.configure?.(config);
+      return true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error("STTServiceProxy: Bridge not available");
@@ -116,6 +156,15 @@ class STTServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} True if ready
    */
   async isConfigured(): Promise<boolean> {
+    const hostBridge = this.getHostTransportBridge()?.stt;
+    if (hostBridge) {
+      if (!hostBridge.isConfigured) {
+        return true;
+      }
+
+      return (await hostBridge.isConfigured()) === true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
@@ -138,7 +187,7 @@ class STTServiceProxy extends ServiceProxy {
    * @returns {boolean} True if recording
    */
   isCurrentlyRecording(): boolean {
-    if (this.isExtension) {
+    if (this.isUsingBridgeTranscription()) {
       // In extension mode, we track locally
       return this._isRecording || false;
     } else {
@@ -154,7 +203,7 @@ class STTServiceProxy extends ServiceProxy {
   async startRecording(deviceId: string | null = null): Promise<boolean> {
     await this.ensureConfigured();
 
-    if (this.isExtension) {
+    if (this.isUsingBridgeTranscription()) {
       // In extension mode, recording happens in content script
       // We use MediaRecorder directly here
       if (this._isRecording) {
@@ -208,20 +257,14 @@ class STTServiceProxy extends ServiceProxy {
             // Cleanup local resources
             this.cleanup();
 
-            // Send to background for transcription
-            const bridge = await this.waitForBridge();
-            if (!bridge)
-              throw new Error("STTServiceProxy: Bridge not available");
-
-            const response = (await bridge.sendMessage(
-              MessageTypes.STT_TRANSCRIBE_AUDIO,
-              { audioBuffer: audioData, mimeType },
-              { timeout: 60000 },
-            )) as STTBridgeResponse;
+            const text = await this.transcribeCapturedAudio(
+              audioData,
+              mimeType,
+            );
 
             // Call transcription callback
             if (this.onTranscription) {
-              this.onTranscription(response.text || "");
+              this.onTranscription(text);
             }
 
             // Call stop callback
@@ -270,7 +313,7 @@ class STTServiceProxy extends ServiceProxy {
    * Stop recording audio
    */
   stopRecording(): void {
-    if (this.isExtension) {
+    if (this.isUsingBridgeTranscription()) {
       if (!this._isRecording || !this.mediaRecorder) {
         Logger.warn("STTServiceProxy", "Not recording");
         return;
@@ -290,6 +333,17 @@ class STTServiceProxy extends ServiceProxy {
    */
   async transcribeAudio(audioBlob: Blob): Promise<string> {
     await this.ensureConfigured();
+
+    const hostBridge = this.getHostTransportBridge()?.stt;
+    if (hostBridge) {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioData = Array.from(new Uint8Array(arrayBuffer));
+      const mimeType = audioBlob.type || "audio/webm";
+      return await hostBridge.transcribeAudio({
+        audio: audioData,
+        mimeType,
+      });
+    }
 
     if (this.isExtension) {
       // Convert blob to ArrayBuffer, then to plain Array (like TTS does)
@@ -326,7 +380,7 @@ class STTServiceProxy extends ServiceProxy {
     duration = 3,
     deviceId: string | null = null,
   ): Promise<string> {
-    if (this.isExtension) {
+    if (this.isUsingBridgeTranscription()) {
       return new Promise<string>((resolve, reject) => {
         const originalTranscription = this.onTranscription;
         const originalError = this.onError;

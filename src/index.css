@@ -82,6 +82,10 @@
 @import "./styles/streaming-animations.css";
 
 :root {
+  --vassist-font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --vassist-mono-font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -143,6 +147,31 @@
 
 .vassist-theme-root {
   color: var(--vassist-text-primary);
+  font-family: var(
+    --vassist-font-family,
+    system-ui,
+    Avenir,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+}
+
+.vassist-theme-root code,
+.vassist-theme-root pre,
+.vassist-theme-root kbd,
+.vassist-theme-root samp {
+  font-family: var(
+    --vassist-mono-font-family,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
 }
 
 .vassist-card-surface {
@@ -280,6 +309,14 @@
 
 button {
   cursor: pointer;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
 }
 
 button:disabled {

@@ -1,6 +1,9 @@
 import React from "react";
 import { iconMap } from "./iconMap";
 import { getIconColor } from "./iconColors";
+import { getBrandedIconUrl } from "../../embed/branding";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/LoggerService";
 
@@ -38,13 +41,9 @@ const Icon = ({
   style = {},
   ...props
 }: IconProps) => {
+  const { embedConfig, hostId } = useEmbedHost();
+  const reactCustomizations = useVAssistReactCustomizations(hostId);
   const uiConfig = useUIConfig();
-  const IconComponent = iconMap[name as IconName];
-
-  if (!IconComponent) {
-    Logger.warn("other", `Icon "${name}" not found in iconMap`);
-    return null;
-  }
 
   const enableColored = Boolean(uiConfig?.enableColoredIcons);
   const toolbarOnly = Boolean(uiConfig?.enableColoredIconsToolbarOnly);
@@ -58,19 +57,50 @@ const Icon = ({
   const finalClassName = hasCustomColor
     ? `icon icon-${name} ${className}`
     : `icon icon-${name} ${iconColor} ${className}`;
+  const mergedStyle = {
+    width: size,
+    height: size,
+    display: "block",
+    flexShrink: 0,
+    ...style,
+  };
+  const customRenderer = reactCustomizations.iconRenderers?.[name];
+
+  if (customRenderer) {
+    return (
+      <>
+        {customRenderer({
+          name,
+          size,
+          className: finalClassName,
+          style: mergedStyle,
+        })}
+      </>
+    );
+  }
+
+  const brandedIconUrl = getBrandedIconUrl(embedConfig, name);
+  if (brandedIconUrl) {
+    return (
+      <img
+        src={brandedIconUrl}
+        alt=""
+        aria-hidden="true"
+        className={finalClassName}
+        style={mergedStyle}
+      />
+    );
+  }
+
+  const IconComponent = iconMap[name as IconName];
+
+  if (!IconComponent) {
+    Logger.warn("other", `Icon "${name}" not found in iconMap`);
+    return null;
+  }
 
   return (
-    <IconComponent
-      className={finalClassName}
-      style={{
-        width: size,
-        height: size,
-        display: "block",
-        flexShrink: 0,
-        ...style,
-      }}
-      {...props}
-    />
+    <IconComponent className={finalClassName} style={mergedStyle} {...props} />
   );
 };
 

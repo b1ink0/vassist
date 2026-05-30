@@ -4,9 +4,14 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import type {
+  VAssistOpenSettingsOptions,
   ResolvedVAssistEmbedConfig,
   VAssistSettingsTabId,
+  VAssistSettingsTargetId,
 } from "../embed/config";
+import { getBrandedLabel } from "../embed/branding";
+import { useEmbedHost } from "../embed/EmbedHostContext";
+import { useVAssistReactCustomizations } from "../embed/reactHostCustomizations";
 import { Icon } from "./icons";
 import { cn } from "../utils/cn";
 import TabBar from "./ui/TabBar";
@@ -44,6 +49,8 @@ interface SettingsPanelProps {
   onClose: () => void;
   isLightBackground: boolean;
   embedConfig: ResolvedVAssistEmbedConfig;
+  requestedView?: VAssistOpenSettingsOptions | null;
+  onActiveTargetChange?: (target: VAssistSettingsTargetId | null) => void;
   animationClass?: string;
   onRequestDeleteModelDialog?: (modelId: string) => void;
   onRequestDeleteMotionDialog?: (motionId: string) => void;
@@ -58,6 +65,46 @@ interface SettingsPanelProps {
   onRequestSettingsErrorDialog?: (message: string) => void;
   refreshTrigger: number;
 }
+
+const getSettingsTabFromTarget = (
+  target?: VAssistSettingsTargetId | null,
+): VAssistSettingsTabId | null => {
+  if (!target) {
+    return null;
+  }
+
+  if (
+    target === "ui" ||
+    target === "3d" ||
+    target === "llm" ||
+    target === "tts" ||
+    target === "stt" ||
+    target === "ai-plus"
+  ) {
+    return target;
+  }
+
+  if (target.startsWith("ui.")) {
+    return "ui";
+  }
+  if (target.startsWith("llm.")) {
+    return "llm";
+  }
+  if (target.startsWith("tts.")) {
+    return "tts";
+  }
+  if (target.startsWith("stt.")) {
+    return "stt";
+  }
+  if (target.startsWith("ai-plus.")) {
+    return "ai-plus";
+  }
+  if (target.startsWith("3d.")) {
+    return "3d";
+  }
+
+  return null;
+};
 
 /**
  * Settings panel with configuration options for UI, LLM, TTS, STT, and AI features.
@@ -78,6 +125,8 @@ const SettingsPanel = ({
   onClose,
   isLightBackground,
   embedConfig,
+  requestedView = null,
+  onActiveTargetChange,
   animationClass = "",
   onRequestDeleteModelDialog,
   onRequestDeleteMotionDialog,
@@ -89,7 +138,11 @@ const SettingsPanel = ({
   onRequestSettingsErrorDialog,
   refreshTrigger,
 }: SettingsPanelProps) => {
+  const { hostId } = useEmbedHost();
+  const reactCustomizations = useVAssistReactCustomizations(hostId);
   const [activeTab, setActiveTab] = useState<SettingsTabId>("ui");
+  const [activeNestedTarget, setActiveNestedTarget] =
+    useState<VAssistSettingsTargetId | null>(null);
   const [hasChromeAI, setHasChromeAI] = useState(false);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({
     left: 0,
@@ -198,6 +251,12 @@ const SettingsPanel = ({
               hasChromeAI={hasChromeAI}
               onRequestDeleteLLMModel={onRequestDeleteLLMModel}
               refreshTrigger={refreshTrigger}
+              requestedSubTab={
+                activeTab === "llm" ? (requestedView?.subTab ?? null) : null
+              }
+              onActiveTargetChange={
+                activeTab === "llm" ? setActiveNestedTarget : undefined
+              }
             />
           ),
         },
@@ -235,6 +294,7 @@ const SettingsPanel = ({
         },
       ].filter((tab) => !embedConfig.settings.hiddenTabs.includes(tab.id)),
     [
+      activeTab,
       embedConfig.settings.hiddenTabs,
       hasChromeAI,
       isLightBackground,
@@ -246,6 +306,7 @@ const SettingsPanel = ({
       onRequestDeleteVoiceDialog,
       onRequestResetSetupDialog,
       onRequestSettingsErrorDialog,
+      requestedView?.subTab,
       refreshTrigger,
     ],
   );
@@ -261,6 +322,47 @@ const SettingsPanel = ({
 
     setActiveTab(visibleTabs[0]?.id ?? "ui");
   }, [activeTab, visibleTabs]);
+
+  useEffect(() => {
+    const requestedTab =
+      requestedView?.tab ?? getSettingsTabFromTarget(requestedView?.target);
+
+    if (!requestedTab) {
+      return;
+    }
+
+    if (!visibleTabs.some((tab) => tab.id === requestedTab)) {
+      return;
+    }
+
+    setActiveTab(requestedTab);
+  }, [requestedView, visibleTabs]);
+
+  useEffect(() => {
+    if (activeTab !== "llm") {
+      setActiveNestedTarget(null);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    onActiveTargetChange?.(activeNestedTarget ?? activeTab);
+  }, [activeNestedTarget, activeTab, onActiveTargetChange]);
+
+  const settingsTitle = getBrandedLabel(
+    embedConfig,
+    "settings.title",
+    "Settings",
+  );
+  const managedByHostLabel = getBrandedLabel(
+    embedConfig,
+    "settings.managedByHost",
+    "Settings are managed by the host application.",
+  );
+  const settingsExtension = reactCustomizations.renderSettingsExtension?.({
+    hostId,
+    activeTab,
+    activeTarget: activeNestedTarget ?? activeTab,
+  });
 
   const getActiveStatus = () => {
     if (activeTab === "ui") {
@@ -383,7 +485,7 @@ const SettingsPanel = ({
       <div className="flex justify-between items-center px-4 md:px-6 py-2 md:py-4 border-b border-white/20">
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-white shrink-0">
-            Settings
+            {settingsTitle}
           </h2>
 
           {activeStatus && (
@@ -445,7 +547,7 @@ const SettingsPanel = ({
       <div className="flex-1 overflow-hidden relative">
         {visibleTabs.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/70">
-            Settings are managed by the host application.
+            {managedByHostLabel}
           </div>
         ) : (
           <div
@@ -475,6 +577,12 @@ const SettingsPanel = ({
           </div>
         )}
       </div>
+
+      {settingsExtension ? (
+        <div className="border-t border-white/10 px-4 py-3">
+          {settingsExtension}
+        </div>
+      ) : null}
     </div>
   );
 };

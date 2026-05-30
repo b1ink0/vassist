@@ -2,7 +2,20 @@
  * @fileoverview Floating AI toolbar for text and image operations.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useEffectEvent,
+} from "react";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import {
+  getHostCommandEventName,
+  type VAssistToolbarActionEventDetail,
+} from "../../embed/hostCommands";
+import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { cn } from "../../utils/cn";
 import { useToolingActions } from "../../hooks/app/useTooling";
 import { useAIConfig } from "../../hooks/config/useConfigAI";
@@ -96,6 +109,8 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const AIToolbar = () => {
+  const { hostId } = useEmbedHost();
+  const reactCustomizations = useVAssistReactCustomizations(hostId);
   const uiConfig = useUIConfig();
   const aiConfig = useAIConfig();
   const ttsConfig = useTTSConfig();
@@ -270,6 +285,9 @@ const AIToolbar = () => {
       isVisible;
     return flag;
   }, [hasResult, hasError, isLoading, showWriterInput, action, isVisible]);
+  const customToolbarActions = reactCustomizations.renderToolbarActions?.({
+    hostId,
+  });
 
   /**
    * Calculate if result panel should be above or below toolbar based on available space
@@ -2749,6 +2767,131 @@ const AIToolbar = () => {
     setIsVisible(false);
   };
 
+  const handleToolbarActionCommand = useEffectEvent(
+    (detail: VAssistToolbarActionEventDetail | null) => {
+      if (!detail?.action) {
+        return;
+      }
+
+      setIsVisible(true);
+      setIsClosing(false);
+
+      switch (detail.action) {
+        case "dictionary-define":
+          void onDictionaryClick();
+          break;
+        case "dictionary-synonyms":
+          void onSynonymsClick();
+          break;
+        case "dictionary-antonyms":
+          void onAntonymsClick();
+          break;
+        case "dictionary-pronunciation":
+          void onPronunciationClick();
+          break;
+        case "dictionary-examples":
+          void onExamplesClick();
+          break;
+        case "rewrite-grammar":
+          void onFixGrammarClick();
+          break;
+        case "rewrite-spelling":
+          void onFixSpellingClick();
+          break;
+        case "rewrite-moreFormal":
+          void onMakeFormalClick();
+          break;
+        case "rewrite-moreCasual":
+          void onMakeCasualClick();
+          break;
+        case "rewrite-professional":
+          void onMakeProfessionalClick();
+          break;
+        case "rewrite-shorter":
+          void onMakeShorterClick();
+          break;
+        case "rewrite-longer":
+          void onExpandClick();
+          break;
+        case "rewrite-simplify":
+          void onSimplifyClick();
+          break;
+        case "rewrite-concise":
+          void onMakeConciseClick();
+          break;
+        case "rewrite-clarity":
+          void onImproveClarityClick();
+          break;
+        case "rewrite-custom":
+          onCustomRewriteClick();
+          break;
+        case "write":
+          onWriteClick();
+          break;
+        case "dictation":
+          void onDictationClick();
+          break;
+        case "summarize-tldr":
+          void onSummarizeClick("tldr");
+          break;
+        case "summarize-headline":
+          void onSummarizeClick("headline");
+          break;
+        case "summarize-key-points":
+          void onSummarizeClick("key-points");
+          break;
+        case "summarize-teaser":
+          void onSummarizeClick("teaser");
+          break;
+        case "translate":
+          void onTranslateClick(
+            detail.options?.targetLanguage ?? null,
+            detail.options?.autoDetectSourceLanguage !== false,
+          );
+          break;
+        case "detect-language":
+          void onDetectLanguageClick();
+          break;
+        case "image-describe":
+          void onImageAnalysisClick("describe");
+          break;
+        case "image-extract-text":
+          void onImageAnalysisClick("extract-text");
+          break;
+        case "image-identify-objects":
+          void onImageAnalysisClick("identify-objects");
+          break;
+        case "add-to-chat":
+          void onAddToChatClick();
+          break;
+      }
+    },
+  );
+
+  useEffect(() => {
+    const handleToolbarActionCommandEvent = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+
+      handleToolbarActionCommand(
+        event.detail as VAssistToolbarActionEventDetail | null,
+      );
+    };
+
+    window.addEventListener(
+      getHostCommandEventName(hostId, "toolbar-action"),
+      handleToolbarActionCommandEvent,
+    );
+
+    return () => {
+      window.removeEventListener(
+        getHostCommandEventName(hostId, "toolbar-action"),
+        handleToolbarActionCommandEvent,
+      );
+    };
+  }, [hostId, handleToolbarActionCommand]);
+
   /**
    * Handle copy result to clipboard
    */
@@ -3088,7 +3231,7 @@ const AIToolbar = () => {
    * - Manual mode: User clicks Insert to insert all accumulated text
    * - Auto mode: Text already inserted sentence-by-sentence, cursor at end
    */
-  const onDictationClick = async () => {
+  async function onDictationClick() {
     try {
       if (!isRecording) {
         const hasSelection = selectedText && selectedText.trim().length > 0;
@@ -3246,7 +3389,7 @@ const AIToolbar = () => {
         recordingIntervalRef.current = null;
       }
     }
-  };
+  }
 
   useEffect(() => {
     return () => {
@@ -3640,6 +3783,8 @@ const AIToolbar = () => {
               isLightBackground={isLightBackgroundToolbar}
             />
           )}
+
+          {customToolbarActions ? customToolbarActions : null}
 
           {/* Insert button - Only show when result is ready for editable content */}
           {result &&

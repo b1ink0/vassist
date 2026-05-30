@@ -18,6 +18,8 @@ import {
   normalizeVAssistEmbedConfig,
   type ResolvedVAssistEmbedConfig,
 } from "../../embed/config";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { getHostCommandEventName } from "../../embed/hostCommands";
 import { STTServiceProxy } from "../../services/proxies";
 import { TTSServiceProxy } from "../../services/proxies";
 import VoiceConversationService, {
@@ -28,6 +30,7 @@ import DragDropService from "../../services/DragDropService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import {
   useChatActions,
+  useChatDraft,
   useIsChatInputVisible,
   usePendingDropData,
 } from "../../hooks/app/useChat";
@@ -129,15 +132,18 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     { onSend, onClose, onVoiceTranscription, onVoiceMode, embedConfig },
     ref,
   ) => {
+    const { hostId, embedConfig: contextEmbedConfig } = useEmbedHost();
     const isVisible = useIsChatInputVisible();
     const pendingDropData = usePendingDropData();
-    const { setPendingDropData } = useChatActions();
+    const message = useChatDraft();
+    const { setPendingDropData, setChatDraft: setMessage } = useChatActions();
     const isSettingsPanelOpen = useIsSettingsPanelOpen();
     const isHistoryPanelOpen = useIsHistoryPanelOpen();
 
     const uiConfig = useUIConfig();
     const api = useDesktopApi();
-    const resolvedEmbedConfig = embedConfig ?? normalizeVAssistEmbedConfig();
+    const resolvedEmbedConfig =
+      embedConfig ?? contextEmbedConfig ?? normalizeVAssistEmbedConfig();
     const voiceInputEnabled = resolvedEmbedConfig.features.voiceInput;
     const voiceCallEnabled = resolvedEmbedConfig.features.voiceCall;
     const cameraEnabled =
@@ -152,7 +158,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       useState<DropData | null>(null);
     const [localIsVisible, _setLocalIsVisible] = useState(true); // Input window is always visible when open
 
-    const [message, setMessage] = useState("");
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessingRecording, setIsProcessingRecording] = useState(false);
     const [recordingError, setRecordingError] = useState("");
@@ -439,7 +444,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         unsubscribeSttTranscription?.();
         unsubscribeSttRecording?.();
       };
-    }, [api, attachedImages, isVoiceMode, isDesktopInputWindow]);
+    }, [api, attachedImages, isVoiceMode, isDesktopInputWindow, setMessage]);
 
     /**
      * Auto-resizes textarea based on content.
@@ -560,7 +565,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         setAttachedAudios([]);
         setMessage("");
       }
-    }, [effectiveIsVisible, isVoiceMode]);
+    }, [effectiveIsVisible, isVoiceMode, setMessage]);
 
     useEffect(() => {
       adjustTextareaHeight();
@@ -610,7 +615,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         STTServiceProxy.setRecordingStartCallback(() => {});
         STTServiceProxy.setRecordingStopCallback(() => {});
       };
-    }, []);
+    }, [setMessage]);
 
     useEffect(() => {
       if (!isVoiceMode) {
@@ -1031,60 +1036,63 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
      *
      * @param {Object} dropData - Drop data containing text, images, audios, and errors
      */
-    const processDropData = useCallback((dropData: DropData | null) => {
-      if (!dropData) return;
+    const processDropData = useCallback(
+      (dropData: DropData | null) => {
+        if (!dropData) return;
 
-      const { text, images, audios, errors } = dropData;
+        const { text, images, audios, errors } = dropData;
 
-      Logger.log("ChatInput", "Processing drop data:", {
-        textLength: text?.length || 0,
-        imageCount: images?.length || 0,
-        audioCount: audios?.length || 0,
-        errorCount: errors?.length || 0,
-      });
-
-      if (errors && errors.length > 0) {
-        setRecordingError(errors[0] || "Attachment processing failed");
-        setTimeout(() => setRecordingError(""), 3000);
-      }
-
-      if (text && text.trim()) {
-        setMessage((prev) => (prev ? prev + "\n" + text : text));
-      }
-
-      if (images && images.length > 0) {
-        setAttachedImages((prev) => {
-          const newImages = [...prev, ...images];
-          const maxImages = 3;
-          if (newImages.length > maxImages) {
-            setRecordingError(`Maximum ${maxImages} images allowed`);
-            setTimeout(() => setRecordingError(""), 3000);
-            return newImages.slice(0, maxImages);
-          }
-          return newImages;
+        Logger.log("ChatInput", "Processing drop data:", {
+          textLength: text?.length || 0,
+          imageCount: images?.length || 0,
+          audioCount: audios?.length || 0,
+          errorCount: errors?.length || 0,
         });
-      }
 
-      if (audios && audios.length > 0) {
-        setAttachedAudios((prev) => {
-          const newAudios = [...prev, ...audios];
-          const maxAudios = 1;
-          if (newAudios.length > maxAudios) {
-            setRecordingError(`Maximum ${maxAudios} audio files allowed`);
-            setTimeout(() => setRecordingError(""), 3000);
-            return newAudios.slice(0, maxAudios);
-          }
-          return newAudios;
-        });
-      }
-
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          adjustTextareaHeight();
+        if (errors && errors.length > 0) {
+          setRecordingError(errors[0] || "Attachment processing failed");
+          setTimeout(() => setRecordingError(""), 3000);
         }
-      }, 0);
-    }, []);
+
+        if (text && text.trim()) {
+          setMessage((prev) => (prev ? prev + "\n" + text : text));
+        }
+
+        if (images && images.length > 0) {
+          setAttachedImages((prev) => {
+            const newImages = [...prev, ...images];
+            const maxImages = 3;
+            if (newImages.length > maxImages) {
+              setRecordingError(`Maximum ${maxImages} images allowed`);
+              setTimeout(() => setRecordingError(""), 3000);
+              return newImages.slice(0, maxImages);
+            }
+            return newImages;
+          });
+        }
+
+        if (audios && audios.length > 0) {
+          setAttachedAudios((prev) => {
+            const newAudios = [...prev, ...audios];
+            const maxAudios = 1;
+            if (newAudios.length > maxAudios) {
+              setRecordingError(`Maximum ${maxAudios} audio files allowed`);
+              setTimeout(() => setRecordingError(""), 3000);
+              return newAudios.slice(0, maxAudios);
+            }
+            return newAudios;
+          });
+        }
+
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            adjustTextareaHeight();
+          }
+        }, 0);
+      },
+      [setMessage],
+    );
 
     /**
      * Handles message submission.
@@ -1134,7 +1142,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         setAttachedImages([]);
         setAttachedAudios([]);
       },
-      [message, attachedImages, attachedAudios, wrappedOnSend],
+      [message, attachedImages, attachedAudios, setMessage, wrappedOnSend],
     );
 
     useEffect(() => {
@@ -1154,12 +1162,31 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         }
       };
 
+      const handleHostChatDragDrop = (e: Event) => {
+        if (!(e instanceof CustomEvent)) {
+          return;
+        }
+        if (!effectiveIsVisible || isVoiceMode) {
+          return;
+        }
+
+        processDropData((e.detail as DropData) || null);
+      };
+
       window.addEventListener("chatDragDrop", handleChatDragDrop);
+      window.addEventListener(
+        getHostCommandEventName(hostId, "enqueue-drop-data"),
+        handleHostChatDragDrop,
+      );
 
       return () => {
         window.removeEventListener("chatDragDrop", handleChatDragDrop);
+        window.removeEventListener(
+          getHostCommandEventName(hostId, "enqueue-drop-data"),
+          handleHostChatDragDrop,
+        );
       };
-    }, [effectiveIsVisible, isVoiceMode, processDropData]);
+    }, [effectiveIsVisible, hostId, isVoiceMode, processDropData]);
 
     useEffect(() => {
       if (!effectivePendingDropData || !effectiveIsVisible || isVoiceMode)
@@ -1185,16 +1212,30 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       };
 
       window.addEventListener("focusChatInput", handleFocusInput);
+      window.addEventListener(
+        getHostCommandEventName(hostId, "focus-input"),
+        handleFocusInput,
+      );
 
       return () => {
         window.removeEventListener("focusChatInput", handleFocusInput);
+        window.removeEventListener(
+          getHostCommandEventName(hostId, "focus-input"),
+          handleFocusInput,
+        );
       };
-    }, [effectiveIsVisible, isVoiceMode]);
+    }, [effectiveIsVisible, hostId, isVoiceMode]);
 
     // Auto-send listener for demo actions
     useEffect(() => {
       const handleAutoSend = () => {
-        if (effectiveIsVisible && !isVoiceMode && message.trim()) {
+        if (
+          effectiveIsVisible &&
+          !isVoiceMode &&
+          (message.trim() ||
+            attachedImages.length > 0 ||
+            attachedAudios.length > 0)
+        ) {
           Logger.log("ChatInput", "Auto-sending message from demo action");
           setTimeout(() => {
             // Click the submit button to trigger the form submission
@@ -1204,11 +1245,26 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       };
 
       window.addEventListener("chatAutoSend", handleAutoSend);
+      window.addEventListener(
+        getHostCommandEventName(hostId, "submit-draft"),
+        handleAutoSend,
+      );
 
       return () => {
         window.removeEventListener("chatAutoSend", handleAutoSend);
+        window.removeEventListener(
+          getHostCommandEventName(hostId, "submit-draft"),
+          handleAutoSend,
+        );
       };
-    }, [effectiveIsVisible, isVoiceMode, message]);
+    }, [
+      attachedAudios.length,
+      attachedImages.length,
+      effectiveIsVisible,
+      hostId,
+      isVoiceMode,
+      message,
+    ]);
 
     /**
      * Handles image file selection.

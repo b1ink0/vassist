@@ -331,7 +331,7 @@ const TTSSettings = ({
 
       {/* Enable TTS Toggle */}
       <Card variant="default">
-        <SettingsRow label="Enable Text-to-Speech">
+        <SettingsRow label="Enable Text-to-Speech" targetId="tts.enabled">
           <Toggle
             id="enable-tts"
             data-testid="toggle-enable-tts"
@@ -343,19 +343,18 @@ const TTSSettings = ({
 
       {/* Provider Selection */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Provider
-        </label>
-        <Select
-          value={ttsConfig.provider}
-          onChange={(e) => updateTTSConfig("provider", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          disabled={!ttsConfig.enabled}
-          options={Object.entries(availableProviders).map(([key, value]) => ({
-            value,
-            label: key,
-          }))}
-        />
+        <SettingsRow label="Provider" targetId="tts.provider.select">
+          <Select
+            value={ttsConfig.provider}
+            onChange={(e) => updateTTSConfig("provider", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            disabled={!ttsConfig.enabled}
+            options={Object.entries(availableProviders).map(([key, value]) => ({
+              value,
+              label: key,
+            }))}
+          />
+        </SettingsRow>
         {isAndroid && (
           <p className="text-xs text-white/50">
             Using native Android TTS via local VITS model
@@ -461,10 +460,10 @@ const TTSSettings = ({
           {ttsConfig.provider === TTSProviders.GPTSOVITS_REMOTE && (
             <>
               {renderRemoteProfileBar("gptsovits-remote")}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Server URL
-                </label>
+              <SettingsRow
+                label="Server URL"
+                targetId="tts.gptsovitsRemote.endpoint"
+              >
                 <Input
                   type="text"
                   value={ttsConfig["gptsovits-remote"]?.endpoint || ""}
@@ -474,7 +473,7 @@ const TTSSettings = ({
                   placeholder="http://localhost:11438"
                   variant={isLightBackground ? "dark" : "default"}
                 />
-              </div>
+              </SettingsRow>
 
               {/* Voice Cloning Configuration - Reuse GPTSoVITSConfig */}
               <GPTSoVITSConfig
@@ -603,10 +602,7 @@ const TTSSettings = ({
           {ttsConfig.provider === TTSProviders.OPENAI && (
             <>
               {renderRemoteProfileBar("openai")}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  API Key
-                </label>
+              <SettingsRow label="API Key" targetId="tts.openai.apiKey">
                 <Input
                   type="password"
                   value={ttsConfig.openai.apiKey}
@@ -616,11 +612,8 @@ const TTSSettings = ({
                   placeholder="sk-..."
                   variant={isLightBackground ? "dark" : "default"}
                 />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Model
-                </label>
+              </SettingsRow>
+              <SettingsRow label="Model" targetId="tts.openai.model">
                 <RemoteModelPicker
                   value={ttsConfig.openai.model}
                   onChange={(value) => updateTTSConfig("openai.model", value)}
@@ -629,7 +622,7 @@ const TTSSettings = ({
                   placeholder="tts-1"
                   isLightBackground={isLightBackground}
                 />
-              </div>
+              </SettingsRow>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">
                   Voice
@@ -653,10 +646,10 @@ const TTSSettings = ({
           {ttsConfig.provider === TTSProviders.OPENAI_COMPATIBLE && (
             <>
               {renderRemoteProfileBar("openai-compatible")}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Endpoint URL
-                </label>
+              <SettingsRow
+                label="Endpoint URL"
+                targetId="tts.openaiCompatible.endpoint"
+              >
                 <Input
                   type="text"
                   value={ttsConfig["openai-compatible"]?.endpoint ?? ""}
@@ -669,11 +662,11 @@ const TTSSettings = ({
                   placeholder="http://localhost:8000"
                   variant={isLightBackground ? "dark" : "default"}
                 />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  API Key (Optional)
-                </label>
+              </SettingsRow>
+              <SettingsRow
+                label="API Key (Optional)"
+                targetId="tts.openaiCompatible.apiKey"
+              >
                 <Input
                   type="password"
                   value={ttsConfig["openai-compatible"]?.apiKey ?? ""}
@@ -683,11 +676,8 @@ const TTSSettings = ({
                   placeholder="Leave empty if not required"
                   variant={isLightBackground ? "dark" : "default"}
                 />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Model
-                </label>
+              </SettingsRow>
+              <SettingsRow label="Model" targetId="tts.openaiCompatible.model">
                 <RemoteModelPicker
                   value={ttsConfig["openai-compatible"]?.model ?? ""}
                   onChange={(value) =>
@@ -699,7 +689,7 @@ const TTSSettings = ({
                   placeholder="tts"
                   isLightBackground={isLightBackground}
                 />
-              </div>
+              </SettingsRow>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/90">
                   Voice

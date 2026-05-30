@@ -12,6 +12,11 @@ import {
   updateVAssistEmbedConfig,
 } from "../../../embed/main";
 import {
+  clearVAssistReactCustomizations,
+  registerVAssistReactCustomizations,
+  type VAssistReactCustomizations,
+} from "../../../src/embed/reactHostCustomizations";
+import {
   mergeVAssistEmbedConfig,
   type VAssistEmbedConfig,
 } from "../../../src/embed/config";
@@ -23,6 +28,7 @@ export type VAssistEmbedProps = Omit<
   config?: VAssistEmbedConfig;
   defaultConfig?: VAssistEmbedConfig;
   hostId?: string;
+  customizations?: VAssistReactCustomizations;
   style?: CSSProperties;
 };
 
@@ -30,6 +36,7 @@ export function VAssistEmbed({
   config,
   defaultConfig,
   hostId,
+  customizations,
   style,
   ...divProps
 }: VAssistEmbedProps) {
@@ -43,9 +50,25 @@ export function VAssistEmbed({
 
   useEffect(() => {
     return () => {
+      clearVAssistReactCustomizations(resolvedHostId);
       removeVAssistEmbed(resolvedHostId);
     };
   }, [resolvedHostId]);
+
+  useEffect(() => {
+    if (customizations) {
+      registerVAssistReactCustomizations(resolvedHostId, customizations);
+      return () => {
+        clearVAssistReactCustomizations(resolvedHostId);
+      };
+    }
+
+    clearVAssistReactCustomizations(resolvedHostId);
+
+    return () => {
+      clearVAssistReactCustomizations(resolvedHostId);
+    };
+  }, [customizations, resolvedHostId]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -82,20 +105,42 @@ export {
   normalizeVAssistEmbedConfig,
   type DeepPartial,
   type ResolvedVAssistEmbedConfig,
+  type VAssistBinaryLike,
+  type VAssistBrandingConfig,
   type VAssistEmbedApi,
   type VAssistEmbedConfig,
   type VAssistEmbedElementHandle,
   type VAssistEmbedHooks,
   type VAssistEmbedInjectOptions,
   type VAssistFeatureName,
+  type VAssistLabelId,
   type VAssistMessageEventPayload,
+  type VAssistOpenSettingsOptions,
+  type VAssistPortalContainerId,
+  type VAssistPortalContainerTarget,
+  type VAssistPortalContainersConfig,
+  type VAssistProviderBridge,
+  type VAssistProviderBridgeAI,
+  type VAssistProviderBridgeSTT,
+  type VAssistProviderBridgeTTS,
   type VAssistProviderMode,
   type VAssistResourceLoader,
   type VAssistRuntimeIsolationMode,
+  type VAssistRuntimeSnapshot,
+  type VAssistRuntimeSnapshotMessage,
+  type VAssistSendMessageInput,
+  type VAssistSetDraftOptions,
+  type VAssistSettingsFieldId,
+  type VAssistSettingsPolicy,
+  type VAssistSettingsSectionId,
+  type VAssistSettingsSubTabId,
   type VAssistThemeConfig,
   type VAssistThemeEffects,
   type VAssistThemeMode,
+  type VAssistToolbarActionId,
+  type VAssistTriggerToolbarActionOptions,
   type VAssistSettingsTabId,
+  type VAssistSettingsTargetId,
   type VAssistShellMode,
   type VAssistStorageAdapter,
   type VAssistStorageMode,
@@ -103,6 +148,22 @@ export {
   type VAssistThemeTokens,
   type VAssistTransportMode,
 } from "../../../src/embed/config";
+
+export {
+  clearVAssistReactCustomizations,
+  getVAssistReactCustomizations,
+  registerVAssistReactCustomizations,
+} from "../../../src/embed/reactHostCustomizations";
+
+export type {
+  VAssistReactCustomizations,
+  VAssistReactEmptyStateContext,
+  VAssistReactFooterContext,
+  VAssistReactHeaderActionsContext,
+  VAssistReactIconProps,
+  VAssistReactSettingsExtensionContext,
+  VAssistReactToolbarActionsContext,
+} from "../../../src/embed/reactHostCustomizations";
 
 export {
   createStorageManager,

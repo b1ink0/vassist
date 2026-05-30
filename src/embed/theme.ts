@@ -102,6 +102,8 @@ export const getVAssistThemeRootAttributes = (
 
   const style = {
     colorScheme: theme.mode === "light" ? "light" : "dark",
+    "--vassist-font-family": theme.fontFamily,
+    "--vassist-mono-font-family": theme.monoFontFamily,
     "--vassist-backdrop-blur": `${backdropBlurPx}px`,
     "--vassist-surface-shadow": theme.effects.enableSurfaceShadows
       ? `0 8px 32px 0 ${tokens.shadowColor}`

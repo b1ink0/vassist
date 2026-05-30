@@ -3,7 +3,7 @@
  * Shared between Settings and Setup Wizard
  */
 
-import { Input, Select } from "../../ui";
+import { Input, Select, SettingsRow } from "../../ui";
 import RemoteModelPicker from "../shared/RemoteModelPicker";
 
 interface OpenAICompatibleSTTConfigShape {
@@ -45,10 +45,10 @@ const OpenAICompatibleSTTConfig = ({
   return (
     <div className="space-y-4">
       {/* Endpoint URL */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Endpoint URL <span className="text-red-400">*</span>
-        </label>
+      <SettingsRow
+        label="Endpoint URL *"
+        targetId="stt.openaiCompatible.endpoint"
+      >
         <Input
           type="text"
           value={config.endpoint || ""}
@@ -56,13 +56,13 @@ const OpenAICompatibleSTTConfig = ({
           placeholder="http://localhost:8000"
           variant={isLightBackground ? "dark" : "default"}
         />
-      </div>
+      </SettingsRow>
 
       {/* API Key (Optional) */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          API Key (Optional)
-        </label>
+      <SettingsRow
+        label="API Key (Optional)"
+        targetId="stt.openaiCompatible.apiKey"
+      >
         <Input
           type="password"
           value={config.apiKey || ""}
@@ -70,11 +70,10 @@ const OpenAICompatibleSTTConfig = ({
           placeholder="Leave empty if not required"
           variant={isLightBackground ? "dark" : "default"}
         />
-      </div>
+      </SettingsRow>
 
       {/* Model */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Model</label>
+      <SettingsRow label="Model" targetId="stt.openaiCompatible.model">
         <RemoteModelPicker
           value={config.model || ""}
           onChange={(value) => handleFieldChange("model", value)}
@@ -84,7 +83,7 @@ const OpenAICompatibleSTTConfig = ({
           placeholder="whisper"
           isLightBackground={isLightBackground}
         />
-      </div>
+      </SettingsRow>
 
       {/* Language */}
       <div className="space-y-2">

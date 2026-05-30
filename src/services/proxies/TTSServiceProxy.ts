@@ -130,12 +130,43 @@ class TTSServiceProxy extends ServiceProxy {
     this.stopCallback = null;
   }
 
+  private async normalizeBridgeAudio(
+    audio: unknown,
+  ): Promise<ArrayBuffer | null> {
+    if (audio instanceof Blob) {
+      return await audio.arrayBuffer();
+    }
+
+    if (audio instanceof ArrayBuffer) {
+      return audio;
+    }
+
+    if (ArrayBuffer.isView(audio)) {
+      const bytes = new Uint8Array(
+        audio.buffer,
+        audio.byteOffset,
+        audio.byteLength,
+      );
+      return new Uint8Array(bytes).buffer;
+    }
+
+    if (Array.isArray(audio)) {
+      return new Uint8Array(audio).buffer;
+    }
+
+    return null;
+  }
+
   /**
    * Ensure service is configured (auto-loads from storage if needed)
    * @returns {Promise<void>}
    */
   async ensureConfigured(): Promise<void> {
     if (this._configuring) return;
+
+    if (this.getHostTransportBridge()?.tts) {
+      return;
+    }
 
     const configured = await this.isConfigured();
     if (configured) return;
@@ -166,6 +197,12 @@ class TTSServiceProxy extends ServiceProxy {
     // Store the config for later use in initializeKokoro
     this.lastConfigured = config;
 
+    const hostBridge = this.getHostTransportBridge()?.tts;
+    if (hostBridge) {
+      await hostBridge.configure?.(config);
+      return true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error("TTSServiceProxy: Bridge not available");
@@ -184,6 +221,15 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} True if ready
    */
   async isConfigured(): Promise<boolean> {
+    const hostBridge = this.getHostTransportBridge()?.tts;
+    if (hostBridge) {
+      if (!hostBridge.isConfigured) {
+        return true;
+      }
+
+      return (await hostBridge.isConfigured()) === true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
@@ -206,6 +252,14 @@ class TTSServiceProxy extends ServiceProxy {
    * @returns {string|null} Provider name or null
    */
   getCurrentProvider(): string | null {
+    const hostBridge = this.getHostTransportBridge()?.tts;
+    if (hostBridge?.getCurrentProvider) {
+      const provider = hostBridge.getCurrentProvider();
+      return typeof provider === "string" || provider === null
+        ? provider
+        : null;
+    }
+
     if (this.isExtension) {
       return null;
     } else {
@@ -295,6 +349,29 @@ class TTSServiceProxy extends ServiceProxy {
   ): Promise<TTSResult | null> {
     try {
       await this.ensureConfigured();
+
+      const hostBridge = this.getHostTransportBridge()?.tts;
+      if (hostBridge) {
+        const response = await hostBridge.generateSpeech({
+          text,
+          generateLipSync,
+        });
+
+        if (!response?.audio) {
+          return null;
+        }
+
+        const audioBuffer = await this.normalizeBridgeAudio(response.audio);
+        if (!audioBuffer || audioBuffer.byteLength === 0) {
+          return null;
+        }
+
+        return {
+          audio: audioBuffer,
+          bvmdUrl: response.bvmdUrl ?? null,
+          ...(response.mimeType ? { mimeType: response.mimeType } : {}),
+        };
+      }
 
       if (this.isExtension) {
         // Extension mode flow:
@@ -463,7 +540,7 @@ class TTSServiceProxy extends ServiceProxy {
     minChunkSize = 100,
     sessionId: string | null = null,
   ): Promise<TTSQueueItem[]> {
-    if (this.isExtension) {
+    if (this.isExtension || this.getHostTransportBridge()?.tts) {
       // In extension mode, chunking might be handled differently
       // For now, use simple approach
       const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
@@ -853,6 +930,11 @@ class TTSServiceProxy extends ServiceProxy {
    */
   async testConnection(testText = "Hello, this is a test."): Promise<boolean> {
     try {
+      const hostBridge = this.getHostTransportBridge()?.tts;
+      if (hostBridge?.testConnection) {
+        return (await hostBridge.testConnection({ text: testText })) === true;
+      }
+
       const audioItems = await this.generateChunkedSpeech(testText);
 
       if (!audioItems || audioItems.length === 0) {

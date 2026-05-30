@@ -3,7 +3,7 @@
  * Shared between Settings and Setup Wizard
  */
 
-import { Input } from "../../ui";
+import { Input, SettingsRow } from "../../ui";
 import RemoteModelPicker from "../shared/RemoteModelPicker";
 
 interface OpenAISTTConfigShape {
@@ -43,10 +43,7 @@ const OpenAISTTConfig = ({
   return (
     <div className="space-y-4">
       {/* API Key */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          API Key <span className="text-red-400">*</span>
-        </label>
+      <SettingsRow label="API Key *" targetId="stt.openai.apiKey">
         <Input
           type="password"
           value={config.apiKey || ""}
@@ -54,11 +51,10 @@ const OpenAISTTConfig = ({
           placeholder="sk-..."
           variant={isLightBackground ? "dark" : "default"}
         />
-      </div>
+      </SettingsRow>
 
       {/* Model */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Model</label>
+      <SettingsRow label="Model" targetId="stt.openai.model">
         <RemoteModelPicker
           value={config.model || "whisper-1"}
           onChange={(value) => handleFieldChange("model", value)}
@@ -67,7 +63,7 @@ const OpenAISTTConfig = ({
           placeholder="whisper-1"
           isLightBackground={isLightBackground}
         />
-      </div>
+      </SettingsRow>
     </div>
   );
 };

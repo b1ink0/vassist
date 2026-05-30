@@ -11,11 +11,29 @@ import {
   type VAssistEmbedElementHandle,
   type VAssistEmbedHooks,
   type VAssistEmbedInjectOptions,
+  type VAssistOpenSettingsOptions,
   type VAssistMessageEventPayload,
+  type VAssistRuntimeSnapshot,
+  type VAssistSendMessageInput,
+  type VAssistSetDraftOptions,
+  type VAssistToolbarActionId,
+  type VAssistTriggerToolbarActionOptions,
 } from "../src/embed/config";
-import { setEmbedConfig } from "../src/embed/runtimeStore";
+import {
+  getEmbedConfig,
+  setActiveEmbedHostId,
+  setEmbedConfig,
+} from "../src/embed/runtimeStore";
+import {
+  dispatchEnqueueDropDataCommand,
+  dispatchFocusInputCommand,
+  dispatchOpenSettingsCommand,
+  dispatchSubmitDraftCommand,
+  dispatchToolbarActionCommand,
+} from "../src/embed/hostCommands";
 import appStyles from "../src/index.css?inline";
 import type { AppStore } from "../src/stores/createAppStore";
+import { useConfigStore } from "../src/stores/useConfigStore";
 import { VASSIST_REACT_ROOT_ID } from "../src/utils/VAssistDomIds";
 
 const elementTagName = "vassist-embed";
@@ -46,29 +64,18 @@ const hostStyles = `
   box-sizing: border-box;
 }
 
-.vassist-embed-shadow-root,
-.vassist-embed-frame {
-  width: 100%;
-  height: 100vh;
+.vassist-embed-shadow-root {
+  background: transparent;
   pointer-events: auto;
 }
 
-.vassist-embed-shadow-root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.87);
-  background: transparent;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 .vassist-embed-frame {
+  width: 100%;
+  height: 100vh;
   display: block;
   border: 0;
   background: transparent;
+  pointer-events: auto;
 }
 
 .virtual-assistant-container {
@@ -442,6 +449,7 @@ function createChildRuntimeConfig(
       shadowRoot: resolvedConfig.mount.shadowRoot,
       autoInject: false,
       runtimeIsolation: "shadow-root",
+      portalContainers: resolvedConfig.mount.portalContainers,
     },
     shell: {
       mode: resolvedConfig.shell.mode,
@@ -457,6 +465,7 @@ function createChildRuntimeConfig(
     providers: resolvedConfig.providers,
     assets: resolvedConfig.assets,
     transport: resolvedConfig.transport,
+    branding: resolvedConfig.branding,
     hooks: createHookBridge(config.hooks, resolvedConfig.mount.hostId),
     ...(storage !== undefined ? { storage } : {}),
   });
@@ -477,6 +486,161 @@ function runGlobalHostCommand(
   }
 
   command(hostElement);
+}
+
+function createHostAttachmentPayload(
+  items: string[] | undefined,
+  type: "image" | "audio",
+) {
+  return (items ?? []).map((dataUrl, index) => ({
+    dataUrl,
+    name: `${type}-${index + 1}`,
+    size: dataUrl.length,
+    type,
+  }));
+}
+
+function ensureHostIsActive(hostId: string): void {
+  setActiveEmbedHostId(hostId);
+}
+
+function ensureChatVisible(store: AppStore, hostId: string): void {
+  const state = store.getState();
+  if (!state.isChatContainerVisible || !state.isChatInputVisible) {
+    state.openChat();
+  }
+
+  window.setTimeout(() => {
+    dispatchFocusInputCommand(hostId);
+  }, 100);
+}
+
+function openSettingsForStore(
+  store: AppStore,
+  hostId: string,
+  options?: VAssistOpenSettingsOptions,
+): void {
+  ensureHostIsActive(hostId);
+  ensureChatVisible(store, hostId);
+
+  const state = store.getState();
+  state.setIsHistoryPanelOpen(false);
+  state.setIsSettingsPanelOpen(true);
+  dispatchOpenSettingsCommand(hostId, options);
+}
+
+function openHistoryForStore(store: AppStore, hostId: string): void {
+  ensureHostIsActive(hostId);
+  ensureChatVisible(store, hostId);
+
+  const state = store.getState();
+  state.setIsSettingsPanelOpen(false);
+  state.setIsHistoryPanelOpen(true);
+}
+
+function setDraftForStore(
+  store: AppStore,
+  hostId: string,
+  value: string,
+  options?: VAssistSetDraftOptions,
+): void {
+  ensureHostIsActive(hostId);
+  ensureChatVisible(store, hostId);
+
+  const state = store.getState();
+  const nextDraft = options?.append ? `${state.chatDraft}${value}` : value;
+  state.setChatDraft(nextDraft);
+
+  if (options?.focus !== false) {
+    window.setTimeout(() => {
+      dispatchFocusInputCommand(hostId);
+    }, 100);
+  }
+}
+
+function sendMessageForStore(
+  store: AppStore,
+  hostId: string,
+  input: VAssistSendMessageInput,
+): void {
+  const hasContent = input.content.trim().length > 0;
+  const images = createHostAttachmentPayload(input.images, "image");
+  const audios = createHostAttachmentPayload(input.audios, "audio");
+
+  if (!hasContent && images.length === 0 && audios.length === 0) {
+    return;
+  }
+
+  ensureHostIsActive(hostId);
+  ensureChatVisible(store, hostId);
+
+  const state = store.getState();
+  state.setChatDraft(hasContent ? input.content : "");
+
+  window.setTimeout(() => {
+    if (images.length > 0 || audios.length > 0) {
+      dispatchEnqueueDropDataCommand(hostId, {
+        ...(images.length > 0 ? { images } : {}),
+        ...(audios.length > 0 ? { audios } : {}),
+      });
+    }
+
+    dispatchSubmitDraftCommand(hostId);
+  }, 120);
+}
+
+function triggerToolbarActionForStore(
+  store: AppStore,
+  hostId: string,
+  action: VAssistToolbarActionId,
+  options?: VAssistTriggerToolbarActionOptions,
+): void {
+  ensureHostIsActive(hostId);
+  ensureChatVisible(store, hostId);
+  dispatchToolbarActionCommand(hostId, action, options);
+}
+
+function getRuntimeSnapshotForStore(
+  store: AppStore | null,
+  hostId: string,
+): VAssistRuntimeSnapshot | null {
+  if (!store) {
+    return null;
+  }
+
+  const state = store.getState();
+  const configState = useConfigStore.getState();
+  const embedConfig = getEmbedConfig(hostId);
+
+  return {
+    hostId,
+    shellMode: embedConfig.shell.mode,
+    draft: state.chatDraft,
+    currentChatId: state.currentChatId,
+    isTempChat: state.isTempChat,
+    isProcessing: state.isProcessing,
+    isSpeaking: state.isSpeaking,
+    isVoiceMode: state.isVoiceMode,
+    pendingDropData: state.pendingDropData !== null,
+    panels: {
+      chatInputOpen: state.isChatInputVisible,
+      chatContainerOpen: state.isChatContainerVisible,
+      settingsOpen: state.isSettingsPanelOpen,
+      historyOpen: state.isHistoryPanelOpen,
+    },
+    messages: state.chatMessages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      ...(Array.isArray(message.images) ? { images: message.images } : {}),
+      ...(Array.isArray(message.audios) ? { audios: message.audios } : {}),
+    })),
+    embedConfig,
+    uiConfig: configState.uiConfig,
+    aiConfig: configState.aiConfig,
+    ttsConfig: configState.ttsConfig,
+    sttConfig: configState.sttConfig,
+  };
 }
 
 class VAssistEmbedElement
@@ -518,6 +682,10 @@ class VAssistEmbedElement
     return getResolvedElementConfig(this.currentConfig, this);
   }
 
+  private getHostId(): string {
+    return this.getConfig().mount.hostId;
+  }
+
   openChat() {
     if (this.iframeState && !this.forceDirectMount) {
       void this.runChildCommand((api) => {
@@ -526,7 +694,100 @@ class VAssistEmbedElement
       return;
     }
 
+    ensureHostIsActive(this.getHostId());
     this.mountedState?.store?.getState().openChat();
+  }
+
+  openSettings(options?: VAssistOpenSettingsOptions) {
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => {
+        api.openSettings(options);
+      });
+      return;
+    }
+
+    const hostId = this.getHostId();
+    if (this.mountedState?.store) {
+      openSettingsForStore(this.mountedState.store, hostId, options);
+    }
+  }
+
+  openHistory() {
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => {
+        api.openHistory();
+      });
+      return;
+    }
+
+    const hostId = this.getHostId();
+    if (this.mountedState?.store) {
+      openHistoryForStore(this.mountedState.store, hostId);
+    }
+  }
+
+  setDraftInput(value: string, options?: VAssistSetDraftOptions) {
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => {
+        api.setDraftInput(value, options);
+      });
+      return;
+    }
+
+    const hostId = this.getHostId();
+    if (this.mountedState?.store) {
+      setDraftForStore(this.mountedState.store, hostId, value, options);
+    }
+  }
+
+  sendMessage(input: VAssistSendMessageInput) {
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => {
+        api.sendMessage(input);
+      });
+      return;
+    }
+
+    const hostId = this.getHostId();
+    if (this.mountedState?.store) {
+      sendMessageForStore(this.mountedState.store, hostId, input);
+    }
+  }
+
+  triggerToolbarAction(
+    action: VAssistToolbarActionId,
+    options?: VAssistTriggerToolbarActionOptions,
+  ) {
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => {
+        api.triggerToolbarAction(action, options);
+      });
+      return;
+    }
+
+    const hostId = this.getHostId();
+    if (this.mountedState?.store) {
+      triggerToolbarActionForStore(
+        this.mountedState.store,
+        hostId,
+        action,
+        options,
+      );
+    }
+  }
+
+  getRuntimeSnapshot(): VAssistRuntimeSnapshot | null {
+    if (this.iframeState && !this.forceDirectMount) {
+      const childApi = (
+        this.iframeState.iframe.contentWindow as ChildRuntimeWindow | null
+      )?.VAssistEmbed;
+      return childApi?.getRuntimeSnapshot() ?? null;
+    }
+
+    return getRuntimeSnapshotForStore(
+      this.mountedState?.store ?? null,
+      this.getHostId(),
+    );
   }
 
   closeChat() {
@@ -537,6 +798,7 @@ class VAssistEmbedElement
       return;
     }
 
+    ensureHostIsActive(this.getHostId());
     this.mountedState?.store?.getState().closeChat();
   }
 
@@ -548,6 +810,7 @@ class VAssistEmbedElement
       return;
     }
 
+    ensureHostIsActive(this.getHostId());
     this.mountedState?.store?.getState().toggleChat();
   }
 
@@ -559,6 +822,7 @@ class VAssistEmbedElement
       return;
     }
 
+    ensureHostIsActive(this.getHostId());
     void this.mountedState?.store?.getState().clearChat();
   }
 
@@ -795,6 +1059,87 @@ if (typeof window !== "undefined") {
       runGlobalHostCommand((hostElement) => {
         hostElement.openChat();
       });
+    },
+    openSettings: (options) => {
+      if (isIframeRuntime()) {
+        const hostId = getEmbedConfig().mount.hostId;
+        if (iframeRuntimeStore) {
+          openSettingsForStore(iframeRuntimeStore, hostId, options);
+        }
+        return;
+      }
+
+      runGlobalHostCommand((hostElement) => {
+        hostElement.openSettings(options);
+      });
+    },
+    openHistory: () => {
+      if (isIframeRuntime()) {
+        const hostId = getEmbedConfig().mount.hostId;
+        if (iframeRuntimeStore) {
+          openHistoryForStore(iframeRuntimeStore, hostId);
+        }
+        return;
+      }
+
+      runGlobalHostCommand((hostElement) => {
+        hostElement.openHistory();
+      });
+    },
+    setDraftInput: (value, options) => {
+      if (isIframeRuntime()) {
+        const hostId = getEmbedConfig().mount.hostId;
+        if (iframeRuntimeStore) {
+          setDraftForStore(iframeRuntimeStore, hostId, value, options);
+        }
+        return;
+      }
+
+      runGlobalHostCommand((hostElement) => {
+        hostElement.setDraftInput(value, options);
+      });
+    },
+    sendMessage: (input) => {
+      if (isIframeRuntime()) {
+        const hostId = getEmbedConfig().mount.hostId;
+        if (iframeRuntimeStore) {
+          sendMessageForStore(iframeRuntimeStore, hostId, input);
+        }
+        return;
+      }
+
+      runGlobalHostCommand((hostElement) => {
+        hostElement.sendMessage(input);
+      });
+    },
+    triggerToolbarAction: (action, options) => {
+      if (isIframeRuntime()) {
+        const hostId = getEmbedConfig().mount.hostId;
+        if (iframeRuntimeStore) {
+          triggerToolbarActionForStore(
+            iframeRuntimeStore,
+            hostId,
+            action,
+            options,
+          );
+        }
+        return;
+      }
+
+      runGlobalHostCommand((hostElement) => {
+        hostElement.triggerToolbarAction(action, options);
+      });
+    },
+    getRuntimeSnapshot: () => {
+      if (isIframeRuntime()) {
+        return getRuntimeSnapshotForStore(
+          iframeRuntimeStore,
+          getEmbedConfig().mount.hostId,
+        );
+      }
+
+      const hostElement = getHostElement();
+      return hostElement?.getRuntimeSnapshot() ?? null;
     },
     closeChat: () => {
       if (isIframeRuntime()) {

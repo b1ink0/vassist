@@ -2,6 +2,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 import { Select as BaseSelect } from "@base-ui/react/select";
 import type { SelectHTMLAttributes } from "react";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
 import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
@@ -84,6 +86,7 @@ const Select = ({
   portalContainer,
   "data-testid": dataTestId,
 }: SelectProps) => {
+  const { embedConfig } = useEmbedHost();
   const [portalAnchor, setPortalAnchor] = React.useState<HTMLDivElement | null>(
     null,
   );
@@ -109,9 +112,20 @@ const Select = ({
   }, [isControlled, value]);
 
   const selectedValue = isControlled ? String(value ?? "") : internalValue;
-  const resolvedPortalContainer = React.useMemo(() => {
+  const fallbackPortalContainer = React.useMemo(() => {
     return resolvePortalContainer(portalContainer, portalAnchor);
   }, [portalAnchor, portalContainer]);
+  const resolvedPortalContainer = React.useMemo(() => {
+    if (portalContainer !== undefined) {
+      return fallbackPortalContainer;
+    }
+
+    return resolveConfiguredPortalContainer(
+      embedConfig,
+      "popovers",
+      fallbackPortalContainer,
+    );
+  }, [embedConfig, fallbackPortalContainer, portalContainer]);
 
   const triggerChange = (nextValue: string | null): void => {
     const resolvedValue = nextValue ?? "";

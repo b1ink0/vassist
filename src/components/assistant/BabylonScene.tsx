@@ -10,6 +10,8 @@ import {
 } from "@babylonjs/core";
 import { getSceneConfigAsync } from "../../config/sceneConfig";
 import DragDropService from "../../services/DragDropService";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
 import { useChatActions } from "../../hooks/app/useChat";
@@ -145,6 +147,7 @@ const BabylonScene = ({
   previewHeight = "100%",
   previewClassName = "",
 }: BabylonSceneProps) => {
+  const { embedConfig } = useEmbedHost();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasElementRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<Engine | null>(null);
@@ -925,7 +928,11 @@ const BabylonScene = ({
     );
   }
 
-  return createPortal(canvasContent, document.body);
+  return createPortal(
+    canvasContent,
+    resolveConfiguredPortalContainer(embedConfig, "canvas", document.body) ??
+      document.body,
+  );
 };
 
 export default BabylonScene;

@@ -6,6 +6,8 @@
  */
 
 import { isExtension } from "../../utils/PlatformUtils";
+import { getEmbedConfig } from "../../embed/runtimeStore";
+import type { VAssistProviderBridge } from "../../embed/config";
 
 export interface BridgeSendOptions {
   timeout?: number;
@@ -157,5 +159,14 @@ export class ServiceProxy {
    */
   isInExtensionMode() {
     return this.isExtension;
+  }
+
+  protected getHostTransportBridge(): VAssistProviderBridge | null {
+    const embedConfig = getEmbedConfig();
+    if (embedConfig.transport.mode !== "host-bridge") {
+      return null;
+    }
+
+    return embedConfig.transport.bridge ?? null;
   }
 }

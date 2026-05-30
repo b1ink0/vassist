@@ -101,6 +101,7 @@ export interface AppStoreState {
   isChatInputVisible: boolean;
   isChatContainerVisible: boolean;
   chatMessages: ChatMessageItem[];
+  chatDraft: string;
   isProcessing: boolean;
   currentChatId: string | null;
   isTempChat: boolean;
@@ -135,6 +136,7 @@ export interface AppStoreState {
   setIsChatInputVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setIsChatContainerVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setChatMessages: React.Dispatch<React.SetStateAction<ChatMessageItem[]>>;
+  setChatDraft: React.Dispatch<React.SetStateAction<string>>;
   setIsProcessing: React.Dispatch<React.SetStateAction<boolean>>;
   setCurrentChatId: React.Dispatch<React.SetStateAction<string | null>>;
   setIsTempChat: React.Dispatch<React.SetStateAction<boolean>>;
@@ -449,6 +451,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
           isChatInputVisible: false,
           isChatContainerVisible: false,
           chatMessages: [],
+          chatDraft: "",
           isProcessing: false,
           currentChatId: null,
           isTempChat: false,
@@ -516,6 +519,11 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               chatMessages: resolveSetStateAction(value, state.chatMessages),
             }));
             applyChatSchedule();
+          },
+          setChatDraft: (value) => {
+            set((state) => ({
+              chatDraft: resolveSetStateAction(value, state.chatDraft),
+            }));
           },
           setIsProcessing: (value) => {
             set((state) => ({
@@ -712,6 +720,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             chatService.clearMessages();
             set({
               chatMessages: [],
+              chatDraft: "",
               isProcessing: false,
               currentChatId: null,
               isTempChat: false,

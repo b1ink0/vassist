@@ -79,6 +79,10 @@ class AIServiceProxy extends ServiceProxy {
   async ensureConfigured() {
     if (this._configuring) return;
 
+    if (this.getHostTransportBridge()?.ai) {
+      return;
+    }
+
     const configured = await this.isConfigured();
     if (configured) return;
 
@@ -103,6 +107,11 @@ class AIServiceProxy extends ServiceProxy {
    * @param {Object} config - AI configuration
    */
   async configure(config: Record<string, unknown>): Promise<unknown> {
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      return await hostBridge.configure?.(config);
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error("AIServiceProxy: Bridge not available");
@@ -117,6 +126,15 @@ class AIServiceProxy extends ServiceProxy {
    * @returns {Promise<boolean>} True if ready
    */
   async isConfigured(): Promise<boolean> {
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      if (!hostBridge.isConfigured) {
+        return true;
+      }
+
+      return (await hostBridge.isConfigured()) === true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) return false;
@@ -139,6 +157,14 @@ class AIServiceProxy extends ServiceProxy {
    * @returns {string|null} Provider name or null
    */
   getCurrentProvider() {
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge?.getCurrentProvider) {
+      const provider = hostBridge.getCurrentProvider();
+      return typeof provider === "string" || provider === null
+        ? provider
+        : null;
+    }
+
     if (this.isExtension) {
       // Could add message to get provider, but not critical
       return null;
@@ -160,6 +186,32 @@ class AIServiceProxy extends ServiceProxy {
     options: Record<string, unknown> = {},
   ): Promise<AIServiceResponse> {
     await this.ensureConfigured();
+
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      try {
+        const response = await hostBridge.sendMessage({
+          messages,
+          options,
+          signal: null,
+          onStream,
+        });
+
+        return {
+          success: response.success !== false,
+          response: response.response ?? null,
+          cancelled: response.cancelled === true,
+          error: response.error ?? null,
+        };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          response: null,
+          cancelled: false,
+          error,
+        };
+      }
+    }
 
     if (this.isExtension) {
       // Extension mode: streaming via message bridge
@@ -256,6 +308,16 @@ class AIServiceProxy extends ServiceProxy {
   async sendMessageSync(messages: AIMessage[]): Promise<string> {
     await this.ensureConfigured();
 
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      const response = await hostBridge.sendMessage({
+        messages,
+        signal: null,
+        onStream: null,
+      });
+      return response.response ?? "";
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error("AIServiceProxy: Bridge not available");
@@ -274,6 +336,15 @@ class AIServiceProxy extends ServiceProxy {
    * Abort the current ongoing request
    */
   async abortRequest(): Promise<boolean> {
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      if (!hostBridge.abortRequest) {
+        return true;
+      }
+
+      return (await hostBridge.abortRequest()) === true;
+    }
+
     if (this.isExtension) {
       // Send abort message to background
       const bridge = await this.waitForBridge();
@@ -311,6 +382,15 @@ class AIServiceProxy extends ServiceProxy {
   async testConnection(): Promise<boolean> {
     await this.ensureConfigured();
 
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      if (!hostBridge.testConnection) {
+        return true;
+      }
+
+      return (await hostBridge.testConnection()) === true;
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) throw new Error("AIServiceProxy: Bridge not available");
@@ -330,6 +410,18 @@ class AIServiceProxy extends ServiceProxy {
     endpoint?: string;
     apiKey?: string;
   }): Promise<{ models: string[]; error?: string }> {
+    const hostBridge = this.getHostTransportBridge()?.ai;
+    if (hostBridge) {
+      if (!hostBridge.listModels) {
+        return {
+          models: [],
+          error: "Host bridge does not support remote model listing.",
+        };
+      }
+
+      return await hostBridge.listModels(config);
+    }
+
     if (this.isExtension) {
       const bridge = await this.waitForBridge();
       if (!bridge) {

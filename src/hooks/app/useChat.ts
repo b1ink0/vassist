@@ -9,6 +9,8 @@ export const useIsChatContainerVisible = () =>
 
 export const useChatMessages = () => useAppStore((state) => state.chatMessages);
 
+export const useChatDraft = () => useAppStore((state) => state.chatDraft);
+
 export const useIsProcessing = () => useAppStore((state) => state.isProcessing);
 
 export const useCurrentChatId = () =>
@@ -25,6 +27,7 @@ export const useChatActions = () =>
       setIsChatInputVisible: state.setIsChatInputVisible,
       setIsChatContainerVisible: state.setIsChatContainerVisible,
       setChatMessages: state.setChatMessages,
+      setChatDraft: state.setChatDraft,
       setIsProcessing: state.setIsProcessing,
       setCurrentChatId: state.setCurrentChatId,
       setIsTempChat: state.setIsTempChat,
