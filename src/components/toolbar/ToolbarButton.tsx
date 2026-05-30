@@ -8,7 +8,7 @@
  * - Icon + label display
  */
 
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import type { MouseEventHandler } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
@@ -26,6 +26,7 @@ export interface ToolbarButtonProps {
   isLightBackground?: boolean;
   maxLabelWidth?: string;
   testId?: string;
+  style?: CSSProperties;
   onMouseEnterButton?: MouseEventHandler<HTMLButtonElement>;
   onMouseLeaveButton?: MouseEventHandler<HTMLButtonElement>;
 }
@@ -43,6 +44,7 @@ const ToolbarButton = ({
   isLightBackground: _isLightBackground = false,
   maxLabelWidth = "100px",
   testId,
+  style,
   onMouseEnterButton,
   onMouseLeaveButton,
 }: ToolbarButtonProps) => {
@@ -161,6 +163,7 @@ const ToolbarButton = ({
         className,
       )}
       title={title}
+      style={style}
     >
       <span
         className={cn(

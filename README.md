@@ -55,6 +55,13 @@ Select text or focus an input to rewrite, summarize, translate, dictate, or run 
 | Desktop app       | Everything in one desktop app            | On-device LLM support, on-device speech input, on-device speech output, camera and screen share, and tray integration              |
 | Android app       | VAssist on a phone or tablet             | On-device LLM support, on-device speech input, on-device speech output, shared app and wallpaper settings, and live wallpaper mode |
 | Browser extension | VAssist inside the sites you already use | Page-aware chat, on-page tools, and Chrome AI support where available                                                              |
+| npm packages      | Embed VAssist in your own web app        | `@vassist/react` for React hosts and `@vassist/embed` for plain JavaScript host bridge for your own AI/TTS/STT backend             |
+
+## Embed in Your Own App
+
+VAssist ships as `@vassist/react` and `@vassist/embed` npm packages. Mount the full assistant into any React or JavaScript host, route AI, TTS, and STT requests through your own backend via the host bridge, and control which features, settings, and UI surfaces are available to users.
+
+[Package integration docs →](https://b1ink0.github.io/vassist/architecture/packages-and-integration)
 
 ## Model and Voice Support
 
@@ -143,6 +150,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 - node-llama-cpp
 - llama.cpp
 - Express and NanoHTTPD
+- `@vassist/react` and `@vassist/embed` npm packages
 
 ## License
 

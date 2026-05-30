@@ -147,6 +147,12 @@ export type VAssistToolbarActionId =
   | "image-identify-objects"
   | "add-to-chat";
 
+export type VAssistToolbarItemId =
+  | VAssistToolbarActionId
+  | "insert"
+  | "undo"
+  | "redo";
+
 export type VAssistLabelId =
   | "chat.emptyState.title"
   | "chat.emptyState.description"
@@ -195,6 +201,22 @@ export interface VAssistBrandingConfig {
   appName?: string;
   labelOverrides?: Partial<Record<VAssistLabelId, string>>;
   iconOverrides?: Record<string, string>;
+}
+
+export interface VAssistAIToolbarConfig {
+  showOnInputFocus?: boolean;
+  showOnImageHover?: boolean;
+  visibleItems?: VAssistToolbarItemId[];
+  hiddenItems?: VAssistToolbarItemId[];
+  itemOrder?: VAssistToolbarItemId[];
+}
+
+export interface ResolvedVAssistAIToolbarConfig {
+  showOnInputFocus: boolean;
+  showOnImageHover: boolean;
+  visibleItems: VAssistToolbarItemId[] | null;
+  hiddenItems: VAssistToolbarItemId[];
+  itemOrder: VAssistToolbarItemId[];
 }
 
 export interface VAssistBridgeAIMessage {
@@ -395,6 +417,7 @@ export interface VAssistEmbedConfig {
     hiddenFields?: string[];
     policy?: VAssistSettingsPolicy;
   };
+  aiToolbar?: VAssistAIToolbarConfig;
   setup?: {
     mode?: VAssistSetupMode;
     allowedSteps?: string[];
@@ -452,6 +475,7 @@ export interface ResolvedVAssistEmbedConfig {
       readOnly: VAssistSettingsTargetId[];
     };
   };
+  aiToolbar: ResolvedVAssistAIToolbarConfig;
   setup: {
     mode: VAssistSetupMode;
     allowedSteps: string[];
@@ -546,6 +570,42 @@ export interface VAssistEmbedElementHandle extends HTMLElement {
 }
 
 export const DEFAULT_VASSIST_EMBED_HOST_ID = "vassist-embed-root";
+export const VASSIST_TOOLBAR_ACTIONS: readonly VAssistToolbarActionId[] = [
+  "dictionary-define",
+  "dictionary-synonyms",
+  "dictionary-antonyms",
+  "dictionary-pronunciation",
+  "dictionary-examples",
+  "rewrite-grammar",
+  "rewrite-spelling",
+  "rewrite-moreFormal",
+  "rewrite-moreCasual",
+  "rewrite-professional",
+  "rewrite-shorter",
+  "rewrite-longer",
+  "rewrite-simplify",
+  "rewrite-concise",
+  "rewrite-clarity",
+  "rewrite-custom",
+  "write",
+  "dictation",
+  "summarize-tldr",
+  "summarize-headline",
+  "summarize-key-points",
+  "summarize-teaser",
+  "translate",
+  "detect-language",
+  "image-describe",
+  "image-extract-text",
+  "image-identify-objects",
+  "add-to-chat",
+];
+export const VASSIST_TOOLBAR_ITEMS: readonly VAssistToolbarItemId[] = [
+  ...VASSIST_TOOLBAR_ACTIONS,
+  "insert",
+  "undo",
+  "redo",
+];
 export const VASSIST_SETTINGS_TABS: readonly VAssistSettingsTabId[] = [
   "ui",
   "3d",
@@ -873,6 +933,24 @@ export function normalizeVAssistEmbedConfig(
   const motionPack = normalizeOptionalEmbedAssetValue(
     config.assets?.motionPack,
   );
+  const hasVisibleToolbarItems = Array.isArray(config.aiToolbar?.visibleItems);
+  const visibleToolbarItems = hasVisibleToolbarItems
+    ? uniqueStrings(config.aiToolbar?.visibleItems, VASSIST_TOOLBAR_ITEMS)
+    : null;
+  const hiddenToolbarItems = uniqueStrings(
+    config.aiToolbar?.hiddenItems,
+    VASSIST_TOOLBAR_ITEMS,
+  );
+  const configuredToolbarItemOrder = uniqueStrings(
+    config.aiToolbar?.itemOrder,
+    VASSIST_TOOLBAR_ITEMS,
+  );
+  const toolbarItemOrder: VAssistToolbarItemId[] = [
+    ...configuredToolbarItemOrder,
+    ...VASSIST_TOOLBAR_ITEMS.filter(
+      (itemId) => !configuredToolbarItemOrder.includes(itemId),
+    ),
+  ];
   const fontFamily =
     normalizeOptionalFontFamily(config.theme?.fontFamily) ??
     DEFAULT_VASSIST_FONT_FAMILY;
@@ -936,6 +1014,13 @@ export function normalizeVAssistEmbedConfig(
         hidden: policyHidden,
         readOnly: policyReadOnly,
       },
+    },
+    aiToolbar: {
+      showOnInputFocus: config.aiToolbar?.showOnInputFocus ?? true,
+      showOnImageHover: config.aiToolbar?.showOnImageHover ?? true,
+      visibleItems: visibleToolbarItems,
+      hiddenItems: hiddenToolbarItems,
+      itemOrder: toolbarItemOrder,
     },
     setup: {
       mode: setupMode,

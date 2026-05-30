@@ -17,7 +17,7 @@ import {
 import { getVAssistThemeRootAttributes } from "./embed/theme";
 import {
   setActiveEmbedHostId,
-  setEmbedConfig as setRuntimeEmbedConfig,
+  setResolvedEmbedConfig,
 } from "./embed/runtimeStore";
 import { EmbedHostProvider } from "./embed/EmbedHostContext";
 import { AnimationProvider } from "./contexts/AnimationContext";
@@ -96,7 +96,7 @@ function StoreBootstrapInner({
   }, [refreshAndroidApi, refreshDesktopApi]);
 
   useEffect(() => {
-    setRuntimeEmbedConfig(embedConfig, embedConfig.mount.hostId);
+    setResolvedEmbedConfig(embedConfig, embedConfig.mount.hostId);
     setActiveEmbedHostId(embedConfig.mount.hostId);
   }, [embedConfig]);
 

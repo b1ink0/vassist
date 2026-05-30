@@ -1,68 +1,89 @@
 # Technical Overview
 
-Reference for the repository layout, runtime boundaries, storage model, and AI or media stack. For user-facing guides, start at [Start Here](/intro) or [Using VAssist](/guide/).
+This section serves two different jobs:
 
-## Reference pages
+- integration work for teams embedding VAssist into their own host app
+- contributor work for people changing the VAssist runtime itself
 
-| Page                                                         | What it is for                                                                                |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [AI and Media Stack](/architecture/ai-and-media-stack)       | The engines, provider backends, and file formats behind chat, speech, and the Live Assistant. |
-| [Storage and Data](/architecture/storage-and-data)           | What kinds of data VAssist saves and why backup matters.                                      |
-| [Repository Map](/architecture/repository-map)               | A quick folder guide for contributors.                                                        |
-| [Repository Tree and Metrics](/architecture/repository-tree) | File and directory totals, line counts by file type, and the full generated tree.             |
+If you are looking for user-facing help, start at [Start Here](/intro) or [Using VAssist](/guide/).
 
-## Key libraries
+## If You Are Embedding VAssist
 
-| Area                | Library              | Notes                                                  |
-| ------------------- | -------------------- | ------------------------------------------------------ |
-| UI framework        | React 19             | Shared across all platforms                            |
-| 3D rendering        | `@babylonjs/core` v8 | WebGL rendering for the Live Assistant                 |
-| MMD support         | `babylon-mmd` v1     | PMX/VMD loading and playback on top of BabylonJS       |
-| Physics             | `@babylonjs/havok`   | Cloth and hair simulation                              |
-| VAD                 | `@ricky0123/vad-web` | Silero VAD v5, voice activity detection                |
-| TTS (browser)       | `kokoro-js`          | ONNX-based TTS in a shared audio worker                |
-| ONNX runtime        | `onnxruntime-web`    | Powers Kokoro and VAD inference in the browser         |
-| Local LLM (desktop) | `node-llama-cpp`     | llama.cpp bindings for GGUF models                     |
-| Storage             | `dexie`              | IndexedDB wrapper for config, chat history, and assets |
-| Mobile bridge       | Capacitor            | Web-to-Android bridge for the native app               |
+Start with the page that answers the next decision you actually need to make.
 
-## Repository layout
+| Question                                             | Read this page                                                   |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| Which package and entry point should I use?          | [Package Integration](/architecture/packages-and-integration)    |
+| How do I mount and control a non-React instance?     | [@vassist/embed](/architecture/embed)                            |
+| How do I use the React wrapper and `customizations`? | [@vassist/react](/architecture/react)                            |
+| Which config field controls the thing I need?        | [Configuration Reference](/architecture/configuration-reference) |
 
-VAssist is one product with multiple runtime shells.
+## If You Are Changing VAssist Itself
 
-- `src/` holds most of the shared React UI, services, hooks, stores, and Babylon scene logic.
-- `extension/` adds browser-specific injection, background logic, and offscreen support.
-- `electron/` adds the desktop runtime, local service managers, and IPC handlers.
-- `android/` adds the native Android launcher, wallpaper service, and Android-local AI services.
-- `android-src/` contains the Android-facing web entry used by the shared app.
+| Question                                               | Read this page                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| Which runtime owns this feature?                       | This page                                                    |
+| Where does the code live?                              | [Repository Map](/architecture/repository-map)               |
+| Which engines and model formats are in play?           | [AI and Media Stack](/architecture/ai-and-media-stack)       |
+| What data is persisted or backed up?                   | [Storage and Data](/architecture/storage-and-data)           |
+| How big is the repo and where are the generated trees? | [Repository Tree and Metrics](/architecture/repository-tree) |
 
-## How the app boots
+## Runtime Model
 
-1. Load config and stores.
-2. Detect which runtime is active.
-3. Decide whether setup must block normal use.
-4. Mount the shared UI or the runtime-specific wrapper.
-5. Route actions through the right provider or bridge for the current platform.
+VAssist is one shared application runtime with several outer shells around it.
 
-## Proxy and bridge layers
+| Layer                      | Main location                 | What it owns                                                                                          |
+| -------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Shared application runtime | `src/`                        | Shared UI, stores, services, hooks, config, Babylon integration, and runtime-aware proxies            |
+| Browser package surfaces   | `packages/`                   | Public browser APIs for plain JS hosts and React hosts                                                |
+| Embed bootstrapping        | `embed/` and `src/embed/`     | Custom element definition, host APIs, config normalization, settings policy, branding, portal routing |
+| Extension shell            | `extension/`                  | Content/background/offscreen runtime pieces and browser-specific bridge flow                          |
+| Desktop shell              | `electron/`                   | Electron process wiring, local service management, IPC, packaging                                     |
+| Android shell              | `android/` and `android-src/` | Native Android runtime, wallpaper mode, Android-local AI services, Android-facing web entry           |
 
-The UI is consistent across platforms, but the implementation behind each action differs:
+## Request And Control Paths
 
-- In direct web flows, features can run inside the same app context.
-- In the extension, the same action may pass through content, background, and offscreen contexts.
-- In desktop and Android-local modes, actions go through local servers or native bridges.
+The same UI can route work through very different execution paths.
 
-## Main product systems
+| Situation                           | Path                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| Browser host with builtin providers | UI -> service proxies -> browser-side provider/runtime code              |
+| Browser host with secure bridge     | UI -> service proxies -> `transport.bridge` -> host/backend              |
+| Extension                           | UI/content -> background and offscreen contexts -> provider/runtime code |
+| Desktop local mode                  | UI -> service proxies -> Electron IPC -> local service/runtime           |
+| Android local mode                  | UI -> bridge/store -> Android runtime service                            |
 
-- setup wizard
-- chat and voice
-- AI toolbar
-- Live Assistant and Babylon scene
-- settings and provider configuration
+This is why `src/services/proxies/` matters: it is the routing layer that keeps one UI working across all shells.
 
-## Runtime-heavy systems
+## Package Boundary
 
-- Electron local AI server management
-- Android native AI services and wallpaper rendering
-- extension background and offscreen audio handling
-- file-backed storage, backup, and import or export behavior
+The browser packages are thin public wrappers over the shared runtime.
+
+- `packages/embed/src/` exposes imperative mount, update, remove, and type re-exports.
+- `packages/react/src/` wraps the same runtime in React components and adds host-scoped React customizations.
+- `src/embed/config.ts` is the central public config and type contract used by both packages.
+
+If the docs and the exports ever disagree, `packages/embed/src/index.ts`, `packages/react/src/index.tsx`, and `src/embed/config.ts` are the files to trust first.
+
+## Key Libraries
+
+| Area                      | Library              | Why it is here                                   |
+| ------------------------- | -------------------- | ------------------------------------------------ |
+| Shared UI                 | React 19             | Common UI layer across shells                    |
+| 3D rendering              | `@babylonjs/core`    | Live Assistant rendering                         |
+| MMD model support         | `babylon-mmd`        | PMX/VMD loading and playback                     |
+| Physics                   | `@babylonjs/havok`   | Cloth and hair simulation                        |
+| Browser VAD               | `@ricky0123/vad-web` | Voice activity detection                         |
+| Browser TTS               | `kokoro-js`          | ONNX-backed speech synthesis in browser contexts |
+| Browser inference runtime | `onnxruntime-web`    | ONNX execution for supported browser features    |
+| Desktop local LLM         | `node-llama-cpp`     | GGUF model execution on desktop                  |
+| Persistence               | `dexie`              | IndexedDB-backed storage layer                   |
+| Android bridge            | Capacitor            | Web-to-Android runtime bridge                    |
+
+## Where To Look Next In Code
+
+- `src/embed/` for host-facing config, branding, portal containers, and settings policy
+- `src/services/proxies/` for runtime routing logic
+- `src/components/` for shared product UI
+- `packages/` for the public browser API boundary
+- `electron/`, `extension/`, and `android/` for shell-specific code

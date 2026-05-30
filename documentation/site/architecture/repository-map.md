@@ -1,45 +1,69 @@
 # Repository Map
 
-The repository map is a folder-level index of the project. It is the fastest way to locate a feature area before opening the full generated tree.
+Use this page when you know the job you need to do and want the shortest path to the right folder.
 
-## Root-level map
+## If You Are Working On Browser Integration
 
-| Path | Purpose |
-| --- | --- |
-| `src/` | Shared product UI, hooks, stores, services, Babylon scene code, and shared configuration |
-| `extension/` | Chrome extension runtime pieces: manifest, background, content, offscreen, and shared bridge types |
-| `electron/` | Electron runtime orchestration, IPC, local server management, Python helper coordination, and packaging glue |
-| `android/` | Native Android project, Gradle files, Kotlin runtime code, wallpaper service, and Android-local AI services |
-| `android-src/` | Android-facing React entry and related web content |
-| `public/` | Shared app assets, including bundled avatar and motion resources |
-| `tools/` | Build-time helpers and Vite plugins |
-| `documentation/` | Product docs, docs assets, and docs-generation scripts |
-| `dist-android/`, `dist-desktop/`, `dist-desktop-release/` | Build outputs when they exist in the checkout |
+| Path                                    | Open it for                                                                                   |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `packages/embed/src/`                   | Public plain-JS entry points and re-exports                                                   |
+| `packages/react/src/`                   | React wrapper components, props, and React-specific re-exports                                |
+| `embed/main.tsx`                        | Low-level embed bootstrapping, custom element registration, and global host API wiring        |
+| `src/embed/config.ts`                   | Public config contract, runtime snapshot types, settings target IDs, and config normalization |
+| `src/embed/reactHostCustomizations.tsx` | React-only customization hooks and host-scoped registry                                       |
+| `src/embed/branding.ts`                 | Label and icon override helpers                                                               |
+| `src/embed/settingsPolicy.ts`           | Hide and read-only policy helpers                                                             |
+| `src/embed/portalContainers.ts`         | Portal target resolution for popovers and canvas surfaces                                     |
+| `src/embed/hostCommands.ts`             | Internal host command event naming and dispatch helpers used by the runtime                   |
 
-## Where the docs live
+## If You Are Working On Shared Product Behavior
 
-| Path | Purpose |
-| --- | --- |
-| `documentation/site/getting-started/` | Install and setup guides |
-| `documentation/site/guide/` | Task-based usage guides |
-| `documentation/site/platforms/` | Desktop, Android, and extension differences |
-| `documentation/site/settings/` | Exact settings reference |
-| `documentation/site/architecture/` | Technical reference, repository map, and generated repository tree or metrics |
-| `documentation/site/public/assets/` | Shared screenshots and GIFs used by the docs |
+| Path                    | Open it for                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/components/`       | Chat, settings, setup, toolbar, assistant, and shared UI pieces                                     |
+| `src/services/`         | Core business logic for AI, voice, assets, page interaction, and media features                     |
+| `src/services/proxies/` | Runtime-aware routing between browser, extension, desktop, Android, and host-bridge execution paths |
+| `src/hooks/`            | App hooks, config hooks, bootstrap hooks, and platform helpers                                      |
+| `src/stores/`           | Zustand stores and app-level state transitions                                                      |
+| `src/config/`           | Default config, prompts, feature defaults, scene presets, and lists                                 |
+| `src/utils/`            | Shared runtime utilities, resource loading, platform checks, and DOM helpers                        |
+| `src/babylon/`          | Live Assistant scene, animation, camera, and interaction layers                                     |
 
-## Notable shared folders inside `src/`
+## If You Are Working On Runtime-Specific Code
 
-| Path | Purpose |
-| --- | --- |
-| `src/components/` | Chat, settings, setup, toolbar, assistant, and shared UI pieces |
-| `src/babylon/` | Scene, camera, animation, and interaction managers |
-| `src/services/` | Business logic for AI, voice, assets, storage, and page interaction |
-| `src/services/proxies/` | Runtime-aware routing layer for shared service calls |
-| `src/hooks/` | App, config, bootstrap, and platform hooks |
-| `src/stores/` | Zustand-based state containers |
-| `src/config/` | Default config, prompt templates, scene presets, and animation categories |
-| `src/workers/` | Shared audio worker and worker client logic |
+| Path           | What lives there                                                                       |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `extension/`   | Chrome extension manifest, background logic, content scripts, offscreen runtime pieces |
+| `electron/`    | Electron main/preload/renderer integration, local services, packaging glue             |
+| `android/`     | Native Android project, Gradle setup, wallpaper runtime, Android-local AI services     |
+| `android-src/` | Android-facing React entry used by the shared app                                      |
 
-## Full tree vs folder map
+## Root-Level Orientation
 
-[Repository Tree and Metrics](/architecture/repository-tree) expands this into a file-by-file listing with counts. The map below stays at the folder level for quicker orientation.
+| Path             | Purpose                                               |
+| ---------------- | ----------------------------------------------------- |
+| `src/`           | Shared application runtime                            |
+| `packages/`      | Public browser package boundary                       |
+| `embed/`         | Embed runtime bootstrapping layer                     |
+| `extension/`     | Browser extension shell                               |
+| `electron/`      | Desktop shell                                         |
+| `android/`       | Native Android shell                                  |
+| `android-src/`   | Android web entry                                     |
+| `public/`        | Shared assets bundled with the app                    |
+| `tools/`         | Build-time helpers and Vite plugins                   |
+| `documentation/` | Product docs, generated docs assets, and docs tooling |
+
+## Docs Map
+
+| Path                                  | Use it for                                    |
+| ------------------------------------- | --------------------------------------------- |
+| `documentation/site/getting-started/` | Install and setup flow                        |
+| `documentation/site/guide/`           | Task-based user guides                        |
+| `documentation/site/platforms/`       | Desktop, Android, and extension differences   |
+| `documentation/site/settings/`        | Exact settings reference                      |
+| `documentation/site/architecture/`    | Technical reference and integration reference |
+| `documentation/site/public/assets/`   | Shared screenshots and GIFs used by docs      |
+
+## When The Folder Map Is Not Enough
+
+[Repository Tree and Metrics](/architecture/repository-tree) expands this into the generated file tree and counts. Use this page first, then jump to the tree if you need exact files.

@@ -101,10 +101,14 @@ export function VAssistEmbed({
 
 export {
   DEFAULT_VASSIST_EMBED_HOST_ID,
+  VASSIST_TOOLBAR_ACTIONS,
+  VASSIST_TOOLBAR_ITEMS,
   mergeVAssistEmbedConfig,
   normalizeVAssistEmbedConfig,
   type DeepPartial,
+  type ResolvedVAssistAIToolbarConfig,
   type ResolvedVAssistEmbedConfig,
+  type VAssistAIToolbarConfig,
   type VAssistBinaryLike,
   type VAssistBrandingConfig,
   type VAssistEmbedApi,
@@ -138,6 +142,7 @@ export {
   type VAssistThemeEffects,
   type VAssistThemeMode,
   type VAssistToolbarActionId,
+  type VAssistToolbarItemId,
   type VAssistTriggerToolbarActionOptions,
   type VAssistSettingsTabId,
   type VAssistSettingsTargetId,

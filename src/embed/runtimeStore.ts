@@ -29,6 +29,10 @@ interface EmbedRuntimeState {
     config?: VAssistEmbedConfig,
     hostId?: string,
   ) => ResolvedVAssistEmbedConfig;
+  setResolvedConfig: (
+    config: ResolvedVAssistEmbedConfig,
+    hostId?: string,
+  ) => ResolvedVAssistEmbedConfig;
   updateConfig: (
     config: VAssistEmbedConfig,
     hostId?: string,
@@ -72,6 +76,18 @@ export const useEmbedRuntimeStore = create<EmbedRuntimeState>((set, get) => ({
       activeHostId: targetHostId,
     }));
     return resolved;
+  },
+  setResolvedConfig: (config, hostId) => {
+    const targetHostId = resolveHostId(config, hostId);
+    set((state) => ({
+      config,
+      configsByHostId: {
+        ...state.configsByHostId,
+        [targetHostId]: config,
+      },
+      activeHostId: targetHostId,
+    }));
+    return config;
   },
   updateConfig: (config, hostId) => {
     const state = get();
@@ -148,6 +164,12 @@ export const setEmbedConfig = (
   hostId?: string,
 ): ResolvedVAssistEmbedConfig =>
   useEmbedRuntimeStore.getState().setConfig(config, hostId);
+
+export const setResolvedEmbedConfig = (
+  config: ResolvedVAssistEmbedConfig,
+  hostId?: string,
+): ResolvedVAssistEmbedConfig =>
+  useEmbedRuntimeStore.getState().setResolvedConfig(config, hostId);
 
 export const updateEmbedConfig = (
   config: VAssistEmbedConfig,

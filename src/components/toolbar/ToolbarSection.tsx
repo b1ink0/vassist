@@ -9,7 +9,7 @@
  * - Optional separator after section
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import type { MouseEventHandler } from "react";
 import ToolbarButton from "./ToolbarButton";
 import type { ToolbarButtonProps } from "./ToolbarButton";
@@ -25,6 +25,7 @@ interface ToolbarSectionProps {
   isLoading?: boolean;
   showSeparator?: boolean;
   isLightBackground?: boolean;
+  style?: CSSProperties;
 }
 
 const ToolbarSection = ({
@@ -33,6 +34,7 @@ const ToolbarSection = ({
   isLoading = false,
   showSeparator = true,
   isLightBackground = false,
+  style,
 }: ToolbarSectionProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -89,6 +91,7 @@ const ToolbarSection = ({
       className="flex items-center gap-0.5"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      style={style}
     >
       {/* Main Button */}
       <ToolbarButton

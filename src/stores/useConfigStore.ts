@@ -566,6 +566,12 @@ const applyEmbedUiPolicy = (
     nextUiConfig.enableAIToolbar = false;
   }
 
+  nextUiConfig.aiToolbar = {
+    ...nextUiConfig.aiToolbar,
+    showOnInputFocus: embedConfig.aiToolbar.showOnInputFocus,
+    showOnImageHover: embedConfig.aiToolbar.showOnImageHover,
+  };
+
   if (!embedConfig.features.chat) {
     nextUiConfig.shortcuts.enabled = false;
   }

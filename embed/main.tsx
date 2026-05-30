@@ -871,7 +871,7 @@ class VAssistEmbedElement
         <App
           mode="development"
           embedded={true}
-          embedConfig={resolvedConfig}
+          embedConfig={this.currentConfig}
           onStoreReady={(store) => {
             iframeRuntimeStore = store;
             if (this.mountedState) {

@@ -70,7 +70,7 @@ The AI Toolbar is the floating popup that appears when you select text on a page
 - **Show on Input Focus** shows dictation helpers when you click into a text field. Turn it off if the toolbar appearing on every input field is distracting.
 - **Show on Image Hover** shows image-analysis affordances when you hover an image. Turn it off if you rarely use image actions.
 
-What actions the toolbar offers is controlled by the AI+ settings tab, not here.
+What actions the toolbar offers is mostly controlled by the AI+ settings tab. In embedded hosts, the host can also force built-in toolbar visibility and ordering through the embed config.
 
 | Control             | Default | Behavior                                                                      |
 | ------------------- | ------- | ----------------------------------------------------------------------------- |

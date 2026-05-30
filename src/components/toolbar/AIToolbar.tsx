@@ -15,6 +15,7 @@ import {
   getHostCommandEventName,
   type VAssistToolbarActionEventDetail,
 } from "../../embed/hostCommands";
+import type { VAssistToolbarItemId } from "../../embed/config";
 import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { cn } from "../../utils/cn";
 import { useToolingActions } from "../../hooks/app/useTooling";
@@ -35,7 +36,7 @@ import {
 import VoiceRecordingService from "../../services/VoiceRecordingService";
 import { TranslationLanguages } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
-import ToolbarButton from "./ToolbarButton";
+import ToolbarButton, { type ToolbarButtonProps } from "./ToolbarButton";
 import ToolbarSection from "./ToolbarSection";
 import ToolbarResultPanel from "./ToolbarResultPanel";
 import { Icon } from "../icons";
@@ -61,6 +62,14 @@ type SavedCursorPosition = {
   end?: number | null;
   range?: Range;
 } | null;
+
+type ToolbarRenderableButton = {
+  itemId: VAssistToolbarItemId;
+  props: Omit<
+    ToolbarButtonProps,
+    "isLightBackground" | "onMouseEnterButton" | "onMouseLeaveButton" | "style"
+  >;
+};
 
 interface SelectionSnapshot {
   text: string;
@@ -109,7 +118,7 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const AIToolbar = () => {
-  const { hostId } = useEmbedHost();
+  const { hostId, embedConfig } = useEmbedHost();
   const reactCustomizations = useVAssistReactCustomizations(hostId);
   const uiConfig = useUIConfig();
   const aiConfig = useAIConfig();
@@ -336,12 +345,121 @@ const AIToolbar = () => {
   const aiToolbarSettings = uiConfig?.aiToolbar as
     | { showOnInputFocus?: boolean; showOnImageHover?: boolean }
     | undefined;
+  const toolbarPolicy = embedConfig.aiToolbar;
   const backgroundMode =
     (
       uiConfig?.backgroundDetection as
         | { mode?: "adaptive" | "light" | "dark" }
         | undefined
     )?.mode || "adaptive";
+  const hiddenToolbarItems = useMemo(
+    () => new Set(toolbarPolicy.hiddenItems),
+    [toolbarPolicy.hiddenItems],
+  );
+  const visibleToolbarItems = useMemo(
+    () =>
+      toolbarPolicy.visibleItems ? new Set(toolbarPolicy.visibleItems) : null,
+    [toolbarPolicy.visibleItems],
+  );
+  const toolbarItemOrder = useMemo(() => {
+    const nextOrder = new Map<VAssistToolbarItemId, number>();
+
+    toolbarPolicy.itemOrder.forEach((itemId, index) => {
+      nextOrder.set(itemId, index);
+    });
+
+    return nextOrder;
+  }, [toolbarPolicy.itemOrder]);
+  const isSummarizerEnabled =
+    aiConfig?.aiFeatures?.summarizer?.enabled !== false;
+  const isTranslatorEnabled =
+    aiConfig?.aiFeatures?.translator?.enabled !== false;
+  const isLanguageDetectorEnabled =
+    aiConfig?.aiFeatures?.languageDetector?.enabled !== false;
+  const isRewriterEnabled = aiConfig?.aiFeatures?.rewriter?.enabled !== false;
+  const isWriterEnabled = aiConfig?.aiFeatures?.writer?.enabled !== false;
+
+  const isToolbarItemAllowed = useCallback(
+    (itemId: VAssistToolbarItemId) => {
+      if (hiddenToolbarItems.has(itemId)) {
+        return false;
+      }
+
+      if (visibleToolbarItems && !visibleToolbarItems.has(itemId)) {
+        return false;
+      }
+
+      return true;
+    },
+    [hiddenToolbarItems, visibleToolbarItems],
+  );
+
+  const getToolbarItemOrder = useCallback(
+    (itemId: VAssistToolbarItemId) =>
+      toolbarItemOrder.get(itemId) ?? Number.MAX_SAFE_INTEGER,
+    [toolbarItemOrder],
+  );
+
+  const orderToolbarButtons = useCallback(
+    (buttons: ToolbarRenderableButton[]) =>
+      buttons
+        .filter((button) => isToolbarItemAllowed(button.itemId))
+        .sort(
+          (left, right) =>
+            getToolbarItemOrder(left.itemId) -
+            getToolbarItemOrder(right.itemId),
+        ),
+    [getToolbarItemOrder, isToolbarItemAllowed],
+  );
+
+  const renderToolbarSection = useCallback(
+    (key: string, buttons: ToolbarRenderableButton[]) => {
+      const orderedButtons = orderToolbarButtons(buttons);
+
+      const mainButton = orderedButtons[0];
+
+      if (!mainButton) {
+        return null;
+      }
+
+      const subButtons = orderedButtons.slice(1);
+
+      return (
+        <ToolbarSection
+          key={key}
+          style={{ order: getToolbarItemOrder(mainButton.itemId) }}
+          isLoading={isLoading}
+          isLightBackground={isLightBackgroundToolbar}
+          mainButton={mainButton.props}
+          subButtons={subButtons.map((button) => button.props)}
+        />
+      );
+    },
+    [
+      getToolbarItemOrder,
+      isLoading,
+      isLightBackgroundToolbar,
+      orderToolbarButtons,
+    ],
+  );
+
+  const renderToolbarButton = useCallback(
+    (key: string, button: ToolbarRenderableButton) => {
+      if (!isToolbarItemAllowed(button.itemId)) {
+        return null;
+      }
+
+      return (
+        <ToolbarButton
+          key={key}
+          {...button.props}
+          style={{ order: getToolbarItemOrder(button.itemId) }}
+          isLightBackground={isLightBackgroundToolbar}
+        />
+      );
+    },
+    [getToolbarItemOrder, isLightBackgroundToolbar, isToolbarItemAllowed],
+  );
 
   /**
    * Determine selection type based on word count
@@ -3429,22 +3547,25 @@ const AIToolbar = () => {
           {/* Toolbar buttons with labels - Expand sub-options on hover */}
 
           {/* Dictionary Group - Only show for single words/short selections with text */}
-          {hasTextSelection && isSingleWord && (
-            <ToolbarSection
-              isLoading={isLoading}
-              isLightBackground={isLightBackgroundToolbar}
-              mainButton={{
-                icon: "book",
-                label: "Dictionary",
-                onClick: () => onDictionaryClick(resultPanelActive),
-                disabled: !selectedText,
-                isLoading: isLoading && action === "dictionary-define",
-                actionType: "dictionary-define",
-                title: "Get word definition",
-                maxLabelWidth: "100px",
-              }}
-              subButtons={[
-                {
+          {hasTextSelection &&
+            isSingleWord &&
+            renderToolbarSection("dictionary", [
+              {
+                itemId: "dictionary-define",
+                props: {
+                  icon: "book",
+                  label: "Dictionary",
+                  onClick: () => onDictionaryClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === "dictionary-define",
+                  actionType: "dictionary-define",
+                  title: "Get word definition",
+                  maxLabelWidth: "100px",
+                },
+              },
+              {
+                itemId: "dictionary-synonyms",
+                props: {
                   icon: "refresh",
                   label: "Synonyms",
                   onClick: () => onSynonymsClick(resultPanelActive),
@@ -3454,7 +3575,10 @@ const AIToolbar = () => {
                   title: "Find similar words",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "dictionary-antonyms",
+                props: {
                   icon: "bidirectional",
                   label: "Antonyms",
                   onClick: () => onAntonymsClick(resultPanelActive),
@@ -3464,7 +3588,10 @@ const AIToolbar = () => {
                   title: "Find opposite words",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "dictionary-pronunciation",
+                props: {
                   icon: "speaker",
                   label: "Pronunciation",
                   onClick: () => onPronunciationClick(resultPanelActive),
@@ -3474,7 +3601,10 @@ const AIToolbar = () => {
                   title: "Get pronunciation guide",
                   maxLabelWidth: "120px",
                 },
-                {
+              },
+              {
+                itemId: "dictionary-examples",
+                props: {
                   icon: "idea",
                   label: "Examples",
                   onClick: () => onExamplesClick(resultPanelActive),
@@ -3484,27 +3614,30 @@ const AIToolbar = () => {
                   title: "See usage examples",
                   maxLabelWidth: "100px",
                 },
-              ]}
-            />
-          )}
+              },
+            ])}
 
           {/* Rewrite Text Group - Only show for editable content */}
-          {hasTextSelection && isEditableContent && (
-            <ToolbarSection
-              isLoading={isLoading}
-              isLightBackground={isLightBackgroundToolbar}
-              mainButton={{
-                icon: "write",
-                label: "Rewrite",
-                onClick: () => onFixGrammarClick(resultPanelActive),
-                disabled: !selectedText,
-                isLoading: isLoading && action === "rewrite-grammar",
-                actionType: "rewrite-grammar",
-                title: "Fix grammar (default)",
-                maxLabelWidth: "100px",
-              }}
-              subButtons={[
-                {
+          {hasTextSelection &&
+            isEditableContent &&
+            isRewriterEnabled &&
+            renderToolbarSection("rewrite", [
+              {
+                itemId: "rewrite-grammar",
+                props: {
+                  icon: "write",
+                  label: "Rewrite",
+                  onClick: () => onFixGrammarClick(resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === "rewrite-grammar",
+                  actionType: "rewrite-grammar",
+                  title: "Fix grammar (default)",
+                  maxLabelWidth: "100px",
+                },
+              },
+              {
+                itemId: "rewrite-spelling",
+                props: {
                   icon: "check",
                   label: "Spelling",
                   onClick: () => onFixSpellingClick(resultPanelActive),
@@ -3514,7 +3647,10 @@ const AIToolbar = () => {
                   title: "Fix spelling",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-moreFormal",
+                props: {
                   icon: "formal",
                   label: "Formal",
                   onClick: () => onMakeFormalClick(resultPanelActive),
@@ -3524,7 +3660,10 @@ const AIToolbar = () => {
                   title: "Make formal",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-moreCasual",
+                props: {
                   icon: "casual",
                   label: "Casual",
                   onClick: () => onMakeCasualClick(resultPanelActive),
@@ -3534,7 +3673,10 @@ const AIToolbar = () => {
                   title: "Make casual",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-professional",
+                props: {
                   icon: "briefcase",
                   label: "Professional",
                   onClick: () => onMakeProfessionalClick(resultPanelActive),
@@ -3544,7 +3686,10 @@ const AIToolbar = () => {
                   title: "Make professional",
                   maxLabelWidth: "110px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-shorter",
+                props: {
                   icon: "compress",
                   label: "Shorter",
                   onClick: () => onMakeShorterClick(resultPanelActive),
@@ -3554,7 +3699,10 @@ const AIToolbar = () => {
                   title: "Make shorter",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-longer",
+                props: {
                   icon: "note",
                   label: "Expand",
                   onClick: () => onExpandClick(resultPanelActive),
@@ -3564,7 +3712,10 @@ const AIToolbar = () => {
                   title: "Expand text",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-simplify",
+                props: {
                   icon: "book",
                   label: "Simplify",
                   onClick: () => onSimplifyClick(resultPanelActive),
@@ -3574,7 +3725,10 @@ const AIToolbar = () => {
                   title: "Simplify text",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-concise",
+                props: {
                   icon: "lightning",
                   label: "Concise",
                   onClick: () => onMakeConciseClick(resultPanelActive),
@@ -3584,7 +3738,10 @@ const AIToolbar = () => {
                   title: "Make concise",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-clarity",
+                props: {
                   icon: "clarity",
                   label: "Clarity",
                   onClick: () => onImproveClarityClick(resultPanelActive),
@@ -3594,7 +3751,10 @@ const AIToolbar = () => {
                   title: "Improve clarity",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "rewrite-custom",
+                props: {
                   icon: "edit",
                   label: "Custom",
                   onClick: () => onCustomRewriteClick(),
@@ -3604,63 +3764,67 @@ const AIToolbar = () => {
                   title: "Custom rewrite with instructions",
                   maxLabelWidth: "100px",
                 },
-              ]}
-            />
-          )}
+              },
+            ])}
 
           {/* Write Button - Only show for editable content */}
-          {isEditableContent && (
-            <ToolbarButton
-              icon="edit"
-              label="Write"
-              onClick={onWriteClick}
-              disabled={false}
-              isLoading={isLoading && action === "write"}
-              actionType="write"
-              title="Generate text with AI"
-              maxLabelWidth="80px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
+          {isEditableContent &&
+            isWriterEnabled &&
+            renderToolbarButton("write", {
+              itemId: "write",
+              props: {
+                icon: "edit",
+                label: "Write",
+                onClick: onWriteClick,
+                disabled: false,
+                isLoading: isLoading && action === "write",
+                actionType: "write",
+                title: "Generate text with AI",
+                maxLabelWidth: "80px",
+              },
+            })}
 
           {/* Dictation Button - Only show for editable content */}
-          {isEditableContent && (
-            <ToolbarButton
-              icon={isRecording ? "stop" : "microphone"}
-              label={isRecording ? `${recordingDuration}s` : "Dictate"}
-              onClick={onDictationClick}
-              disabled={false}
-              isLoading={isRecording}
-              actionType="dictation"
-              title={
-                isRecording
+          {isEditableContent &&
+            renderToolbarButton("dictation", {
+              itemId: "dictation",
+              props: {
+                icon: isRecording ? "stop" : "microphone",
+                label: isRecording ? `${recordingDuration}s` : "Dictate",
+                onClick: onDictationClick,
+                disabled: false,
+                isLoading: isRecording,
+                actionType: "dictation",
+                title: isRecording
                   ? "Click to stop recording"
                   : selectedText && selectedText.trim().length > 0
                     ? "Record and insert via button"
-                    : "Record and auto-insert at cursor"
-              }
-              maxLabelWidth="80px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
+                    : "Record and auto-insert at cursor",
+                maxLabelWidth: "80px",
+              },
+            })}
 
           {/* Summarize Group - Only show when text is selected and not a single word */}
-          {hasTextSelection && !isSingleWord && (
-            <ToolbarSection
-              isLoading={isLoading}
-              isLightBackground={isLightBackgroundToolbar}
-              mainButton={{
-                icon: "note",
-                label: "Summarize",
-                onClick: () => onSummarizeClick("tldr", resultPanelActive),
-                disabled: !selectedText,
-                isLoading: isLoading && action === "summarize-tldr",
-                actionType: "summarize-tldr",
-                title: "Summarize (TL;DR)",
-                maxLabelWidth: "100px",
-              }}
-              subButtons={[
-                {
+          {hasTextSelection &&
+            !isSingleWord &&
+            isSummarizerEnabled &&
+            renderToolbarSection("summarize", [
+              {
+                itemId: "summarize-tldr",
+                props: {
+                  icon: "note",
+                  label: "Summarize",
+                  onClick: () => onSummarizeClick("tldr", resultPanelActive),
+                  disabled: !selectedText,
+                  isLoading: isLoading && action === "summarize-tldr",
+                  actionType: "summarize-tldr",
+                  title: "Summarize (TL;DR)",
+                  maxLabelWidth: "100px",
+                },
+              },
+              {
+                itemId: "summarize-headline",
+                props: {
                   icon: "article",
                   label: "Headline",
                   onClick: () =>
@@ -3671,7 +3835,10 @@ const AIToolbar = () => {
                   title: "Generate headline",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "summarize-key-points",
+                props: {
                   icon: "key",
                   label: "Key Points",
                   onClick: () =>
@@ -3682,7 +3849,10 @@ const AIToolbar = () => {
                   title: "Extract key points",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "summarize-teaser",
+                props: {
                   icon: "magic",
                   label: "Teaser",
                   onClick: () => onSummarizeClick("teaser", resultPanelActive),
@@ -3692,58 +3862,69 @@ const AIToolbar = () => {
                   title: "Create teaser",
                   maxLabelWidth: "100px",
                 },
-              ]}
-            />
-          )}
+              },
+            ])}
 
           {/* Translate Group - Only show when text is selected */}
-          {hasTextSelection && (
-            <ToolbarSection
-              isLoading={isLoading}
-              isLightBackground={isLightBackgroundToolbar}
-              mainButton={{
-                icon: "globe",
-                label: "Translate",
-                onClick: () => onTranslateClick(null, true, resultPanelActive),
-                disabled: !selectedText,
-                isLoading: isLoading && action === "translate",
-                actionType: "translate",
-                title: "Translate",
-                maxLabelWidth: "100px",
-              }}
-              subButtons={[
-                {
-                  icon: "search",
-                  label: "Detect Lang",
-                  onClick: () => onDetectLanguageClick(resultPanelActive),
-                  disabled: !selectedText,
-                  isLoading: isLoading && action === "detect-language",
-                  actionType: "detect-language",
-                  title: "Detect language",
-                  maxLabelWidth: "90px",
-                },
-              ]}
-            />
-          )}
+          {hasTextSelection &&
+            renderToolbarSection("translate", [
+              ...(isTranslatorEnabled
+                ? [
+                    {
+                      itemId: "translate" as const,
+                      props: {
+                        icon: "globe",
+                        label: "Translate",
+                        onClick: () =>
+                          onTranslateClick(null, true, resultPanelActive),
+                        disabled: !selectedText,
+                        isLoading: isLoading && action === "translate",
+                        actionType: "translate",
+                        title: "Translate",
+                        maxLabelWidth: "100px",
+                      },
+                    },
+                  ]
+                : []),
+              ...(isLanguageDetectorEnabled
+                ? [
+                    {
+                      itemId: "detect-language" as const,
+                      props: {
+                        icon: "search",
+                        label: "Detect Lang",
+                        onClick: () => onDetectLanguageClick(resultPanelActive),
+                        disabled: !selectedText,
+                        isLoading: isLoading && action === "detect-language",
+                        actionType: "detect-language",
+                        title: "Detect language",
+                        maxLabelWidth: "90px",
+                      },
+                    },
+                  ]
+                : []),
+            ])}
 
           {/* Image Analysis Group - show when images are selected OR when hovered image exists */}
-          {(selectedImages.length > 0 || hoveredImageElement) && (
-            <ToolbarSection
-              isLoading={isLoading}
-              isLightBackground={isLightBackgroundToolbar}
-              mainButton={{
-                icon: "image",
-                label: "Describe",
-                onClick: () =>
-                  onImageAnalysisClick("describe", resultPanelActive),
-                disabled: false,
-                isLoading: isLoading && action === "image-describe",
-                actionType: "image-describe",
-                title: "Describe image",
-                maxLabelWidth: "100px",
-              }}
-              subButtons={[
-                {
+          {(selectedImages.length > 0 || hoveredImageElement) &&
+            renderToolbarSection("image-analysis", [
+              {
+                itemId: "image-describe",
+                props: {
+                  icon: "image",
+                  label: "Describe",
+                  onClick: () =>
+                    onImageAnalysisClick("describe", resultPanelActive),
+                  disabled: false,
+                  isLoading: isLoading && action === "image-describe",
+                  actionType: "image-describe",
+                  title: "Describe image",
+                  maxLabelWidth: "100px",
+                },
+              },
+              {
+                itemId: "image-extract-text",
+                props: {
                   icon: "document",
                   label: "Extract Text",
                   onClick: () =>
@@ -3754,7 +3935,10 @@ const AIToolbar = () => {
                   title: "Extract text",
                   maxLabelWidth: "100px",
                 },
-                {
+              },
+              {
+                itemId: "image-identify-objects",
+                props: {
                   icon: "tag",
                   label: "Identify Objects",
                   onClick: () =>
@@ -3765,24 +3949,24 @@ const AIToolbar = () => {
                   title: "Identify objects",
                   maxLabelWidth: "150px",
                 },
-              ]}
-            />
-          )}
+              },
+            ])}
 
           {/* Add to Chat button - hide when showing toolbar from input focus (dictation mode) */}
-          {!showingFromInputFocusRef.current && (
-            <ToolbarButton
-              icon="ai"
-              label="Add to Chat"
-              onClick={onAddToChatClick}
-              disabled={false}
-              isLoading={false}
-              actionType="chat"
-              title="Add to chat"
-              maxLabelWidth="100px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
+          {!showingFromInputFocusRef.current &&
+            renderToolbarButton("add-to-chat", {
+              itemId: "add-to-chat",
+              props: {
+                icon: "ai",
+                label: "Add to Chat",
+                onClick: onAddToChatClick,
+                disabled: false,
+                isLoading: false,
+                actionType: "chat",
+                title: "Add to chat",
+                maxLabelWidth: "100px",
+              },
+            })}
 
           {customToolbarActions ? customToolbarActions : null}
 
@@ -3794,61 +3978,68 @@ const AIToolbar = () => {
               action?.startsWith("write-") ||
               action === "write" ||
               action === "dictation" ||
-              action === "translate") && (
-              <ToolbarButton
-                icon="download"
-                label="Insert"
-                onClick={(e) => {
+              action === "translate") &&
+            renderToolbarButton("insert", {
+              itemId: "insert",
+              props: {
+                icon: "download",
+                label: "Insert",
+                onClick: (e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   onInsertClick();
-                }}
-                disabled={false}
-                isLoading={false}
-                actionType="insert"
-                title="Insert generated text"
-                maxLabelWidth="80px"
-                isLightBackground={isLightBackgroundToolbar}
-              />
-            )}
+                },
+                disabled: false,
+                isLoading: false,
+                actionType: "insert",
+                title: "Insert generated text",
+                maxLabelWidth: "80px",
+              },
+            })}
 
           {/* Undo button - Restore original text after insert */}
-          {hasInserted && isEditableContent && originalContent && (
-            <ToolbarButton
-              icon="undo"
-              label=""
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onUndoClick();
-              }}
-              disabled={false}
-              isLoading={false}
-              actionType="undo"
-              title="Restore original text"
-              maxLabelWidth="0px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
+          {hasInserted &&
+            isEditableContent &&
+            originalContent &&
+            renderToolbarButton("undo", {
+              itemId: "undo",
+              props: {
+                icon: "undo",
+                label: "",
+                onClick: (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onUndoClick();
+                },
+                disabled: false,
+                isLoading: false,
+                actionType: "undo",
+                title: "Restore original text",
+                maxLabelWidth: "0px",
+              },
+            })}
 
           {/* Redo button - Restore generated text after undo */}
-          {!hasInserted && isEditableContent && improvedContent && (
-            <ToolbarButton
-              icon="redo"
-              label=""
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onRedoClick();
-              }}
-              disabled={false}
-              isLoading={false}
-              actionType="redo"
-              title="Restore generated text"
-              maxLabelWidth="0px"
-              isLightBackground={isLightBackgroundToolbar}
-            />
-          )}
+          {!hasInserted &&
+            isEditableContent &&
+            improvedContent &&
+            renderToolbarButton("redo", {
+              itemId: "redo",
+              props: {
+                icon: "redo",
+                label: "",
+                onClick: (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRedoClick();
+                },
+                disabled: false,
+                isLoading: false,
+                actionType: "redo",
+                title: "Restore generated text",
+                maxLabelWidth: "0px",
+              },
+            })}
         </div>
       )}
 

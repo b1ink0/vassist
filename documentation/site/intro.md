@@ -29,7 +29,14 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser with no in
     <p>Once setup is done: chat, toolbar, voice, the Live Assistant, and everything in between.</p>
     <p class="doc-card-cta">Usage guides →</p>
   </a>
+  <a class="doc-card doc-card-link" href="./architecture/packages-and-integration">
+    <h3>Use VAssist As A Package</h3>
+    <p>Install <code>@vassist/react</code> or <code>@vassist/embed</code> from npm. Route AI, TTS, and STT through your own backend via the host bridge. Control which features users can access, lock down settings, and customize the UI to fit your project.</p>
+    <p class="doc-card-cta">Integration docs →</p>
+  </a>
 </div>
+
+If you are embedding VAssist, start with [Package integration](/architecture/packages-and-integration). That page covers the decisions you usually need first: package choice, shell entry point, provider ownership, request execution, and host control surfaces.
 
 ## The three main features
 
@@ -58,4 +65,5 @@ A 3D animated assistant that stays visible while you work. It reacts during chat
 
 - [Settings reference](/settings/): every toggle and picker, tab by tab
 - [Platform differences](/platforms/desktop): what's different on desktop vs Android vs extension
+- [Package integration](/architecture/packages-and-integration): React and browser package docs, secure host bridge transport, runtime control APIs, and embedding guides
 - [Technical reference](/architecture/overview): how VAssist is built, what engines it uses, where things live in the repo

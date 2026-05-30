@@ -1,6 +1,6 @@
 # Install VAssist
 
-All releases are published on [GitHub Releases](https://github.com/b1ink0/vassist/releases). Pick the version for your platform below.
+Desktop, Android, and extension releases are published on [GitHub Releases](https://github.com/b1ink0/vassist/releases). If you are embedding VAssist into your own site or app, use the npm package docs instead of the platform installers.
 
 ::: tip Not sure yet?
 The [live demo](https://vassist-demo.vercel.app) runs in your browser and shows the full interface with no install required.
@@ -25,6 +25,25 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser and shows 
 		<p><a href="https://github.com/b1ink0/vassist/releases">GitHub Releases →</a></p>
 	</div>
 </div>
+
+## Use VAssist as a package
+
+If you want to embed VAssist into your own web app instead of installing the desktop app, Android app, or extension, use the browser packages published on npm:
+
+```bash
+npm install @vassist/embed
+# or
+npm install @vassist/react react react-dom
+```
+
+Recommended reading order if you are embedding VAssist:
+
+1. [Package integration](/architecture/packages-and-integration): choose `@vassist/embed` vs `@vassist/react`, pick an entry point, and decide whether requests stay in the browser or move to a host bridge.
+2. [@vassist/embed reference](/architecture/embed): imperative mount/update/remove helpers, custom element usage, runtime controls, snapshots, storage, and resource loading.
+3. [@vassist/react reference](/architecture/react): React components, reactive config props, `customizations`, and host control from React.
+4. [Configuration reference](/architecture/configuration-reference): every supported config field, settings target ID, bridge type, branding option, and hook.
+
+If browser code must not hold vendor credentials, use `providers.mode: "host-managed"` together with `transport.mode: "host-bridge"` so your backend or native host owns AI/TTS/STT requests.
 
 ## Requirements
 
