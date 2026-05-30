@@ -12,11 +12,18 @@ import {
   type UIEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Icon } from "../icons";
 import { Button, Input } from "../ui";
 import { cn } from "../../utils/cn";
 import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
 import Logger from "../../services/LoggerService";
+import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+
+const HISTORY_PAGE_SIZE = 30;
+const HISTORY_LOAD_SIZE = 20;
+const HISTORY_LOAD_THRESHOLD = 300;
+const HISTORY_ESTIMATED_ROW_HEIGHT = 96;
 
 interface ChatHistoryMessage {
   role?: string;
@@ -72,18 +79,24 @@ const ChatHistoryPanel = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [topOffset, setTopOffset] = useState(0);
-  const [hasMoreAbove, setHasMoreAbove] = useState(false);
   const [hasMoreBelow, setHasMoreBelow] = useState(true);
   const [deletingChatId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevScrollHeightRef = useRef(0);
-  const WINDOW_SIZE = 30;
-  const LOAD_SIZE = 5;
-  const LOAD_THRESHOLD = 300;
+
+  const historyVirtualizer = useVirtualizer({
+    count: filteredChats.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => HISTORY_ESTIMATED_ROW_HEIGHT,
+    getItemKey: (index) => filteredChats[index]?.chatId ?? `chat-${index}`,
+    overscan: 8,
+  });
+
+  const shouldShowSourceUrl = !(isDesktop || isAndroid);
+
+  const virtualChatItems = historyVirtualizer.getVirtualItems();
 
   /**
    * Loads initial batch of chats.
@@ -91,12 +104,13 @@ const ChatHistoryPanel = ({
   const loadInitialChats = useCallback(async () => {
     try {
       setIsLoading(true);
-      const initialChats = await chatHistoryService.getAllChats(WINDOW_SIZE, 0);
+      const initialChats = await chatHistoryService.getAllChats(
+        HISTORY_PAGE_SIZE,
+        0,
+      );
       setDisplayedChats(initialChats);
       setFilteredChats(initialChats);
-      setTopOffset(0);
-      setHasMoreBelow(initialChats.length === WINDOW_SIZE);
-      setHasMoreAbove(false);
+      setHasMoreBelow(initialChats.length === HISTORY_PAGE_SIZE);
     } catch (error) {
       Logger.error("ChatHistoryPanel", "Failed to load chats:", error);
     } finally {
@@ -116,12 +130,6 @@ const ChatHistoryPanel = ({
   }, [loadInitialChats, refreshTrigger]);
 
   useEffect(() => {
-    if (scrollRef.current && displayedChats.length > 0) {
-      prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-    }
-  }, [displayedChats.length]);
-
-  useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchQuery.trim() === "") {
         setFilteredChats(displayedChats);
@@ -139,65 +147,27 @@ const ChatHistoryPanel = ({
     return () => clearTimeout(timer);
   }, [chatHistoryService, displayedChats, searchQuery]);
 
-  useEffect(() => {
-    if (!scrollRef.current) return;
-
-    const scrollContainer = scrollRef.current;
-    const newScrollHeight = scrollContainer.scrollHeight;
-    const prevScrollHeight = prevScrollHeightRef.current;
-
-    if (
-      newScrollHeight > prevScrollHeight &&
-      prevScrollHeight > 0 &&
-      !isLoadingMore
-    ) {
-      const heightDiff = newScrollHeight - prevScrollHeight;
-      scrollContainer.scrollTop += heightDiff;
-      prevScrollHeightRef.current = newScrollHeight;
-    }
-  }, [isLoadingMore]);
-
-  /**
-   * Loads more chats when scrolling to bottom.
-   */
-  const loadMoreBelow = async () => {
-    if (isLoadingMore || !hasMoreBelow) return;
+  const loadMoreBelow = useCallback(async () => {
+    if (searchQuery.trim() !== "" || isLoadingMore || !hasMoreBelow) return;
 
     try {
       setIsLoadingMore(true);
-      const newOffset = topOffset + displayedChats.length;
       const moreChats = await chatHistoryService.getAllChats(
-        LOAD_SIZE,
-        newOffset,
+        HISTORY_LOAD_SIZE,
+        displayedChats.length,
       );
 
       if (moreChats.length > 0) {
         setDisplayedChats((prev) => {
-          const existingIds = new Set(prev.map((c) => c.chatId));
+          const existingIds = new Set(prev.map((chat) => chat.chatId));
           const uniqueNewChats = moreChats.filter(
-            (c) => !existingIds.has(c.chatId),
+            (chat) => !existingIds.has(chat.chatId),
           );
-
-          const updated = [...prev, ...uniqueNewChats];
-          if (updated.length > WINDOW_SIZE) {
-            const removed = updated.length - WINDOW_SIZE;
-            setTopOffset((prevOffset) => prevOffset + removed);
-            const result = updated.slice(removed);
-            if (searchQuery.trim() === "") {
-              setFilteredChats(result);
-            }
-            return result;
-          }
-          if (searchQuery.trim() === "") {
-            setFilteredChats(updated);
-          }
-          return updated;
+          return [...prev, ...uniqueNewChats];
         });
-        setHasMoreAbove(true);
-        setHasMoreBelow(moreChats.length === LOAD_SIZE);
-      } else {
-        setHasMoreBelow(false);
       }
+
+      setHasMoreBelow(moreChats.length === HISTORY_LOAD_SIZE);
     } catch (error) {
       Logger.error(
         "ChatHistoryPanel",
@@ -207,69 +177,49 @@ const ChatHistoryPanel = ({
     } finally {
       setIsLoadingMore(false);
     }
-  };
+  }, [
+    chatHistoryService,
+    displayedChats.length,
+    hasMoreBelow,
+    isLoadingMore,
+    searchQuery,
+  ]);
+
+  useEffect(() => {
+    if (
+      searchQuery.trim() !== "" ||
+      isLoading ||
+      isLoadingMore ||
+      !hasMoreBelow ||
+      !scrollRef.current
+    ) {
+      return;
+    }
+
+    if (
+      scrollRef.current.scrollHeight <=
+      scrollRef.current.clientHeight + HISTORY_LOAD_THRESHOLD
+    ) {
+      void loadMoreBelow();
+    }
+  }, [
+    displayedChats.length,
+    hasMoreBelow,
+    isLoading,
+    isLoadingMore,
+    loadMoreBelow,
+    searchQuery,
+  ]);
 
   /**
-   * Loads more chats when scrolling to top.
+   * Loads more chats when scrolling to bottom.
    */
-  const loadMoreAbove = async () => {
-    if (isLoadingMore || !hasMoreAbove || topOffset === 0) return;
-
-    try {
-      setIsLoadingMore(true);
-      if (scrollRef.current) {
-        prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-      }
-
-      const newOffset = Math.max(0, topOffset - LOAD_SIZE);
-      const moreChats = await chatHistoryService.getAllChats(
-        LOAD_SIZE,
-        newOffset,
-      );
-
-      if (moreChats.length > 0) {
-        setDisplayedChats((prev) => {
-          const existingIds = new Set(prev.map((c) => c.chatId));
-          const uniqueNewChats = moreChats.filter(
-            (c) => !existingIds.has(c.chatId),
-          );
-
-          const updated = [...uniqueNewChats, ...prev];
-          if (updated.length > WINDOW_SIZE) {
-            const result = updated.slice(0, WINDOW_SIZE);
-            if (searchQuery.trim() === "") {
-              setFilteredChats(result);
-            }
-            return result;
-          }
-          if (searchQuery.trim() === "") {
-            setFilteredChats(updated);
-          }
-          return updated;
-        });
-        setTopOffset(newOffset);
-        setHasMoreBelow(true);
-        setHasMoreAbove(newOffset > 0);
-      } else {
-        setHasMoreAbove(false);
-      }
-    } catch (error) {
-      Logger.error(
-        "ChatHistoryPanel",
-        "Failed to load more chats above:",
-        error,
-      );
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
-
   /**
    * Handles scroll events to trigger infinite loading.
    *
    * @param {Event} e - Scroll event
    */
-  const handleScroll = async (e: UIEvent<HTMLDivElement>) => {
+  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
     if (searchQuery.trim() !== "") return;
 
     if (scrollTimeoutRef.current) return;
@@ -280,19 +230,16 @@ const ChatHistoryPanel = ({
       scrollTimeoutRef.current = null;
     }, 150);
 
-    const element = e.currentTarget;
-    const scrollTop = element.scrollTop;
-    const scrollHeight = element.scrollHeight;
-    const clientHeight = element.clientHeight;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const distanceFromTop = scrollTop;
-
-    if (distanceFromBottom < LOAD_THRESHOLD && hasMoreBelow && !isLoadingMore) {
-      await loadMoreBelow();
-    }
-
-    if (distanceFromTop < LOAD_THRESHOLD && hasMoreAbove && !isLoadingMore) {
-      await loadMoreAbove();
+    if (
+      e.currentTarget.scrollHeight -
+        e.currentTarget.scrollTop -
+        e.currentTarget.clientHeight <
+        HISTORY_LOAD_THRESHOLD &&
+      historyVirtualizer.getDistanceFromEnd() < HISTORY_LOAD_THRESHOLD &&
+      hasMoreBelow &&
+      !isLoadingMore
+    ) {
+      void loadMoreBelow();
     }
   };
 
@@ -405,7 +352,7 @@ const ChatHistoryPanel = ({
           {onClose && (
             <Button
               onClick={onClose}
-              variant="default"
+              variant="ghost"
               className="w-8 h-8 flex items-center justify-center"
               aria-label="Close history"
             >
@@ -471,113 +418,151 @@ const ChatHistoryPanel = ({
           </div>
         ) : null}
 
-        {/* Chat items */}
-        {filteredChats.map((chat) => (
-          <div
-            key={chat.chatId}
-            data-testid={`chat-history-item-${chat.chatId}`}
-            className="px-2 md:px-4 py-2 md:py-3 border-b border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-            onClick={() => onSelectChat && onSelectChat(chat)}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                {/* Chat title */}
-                <div className="font-medium text-sm truncate text-white">
-                  {chat.title || "Untitled Chat"}
-                </div>
+        {!isLoading && filteredChats.length > 0 && (
+          <>
+            <div
+              style={{
+                height: `${historyVirtualizer.getTotalSize()}px`,
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              {virtualChatItems.map((virtualItem) => {
+                const chat = filteredChats[virtualItem.index];
 
-                {/* Chat preview */}
-                <div className="text-xs truncate mt-1 text-white/50">
-                  {getChatPreview(chat)}
-                </div>
+                if (!chat) {
+                  return null;
+                }
 
-                {/* Metadata with URL */}
-                <div className="text-xs mt-1 flex flex-col gap-1 text-white/40">
-                  <div className="flex items-center gap-2">
-                    <span>{chat.messageCount || 0} messages</span>
-                    <span>•</span>
-                    <span>{formatDate(chat.updatedAt || chat.createdAt)}</span>
-                  </div>
-                  {typeof chat.metadata?.sourceUrl === "string" && (
-                    <div className="flex items-center gap-1 text-xs truncate text-white/30">
-                      <Icon name="location" size={12} />
-                      <span>{formatUrl(chat.metadata.sourceUrl)}</span>
+                return (
+                  <div
+                    key={virtualItem.key}
+                    ref={historyVirtualizer.measureElement}
+                    data-index={virtualItem.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <div
+                      data-testid={`chat-history-item-${chat.chatId}`}
+                      className="px-2 md:px-4 py-2 md:py-3 border-b border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
+                      onClick={() => onSelectChat && onSelectChat(chat)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate text-white">
+                            {chat.title || "Untitled Chat"}
+                          </div>
+
+                          <div className="text-xs truncate mt-1 text-white/50">
+                            {getChatPreview(chat)}
+                          </div>
+
+                          <div className="text-xs mt-1 flex flex-col gap-1 text-white/40">
+                            <div className="flex items-center gap-2">
+                              <span>{chat.messageCount || 0} messages</span>
+                              <span>•</span>
+                              <span>
+                                {formatDate(chat.updatedAt || chat.createdAt)}
+                              </span>
+                            </div>
+                            {shouldShowSourceUrl &&
+                              typeof chat.metadata?.sourceUrl === "string" && (
+                                <div className="flex items-center gap-1 text-xs truncate text-white/30">
+                                  <Icon name="location" size={12} />
+                                  <span>
+                                    {formatUrl(chat.metadata.sourceUrl)}
+                                  </span>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+
+                        <div className="flex-shrink-0 flex gap-1">
+                          <Button
+                            onClick={(
+                              e: ReactMouseEvent<HTMLButtonElement>,
+                            ) => {
+                              e.stopPropagation();
+                              handleEditTitle(chat);
+                            }}
+                            data-testid={`chat-history-edit-${chat.chatId}`}
+                            variant="ghost"
+                            className="h-6 w-6 p-2 rounded-md"
+                            title="Edit title"
+                          >
+                            <span
+                              className={cn(
+                                isLightBackground
+                                  ? "glass-text"
+                                  : "glass-text-black",
+                                "text-xs leading-none",
+                              )}
+                            >
+                              <Icon name="pencil" size={16} />
+                            </span>
+                          </Button>
+
+                          <Button
+                            onClick={(
+                              e: ReactMouseEvent<HTMLButtonElement>,
+                            ) => {
+                              e.stopPropagation();
+                              handleDeleteClick(chat.chatId);
+                            }}
+                            data-testid={`chat-history-delete-${chat.chatId}`}
+                            disabled={deletingChatId === chat.chatId}
+                            variant="ghost"
+                            className={cn(
+                              "flex-shrink-0 h-6 w-6 p-2 rounded-md",
+                              deletingChatId === chat.chatId
+                                ? "opacity-50 cursor-not-allowed"
+                                : "hover:glass-error",
+                            )}
+                            title="Delete chat"
+                          >
+                            <span
+                              className={cn(
+                                isLightBackground
+                                  ? "glass-text"
+                                  : "glass-text-black",
+                                "text-xs leading-none",
+                              )}
+                            >
+                              <Icon
+                                name={
+                                  deletingChatId === chat.chatId
+                                    ? "hourglass"
+                                    : "delete"
+                                }
+                                size={14}
+                              />
+                            </span>
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex-shrink-0 flex gap-1">
-                {/* Edit button */}
-                <Button
-                  onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
-                    e.stopPropagation();
-                    handleEditTitle(chat);
-                  }}
-                  data-testid={`chat-history-edit-${chat.chatId}`}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className="h-6 w-6 rounded-md"
-                  title="Edit title"
-                >
-                  <span
-                    className={cn(
-                      isLightBackground ? "glass-text" : "glass-text-black",
-                      "text-xs leading-none",
-                    )}
-                  >
-                    <Icon name="pencil" size={16} />
-                  </span>
-                </Button>
-
-                {/* Delete button */}
-                <Button
-                  onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
-                    e.stopPropagation();
-                    handleDeleteClick(chat.chatId);
-                  }}
-                  data-testid={`chat-history-delete-${chat.chatId}`}
-                  disabled={deletingChatId === chat.chatId}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className={cn(
-                    "flex-shrink-0 h-6 w-6 rounded-md",
-                    deletingChatId === chat.chatId
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:glass-error",
-                  )}
-                  title="Delete chat"
-                >
-                  <span
-                    className={cn(
-                      isLightBackground ? "glass-text" : "glass-text-black",
-                      "text-xs leading-none",
-                    )}
-                  >
-                    <Icon
-                      name={
-                        deletingChatId === chat.chatId ? "hourglass" : "delete"
-                      }
-                      size={14}
-                    />
-                  </span>
-                </Button>
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        ))}
 
-        {/* End of history indicator */}
-        {!hasMoreAbove && filteredChats.length > 0 && (
-          <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
-            ↑ You've reached the beginning of your chat history
-          </div>
-        )}
+            {isLoadingMore && (
+              <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
+                ⏳ Loading more chats...
+              </div>
+            )}
 
-        {/* Loading more indicator at bottom */}
-        {isLoadingMore && (
-          <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
-            ⏳ Loading more chats...
-          </div>
+            {searchQuery.trim() === "" && !hasMoreBelow && (
+              <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
+                You've reached the end of your chat history
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

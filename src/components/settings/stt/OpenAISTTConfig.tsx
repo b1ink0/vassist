@@ -43,7 +43,11 @@ const OpenAISTTConfig = ({
   return (
     <div className="space-y-4">
       {/* API Key */}
-      <SettingsRow label="API Key *" targetId="stt.openai.apiKey">
+      <SettingsRow
+        label="API Key *"
+        targetId="stt.openai.apiKey"
+        layout="stacked"
+      >
         <Input
           type="password"
           value={config.apiKey || ""}
@@ -54,7 +58,7 @@ const OpenAISTTConfig = ({
       </SettingsRow>
 
       {/* Model */}
-      <SettingsRow label="Model" targetId="stt.openai.model">
+      <SettingsRow label="Model" targetId="stt.openai.model" layout="stacked">
         <RemoteModelPicker
           value={config.model || "whisper-1"}
           onChange={(value) => handleFieldChange("model", value)}

@@ -1,4 +1,19 @@
 @import "tailwindcss";
+@source "../node_modules/streamdown/dist/*.js";
+
+@theme inline {
+  --color-background: var(--sd-background);
+  --color-foreground: var(--sd-foreground);
+  --color-card: var(--sd-card);
+  --color-card-foreground: var(--sd-card-foreground);
+  --color-muted: var(--sd-muted);
+  --color-muted-foreground: var(--sd-muted-foreground);
+  --color-border: var(--sd-border);
+  --color-input: var(--sd-input);
+  --color-primary: var(--sd-primary);
+  --color-primary-foreground: var(--sd-primary-foreground);
+  --color-sidebar: var(--sd-sidebar);
+}
 
 /* Shadow DOM fix: Re-establish CSS variables after :host { all: initial } */
 /* These come after Tailwind's base but with same specificity, so they restore defaults */
@@ -79,6 +94,7 @@
 }
 
 @import "./styles/ui-effects.css";
+@import "./styles/markdown.css";
 @import "./styles/streaming-animations.css";
 
 :root {
@@ -126,6 +142,12 @@
   --vassist-inverse-status-error: rgba(239, 68, 68, 0.38);
   --vassist-inverse-status-success: rgba(34, 197, 94, 0.32);
   --vassist-inverse-status-warning: rgba(251, 191, 36, 0.34);
+  --vassist-dark-glass-base: rgba(12, 12, 12, 0.72);
+  --vassist-dark-glass-elevated: rgba(16, 16, 16, 0.8);
+  --vassist-dark-glass-interactive: rgba(20, 20, 20, 0.84);
+  --vassist-dark-glass-highlight: rgba(255, 255, 255, 0.08);
+  --vassist-dark-glass-border: rgba(255, 255, 255, 0.18);
+  --vassist-dark-glass-border-strong: rgba(255, 255, 255, 0.26);
   --vassist-backdrop-blur: 16px;
   --vassist-surface-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
   --vassist-surface-shadow-strong: 0 12px 40px 0 rgba(0, 0, 0, 0.5);

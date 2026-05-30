@@ -31,9 +31,12 @@
 
 /* Dark theme for containers (on light backgrounds) */
 .glass-container-dark {
-  background: var(--vassist-inverse-surface-base);
-  border: 1px solid var(--vassist-inverse-border-color);
-  box-shadow: var(--vassist-surface-shadow-strong);
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
+  box-shadow: var(--vassist-surface-shadow);
   color: var(--vassist-inverse-text-primary);
 }
 
@@ -54,9 +57,12 @@
 
 /* Dark theme for messages (on light backgrounds) */
 .glass-message-dark {
-  background: var(--vassist-inverse-surface-base);
-  border: 1px solid var(--vassist-inverse-border-color);
-  box-shadow: var(--vassist-surface-shadow-strong);
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
+  box-shadow: var(--vassist-surface-shadow);
   color: var(--vassist-inverse-text-primary);
 }
 
@@ -76,9 +82,12 @@
 }
 
 .glass-message-user-dark {
-  background: var(--vassist-inverse-surface-interactive);
-  border: 1px solid var(--vassist-inverse-border-color);
-  box-shadow: var(--vassist-surface-shadow-strong);
+  background: var(--vassist-dark-glass-interactive);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border-strong);
+  box-shadow: var(--vassist-surface-shadow);
   color: var(--vassist-inverse-text-primary);
 }
 
@@ -99,9 +108,11 @@
 }
 
 .glass-button-dark {
-  background: var(--vassist-inverse-surface-elevated);
-  border: 1px solid var(--vassist-inverse-border-strong-color);
-  box-shadow: var(--vassist-surface-shadow-strong);
+  background: var(--vassist-dark-glass-elevated);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border-strong);
+  box-shadow: var(--vassist-surface-shadow);
   color: var(--vassist-inverse-text-primary);
 }
 
@@ -141,12 +152,14 @@
 
 /* Dark input variant (for light backgrounds) */
 .glass-input-dark {
-  background: var(--vassist-inverse-surface-base);
-  border: 1px solid var(--vassist-inverse-border-color);
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  box-shadow: var(--vassist-surface-shadow-strong);
+  box-shadow: var(--vassist-surface-shadow);
   color: var(--vassist-inverse-text-primary);
 }
 
@@ -156,8 +169,8 @@
 
 .glass-input-dark:focus {
   outline: none;
-  background: var(--vassist-inverse-surface-elevated);
-  border-color: var(--vassist-inverse-border-strong-color);
+  background: var(--vassist-dark-glass-elevated);
+  border-color: var(--vassist-dark-glass-border-strong);
   box-shadow: 0 0 0 2px var(--vassist-inverse-focus-ring-color);
 }
 

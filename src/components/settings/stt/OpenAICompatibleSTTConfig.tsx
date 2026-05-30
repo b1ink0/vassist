@@ -48,6 +48,7 @@ const OpenAICompatibleSTTConfig = ({
       <SettingsRow
         label="Endpoint URL *"
         targetId="stt.openaiCompatible.endpoint"
+        layout="stacked"
       >
         <Input
           type="text"
@@ -62,6 +63,7 @@ const OpenAICompatibleSTTConfig = ({
       <SettingsRow
         label="API Key (Optional)"
         targetId="stt.openaiCompatible.apiKey"
+        layout="stacked"
       >
         <Input
           type="password"
@@ -73,7 +75,11 @@ const OpenAICompatibleSTTConfig = ({
       </SettingsRow>
 
       {/* Model */}
-      <SettingsRow label="Model" targetId="stt.openaiCompatible.model">
+      <SettingsRow
+        label="Model"
+        targetId="stt.openaiCompatible.model"
+        layout="stacked"
+      >
         <RemoteModelPicker
           value={config.model || ""}
           onChange={(value) => handleFieldChange("model", value)}

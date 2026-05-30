@@ -9,6 +9,7 @@ export function useInitializeConfigStore(
   embedConfig?: ResolvedVAssistEmbedConfig,
 ) {
   const startedRef = useRef(false);
+  const kokoroBootstrapCheckedRef = useRef(false);
   const hydrateConfigStore = useConfigStore(
     (state) => state.hydrateConfigStore,
   );
@@ -32,6 +33,12 @@ export function useInitializeConfigStore(
     if (!hasHydrated) {
       return;
     }
+
+    if (kokoroBootstrapCheckedRef.current) {
+      return;
+    }
+
+    kokoroBootstrapCheckedRef.current = true;
 
     if (
       !ttsEnabled ||

@@ -8,12 +8,11 @@
  * - Streaming indicator
  */
 
-import { forwardRef, useRef, useEffect, useState } from "react";
+import { forwardRef, useRef, useEffect } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
 import { TranslationLanguages } from "../../config/aiConfig";
-import StreamingText from "../common/StreamingText";
-import MarkdownText from "../common/MarkdownText";
+import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
 
 interface ToolbarResultPanelProps {
@@ -68,19 +67,6 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
     ref,
   ) => {
     const contentRef = useRef<HTMLDivElement | null>(null);
-    const [hasCompletedStreaming, setHasCompletedStreaming] = useState(false);
-
-    // Reset streaming state when result changes
-    useEffect(() => {
-      setHasCompletedStreaming(false);
-    }, [result]);
-
-    // Mark as completed when loading stops
-    useEffect(() => {
-      if (!isLoading && result) {
-        setHasCompletedStreaming(true);
-      }
-    }, [isLoading, result]);
 
     useEffect(() => {
       if (contentRef.current && isLoading) {
@@ -305,20 +291,9 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
           >
             <StreamingContainer autoActivate speed="fast">
               <div>
-                {hasCompletedStreaming ? (
-                  <div className="text-[13px] leading-6 opacity-90 max-w-full overflow-hidden text-white">
-                    <MarkdownText text={result} />
-                  </div>
-                ) : (
-                  <div className="text-[13px] leading-6 whitespace-pre-wrap opacity-90 max-w-full overflow-hidden text-white">
-                    <StreamingText
-                      text={result}
-                      wordsPerSecond={40}
-                      showCursor={false}
-                      disabled={false}
-                    />
-                  </div>
-                )}
+                <div className="text-[13px] leading-6 opacity-90 max-w-full overflow-hidden text-white">
+                  <MarkdownText text={result} isStreaming={isLoading} />
+                </div>
                 {/* Show streaming indicator while loading */}
                 {isLoading && (
                   <div className="flex items-center gap-1 mt-2 text-white/50">

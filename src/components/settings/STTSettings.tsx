@@ -337,7 +337,11 @@ const STTSettings = ({
 
       {/* Provider Selection */}
       <div className="space-y-2">
-        <SettingsRow label="Provider" targetId="stt.provider.select">
+        <SettingsRow
+          label="Provider"
+          targetId="stt.provider.select"
+          layout="stacked"
+        >
           <Select
             value={sttConfig.provider}
             onChange={(e) => updateSTTConfig("provider", e.target.value)}

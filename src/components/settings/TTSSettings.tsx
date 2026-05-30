@@ -343,12 +343,15 @@ const TTSSettings = ({
 
       {/* Provider Selection */}
       <div className="space-y-2">
-        <SettingsRow label="Provider" targetId="tts.provider.select">
+        <SettingsRow
+          label="Provider"
+          targetId="tts.provider.select"
+          layout="stacked"
+        >
           <Select
             value={ttsConfig.provider}
             onChange={(e) => updateTTSConfig("provider", e.target.value)}
             variant={isLightBackground ? "dark" : "default"}
-            disabled={!ttsConfig.enabled}
             options={Object.entries(availableProviders).map(([key, value]) => ({
               value,
               label: key,
@@ -463,6 +466,7 @@ const TTSSettings = ({
               <SettingsRow
                 label="Server URL"
                 targetId="tts.gptsovitsRemote.endpoint"
+                layout="stacked"
               >
                 <Input
                   type="text"
@@ -602,7 +606,11 @@ const TTSSettings = ({
           {ttsConfig.provider === TTSProviders.OPENAI && (
             <>
               {renderRemoteProfileBar("openai")}
-              <SettingsRow label="API Key" targetId="tts.openai.apiKey">
+              <SettingsRow
+                label="API Key"
+                targetId="tts.openai.apiKey"
+                layout="stacked"
+              >
                 <Input
                   type="password"
                   value={ttsConfig.openai.apiKey}
@@ -613,7 +621,11 @@ const TTSSettings = ({
                   variant={isLightBackground ? "dark" : "default"}
                 />
               </SettingsRow>
-              <SettingsRow label="Model" targetId="tts.openai.model">
+              <SettingsRow
+                label="Model"
+                targetId="tts.openai.model"
+                layout="stacked"
+              >
                 <RemoteModelPicker
                   value={ttsConfig.openai.model}
                   onChange={(value) => updateTTSConfig("openai.model", value)}
@@ -649,6 +661,7 @@ const TTSSettings = ({
               <SettingsRow
                 label="Endpoint URL"
                 targetId="tts.openaiCompatible.endpoint"
+                layout="stacked"
               >
                 <Input
                   type="text"
@@ -666,6 +679,7 @@ const TTSSettings = ({
               <SettingsRow
                 label="API Key (Optional)"
                 targetId="tts.openaiCompatible.apiKey"
+                layout="stacked"
               >
                 <Input
                   type="password"
@@ -677,7 +691,11 @@ const TTSSettings = ({
                   variant={isLightBackground ? "dark" : "default"}
                 />
               </SettingsRow>
-              <SettingsRow label="Model" targetId="tts.openaiCompatible.model">
+              <SettingsRow
+                label="Model"
+                targetId="tts.openaiCompatible.model"
+                layout="stacked"
+              >
                 <RemoteModelPicker
                   value={ttsConfig["openai-compatible"]?.model ?? ""}
                   onChange={(value) =>

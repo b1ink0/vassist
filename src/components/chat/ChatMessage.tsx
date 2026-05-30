@@ -17,8 +17,7 @@ import { Icon } from "../icons";
 import { Button } from "../ui";
 import { TTSServiceProxy } from "../../services/proxies";
 import AudioPlayer from "../media/AudioPlayer";
-import StreamingText from "../common/StreamingText";
-import MarkdownText from "../common/MarkdownText";
+import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
 import Logger from "../../services/LoggerService";
 
@@ -47,9 +46,7 @@ interface ChatMessageProps {
   playingMessageIndex: number | null;
   loadingMessageIndex: number | null;
   copiedMessageIndex: number | null;
-  streamedMessageIdsRef: MutableRefObject<Set<string>>;
-  completedMessageIdsRef: MutableRefObject<Set<string>>;
-  shouldForceComplete: boolean;
+  isStreamingMessage: boolean;
   currentSessionRef: MutableRefObject<string | null>;
   smoothStreamingAnimation?: boolean;
   shouldAnimate?: boolean;
@@ -83,9 +80,7 @@ interface ChatMessageProps {
  * @param {number} props.playingMessageIndex - Index of currently playing message
  * @param {number} props.loadingMessageIndex - Index of loading message
  * @param {number} props.copiedMessageIndex - Index of copied message
- * @param {Object} props.streamedMessageIdsRef - Ref to streamed message IDs
- * @param {Object} props.completedMessageIdsRef - Ref to completed message IDs
- * @param {boolean} props.shouldForceComplete - Whether to force complete streaming
+ * @param {boolean} props.isStreamingMessage - Whether this assistant message is currently streaming
  * @param {Object} props.currentSessionRef - Ref to current session
  * @param {boolean} props.smoothStreamingAnimation - Whether to use smooth streaming
  * @param {boolean} props.shouldAnimate - Whether message should animate
@@ -107,9 +102,7 @@ const ChatMessage = ({
   playingMessageIndex,
   loadingMessageIndex,
   copiedMessageIndex,
-  streamedMessageIdsRef,
-  completedMessageIdsRef,
-  shouldForceComplete,
+  isStreamingMessage,
   currentSessionRef,
   smoothStreamingAnimation = false,
   shouldAnimate = false, // Only animate if this is the latest message
@@ -133,31 +126,24 @@ const ChatMessage = ({
   const isPlaying = playingMessageIndex === messageIndex;
   const isLoading = loadingMessageIndex === messageIndex;
   const hasAudio = isUser && message.audios && message.audios.length > 0;
-
-  const wasStreamedInSession = streamedMessageIdsRef.current.has(message.id);
-
-  const hasCompletedStreaming = completedMessageIdsRef.current.has(message.id);
-
-  const shouldDisableStreaming =
-    !isUser && !isError && (!wasStreamedInSession || hasCompletedStreaming);
-
-  const shouldForceCompleteThis = shouldForceComplete && !isUser && !isError;
   const branchTotal = message.branchInfo?.totalBranches ?? 0;
   const branchIndex =
     message.branchInfo?.currentIndex ?? message.branchInfo?.currentBranch ?? 0;
+  const streamingMarkdownAnimation = smoothStreamingAnimation
+    ? {
+        animation: "fadeIn" as const,
+        duration: 140,
+        easing: "ease-out",
+        sep: "word" as const,
+        stagger: 12,
+      }
+    : false;
 
   const animationClass = shouldAnimate
     ? isUser
       ? "animate-slide-right-up"
       : "animate-slide-left-up"
     : "";
-
-  /**
-   * Handles streaming completion by adding message to permanent completion tracker.
-   */
-  const handleStreamingComplete = useCallback(() => {
-    completedMessageIdsRef.current.add(message.id);
-  }, [message.id, completedMessageIdsRef]);
 
   /**
    * Starts editing this message.
@@ -299,7 +285,7 @@ const ChatMessage = ({
                 !isError &&
                   isLightBackground &&
                   (isUser ? "glass-message-user-dark" : "glass-message-dark"),
-                "px-2 md:px-4 py-2 md:py-3",
+                "px-2 md:px-3 py-2",
                 isError
                   ? "rounded-3xl"
                   : isUser
@@ -402,10 +388,7 @@ const ChatMessage = ({
                     value={editingContent}
                     onChange={handleEditContentChange}
                     className={cn(
-                      "w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar bg-transparent border-none min-h-[24px]",
-                      isLightBackground
-                        ? "text-black placeholder-black/40"
-                        : "text-white placeholder-white/40",
+                      "w-full max-h-[300px] overflow-y-auto px-3 py-2.5 rounded-lg resize-none text-[15px] leading-relaxed custom-scrollbar appearance-none bg-transparent border-none shadow-none min-h-[24px] text-inherit placeholder-white/40 caret-current [color-scheme:normal]",
                       "focus:outline-none",
                     )}
                     onKeyDown={(e) => {
@@ -420,8 +403,8 @@ const ChatMessage = ({
                     <Button
                       onClick={handleCancelEdit}
                       data-testid={`chat-message-edit-cancel-${messageIndex}`}
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100"
+                      variant="ghost"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Cancel (Esc)"
                     >
                       <span
@@ -441,8 +424,8 @@ const ChatMessage = ({
                         editingImages.length === 0 &&
                         editingAudios.length === 0
                       }
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100"
+                      variant="ghost"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Save (Ctrl+Enter)"
                     >
                       <span
@@ -459,34 +442,25 @@ const ChatMessage = ({
               ) : (
                 <>
                   {!isUser && !isError ? (
-                    shouldDisableStreaming ? (
-                      <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
-                        <MarkdownText text={message.content} />
-                      </div>
-                    ) : (
+                    isStreamingMessage ? (
                       <StreamingContainer
                         autoActivate={true}
                         speed="normal"
                         disabled={false}
                       >
-                        {hasCompletedStreaming ? (
-                          <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
-                            <MarkdownText text={message.content} />
-                          </div>
-                        ) : (
-                          <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words max-w-full overflow-hidden">
-                            <StreamingText
-                              text={message.content}
-                              wordsPerSecond={40}
-                              showCursor={false}
-                              disabled={false}
-                              forceComplete={shouldForceCompleteThis}
-                              smoothHeightAnimation={smoothStreamingAnimation}
-                              onComplete={handleStreamingComplete}
-                            />
-                          </div>
-                        )}
+                        <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
+                          <MarkdownText
+                            text={message.content}
+                            isStreaming={true}
+                            emitProgressEvents={true}
+                            animated={streamingMarkdownAnimation}
+                          />
+                        </div>
                       </StreamingContainer>
+                    ) : (
+                      <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
+                        <MarkdownText text={message.content} />
+                      </div>
                     )
                   ) : (
                     <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
@@ -514,16 +488,16 @@ const ChatMessage = ({
                       data-testid={`chat-message-assistant-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
                       variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                       title="Previous variant"
                     >
                       <span
                         className={cn(
                           isLightBackground ? "glass-text" : "glass-text-black",
-                          "text-[9px]",
+                          "text-[9px] rotate-180",
                         )}
                       >
-                        ◀
+                        <Icon name="play" size={16} />
                       </span>
                     </Button>
                     <span
@@ -539,7 +513,7 @@ const ChatMessage = ({
                       data-testid={`chat-message-assistant-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
                       variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                       title="Next variant"
                     >
                       <span
@@ -572,7 +546,7 @@ const ChatMessage = ({
                     }
                   }}
                   variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title={
                     isLoading
                       ? "Cancel TTS generation"
@@ -616,7 +590,7 @@ const ChatMessage = ({
                 <Button
                   onClick={() => onCopyMessage(messageIndex, message.content)}
                   variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Copy message"
                 >
                   <span
@@ -642,13 +616,13 @@ const ChatMessage = ({
                   onClick={handleStartEdit}
                   data-testid={`chat-message-edit-button-${messageIndex}`}
                   variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Edit message"
                 >
                   <span
                     className={cn(
                       isLightBackground ? "glass-text" : "glass-text-black",
-                      "text-[10px]",
+                      "text-[9px]",
                     )}
                   >
                     <Icon name="edit" size={16} />
@@ -666,16 +640,16 @@ const ChatMessage = ({
                       data-testid={`chat-message-user-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
                       variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                       title="Previous variant"
                     >
                       <span
                         className={cn(
                           isLightBackground ? "glass-text" : "glass-text-black",
-                          "text-[9px]",
+                          "text-[9px] rotate-180",
                         )}
                       >
-                        ◀
+                        <Icon name="play" size={16} />
                       </span>
                     </Button>
                     <span
@@ -691,7 +665,7 @@ const ChatMessage = ({
                       data-testid={`chat-message-user-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
                       variant={isLightBackground ? "dark" : "default"}
-                      className="w-5 h-5 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                       title="Next variant"
                     >
                       <span
@@ -711,7 +685,7 @@ const ChatMessage = ({
                   onClick={() => onRewriteMessage(message)}
                   data-testid={`chat-message-regenerate-button-${messageIndex}`}
                   variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   title="Regenerate response"
                 >
                   <span

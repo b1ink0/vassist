@@ -1706,7 +1706,11 @@ const LLMSettings = ({
       )}
 
       <div className="space-y-2">
-        <SettingsRow label="Provider" targetId="llm.provider.select">
+        <SettingsRow
+          label="Provider"
+          targetId="llm.provider.select"
+          layout="stacked"
+        >
           <Select
             value={aiConfig.provider}
             onChange={(e) => updateAIConfig("provider", e.target.value)}
@@ -1735,7 +1739,11 @@ const LLMSettings = ({
             isLightBackground={isLightBackground}
             provider="openai"
           />
-          <SettingsRow label="API Key" targetId="llm.openai.apiKey">
+          <SettingsRow
+            label="API Key"
+            targetId="llm.openai.apiKey"
+            layout="stacked"
+          >
             <Input
               type="password"
               value={aiConfig.openai.apiKey}
@@ -1745,7 +1753,11 @@ const LLMSettings = ({
               className="w-full"
             />
           </SettingsRow>
-          <SettingsRow label="Model" targetId="llm.openai.model">
+          <SettingsRow
+            label="Model"
+            targetId="llm.openai.model"
+            layout="stacked"
+          >
             <RemoteModelPicker
               value={aiConfig.openai.model}
               onChange={(value) => updateAIConfig("openai.model", value)}
@@ -1776,7 +1788,11 @@ const LLMSettings = ({
             isLightBackground={isLightBackground}
             provider="ollama"
           />
-          <SettingsRow label="Endpoint URL" targetId="llm.ollama.endpoint">
+          <SettingsRow
+            label="Endpoint URL"
+            targetId="llm.ollama.endpoint"
+            layout="stacked"
+          >
             <Input
               type="text"
               value={aiConfig.ollama?.endpoint ?? ""}
@@ -1788,7 +1804,11 @@ const LLMSettings = ({
               className="w-full"
             />
           </SettingsRow>
-          <SettingsRow label="Model" targetId="llm.ollama.model">
+          <SettingsRow
+            label="Model"
+            targetId="llm.ollama.model"
+            layout="stacked"
+          >
             <RemoteModelPicker
               value={aiConfig.ollama?.model ?? ""}
               onChange={(value) => updateAIConfig("ollama.model", value)}

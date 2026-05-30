@@ -7,12 +7,14 @@ import {
   useState,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useCallback,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ResolvedVAssistEmbedConfig,
   VAssistOpenSettingsOptions,
@@ -42,6 +44,7 @@ import emoteStorageService from "../../services/EmoteStorageService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import {
   useChatActions,
+  useCurrentChatId,
   useChatMessages,
   useIsChatContainerVisible,
   useIsProcessing,
@@ -123,6 +126,25 @@ interface ChatMessageLike {
     canGoForward?: boolean;
   };
 }
+
+type ChatRenderableItem =
+  | {
+      kind: "message";
+      key: string;
+      message: ChatMessageLike;
+      messageIndex: number;
+      isLastAIMessage: boolean;
+      isLastUserMessage: boolean;
+    }
+  | {
+      kind: "loading";
+      key: string;
+    };
+
+const CHAT_MESSAGE_GAP = 12;
+const CHAT_LIST_PADDING = 50;
+const CHAT_SCROLL_END_THRESHOLD = 120;
+const CHAT_ESTIMATED_ROW_HEIGHT = 128;
 
 interface ChatHistoryPanelPropsLike {
   isLightBackground: boolean;
@@ -298,6 +320,7 @@ const ChatContainer = ({
   const { chatHistoryService } = useAppRuntimeServices();
   const positionManagerRef = usePositionManagerRef();
   const messages = useChatMessages();
+  const currentChatId = useCurrentChatId();
   const isVisible = useIsChatContainerVisible();
   const isGenerating = useIsProcessing();
   const isTempChat = useIsTempChat();
@@ -363,10 +386,6 @@ const ChatContainer = ({
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(
     null,
   );
-  const previousMessageCountRef = useRef(0);
-  const previousIsGeneratingRef = useRef(false);
-  const [shouldForceComplete, setShouldForceComplete] = useState(false);
-  const [isWaitingForAnimation, setIsWaitingForAnimation] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
   const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
@@ -418,11 +437,69 @@ const ChatContainer = ({
   const historyEnabled = embedConfig.features.history;
   const liveAssistantEnabled = embedConfig.features.liveAssistant3d;
 
-  const streamedMessageIdsRef = useRef<Set<string>>(new Set());
-
-  const completedMessageIdsRef = useRef<Set<string>>(new Set());
-
   const lastAnimatedMessageIdRef = useRef<string | null>(null);
+  const wasVisibleRef = useRef(isVisible);
+  const pendingHistoryScrollToEndRef = useRef(false);
+  const wasAtChatEndRef = useRef(true);
+  const pendingStreamingScrollFrameRef = useRef<number | null>(null);
+
+  const lastUserMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") {
+        return messages[index]?.id ?? null;
+      }
+    }
+
+    return null;
+  }, [messages]);
+
+  const chatItems = useMemo<ChatRenderableItem[]>(() => {
+    const items: ChatRenderableItem[] = [];
+
+    for (const [index, message] of messages.entries()) {
+      const isLastMessage = index === messages.length - 1;
+
+      const isUser = message.role === "user";
+      const isError = message.content.toLowerCase().startsWith("error:");
+
+      items.push({
+        kind: "message",
+        key: message.id,
+        message,
+        messageIndex: index,
+        isLastAIMessage: !isUser && !isError && isLastMessage,
+        isLastUserMessage: isUser && lastUserMessageId === message.id,
+      });
+    }
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (isGenerating && lastMessage?.role === "user") {
+      items.push({
+        kind: "loading",
+        key: `loading-${lastMessage.id}`,
+      });
+    }
+
+    return items;
+  }, [isGenerating, lastUserMessageId, messages]);
+
+  const chatVirtualizer = useVirtualizer({
+    count: chatItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => CHAT_ESTIMATED_ROW_HEIGHT,
+    getItemKey: (index) => chatItems[index]?.key ?? `chat-item-${index}`,
+    anchorTo: "end",
+    followOnAppend: true,
+    scrollEndThreshold: CHAT_SCROLL_END_THRESHOLD,
+    overscan: 8,
+    paddingStart: CHAT_LIST_PADDING,
+    paddingEnd: CHAT_LIST_PADDING,
+    gap: CHAT_MESSAGE_GAP,
+    enabled: chatItems.length > 0,
+  });
+
+  const virtualChatItems = chatVirtualizer.getVirtualItems();
 
   useEffect(() => {
     buttonPosRef.current = buttonPosition;
@@ -469,96 +546,14 @@ const ChatContainer = ({
   useDesktopWindowResize();
 
   /**
-   * Detects when to force-complete streaming animation.
-   * Triggers when AI generation stops.
-   */
-  useEffect(() => {
-    if (isGenerating && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (
-        lastMessage &&
-        !lastMessage.isUser &&
-        !streamedMessageIdsRef.current.has(lastMessage.id)
-      ) {
-        streamedMessageIdsRef.current.add(lastMessage.id);
-        Logger.log(
-          "ChatContainer",
-          "Tracking streamed message:",
-          lastMessage.id,
-        );
-      }
-    }
-
-    const wasGenerating = previousIsGeneratingRef.current;
-    const stoppedGenerating = wasGenerating && !isGenerating;
-
-    const messageCountIncreased =
-      messages.length > previousMessageCountRef.current;
-
-    if (stoppedGenerating && messageCountIncreased) {
-      Logger.log("ChatContainer", "AI interrupted by user, forcing completion");
-      setShouldForceComplete(true);
-      setIsWaitingForAnimation(true);
-
-      const animationTimer = setTimeout(() => {
-        setIsWaitingForAnimation(false);
-      }, 200);
-
-      const resetTimer = setTimeout(() => {
-        setShouldForceComplete(false);
-      }, 250);
-
-      return () => {
-        clearTimeout(animationTimer);
-        clearTimeout(resetTimer);
-      };
-    }
-
-    previousIsGeneratingRef.current = isGenerating;
-    previousMessageCountRef.current = messages.length;
-  }, [messages, isGenerating]);
-
-  /**
    * Auto-focuses input when chat is cleared (new chat created).
    */
   useEffect(() => {
     if (messages.length === 0 && isVisible) {
-      streamedMessageIdsRef.current.clear();
-      Logger.log(
-        "ChatContainer",
-        "Cleared streamed message tracking for new chat",
-      );
-
       const event = new CustomEvent("focusChatInput");
       window.dispatchEvent(event);
     }
   }, [messages.length, isVisible]);
-
-  /**
-   * Listens for voice interrupt events to trigger force-complete.
-   */
-  useEffect(() => {
-    const handleVoiceInterrupt = () => {
-      if (isGenerating) {
-        Logger.log(
-          "ChatContainer",
-          "Voice interrupt detected, forcing instant completion",
-        );
-
-        setShouldForceComplete(true);
-
-        setTimeout(() => {
-          setShouldForceComplete(false);
-        }, 250);
-      }
-    };
-
-    window.addEventListener("voiceInterrupt", handleVoiceInterrupt);
-
-    return () => {
-      window.removeEventListener("voiceInterrupt", handleVoiceInterrupt);
-    };
-  }, [isGenerating]);
 
   /**
    * Calculates container position based on button or model position.
@@ -902,11 +897,7 @@ const ChatContainer = ({
 
   const handleSelectChat = useCallback(
     (chat: ChatHistorySelection) => {
-      streamedMessageIdsRef.current.clear();
-      Logger.log(
-        "ChatContainer",
-        "Cleared streamed message tracking for history load",
-      );
+      pendingHistoryScrollToEndRef.current = true;
 
       loadChatFromHistory(chat);
       setIsHistoryPanelClosing(true);
@@ -1298,22 +1289,12 @@ const ChatContainer = ({
   }, [setIsSettingsPanelOpen]);
 
   /**
-   * Handle stop generation with force-complete animation
+   * Handle stop generation.
    */
   const handleStopGeneration = useCallback(() => {
     if (isGenerating) {
-      Logger.log(
-        "ChatContainer",
-        "Stop button clicked, forcing instant completion",
-      );
-
-      setShouldForceComplete(true);
-
+      Logger.log("ChatContainer", "Stop button clicked");
       stopGeneration();
-
-      setTimeout(() => {
-        setShouldForceComplete(false);
-      }, 250);
     } else {
       stopGeneration();
     }
@@ -1591,60 +1572,121 @@ const ChatContainer = ({
    * Used for: chat open, user sends message.
    */
   const scrollToBottomImmediate = useCallback(() => {
-    if (!scrollRef.current) return;
-
-    const container = scrollRef.current;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "instant",
-    });
-  }, []);
+    wasAtChatEndRef.current = true;
+    chatVirtualizer.scrollToEnd({ behavior: "instant" });
+  }, [chatVirtualizer]);
 
   /**
-   * Scrolls to bottom only if user is already near the bottom.
-   * Prevents scroll interruption if user scrolled up to read.
+   * Keeps the chat pinned to the bottom only when the user was already near the end.
    */
-  const scrollToBottom = useCallback(() => {
-    if (!scrollRef.current) return;
-
-    const container = scrollRef.current;
-    const scrollHeight = container.scrollHeight;
-    const scrollTop = container.scrollTop;
-    const clientHeight = container.clientHeight;
-
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const shouldScroll = distanceFromBottom < clientHeight * 3;
-
-    if (shouldScroll) {
-      container.scrollTo({
-        top: scrollHeight,
-        behavior: "smooth",
-      });
+  const scrollToBottomIfPinned = useCallback(() => {
+    if (!isVisible || chatItems.length === 0 || !wasAtChatEndRef.current) {
+      return;
     }
-  }, []);
+
+    chatVirtualizer.scrollToEnd({ behavior: "instant" });
+    wasAtChatEndRef.current = true;
+  }, [chatItems.length, chatVirtualizer, isVisible]);
 
   useEffect(() => {
-    if (!isVisible || messages.length === 0) return;
+    const scrollElement = scrollRef.current;
 
-    const lastMessage = messages[messages.length - 1];
-
-    // Auto-scroll when assistant message is being updated (streaming)
-    if (lastMessage?.role === "assistant") {
-      requestAnimationFrame(() => {
-        scrollToBottom();
-      });
+    if (!scrollElement) {
+      return;
     }
-  }, [messages, isVisible, scrollToBottom]);
+
+    const updatePinnedState = () => {
+      wasAtChatEndRef.current = chatVirtualizer.isAtEnd(
+        CHAT_SCROLL_END_THRESHOLD,
+      );
+    };
+
+    updatePinnedState();
+    scrollElement.addEventListener("scroll", updatePinnedState, {
+      passive: true,
+    });
+
+    return () => {
+      scrollElement.removeEventListener("scroll", updatePinnedState);
+    };
+  }, [chatVirtualizer, currentChatId, isVisible]);
 
   /**
    * Scroll to bottom immediately when chat opens (from button or history)
    * Uses useLayoutEffect to scroll BEFORE paint to prevent visible jump
    */
   useLayoutEffect(() => {
-    if (isVisible && messages.length > 0) {
+    if (isVisible && !wasVisibleRef.current && chatItems.length > 0) {
       scrollToBottomImmediate();
     }
-  }, [isVisible, scrollToBottomImmediate, messages.length]);
+
+    wasVisibleRef.current = isVisible;
+  }, [chatItems.length, isVisible, scrollToBottomImmediate]);
+
+  useLayoutEffect(() => {
+    if (
+      pendingHistoryScrollToEndRef.current &&
+      isVisible &&
+      chatItems.length > 0
+    ) {
+      pendingHistoryScrollToEndRef.current = false;
+      scrollToBottomImmediate();
+    }
+  }, [chatItems.length, currentChatId, isVisible, scrollToBottomImmediate]);
+
+  useEffect(() => {
+    if (!isVisible || messages.length === 0) {
+      return;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role !== "assistant") {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      scrollToBottomIfPinned();
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [messages, isVisible, scrollToBottomIfPinned]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+
+    const handleStreamingWordAdded = () => {
+      if (
+        !wasAtChatEndRef.current ||
+        pendingStreamingScrollFrameRef.current !== null
+      ) {
+        return;
+      }
+
+      pendingStreamingScrollFrameRef.current = requestAnimationFrame(() => {
+        pendingStreamingScrollFrameRef.current = null;
+        scrollToBottomIfPinned();
+      });
+    };
+
+    window.addEventListener("streamingWordAdded", handleStreamingWordAdded);
+
+    return () => {
+      window.removeEventListener(
+        "streamingWordAdded",
+        handleStreamingWordAdded,
+      );
+
+      if (pendingStreamingScrollFrameRef.current !== null) {
+        cancelAnimationFrame(pendingStreamingScrollFrameRef.current);
+        pendingStreamingScrollFrameRef.current = null;
+      }
+    };
+  }, [isVisible, scrollToBottomIfPinned]);
 
   /**
    * Force scroll to bottom when user sends a message
@@ -2193,7 +2235,7 @@ const ChatContainer = ({
           {/* Scrollable messages */}
           <div
             ref={scrollRef}
-            className="absolute inset-0 flex flex-col gap-3 px-0 pt-[50px] pb-[50px] overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth"
+            className="absolute inset-0 overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth"
           >
             {messages.length === 0 ? (
               customEmptyState ? (
@@ -2225,66 +2267,34 @@ const ChatContainer = ({
                 </div>
               )
             ) : (
-              <>
-                {messages.map((msg, index) => {
-                  const isUser = msg.role === "user";
-                  const isLastMessage = index === messages.length - 1;
+              <div
+                style={{
+                  height: `${chatVirtualizer.getTotalSize()}px`,
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {virtualChatItems.map((virtualItem) => {
+                  const item = chatItems[virtualItem.index];
 
-                  if (isWaitingForAnimation && isLastMessage) {
+                  if (!item) {
                     return null;
                   }
 
-                  const isError = msg.content
-                    .toLowerCase()
-                    .startsWith("error:");
-                  const isLastAIMessage = !isUser && !isError && isLastMessage;
-                  const shouldForceCompleteThis =
-                    shouldForceComplete && isLastAIMessage;
-
-                  const lastUserMessage = [...messages]
-                    .reverse()
-                    .find((m) => m.role === "user");
-                  const isLastUserMessage =
-                    isUser && lastUserMessage?.id === msg.id;
-
-                  const shouldAnimateThis =
-                    isLastUserMessage &&
-                    lastAnimatedMessageIdRef.current !== msg.id;
-
-                  if (shouldAnimateThis) {
-                    lastAnimatedMessageIdRef.current = msg.id;
-                  }
-
-                  return (
-                    <div key={msg.id}>
-                      <ChatMessage
-                        message={msg}
-                        messageIndex={index}
-                        isLightBackground={isLightBackground}
-                        ttsEnabled={ttsEnabled}
-                        playingMessageIndex={playingMessageIndex}
-                        loadingMessageIndex={loadingMessageIndex}
-                        copiedMessageIndex={copiedMessageIndex}
-                        streamedMessageIdsRef={streamedMessageIdsRef}
-                        completedMessageIdsRef={completedMessageIdsRef}
-                        shouldForceComplete={shouldForceCompleteThis}
-                        currentSessionRef={currentSessionRef}
-                        smoothStreamingAnimation={
-                          uiConfig?.smoothStreamingAnimation || false
-                        }
-                        shouldAnimate={shouldAnimateThis}
-                        onCopyMessage={handleCopyMessage}
-                        onPlayTTS={handlePlayTTS}
-                        onEditUserMessage={editUserMessage}
-                        onRewriteMessage={handleRewriteMessage}
-                        onPreviousBranch={handlePreviousBranch}
-                        onNextBranch={handleNextBranch}
-                        setLoadingMessageIndex={setLoadingMessageIndex}
-                        setPlayingMessageIndex={setPlayingMessageIndex}
-                      />
-
-                      {/* Loading indicator after last user message */}
-                      {isGenerating && isLastMessage && isUser && (
+                  if (item.kind === "loading") {
+                    return (
+                      <div
+                        key={virtualItem.key}
+                        ref={chatVirtualizer.measureElement}
+                        data-index={virtualItem.index}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
                         <div className="flex flex-col gap-3 animate-slide-left-up">
                           <div className="flex flex-col items-start">
                             <div className="flex items-start gap-2 max-w-[80%]">
@@ -2306,11 +2316,60 @@ const ChatContainer = ({
                             </div>
                           </div>
                         </div>
-                      )}
+                      </div>
+                    );
+                  }
+
+                  const shouldAnimateThis =
+                    item.isLastUserMessage &&
+                    lastAnimatedMessageIdRef.current !== item.message.id;
+
+                  if (shouldAnimateThis) {
+                    lastAnimatedMessageIdRef.current = item.message.id;
+                  }
+
+                  return (
+                    <div
+                      key={virtualItem.key}
+                      ref={chatVirtualizer.measureElement}
+                      data-index={virtualItem.index}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                    >
+                      <ChatMessage
+                        message={item.message}
+                        messageIndex={item.messageIndex}
+                        isLightBackground={isLightBackground}
+                        ttsEnabled={ttsEnabled}
+                        playingMessageIndex={playingMessageIndex}
+                        loadingMessageIndex={loadingMessageIndex}
+                        copiedMessageIndex={copiedMessageIndex}
+                        isStreamingMessage={
+                          isGenerating && item.isLastAIMessage
+                        }
+                        currentSessionRef={currentSessionRef}
+                        smoothStreamingAnimation={
+                          uiConfig?.smoothStreamingAnimation || false
+                        }
+                        shouldAnimate={shouldAnimateThis}
+                        onCopyMessage={handleCopyMessage}
+                        onPlayTTS={handlePlayTTS}
+                        onEditUserMessage={editUserMessage}
+                        onRewriteMessage={handleRewriteMessage}
+                        onPreviousBranch={handlePreviousBranch}
+                        onNextBranch={handleNextBranch}
+                        setLoadingMessageIndex={setLoadingMessageIndex}
+                        setPlayingMessageIndex={setPlayingMessageIndex}
+                      />
                     </div>
                   );
                 })}
-              </>
+              </div>
             )}
           </div>
         </div>
