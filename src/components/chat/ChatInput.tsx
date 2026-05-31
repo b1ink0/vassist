@@ -36,7 +36,9 @@ import {
 } from "../../hooks/app/useChat";
 import {
   useIsHistoryPanelOpen,
+  useIsQuickPanelOpen,
   useIsSettingsPanelOpen,
+  useToolingActions,
 } from "../../hooks/app/useTooling";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import { Icon } from "../icons";
@@ -138,7 +140,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const message = useChatDraft();
     const { setPendingDropData, setChatDraft: setMessage } = useChatActions();
     const isSettingsPanelOpen = useIsSettingsPanelOpen();
+    const isQuickPanelOpen = useIsQuickPanelOpen();
     const isHistoryPanelOpen = useIsHistoryPanelOpen();
+    const {
+      setIsSettingsPanelOpen,
+      setIsQuickPanelOpen,
+      setIsHistoryPanelOpen,
+    } = useToolingActions();
 
     const uiConfig = useUIConfig();
     const api = useDesktopApi();
@@ -308,6 +316,28 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         onClose?.();
       }
     }, [onClose, api]);
+
+    const handleQuickPanelToggle = useCallback(() => {
+      if (!resolvedEmbedConfig.features.settings) {
+        return;
+      }
+
+      if (isDesktopInputWindow) {
+        api?.ipc?.send("chatInput:toggleQuickPanel");
+        return;
+      }
+
+      setIsSettingsPanelOpen(false);
+      setIsHistoryPanelOpen(false);
+      setIsQuickPanelOpen((previous) => !previous);
+    }, [
+      api,
+      isDesktopInputWindow,
+      resolvedEmbedConfig.features.settings,
+      setIsHistoryPanelOpen,
+      setIsQuickPanelOpen,
+      setIsSettingsPanelOpen,
+    ]);
 
     const effectiveIsVisible = isInputWindow ? localIsVisible : isVisible;
     const effectivePendingDropData = isInputWindow
@@ -1411,7 +1441,12 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       if (e.key === "Escape") {
         Logger.log("ChatInput", "Escape pressed - closing");
         wrappedOnClose();
-      } else if (e.key === "Enter" && !e.shiftKey) {
+      } else if (
+        e.key === "Enter" &&
+        !e.shiftKey &&
+        !isAndroid &&
+        !e.nativeEvent.isComposing
+      ) {
         e.preventDefault();
         handleSubmit();
       }
@@ -2247,7 +2282,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           trigger={
                             <Button
                               type="button"
-                            data-testid="chat-voice-camera-select"
+                              data-testid="chat-voice-camera-select"
                               variant="unstyled"
                               className={iconButtonClass()}
                               title="Select Camera"
@@ -2446,6 +2481,26 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           title="Voice Mode"
                         >
                           <Icon name="phone" size={18} />
+                        </button>
+                      ) : null}
+
+                      {resolvedEmbedConfig.features.settings ? (
+                        <button
+                          type="button"
+                          onClick={handleQuickPanelToggle}
+                          data-testid="chat-quick-panel-button"
+                          className={cn(
+                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
+                            isQuickPanelOpen
+                              ? "text-blue-300"
+                              : isLightBackground
+                                ? "glass-text"
+                                : "glass-text-black",
+                          )}
+                          title="Quick Access"
+                          aria-label="Quick access"
+                        >
+                          <Icon name="tools" size={18} />
                         </button>
                       ) : null}
 

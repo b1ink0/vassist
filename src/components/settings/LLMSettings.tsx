@@ -1608,10 +1608,18 @@ const LLMSettings = ({
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
-      return AIProviders;
+      const { DESKTOP_LOCAL, CHROME_AI, ...androidProviders } = AIProviders;
+      return androidProviders;
     }
-    const { ANDROID_LOCAL, CHROME_AI, ...otherProviders } = AIProviders;
-    return otherProviders;
+
+    if (isDesktop) {
+      const { ANDROID_LOCAL, CHROME_AI, ...desktopProviders } = AIProviders;
+      return desktopProviders;
+    }
+
+    const { ANDROID_LOCAL, DESKTOP_LOCAL, CHROME_AI, ...webProviders } =
+      AIProviders;
+    return webProviders;
   }, []);
 
   const llmSubTabOrder: LLMSubTabId[] = ["provider", "routing", "profiles"];

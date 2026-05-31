@@ -16,7 +16,11 @@ import {
 } from "react";
 import { useChatActions } from "../../hooks/app/useChat";
 import { useButtonPosition, useDragActions } from "../../hooks/app/useDrag";
-import { usePositionManagerRef, useSceneRef } from "../../hooks/app/useScene";
+import {
+  usePositionManagerRef,
+  useSceneActions,
+  useSceneRef,
+} from "../../hooks/app/useScene";
 import {
   useConfigUIActions,
   useUIConfig,
@@ -191,6 +195,7 @@ const ChatButton = ({
 }: ChatButtonProps) => {
   const positionManagerRef = usePositionManagerRef();
   const sceneRef = useSceneRef();
+  const { reloadScene } = useSceneActions();
   const buttonPos = useButtonPosition();
   const {
     updateButtonPosition: setButtonPos,
@@ -1350,43 +1355,49 @@ const ChatButton = ({
     emotePlayerService.togglePlayback();
   }, []);
 
-  const handleModelSelect = useCallback(async (modelId: string | null) => {
-    try {
-      if (modelId === null) {
-        await modelStorageService.clearAllDefaults();
-      } else {
-        await modelStorageService.setDefaultModel(modelId);
+  const handleModelSelect = useCallback(
+    async (modelId: string | null) => {
+      try {
+        if (modelId === null) {
+          await modelStorageService.clearAllDefaults();
+        } else {
+          await modelStorageService.setDefaultModel(modelId);
+        }
+        setSelectedModelId(modelId);
+        setIsAvatarPanelOpen(false);
+        Logger.log(
+          "ChatButton",
+          `Model ${modelId || "default"} selected, reloading scene...`,
+        );
+        reloadScene();
+      } catch (err) {
+        Logger.error("ChatButton", "Failed to select model:", err);
       }
-      setSelectedModelId(modelId);
-      setIsAvatarPanelOpen(false);
-      Logger.log(
-        "ChatButton",
-        `Model ${modelId || "default"} selected, reloading page...`,
-      );
-      window.location.reload();
-    } catch (err) {
-      Logger.error("ChatButton", "Failed to select model:", err);
-    }
-  }, []);
+    },
+    [reloadScene],
+  );
 
-  const handleStageSelect = useCallback(async (stageId: string | null) => {
-    try {
-      if (stageId === null) {
-        await stageStorageService.clearAllDefaults();
-      } else {
-        await stageStorageService.setDefaultStage(stageId);
+  const handleStageSelect = useCallback(
+    async (stageId: string | null) => {
+      try {
+        if (stageId === null) {
+          await stageStorageService.clearAllDefaults();
+        } else {
+          await stageStorageService.setDefaultStage(stageId);
+        }
+        setSelectedStageId(stageId);
+        setIsAvatarPanelOpen(false);
+        Logger.log(
+          "ChatButton",
+          `Stage ${stageId || "none"} selected, reloading scene...`,
+        );
+        reloadScene();
+      } catch (err) {
+        Logger.error("ChatButton", "Failed to select stage:", err);
       }
-      setSelectedStageId(stageId);
-      setIsAvatarPanelOpen(false);
-      Logger.log(
-        "ChatButton",
-        `Stage ${stageId || "none"} selected, reloading page...`,
-      );
-      window.location.reload();
-    } catch (err) {
-      Logger.error("ChatButton", "Failed to select stage:", err);
-    }
-  }, []);
+    },
+    [reloadScene],
+  );
 
   const [_forceUpdate, setForceUpdate] = useState(0);
 
@@ -2039,7 +2050,7 @@ const ChatButton = ({
           <>
             {/* Reload Button */}
             <Button
-              onClick={() => window.location.reload()}
+              onClick={reloadScene}
               variant={isLightBackground ? "dark" : "default"}
               className={cn(
                 "w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-transform",
@@ -2048,7 +2059,7 @@ const ChatButton = ({
                   ? "animate-fade-in"
                   : !isVisible && "animate-fade-out",
               )}
-              title="Reload Page"
+              title="Reload Avatar"
             >
               <Icon
                 name="refresh"

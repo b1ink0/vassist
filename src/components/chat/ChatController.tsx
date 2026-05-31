@@ -358,8 +358,13 @@ const ChatController = ({
   } = useChatActions();
   const _isVoiceMode = useIsVoiceMode();
   const { setIsVoiceMode, setIsSpeaking } = usePlaybackActions();
-  const { regenerateWithStreamingRef, editWithStreamingRef } =
-    useToolingActions();
+  const {
+    setIsSettingsPanelOpen,
+    setIsQuickPanelOpen,
+    setIsHistoryPanelOpen,
+    regenerateWithStreamingRef,
+    editWithStreamingRef,
+  } = useToolingActions();
   const previousChatOpenRef = useRef(false);
   const seenMessageIdsRef = useRef<Set<string>>(
     new Set(chatMessages.map((message) => message.id)),
@@ -1517,6 +1522,12 @@ const ChatController = ({
     closeChat();
   });
 
+  const handleDesktopQuickPanelToggle = useEffectEvent(() => {
+    setIsSettingsPanelOpen(false);
+    setIsHistoryPanelOpen(false);
+    setIsQuickPanelOpen((previous) => !previous);
+  });
+
   /**
    * Streams AI response with TTS generation.
    */
@@ -2086,15 +2097,24 @@ const ChatController = ({
       handleDesktopChatInputClose();
     });
 
+    const unsubscribeQuickPanel = api.ipc.on(
+      "chatInput:toggleQuickPanel",
+      () => {
+        handleDesktopQuickPanelToggle();
+      },
+    );
+
     return () => {
       unsubscribeSend?.();
       unsubscribePendingDrop?.();
       unsubscribeClose?.();
+      unsubscribeQuickPanel?.();
     };
   }, [
     setPendingDropData,
     api,
     handleDesktopChatInputClose,
+    handleDesktopQuickPanelToggle,
     handleDesktopChatInputSend,
   ]);
 

@@ -34,6 +34,7 @@ import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/DragDropService";
 import UtilService from "../../services/UtilService";
 import SettingsPanel from "../SettingsPanel";
+import QuickAccessPanel from "../QuickAccessPanel";
 import ChatHistoryPanel from "./ChatHistoryPanel";
 import Dialog from "../common/Dialog";
 import ChatMessage from "./ChatMessage";
@@ -67,6 +68,7 @@ import {
 import { usePositionManagerRef } from "../../hooks/app/useScene";
 import {
   useIsHistoryPanelOpen,
+  useIsQuickPanelOpen,
   useIsSettingsPanelOpen,
   useToolingActions,
 } from "../../hooks/app/useTooling";
@@ -349,9 +351,11 @@ const ChatContainer = ({
     endModelDrag,
   } = useDragActions();
   const isSettingsPanelOpen = useIsSettingsPanelOpen();
+  const isQuickPanelOpen = useIsQuickPanelOpen();
   const isHistoryPanelOpen = useIsHistoryPanelOpen();
   const {
     setIsSettingsPanelOpen,
+    setIsQuickPanelOpen,
     setIsHistoryPanelOpen,
     editUserMessage,
     regenerateAIMessage,
@@ -388,6 +392,7 @@ const ChatContainer = ({
   );
   const [isClosing, setIsClosing] = useState(false);
   const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
+  const [isQuickPanelClosing, setIsQuickPanelClosing] = useState(false);
   const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -512,6 +517,12 @@ const ChatContainer = ({
   }, [isSettingsPanelOpen, setIsSettingsPanelOpen, settingsEnabled]);
 
   useEffect(() => {
+    if (!settingsEnabled && isQuickPanelOpen) {
+      setIsQuickPanelOpen(false);
+    }
+  }, [isQuickPanelOpen, setIsQuickPanelOpen, settingsEnabled]);
+
+  useEffect(() => {
     if (!historyEnabled && isHistoryPanelOpen) {
       setIsHistoryPanelOpen(false);
     }
@@ -526,6 +537,7 @@ const ChatContainer = ({
       setRequestedSettingsView(
         (event.detail as VAssistOpenSettingsOptions | null | undefined) ?? {},
       );
+      setIsQuickPanelOpen(false);
       setIsHistoryPanelOpen(false);
       setIsSettingsPanelOpen(true);
     };
@@ -541,7 +553,13 @@ const ChatContainer = ({
         handleOpenSettings,
       );
     };
-  }, [hostId, setIsHistoryPanelOpen, setIsSettingsPanelOpen, settingsEnabled]);
+  }, [
+    hostId,
+    setIsHistoryPanelOpen,
+    setIsQuickPanelOpen,
+    setIsSettingsPanelOpen,
+    settingsEnabled,
+  ]);
 
   useDesktopWindowResize();
 
@@ -1288,6 +1306,14 @@ const ChatContainer = ({
     }, 200);
   }, [setIsSettingsPanelOpen]);
 
+  const handleQuickPanelClose = useCallback(() => {
+    setIsQuickPanelClosing(true);
+    setTimeout(() => {
+      setIsQuickPanelOpen(false);
+      setIsQuickPanelClosing(false);
+    }, 200);
+  }, [setIsQuickPanelOpen]);
+
   /**
    * Handle stop generation.
    */
@@ -2017,7 +2043,11 @@ const ChatContainer = ({
           <div className="flex items-center gap-2">
             {settingsEnabled ? (
               <Button
-                onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+                onClick={() => {
+                  setIsQuickPanelOpen(false);
+                  setIsHistoryPanelOpen(false);
+                  setIsSettingsPanelOpen(!isSettingsPanelOpen);
+                }}
                 size="icon"
                 variant={isLightBackground ? "dark" : "default"}
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
@@ -2038,7 +2068,11 @@ const ChatContainer = ({
 
             {historyEnabled ? (
               <Button
-                onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+                onClick={() => {
+                  setIsQuickPanelOpen(false);
+                  setIsSettingsPanelOpen(false);
+                  setIsHistoryPanelOpen(!isHistoryPanelOpen);
+                }}
                 size="icon"
                 variant={isLightBackground ? "dark" : "default"}
                 className={isClosing ? "animate-fade-out" : "animate-fade-in"}
@@ -2373,6 +2407,28 @@ const ChatContainer = ({
             )}
           </div>
         </div>
+
+        {/* Settings Panel - renders inside ChatContainer */}
+        {settingsEnabled && isQuickPanelOpen && (
+          <div className="absolute inset-0 z-10">
+            <QuickAccessPanel
+              onClose={handleQuickPanelClose}
+              isLightBackground={isLightBackground}
+              embedConfig={embedConfig}
+              animationClass={
+                isQuickPanelClosing
+                  ? "animate-fade-out"
+                  : "animate-slide-up-fade-in"
+              }
+              onOpenSettings={(options) => {
+                setRequestedSettingsView(options ?? {});
+                setIsQuickPanelOpen(false);
+                setIsHistoryPanelOpen(false);
+                setIsSettingsPanelOpen(true);
+              }}
+            />
+          </div>
+        )}
 
         {/* Settings Panel - renders inside ChatContainer */}
         {settingsEnabled && isSettingsPanelOpen && (

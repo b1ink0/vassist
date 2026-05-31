@@ -197,10 +197,11 @@ const Select = ({
         >
           {!trigger && (
             <>
-              <BaseSelect.Value
-                className={cn("block truncate pr-2", textClass)}
-                placeholder={placeholder || "Select"}
-              />
+              <span className={cn("block truncate pr-2", textClass)}>
+                {optionItems.find((opt) => String(opt.value) === selectedValue)
+                  ?.label ??
+                  (placeholder || "Select")}
+              </span>
               <BaseSelect.Icon
                 className={cn(
                   "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2",

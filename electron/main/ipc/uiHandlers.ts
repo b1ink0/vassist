@@ -243,6 +243,12 @@ export function registerUIIPCHandlers({
     }
   });
 
+  ipcMain.on("chatInput:toggleQuickPanel", () => {
+    if (state.mainWindow && state.mainWindow.webContents) {
+      state.mainWindow.webContents.send("chatInput:toggleQuickPanel");
+    }
+  });
+
   ipcMain.on(
     "state:isChatInputVisible",
     (_event: IpcMainEvent, visible: boolean) => {

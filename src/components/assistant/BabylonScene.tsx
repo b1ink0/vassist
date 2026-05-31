@@ -676,8 +676,23 @@ const BabylonScene = ({
 
     const cleanupPromise = initEngine();
     cleanupPromise.then((cleanupFn) => {
-      if (!cancelled && cleanupFn) {
-        cleanupFnRef.current = cleanupFn;
+      if (cleanupFn) {
+        if (cancelled) {
+          Logger.log(
+            "BabylonScene",
+            "Calling deferred cleanup (unmounted during init)",
+          );
+          cleanupFn();
+          if (canvas.parentNode) {
+            Logger.log(
+              "BabylonScene",
+              "Removing canvas after deferred cleanup",
+            );
+            canvas.parentNode.removeChild(canvas);
+          }
+        } else {
+          cleanupFnRef.current = cleanupFn;
+        }
       }
     });
 
@@ -835,7 +850,7 @@ const BabylonScene = ({
                 top: 0,
                 left: 0,
                 pointerEvents: "none",
-                zIndex: isAndroid ? 100 : 9999,
+                zIndex: 100,
                 opacity: isReady ? 1 : 0,
                 transition: "opacity 700ms ease-in-out",
               }
@@ -851,7 +866,7 @@ const BabylonScene = ({
             top: `${modelOverlayPos.y}px`,
             width: `${modelOverlayPos.width}px`,
             height: `${modelOverlayPos.height}px`,
-            zIndex: isAndroid ? 101 : 10000,
+            zIndex: 101,
             pointerEvents: isDragging ? "auto" : "none",
             borderRadius: "24px",
           }}

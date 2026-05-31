@@ -79,6 +79,9 @@ const isWasmCspError = (error: unknown): boolean => {
   );
 };
 
+let allowBulletPhysics = true;
+let allowMultiThreadedBulletPhysics = true;
+
 type MaterialWithState = {
   diffuseTexture?: unknown;
   sphereTexture?: unknown;
@@ -817,9 +820,19 @@ export const buildMmdModelScene = async (
 
   if (finalConfig.enablePhysics) {
     const useBullet = physicsEngine === "bullet";
+    const canUseMultiThreadedBulletPhysics =
+      !isExtension &&
+      hasSharedArrayBuffer &&
+      allowBulletPhysics &&
+      allowMultiThreadedBulletPhysics;
 
     if (useBullet) {
-      if (!isExtension && hasSharedArrayBuffer) {
+      if (!allowBulletPhysics) {
+        Logger.warn(
+          "MmdModelScene",
+          "Bullet physics was disabled after a previous initialization failure; continuing without physics",
+        );
+      } else if (canUseMultiThreadedBulletPhysics) {
         // Multi-threaded Bullet physics (faster, requires SharedArrayBuffer)
         Logger.log(
           "MmdModelScene",
@@ -848,11 +861,12 @@ export const buildMmdModelScene = async (
             "MmdModelScene",
             "Falling back to single-threaded mode...",
           );
+          allowMultiThreadedBulletPhysics = false;
         }
       }
 
       // Fall back to single-threaded if multi-threaded failed or SharedArrayBuffer not available
-      if (!mmdPhysics) {
+      if (!mmdPhysics && allowBulletPhysics) {
         Logger.log(
           "MmdModelScene",
           `Initializing Single-threaded Bullet Physics (${isExtension ? "Extension/Page mode" : "Android/WebView mode"})...`,
@@ -879,6 +893,7 @@ export const buildMmdModelScene = async (
             error,
           );
           Logger.warn("MmdModelScene", "Continuing without physics");
+          allowBulletPhysics = false;
         }
       }
     } else if (isExtension) {
@@ -1867,6 +1882,17 @@ export const buildMmdModelScene = async (
   // Cleanup on scene dispose
   scene.onDisposeObservable.add(() => {
     Logger.log("MmdModelScene", "Scene disposing, cleaning up managers");
+
+    try {
+      mmdRuntime.dispose(scene);
+    } catch (error) {
+      Logger.warn(
+        "MmdModelScene",
+        "Failed to dispose MMD runtime cleanly:",
+        error,
+      );
+    }
+
     animationManager.dispose();
     positionManager.dispose();
     interactionManager.dispose();

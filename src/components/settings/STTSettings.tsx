@@ -45,6 +45,14 @@ interface ProviderRecord {
   [key: string]: string;
 }
 
+const STT_PROVIDER_LABELS: Record<string, string> = {
+  [STTProviders.ANDROID_LOCAL]: "Android Local",
+  [STTProviders.DESKTOP_LOCAL]: "Desktop Local",
+  [STTProviders.CHROME_AI_MULTIMODAL]: "Chrome Built-in AI",
+  [STTProviders.OPENAI]: "OpenAI",
+  [STTProviders.OPENAI_COMPATIBLE]: "OpenAI-Compatible",
+};
+
 const STTSettings = ({
   isLightBackground = false,
   hasChromeAI = false,
@@ -306,15 +314,19 @@ const STTSettings = ({
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
-      return STTProviders as ProviderRecord;
+      const { DESKTOP_LOCAL, CHROME_AI_MULTIMODAL, ...androidProviders } =
+        STTProviders;
+      return androidProviders as ProviderRecord;
     }
+
     if (isDesktop) {
       const { ANDROID_LOCAL, CHROME_AI_MULTIMODAL, ...desktopProviders } =
         STTProviders;
       return desktopProviders as ProviderRecord;
     }
-    const { ANDROID_LOCAL, ...otherProviders } = STTProviders;
-    return otherProviders as ProviderRecord;
+
+    const { ANDROID_LOCAL, DESKTOP_LOCAL, ...webProviders } = STTProviders;
+    return webProviders as ProviderRecord;
   }, []);
 
   return (
@@ -349,7 +361,7 @@ const STTSettings = ({
             disabled={!sttConfig.enabled}
             options={Object.entries(availableProviders).map(([key, value]) => ({
               value,
-              label: key,
+              label: STT_PROVIDER_LABELS[value] || key,
             }))}
           />
         </SettingsRow>

@@ -382,12 +382,11 @@ const UISettings = ({
               updateUIConfig("backgroundDetection.mode", e.target.value)
             }
             variant={isLightBackground ? "dark" : "default"}
-            options={Object.entries(BackgroundThemeModes).map(
-              ([key, value]) => ({
-                value,
-                label: key.charAt(0) + key.slice(1).toLowerCase(),
-              }),
-            )}
+            options={[
+              { value: BackgroundThemeModes.ADAPTIVE, label: "Adaptive" },
+              { value: "light", label: "Dark" },
+              { value: "dark", label: "Light" },
+            ]}
           />
           <p className="text-xs text-white/50">
             Choose the color theme for the assistant UI (chat, input, buttons)

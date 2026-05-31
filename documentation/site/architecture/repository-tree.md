@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 141
-- Files: 464
-- Text files counted for metrics: 380
-- Total text lines: 127330
-- Code files counted for metrics: 291
-- Total code lines: 116328
+- Directories: 151
+- Files: 537
+- Text files counted for metrics: 453
+- Total text lines: 139346
+- Code files counted for metrics: 360
+- Total code lines: 125688
 
 ## Line Counts by File Type
 
@@ -17,18 +17,18 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1285 |
-| CSS          | .css, .scss, .less      |     5 |  1435 |
-| HTML         | .html                   |     4 |    73 |
+| CSS          | .css, .scss, .less      |     6 |  1717 |
+| HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   255 |
-| TSX          | .tsx                    |    94 | 45469 |
-| TypeScript   | .ts, .mts, .cts         |   164 | 61188 |
+| TSX          | .tsx                    |    98 | 47685 |
+| TypeScript   | .ts, .mts, .cts         |   227 | 67932 |
 | Gradle       | .gradle                 |     7 |   242 |
-| JSON         | .json                   |    17 |   545 |
-| Markdown     | .md                     |    30 |  3606 |
+| JSON         | .json                   |    17 |   566 |
+| Markdown     | .md                     |    34 |  5843 |
 | Other Text   | mixed                   |     7 |  2236 |
-| Plain Text   | (no extension)          |    10 |  3607 |
+| Plain Text   | (no extension)          |    10 |  4005 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   395 |
@@ -38,14 +38,15 @@ VAssist repository tree and file metrics.
 - .husky/: 1 directories, 1 files
 - android/: 52 directories, 74 files
 - android-src/: 1 directories, 3 files
-- documentation/: 10 directories, 40 files
+- documentation/: 10 directories, 44 files
 - electron/: 13 directories, 48 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 19 files
-- src/: 45 directories, 214 files
-- tools/: 2 directories, 5 files
+- src/: 46 directories, 225 files
+- tests/: 9 directories, 56 files
+- tools/: 2 directories, 6 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
@@ -58,6 +59,7 @@ VAssist repository tree and file metrics.
 - index.html: file
 - LICENSE: file
 - package.json: file
+- playwright.config.ts: file
 - README.md: file
 - tsconfig.app.json: file
 - tsconfig.base.json: file
@@ -217,7 +219,11 @@ vassist/
 │   ├── site/
 │   │   ├── architecture/
 │   │   │   ├── ai-and-media-stack.md
+│   │   │   ├── configuration-reference.md
+│   │   │   ├── embed.md
 │   │   │   ├── overview.md
+│   │   │   ├── packages-and-integration.md
+│   │   │   ├── react.md
 │   │   │   ├── repository-map.md
 │   │   │   ├── repository-tree.md
 │   │   │   └── storage-and-data.md
@@ -433,6 +439,7 @@ vassist/
 │   │   │   ├── MarkdownText.tsx
 │   │   │   ├── ShortcutsConfig.tsx
 │   │   │   ├── StatusMessage.tsx
+│   │   │   ├── StreamdownMarkdown.tsx
 │   │   │   ├── StreamingContainer.tsx
 │   │   │   ├── StreamingText.tsx
 │   │   │   ├── Toggle.tsx
@@ -510,6 +517,7 @@ vassist/
 │   │   ├── AppContent.tsx
 │   │   ├── DemoSite.tsx
 │   │   ├── ModelLoadingOverlay.tsx
+│   │   ├── QuickAccessPanel.tsx
 │   │   └── SettingsPanel.tsx
 │   ├── config/
 │   │   ├── aiConfig.ts
@@ -522,8 +530,14 @@ vassist/
 │   │   ├── AppRuntimeContext.tsx
 │   │   └── SetupContext.tsx
 │   ├── embed/
+│   │   ├── branding.ts
 │   │   ├── config.ts
+│   │   ├── EmbedHostContext.tsx
+│   │   ├── hostCommands.ts
+│   │   ├── portalContainers.ts
+│   │   ├── reactHostCustomizations.tsx
 │   │   ├── runtimeStore.ts
+│   │   ├── settingsPolicy.ts
 │   │   └── theme.ts
 │   ├── hooks/
 │   │   ├── app/
@@ -615,8 +629,12 @@ vassist/
 │   │   ├── useConfigStore.ts
 │   │   └── useDesktopStore.ts
 │   ├── styles/
+│   │   ├── markdown.css
 │   │   ├── streaming-animations.css
 │   │   └── ui-effects.css
+│   ├── testing/
+│   │   ├── runtime.ts
+│   │   └── testBridge.ts
 │   ├── types/
 │   │   ├── android.d.ts
 │   │   ├── android.ts
@@ -649,10 +667,76 @@ vassist/
 │   ├── env.d.ts
 │   ├── index.css
 │   └── main.tsx
+├── tests/
+│   ├── e2e/
+│   │   ├── electron/
+│   │   │   ├── chat.history.spec.ts
+│   │   │   ├── chat.interactions.spec.ts
+│   │   │   ├── chat.voice-mode.spec.ts
+│   │   │   ├── harness.smoke.spec.ts
+│   │   │   ├── settings.3d.spec.ts
+│   │   │   ├── settings.ai-features.spec.ts
+│   │   │   ├── settings.coverage.spec.ts
+│   │   │   ├── settings.llm.spec.ts
+│   │   │   ├── settings.stt.spec.ts
+│   │   │   ├── settings.tts.spec.ts
+│   │   │   ├── settings.ui.spec.ts
+│   │   │   ├── setup.wizard.spec.ts
+│   │   │   ├── toolbar.interactions.spec.ts
+│   │   │   └── window.controls.spec.ts
+│   │   ├── extension/
+│   │   │   ├── chat.history.spec.ts
+│   │   │   ├── chat.interactions.spec.ts
+│   │   │   ├── chat.voice-mode.spec.ts
+│   │   │   ├── harness.smoke.spec.ts
+│   │   │   ├── page-context.spec.ts
+│   │   │   ├── runtime.resilience.spec.ts
+│   │   │   ├── settings.3d.spec.ts
+│   │   │   ├── settings.ai-features.spec.ts
+│   │   │   ├── settings.coverage.spec.ts
+│   │   │   ├── settings.llm.spec.ts
+│   │   │   ├── settings.stt.spec.ts
+│   │   │   ├── settings.tts.spec.ts
+│   │   │   ├── settings.ui.spec.ts
+│   │   │   ├── setup.wizard.spec.ts
+│   │   │   └── toolbar.interactions.spec.ts
+│   │   ├── shared/
+│   │   │   ├── chat.suites.ts
+│   │   │   ├── settings.suites.ts
+│   │   │   ├── setup.suites.ts
+│   │   │   └── toolbar.suites.ts
+│   │   └── web/
+│   │       ├── chat.history.spec.ts
+│   │       ├── chat.interactions.spec.ts
+│   │       ├── chat.voice-mode.spec.ts
+│   │       ├── settings.3d.spec.ts
+│   │       ├── settings.ai-features.spec.ts
+│   │       ├── settings.coverage.spec.ts
+│   │       ├── settings.llm.spec.ts
+│   │       ├── settings.stt.spec.ts
+│   │       ├── settings.tts.spec.ts
+│   │       ├── settings.ui.spec.ts
+│   │       ├── setup.wizard.spec.ts
+│   │       └── toolbar.interactions.spec.ts
+│   ├── fixtures/
+│   │   ├── electron.ts
+│   │   ├── extension.ts
+│   │   ├── shared.ts
+│   │   └── web.ts
+│   ├── helpers/
+│   │   ├── extensionTestApi.ts
+│   │   ├── interactions.ts
+│   │   ├── selectors.ts
+│   │   ├── setup.ts
+│   │   └── testApi.ts
+│   ├── hosts/
+│   │   └── extension-host.html
+│   └── extensionTestHost.ts
 ├── tools/
 │   ├── vite-plugins/
 │   │   ├── android-models-plugin.ts
 │   │   ├── extension-plugins.ts
+│   │   ├── extension-test-host-plugin.ts
 │   │   └── vad-assets-plugin.ts
 │   ├── create-node-llama-runtime-core.ts
 │   └── write-package-type-entries.ts
@@ -668,6 +752,7 @@ vassist/
 ├── index.html
 ├── LICENSE
 ├── package.json
+├── playwright.config.ts
 ├── README.md
 ├── tsconfig.app.json
 ├── tsconfig.base.json

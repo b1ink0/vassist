@@ -109,6 +109,7 @@ export interface AppStoreState {
   isVoiceMode: boolean;
   isSpeaking: boolean;
   isSettingsPanelOpen: boolean;
+  isQuickPanelOpen: boolean;
   isHistoryPanelOpen: boolean;
   playingMessageIndex: number | null;
   loadingMessageIndex: number | null;
@@ -146,6 +147,7 @@ export interface AppStoreState {
   setIsVoiceMode: React.Dispatch<React.SetStateAction<boolean>>;
   setIsSpeaking: React.Dispatch<React.SetStateAction<boolean>>;
   setIsSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsQuickPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setIsHistoryPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setPlayingMessageIndex: React.Dispatch<React.SetStateAction<number | null>>;
   setLoadingMessageIndex: React.Dispatch<React.SetStateAction<number | null>>;
@@ -192,6 +194,7 @@ export interface AppStoreState {
     React.SetStateAction<{ x: number; y: number }>
   >;
   toggleSettingsPanel: () => void;
+  toggleQuickPanel: () => void;
   toggleHistoryPanel: () => void;
   handleSummarize: (text: string) => Promise<string>;
   handleTranslate: (
@@ -485,6 +488,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
           isVoiceMode: false,
           isSpeaking: false,
           isSettingsPanelOpen: false,
+          isQuickPanelOpen: false,
           isHistoryPanelOpen: false,
           playingMessageIndex: null,
           loadingMessageIndex: null,
@@ -592,6 +596,14 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               isSettingsPanelOpen: resolveSetStateAction(
                 value,
                 state.isSettingsPanelOpen,
+              ),
+            }));
+          },
+          setIsQuickPanelOpen: (value) => {
+            set((state) => ({
+              isQuickPanelOpen: resolveSetStateAction(
+                value,
+                state.isQuickPanelOpen,
               ),
             }));
           },
@@ -712,6 +724,9 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             set({
               isChatInputVisible: false,
               isChatContainerVisible: false,
+              isSettingsPanelOpen: false,
+              isQuickPanelOpen: false,
+              isHistoryPanelOpen: false,
             });
             TTSServiceProxy.stopPlayback();
             dispatchWindowEvent("abortTTSGeneration");
@@ -1016,6 +1031,11 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
           toggleSettingsPanel: () => {
             set((state) => ({
               isSettingsPanelOpen: !state.isSettingsPanelOpen,
+            }));
+          },
+          toggleQuickPanel: () => {
+            set((state) => ({
+              isQuickPanelOpen: !state.isQuickPanelOpen,
             }));
           },
           toggleHistoryPanel: () => {

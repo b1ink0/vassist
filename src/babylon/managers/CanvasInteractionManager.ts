@@ -104,28 +104,38 @@ export class CanvasInteractionManager {
     Logger.log("CanvasInteractionManager", "Initialized");
   }
 
+  private isCameraLocked(): boolean {
+    const cameraLockedGetter = this.scene.metadata?.isCameraLocked;
+    if (typeof cameraLockedGetter === "function") {
+      return cameraLockedGetter();
+    }
+    return true;
+  }
+
   private updateInteractiveState(clientX: number, clientY: number): boolean {
     if (this.isDragging) {
+      this.canvas.style.pointerEvents = "auto";
       return true;
     }
 
     const rect = this.canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    const isCameraLocked =
-      this.scene.metadata?.isCameraLocked &&
-      this.scene.metadata.isCameraLocked();
 
     if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
-      if (isCameraLocked && this.canvas.style.pointerEvents !== "none") {
-        this.canvas.style.pointerEvents = "none";
-        this.canvas.style.cursor = "default";
-      }
+      this.canvas.style.pointerEvents = "none";
+      this.canvas.style.cursor = "default";
       this.isOverModel = false;
       return false;
     }
 
-    this.canvas.style.pointerEvents = "auto";
+    if (!this.isCameraLocked()) {
+      this.canvas.style.pointerEvents = "auto";
+      this.canvas.style.cursor = "default";
+      this.isOverModel = false;
+      return true;
+    }
+
     const pickResult = this.scene.pick(x, y);
     const overModel =
       Boolean(pickResult?.hit) &&
@@ -133,6 +143,7 @@ export class CanvasInteractionManager {
 
     if (overModel) {
       this.isOverModel = true;
+      this.canvas.style.pointerEvents = "auto";
       this.canvas.style.cursor = "grab";
       return true;
     }
@@ -140,12 +151,9 @@ export class CanvasInteractionManager {
     this.canvas.style.cursor = "default";
     this.isOverModel = false;
 
-    if (isCameraLocked) {
-      this.canvas.style.pointerEvents = "none";
-      return false;
-    }
+    this.canvas.style.pointerEvents = "none";
 
-    return true;
+    return false;
   }
 
   /**
@@ -165,6 +173,8 @@ export class CanvasInteractionManager {
   async handleCanvasPointerDown(event: PointerEvent): Promise<void> {
     // Only left button
     if (event.button !== 0) return;
+
+    if (!this.isCameraLocked()) return;
 
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;

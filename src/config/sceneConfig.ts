@@ -300,7 +300,11 @@ export async function getSceneConfigAsync(): Promise<SceneConfigData> {
     const customDefaultModel = await modelStorageService.getDefaultModel();
 
     if (customDefaultModel && customDefaultModel.modelData) {
-      const customFileName = customDefaultModel.name || "model.bpmx";
+      const originalFileName =
+        customDefaultModel.metadata?.originalFileName || "model.bpmx";
+      const customFileName = originalFileName.toLowerCase().endsWith(".bpmx")
+        ? originalFileName
+        : originalFileName;
       config.customModelFile = new File(
         [customDefaultModel.modelData],
         customFileName,

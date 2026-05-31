@@ -46,6 +46,15 @@ interface KokoroCacheSize {
   usage?: number;
 }
 
+const TTS_PROVIDER_LABELS: Record<string, string> = {
+  [TTSProviders.ANDROID_LOCAL]: "Android Local",
+  [TTSProviders.DESKTOP_LOCAL]: "Desktop Local",
+  [TTSProviders.KOKORO]: "Kokoro (Local)",
+  [TTSProviders.OPENAI]: "OpenAI",
+  [TTSProviders.OPENAI_COMPATIBLE]: "OpenAI-Compatible",
+  [TTSProviders.GPTSOVITS_REMOTE]: "GPT-SoVITS (Remote)",
+};
+
 const TTSSettings = ({
   isLightBackground = false,
   onRequestDeleteVoiceDialog,
@@ -317,10 +326,17 @@ const TTSSettings = ({
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
     if (isAndroid) {
-      return TTSProviders;
+      const { DESKTOP_LOCAL, KOKORO, ...androidProviders } = TTSProviders;
+      return androidProviders;
     }
-    const { ANDROID_LOCAL, ...otherProviders } = TTSProviders;
-    return otherProviders;
+
+    if (isDesktop) {
+      const { ANDROID_LOCAL, ...desktopProviders } = TTSProviders;
+      return desktopProviders;
+    }
+
+    const { ANDROID_LOCAL, DESKTOP_LOCAL, ...webProviders } = TTSProviders;
+    return webProviders;
   }, []);
 
   return (
@@ -354,7 +370,7 @@ const TTSSettings = ({
             variant={isLightBackground ? "dark" : "default"}
             options={Object.entries(availableProviders).map(([key, value]) => ({
               value,
-              label: key,
+              label: TTS_PROVIDER_LABELS[value] || key,
             }))}
           />
         </SettingsRow>

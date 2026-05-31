@@ -118,6 +118,19 @@ Voice quality depends on your STT and TTS provider setup. If transcription or sp
 
 The AI behavior is controlled by the active **system prompt profile** in Settings and LLM and Profiles. The default is a general assistant. You can create your own: a coding assistant, a writing partner, a specific character. Changes apply to the next message.
 
+## Quick access panel
+
+The **Quick Access** button (wrench/tools icon, right side of the input bar) opens a compact overlay panel without leaving the chat. Use it to change common settings.
+
+| Section        | What you can change                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| LLM Provider   | Switch AI provider, apply a saved backend profile, pick a model, and change the active system prompt. |
+| Text-to-Speech | Toggle TTS on/off and switch provider.                                                                |
+| Speech-to-Text | Toggle STT on/off and switch provider.                                                                |
+| Interface      | Enable or disable the AI toolbar; toggle Temporary Chat (messages not saved to history).              |
+
+Each section has a **More** link that jumps straight to the corresponding settings tab if you need deeper configuration.
+
 ## Live Assistant reactions during chat
 
 - Spoken output drives lip sync and can shift the Live Assistant animation state.
