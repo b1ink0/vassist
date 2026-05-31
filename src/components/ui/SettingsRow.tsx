@@ -29,6 +29,10 @@ const SettingsRow = ({
   layout = "inline",
 }: SettingsRowProps) => {
   const { embedConfig } = useEmbedHost();
+  const rowAttributes = {
+    "data-settings-row": "true",
+    "data-settings-label": label,
+  };
 
   if (targetId && isSettingsTargetHidden(embedConfig, targetId)) {
     return null;
@@ -38,7 +42,7 @@ const SettingsRow = ({
     targetId !== undefined && isSettingsTargetReadOnly(embedConfig, targetId);
 
   const labelContent = (
-    <div className="flex-1 min-w-0">
+    <div className="flex-1 min-w-0" data-settings-label-content>
       <span className="text-sm text-white font-medium">{label}</span>
       {description && (
         <p className="text-xs text-white/50 mt-0.5">{description}</p>
@@ -54,10 +58,15 @@ const SettingsRow = ({
 
   if (layout === "stacked") {
     return (
-      <div className={cn("space-y-2", className)}>
+      <div
+        {...rowAttributes}
+        data-settings-target={targetId}
+        className={cn("space-y-2", className)}
+      >
         {labelContent}
-        <div className="space-y-2">
+        <div className="space-y-2" data-settings-control-group>
           <div
+            data-settings-control
             className={cn(
               "min-w-0",
               isReadOnly && "pointer-events-none opacity-70",
@@ -72,10 +81,17 @@ const SettingsRow = ({
   }
 
   return (
-    <div className={cn("flex items-center justify-between gap-3", className)}>
+    <div
+      {...rowAttributes}
+      data-settings-target={targetId}
+      className={cn("flex items-center justify-between gap-3", className)}
+    >
       {labelContent}
-      <div className="flex items-center gap-2">
-        <div className={cn(isReadOnly && "pointer-events-none opacity-70")}>
+      <div className="flex items-center gap-2" data-settings-control-group>
+        <div
+          data-settings-control
+          className={cn(isReadOnly && "pointer-events-none opacity-70")}
+        >
           {children}
         </div>
         {readOnlyBadge}

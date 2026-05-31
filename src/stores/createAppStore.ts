@@ -350,6 +350,83 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
   return createStore<AppStoreState>()(
     devtools(
       (set, get, store) => {
+        const buildHistoryChatServiceAdapter = () => ({
+          exportTree: () => {
+            const exportedTree: ExportedChatTree = chatService.exportTree();
+            const rawTree = exportedTree.tree;
+            const normalizedTree =
+              rawTree && typeof rawTree === "object"
+                ? normalizeHistoryTreeNode(rawTree)
+                : undefined;
+
+            return {
+              ...exportedTree,
+              ...(normalizedTree ? { tree: normalizedTree } : {}),
+            } as HistoryTreeData;
+          },
+          getMessages: () =>
+            chatService.getMessages().map((message) => ({
+              role: message.role,
+              content: message.content,
+              images: message.images.filter(
+                (value): value is string | Blob =>
+                  typeof value === "string" || value instanceof Blob,
+              ),
+              audios: message.audios.filter(
+                (value): value is string | Blob =>
+                  typeof value === "string" || value instanceof Blob,
+              ),
+            })),
+        });
+
+        const persistCurrentChatState = async (
+          state: Pick<
+            AppStoreState,
+            "chatMessages" | "currentChatId" | "isProcessing" | "isTempChat"
+          >,
+          reason: string,
+        ): Promise<string | null> => {
+          if (
+            state.chatMessages.length === 0 ||
+            state.isTempChat ||
+            state.isProcessing
+          ) {
+            return null;
+          }
+
+          let chatId = state.currentChatId;
+          if (!chatId) {
+            chatId = historyService.generateChatId();
+            store.setState({ currentChatId: chatId });
+            Logger.log("AppStore", "New chat created for auto-save:", chatId);
+          }
+
+          await historyService.saveChat({
+            chatId,
+            chatService: buildHistoryChatServiceAdapter(),
+            messages: state.chatMessages,
+            isTemp: false,
+            metadata: {
+              sourceUrl: window.location.href,
+            },
+          });
+
+          Logger.log("AppStore", `Chat auto-saved (${reason}):`, chatId);
+          return chatId;
+        };
+
+        const persistCurrentChatStateNow = (reason: string) => {
+          void persistCurrentChatState(store.getState(), reason).catch(
+            (error) => {
+              Logger.error(
+                "AppStore",
+                `Failed to auto-save chat (${reason}):`,
+                error,
+              );
+            },
+          );
+        };
+
         const scheduleChatAutoSave = () => {
           if (chatAutoSaveTimeout) {
             clearTimeout(chatAutoSaveTimeout);
@@ -376,58 +453,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             }
 
             try {
-              let chatId = latestState.currentChatId;
-              if (!chatId) {
-                chatId = historyService.generateChatId();
-                store.setState({ currentChatId: chatId });
-                Logger.log(
-                  "AppStore",
-                  "New chat created for auto-save:",
-                  chatId,
-                );
-              }
-
-              const sourceUrl = window.location.href;
-              const chatServiceAdapter = {
-                exportTree: () => {
-                  const exportedTree: ExportedChatTree =
-                    chatService.exportTree();
-                  const rawTree = exportedTree.tree;
-                  const normalizedTree =
-                    rawTree && typeof rawTree === "object"
-                      ? normalizeHistoryTreeNode(rawTree)
-                      : undefined;
-                  return {
-                    ...exportedTree,
-                    ...(normalizedTree ? { tree: normalizedTree } : {}),
-                  } as HistoryTreeData;
-                },
-                getMessages: () =>
-                  chatService.getMessages().map((message) => ({
-                    role: message.role,
-                    content: message.content,
-                    images: message.images.filter(
-                      (value): value is string | Blob =>
-                        typeof value === "string" || value instanceof Blob,
-                    ),
-                    audios: message.audios.filter(
-                      (value): value is string | Blob =>
-                        typeof value === "string" || value instanceof Blob,
-                    ),
-                  })),
-              };
-
-              await historyService.saveChat({
-                chatId,
-                chatService: chatServiceAdapter,
-                messages: latestState.chatMessages,
-                isTemp: false,
-                metadata: {
-                  sourceUrl,
-                },
-              });
-
-              Logger.log("AppStore", "Chat auto-saved (debounced):", chatId);
+              await persistCurrentChatState(latestState, "debounced");
             } catch (error) {
               Logger.error(
                 "AppStore",
@@ -823,6 +849,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
 
               if (editWithStreamingRef.current) {
                 await editWithStreamingRef.current(newMessageId);
+                await persistCurrentChatState(store.getState(), "edit");
                 return;
               }
 
@@ -853,6 +880,8 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
                 });
                 applyChatSchedule();
               }
+
+              await persistCurrentChatState(store.getState(), "edit");
             } catch (error) {
               Logger.error("AppStore", "Failed to edit message:", error);
               set({ isProcessing: false });
@@ -873,6 +902,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
 
               if (regenerateWithStreamingRef.current) {
                 await regenerateWithStreamingRef.current();
+                await persistCurrentChatState(store.getState(), "regenerate");
                 return;
               }
 
@@ -902,6 +932,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
 
               set({ isProcessing: false });
               applyChatSchedule();
+              await persistCurrentChatState(store.getState(), "regenerate");
             } catch (error) {
               Logger.error("AppStore", "Failed to regenerate message:", error);
               set({ isProcessing: false });
@@ -924,6 +955,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
                 chatMessages: toChatMessageItems(chatService.getMessages()),
               });
               applyChatSchedule();
+              persistCurrentChatStateNow("switch-branch");
             } catch (error) {
               Logger.error("AppStore", "Failed to switch branch:", error);
               throw error;
@@ -936,6 +968,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
                 chatMessages: toChatMessageItems(chatService.getMessages()),
               });
               applyChatSchedule();
+              persistCurrentChatStateNow("previous-branch");
             } catch (error) {
               Logger.error(
                 "AppStore",
@@ -951,6 +984,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
                 chatMessages: toChatMessageItems(chatService.getMessages()),
               });
               applyChatSchedule();
+              persistCurrentChatStateNow("next-branch");
             } catch (error) {
               Logger.error(
                 "AppStore",

@@ -9,7 +9,7 @@ export type {
   SeedSetupWizardStateOptions,
 } from "./testApi";
 
-const APP_BOOT_TIMEOUT_MS = 120_000;
+const APP_BOOT_TIMEOUT_MS = 50_000;
 const BOOTSTRAP_PAYLOAD_SESSION_KEY = "__vassist:test-bootstrap-payload";
 const BOOTSTRAP_ARMED_SESSION_KEY = "__vassist:test-bootstrap-armed";
 const EXTENSION_HOST_URL = `http://127.0.0.1:4173${EXTENSION_TEST_HOST_ROUTE}`;

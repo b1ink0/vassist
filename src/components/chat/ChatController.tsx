@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useEffectEvent,
   type ForwardRefExoticComponent,
   type Dispatch,
   type MutableRefObject,
@@ -1489,6 +1490,33 @@ const ChatController = ({
     setIsChatInputVisible(false);
   };
 
+  const handleDesktopChatInputSend = useEffectEvent((payload: unknown) => {
+    const data =
+      payload && typeof payload === "object"
+        ? (payload as {
+            message?: string;
+            images?: string[] | null;
+            audios?: string[] | null;
+          })
+        : {};
+    const message = data.message ?? "";
+    const images = data.images ?? null;
+    const audios = data.audios ?? null;
+
+    Logger.log("ChatController", "Received send from input window via IPC", {
+      message,
+      images,
+      audios,
+    });
+
+    void handleMessageSend(message, images, audios);
+  });
+
+  const handleDesktopChatInputClose = useEffectEvent(() => {
+    Logger.log("ChatController", "Received close from input window via IPC");
+    closeChat();
+  });
+
   /**
    * Streams AI response with TTS generation.
    */
@@ -1981,7 +2009,9 @@ const ChatController = ({
 
     setIsProcessing(false);
 
-    if (!isTempChat && chatMessages.length > 0) {
+    const messagesToPersist = chatService.getMessages();
+
+    if (!isTempChat && messagesToPersist.length > 0) {
       try {
         let chatId = currentChatId;
         if (!chatId) {
@@ -1994,7 +2024,7 @@ const ChatController = ({
         await historyService.saveChat({
           chatId,
           chatService,
-          messages: toChatMessageItems(chatService.getMessages()),
+          messages: toChatMessageItems(messagesToPersist),
           isTemp: false,
           metadata: {
             sourceUrl,
@@ -2037,23 +2067,7 @@ const ChatController = ({
     if (!api?.ipc) return;
 
     const unsubscribeSend = api.ipc.on("chatInput:send", (payload: unknown) => {
-      const data =
-        payload && typeof payload === "object"
-          ? (payload as {
-              message?: string;
-              images?: string[] | null;
-              audios?: string[] | null;
-            })
-          : {};
-      const message = data.message ?? "";
-      const images = data.images ?? null;
-      const audios = data.audios ?? null;
-      Logger.log("ChatController", "Received send from input window via IPC", {
-        message,
-        images,
-        audios,
-      });
-      handleMessageSend(message, images, audios);
+      handleDesktopChatInputSend(payload);
     });
 
     const unsubscribePendingDrop = api.ipc.on(
@@ -2069,8 +2083,7 @@ const ChatController = ({
     );
 
     const unsubscribeClose = api.ipc.on("chatInput:close", () => {
-      Logger.log("ChatController", "Received close from input window via IPC");
-      closeChat();
+      handleDesktopChatInputClose();
     });
 
     return () => {
@@ -2078,8 +2091,12 @@ const ChatController = ({
       unsubscribePendingDrop?.();
       unsubscribeClose?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setPendingDropData, api]);
+  }, [
+    setPendingDropData,
+    api,
+    handleDesktopChatInputClose,
+    handleDesktopChatInputSend,
+  ]);
 
   /**
    * IPC state broadcast for desktop mode - send state changes to input window

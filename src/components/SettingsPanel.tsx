@@ -562,7 +562,11 @@ const SettingsPanel = ({
               );
 
               return (
-                <div key={tab.id} className={cn(tab.className, "relative")}>
+                <div
+                  key={tab.id}
+                  data-testid={`settings-tab-${tab.id}`}
+                  className={cn(tab.className, "relative")}
+                >
                   {tab.content}
                   {tabIsReadOnly ? (
                     <div className="absolute inset-0 z-10 flex items-start justify-end bg-slate-950/35 backdrop-blur-[1px] pointer-events-auto">

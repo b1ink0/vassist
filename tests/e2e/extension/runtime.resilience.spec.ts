@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/extension";
+import { VASSIST_REACT_ROOT_ID } from "../../../src/utils/VAssistDomIds";
 
 test.describe("extension runtime resilience", () => {
   test("@extension remounts after the injected root is replaced and the react root appears later", async ({
@@ -9,7 +10,7 @@ test.describe("extension runtime resilience", () => {
     await seedCompletedAppState();
     await expect(page.getByTestId("chat-button")).toBeVisible();
 
-    await page.evaluate(() => {
+    await page.evaluate((reactRootId) => {
       const existing = document.getElementById(
         "virtual-assistant-extension-root",
       );
@@ -26,10 +27,10 @@ test.describe("extension runtime resilience", () => {
 
         const shadowRoot = replacement.attachShadow({ mode: "open" });
         const reactRoot = document.createElement("div");
-        reactRoot.id = "react-root";
+        reactRoot.id = reactRootId;
         shadowRoot.appendChild(reactRoot);
       }, 150);
-    });
+    }, VASSIST_REACT_ROOT_ID);
 
     await expect(page.getByTestId("chat-button")).toHaveCount(0);
     await expect(page.getByTestId("chat-button")).toBeVisible({

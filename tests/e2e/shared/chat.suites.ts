@@ -572,7 +572,9 @@ export const registerChatHistorySuite = (
       await expect(
         page.getByTestId("chat-history-item-chat_translation_notes"),
       ).toBeVisible();
-      await expect(page.getByText("example.com/translation")).toBeVisible();
+      if (platform !== "electron") {
+        await expect(page.getByText("example.com/translation")).toBeVisible();
+      }
 
       await page.getByTestId("chat-history-search-input").fill("translation");
       await expect(

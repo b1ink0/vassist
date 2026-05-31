@@ -33,13 +33,13 @@ export const registerSetupWizardSuite = (
       ).toBeVisible();
 
       await page.getByRole("button", { name: /Get Started/i }).click();
-      await expectSetupStep(page, 2, "Virtual Companion");
+      await expectSetupStep(page, 2, "Live Assistant");
 
       await goToPreviousSetupStep(page);
       await expectSetupStep(page, 1, "Welcome");
 
       await goToNextSetupStep(page);
-      await expectSetupStep(page, 2, "Virtual Companion");
+      await expectSetupStep(page, 2, "Live Assistant");
 
       await page.getByTestId("setup-display-mode-portrait").click();
       if (platform === "electron") {

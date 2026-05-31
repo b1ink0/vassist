@@ -7,6 +7,7 @@ import {
   type TTSConfig,
 } from "../config/aiConfig";
 import { DefaultUIConfig, type UIConfig } from "../config/uiConfig";
+import type { AppRuntimeContextValue } from "../contexts/AppRuntimeContext";
 import ChatService, {
   type ChatNode,
   type ExportedChatTree,
@@ -157,6 +158,11 @@ interface PendingSetupWizardStateBootstrap {
   options?: SeedSetupWizardStateOptions;
 }
 
+type VAssistTestRuntime = Pick<
+  AppRuntimeContextValue,
+  "chatService" | "chatHistoryService"
+>;
+
 const BOOTSTRAP_PAYLOAD_SESSION_KEY = "__vassist:test-bootstrap-payload";
 const FAKE_LANGUAGE_MODEL_SESSION_KEY = "__vassist:test-fake-language-model";
 
@@ -170,8 +176,23 @@ type TestWindow = Window & {
   [TEST_RUNTIME_MARKERS.fakeMediaInstalled]?: boolean;
   [TEST_RUNTIME_MARKERS.fakeAiInstalled]?: boolean;
   [TEST_RUNTIME_MARKERS.fakeLanguageModelInstalled]?: boolean;
+  __VASSIST_TEST_RUNTIME__?: VAssistTestRuntime;
   __VASSIST_TEST_API__?: VAssistTestApi;
 };
+
+const getTestRuntime = (): VAssistTestRuntime | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (window as TestWindow).__VASSIST_TEST_RUNTIME__ ?? null;
+};
+
+const getRuntimeChatService = () =>
+  getTestRuntime()?.chatService ?? ChatService;
+
+const getRuntimeChatHistoryService = () =>
+  getTestRuntime()?.chatHistoryService ?? chatHistoryService;
 
 const createFakeMediaDevice = (
   kind: MediaDeviceKind,
@@ -898,6 +919,11 @@ const buildDefaultSttConfig = (
 };
 
 const clearPersistedState = async (): Promise<void> => {
+  ChatService.clear();
+  chatHistoryService.clearCache();
+  getRuntimeChatService().clear();
+  getRuntimeChatHistoryService().clearCache();
+
   await Promise.all([
     StorageServiceProxy.configClear(),
     StorageServiceProxy.settingsClear(),
@@ -940,6 +966,7 @@ const seedChatHistory = async (
   entries: SeedChatHistoryEntry[],
 ): Promise<{ chatIds: string[] }> => {
   const chatIds: string[] = [];
+  const runtimeChatHistoryService = getRuntimeChatHistoryService();
 
   for (const [index, entry] of entries.entries()) {
     const chatToSave: {
@@ -957,7 +984,7 @@ const seedChatHistory = async (
       chatToSave.chatId = entry.chatId;
     }
 
-    const chatId = await chatHistoryService.saveChat(chatToSave);
+    const chatId = await runtimeChatHistoryService.saveChat(chatToSave);
     chatIds.push(chatId);
   }
 
@@ -1052,7 +1079,7 @@ const getPersistedChatMessagesFromTree = (
 };
 
 const getCurrentChatMessages = () =>
-  toTestChatMessages(ChatService.getMessages());
+  toTestChatMessages(getRuntimeChatService().getMessages());
 
 const getPersistedChats = async (): Promise<
   Array<{
@@ -1063,7 +1090,10 @@ const getPersistedChats = async (): Promise<
     updatedAt: string;
   }>
 > => {
-  const chats = (await chatHistoryService.getAllChats(100, 0)) as Array<{
+  const chats = (await getRuntimeChatHistoryService().getAllChats(
+    100,
+    0,
+  )) as Array<{
     chatId: string;
     title: string;
     messageCount: number;
@@ -1090,7 +1120,7 @@ const getPersistedChatMessages = async (
     branchInfo: FlatChatMessage["branchInfo"];
   }>
 > => {
-  const chats = (await chatHistoryService.getAllChats(
+  const chats = (await getRuntimeChatHistoryService().getAllChats(
     100,
     0,
   )) as unknown as Array<{

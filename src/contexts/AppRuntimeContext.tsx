@@ -16,12 +16,17 @@ import {
   type AppStore,
   type AppStoreState,
 } from "../stores/createAppStore";
+import { isVAssistTestMode } from "../testing/runtime";
 
-interface AppRuntimeContextValue {
+export interface AppRuntimeContextValue {
   store: AppStore;
   chatService: ChatService;
   chatHistoryService: ChatHistoryService;
 }
+
+type TestRuntimeWindow = Window & {
+  __VASSIST_TEST_RUNTIME__?: AppRuntimeContextValue;
+};
 
 const globalRuntimeValue: AppRuntimeContextValue = {
   store: appStore,
@@ -58,7 +63,22 @@ export function AppRuntimeProvider({
   }
 
   useEffect(() => {
-    onStoreReady?.(runtimeRef.current!.store);
+    const runtime = runtimeRef.current!;
+
+    onStoreReady?.(runtime.store);
+
+    if (!isVAssistTestMode || typeof window === "undefined") {
+      return;
+    }
+
+    const testWindow = window as TestRuntimeWindow;
+    testWindow.__VASSIST_TEST_RUNTIME__ = runtime;
+
+    return () => {
+      if (testWindow.__VASSIST_TEST_RUNTIME__ === runtime) {
+        delete testWindow.__VASSIST_TEST_RUNTIME__;
+      }
+    };
   }, [onStoreReady]);
 
   return (

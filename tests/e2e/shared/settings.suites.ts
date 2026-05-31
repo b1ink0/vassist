@@ -17,11 +17,14 @@ import {
 type SharedUITest = TestType<any, any>;
 
 const openLlmSubTab = async (
-  settingsPanel: Locator,
+  page: Page,
   subTab: "Provider" | "Routing" | "Profiles",
-): Promise<void> => {
+): Promise<Locator> => {
+  const settingsPanel = page.getByTestId("settings-panel");
   await clickTabByName(settingsPanel, "LLM");
-  await clickTabByName(settingsPanel, subTab);
+  const llmPanel = page.getByTestId("settings-tab-llm");
+  await clickTabByName(llmPanel, subTab);
+  return llmPanel;
 };
 
 const createSavedOpenAiBackend = async (
@@ -277,25 +280,24 @@ export const registerSettingsLLMSuite = (
       await seedSettingsAppState();
       await openSettings();
 
-      const settingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(settingsPanel, "Provider");
+      const llmPanel = await openLlmSubTab(page, "Provider");
 
-      await selectOptionByLabel(settingsPanel, "Provider", "OpenAI");
+      await selectOptionByLabel(llmPanel, "Provider", "OpenAI");
       await expect(page.getByText("Saved Backends")).toBeVisible();
       await page
         .getByTestId("llm-saved-backend-name-input")
         .fill("OpenAI Main");
-      await fillFieldByLabel(settingsPanel, "API Key", "sk-test-openai-main");
+      await fillFieldByLabel(llmPanel, "API Key", "sk-test-openai-main");
       await setToggleState(page.locator("#openai-image-support"), true);
       await setToggleState(page.locator("#openai-audio-support"), true);
 
       await selectOptionByLabel(
-        settingsPanel,
+        llmPanel,
         "Provider",
         "OpenAI-Compatible / Ollama",
       );
       await fillFieldByLabel(
-        settingsPanel,
+        llmPanel,
         "Endpoint URL",
         "http://127.0.0.1:11434",
       );
@@ -311,12 +313,11 @@ export const registerSettingsLLMSuite = (
       await seedSettingsAppState();
       await openSettings();
 
-      const settingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(settingsPanel, "Provider");
+      const llmPanel = await openLlmSubTab(page, "Provider");
 
       await createSavedOpenAiBackend(
         page,
-        settingsPanel,
+        llmPanel,
         "Vision Remote",
         "sk-test-vision-key",
       );
@@ -324,7 +325,7 @@ export const registerSettingsLLMSuite = (
       await page.getByTestId("llm-saved-backend-new-button").click();
       await createSavedOpenAiBackend(
         page,
-        settingsPanel,
+        llmPanel,
         "Router Remote",
         "sk-test-router-key",
       );
@@ -334,7 +335,7 @@ export const registerSettingsLLMSuite = (
       await expect(
         page.getByTestId("llm-saved-backend-name-input"),
       ).toHaveValue("Vision Remote");
-      await expect(getFieldByLabel(settingsPanel, "API Key")).toHaveValue(
+      await expect(getFieldByLabel(llmPanel, "API Key")).toHaveValue(
         "sk-test-vision-key",
       );
 
@@ -342,7 +343,7 @@ export const registerSettingsLLMSuite = (
       await expect(
         page.getByTestId("llm-saved-backend-name-input"),
       ).toHaveValue("Router Remote");
-      await expect(getFieldByLabel(settingsPanel, "API Key")).toHaveValue(
+      await expect(getFieldByLabel(llmPanel, "API Key")).toHaveValue(
         "sk-test-router-key",
       );
 
@@ -367,12 +368,11 @@ export const registerSettingsLLMSuite = (
       await seedSettingsAppState();
       await openSettings();
 
-      const settingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(settingsPanel, "Provider");
+      const llmPanel = await openLlmSubTab(page, "Provider");
 
       await createSavedOpenAiBackend(
         page,
-        settingsPanel,
+        llmPanel,
         "Vision Remote",
         "sk-test-vision-key",
       );
@@ -380,12 +380,12 @@ export const registerSettingsLLMSuite = (
       await page.getByTestId("llm-saved-backend-new-button").click();
       await createSavedOpenAiBackend(
         page,
-        settingsPanel,
+        llmPanel,
         "Router Remote",
         "sk-test-router-key",
       );
 
-      await openLlmSubTab(settingsPanel, "Routing");
+      await openLlmSubTab(page, "Routing");
       await setToggleState(
         page.getByTestId("llm-routing-enabled-toggle"),
         true,
@@ -426,8 +426,7 @@ export const registerSettingsLLMSuite = (
       await page.reload();
       await openSettings();
 
-      const reloadedSettingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(reloadedSettingsPanel, "Routing");
+      await openLlmSubTab(page, "Routing");
 
       await expect(
         page.getByTestId("llm-routing-enabled-toggle"),
@@ -462,8 +461,7 @@ export const registerSettingsLLMSuite = (
       await seedSettingsAppState();
       await openSettings();
 
-      const settingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(settingsPanel, "Profiles");
+      await openLlmSubTab(page, "Profiles");
 
       const profileSelect = page.getByTestId("llm-system-profile-select");
       const profileNameInput = page.getByTestId(
@@ -519,8 +517,7 @@ export const registerSettingsLLMSuite = (
       await page.reload();
       await openSettings();
 
-      const reloadedSettingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(reloadedSettingsPanel, "Profiles");
+      await openLlmSubTab(page, "Profiles");
 
       await expect(
         page.getByTestId("llm-system-profile-name-input"),
@@ -540,8 +537,7 @@ export const registerSettingsLLMSuite = (
       await seedSettingsAppState();
       await openSettings();
 
-      const settingsPanel = page.getByTestId("settings-panel");
-      await openLlmSubTab(settingsPanel, "Profiles");
+      await openLlmSubTab(page, "Profiles");
 
       const profileSelect = page.getByTestId("llm-system-profile-select");
 

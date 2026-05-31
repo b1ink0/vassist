@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
-const APP_BOOT_TIMEOUT_MS = 120_000;
-const PANEL_OPEN_TIMEOUT_MS = 30_000;
+const APP_BOOT_TIMEOUT_MS = 50_000;
+const PANEL_OPEN_TIMEOUT_MS = 20_000;
 const BOOTSTRAP_PAYLOAD_SESSION_KEY = "__vassist:test-bootstrap-payload";
 const BOOTSTRAP_ARMED_SESSION_KEY = "__vassist:test-bootstrap-armed";
 const FAKE_LANGUAGE_MODEL_SESSION_KEY = "__vassist:test-fake-language-model";
@@ -103,7 +103,32 @@ export const waitForSetupWizard = async (
   timeout = APP_BOOT_TIMEOUT_MS,
 ): Promise<void> => {
   await page.waitForLoadState("domcontentloaded");
-  await expect(page.getByTestId("setup-wizard")).toBeVisible({ timeout });
+  const setupWizard = page.getByTestId("setup-wizard");
+
+  try {
+    await expect(setupWizard).toBeVisible({ timeout: 1_500 });
+    return;
+  } catch {
+    const chatButton = page.getByTestId("chat-button");
+    if (await chatButton.isVisible().catch(() => false)) {
+      await chatButton.click();
+    } else {
+      const launchButton = page.getByRole("button", {
+        name: "Open Chat",
+        exact: true,
+      });
+      if (
+        await launchButton
+          .first()
+          .isVisible()
+          .catch(() => false)
+      ) {
+        await launchButton.first().click();
+      }
+    }
+  }
+
+  await expect(setupWizard).toBeVisible({ timeout });
 };
 
 const armBootstrap = async <TOptions>(

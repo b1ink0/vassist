@@ -2,12 +2,21 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 type Scope = Page | Locator;
 
+const normalizeText = (value: string | null | undefined): string =>
+  (value ?? "").replace(/\s+/g, " ").trim();
+
 const labelContainer = (scope: Scope, label: string) =>
-  scope.locator("label:visible", { hasText: label }).first().locator("..");
+  scope
+    .locator(
+      `[data-settings-row][data-settings-label="${label}"], [data-settings-row][data-settings-label="${label} *"]`,
+    )
+    .first();
 
 export const getSelectTriggerByLabel = (scope: Scope, label: string): Locator =>
   labelContainer(scope, label)
-    .locator('[role="combobox"], button[aria-haspopup="listbox"], button')
+    .locator(
+      '[data-settings-control] [role="combobox"], [data-settings-control] button[aria-haspopup="listbox"], [data-settings-control] button',
+    )
     .first();
 
 const isPage = (scope: Scope): scope is Page => "context" in scope;
@@ -38,7 +47,9 @@ export const fillFieldByLabel = async (
 
 export const getFieldByLabel = (scope: Scope, label: string): Locator =>
   labelContainer(scope, label)
-    .locator("input:visible, textarea:visible")
+    .locator(
+      "[data-settings-control] input:visible, [data-settings-control] textarea:visible",
+    )
     .first();
 
 export const selectOptionByLabel = async (
@@ -47,7 +58,9 @@ export const selectOptionByLabel = async (
   optionLabel: string,
 ): Promise<void> => {
   const container = labelContainer(scope, label);
-  const nativeSelect = container.locator("select").first();
+  const nativeSelect = container
+    .locator("[data-settings-control] select")
+    .first();
 
   if ((await nativeSelect.count()) > 0) {
     await expect(nativeSelect).toBeVisible();
@@ -57,6 +70,11 @@ export const selectOptionByLabel = async (
 
   const trigger = getSelectTriggerByLabel(scope, label);
   await expect(trigger).toBeVisible();
+
+  if (normalizeText(await trigger.textContent()) === optionLabel) {
+    return;
+  }
+
   await trigger.scrollIntoViewIfNeeded();
   await trigger.click({ force: true });
   await selectPopupOption(pageForScope(scope), optionLabel);
