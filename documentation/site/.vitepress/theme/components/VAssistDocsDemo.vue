@@ -29,7 +29,7 @@ onMounted(() => {
             namespace: "vitepress-docs",
           },
           shell: {
-            deferSetupUntilStarted: false,
+            deferSetupUntilStarted: true,
           },
           theme: {
             mode: "dark",
