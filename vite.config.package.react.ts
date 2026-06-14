@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { packageRuntimeAssetsPlugin } from "./tools/vite-plugins/package-runtime-assets-plugin";
 import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
@@ -17,6 +18,7 @@ export default defineConfig({
     }),
     tailwindcss(),
     vadAssetsPlugin("packages/react/dist"),
+    packageRuntimeAssetsPlugin("packages/react/dist"),
   ],
   define: {
     __EXTENSION_MODE__: JSON.stringify(false),

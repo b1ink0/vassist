@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 154
-- Files: 542
-- Text files counted for metrics: 458
-- Total text lines: 140336
-- Code files counted for metrics: 364
-- Total code lines: 126523
+- Files: 543
+- Text files counted for metrics: 459
+- Total text lines: 140516
+- Code files counted for metrics: 365
+- Total code lines: 126703
 
 ## Line Counts by File Type
 
@@ -23,7 +23,7 @@ VAssist repository tree and file metrics.
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   260 |
 | TSX          | .tsx                    |    98 | 47807 |
-| TypeScript   | .ts, .mts, .cts         |   230 | 68328 |
+| TypeScript   | .ts, .mts, .cts         |   231 | 68508 |
 | Gradle       | .gradle                 |     7 |   242 |
 | JSON         | .json                   |    17 |   568 |
 | Markdown     | .md                     |    34 |  5936 |
@@ -46,7 +46,7 @@ VAssist repository tree and file metrics.
 - public/: 5 directories, 19 files
 - src/: 46 directories, 225 files
 - tests/: 9 directories, 56 files
-- tools/: 2 directories, 6 files
+- tools/: 2 directories, 7 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
@@ -745,6 +745,7 @@ vassist/
 │   │   ├── android-models-plugin.ts
 │   │   ├── extension-plugins.ts
 │   │   ├── extension-test-host-plugin.ts
+│   │   ├── package-runtime-assets-plugin.ts
 │   │   └── vad-assets-plugin.ts
 │   ├── create-node-llama-runtime-core.ts
 │   └── write-package-type-entries.ts
