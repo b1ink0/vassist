@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("electron", {
     setPosition: (x: number, y: number) =>
       ipcRenderer.invoke("window:set-position", x, y),
     getPosition: () => ipcRenderer.invoke("window:get-position"),
+    getCursorScreenPoint: () =>
+      ipcRenderer.invoke("window:get-cursor-screen-point"),
     setSize: (width: number, height: number) =>
       ipcRenderer.invoke("window:set-size", width, height),
     getSize: () => ipcRenderer.invoke("window:get-size"),
@@ -42,6 +44,10 @@ contextBridge.exposeInMainWorld("electron", {
         scaleFactorHeight,
       ),
     getScaleFactor: () => ipcRenderer.invoke("window:get-scale-factor"),
+    setNativeDevToolsEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke("window:set-native-devtools-enabled", enabled),
+    getNativeDevToolsEnabled: () =>
+      ipcRenderer.invoke("window:get-native-devtools-enabled"),
   },
 
   // Input window controls

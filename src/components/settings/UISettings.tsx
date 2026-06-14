@@ -670,6 +670,22 @@ const UISettings = ({
           Developer Options
         </h4>
 
+        {isDesktop && (
+          <SettingsRow
+            label="Enable Native Electron DevTools"
+            description={
+              uiConfig.nativeDevTools
+                ? "Open native Electron DevTools for all desktop windows"
+                : "Keep native Electron DevTools closed"
+            }
+          >
+            <Toggle
+              checked={uiConfig.nativeDevTools || false}
+              onChange={(checked) => updateUIConfig("nativeDevTools", checked)}
+            />
+          </SettingsRow>
+        )}
+
         <SettingsRow
           label="Enable Developer Tools"
           description="Show draggable debug panel for testing animations and positions"

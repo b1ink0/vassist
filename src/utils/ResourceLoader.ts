@@ -54,6 +54,17 @@ export class DefaultResourceLoader implements ResourceLoaderAdapterLike {
       return null;
     }
 
+    // Runtime model/motion assets under res/ should resolve from app base,
+    // not relative to the current JS chunk location (e.g. /assets/chunks).
+    if (normalizedPath.startsWith("res/")) {
+      const baseUrl =
+        (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env
+          ?.BASE_URL ?? "/";
+      const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+
+      return `${normalizedBaseUrl}${normalizedPath}`;
+    }
+
     const URLConstructor = URL;
     return new URLConstructor(
       `../${normalizedPath}`,

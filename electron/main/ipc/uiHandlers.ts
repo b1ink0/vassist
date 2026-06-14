@@ -16,19 +16,25 @@ type WindowState = {
 type UIHandlersDeps = {
   ipcMain: IpcMain;
   BrowserWindow: typeof import("electron").BrowserWindow;
+  screen: typeof import("electron").screen;
   app: App;
   process: NodeJS.Process;
   state: WindowState;
   registerGlobalShortcuts: (shortcuts: Record<string, unknown>) => void;
+  setNativeDevToolsEnabled: (enabled: boolean) => boolean;
+  getNativeDevToolsEnabled: () => boolean;
 };
 
 export function registerUIIPCHandlers({
   ipcMain,
   BrowserWindow,
+  screen,
   app,
   process,
   state,
   registerGlobalShortcuts,
+  setNativeDevToolsEnabled,
+  getNativeDevToolsEnabled,
 }: UIHandlersDeps) {
   ipcMain.handle("window:minimize", () => {
     if (state.mainWindow) state.mainWindow.minimize();
@@ -77,8 +83,10 @@ export function registerUIIPCHandlers({
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
 
     if (senderWindow && senderWindow === state.mainWindow) {
-      console.log("[Main] Frontend ready - enabling pass-through monitoring");
-      senderWindow.setIgnoreMouseEvents(true, { forward: true });
+      console.log(
+        "[Main] Frontend ready - renderer interactivity bridge active",
+      );
+      senderWindow.setIgnoreMouseEvents(false);
       senderWindow.moveTop();
     }
   });
@@ -115,6 +123,11 @@ export function registerUIIPCHandlers({
       return { x, y };
     }
     return { x: 0, y: 0 };
+  });
+
+  ipcMain.handle("window:get-cursor-screen-point", () => {
+    const { x, y } = screen.getCursorScreenPoint();
+    return { x, y };
   });
 
   ipcMain.handle(
@@ -201,6 +214,17 @@ export function registerUIIPCHandlers({
       return { width, height };
     }
     return { width: 0, height: 0 };
+  });
+
+  ipcMain.handle(
+    "window:set-native-devtools-enabled",
+    (_event: IpcMainInvokeEvent, enabled: boolean) => {
+      return setNativeDevToolsEnabled(enabled);
+    },
+  );
+
+  ipcMain.handle("window:get-native-devtools-enabled", () => {
+    return getNativeDevToolsEnabled();
   });
 
   ipcMain.handle("input-window:open", async () => {

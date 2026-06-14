@@ -77,6 +77,7 @@ export interface UIConfig {
   enableColoredIcons: boolean;
   enableColoredIconsToolbarOnly: boolean;
   enableDebugPanel: boolean;
+  nativeDevTools: boolean;
   emotePlayback: {
     showDurationBar: boolean;
     showTime: boolean;
@@ -391,6 +392,7 @@ export const DefaultUIConfig: UIConfig = {
   enableColoredIconsToolbarOnly: false,
 
   enableDebugPanel: false,
+  nativeDevTools: false,
 
   emotePlayback: {
     showDurationBar: true,

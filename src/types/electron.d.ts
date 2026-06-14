@@ -16,9 +16,12 @@ export interface ElectronWindow {
   frontendReady: () => Promise<void>;
   setPosition: (x: number, y: number) => Promise<void>;
   getPosition: () => Promise<{ x: number; y: number }>;
+  getCursorScreenPoint?: () => Promise<{ x: number; y: number }>;
   setSize: (width: number, height: number) => Promise<void>;
   getSize: () => Promise<{ width: number; height: number }>;
   updateWindowSizeForZoom?: (width: number, height: number) => Promise<void>;
+  setNativeDevToolsEnabled?: (enabled: boolean) => Promise<boolean>;
+  getNativeDevToolsEnabled?: () => Promise<boolean>;
 }
 
 export interface ElectronServerAPI {

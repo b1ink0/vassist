@@ -47,6 +47,7 @@ export default function DesktopWindowInteractivityBridge() {
   const latestPointRef = useRef<{ x: number; y: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastIgnoreStateRef = useRef<boolean | null>(null);
+  const cursorPollInFlightRef = useRef(false);
 
   const applyIgnoreState = useCallback(
     (ignore: boolean) => {
@@ -133,8 +134,44 @@ export default function DesktopWindowInteractivityBridge() {
       return;
     }
 
-    applyIgnoreState(!isDraggingModel);
-  }, [applyIgnoreState, isDraggingModel, scheduleEvaluation]);
+    // When no pointer sample exists yet, prefer interactive mode so the
+    // window never gets stuck fully click-through during startup.
+    applyIgnoreState(false);
+  }, [applyIgnoreState, scheduleEvaluation]);
+
+  const pollCursorInteractivity = useCallback(async () => {
+    if (!api?.window?.getCursorScreenPoint) {
+      return;
+    }
+
+    if (cursorPollInFlightRef.current) {
+      return;
+    }
+
+    cursorPollInFlightRef.current = true;
+
+    try {
+      const point = await api.window.getCursorScreenPoint();
+      if (!point) {
+        return;
+      }
+
+      const windowScreenX = window.screenX ?? window.screenLeft ?? 0;
+      const windowScreenY = window.screenY ?? window.screenTop ?? 0;
+      const clientX = point.x - windowScreenX;
+      const clientY = point.y - windowScreenY;
+
+      evaluateInteractivity(clientX, clientY);
+    } catch (error) {
+      Logger.warn(
+        "DesktopWindowInteractivityBridge",
+        "Cursor polling failed:",
+        error,
+      );
+    } finally {
+      cursorPollInFlightRef.current = false;
+    }
+  }, [api, evaluateInteractivity]);
 
   useEffect(() => {
     if (!isDesktop || !api?.window?.setIgnoreMouseEvents) {
@@ -157,6 +194,9 @@ export default function DesktopWindowInteractivityBridge() {
     const timeoutId = window.setTimeout(() => {
       reevaluateLatestPoint();
     }, 0);
+    const cursorPollIntervalId = window.setInterval(() => {
+      void pollCursorInteractivity();
+    }, 50);
 
     document.addEventListener("mousemove", handleMouseEvent, true);
     document.addEventListener("mousedown", handleMouseEvent, true);
@@ -165,6 +205,7 @@ export default function DesktopWindowInteractivityBridge() {
 
     return () => {
       window.clearTimeout(timeoutId);
+      window.clearInterval(cursorPollIntervalId);
       document.removeEventListener("mousemove", handleMouseEvent, true);
       document.removeEventListener("mousedown", handleMouseEvent, true);
       document.removeEventListener("focusin", handleFocusIn);
@@ -174,8 +215,16 @@ export default function DesktopWindowInteractivityBridge() {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+
+      cursorPollInFlightRef.current = false;
     };
-  }, [api, applyIgnoreState, reevaluateLatestPoint, scheduleEvaluation]);
+  }, [
+    api,
+    applyIgnoreState,
+    pollCursorInteractivity,
+    reevaluateLatestPoint,
+    scheduleEvaluation,
+  ]);
 
   useEffect(() => {
     if (!isDesktop || !api?.window?.setIgnoreMouseEvents) {
@@ -183,7 +232,8 @@ export default function DesktopWindowInteractivityBridge() {
     }
 
     reevaluateLatestPoint();
-  }, [api, isDraggingModel, reevaluateLatestPoint]);
+    void pollCursorInteractivity();
+  }, [api, isDraggingModel, pollCursorInteractivity, reevaluateLatestPoint]);
 
   return null;
 }

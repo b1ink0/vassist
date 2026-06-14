@@ -72,6 +72,7 @@ const runtimePaths = createRuntimePaths({
 const devToolsManager = createDevToolsManager({
   processArgv: process.argv,
   app,
+  BrowserWindow,
 });
 
 const windowManager = createWindowManager({
@@ -137,10 +138,13 @@ registerPrivilegedSchemes(protocol);
 registerUIIPCHandlers({
   ipcMain,
   BrowserWindow,
+  screen,
   app,
   process,
   state,
   registerGlobalShortcuts: trayShortcutsManager.registerGlobalShortcuts,
+  setNativeDevToolsEnabled: devToolsManager.setNativeDevToolsEnabled,
+  getNativeDevToolsEnabled: devToolsManager.getNativeDevToolsEnabled,
 });
 
 localServerManager.registerIPCHandlers(ipcMain);

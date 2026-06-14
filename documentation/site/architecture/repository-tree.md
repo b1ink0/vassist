@@ -7,9 +7,9 @@ VAssist repository tree and file metrics.
 - Directories: 151
 - Files: 537
 - Text files counted for metrics: 453
-- Total text lines: 139346
+- Total text lines: 139716
 - Code files counted for metrics: 360
-- Total code lines: 125688
+- Total code lines: 125971
 
 ## Line Counts by File Type
 
@@ -21,12 +21,12 @@ VAssist repository tree and file metrics.
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
-| Shell Script | (no extension)          |     2 |   255 |
-| TSX          | .tsx                    |    98 | 47685 |
-| TypeScript   | .ts, .mts, .cts         |   227 | 67932 |
+| Shell Script | (no extension)          |     2 |   260 |
+| TSX          | .tsx                    |    98 | 47807 |
+| TypeScript   | .ts, .mts, .cts         |   227 | 68088 |
 | Gradle       | .gradle                 |     7 |   242 |
-| JSON         | .json                   |    17 |   566 |
-| Markdown     | .md                     |    34 |  5843 |
+| JSON         | .json                   |    17 |   568 |
+| Markdown     | .md                     |    34 |  5928 |
 | Other Text   | mixed                   |     7 |  2236 |
 | Plain Text   | (no extension)          |    10 |  4005 |
 | Properties   | .properties             |     2 |    29 |

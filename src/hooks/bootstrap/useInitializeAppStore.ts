@@ -119,6 +119,26 @@ export function useInitializeAppStore(
   }, [isAssistantReady, notifyFrontendReady]);
 
   useEffect(() => {
+    if (
+      isConfigLoading ||
+      !isDesktop ||
+      !api?.window?.setNativeDevToolsEnabled
+    ) {
+      return;
+    }
+
+    const enabled = uiConfig?.nativeDevTools === true;
+
+    api.window.setNativeDevToolsEnabled(enabled).catch((error) => {
+      Logger.error(
+        "AppBootstrap",
+        "Failed to sync native Electron DevTools setting:",
+        error,
+      );
+    });
+  }, [api, isConfigLoading, uiConfig?.nativeDevTools]);
+
+  useEffect(() => {
     if (isInputWindow) {
       return;
     }

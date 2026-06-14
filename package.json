@@ -59,6 +59,7 @@
     "format:staged": "lint-staged",
     "docs:dev": "bun run build:packages && vitepress dev documentation/site",
     "docs:build": "bun run build:packages && bun run docs:generate:tree && vitepress build documentation/site",
+    "docs:build:deploy": "cross-env VASSIST_DOCS_BASE=/ bun run docs:build",
     "docs:preview": "vitepress preview documentation/site",
     "docs:generate:tree": "bun documentation/scripts/generate-repository-tree.ts",
     "preview": "vite preview",

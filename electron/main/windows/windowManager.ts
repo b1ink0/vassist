@@ -118,7 +118,7 @@ export function createWindowManager({
 
     mainWindow.once("ready-to-show", () => {
       mainWindow.show();
-      mainWindow.setIgnoreMouseEvents(true);
+      mainWindow.setIgnoreMouseEvents(false);
       createInputWindow();
     });
 
