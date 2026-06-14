@@ -49,6 +49,10 @@ private_test
 *.whl
 *.tmp*
 .vitepress
+!documentation/site/.vitepress/
+!documentation/site/.vitepress/**
+documentation/site/.vitepress/cache/
+documentation/site/.vitepress/dist/
 electron/server/gpt-sovits/python*/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/
@@ -61,3 +65,5 @@ electron/server/whisper-stt/models/
 models/whisper
 playwright-report
 test-results
+.vercel
+.env*

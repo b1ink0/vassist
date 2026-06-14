@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 151
-- Files: 537
-- Text files counted for metrics: 453
-- Total text lines: 139716
-- Code files counted for metrics: 360
-- Total code lines: 125971
+- Directories: 154
+- Files: 542
+- Text files counted for metrics: 458
+- Total text lines: 140324
+- Code files counted for metrics: 364
+- Total code lines: 126519
 
 ## Line Counts by File Type
 
@@ -17,18 +17,18 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1285 |
-| CSS          | .css, .scss, .less      |     6 |  1717 |
+| CSS          | .css, .scss, .less      |     7 |  2025 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   260 |
 | TSX          | .tsx                    |    98 | 47807 |
-| TypeScript   | .ts, .mts, .cts         |   227 | 68088 |
+| TypeScript   | .ts, .mts, .cts         |   230 | 68328 |
 | Gradle       | .gradle                 |     7 |   242 |
 | JSON         | .json                   |    17 |   568 |
 | Markdown     | .md                     |    34 |  5928 |
-| Other Text   | mixed                   |     7 |  2236 |
-| Plain Text   | (no extension)          |    10 |  4005 |
+| Other Text   | mixed                   |     8 |  2290 |
+| Plain Text   | (no extension)          |    10 |  4011 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   395 |
@@ -38,7 +38,7 @@ VAssist repository tree and file metrics.
 - .husky/: 1 directories, 1 files
 - android/: 52 directories, 74 files
 - android-src/: 1 directories, 3 files
-- documentation/: 10 directories, 44 files
+- documentation/: 13 directories, 49 files
 - electron/: 13 directories, 48 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
@@ -217,6 +217,14 @@ vassist/
 │   ├── scripts/
 │   │   └── generate-repository-tree.ts
 │   ├── site/
+│   │   ├── .vitepress/
+│   │   │   ├── theme/
+│   │   │   │   ├── components/
+│   │   │   │   │   └── VAssistDocsDemo.vue
+│   │   │   │   ├── custom.css
+│   │   │   │   ├── custom.d.ts
+│   │   │   │   └── index.ts
+│   │   │   └── config.ts
 │   │   ├── architecture/
 │   │   │   ├── ai-and-media-stack.md
 │   │   │   ├── configuration-reference.md

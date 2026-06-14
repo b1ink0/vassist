@@ -1,0 +1,312 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap");
+
+:root {
+  --vp-font-family-base: "Space Grotesk", "Segoe UI", sans-serif;
+  --vp-font-family-mono: "IBM Plex Mono", "Cascadia Code", monospace;
+  color-scheme: dark;
+  --vp-c-brand-1: #ffffff;
+  --vp-c-brand-2: #ececec;
+  --vp-c-brand-3: #d1d1d1;
+  --vp-c-brand-soft: rgba(255, 255, 255, 0.12);
+  --vp-c-bg: #000000;
+  --vp-c-bg-soft: #090909;
+  --vp-c-bg-alt: #111111;
+  --vp-c-text-1: #f7f7f7;
+  --vp-c-text-2: #cfcfcf;
+  --vp-c-text-3: #9b9b9b;
+  --vp-c-divider: rgba(255, 255, 255, 0.12);
+  --vp-c-divider-light: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.08);
+  --vp-c-default-1: #171717;
+  --vp-c-default-2: #202020;
+  --vp-c-default-3: #292929;
+  --vp-c-default-soft: rgba(255, 255, 255, 0.06);
+  --vp-c-tip-1: #ffffff;
+  --vp-c-tip-2: rgba(255, 255, 255, 0.16);
+  --vp-c-tip-soft: rgba(255, 255, 255, 0.05);
+  --vp-c-note-1: #ffffff;
+  --vp-c-note-2: rgba(255, 255, 255, 0.16);
+  --vp-c-note-soft: rgba(255, 255, 255, 0.05);
+  --vp-c-warning-1: #f0f0f0;
+  --vp-c-warning-2: rgba(255, 255, 255, 0.16);
+  --vp-c-warning-soft: rgba(255, 255, 255, 0.05);
+  --vp-c-danger-1: #ffffff;
+  --vp-c-danger-2: rgba(255, 255, 255, 0.16);
+  --vp-c-danger-soft: rgba(255, 255, 255, 0.05);
+  --vp-code-block-bg: rgba(255, 255, 255, 0.03);
+  --vp-button-brand-text: #000000;
+  --vp-button-brand-bg: #ffffff;
+  --vp-button-brand-hover-text: #000000;
+  --vp-button-brand-hover-bg: #e6e6e6;
+  --vp-button-brand-active-text: #000000;
+  --vp-button-brand-active-bg: #d6d6d6;
+  --vp-button-alt-text: #ffffff;
+  --vp-button-alt-bg: rgba(255, 255, 255, 0.06);
+  --vp-button-alt-hover-bg: rgba(255, 255, 255, 0.1);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    115deg,
+    #ffffff 0%,
+    #8c8c8c 52%,
+    #f2f2f2 100%
+  );
+  --vassist-nav-bg: rgba(0, 0, 0, 0.8);
+  --vassist-nav-border: rgba(255, 255, 255, 0.1);
+  --vassist-surface: rgba(255, 255, 255, 0.03);
+  --vassist-surface-strong: rgba(0, 0, 0, 0.86);
+  --vassist-border: rgba(255, 255, 255, 0.12);
+  --vassist-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
+  --vassist-table-header: rgba(255, 255, 255, 0.06);
+  --vassist-table-row: rgba(255, 255, 255, 0.03);
+  --vassist-placeholder-border: rgba(255, 255, 255, 0.18);
+  --vassist-placeholder-bg:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
+    rgba(12, 12, 12, 0.9);
+}
+
+html,
+body,
+.VPApp {
+  background: var(--vp-c-bg);
+}
+
+.VPNavBar {
+  backdrop-filter: blur(16px);
+  background: var(--vassist-nav-bg);
+  border-bottom: 1px solid var(--vassist-nav-border);
+}
+
+.VPLocalNav,
+.VPNavScreen,
+.VPSidebar {
+  background: var(--vassist-surface-strong);
+}
+
+.VPLocalNav {
+  border-bottom: 1px solid var(--vassist-nav-border);
+}
+
+.VPHero .name {
+  letter-spacing: -0.03em;
+}
+
+.VPHero .text,
+.VPHero .tagline {
+  max-width: 720px;
+}
+
+.VPHero .tagline,
+.vp-doc p,
+.vp-doc li {
+  color: var(--vp-c-text-2);
+}
+
+.VPFeature {
+  border: 1px solid var(--vassist-border);
+  background: var(--vassist-surface);
+  box-shadow: var(--vassist-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc a {
+  text-decoration-thickness: 1px;
+}
+
+.vp-doc div[class*="language-"],
+.vp-doc .custom-block,
+.vp-doc .tip,
+.vp-doc .warning,
+.vp-doc .danger,
+.vp-doc .details {
+  border: 1px solid var(--vassist-border);
+  background: var(--vassist-surface);
+  box-shadow: var(--vassist-shadow);
+  backdrop-filter: blur(12px);
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--vassist-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.vp-doc table th {
+  background: var(--vassist-table-header);
+}
+
+.vp-doc table tr:nth-child(2n) {
+  background: var(--vassist-table-row);
+}
+
+.vp-doc table th,
+.vp-doc table td {
+  border-color: var(--vassist-border);
+}
+
+.media-placeholder {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--vassist-placeholder-border);
+  border-radius: 18px;
+  background: var(--vassist-placeholder-bg);
+  backdrop-filter: blur(12px);
+}
+
+.media-placeholder strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--vp-c-text-1);
+}
+
+.media-placeholder span {
+  display: block;
+  color: var(--vp-c-text-2);
+  font-size: 0.95rem;
+}
+
+.doc-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 1.25rem 0;
+}
+
+.VPFeature .details {
+  font-weight: 400;
+}
+
+.doc-card {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--vassist-border);
+  background: var(--vassist-surface);
+  box-shadow: var(--vassist-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.doc-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.doc-card p {
+  margin: 0;
+  font-weight: 400;
+}
+
+.doc-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.doc-card-link:hover,
+.doc-card-link:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.vp-doc a.doc-card-link,
+.vp-doc a.doc-card-link:hover,
+.vp-doc a.doc-card-link:focus-visible,
+.vp-doc a.doc-card-link:active,
+.vp-doc a.doc-card-link:visited,
+.vp-doc a.doc-card-link h3,
+.vp-doc a.doc-card-link p,
+.vp-doc a.doc-card-link span {
+  color: inherit;
+  text-decoration: none;
+}
+
+.doc-card-cta {
+  margin-top: 0.85rem;
+  color: var(--vp-c-text-1);
+}
+
+.doc-figure {
+  margin: 1.5rem 0;
+  padding: 0.9rem;
+  border-radius: 22px;
+  border: 1px solid var(--vassist-border);
+  background: var(--vassist-surface);
+  box-shadow: var(--vassist-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.doc-figure img {
+  display: block;
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.doc-figure figcaption {
+  margin-top: 0.75rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.95rem;
+}
+
+.doc-figure-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin: 1.5rem 0;
+}
+
+.doc-link-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+}
+
+.doc-link-list a {
+  display: block;
+}
+
+/* Sidebar width */
+:root {
+  --vp-sidebar-width: 196px;
+}
+
+/* Hide hero background blobs */
+.VPHero .image-bg {
+  display: none;
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --vp-sidebar-width: 208px;
+  }
+}
+
+@media (max-width: 768px) {
+  .VPNavBar {
+    background: var(--vassist-surface-strong);
+  }
+}
+
+/* Logo size in nav */
+.VPNavBarTitle .logo {
+  height: 24px;
+  width: 24px;
+}
