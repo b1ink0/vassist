@@ -59,6 +59,7 @@ export function createPythonServerManager({
   let setupRunner: SetupRunnerLike | null = null;
   let whisperSetupRunner: SetupRunnerLike | null = null;
   let gptsovitsStartupPromise: Promise<void> | null = null;
+  let gptsovitsRecyclePromise: Promise<void> | null = null;
   let gptsovitsIdleTimer: NodeJS.Timeout | null = null;
   let gptsovitsActiveRequests = 0;
   let gptsovitsHandledRequests = 0;
@@ -80,6 +81,10 @@ export function createPythonServerManager({
     1000,
     Number(processEnv.GPTSOVITS_POST_BURST_IDLE_MS ?? 15000) || 15000,
   );
+  const gptsovitsKeepWarm =
+    String(processEnv.GPTSOVITS_KEEP_WARM ?? "1")
+      .trim()
+      .toLowerCase() !== "0";
 
   function delay(ms: number) {
     return new Promise<void>((resolve) => {
@@ -101,22 +106,68 @@ export function createPythonServerManager({
     gptsovitsLastUsedAt = null;
   }
 
-  function scheduleGPTSoVITSIdleStop() {
-    clearGPTSoVITSIdleTimer();
-
-    if (!gptsovitsProcess || gptsovitsActiveRequests > 0) {
+  async function recycleGPTSoVITSWorker(reason: string) {
+    if (gptsovitsRecyclePromise) {
+      await gptsovitsRecyclePromise;
       return;
     }
 
-    const idleDelayMs =
-      gptsovitsHandledRequests >= gptsovitsRecycleAfterRequests
-        ? gptsovitsPostBurstIdleMs
-        : gptsovitsIdleTimeoutMs;
+    gptsovitsRecyclePromise = (async () => {
+      if (gptsovitsActiveRequests > 0) {
+        return;
+      }
+
+      console.log(`[GPT-SoVITS] Recycling worker: ${reason}`);
+      stopGPTSoVITSServer();
+
+      if (!gptsovitsKeepWarm) {
+        return;
+      }
+
+      await delay(250);
+      console.log("[GPT-SoVITS] Prewarming fresh worker after recycle...");
+      await startGPTSoVITSServer();
+    })()
+      .catch((error) => {
+        console.error("[GPT-SoVITS] Recycle error:", error);
+      })
+      .finally(() => {
+        gptsovitsRecyclePromise = null;
+      });
+
+    await gptsovitsRecyclePromise;
+  }
+
+  function scheduleGPTSoVITSIdleAction() {
+    clearGPTSoVITSIdleTimer();
+
+    if (
+      !gptsovitsProcess ||
+      gptsovitsActiveRequests > 0 ||
+      gptsovitsRecyclePromise
+    ) {
+      return;
+    }
+
+    const shouldRecycle =
+      gptsovitsHandledRequests >= gptsovitsRecycleAfterRequests;
+
+    if (!shouldRecycle && gptsovitsKeepWarm) {
+      return;
+    }
+
+    const idleDelayMs = shouldRecycle
+      ? gptsovitsPostBurstIdleMs
+      : gptsovitsIdleTimeoutMs;
 
     gptsovitsIdleTimer = setTimeout(() => {
       gptsovitsIdleTimer = null;
 
-      if (!gptsovitsProcess || gptsovitsActiveRequests > 0) {
+      if (
+        !gptsovitsProcess ||
+        gptsovitsActiveRequests > 0 ||
+        gptsovitsRecyclePromise
+      ) {
         return;
       }
 
@@ -124,14 +175,18 @@ export function createPythonServerManager({
         ? Date.now() - gptsovitsLastUsedAt
         : idleDelayMs;
       if (idleForMs < idleDelayMs) {
-        scheduleGPTSoVITSIdleStop();
+        scheduleGPTSoVITSIdleAction();
         return;
       }
 
-      const reason =
-        gptsovitsHandledRequests >= gptsovitsRecycleAfterRequests
-          ? `post-burst recycle after ${gptsovitsHandledRequests} request(s)`
-          : `idle timeout after ${Math.round(idleForMs / 1000)}s`;
+      if (shouldRecycle) {
+        void recycleGPTSoVITSWorker(
+          `post-burst recycle after ${gptsovitsHandledRequests} request(s)`,
+        );
+        return;
+      }
+
+      const reason = `idle timeout after ${Math.round(idleForMs / 1000)}s`;
       console.log(`[GPT-SoVITS] Releasing worker: ${reason}`);
       stopGPTSoVITSServer();
     }, idleDelayMs);
@@ -147,7 +202,7 @@ export function createPythonServerManager({
     gptsovitsActiveRequests = Math.max(0, gptsovitsActiveRequests - 1);
     gptsovitsHandledRequests += 1;
     gptsovitsLastUsedAt = Date.now();
-    scheduleGPTSoVITSIdleStop();
+    scheduleGPTSoVITSIdleAction();
   }
 
   async function isGPTSoVITSHealthy() {
@@ -331,6 +386,7 @@ export function createPythonServerManager({
 
       gptsovitsProcess.on("error", (error: Error) => {
         console.error("[GPT-SoVITS] Failed to start:", error);
+        resetGPTSoVITSUsageState();
         gptsovitsProcess = null;
       });
       resetGPTSoVITSUsageState();
@@ -363,6 +419,7 @@ export function createPythonServerManager({
 
   function stopGPTSoVITSServer() {
     gptsovitsStartupPromise = null;
+    clearGPTSoVITSIdleTimer();
     if (gptsovitsProcess) {
       console.log("[GPT-SoVITS] Stopping server...");
       resetGPTSoVITSUsageState();
