@@ -73,6 +73,13 @@ def normalize_model_name(model_name_str):
     }
     return mapping.get(raw, "tiny")
 
+
+def is_rocm_torch(torch_module):
+    try:
+        return bool(getattr(torch_module.version, "hip", None))
+    except Exception:
+        return False
+
 def load_model(model_name_str="tiny.en", device="cuda", compute_type="float16"):
     """Load faster-whisper model with GPU support"""
     global whisper_model, model_name, active_device, active_compute_type
@@ -126,6 +133,12 @@ async def startup():
         import torch
         if not torch.cuda.is_available():
             whisper_log("[Whisper] CUDA not available, using CPU")
+            device = "cpu"
+            compute_type = "int8"
+        elif is_rocm_torch(torch):
+            whisper_log(
+                "[Whisper] ROCm PyTorch detected on AMD GPU, but faster-whisper/ctranslate2 GPU mode requires NVIDIA CUDA. Using CPU."
+            )
             device = "cpu"
             compute_type = "int8"
         else:

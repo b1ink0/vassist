@@ -14,12 +14,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SCRIPT_DIR = __dirname;
-const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
 const IS_WINDOWS = process.platform === "win32";
 
+function getBaseDir(): string {
+  return process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
+}
+
 function resolvePythonDir() {
-  const python312 = path.join(BASE_DIR, "python312");
-  const python = path.join(BASE_DIR, "python");
+  const baseDir = getBaseDir();
+  const python312 = path.join(baseDir, "python312");
+  const python = path.join(baseDir, "python");
   if (IS_WINDOWS && fs.existsSync(python312)) {
     return python312;
   }
@@ -94,12 +98,15 @@ class WhisperSetupRunner {
   }
 
   getWhisperModelDir() {
-    return path.join(path.dirname(BASE_DIR), "models", "whisper");
+    return path.join(path.dirname(getBaseDir()), "models", "whisper");
   }
 
   getWhisperSetupDir() {
     const envDir = process.env.WHISPER_SETUP_DIR;
-    const fallbackRuntimeDir = path.join(path.dirname(BASE_DIR), "whisper-stt");
+    const fallbackRuntimeDir = path.join(
+      path.dirname(getBaseDir()),
+      "whisper-stt",
+    );
     const candidateDirs = [envDir, fallbackRuntimeDir, SCRIPT_DIR].filter(
       (candidate): candidate is string => Boolean(candidate),
     );
@@ -273,7 +280,7 @@ class WhisperSetupRunner {
           ...process.env,
           PYTHONUNBUFFERED: "1",
           PYTHONIOENCODING: "utf-8",
-          GPTSOVITS_DATA_DIR: BASE_DIR,
+          GPTSOVITS_DATA_DIR: getBaseDir(),
           WHISPER_SETUP_DIR: whisperSetupDir,
           WHISPER_SETUP_MODEL: this.model,
           // Work around mixed OpenMP runtimes on Windows (libiomp + libomp) during faster-whisper import.

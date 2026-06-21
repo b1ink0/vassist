@@ -124,6 +124,7 @@ const localServerManager = createLocalServerManager({
   loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
   ensureTTSBackendRunning: pythonServerManager.startGPTSoVITSServer,
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
+  setTTSBackend: pythonServerManager.setGPTSoVITSTorchBackend,
 });
 
 app.commandLine.appendSwitch("force_high_performance_gpu");

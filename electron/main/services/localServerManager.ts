@@ -18,6 +18,7 @@ type ServerRuntimeConfig = {
   };
   tts?: {
     enabled?: boolean;
+    pytorchBackend?: string;
   };
 };
 
@@ -68,6 +69,7 @@ type LocalServerManagerDeps = {
   loadLlamaApi?: () => Promise<unknown>;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
   stopTTSBackend?: (() => void) | null;
+  setTTSBackend?: ((backend: string | undefined | null) => void) | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -86,6 +88,7 @@ export function createLocalServerManager({
   loadLlamaApi,
   ensureTTSBackendRunning,
   stopTTSBackend,
+  setTTSBackend,
 }: LocalServerManagerDeps) {
   let server: LocalAIServerLike | null = null;
   let restartPromise: Promise<void> | null = null;
@@ -117,6 +120,9 @@ export function createLocalServerManager({
         }
 
         const desktopTtsEnabled = Boolean(config.tts?.enabled);
+        if (typeof setTTSBackend === "function") {
+          setTTSBackend(config.tts?.pytorchBackend);
+        }
         if (!desktopTtsEnabled && typeof stopTTSBackend === "function") {
           try {
             stopTTSBackend();

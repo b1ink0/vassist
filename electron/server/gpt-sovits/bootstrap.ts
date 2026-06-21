@@ -14,8 +14,6 @@ import type { IncomingMessage } from "http";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || __dirname;
-
 const IS_WINDOWS = process.platform === "win32";
 const IS_MACOS = process.platform === "darwin";
 
@@ -28,6 +26,10 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function getBaseDir(): string {
+  return process.env.GPTSOVITS_DATA_DIR || __dirname;
 }
 
 class PythonBootstrap {
@@ -43,8 +45,8 @@ class PythonBootstrap {
     this.backend = (options.backend || "auto").toString().trim().toLowerCase();
     this.pythonDir =
       IS_WINDOWS && this.backend === "rocm"
-        ? path.join(BASE_DIR, "python312")
-        : path.join(BASE_DIR, "python");
+        ? path.join(getBaseDir(), "python312")
+        : path.join(getBaseDir(), "python");
   }
 
   log(message: string) {
@@ -160,7 +162,7 @@ class PythonBootstrap {
     // Download embedded Python
     const pythonUrl =
       "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip";
-    const zipPath = path.join(BASE_DIR, "python.zip");
+    const zipPath = path.join(getBaseDir(), "python.zip");
 
     await this.downloadFile(pythonUrl, zipPath);
     await this.extractZip(zipPath, this.pythonDir);
@@ -224,7 +226,7 @@ class PythonBootstrap {
       ? "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-aarch64-apple-darwin-install_only.tar.gz"
       : "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-x86_64-apple-darwin-install_only.tar.gz";
 
-    const tarPath = path.join(BASE_DIR, "python.tar.gz");
+    const tarPath = path.join(getBaseDir(), "python.tar.gz");
 
     this.log(
       `[SETUP] Downloading standalone Python for macOS (${isARM ? "ARM64" : "x86_64"})...`,
@@ -304,7 +306,7 @@ class PythonBootstrap {
     // Python 3.12.7 embeddable
     const pythonUrl =
       "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip";
-    const zipPath = path.join(BASE_DIR, "python312.zip");
+    const zipPath = path.join(getBaseDir(), "python312.zip");
 
     this.log("[SETUP] Downloading Python 3.12 embedded (~11 MB)...");
     await this.downloadFile(pythonUrl, zipPath);

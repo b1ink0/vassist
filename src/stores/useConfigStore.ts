@@ -779,6 +779,7 @@ const syncDesktopServerForProviders = async (
 
   const desktopLlmConfig = aiConfig?.["desktop-local"] || {};
   const desktopSttConfig = sttConfig?.["desktop-local"] || {};
+  const desktopTtsConfig = ttsConfig?.["desktop-local"] || {};
 
   let canStartServer = true;
   if (
@@ -820,6 +821,7 @@ const syncDesktopServerForProviders = async (
       },
       tts: {
         enabled: Boolean(ttsConfig?.enabled && ttsUsesDesktopLocal),
+        pytorchBackend: desktopTtsConfig.pytorchBackend || "auto",
       },
     })) as DesktopServerStartResult;
 

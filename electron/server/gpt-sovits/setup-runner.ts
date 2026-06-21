@@ -14,7 +14,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SCRIPT_DIR = __dirname;
-const BASE_DIR = process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
 const IS_WINDOWS = process.platform === "win32";
 
 type SetupLog = {
@@ -41,12 +40,16 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function getBaseDir(): string {
+  return process.env.GPTSOVITS_DATA_DIR || SCRIPT_DIR;
+}
+
 function resolvePythonDir(torchBackend: string | undefined | null): string {
   const backend = (torchBackend || "auto").toString().trim().toLowerCase();
   if (IS_WINDOWS && backend === "rocm") {
-    return path.join(BASE_DIR, "python312");
+    return path.join(getBaseDir(), "python312");
   }
-  return path.join(BASE_DIR, "python");
+  return path.join(getBaseDir(), "python");
 }
 
 class SetupRunner {
@@ -87,13 +90,14 @@ class SetupRunner {
    */
   getStatus(): SetupStatus {
     // Check both possible python dirs (standard 3.10 and ROCm 3.12)
-    const pythonDirDefault = path.join(BASE_DIR, "python");
-    const pythonDir312 = path.join(BASE_DIR, "python312");
+    const baseDir = getBaseDir();
+    const pythonDirDefault = path.join(baseDir, "python");
+    const pythonDir312 = path.join(baseDir, "python312");
     const pythonExists =
       fs.existsSync(pythonDirDefault) || fs.existsSync(pythonDir312);
-    const modelsDir = path.join(BASE_DIR, "models");
+    const modelsDir = path.join(baseDir, "models");
     const modelsExist = fs.existsSync(modelsDir);
-    const gptsovitsDir = path.join(BASE_DIR, "GPT-SoVITS");
+    const gptsovitsDir = path.join(baseDir, "GPT-SoVITS");
     const gptsovitsExists = fs.existsSync(gptsovitsDir);
 
     return {
@@ -133,7 +137,8 @@ class SetupRunner {
     });
 
     const pythonExe = this.getPythonExe();
-    const setupScript = path.join(BASE_DIR, "setup.py");
+    const baseDir = getBaseDir();
+    const setupScript = path.join(baseDir, "setup.py");
 
     if (!fs.existsSync(pythonExe)) {
       throw new Error(
@@ -153,13 +158,13 @@ class SetupRunner {
 
     return new Promise<void>((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
-        cwd: BASE_DIR,
+        cwd: baseDir,
         env: {
           ...process.env,
           PYTHONUNBUFFERED: "1", // Disable Python output buffering
           PYTHONIOENCODING: "utf-8", // Force UTF-8 encoding
           GPTSOVITS_TORCH_BACKEND: selectedBackend,
-          GPTSOVITS_DATA_DIR: BASE_DIR,
+          GPTSOVITS_DATA_DIR: baseDir,
           GPTSOVITS_FORCE_REINSTALL: forceReinstall,
         },
       });

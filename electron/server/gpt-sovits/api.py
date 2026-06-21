@@ -7,6 +7,7 @@ Runs on http://127.0.0.1:9880
 import os
 import sys
 import io
+import types
 
 # Force jieba to use pure Python mode (embedded Python doesn't have C extensions)
 class _DummyJiebaModule:
@@ -21,6 +22,8 @@ if sys.platform == 'win32':
 
 import logging
 import time
+from contextlib import nullcontext
+from functools import wraps
 from pathlib import Path
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Request
@@ -115,8 +118,102 @@ bert_model = None
 ssl_model = None
 tokenizer = None
 webui_module = None 
+is_rocm = False
+use_rocm_mixed_precision = False
 
 models_loaded = False
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _rocm_autocast_context():
+    if use_rocm_mixed_precision and device == "cuda":
+        import torch
+
+        return torch.autocast(device_type="cuda", dtype=torch.float16)
+    return nullcontext()
+
+
+def _wrap_bound_method_with_autocast(instance, method_name: str):
+    original = getattr(instance, method_name, None)
+    if original is None or getattr(original, "_gptsovits_rocm_amp_wrapped", False):
+        return
+
+    original_func = getattr(original, "__func__", None)
+    if original_func is None:
+        return
+
+    @wraps(original_func)
+    def wrapped(self, *args, **kwargs):
+        with _rocm_autocast_context():
+            return original_func(self, *args, **kwargs)
+
+    wrapped._gptsovits_rocm_amp_wrapped = True
+    setattr(instance, method_name, types.MethodType(wrapped, instance))
+
+
+def _patch_rocm_mixed_precision_runtime(webui_mod):
+    if not use_rocm_mixed_precision:
+        return
+
+    try:
+        if getattr(webui_mod, "bert_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.bert_model, "forward")
+
+        if getattr(webui_mod, "ssl_model", None) is not None and getattr(webui_mod.ssl_model, "model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.ssl_model.model, "forward")
+
+        if getattr(webui_mod, "t2s_model", None) is not None and getattr(webui_mod.t2s_model, "model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.t2s_model.model, "infer_panel")
+
+        if getattr(webui_mod, "vq_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.vq_model, "decode")
+            _wrap_bound_method_with_autocast(webui_mod.vq_model, "decode_encp")
+            if getattr(webui_mod.vq_model, "cfm", None) is not None:
+                _wrap_bound_method_with_autocast(webui_mod.vq_model.cfm, "inference")
+
+        if getattr(webui_mod, "bigvgan_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.bigvgan_model, "forward")
+
+        if getattr(webui_mod, "hifigan_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.hifigan_model, "forward")
+
+        if getattr(webui_mod, "sv_cn_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.sv_cn_model, "compute_embedding3")
+    except Exception as patch_err:
+        logger.warning(f"ROCm mixed precision patch warning: {patch_err}")
+
+
+def _install_rocm_mixed_precision_hooks(webui_mod):
+    if not use_rocm_mixed_precision:
+        return
+
+    if getattr(webui_mod, "_gptsovits_rocm_hooks_installed", False):
+        _patch_rocm_mixed_precision_runtime(webui_mod)
+        return
+
+    _patch_rocm_mixed_precision_runtime(webui_mod)
+
+    for function_name in ("change_sovits_weights", "change_gpt_weights", "init_bigvgan", "init_hifigan", "init_sv_cn"):
+        original = getattr(webui_mod, function_name, None)
+        if original is None or getattr(original, "_gptsovits_rocm_hook_wrapped", False):
+            continue
+
+        @wraps(original)
+        def wrapped(*args, _original=original, **kwargs):
+            result = _original(*args, **kwargs)
+            _patch_rocm_mixed_precision_runtime(webui_mod)
+            return result
+
+        wrapped._gptsovits_rocm_hook_wrapped = True
+        setattr(webui_mod, function_name, wrapped)
+
+    webui_mod._gptsovits_rocm_hooks_installed = True
 
 
 def _disable_transformers_torchvision_path():
@@ -203,6 +300,10 @@ def load_models():
         # reads os.environ["is_half"] at import time and instantiates HuBERT/BERT.
         device = "cuda" if torch.cuda.is_available() else "cpu"
         is_rocm = device == "cuda" and _is_rocm_torch(torch)
+        use_rocm_mixed_precision = is_rocm and _env_flag(
+            "GPTSOVITS_ROCM_MIXED_PRECISION",
+            default=False,
+        )
         is_half = torch.cuda.is_available() and not is_rocm
         os.environ["is_half"] = "True" if is_half else "False"
 
@@ -232,13 +333,16 @@ def load_models():
         # Set global device - properly update global variables
         globals()['device'] = device
         globals()['is_half'] = is_half
+        globals()['is_rocm'] = is_rocm
+        globals()['use_rocm_mixed_precision'] = use_rocm_mixed_precision
         webui_mod.device = device
         webui_mod.is_half = is_half
         logger.info(
-            "Using device: %s, half precision: %s, rocm: %s, cudnn.enabled: %s, cudnn.benchmark: %s",
+            "Using device: %s, half precision: %s, rocm: %s, rocm_mixed_precision: %s, cudnn.enabled: %s, cudnn.benchmark: %s",
             device,
             is_half,
             is_rocm,
+            use_rocm_mixed_precision,
             torch.backends.cudnn.enabled,
             torch.backends.cudnn.benchmark,
         )
@@ -321,6 +425,7 @@ def load_models():
         if is_half:
             webui_mod.t2s_model = webui_mod.t2s_model.half()
         webui_mod.t2s_model = webui_mod.t2s_model.to(device)
+        _install_rocm_mixed_precision_hooks(webui_mod)
         
         del dict_s1
         logger.info("✓ GPT model loaded successfully")

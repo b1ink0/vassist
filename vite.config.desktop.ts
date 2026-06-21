@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
       }),
       tailwindcss(),
       vadAssetsPlugin("dist-desktop"),
-      isProduction && {
+      {
         name: "copy-server-files-production",
         closeBundle() {
           const serverSrc = resolve(__dirname, "electron/server");

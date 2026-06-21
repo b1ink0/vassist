@@ -58,6 +58,45 @@ export function createPythonServerManager({
   let whisperProcess: ChildProcessWithoutNullStreams | null = null;
   let setupRunner: SetupRunnerLike | null = null;
   let whisperSetupRunner: SetupRunnerLike | null = null;
+  let gptsovitsStartupPromise: Promise<void> | null = null;
+  let currentGPTSoVITSTorchBackend = String(
+    processEnv.GPTSOVITS_TORCH_BACKEND ?? "auto",
+  )
+    .trim()
+    .toLowerCase();
+
+  function delay(ms: number) {
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function isGPTSoVITSHealthy() {
+    try {
+      const response = await fetch("http://127.0.0.1:9880/health");
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function waitForGPTSoVITSReady(timeoutMs = 180000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (!gptsovitsProcess) {
+        throw new Error("GPT-SoVITS process exited before becoming ready");
+      }
+
+      if (await isGPTSoVITSHealthy()) {
+        return;
+      }
+
+      await delay(500);
+    }
+
+    throw new Error("Timed out waiting for GPT-SoVITS to become ready");
+  }
 
   function resolveEmbeddedPythonExecutable(gptsovitsDataDir: string): string {
     const candidates =
@@ -80,9 +119,29 @@ export function createPythonServerManager({
     );
   }
 
-  function startGPTSoVITSServer() {
+  async function startGPTSoVITSServer() {
+    if (gptsovitsStartupPromise) {
+      await gptsovitsStartupPromise;
+      return;
+    }
+
     if (gptsovitsProcess) {
-      console.log("[GPT-SoVITS] Server already running");
+      console.log(
+        "[GPT-SoVITS] Server process already running, checking health",
+      );
+      gptsovitsStartupPromise = waitForGPTSoVITSReady()
+        .then(() => {
+          console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
+        })
+        .finally(() => {
+          gptsovitsStartupPromise = null;
+        });
+      await gptsovitsStartupPromise;
+      return;
+    }
+
+    if (await isGPTSoVITSHealthy()) {
+      console.log("[GPT-SoVITS] Server already healthy");
       return;
     }
 
@@ -96,28 +155,29 @@ export function createPythonServerManager({
       const apiScript = path.join(gptsovitsDataDir, "api.py");
 
       if (!fs.existsSync(pythonExe)) {
-        console.error(
-          "[GPT-SoVITS] Embedded Python not found. Run setup.py first.",
+        const expectedPaths =
+          process.platform === "win32"
+            ? [path.join(gptsovitsDataDir, "python", "python.exe")]
+            : [
+                path.join(gptsovitsDataDir, "python", "bin", "python3"),
+                path.join(gptsovitsDataDir, "python", "bin", "python"),
+              ];
+        throw new Error(
+          `Embedded Python not found. Expected one of: ${expectedPaths.join(", ")}`,
         );
-        console.log("[GPT-SoVITS] Expected one of:");
-        if (process.platform === "win32") {
-          console.log(
-            `[GPT-SoVITS]   ${path.join(gptsovitsDataDir, "python", "python.exe")}`,
-          );
-        } else {
-          console.log(
-            `[GPT-SoVITS]   ${path.join(gptsovitsDataDir, "python", "bin", "python3")}`,
-          );
-          console.log(
-            `[GPT-SoVITS]   ${path.join(gptsovitsDataDir, "python", "bin", "python")}`,
-          );
-        }
-        return;
+      }
+
+      if (!fs.existsSync(apiScript)) {
+        throw new Error(`GPT-SoVITS API script not found at ${apiScript}`);
       }
 
       console.log("[GPT-SoVITS] Starting TTS server...");
       console.log("[GPT-SoVITS] Python:", pythonExe);
       console.log("[GPT-SoVITS] Script:", apiScript);
+      console.log(
+        "[GPT-SoVITS] Configured PyTorch backend:",
+        currentGPTSoVITSTorchBackend,
+      );
 
       gptsovitsProcess = spawn(pythonExe, [apiScript], {
         cwd: gptsovitsDataDir,
@@ -126,11 +186,15 @@ export function createPythonServerManager({
           GPTSOVITS_PORT: "9880",
           PYTHONUNBUFFERED: "1",
           GPTSOVITS_DATA_DIR: gptsovitsDataDir,
+          GPTSOVITS_TORCH_BACKEND: currentGPTSoVITSTorchBackend,
           WHISPER_MODEL_DIR: path.join(
             getRuntimeServerBasePath(),
             "models",
             "whisper",
           ),
+          GPTSOVITS_ROCM_MIXED_PRECISION:
+            processEnv.GPTSOVITS_ROCM_MIXED_PRECISION ??
+            (currentGPTSoVITSTorchBackend === "rocm" ? "1" : "0"),
           // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
           KMP_DUPLICATE_LIB_OK: "TRUE",
         },
@@ -159,13 +223,23 @@ export function createPythonServerManager({
         },
       );
 
-      console.log("[GPT-SoVITS] Server started on http://127.0.0.1:9880");
+      gptsovitsStartupPromise = waitForGPTSoVITSReady()
+        .then(() => {
+          console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
+        })
+        .finally(() => {
+          gptsovitsStartupPromise = null;
+        });
+
+      await gptsovitsStartupPromise;
     } catch (error) {
       console.error("[GPT-SoVITS] Start error:", error);
+      throw error;
     }
   }
 
   function stopGPTSoVITSServer() {
+    gptsovitsStartupPromise = null;
     if (gptsovitsProcess) {
       console.log("[GPT-SoVITS] Stopping server...");
       gptsovitsProcess.kill("SIGTERM");
@@ -260,6 +334,13 @@ export function createPythonServerManager({
     }
   }
 
+  function setGPTSoVITSTorchBackend(backend: string | undefined | null) {
+    currentGPTSoVITSTorchBackend = String(backend ?? "auto")
+      .trim()
+      .toLowerCase();
+    process.env.GPTSOVITS_TORCH_BACKEND = currentGPTSoVITSTorchBackend;
+  }
+
   function registerSetupIPCHandlers(
     ipcMain: IpcMain,
     localServerManager: LocalServerManagerLike,
@@ -289,6 +370,8 @@ export function createPythonServerManager({
         const selectedBackend = String(options.torchBackend ?? "auto")
           .trim()
           .toLowerCase();
+        currentGPTSoVITSTorchBackend = selectedBackend;
+        process.env.GPTSOVITS_TORCH_BACKEND = selectedBackend;
 
         console.log("[GPT-SoVITS] Starting setup...");
         console.log("[GPT-SoVITS] Selected PyTorch backend:", selectedBackend);
@@ -499,6 +582,7 @@ export function createPythonServerManager({
   return {
     startGPTSoVITSServer,
     stopGPTSoVITSServer,
+    setGPTSoVITSTorchBackend,
     startWhisperServer,
     stopWhisperServer,
     registerSetupIPCHandlers,
