@@ -87,6 +87,8 @@ type WhisperContextLike = {
 type LocalAIServerDeps = {
   loadLlamaApi?: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+  onTTSRequestStart?: (() => void) | null;
+  onTTSRequestComplete?: (() => void) | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -140,6 +142,8 @@ export class LocalAIServer {
   currentModelPath: string | null;
   loadLlamaApi: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning: (() => void | Promise<void>) | null;
+  onTTSRequestStart: (() => void) | null;
+  onTTSRequestComplete: (() => void) | null;
   isLoadingModel: boolean;
   loadPromise: Promise<void> | null;
   lastUsed: number | null;
@@ -151,6 +155,8 @@ export class LocalAIServer {
   constructor({
     loadLlamaApi,
     ensureTTSBackendRunning,
+    onTTSRequestStart,
+    onTTSRequestComplete,
   }: LocalAIServerDeps = {}) {
     this.app = express();
     this.server = null;
@@ -169,6 +175,10 @@ export class LocalAIServer {
       typeof ensureTTSBackendRunning === "function"
         ? ensureTTSBackendRunning
         : null;
+    this.onTTSRequestStart =
+      typeof onTTSRequestStart === "function" ? onTTSRequestStart : null;
+    this.onTTSRequestComplete =
+      typeof onTTSRequestComplete === "function" ? onTTSRequestComplete : null;
 
     // On-demand loading state
     this.isLoadingModel = false;
@@ -648,6 +658,8 @@ export class LocalAIServer {
     }
 
     try {
+      this.onTTSRequestStart?.();
+
       if (this.ensureTTSBackendRunning) {
         await this.ensureTTSBackendRunning();
       }
@@ -689,6 +701,8 @@ export class LocalAIServer {
         );
       }
       throw new Error("TTS service unavailable");
+    } finally {
+      this.onTTSRequestComplete?.();
     }
   }
 

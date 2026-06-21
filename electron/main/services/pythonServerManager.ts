@@ -59,16 +59,95 @@ export function createPythonServerManager({
   let setupRunner: SetupRunnerLike | null = null;
   let whisperSetupRunner: SetupRunnerLike | null = null;
   let gptsovitsStartupPromise: Promise<void> | null = null;
+  let gptsovitsIdleTimer: NodeJS.Timeout | null = null;
+  let gptsovitsActiveRequests = 0;
+  let gptsovitsHandledRequests = 0;
+  let gptsovitsLastUsedAt: number | null = null;
   let currentGPTSoVITSTorchBackend = String(
     processEnv.GPTSOVITS_TORCH_BACKEND ?? "auto",
   )
     .trim()
     .toLowerCase();
+  const gptsovitsIdleTimeoutMs = Math.max(
+    1000,
+    Number(processEnv.GPTSOVITS_IDLE_TIMEOUT_MS ?? 120000) || 120000,
+  );
+  const gptsovitsRecycleAfterRequests = Math.max(
+    1,
+    Number(processEnv.GPTSOVITS_RECYCLE_AFTER_REQUESTS ?? 4) || 4,
+  );
+  const gptsovitsPostBurstIdleMs = Math.max(
+    1000,
+    Number(processEnv.GPTSOVITS_POST_BURST_IDLE_MS ?? 15000) || 15000,
+  );
 
   function delay(ms: number) {
     return new Promise<void>((resolve) => {
       setTimeout(resolve, ms);
     });
+  }
+
+  function clearGPTSoVITSIdleTimer() {
+    if (gptsovitsIdleTimer) {
+      clearTimeout(gptsovitsIdleTimer);
+      gptsovitsIdleTimer = null;
+    }
+  }
+
+  function resetGPTSoVITSUsageState() {
+    clearGPTSoVITSIdleTimer();
+    gptsovitsActiveRequests = 0;
+    gptsovitsHandledRequests = 0;
+    gptsovitsLastUsedAt = null;
+  }
+
+  function scheduleGPTSoVITSIdleStop() {
+    clearGPTSoVITSIdleTimer();
+
+    if (!gptsovitsProcess || gptsovitsActiveRequests > 0) {
+      return;
+    }
+
+    const idleDelayMs =
+      gptsovitsHandledRequests >= gptsovitsRecycleAfterRequests
+        ? gptsovitsPostBurstIdleMs
+        : gptsovitsIdleTimeoutMs;
+
+    gptsovitsIdleTimer = setTimeout(() => {
+      gptsovitsIdleTimer = null;
+
+      if (!gptsovitsProcess || gptsovitsActiveRequests > 0) {
+        return;
+      }
+
+      const idleForMs = gptsovitsLastUsedAt
+        ? Date.now() - gptsovitsLastUsedAt
+        : idleDelayMs;
+      if (idleForMs < idleDelayMs) {
+        scheduleGPTSoVITSIdleStop();
+        return;
+      }
+
+      const reason =
+        gptsovitsHandledRequests >= gptsovitsRecycleAfterRequests
+          ? `post-burst recycle after ${gptsovitsHandledRequests} request(s)`
+          : `idle timeout after ${Math.round(idleForMs / 1000)}s`;
+      console.log(`[GPT-SoVITS] Releasing worker: ${reason}`);
+      stopGPTSoVITSServer();
+    }, idleDelayMs);
+  }
+
+  function markGPTSoVITSTTSRequestStart() {
+    gptsovitsActiveRequests += 1;
+    gptsovitsLastUsedAt = Date.now();
+    clearGPTSoVITSIdleTimer();
+  }
+
+  function markGPTSoVITSTTSRequestComplete() {
+    gptsovitsActiveRequests = Math.max(0, gptsovitsActiveRequests - 1);
+    gptsovitsHandledRequests += 1;
+    gptsovitsLastUsedAt = Date.now();
+    scheduleGPTSoVITSIdleStop();
   }
 
   async function isGPTSoVITSHealthy() {
@@ -190,6 +269,20 @@ export function createPythonServerManager({
       const rocmWeightPolicy =
         processEnv.GPTSOVITS_ROCM_WEIGHT_POLICY ??
         (currentGPTSoVITSTorchBackend === "rocm" ? "aggressive" : "balanced");
+      const rocmWorkerEnv =
+        currentGPTSoVITSTorchBackend === "rocm"
+          ? {
+              HSA_SCRATCH_SINGLE_LIMIT:
+                processEnv.HSA_SCRATCH_SINGLE_LIMIT ?? "0",
+              HSA_ENABLE_SCRATCH_ASYNC_RECLAIM:
+                processEnv.HSA_ENABLE_SCRATCH_ASYNC_RECLAIM ?? "1",
+              HIPBLAS_WORKSPACE_CONFIG:
+                processEnv.HIPBLAS_WORKSPACE_CONFIG ?? ":4096:2",
+              MIOPEN_FIND_MODE: processEnv.MIOPEN_FIND_MODE ?? "3",
+              PYTORCH_HIP_ALLOC_CONF:
+                processEnv.PYTORCH_HIP_ALLOC_CONF ?? "expandable_segments:True",
+            }
+          : {};
 
       console.log(
         "[GPT-SoVITS] ROCm mixed precision:",
@@ -201,6 +294,9 @@ export function createPythonServerManager({
         "weight_policy:",
         rocmWeightPolicy,
       );
+      if (currentGPTSoVITSTorchBackend === "rocm") {
+        console.log("[GPT-SoVITS] ROCm worker env:", rocmWorkerEnv);
+      }
 
       gptsovitsProcess = spawn(pythonExe, [apiScript], {
         cwd: gptsovitsDataDir,
@@ -219,6 +315,7 @@ export function createPythonServerManager({
           GPTSOVITS_ROCM_WEIGHT_DTYPE: rocmWeightDtype,
           GPTSOVITS_ROCM_AUTOCAST_DTYPE: rocmAutocastDtype,
           GPTSOVITS_ROCM_WEIGHT_POLICY: rocmWeightPolicy,
+          ...rocmWorkerEnv,
           // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
           KMP_DUPLICATE_LIB_OK: "TRUE",
         },
@@ -236,6 +333,7 @@ export function createPythonServerManager({
         console.error("[GPT-SoVITS] Failed to start:", error);
         gptsovitsProcess = null;
       });
+      resetGPTSoVITSUsageState();
 
       gptsovitsProcess.on(
         "exit",
@@ -243,6 +341,7 @@ export function createPythonServerManager({
           console.log(
             `[GPT-SoVITS] Process exited with code ${code}, signal ${signal}`,
           );
+          resetGPTSoVITSUsageState();
           gptsovitsProcess = null;
         },
       );
@@ -266,6 +365,7 @@ export function createPythonServerManager({
     gptsovitsStartupPromise = null;
     if (gptsovitsProcess) {
       console.log("[GPT-SoVITS] Stopping server...");
+      resetGPTSoVITSUsageState();
       gptsovitsProcess.kill("SIGTERM");
       gptsovitsProcess = null;
     }
@@ -608,6 +708,8 @@ export function createPythonServerManager({
     stopGPTSoVITSServer,
     setGPTSoVITSTorchBackend,
     startWhisperServer,
+    markGPTSoVITSTTSRequestStart,
+    markGPTSoVITSTTSRequestComplete,
     stopWhisperServer,
     registerSetupIPCHandlers,
     cleanupBeforeQuit,

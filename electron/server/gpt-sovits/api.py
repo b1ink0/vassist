@@ -195,6 +195,17 @@ def _clear_gpu_cache():
         pass
 
 
+def _clear_backend_workspaces():
+    try:
+        import torch
+
+        clear_fn = getattr(getattr(torch, "_C", None), "_cuda_clearCublasWorkspaces", None)
+        if callable(clear_fn):
+            clear_fn()
+    except Exception:
+        pass
+
+
 def _log_gpu_memory(stage: str):
     try:
         import torch
@@ -959,6 +970,7 @@ def get_tts_wav(
         _clear_request_cache()
 
         gc.collect()
+        _clear_backend_workspaces()
         _clear_gpu_cache()
         _log_gpu_memory("after_request_cleanup")
 

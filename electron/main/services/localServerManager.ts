@@ -61,6 +61,8 @@ type LocalServerManagerDeps = {
   LocalAIServer: new (deps: {
     loadLlamaApi?: () => Promise<unknown>;
     ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+    onTTSRequestStart?: (() => void) | null;
+    onTTSRequestComplete?: (() => void) | null;
   }) => LocalAIServerLike;
   path: typeof pathType;
   fs: typeof fsType;
@@ -68,6 +70,8 @@ type LocalServerManagerDeps = {
   getModelsDir: (customPath?: string | null) => string;
   loadLlamaApi?: () => Promise<unknown>;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+  onTTSRequestStart?: (() => void) | null;
+  onTTSRequestComplete?: (() => void) | null;
   stopTTSBackend?: (() => void) | null;
   setTTSBackend?: ((backend: string | undefined | null) => void) | null;
 };
@@ -87,6 +91,8 @@ export function createLocalServerManager({
   getModelsDir,
   loadLlamaApi,
   ensureTTSBackendRunning,
+  onTTSRequestStart,
+  onTTSRequestComplete,
   stopTTSBackend,
   setTTSBackend,
 }: LocalServerManagerDeps) {
@@ -105,12 +111,20 @@ export function createLocalServerManager({
             const serverDeps: {
               loadLlamaApi?: () => Promise<unknown>;
               ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+              onTTSRequestStart?: (() => void) | null;
+              onTTSRequestComplete?: (() => void) | null;
             } = {};
             if (loadLlamaApi) {
               serverDeps.loadLlamaApi = loadLlamaApi;
             }
             if (ensureTTSBackendRunning !== undefined) {
               serverDeps.ensureTTSBackendRunning = ensureTTSBackendRunning;
+            }
+            if (onTTSRequestStart !== undefined) {
+              serverDeps.onTTSRequestStart = onTTSRequestStart;
+            }
+            if (onTTSRequestComplete !== undefined) {
+              serverDeps.onTTSRequestComplete = onTTSRequestComplete;
             }
             server = new LocalAIServer(serverDeps);
           } catch (error) {
@@ -337,12 +351,20 @@ export function createLocalServerManager({
           const serverDeps: {
             loadLlamaApi?: () => Promise<unknown>;
             ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+            onTTSRequestStart?: (() => void) | null;
+            onTTSRequestComplete?: (() => void) | null;
           } = {};
           if (loadLlamaApi) {
             serverDeps.loadLlamaApi = loadLlamaApi;
           }
           if (ensureTTSBackendRunning !== undefined) {
             serverDeps.ensureTTSBackendRunning = ensureTTSBackendRunning;
+          }
+          if (onTTSRequestStart !== undefined) {
+            serverDeps.onTTSRequestStart = onTTSRequestStart;
+          }
+          if (onTTSRequestComplete !== undefined) {
+            serverDeps.onTTSRequestComplete = onTTSRequestComplete;
           }
           server = new LocalAIServer(serverDeps);
         }

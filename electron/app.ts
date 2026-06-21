@@ -123,6 +123,8 @@ const localServerManager = createLocalServerManager({
   getModelsDir,
   loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
   ensureTTSBackendRunning: pythonServerManager.startGPTSoVITSServer,
+  onTTSRequestStart: pythonServerManager.markGPTSoVITSTTSRequestStart,
+  onTTSRequestComplete: pythonServerManager.markGPTSoVITSTTSRequestComplete,
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
   setTTSBackend: pythonServerManager.setGPTSoVITSTorchBackend,
 });
