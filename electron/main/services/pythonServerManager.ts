@@ -178,6 +178,29 @@ export function createPythonServerManager({
         "[GPT-SoVITS] Configured PyTorch backend:",
         currentGPTSoVITSTorchBackend,
       );
+      const rocmMixedPrecision =
+        processEnv.GPTSOVITS_ROCM_MIXED_PRECISION ??
+        (currentGPTSoVITSTorchBackend === "rocm" ? "1" : "0");
+      const rocmWeightDtype =
+        processEnv.GPTSOVITS_ROCM_WEIGHT_DTYPE ??
+        (currentGPTSoVITSTorchBackend === "rocm" ? "float16" : "float32");
+      const rocmAutocastDtype =
+        processEnv.GPTSOVITS_ROCM_AUTOCAST_DTYPE ??
+        (currentGPTSoVITSTorchBackend === "rocm" ? "float16" : "float32");
+      const rocmWeightPolicy =
+        processEnv.GPTSOVITS_ROCM_WEIGHT_POLICY ??
+        (currentGPTSoVITSTorchBackend === "rocm" ? "aggressive" : "balanced");
+
+      console.log(
+        "[GPT-SoVITS] ROCm mixed precision:",
+        rocmMixedPrecision,
+        "weight_dtype:",
+        rocmWeightDtype,
+        "autocast_dtype:",
+        rocmAutocastDtype,
+        "weight_policy:",
+        rocmWeightPolicy,
+      );
 
       gptsovitsProcess = spawn(pythonExe, [apiScript], {
         cwd: gptsovitsDataDir,
@@ -192,9 +215,10 @@ export function createPythonServerManager({
             "models",
             "whisper",
           ),
-          GPTSOVITS_ROCM_MIXED_PRECISION:
-            processEnv.GPTSOVITS_ROCM_MIXED_PRECISION ??
-            (currentGPTSoVITSTorchBackend === "rocm" ? "1" : "0"),
+          GPTSOVITS_ROCM_MIXED_PRECISION: rocmMixedPrecision,
+          GPTSOVITS_ROCM_WEIGHT_DTYPE: rocmWeightDtype,
+          GPTSOVITS_ROCM_AUTOCAST_DTYPE: rocmAutocastDtype,
+          GPTSOVITS_ROCM_WEIGHT_POLICY: rocmWeightPolicy,
           // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
           KMP_DUPLICATE_LIB_OK: "TRUE",
         },

@@ -8,6 +8,7 @@ import os
 import sys
 import io
 import types
+import gc
 
 # Force jieba to use pure Python mode (embedded Python doesn't have C extensions)
 class _DummyJiebaModule:
@@ -120,6 +121,9 @@ tokenizer = None
 webui_module = None 
 is_rocm = False
 use_rocm_mixed_precision = False
+rocm_weight_dtype_name = "float32"
+rocm_autocast_dtype_name = "float16"
+rocm_weight_policy_name = "balanced"
 
 models_loaded = False
 
@@ -135,8 +139,367 @@ def _rocm_autocast_context():
     if use_rocm_mixed_precision and device == "cuda":
         import torch
 
-        return torch.autocast(device_type="cuda", dtype=torch.float16)
+        return torch.autocast(
+            device_type="cuda",
+            dtype=_get_rocm_dtype(torch, rocm_autocast_dtype_name, torch.float16),
+        )
     return nullcontext()
+
+
+def _get_rocm_dtype(torch_module, dtype_name: str, default_dtype):
+    normalized = str(dtype_name or "").strip().lower()
+    mapping = {
+        "float16": torch_module.float16,
+        "fp16": torch_module.float16,
+        "half": torch_module.float16,
+        "bfloat16": torch_module.bfloat16,
+        "bf16": torch_module.bfloat16,
+        "float32": torch_module.float32,
+        "fp32": torch_module.float32,
+        "full": torch_module.float32,
+    }
+    return mapping.get(normalized, default_dtype)
+
+
+def _cast_module_precision(module_obj, dtype):
+    if module_obj is None or dtype is None:
+        return module_obj
+    if not hasattr(module_obj, "to"):
+        return module_obj
+    try:
+        return module_obj.to(device=device, dtype=dtype)
+    except TypeError:
+        return module_obj.to(dtype=dtype).to(device)
+    except Exception:
+        return module_obj
+
+
+def _cast_named_module(owner, attr_name: str, dtype):
+    if owner is None or not hasattr(owner, attr_name):
+        return
+    module_obj = getattr(owner, attr_name, None)
+    if module_obj is None:
+        return
+    setattr(owner, attr_name, _cast_module_precision(module_obj, dtype))
+
+
+def _clear_gpu_cache():
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+
+def _log_gpu_memory(stage: str):
+    try:
+        import torch
+
+        if device != "cuda" or not torch.cuda.is_available():
+            return
+
+        allocated_gb = torch.cuda.memory_allocated() / (1024 ** 3)
+        reserved_gb = torch.cuda.memory_reserved() / (1024 ** 3)
+        max_allocated_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        logger.info(
+            "GPU memory %s: allocated=%.2fGB reserved=%.2fGB peak_allocated=%.2fGB",
+            stage,
+            allocated_gb,
+            reserved_gb,
+            max_allocated_gb,
+        )
+    except Exception:
+        pass
+
+
+def _get_cut_option_label(option: str):
+    if webui_module is None:
+        return option
+
+    labels = {
+        "none": "不切",
+        "4-sentences": "凑四句一切",
+        "50-chars": "凑50字一切",
+        "zh-period": "按中文句号。切",
+        "en-period": "按英文句号.切",
+        "punctuation": "按标点符号切",
+    }
+    source_text = labels.get(option, labels["punctuation"])
+    i18n_fn = getattr(webui_module, "i18n", None)
+    if callable(i18n_fn):
+        try:
+            return i18n_fn(source_text)
+        except Exception:
+            return source_text
+    return source_text
+
+
+def _resolve_cut_strategy(text: str, requested_strategy: Optional[str] = None):
+    strategy = str(
+        requested_strategy
+        or os.environ.get("GPTSOVITS_API_CUT_STRATEGY", "auto")
+    ).strip().lower()
+
+    if strategy and strategy != "auto":
+        return _get_cut_option_label(strategy)
+
+    threshold_raw = os.environ.get("GPTSOVITS_API_CUT_THRESHOLD", "120").strip()
+    try:
+        threshold = max(1, int(threshold_raw))
+    except ValueError:
+        threshold = 120
+
+    if len(text) <= threshold:
+        return _get_cut_option_label("none")
+
+    punctuation_chars = set(",.;:!?，。；：！？、")
+    if any(char in punctuation_chars for char in text):
+        return _get_cut_option_label("punctuation")
+
+    return _get_cut_option_label("50-chars")
+
+
+def _clear_request_cache():
+    try:
+        request_cache = getattr(webui_module, "cache", None)
+        if isinstance(request_cache, dict):
+            request_cache.clear()
+    except Exception as cache_err:
+        logger.warning(f"Request cache cleanup warning: {cache_err}")
+
+
+def _get_chunk_limits(text_language: str):
+    lang = str(text_language or "").lower()
+    if "ja" in lang or "zh" in lang or "yue" in lang or "ko" in lang:
+        return 80, 140
+    return 180, 320
+
+
+def _is_cjk_language(text_language: str):
+    lang = str(text_language or "").lower()
+    return "ja" in lang or "zh" in lang or "yue" in lang or "ko" in lang
+
+
+def _split_sentence_units(text: str):
+    closers = set("\"')]}」』】）》〕］｝〟〞")
+    terminals = set("。！？.!?\n")
+    units = []
+    buffer = []
+    index = 0
+    length = len(text)
+
+    while index < length:
+        ch = text[index]
+        buffer.append(ch)
+
+        if ch in terminals:
+            index += 1
+            while index < length and text[index] in closers.union({" ", "\t", "\r", "\n"}):
+                buffer.append(text[index])
+                index += 1
+            chunk = "".join(buffer).strip()
+            if chunk:
+                units.append(chunk)
+            buffer = []
+            continue
+
+        index += 1
+
+    tail = "".join(buffer).strip()
+    if tail:
+        units.append(tail)
+
+    return units
+
+
+def _split_soft_units(text: str):
+    closers = set("\"')]}」』】）》〕］｝〟〞")
+    separators = set("、，,；;：:\n")
+    units = []
+    buffer = []
+    index = 0
+    length = len(text)
+
+    while index < length:
+        ch = text[index]
+        buffer.append(ch)
+
+        if ch in separators:
+            index += 1
+            while index < length and text[index] in closers.union({" ", "\t", "\r", "\n"}):
+                buffer.append(text[index])
+                index += 1
+            chunk = "".join(buffer).strip()
+            if chunk:
+                units.append(chunk)
+            buffer = []
+            continue
+
+        index += 1
+
+    tail = "".join(buffer).strip()
+    if tail:
+        units.append(tail)
+
+    return units
+
+
+def _split_by_length(text: str, hard_limit: int):
+    preferred_breaks = set("、，,；;：: 。！？.!? \n")
+    chunks = []
+    remaining = text.strip()
+
+    while len(remaining) > hard_limit:
+        window = remaining[:hard_limit]
+        break_at = -1
+        for index in range(len(window) - 1, max(0, hard_limit // 2) - 1, -1):
+            if window[index] in preferred_breaks:
+                break_at = index + 1
+                break
+
+        if break_at <= 0:
+            break_at = hard_limit
+
+        chunk = remaining[:break_at].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[break_at:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+
+    return chunks
+
+
+def _split_oversized_unit(unit: str, target_chars: int, hard_limit: int):
+    stripped = unit.strip()
+    if not stripped:
+        return []
+    if len(stripped) <= hard_limit:
+        return [stripped]
+
+    soft_units = _split_soft_units(stripped)
+    if len(soft_units) <= 1:
+        return _split_by_length(stripped, hard_limit)
+
+    planned = []
+    current = ""
+
+    for soft_unit in soft_units:
+        candidate = f"{current}{soft_unit}" if current else soft_unit
+
+        if current and len(candidate) > target_chars:
+            planned.append(current.strip())
+            current = soft_unit
+        else:
+            current = candidate
+
+    if current.strip():
+        planned.append(current.strip())
+
+    expanded = []
+    for chunk in planned:
+        if len(chunk) > hard_limit:
+            expanded.extend(_split_by_length(chunk, hard_limit))
+        else:
+            expanded.append(chunk)
+
+    return expanded
+
+
+def _plan_tts_requests(
+    text: str,
+    text_language: str,
+    requested_strategy: Optional[str] = None,
+):
+    strategy = str(
+        requested_strategy
+        or os.environ.get("GPTSOVITS_API_CUT_STRATEGY", "auto")
+    ).strip().lower()
+
+    if strategy and strategy != "auto":
+        return [(text.strip(), strategy)]
+
+    target_chars, hard_limit = _get_chunk_limits(text_language)
+    sentence_units = _split_sentence_units(text)
+    if not sentence_units:
+        stripped = text.strip()
+        return [(stripped, "none")] if stripped else []
+
+    units = []
+    for sentence_unit in sentence_units:
+        units.extend(_split_oversized_unit(sentence_unit, target_chars, hard_limit))
+
+    if _is_cjk_language(text_language):
+        planned = units
+    else:
+        planned = []
+        current = ""
+
+        for unit in units:
+            candidate = f"{current}{unit}" if current else unit
+
+            if current and len(candidate) > target_chars:
+                planned.append(current.strip())
+                current = unit
+            else:
+                current = candidate
+
+        if current.strip():
+            planned.append(current.strip())
+
+    requests = []
+    for chunk in planned:
+        if len(chunk) > hard_limit:
+            requests.append((chunk, "50-chars"))
+        else:
+            requests.append((chunk, "none"))
+
+    return requests
+
+
+def _apply_rocm_weight_policy(webui_mod):
+    if not use_rocm_mixed_precision or device != "cuda":
+        return
+
+    try:
+        import torch
+
+        target_dtype = _get_rocm_dtype(
+            torch,
+            rocm_weight_dtype_name,
+            torch.float16,
+        )
+
+        weight_policy = str(rocm_weight_policy_name or "balanced").strip().lower()
+        aggressive = weight_policy == "aggressive"
+        core_dtype = target_dtype if target_dtype != torch.float32 else torch.float32
+        extended_dtype = target_dtype if aggressive and target_dtype != torch.float32 else torch.float32
+
+        _cast_named_module(webui_mod, "bert_model", core_dtype)
+        _cast_named_module(webui_mod, "ssl_model", core_dtype)
+        if getattr(webui_mod, "ssl_model", None) is not None:
+            _cast_named_module(webui_mod.ssl_model, "model", core_dtype)
+        _cast_named_module(webui_mod, "t2s_model", core_dtype)
+        _cast_named_module(webui_mod, "vq_model", extended_dtype)
+        if getattr(webui_mod, "vq_model", None) is not None:
+            _cast_named_module(webui_mod.vq_model, "cfm", extended_dtype)
+
+        if getattr(webui_mod, "sv_cn_model", None) is not None:
+            sv_dtype = target_dtype if aggressive else torch.float32
+            _cast_named_module(webui_mod.sv_cn_model, "embedding_model", sv_dtype)
+            if hasattr(webui_mod.sv_cn_model, "is_half"):
+                webui_mod.sv_cn_model.is_half = sv_dtype == torch.float16
+
+        _cast_named_module(webui_mod, "bigvgan_model", extended_dtype)
+        _cast_named_module(webui_mod, "hifigan_model", extended_dtype)
+        _clear_gpu_cache()
+    except Exception as cast_err:
+        logger.warning(f"ROCm weight policy warning: {cast_err}")
 
 
 def _wrap_bound_method_with_autocast(instance, method_name: str):
@@ -162,6 +525,8 @@ def _patch_rocm_mixed_precision_runtime(webui_mod):
         return
 
     try:
+        _apply_rocm_weight_policy(webui_mod)
+
         if getattr(webui_mod, "bert_model", None) is not None:
             _wrap_bound_method_with_autocast(webui_mod.bert_model, "forward")
 
@@ -172,6 +537,7 @@ def _patch_rocm_mixed_precision_runtime(webui_mod):
             _wrap_bound_method_with_autocast(webui_mod.t2s_model.model, "infer_panel")
 
         if getattr(webui_mod, "vq_model", None) is not None:
+            _wrap_bound_method_with_autocast(webui_mod.vq_model, "extract_latent")
             _wrap_bound_method_with_autocast(webui_mod.vq_model, "decode")
             _wrap_bound_method_with_autocast(webui_mod.vq_model, "decode_encp")
             if getattr(webui_mod.vq_model, "cfm", None) is not None:
@@ -260,6 +626,7 @@ def load_models():
     """Load GPT-SoVITS models using the same approach as reference api.py"""
     global models_loaded, vq_model, hps, t2s_model, config, hz, max_sec
     global bert_model, ssl_model, tokenizer, is_half, device
+    global rocm_weight_dtype_name, rocm_autocast_dtype_name, rocm_weight_policy_name
     
     if models_loaded:
         logger.info("Models already loaded")
@@ -304,6 +671,18 @@ def load_models():
             "GPTSOVITS_ROCM_MIXED_PRECISION",
             default=False,
         )
+        rocm_weight_dtype_name = os.environ.get(
+            "GPTSOVITS_ROCM_WEIGHT_DTYPE",
+            "float16",
+        ).strip().lower()
+        rocm_autocast_dtype_name = os.environ.get(
+            "GPTSOVITS_ROCM_AUTOCAST_DTYPE",
+            rocm_weight_dtype_name,
+        ).strip().lower()
+        rocm_weight_policy_name = os.environ.get(
+            "GPTSOVITS_ROCM_WEIGHT_POLICY",
+            "balanced",
+        ).strip().lower()
         is_half = torch.cuda.is_available() and not is_rocm
         os.environ["is_half"] = "True" if is_half else "False"
 
@@ -317,8 +696,6 @@ def load_models():
             torch.backends.cudnn.enabled = os.environ.get("GPTSOVITS_ROCM_CUDNN", "0") == "1"
 
         import numpy as np
-        from transformers import AutoModelForMaskedLM, AutoTokenizer
-        from feature_extractor import cnhubert
         from module.models import SynthesizerTrn
         from AR.models.t2s_lightning_module import Text2SemanticLightningModule
         from text import cleaned_text_to_sequence
@@ -327,7 +704,21 @@ def load_models():
         from tools.my_utils import load_audio
         
         # Import the get_tts_wav function and helper functions
-        import GPT_SoVITS.inference_webui as webui_mod
+        force_cpu_webui_import = use_rocm_mixed_precision and device == "cuda"
+        original_cuda_is_available = None
+        if force_cpu_webui_import:
+            logger.info(
+                "ROCm mixed mode: forcing inference_webui startup load onto CPU before selective GPU transfer"
+            )
+            original_cuda_is_available = torch.cuda.is_available
+            torch.cuda.is_available = lambda: False
+
+        try:
+            import GPT_SoVITS.inference_webui as webui_mod
+        finally:
+            if original_cuda_is_available is not None:
+                torch.cuda.is_available = original_cuda_is_available
+
         globals()['webui_module'] = webui_mod  # Store globally for get_tts_wav
         
         # Set global device - properly update global variables
@@ -335,42 +726,32 @@ def load_models():
         globals()['is_half'] = is_half
         globals()['is_rocm'] = is_rocm
         globals()['use_rocm_mixed_precision'] = use_rocm_mixed_precision
+        globals()['rocm_weight_dtype_name'] = rocm_weight_dtype_name
+        globals()['rocm_autocast_dtype_name'] = rocm_autocast_dtype_name
+        globals()['rocm_weight_policy_name'] = rocm_weight_policy_name
         webui_mod.device = device
         webui_mod.is_half = is_half
         logger.info(
-            "Using device: %s, half precision: %s, rocm: %s, rocm_mixed_precision: %s, cudnn.enabled: %s, cudnn.benchmark: %s",
+            "Using device: %s, half precision: %s, rocm: %s, rocm_mixed_precision: %s, rocm_weight_dtype: %s, rocm_autocast_dtype: %s, rocm_weight_policy: %s, cudnn.enabled: %s, cudnn.benchmark: %s",
             device,
             is_half,
             is_rocm,
             use_rocm_mixed_precision,
+            rocm_weight_dtype_name,
+            rocm_autocast_dtype_name,
+            rocm_weight_policy_name,
             torch.backends.cudnn.enabled,
             torch.backends.cudnn.benchmark,
         )
         
-        # Initialize BERT and HuBERT models
-        cnhubert.cnhubert_base_path = str(hubert_path)
-        tokenizer = AutoTokenizer.from_pretrained(str(bert_path))
-        bert_model = AutoModelForMaskedLM.from_pretrained(str(bert_path))
-        ssl_model = cnhubert.get_model()
+        # Reuse inference_webui singleton models instead of loading duplicate BERT/HuBERT copies.
+        tokenizer = getattr(webui_mod, "tokenizer", None)
+        bert_model = getattr(webui_mod, "bert_model", None)
+        ssl_model = getattr(webui_mod, "ssl_model", None)
         
-        if is_half:
-            bert_model = bert_model.half().to(device)
-            ssl_model = ssl_model.half().to(device)
-        else:
-            bert_model = bert_model.to(device)
-            ssl_model = ssl_model.to(device)
-
-        # Keep inference_webui globals in sync with the chosen precision/device.
-        try:
-            if hasattr(webui_mod, 'bert_model') and webui_mod.bert_model is not None:
-                webui_mod.bert_model = (webui_mod.bert_model.half() if is_half else webui_mod.bert_model.float()).to(device)
-            if hasattr(webui_mod, 'ssl_model') and webui_mod.ssl_model is not None:
-                webui_mod.ssl_model = (webui_mod.ssl_model.half() if is_half else webui_mod.ssl_model.float()).to(device)
-        except Exception as sync_err:
-            logger.warning(f"Precision sync warning: {sync_err}")
-        
-        # Load SoVITS first
-        webui_mod.change_sovits_weights(str(s2G_model))
+        # inference_webui auto-loads SoVITS at import time. Only reload if that contract changes.
+        if getattr(webui_mod, "vq_model", None) is None:
+            webui_mod.change_sovits_weights(str(s2G_model))
         
         # Load GPT model - use default config from GPT-SoVITS
         dict_s1 = torch.load(str(s1_model), map_location="cpu", weights_only=False)
@@ -422,10 +803,25 @@ def load_models():
         webui_mod.t2s_model.load_state_dict(dict_s1["weight"])
         webui_mod.t2s_model.eval()
         
+        target_dtype = torch.float32
+        if use_rocm_mixed_precision:
+            target_dtype = _get_rocm_dtype(
+                torch,
+                rocm_weight_dtype_name,
+                torch.float16,
+            )
+
         if is_half:
             webui_mod.t2s_model = webui_mod.t2s_model.half()
+        elif use_rocm_mixed_precision and target_dtype != torch.float32:
+            webui_mod.t2s_model = webui_mod.t2s_model.to(dtype=target_dtype)
         webui_mod.t2s_model = webui_mod.t2s_model.to(device)
         _install_rocm_mixed_precision_hooks(webui_mod)
+
+        tokenizer = getattr(webui_mod, "tokenizer", tokenizer)
+        bert_model = getattr(webui_mod, "bert_model", bert_model)
+        ssl_model = getattr(webui_mod, "ssl_model", ssl_model)
+        _clear_gpu_cache()
         
         del dict_s1
         logger.info("✓ GPT model loaded successfully")
@@ -450,7 +846,15 @@ def load_models():
         import traceback
         traceback.print_exc()
 
-def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language):
+def get_tts_wav(
+    ref_wav_path,
+    prompt_text,
+    prompt_language,
+    text,
+    text_language,
+    speed=1.0,
+    cut_strategy: Optional[str] = None,
+):
     """
     Generate TTS audio using GPT-SoVITS (generator function)
     Calls the actual GPT-SoVITS inference_webui.get_tts_wav
@@ -472,29 +876,97 @@ def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language)
     # Convert to i18n format that webui's dict_language expects
     prompt_lang = lang_to_i18n.get(prompt_language, prompt_language)
     text_lang = lang_to_i18n.get(text_language, text_language)
+    request_plan = _plan_tts_requests(text, text_language, cut_strategy)
     
     # Timing diagnostics: measure where the request spends time.
     started_at = time.perf_counter()
     chunks_emitted = 0
+    logger.info(
+        "TTS request shaping: chars=%d speed=%.2f planned_chunks=%d",
+        len(text),
+        speed,
+        len(request_plan),
+    )
+    try:
+        import torch
 
-    # Call the webui module's get_tts_wav function
-    for sample_rate, audio_data in webui_module.get_tts_wav(
-        ref_wav_path, prompt_text, prompt_lang, text, text_lang
-    ):
-        chunks_emitted += 1
+        if device == "cuda" and torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
+    _log_gpu_memory("before_request")
 
-        # Convert numpy array to WAV bytes
+    try:
+        import numpy as np
+        import torch
+
+        if not request_plan:
+            raise RuntimeError("No TTS text chunks were produced for synthesis")
+
+        audio_segments = []
+        final_sample_rate = None
+
+        with torch.inference_mode():
+            for chunk_index, (chunk_text, chunk_cut_strategy) in enumerate(
+                request_plan,
+                start=1,
+            ):
+                resolved_cut = _get_cut_option_label(chunk_cut_strategy)
+                logger.info(
+                    "TTS subrequest %d/%d: chars=%d cut=%s text='%s...'",
+                    chunk_index,
+                    len(request_plan),
+                    len(chunk_text),
+                    resolved_cut,
+                    chunk_text[:50].replace("\n", " "),
+                )
+
+                for sample_rate, audio_data in webui_module.get_tts_wav(
+                    ref_wav_path,
+                    prompt_text,
+                    prompt_lang,
+                    chunk_text,
+                    text_lang,
+                    how_to_cut=resolved_cut,
+                    speed=speed,
+                    if_freeze=False,
+                ):
+                    if final_sample_rate is None:
+                        final_sample_rate = sample_rate
+                    chunks_emitted += 1
+                    audio_segments.append(audio_data)
+
+                _clear_request_cache()
+
+        if final_sample_rate is None or not audio_segments:
+            raise RuntimeError("GPT-SoVITS returned no audio segments")
+
+        final_audio = (
+            np.concatenate(audio_segments, axis=0)
+            if len(audio_segments) > 1
+            else audio_segments[0]
+        )
+
         wav_buffer = io.BytesIO()
-        sf.write(wav_buffer, audio_data, sample_rate, format='WAV')
+        sf.write(wav_buffer, final_audio, final_sample_rate, format='WAV')
         wav_buffer.seek(0)
         yield wav_buffer.read()
+    finally:
+        finished_at = time.perf_counter()
 
-    finished_at = time.perf_counter()
-    logger.info(
-        "TTS timing: completed in %.3fs (chunks=%d)",
-        finished_at - started_at,
-        chunks_emitted,
-    )
+        # GPT-SoVITS keeps a module-global semantic cache even when freeze mode
+        # is not active. Drop it between API requests so tensors do not pile up.
+        _clear_request_cache()
+
+        gc.collect()
+        _clear_gpu_cache()
+        _log_gpu_memory("after_request_cleanup")
+
+        logger.info(
+            "TTS timing: completed in %.3fs (chunks=%d)",
+            finished_at - started_at,
+            chunks_emitted,
+        )
 
 # In-memory reference cache
 reference_cache = {}
@@ -558,6 +1030,7 @@ async def openai_compatible_tts(request: dict):
         voice = request.get("voice", "default")
         speed = request.get("speed", 1.0)
         language = request.get("language", "en")
+        cut_strategy = request.get("cut_strategy")
         
         if not text:
             raise HTTPException(status_code=400, detail="Missing 'input' field")
@@ -656,7 +1129,15 @@ async def openai_compatible_tts(request: dict):
         # Return streaming audio response using generator
         try:
             return StreamingResponse(
-                get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language),
+                get_tts_wav(
+                    ref_wav_path,
+                    prompt_text,
+                    prompt_language,
+                    text,
+                    text_language,
+                    speed=speed,
+                    cut_strategy=cut_strategy,
+                ),
                 media_type="audio/wav"
             )
         except Exception as e:
@@ -705,6 +1186,8 @@ async def text_to_speech(request: Request):
             ref_audio_b64 = data.get("reference_audio")
             ref_text_val = data.get("reference_text")
             language_val = data.get("reference_language", "en")
+            speed_val = data.get("speed", 1.0)
+            cut_strategy = data.get("cut_strategy")
         else:
             # Form data format
             form = await request.form()
@@ -712,6 +1195,8 @@ async def text_to_speech(request: Request):
             ref_audio_b64 = form.get("ref_audio_base64")
             ref_text_val = form.get("ref_text")
             language_val = form.get("language", "en")
+            speed_val = form.get("speed", 1.0)
+            cut_strategy = form.get("cut_strategy")
         
         if not text_val:
             raise HTTPException(status_code=400, detail="text/input field is required")
@@ -740,7 +1225,15 @@ async def text_to_speech(request: Request):
         
         # Return streaming response
         response = StreamingResponse(
-            get_tts_wav(str(temp_audio_path), ref_text_val, prompt_language, text_val, text_language),
+            get_tts_wav(
+                str(temp_audio_path),
+                ref_text_val,
+                prompt_language,
+                text_val,
+                text_language,
+                speed=float(speed_val),
+                cut_strategy=cut_strategy,
+            ),
             media_type="audio/wav",
             headers={"Content-Disposition": "attachment; filename=output.wav"}
         )
