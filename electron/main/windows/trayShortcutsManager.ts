@@ -10,6 +10,7 @@ import type * as pathType from "path";
 type WindowState = {
   mainWindow: BrowserWindow | null;
   inputWindow: BrowserWindow | null;
+  inputWindowOpen: boolean;
   tray: ElectronTray | null;
 };
 
@@ -90,14 +91,25 @@ export function createTrayShortcutsManager({
       state.mainWindow.hide();
 
       if (state.inputWindow && !state.inputWindow.isDestroyed()) {
-        state.inputWindow.setOpacity(0);
         state.inputWindow.setIgnoreMouseEvents(true);
+        state.inputWindow.hide();
+        state.inputWindow.setOpacity(0);
       }
       return;
     }
 
     state.mainWindow.show();
     state.mainWindow.focus();
+
+    if (
+      state.inputWindowOpen &&
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed()
+    ) {
+      state.inputWindow.setOpacity(1);
+      state.inputWindow.show();
+      state.inputWindow.setIgnoreMouseEvents(false);
+    }
   }
 
   function registerGlobalShortcuts(shortcuts: ShortcutConfig | undefined) {

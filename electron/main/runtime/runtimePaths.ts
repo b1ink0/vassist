@@ -35,9 +35,11 @@ export function createRuntimePaths({
 
     const runtimeServerDir = getRuntimeServerBasePath();
     const runtimeGPTDir = path.join(runtimeServerDir, "gpt-sovits");
+    const runtimeGPTUtilsDir = path.join(runtimeGPTDir, "utils");
     const runtimeWhisperDir = path.join(runtimeServerDir, "whisper-stt");
 
     fs.mkdirSync(runtimeGPTDir, { recursive: true });
+    fs.mkdirSync(runtimeGPTUtilsDir, { recursive: true });
     fs.mkdirSync(runtimeWhisperDir, { recursive: true });
 
     const filesToCopy = [
@@ -48,6 +50,19 @@ export function createRuntimePaths({
       {
         src: path.join(serverBasePath, "gpt-sovits", "api.py"),
         dest: path.join(runtimeGPTDir, "api.py"),
+      },
+      {
+        src: path.join(serverBasePath, "gpt-sovits", "utils", "__init__.py"),
+        dest: path.join(runtimeGPTUtilsDir, "__init__.py"),
+      },
+      {
+        src: path.join(
+          serverBasePath,
+          "gpt-sovits",
+          "utils",
+          "reference_cache.py",
+        ),
+        dest: path.join(runtimeGPTUtilsDir, "reference_cache.py"),
       },
       {
         src: path.join(serverBasePath, "gpt-sovits", "requirements.txt"),

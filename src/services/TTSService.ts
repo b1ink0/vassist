@@ -720,16 +720,39 @@ class TTSService {
           }),
         });
 
+        Logger.log(
+          "other",
+          `${logPrefix} - TTS response received: ${response.status} ${response.statusText}`,
+        );
+
         if (!response.ok) {
+          const errorText = await response
+            .text()
+            .catch(() => "Unable to read error response");
           throw new Error(
-            `TTS request failed: ${response.status} ${response.statusText}`,
+            `TTS request failed: ${response.status} ${response.statusText}: ${errorText}`,
           );
         }
 
-        if (state.isStopped) return null;
-
         arrayBuffer = await response.arrayBuffer();
         contentType = response.headers.get("content-type") || "audio/mpeg";
+
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error("GPT-SoVITS returned an empty audio response");
+        }
+
+        if (state.isStopped) {
+          Logger.warn(
+            "other",
+            `${logPrefix} - Discarding ${arrayBuffer.byteLength} generated audio bytes because playback was stopped while the request was running`,
+          );
+          return null;
+        }
+
+        Logger.log(
+          "other",
+          `${logPrefix} - Speech generated (${arrayBuffer.byteLength} bytes, ${contentType})`,
+        );
       } else {
         // For other providers, use OpenAI client
         const response = await state.client.audio.speech.create({
@@ -911,6 +934,8 @@ class TTSService {
 
     const chunks = this.chunkText(text, maxChunkSize, minChunkSize);
     const results = [];
+    const failures: Error[] = [];
+    let cancelledChunks = 0;
 
     Logger.log(
       "TTSService",
@@ -922,7 +947,10 @@ class TTSService {
       if (!chunk) continue;
       try {
         const result = await this.generateSpeech(chunk, this.lipSyncEnabled);
-        if (!result) continue;
+        if (!result) {
+          cancelledChunks += 1;
+          continue;
+        }
         const { audio, bvmdUrl } = result;
         const audioUrl = URL.createObjectURL(audio);
         this.blobUrls.add(audioUrl);
@@ -931,8 +959,25 @@ class TTSService {
         if (onChunkReady)
           onChunkReady(chunk, audioUrl, bvmdUrl, i, chunks.length);
       } catch (error) {
-        Logger.error("TTSService", "Failed to generate chunk ${i + 1}:", error);
+        const failure = asError(error);
+        failures.push(failure);
+        Logger.error(
+          "TTSService",
+          `Failed to generate chunk ${i + 1}/${chunks.length}:`,
+          failure,
+        );
       }
+    }
+
+    if (results.length === 0 && failures.length > 0) {
+      throw failures[0];
+    }
+
+    if (results.length === 0 && cancelledChunks > 0) {
+      Logger.warn(
+        "TTSService",
+        `All ${cancelledChunks} generated chunk(s) were discarded because TTS playback was stopped`,
+      );
     }
 
     return results;

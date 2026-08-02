@@ -10,6 +10,7 @@ import type * as pathType from "path";
 type WindowState = {
   mainWindow: BrowserWindowInstance | null;
   inputWindow: BrowserWindowInstance | null;
+  inputWindowOpen: boolean;
 };
 
 type WindowManagerDeps = {
@@ -51,6 +52,7 @@ export function createWindowManager({
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
+      show: false,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -70,13 +72,21 @@ export function createWindowManager({
     maybeOpenDevTools(inputWindow);
 
     inputWindow.once("ready-to-show", () => {
-      inputWindow.show();
-      inputWindow.setOpacity(0);
+      if (state.inputWindowOpen) {
+        inputWindow.setOpacity(1);
+        inputWindow.show();
+        inputWindow.setIgnoreMouseEvents(false);
+        return;
+      }
+
       inputWindow.setIgnoreMouseEvents(true);
+      inputWindow.setOpacity(0);
+      inputWindow.hide();
     });
 
     inputWindow.on("closed", () => {
       state.inputWindow = null;
+      state.inputWindowOpen = false;
     });
   }
 

@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 154
-- Files: 543
-- Text files counted for metrics: 459
-- Total text lines: 141474
+- Directories: 155
+- Files: 545
+- Text files counted for metrics: 461
+- Total text lines: 142151
 - Code files counted for metrics: 365
-- Total code lines: 127037
+- Total code lines: 127433
 
 ## Line Counts by File Type
 
@@ -22,13 +22,13 @@ VAssist repository tree and file metrics.
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   260 |
-| TSX          | .tsx                    |    98 | 47807 |
-| TypeScript   | .ts, .mts, .cts         |   231 | 68842 |
+| TSX          | .tsx                    |    98 | 47804 |
+| TypeScript   | .ts, .mts, .cts         |   231 | 69241 |
 | Gradle       | .gradle                 |     7 |   242 |
 | JSON         | .json                   |    17 |   568 |
 | Markdown     | .md                     |    34 |  5937 |
-| Other Text   | mixed                   |     8 |  2913 |
-| Plain Text   | (no extension)          |    10 |  4011 |
+| Other Text   | mixed                   |    10 |  3193 |
+| Plain Text   | (no extension)          |    10 |  4012 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   395 |
@@ -39,7 +39,7 @@ VAssist repository tree and file metrics.
 - android/: 52 directories, 74 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 49 files
-- electron/: 13 directories, 48 files
+- electron/: 14 directories, 50 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
@@ -314,6 +314,9 @@ vassist/
 │   │       └── windowManager.ts
 │   ├── server/
 │   │   ├── gpt-sovits/
+│   │   │   ├── utils/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── reference_cache.py
 │   │   │   ├── api.py
 │   │   │   ├── bootstrap.ts
 │   │   │   ├── requirements.txt

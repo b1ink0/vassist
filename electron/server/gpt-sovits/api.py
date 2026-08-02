@@ -36,16 +36,45 @@ import io
 import base64
 import tempfile
 
+# The embedded Python distribution uses an isolated sys.path and does not add
+# the directory containing this script automatically.
+API_DIR = Path(__file__).resolve().parent
+if str(API_DIR) not in sys.path:
+    sys.path.insert(0, str(API_DIR))
+
+from utils.reference_cache import ReferenceAudioCache, cleanup_legacy_reference_files
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Directories
-BASE_DIR = Path(os.environ.get("GPTSOVITS_DATA_DIR", str(Path(__file__).parent)))
+# Directories and bounded reference-audio cache
+BASE_DIR = Path(os.environ.get("GPTSOVITS_DATA_DIR", str(API_DIR)))
 MODELS_DIR = BASE_DIR / "models"
 CHECKPOINTS_DIR = BASE_DIR / "checkpoints"
-TEMP_DIR = Path(tempfile.gettempdir()) / "gptsovits"
-TEMP_DIR.mkdir(exist_ok=True)
+LEGACY_TEMP_DIR = BASE_DIR / "temp"
+REFERENCE_AUDIO_CACHE_DIR = Path(tempfile.gettempdir()) / "gptsovits" / "references"
+
+
+def _read_nonnegative_int_env(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value; using %d", name, default)
+        return default
+
+
+reference_audio_cache = ReferenceAudioCache(
+    REFERENCE_AUDIO_CACHE_DIR,
+    ttl_seconds=_read_nonnegative_int_env(
+        "GPTSOVITS_REFERENCE_CACHE_TTL_SECONDS",
+        3600,
+    ),
+    max_bytes=_read_nonnegative_int_env(
+        "GPTSOVITS_REFERENCE_CACHE_MAX_MB",
+        256,
+    ) * 1024 * 1024,
+)
 
 # Add GPT-SoVITS source to Python path
 GPTSOVITS_DIR = BASE_DIR / "GPT-SoVITS"
@@ -59,7 +88,7 @@ if GPTSOVITS_DIR.exists():
     logger.info(f"Changed working directory to: {GPTSOVITS_DIR}")
     logger.info(f"Added GPT-SoVITS source to path: {GPTSOVITS_DIR}")
 
-# Reference audio cache (in-memory)
+# Reference metadata is process-local; audio bytes live in the bounded cache above.
 reference_cache = {}
 
 # Initialize FastAPI
@@ -74,15 +103,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Paths
-MODELS_DIR = BASE_DIR / "models"
-CHECKPOINTS_DIR = BASE_DIR / "checkpoints"
-TEMP_DIR = BASE_DIR / "temp"
-
 # Create directories
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
-TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Language mapping for GPT-SoVITS webui module
 # i18n("英文") returns "English", i18n("中文") returns "Chinese", etc.
@@ -961,7 +984,14 @@ def get_tts_wav(
         wav_buffer = io.BytesIO()
         sf.write(wav_buffer, final_audio, final_sample_rate, format='WAV')
         wav_buffer.seek(0)
-        yield wav_buffer.read()
+        wav_bytes = wav_buffer.read()
+        logger.info(
+            "Encoded WAV response: bytes=%d sample_rate=%d segments=%d",
+            len(wav_bytes),
+            final_sample_rate,
+            len(audio_segments),
+        )
+        yield wav_bytes
     finally:
         finished_at = time.perf_counter()
 
@@ -980,8 +1010,30 @@ def get_tts_wav(
             chunks_emitted,
         )
 
-# In-memory reference cache
-reference_cache = {}
+
+def stream_tts_with_reference_lease(
+    reference_cache_key: str,
+    ref_wav_path,
+    prompt_text,
+    prompt_language,
+    text,
+    text_language,
+    speed=1.0,
+    cut_strategy: Optional[str] = None,
+):
+    """Keep cached reference audio alive until streaming inference finishes."""
+    try:
+        yield from get_tts_wav(
+            ref_wav_path,
+            prompt_text,
+            prompt_language,
+            text,
+            text_language,
+            speed=speed,
+            cut_strategy=cut_strategy,
+        )
+    finally:
+        reference_audio_cache.release(reference_cache_key)
 
 @app.on_event("startup")
 async def startup_event():
@@ -989,6 +1041,20 @@ async def startup_event():
     logger.info("=" * 60)
     logger.info("Starting GPT-SoVITS TTS Server...")
     logger.info("=" * 60)
+    removed_files, removed_bytes = cleanup_legacy_reference_files(LEGACY_TEMP_DIR)
+    if removed_files:
+        logger.info(
+            "Removed %d legacy leaked reference file(s) (%.1f MiB)",
+            removed_files,
+            removed_bytes / (1024 * 1024),
+        )
+    expired_files, expired_bytes = reference_audio_cache.cleanup(force=True)
+    if expired_files:
+        logger.info(
+            "Expired %d cached reference file(s) (%.1f MiB)",
+            expired_files,
+            expired_bytes / (1024 * 1024),
+        )
     load_models()
     logger.info("Server ready for TTS requests")
     logger.info("=" * 60)
@@ -1006,14 +1072,19 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check"""
-    return {
-        "status": "healthy",
+    health = {
+        "status": "healthy" if models_loaded else "not_ready",
+        "pid": os.getpid(),
+        "models_loaded": models_loaded,
         "gpu_available": check_gpu(),
         "models": {
             "gpt": (MODELS_DIR / "v2Pro" / "s2Gv2ProPlus.pth").exists(),
             "sovits": (MODELS_DIR / "v2Pro" / "s2Dv2ProPlus.pth").exists()
         }
     }
+    if not models_loaded:
+        return JSONResponse(status_code=503, content=health)
+    return health
 
 def check_gpu():
     """Check if GPU is available"""
@@ -1036,10 +1107,11 @@ async def openai_compatible_tts(request: dict):
     - reference_id: cached reference ID (optional)
     - references: array of reference_ids for multi-ref (optional)
     """
+    reference_cache_key = None
+    lease_transferred_to_stream = False
     try:
         # Extract parameters
         text = request.get("input", "")
-        voice = request.get("voice", "default")
         speed = request.get("speed", 1.0)
         language = request.get("language", "en")
         cut_strategy = request.get("cut_strategy")
@@ -1047,7 +1119,7 @@ async def openai_compatible_tts(request: dict):
         if not text:
             raise HTTPException(status_code=400, detail="Missing 'input' field")
         
-        # Handle reference audio from cache or new upload
+        # Handle reference audio from the bounded, content-addressed cache.
         ref_audio_path = None
         ref_text = ""
         reference_id = request.get("reference_id", "")
@@ -1064,19 +1136,16 @@ async def openai_compatible_tts(request: dict):
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid base64 audio: {e}")
             
-            # Generate cache ID if not provided
+            reference_cache_key, ref_audio_path = reference_audio_cache.acquire(
+                audio_bytes
+            )
             if not reference_id:
-                import hashlib
-                reference_id = "ref_" + hashlib.md5(audio_bytes).hexdigest()[:16]
-            
-            # Save to temp file
-            ref_audio_path = TEMP_DIR / f"{reference_id}.wav"
-            with open(ref_audio_path, "wb") as f:
-                f.write(audio_bytes)
+                reference_id = "ref_" + reference_cache_key[:16]
             
             # Cache the reference
             reference_cache[reference_id] = {
                 "path": str(ref_audio_path),
+                "cache_key": reference_cache_key,
                 "text": ref_text,
                 "language": ref_lang,
                 "timestamp": time.time()
@@ -1087,30 +1156,42 @@ async def openai_compatible_tts(request: dict):
         elif reference_id and reference_id in reference_cache:
             # Use cached reference
             cached = reference_cache[reference_id]
-            ref_audio_path = Path(cached["path"])
-            ref_text = cached["text"]
-            language = cached.get("language", language)
-            logger.info(f"Using cached reference: {reference_id}")
-        
-        # Handle multiple references for better quality
-        ref_paths = []
-        ref_texts = []
-        
-        if "references" in request and isinstance(request["references"], list):
+            cached_lease = reference_audio_cache.acquire_existing(
+                Path(cached["path"])
+            )
+            if cached_lease:
+                reference_cache_key, ref_audio_path = cached_lease
+                ref_text = cached["text"]
+                language = cached.get("language", language)
+                cached["timestamp"] = time.time()
+                logger.info(f"Using cached reference: {reference_id}")
+            else:
+                reference_cache.pop(reference_id, None)
+
+        # The upstream call only consumes one reference. If no direct reference was
+        # selected, use the first live ID from the optional references list.
+        if ref_audio_path is None and isinstance(request.get("references"), list):
             for ref_id in request["references"]:
-                if ref_id in reference_cache:
-                    cached = reference_cache[ref_id]
-                    ref_paths.append(cached["path"])
-                    ref_texts.append(cached["text"])
-            logger.info(f"Using {len(ref_paths)} references")
-        elif ref_audio_path:
-            ref_paths = [str(ref_audio_path)]
-            ref_texts = [ref_text]
+                cached = reference_cache.get(ref_id)
+                if not cached:
+                    continue
+                cached_lease = reference_audio_cache.acquire_existing(
+                    Path(cached["path"])
+                )
+                if not cached_lease:
+                    reference_cache.pop(ref_id, None)
+                    continue
+                reference_cache_key, ref_audio_path = cached_lease
+                ref_text = cached["text"]
+                language = cached.get("language", language)
+                cached["timestamp"] = time.time()
+                logger.info(f"Using cached reference: {ref_id}")
+                break
         
         # Perform TTS inference
         logger.info(f"Generating TTS for: '{text[:50]}...' (lang={language}, speed={speed})")
         
-        if not ref_paths:
+        if ref_audio_path is None or reference_cache_key is None:
             raise HTTPException(
                 status_code=400,
                 detail="Reference audio required. Provide reference_audio or reference_id."
@@ -1132,16 +1213,16 @@ async def openai_compatible_tts(request: dict):
         prompt_language = dict_language.get(language, language)
         text_language = dict_language.get(language, language)
         
-        # Primary reference
-        ref_wav_path = ref_paths[0]
-        prompt_text = ref_texts[0] if ref_texts else ""
+        ref_wav_path = str(ref_audio_path)
+        prompt_text = ref_text
         
         logger.info(f"Running TTS: text='{text[:50]}...', ref={ref_wav_path}, lang={text_language}")
         
         # Return streaming audio response using generator
         try:
-            return StreamingResponse(
-                get_tts_wav(
+            response = StreamingResponse(
+                stream_tts_with_reference_lease(
+                    reference_cache_key,
                     ref_wav_path,
                     prompt_text,
                     prompt_language,
@@ -1152,6 +1233,8 @@ async def openai_compatible_tts(request: dict):
                 ),
                 media_type="audio/wav"
             )
+            lease_transferred_to_stream = True
+            return response
         except Exception as e:
             logger.error(f"TTS generation failed: {e}")
             raise HTTPException(
@@ -1164,6 +1247,9 @@ async def openai_compatible_tts(request: dict):
     except Exception as e:
         logger.error(f"TTS generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if reference_cache_key and not lease_transferred_to_stream:
+            reference_audio_cache.release(reference_cache_key)
 
 
 class TTSRequestJSON(BaseModel):
@@ -1188,6 +1274,8 @@ async def text_to_speech(request: Request):
     if not models_loaded:
         raise HTTPException(status_code=503, detail="Models not loaded")
     
+    reference_cache_key = None
+    lease_transferred_to_stream = False
     try:
         content_type = request.headers.get("content-type", "")
         
@@ -1225,9 +1313,11 @@ async def text_to_speech(request: Request):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid base64 audio data: {e}")
         
-        # Save to temporary file
-        temp_audio_path = TEMP_DIR / f"ref_{int(time.time() * 1000)}.wav"
-        temp_audio_path.write_bytes(audio_data)
+        # The model requires a path. Store identical reference bytes only once;
+        # the stream owns this lease until inference finishes or disconnects.
+        reference_cache_key, temp_audio_path = reference_audio_cache.acquire(
+            audio_data
+        )
         
         # Pass language codes directly
         prompt_language = language_val.lower()
@@ -1237,7 +1327,8 @@ async def text_to_speech(request: Request):
         
         # Return streaming response
         response = StreamingResponse(
-            get_tts_wav(
+            stream_tts_with_reference_lease(
+                reference_cache_key,
                 str(temp_audio_path),
                 ref_text_val,
                 prompt_language,
@@ -1249,12 +1340,17 @@ async def text_to_speech(request: Request):
             media_type="audio/wav",
             headers={"Content-Disposition": "attachment; filename=output.wav"}
         )
-        
+
+        lease_transferred_to_stream = True
         return response
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"TTS generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if reference_cache_key and not lease_transferred_to_stream:
+            reference_audio_cache.release(reference_cache_key)
 
 
 @app.get("/models/list")

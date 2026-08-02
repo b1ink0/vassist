@@ -935,6 +935,9 @@ class TTSServiceProxy extends ServiceProxy {
         return (await hostBridge.testConnection({ text: testText })) === true;
       }
 
+      // A previous chat close or playback cancellation leaves the direct TTS
+      // service stopped. A connection test is a new explicit playback session.
+      await this.resumePlayback();
       const audioItems = await this.generateChunkedSpeech(testText);
 
       if (!audioItems || audioItems.length === 0) {

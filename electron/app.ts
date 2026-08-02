@@ -56,6 +56,7 @@ const serverBasePath = devServerUrl
 const state = {
   mainWindow: null,
   inputWindow: null,
+  inputWindowOpen: false,
   tray: null,
 };
 
@@ -123,6 +124,7 @@ const localServerManager = createLocalServerManager({
   getModelsDir,
   loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
   ensureTTSBackendRunning: pythonServerManager.startGPTSoVITSServer,
+  restartTTSBackend: pythonServerManager.restartGPTSoVITSServer,
   onTTSRequestStart: pythonServerManager.markGPTSoVITSTTSRequestStart,
   onTTSRequestComplete: pythonServerManager.markGPTSoVITSTTSRequestComplete,
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,

@@ -87,6 +87,7 @@ type WhisperContextLike = {
 type LocalAIServerDeps = {
   loadLlamaApi?: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
+  restartTTSBackend?: ((reason: string) => void | Promise<void>) | null;
   onTTSRequestStart?: (() => void) | null;
   onTTSRequestComplete?: (() => void) | null;
 };
@@ -96,6 +97,69 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+class InvalidTTSAudioResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidTTSAudioResponseError";
+  }
+}
+
+function isRetryableTTSBackendError(error: unknown): boolean {
+  if (error instanceof InvalidTTSAudioResponseError) {
+    return true;
+  }
+
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  if (error.response) {
+    return error.response.status >= 500;
+  }
+
+  return new Set([
+    "ECONNABORTED",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EPIPE",
+    "ERR_NETWORK",
+    "ETIMEDOUT",
+  ]).has(error.code || "");
+}
+
+function validateTTSAudioResponse(data: unknown) {
+  const audio = Buffer.from(data as ArrayBuffer);
+  const isWav =
+    audio.length >= 44 &&
+    audio.toString("ascii", 0, 4) === "RIFF" &&
+    audio.toString("ascii", 8, 12) === "WAVE";
+
+  if (!isWav) {
+    throw new InvalidTTSAudioResponseError(
+      `GPT-SoVITS returned an invalid WAV response (${audio.length} bytes)`,
+    );
+  }
+
+  return audio;
+}
+
+function getTTSBackendErrorDetails(error: unknown) {
+  if (!axios.isAxiosError(error) || error.response?.data == null) {
+    return "";
+  }
+
+  try {
+    const body = Buffer.isBuffer(error.response.data)
+      ? error.response.data.toString("utf8")
+      : typeof error.response.data === "string"
+        ? error.response.data
+        : Buffer.from(error.response.data as ArrayBuffer).toString("utf8");
+    return body.trim().slice(0, 2000);
+  } catch {
+    return "";
+  }
 }
 
 export class LocalAIServer {
@@ -142,6 +206,7 @@ export class LocalAIServer {
   currentModelPath: string | null;
   loadLlamaApi: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning: (() => void | Promise<void>) | null;
+  restartTTSBackend: ((reason: string) => void | Promise<void>) | null;
   onTTSRequestStart: (() => void) | null;
   onTTSRequestComplete: (() => void) | null;
   isLoadingModel: boolean;
@@ -155,6 +220,7 @@ export class LocalAIServer {
   constructor({
     loadLlamaApi,
     ensureTTSBackendRunning,
+    restartTTSBackend,
     onTTSRequestStart,
     onTTSRequestComplete,
   }: LocalAIServerDeps = {}) {
@@ -175,6 +241,8 @@ export class LocalAIServer {
       typeof ensureTTSBackendRunning === "function"
         ? ensureTTSBackendRunning
         : null;
+    this.restartTTSBackend =
+      typeof restartTTSBackend === "function" ? restartTTSBackend : null;
     this.onTTSRequestStart =
       typeof onTTSRequestStart === "function" ? onTTSRequestStart : null;
     this.onTTSRequestComplete =
@@ -678,29 +746,66 @@ export class LocalAIServer {
         language: reference_language,
       });
 
-      const response = await axios.post(
-        `${this.config.tts.proxyUrl}/tts`,
-        requestBody,
-        {
-          headers: { "Content-Type": "application/json" },
-          responseType: "arraybuffer",
-          timeout: 30000,
-        },
-      );
+      const forwardRequest = async () => {
+        const response = await axios.post(
+          `${this.config.tts.proxyUrl}/tts`,
+          requestBody,
+          {
+            headers: { "Content-Type": "application/json" },
+            responseType: "arraybuffer",
+            timeout: 30000,
+          },
+        );
+        const audio = validateTTSAudioResponse(response.data);
+        console.log("[TTS] GPT-SoVITS response:", {
+          status: response.status,
+          bytes: audio.length,
+          contentType: response.headers["content-type"] || "unknown",
+        });
+        return audio;
+      };
+
+      let audio;
+      try {
+        audio = await forwardRequest();
+      } catch (error) {
+        if (
+          !isRetryableTTSBackendError(error) ||
+          (!this.restartTTSBackend && !this.ensureTTSBackendRunning)
+        ) {
+          throw error;
+        }
+
+        console.warn(
+          `[TTS] Backend request failed (${getErrorMessage(error)}); restarting and retrying once`,
+        );
+        if (this.restartTTSBackend) {
+          await this.restartTTSBackend(getErrorMessage(error));
+        } else if (this.ensureTTSBackendRunning) {
+          await this.ensureTTSBackendRunning();
+        }
+        audio = await forwardRequest();
+      }
 
       // Return audio
       res.setHeader("Content-Type", "audio/wav");
-      res.send(Buffer.from(response.data));
+      res.setHeader("Content-Length", String(audio.length));
+      res.send(audio);
     } catch (error) {
+      const backendDetails = getTTSBackendErrorDetails(error);
       console.error("[TTS] Proxy error:", getErrorMessage(error));
       if (axios.isAxiosError(error) && error.response) {
         console.error(
           "[TTS] GPT-SoVITS error:",
           error.response.status,
           error.response.statusText,
+          backendDetails || "(no response body)",
         );
       }
-      throw new Error("TTS service unavailable");
+      const detailSuffix = backendDetails ? `: ${backendDetails}` : "";
+      throw new Error(
+        `TTS service unavailable: ${getErrorMessage(error)}${detailSuffix}`,
+      );
     } finally {
       this.onTTSRequestComplete?.();
     }

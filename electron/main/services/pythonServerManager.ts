@@ -60,6 +60,8 @@ export function createPythonServerManager({
   let whisperSetupRunner: SetupRunnerLike | null = null;
   let gptsovitsStartupPromise: Promise<void> | null = null;
   let gptsovitsRecyclePromise: Promise<void> | null = null;
+  let gptsovitsRestartPromise: Promise<void> | null = null;
+  let gptsovitsAdoptedPid: number | null = null;
   let gptsovitsIdleTimer: NodeJS.Timeout | null = null;
   let gptsovitsActiveRequests = 0;
   let gptsovitsHandledRequests = 0;
@@ -99,9 +101,8 @@ export function createPythonServerManager({
     }
   }
 
-  function resetGPTSoVITSUsageState() {
+  function resetGPTSoVITSWorkerUsageState() {
     clearGPTSoVITSIdleTimer();
-    gptsovitsActiveRequests = 0;
     gptsovitsHandledRequests = 0;
     gptsovitsLastUsedAt = null;
   }
@@ -118,15 +119,14 @@ export function createPythonServerManager({
       }
 
       console.log(`[GPT-SoVITS] Recycling worker: ${reason}`);
-      stopGPTSoVITSServer();
+      await stopGPTSoVITSServer("recycle");
 
       if (!gptsovitsKeepWarm) {
         return;
       }
 
-      await delay(250);
       console.log("[GPT-SoVITS] Prewarming fresh worker after recycle...");
-      await startGPTSoVITSServer();
+      await startGPTSoVITSServer(true);
     })()
       .catch((error) => {
         console.error("[GPT-SoVITS] Recycle error:", error);
@@ -142,7 +142,7 @@ export function createPythonServerManager({
     clearGPTSoVITSIdleTimer();
 
     if (
-      !gptsovitsProcess ||
+      (!gptsovitsProcess && !gptsovitsAdoptedPid) ||
       gptsovitsActiveRequests > 0 ||
       gptsovitsRecyclePromise
     ) {
@@ -164,7 +164,7 @@ export function createPythonServerManager({
       gptsovitsIdleTimer = null;
 
       if (
-        !gptsovitsProcess ||
+        (!gptsovitsProcess && !gptsovitsAdoptedPid) ||
         gptsovitsActiveRequests > 0 ||
         gptsovitsRecyclePromise
       ) {
@@ -205,24 +205,86 @@ export function createPythonServerManager({
     scheduleGPTSoVITSIdleAction();
   }
 
-  async function isGPTSoVITSHealthy() {
+  async function getGPTSoVITSHealth(timeoutMs = 2500) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch("http://127.0.0.1:9880/health");
-      return response.ok;
+      const response = await fetch("http://127.0.0.1:9880/health", {
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        return { healthy: false, pid: null };
+      }
+
+      const data = (await response.json().catch(() => null)) as {
+        status?: string;
+        models_loaded?: boolean;
+        pid?: number;
+      } | null;
+      return {
+        healthy: data?.status === "healthy" && data.models_loaded === true,
+        pid:
+          typeof data?.pid === "number" && Number.isInteger(data.pid)
+            ? data.pid
+            : null,
+      };
+    } catch {
+      return { healthy: false, pid: null };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function isGPTSoVITSHealthy(timeoutMs = 2500) {
+    return (await getGPTSoVITSHealth(timeoutMs)).healthy;
+  }
+
+  function isProcessAlive(pid: number) {
+    try {
+      process.kill(pid, 0);
+      return true;
     } catch {
       return false;
     }
   }
 
-  async function waitForGPTSoVITSReady(timeoutMs = 180000) {
+  async function waitForProcessExit(
+    childProcess: ChildProcessWithoutNullStreams | null,
+    pid: number | null,
+    timeoutMs: number,
+  ) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const isAlive = childProcess
+        ? childProcess.exitCode === null && childProcess.signalCode === null
+        : Boolean(pid && isProcessAlive(pid));
+      if (!isAlive) {
+        return true;
+      }
+      await delay(100);
+    }
+    return false;
+  }
+
+  async function waitForGPTSoVITSReady(
+    expectedProcess: ChildProcessWithoutNullStreams,
+    timeoutMs = 180000,
+  ) {
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < timeoutMs) {
-      if (!gptsovitsProcess) {
+      if (
+        gptsovitsProcess !== expectedProcess ||
+        expectedProcess.exitCode !== null ||
+        expectedProcess.signalCode !== null
+      ) {
         throw new Error("GPT-SoVITS process exited before becoming ready");
       }
 
       if (await isGPTSoVITSHealthy()) {
+        if (gptsovitsProcess !== expectedProcess) {
+          throw new Error("GPT-SoVITS process changed during startup");
+        }
         return;
       }
 
@@ -253,29 +315,27 @@ export function createPythonServerManager({
     );
   }
 
-  async function startGPTSoVITSServer() {
-    if (gptsovitsStartupPromise) {
-      await gptsovitsStartupPromise;
-      return;
-    }
-
+  async function startGPTSoVITSAttempt() {
     if (gptsovitsProcess) {
-      console.log(
-        "[GPT-SoVITS] Server process already running, checking health",
+      if (await isGPTSoVITSHealthy()) {
+        console.log("[GPT-SoVITS] Managed server is healthy");
+        return;
+      }
+
+      console.warn(
+        "[GPT-SoVITS] Managed process is running but unhealthy; replacing it",
       );
-      gptsovitsStartupPromise = waitForGPTSoVITSReady()
-        .then(() => {
-          console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
-        })
-        .finally(() => {
-          gptsovitsStartupPromise = null;
-        });
-      await gptsovitsStartupPromise;
-      return;
+      await stopGPTSoVITSServer("unhealthy process", true);
     }
 
-    if (await isGPTSoVITSHealthy()) {
-      console.log("[GPT-SoVITS] Server already healthy");
+    const existingHealth = await getGPTSoVITSHealth();
+    if (existingHealth.healthy) {
+      gptsovitsAdoptedPid = existingHealth.pid;
+      console.log(
+        existingHealth.pid
+          ? `[GPT-SoVITS] Adopted healthy existing server (pid=${existingHealth.pid})`
+          : "[GPT-SoVITS] Server already healthy (pid unavailable)",
+      );
       return;
     }
 
@@ -353,7 +413,7 @@ export function createPythonServerManager({
         console.log("[GPT-SoVITS] ROCm worker env:", rocmWorkerEnv);
       }
 
-      gptsovitsProcess = spawn(pythonExe, [apiScript], {
+      const spawnedProcess = spawn(pythonExe, [apiScript], {
         cwd: gptsovitsDataDir,
         env: {
           ...processEnv,
@@ -375,57 +435,155 @@ export function createPythonServerManager({
           KMP_DUPLICATE_LIB_OK: "TRUE",
         },
       });
+      gptsovitsProcess = spawnedProcess;
+      gptsovitsAdoptedPid = null;
 
-      gptsovitsProcess.stdout.on("data", (data: Buffer) => {
+      spawnedProcess.stdout.on("data", (data: Buffer) => {
         console.log(`[GPT-SoVITS] ${data.toString().trim()}`);
       });
 
-      gptsovitsProcess.stderr.on("data", (data: Buffer) => {
+      spawnedProcess.stderr.on("data", (data: Buffer) => {
         console.error(`[GPT-SoVITS] ${data.toString().trim()}`);
       });
 
-      gptsovitsProcess.on("error", (error: Error) => {
+      spawnedProcess.on("error", (error: Error) => {
         console.error("[GPT-SoVITS] Failed to start:", error);
-        resetGPTSoVITSUsageState();
-        gptsovitsProcess = null;
+        if (gptsovitsProcess === spawnedProcess) {
+          resetGPTSoVITSWorkerUsageState();
+          gptsovitsProcess = null;
+        }
       });
-      resetGPTSoVITSUsageState();
+      resetGPTSoVITSWorkerUsageState();
 
-      gptsovitsProcess.on(
+      spawnedProcess.on(
         "exit",
         (code: number | null, signal: NodeJS.Signals | null) => {
           console.log(
             `[GPT-SoVITS] Process exited with code ${code}, signal ${signal}`,
           );
-          resetGPTSoVITSUsageState();
-          gptsovitsProcess = null;
+          // A deliberately stopped older process may exit after its replacement
+          // has already started. Never clear the replacement's process handle.
+          if (gptsovitsProcess === spawnedProcess) {
+            resetGPTSoVITSWorkerUsageState();
+            gptsovitsProcess = null;
+          }
+          if (gptsovitsAdoptedPid === spawnedProcess.pid) {
+            gptsovitsAdoptedPid = null;
+          }
         },
       );
 
-      gptsovitsStartupPromise = waitForGPTSoVITSReady()
-        .then(() => {
-          console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
-        })
-        .finally(() => {
-          gptsovitsStartupPromise = null;
-        });
-
-      await gptsovitsStartupPromise;
+      await waitForGPTSoVITSReady(spawnedProcess);
+      console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
     } catch (error) {
       console.error("[GPT-SoVITS] Start error:", error);
       throw error;
     }
   }
 
-  function stopGPTSoVITSServer() {
-    gptsovitsStartupPromise = null;
+  async function startGPTSoVITSServer(skipRecycleWait = false) {
+    if (!skipRecycleWait && gptsovitsRestartPromise) {
+      await gptsovitsRestartPromise;
+      return;
+    }
+
+    if (!skipRecycleWait && gptsovitsRecyclePromise) {
+      await gptsovitsRecyclePromise;
+      if (await isGPTSoVITSHealthy()) {
+        return;
+      }
+    }
+
+    if (gptsovitsStartupPromise) {
+      await gptsovitsStartupPromise;
+      return;
+    }
+
+    // Assign the promise before the first asynchronous health check completes,
+    // so simultaneous requests cannot spawn competing workers.
+    const startupAttempt = startGPTSoVITSAttempt();
+    gptsovitsStartupPromise = startupAttempt;
+    try {
+      await startupAttempt;
+    } finally {
+      if (gptsovitsStartupPromise === startupAttempt) {
+        gptsovitsStartupPromise = null;
+      }
+    }
+  }
+
+  async function stopGPTSoVITSServer(
+    reason = "requested stop",
+    preserveStartupPromise = false,
+  ) {
+    if (!preserveStartupPromise) {
+      gptsovitsStartupPromise = null;
+    }
     clearGPTSoVITSIdleTimer();
-    if (gptsovitsProcess) {
-      console.log("[GPT-SoVITS] Stopping server...");
-      resetGPTSoVITSUsageState();
-      gptsovitsProcess.kill("SIGTERM");
+    const processToStop = gptsovitsProcess;
+    let adoptedPid = gptsovitsAdoptedPid;
+
+    if (!processToStop && !adoptedPid) {
+      const existingHealth = await getGPTSoVITSHealth();
+      adoptedPid = existingHealth.healthy ? existingHealth.pid : null;
+    }
+
+    if (!processToStop && !adoptedPid) {
+      return;
+    }
+
+    console.log(`[GPT-SoVITS] Stopping server (${reason})...`);
+    if (gptsovitsProcess === processToStop) {
       gptsovitsProcess = null;
     }
+    gptsovitsAdoptedPid = null;
+    resetGPTSoVITSWorkerUsageState();
+
+    try {
+      if (processToStop) {
+        processToStop.kill("SIGTERM");
+      } else if (adoptedPid) {
+        process.kill(adoptedPid, "SIGTERM");
+      }
+    } catch (error) {
+      console.warn("[GPT-SoVITS] Graceful stop failed:", error);
+    }
+
+    const exitedGracefully = await waitForProcessExit(
+      processToStop,
+      adoptedPid,
+      5000,
+    );
+    if (!exitedGracefully) {
+      console.warn("[GPT-SoVITS] Worker did not exit; forcing termination");
+      try {
+        if (processToStop) {
+          processToStop.kill("SIGKILL");
+        } else if (adoptedPid) {
+          process.kill(adoptedPid, "SIGKILL");
+        }
+      } catch (error) {
+        console.warn("[GPT-SoVITS] Forced stop failed:", error);
+      }
+      await waitForProcessExit(processToStop, adoptedPid, 2000);
+    }
+  }
+
+  async function restartGPTSoVITSServer(reason = "request recovery") {
+    if (gptsovitsRestartPromise) {
+      await gptsovitsRestartPromise;
+      return;
+    }
+
+    gptsovitsRestartPromise = (async () => {
+      console.warn(`[GPT-SoVITS] Restarting worker: ${reason}`);
+      await stopGPTSoVITSServer(reason);
+      await startGPTSoVITSServer(true);
+    })().finally(() => {
+      gptsovitsRestartPromise = null;
+    });
+
+    await gptsovitsRestartPromise;
   }
 
   function startWhisperServer() {
@@ -762,6 +920,7 @@ export function createPythonServerManager({
 
   return {
     startGPTSoVITSServer,
+    restartGPTSoVITSServer,
     stopGPTSoVITSServer,
     setGPTSoVITSTorchBackend,
     startWhisperServer,

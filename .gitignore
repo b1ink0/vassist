@@ -67,3 +67,4 @@ playwright-report
 test-results
 .vercel
 .env*
+__pycache__

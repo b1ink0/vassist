@@ -20,10 +20,7 @@ export function InputWindowManager() {
         if (isChatInputVisible) {
           await api.inputWindow.open();
         } else {
-          const isOpen = await api.inputWindow.isOpen();
-          if (isOpen) {
-            await api.inputWindow.close();
-          }
+          await api.inputWindow.close();
         }
       } catch (error) {
         Logger.error(

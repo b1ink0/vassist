@@ -11,6 +11,7 @@ import type {
 type WindowState = {
   mainWindow: BrowserWindowInstance | null;
   inputWindow: BrowserWindowInstance | null;
+  inputWindowOpen: boolean;
 };
 
 type UIHandlersDeps = {
@@ -36,6 +37,27 @@ export function registerUIIPCHandlers({
   setNativeDevToolsEnabled,
   getNativeDevToolsEnabled,
 }: UIHandlersDeps) {
+  const openInputWindow = () => {
+    state.inputWindowOpen = true;
+
+    if (state.inputWindow && !state.inputWindow.isDestroyed()) {
+      state.inputWindow.setOpacity(1);
+      state.inputWindow.show();
+      state.inputWindow.setIgnoreMouseEvents(false);
+      state.inputWindow.focus();
+    }
+  };
+
+  const closeInputWindow = () => {
+    state.inputWindowOpen = false;
+
+    if (state.inputWindow && !state.inputWindow.isDestroyed()) {
+      state.inputWindow.setIgnoreMouseEvents(true);
+      state.inputWindow.hide();
+      state.inputWindow.setOpacity(0);
+    }
+  };
+
   ipcMain.handle("window:minimize", () => {
     if (state.mainWindow) state.mainWindow.minimize();
   });
@@ -74,6 +96,11 @@ export function registerUIIPCHandlers({
       const targetWindow = senderWindow ?? state.mainWindow;
 
       if (targetWindow) {
+        if (targetWindow === state.inputWindow && !targetWindow.isVisible()) {
+          targetWindow.setIgnoreMouseEvents(true);
+          return;
+        }
+
         targetWindow.setIgnoreMouseEvents(ignore, options);
       }
     },
@@ -227,23 +254,21 @@ export function registerUIIPCHandlers({
     return getNativeDevToolsEnabled();
   });
 
-  ipcMain.handle("input-window:open", async () => {
-    if (state.inputWindow) {
-      state.inputWindow.setOpacity(1);
-      state.inputWindow.setIgnoreMouseEvents(false);
-      state.inputWindow.focus();
-    }
+  ipcMain.handle("input-window:open", () => {
+    openInputWindow();
   });
 
   ipcMain.handle("input-window:close", () => {
-    if (state.inputWindow) {
-      state.inputWindow.setOpacity(0);
-      state.inputWindow.setIgnoreMouseEvents(true);
-    }
+    closeInputWindow();
   });
 
   ipcMain.handle("input-window:is-open", () => {
-    return state.inputWindow && state.inputWindow.getOpacity() > 0;
+    return Boolean(
+      state.inputWindowOpen &&
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed() &&
+      state.inputWindow.isVisible(),
+    );
   });
 
   ipcMain.on("chatInput:send", (_event: IpcMainEvent, data: unknown) => {
@@ -262,6 +287,8 @@ export function registerUIIPCHandlers({
   );
 
   ipcMain.on("chatInput:close", () => {
+    closeInputWindow();
+
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send("chatInput:close");
     }
