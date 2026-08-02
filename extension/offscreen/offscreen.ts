@@ -12,18 +12,17 @@ import { BVMDConversionCore } from "../../src/workers/shared/BVMDConversionCore"
 import { Scene } from "@babylonjs/core/scene";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 
-// Configure transformers.js to use WASM files from assets BEFORE importing KokoroTTSCore
-import { env } from "@huggingface/transformers";
-if (env.backends?.onnx?.wasm) {
-  env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL("assets/");
-}
+// Configure the transformers runtime bundled inside kokoro-js. Configuring a
+// separately imported @huggingface/transformers instance does not affect
+// Kokoro's runtime and leaves it trying to load ONNX Runtime from a CDN.
+import { env as kokoroEnv } from "kokoro-js";
+kokoroEnv.wasmPaths = chrome.runtime.getURL("assets/");
 Logger.log(
   "Offscreen",
-  "Configured transformers.js to use WASM files from:",
+  "Configured Kokoro to use packaged WASM files from:",
   chrome.runtime.getURL("assets/"),
 );
 
-// Now import KokoroTTSCore (it will use the configured paths)
 import KokoroTTSCore from "../../src/workers/shared/KokoroTTSCore";
 import Logger from "../../src/services/LoggerService";
 

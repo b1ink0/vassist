@@ -228,6 +228,8 @@ export interface MmdRuntimeLike {
 
 export interface MorphControllerLike {
   setMorphWeight: (name: string, weight: number) => void;
+  getMorphIndices: (name: string) => readonly number[] | undefined;
+  update: () => void;
 }
 
 export interface SkeletonBoneLike {

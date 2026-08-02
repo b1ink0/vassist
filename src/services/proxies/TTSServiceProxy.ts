@@ -11,9 +11,12 @@ import { MessageTypes } from "../../../extension/shared/MessageTypes";
 import Logger from "../LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultTTSConfig } from "../../config/aiConfig";
+import liveLipSyncService from "../audio/LiveLipSyncService";
 
 interface TTSProxyConfig {
   enabled?: boolean;
+  accurateLipSync?: boolean;
+  legacyLipSync?: boolean;
   kokoro?: {
     modelId?: string;
     device?: string;
@@ -196,6 +199,10 @@ class TTSServiceProxy extends ServiceProxy {
   async configure(config: Record<string, unknown>): Promise<boolean> {
     // Store the config for later use in initializeKokoro
     this.lastConfigured = config;
+    liveLipSyncService.setAccurateLipSyncEnabled(
+      config.accurateLipSync !== false,
+    );
+    liveLipSyncService.setLegacyLipSyncEnabled(config.legacyLipSync === true);
 
     const hostBridge = this.getHostTransportBridge()?.tts;
     if (hostBridge) {
@@ -349,12 +356,23 @@ class TTSServiceProxy extends ServiceProxy {
   ): Promise<TTSResult | null> {
     try {
       await this.ensureConfigured();
+      const accurateLipSyncRequested =
+        generateLipSync && liveLipSyncService.isAccurateLipSyncEnabled();
+      const legacyLipSyncRequested =
+        accurateLipSyncRequested && liveLipSyncService.isLegacyLipSyncEnabled();
+      const liveLipSyncReady =
+        accurateLipSyncRequested &&
+        !legacyLipSyncRequested &&
+        (await liveLipSyncService.prepare());
+      const generateRecordedLipSync =
+        legacyLipSyncRequested ||
+        (accurateLipSyncRequested && !liveLipSyncReady);
 
       const hostBridge = this.getHostTransportBridge()?.tts;
       if (hostBridge) {
         const response = await hostBridge.generateSpeech({
           text,
-          generateLipSync,
+          generateLipSync: generateRecordedLipSync,
         });
 
         if (!response?.audio) {
@@ -368,7 +386,7 @@ class TTSServiceProxy extends ServiceProxy {
 
         return {
           audio: audioBuffer,
-          bvmdUrl: response.bvmdUrl ?? null,
+          bvmdUrl: generateRecordedLipSync ? (response.bvmdUrl ?? null) : null,
           ...(response.mimeType ? { mimeType: response.mimeType } : {}),
         };
       }
@@ -429,7 +447,7 @@ class TTSServiceProxy extends ServiceProxy {
         }
 
         // 2. If lip sync needed, process through offscreen (includes VMD→BVMD conversion)
-        if (generateLipSync) {
+        if (generateRecordedLipSync) {
           try {
             // IMPORTANT: Convert ArrayBuffer to Array before sending
             // Chrome's structured clone transfers ArrayBuffers but copies Arrays
@@ -489,7 +507,7 @@ class TTSServiceProxy extends ServiceProxy {
         // Dev mode: Direct service handles everything
         const result = await this.directService.generateSpeech(
           text,
-          generateLipSync,
+          generateRecordedLipSync,
         );
         Logger.log(
           "TTSServiceProxy",
@@ -785,7 +803,7 @@ class TTSServiceProxy extends ServiceProxy {
       }
 
       try {
-        const response = (await bridge.sendMessage(
+        const responseValue = await bridge.sendMessage(
           MessageTypes.KOKORO_INIT,
           {
             modelId:
@@ -793,7 +811,15 @@ class TTSServiceProxy extends ServiceProxy {
             device: kokoroConfig.device || "auto",
           },
           { timeout: 300000 }, // 5 minutes for model download
-        )) as TTSBridgeResponse;
+        );
+        if (
+          !responseValue ||
+          typeof responseValue !== "object" ||
+          !("initialized" in responseValue)
+        ) {
+          throw new Error("Kokoro initialization returned an invalid response");
+        }
+        const response = responseValue as TTSBridgeResponse;
         return response.initialized === true;
       } finally {
         if (progressListener) {

@@ -39,6 +39,7 @@ import {
 import TTSService from "../../services/TTSService";
 import { resourceLoader } from "../../utils/ResourceLoader";
 import Logger from "../../services/LoggerService";
+import type { LiveLipSyncMouthWeights } from "../../services/audio/LiveLipSyncService";
 import type {
   AnimationLoaderLike,
   LoadedAnimationLike,
@@ -54,6 +55,19 @@ import type {
 type AssistantStateValue = (typeof AssistantState)[keyof typeof AssistantState];
 
 type StateBehaviorLike = (typeof StateBehavior)[keyof typeof StateBehavior];
+
+type LiveLipSyncVowel = keyof LiveLipSyncMouthWeights;
+
+const LIVE_LIP_SYNC_MORPH_CANDIDATES: Record<
+  LiveLipSyncVowel,
+  readonly string[]
+> = {
+  a: ["\u3042", "A", "a"],
+  i: ["\u3044", "I", "i"],
+  u: ["\u3046", "U", "u"],
+  e: ["\u3048", "E", "e"],
+  o: ["\u304a", "O", "o"],
+};
 
 interface CompositePlayOptions {
   primaryWeight?: number;
@@ -170,6 +184,12 @@ export class AnimationManager {
   private blinkSpeedMultiplier: number;
   private _blinkMorphsApplied: boolean;
   private blinkCompatibleMorphs: string[];
+  private liveLipSyncWeights: LiveLipSyncMouthWeights | null;
+  private _liveLipSyncMorphsApplied: boolean;
+  private liveLipSyncMorphNames: Record<LiveLipSyncVowel, string | null> | null;
+  private genericLipSyncAudio: HTMLAudioElement | null;
+  private genericLipSyncAnimation: LoadedAnimationLike | null;
+  private genericLipSyncLoadToken: number;
 
   private visibilityChangeHandler: (() => void) | null;
 
@@ -320,6 +340,12 @@ export class AnimationManager {
     this.blinkEnabled = true; // Enable/disable blinking system
     this.blinkSpeedMultiplier = 1.5; // Speed multiplier for blink animation (higher = faster)
     this._blinkMorphsApplied = false; // Track if blink morphs are currently applied (for cleanup)
+    this.liveLipSyncWeights = null;
+    this._liveLipSyncMorphsApplied = false;
+    this.liveLipSyncMorphNames = null;
+    this.genericLipSyncAudio = null;
+    this.genericLipSyncAnimation = null;
+    this.genericLipSyncLoadToken = 0;
 
     // Visibility change handling
     this.visibilityChangeHandler = null;
@@ -2197,6 +2223,10 @@ export class AnimationManager {
   registerRenderObserver(): void {
     this.renderObserver = this.scene.onBeforeRenderObservable.add(() => {
       this.onBeforeRender();
+      // MMD evaluates and applies its morph tracks before this observer. Apply
+      // the selected mouth overlay now, then flush the morph controller once
+      // more so the result is visible rather than being overwritten.
+      this._applyTtsLipSyncMorphs();
     });
 
     // CRITICAL: Register AFTER render observer to apply blinks AFTER animations
@@ -2560,6 +2590,127 @@ export class AnimationManager {
       }
       this._blinkMorphsApplied = true;
     }
+  }
+
+  /**
+   * Set real-time mouth weights without changing the currently running body animation.
+   * The values are applied after babylon-mmd evaluates its animation tracks.
+   */
+  setLiveLipSyncWeights(weights: LiveLipSyncMouthWeights | null): void {
+    this.liveLipSyncWeights = weights;
+    if (!weights && this._liveLipSyncMorphsApplied) {
+      const morphController = this.mmdModel.morph;
+      for (const morphName of Object.values(this._getLiveLipSyncMorphNames())) {
+        if (morphName) morphController.setMorphWeight(morphName, 0);
+      }
+      morphController.update();
+      this._liveLipSyncMorphsApplied = false;
+    }
+  }
+
+  /**
+   * Use the built-in mouth-only BVMD as a lightweight overlay. Sampling from
+   * audio.currentTime keeps loop stitching, pauses, and the final crop aligned
+   * with actual playback without changing the active body animation.
+   */
+  setGenericLipSyncAudio(audio: HTMLAudioElement | null): void {
+    this.genericLipSyncAudio = audio;
+    const loadToken = ++this.genericLipSyncLoadToken;
+
+    if (!audio) {
+      if (this._liveLipSyncMorphsApplied) this._clearTtsLipSyncMorphs();
+      return;
+    }
+
+    if (this.genericLipSyncAnimation) return;
+    const genericConfig = getAnimationsByCategory("lipSync")[0];
+    if (!genericConfig) {
+      Logger.warn("AnimationManager", "Generic lip sync animation is missing");
+      return;
+    }
+
+    void this.loadAnimation(genericConfig)
+      .then((animation) => {
+        if (
+          !animation ||
+          this.disposed ||
+          loadToken !== this.genericLipSyncLoadToken ||
+          this.genericLipSyncAudio !== audio
+        ) {
+          return;
+        }
+        this.genericLipSyncAnimation = animation;
+        Logger.log("AnimationManager", "Generic mouth BVMD ready");
+      })
+      .catch((error) => {
+        Logger.error(
+          "AnimationManager",
+          "Could not load generic mouth BVMD",
+          error,
+        );
+      });
+  }
+
+  private _applyTtsLipSyncMorphs(): void {
+    if (this.disposed) return;
+
+    let weights = this.liveLipSyncWeights;
+    if (!weights) weights = this._sampleGenericLipSyncWeights();
+    if (!weights) return;
+
+    const morphController = this.mmdModel.morph;
+    const morphNames = this._getLiveLipSyncMorphNames();
+    for (const vowel of Object.keys(morphNames) as LiveLipSyncVowel[]) {
+      const morphName = morphNames[vowel];
+      if (morphName) morphController.setMorphWeight(morphName, weights[vowel]);
+    }
+    morphController.update();
+    this._liveLipSyncMorphsApplied = true;
+  }
+
+  private _sampleGenericLipSyncWeights(): LiveLipSyncMouthWeights | null {
+    const audio = this.genericLipSyncAudio;
+    const animation = this.genericLipSyncAnimation;
+    if (!audio || !animation || audio.ended || animation.endFrame <= 0) {
+      return null;
+    }
+
+    const frame = (audio.currentTime * 30) % animation.endFrame;
+    const weights: LiveLipSyncMouthWeights = { a: 0, i: 0, u: 0, e: 0, o: 0 };
+    for (const vowel of Object.keys(weights) as LiveLipSyncVowel[]) {
+      const track = animation.morphTracks?.find((candidate) =>
+        LIVE_LIP_SYNC_MORPH_CANDIDATES[vowel].includes(candidate.name),
+      );
+      if (track) weights[vowel] = this._getMorphWeightAtFrame(track, frame);
+    }
+    return weights;
+  }
+
+  private _clearTtsLipSyncMorphs(): void {
+    const morphController = this.mmdModel.morph;
+    for (const morphName of Object.values(this._getLiveLipSyncMorphNames())) {
+      if (morphName) morphController.setMorphWeight(morphName, 0);
+    }
+    morphController.update();
+    this._liveLipSyncMorphsApplied = false;
+  }
+
+  private _getLiveLipSyncMorphNames(): Record<LiveLipSyncVowel, string | null> {
+    if (this.liveLipSyncMorphNames) return this.liveLipSyncMorphNames;
+
+    const morphController = this.mmdModel.morph;
+    const resolved = {} as Record<LiveLipSyncVowel, string | null>;
+    for (const vowel of Object.keys(
+      LIVE_LIP_SYNC_MORPH_CANDIDATES,
+    ) as LiveLipSyncVowel[]) {
+      resolved[vowel] =
+        LIVE_LIP_SYNC_MORPH_CANDIDATES[vowel].find(
+          (name) => morphController.getMorphIndices(name) !== undefined,
+        ) ?? null;
+    }
+    this.liveLipSyncMorphNames = resolved;
+    Logger.log("AnimationManager", "Resolved live PMX mouth morphs", resolved);
+    return resolved;
   }
 
   /**
@@ -3602,6 +3753,9 @@ export class AnimationManager {
 
     // Set disposed flag to prevent further operations
     this.disposed = true;
+    this.genericLipSyncLoadToken++;
+    this.genericLipSyncAudio = null;
+    this.liveLipSyncWeights = null;
 
     // Clear animation queue
     this.clearQueue();

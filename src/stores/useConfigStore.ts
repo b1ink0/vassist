@@ -1636,27 +1636,25 @@ export const useConfigStore = create<ConfigStoreState>()(
           let lastUpdateTime = 0;
           const progressDebounceMs = 100;
 
-          const initializeKokoroWithProgress =
-            TTSServiceProxy.initializeKokoro as unknown as (
-              onProgress: (progress: KokoroDownloadProgress) => void,
-            ) => Promise<unknown>;
+          const initialized = await TTSServiceProxy.initializeKokoro(
+            (progressValue) => {
+              const progress = progressValue as KokoroDownloadProgress;
+              const percent =
+                typeof progress.percent === "number" ? progress.percent : 0;
+              const file = progress.file || "Downloading model...";
+              const now = Date.now();
+              const shouldUpdate =
+                now - lastUpdateTime >= progressDebounceMs || percent >= 99.9;
 
-          const initialized = await initializeKokoroWithProgress((progress) => {
-            const percent =
-              typeof progress.percent === "number" ? progress.percent : 0;
-            const file = progress.file || "Downloading model...";
-            const now = Date.now();
-            const shouldUpdate =
-              now - lastUpdateTime >= progressDebounceMs || percent >= 99.9;
-
-            if (shouldUpdate) {
-              lastUpdateTime = now;
-              set((state) => {
-                state.kokoroStatus.progress = percent;
-                state.kokoroStatus.details = file;
-              });
-            }
-          });
+              if (shouldUpdate) {
+                lastUpdateTime = now;
+                set((state) => {
+                  state.kokoroStatus.progress = percent;
+                  state.kokoroStatus.details = file;
+                });
+              }
+            },
+          );
 
           await get().checkKokoroStatus();
           return initialized;

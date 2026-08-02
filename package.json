@@ -74,6 +74,7 @@
     "@capacitor/core": "^7.6.1",
     "@heroicons/react": "^2.2.0",
     "@huggingface/transformers": "^3.8.1",
+    "@met4citizen/headaudio": "0.1.0",
     "@ricky0123/vad-web": "^0.0.30",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-virtual": "^3.13.26",

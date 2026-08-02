@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 155
-- Files: 545
-- Text files counted for metrics: 461
-- Total text lines: 142151
-- Code files counted for metrics: 365
-- Total code lines: 127433
+- Directories: 156
+- Files: 548
+- Text files counted for metrics: 463
+- Total text lines: 142881
+- Code files counted for metrics: 367
+- Total code lines: 128150
 
 ## Line Counts by File Type
 
@@ -22,13 +22,13 @@ VAssist repository tree and file metrics.
 | Java         | .java                   |     2 |    44 |
 | Kotlin       | .kt                     |    13 |  6485 |
 | Shell Script | (no extension)          |     2 |   260 |
-| TSX          | .tsx                    |    98 | 47804 |
-| TypeScript   | .ts, .mts, .cts         |   231 | 69241 |
+| TSX          | .tsx                    |    98 | 47844 |
+| TypeScript   | .ts, .mts, .cts         |   233 | 69918 |
 | Gradle       | .gradle                 |     7 |   242 |
-| JSON         | .json                   |    17 |   568 |
-| Markdown     | .md                     |    34 |  5937 |
+| JSON         | .json                   |    17 |   571 |
+| Markdown     | .md                     |    34 |  5944 |
 | Other Text   | mixed                   |    10 |  3193 |
-| Plain Text   | (no extension)          |    10 |  4012 |
+| Plain Text   | (no extension)          |    10 |  4015 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   395 |
@@ -43,8 +43,8 @@ VAssist repository tree and file metrics.
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
-- public/: 5 directories, 19 files
-- src/: 46 directories, 225 files
+- public/: 5 directories, 20 files
+- src/: 47 directories, 227 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -391,6 +391,7 @@ vassist/
 │   │       └── motion/
 │   │           ├── blink3.bvmd
 │   │           ├── clap1.bvmd
+│   │           ├── generic-mouth.bvmd
 │   │           ├── hi1.bvmd
 │   │           ├── hi2.bvmd
 │   │           ├── idle1.bvmd
@@ -572,6 +573,8 @@ vassist/
 │   │   ├── useDesktopWindowResize.ts
 │   │   └── useVisibilityUnmount.ts
 │   ├── services/
+│   │   ├── audio/
+│   │   │   └── LiveLipSyncService.ts
 │   │   ├── proxies/
 │   │   │   ├── AIServiceProxy.ts
 │   │   │   ├── index.ts
@@ -652,7 +655,8 @@ vassist/
 │   │   ├── assistant.ts
 │   │   ├── electron.d.ts
 │   │   ├── env.d.ts
-│   │   └── gpt-sovits-bootstrap.d.ts
+│   │   ├── gpt-sovits-bootstrap.d.ts
+│   │   └── headaudio.d.ts
 │   ├── utils/
 │   │   ├── resource-loader/
 │   │   │   └── types.ts

@@ -357,6 +357,23 @@ const TTSSettings = ({
         </SettingsRow>
       </Card>
 
+      <SettingsRow label="Accurate Lip Sync" targetId="tts.accurateLipSync">
+        <Toggle
+          id="accurate-lip-sync"
+          checked={ttsConfig.accurateLipSync}
+          onChange={(checked) => updateTTSConfig("accurateLipSync", checked)}
+        />
+      </SettingsRow>
+
+      <SettingsRow label="Use Legacy Lip Sync" targetId="tts.legacyLipSync">
+        <Toggle
+          id="legacy-lip-sync"
+          checked={ttsConfig.legacyLipSync}
+          disabled={!ttsConfig.accurateLipSync}
+          onChange={(checked) => updateTTSConfig("legacyLipSync", checked)}
+        />
+      </SettingsRow>
+
       {/* Provider Selection */}
       <div className="space-y-2">
         <SettingsRow

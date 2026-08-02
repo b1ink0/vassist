@@ -31,6 +31,9 @@ import {
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/LoggerService";
 import emotePlayerService from "../../services/EmotePlayerService";
+import liveLipSyncService, {
+  type LiveLipSyncMouthWeights,
+} from "../../services/audio/LiveLipSyncService";
 import type {
   PositionManagerLike,
   SavedModelPositionLike,
@@ -95,6 +98,8 @@ interface AnimationManagerLike {
   ) => void;
   clearQueue: () => void;
   getQueueStatus: () => { length: number; isEmpty: boolean; items: unknown[] };
+  setLiveLipSyncWeights: (weights: LiveLipSyncMouthWeights | null) => void;
+  setGenericLipSyncAudio: (audio: HTMLAudioElement | null) => void;
 }
 
 interface PositionManagerWithPreset extends PositionManagerLike {
@@ -218,37 +223,6 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
         // Initialize TTS Service with BVMD converter and animation callback
         TTSServiceProxy.initializeBVMDConverter(scene);
 
-        // Listen to TTS events for animation control
-        TTSServiceProxy.addEventListener("speak", (...args: unknown[]) => {
-          const event = args[0];
-          if (
-            !(event instanceof CustomEvent) ||
-            !event.detail ||
-            typeof event.detail !== "object"
-          ) {
-            return;
-          }
-          const { text, bvmdUrl } = event.detail as {
-            text?: string;
-            bvmdUrl?: string;
-          };
-          // This will be called when audio starts playing
-          Logger.log("VirtualAssistant", "TTS triggering speak animation");
-          if (typeof text === "string" && typeof bvmdUrl === "string") {
-            manager.speak(text, bvmdUrl, "talking");
-          }
-        });
-
-        TTSServiceProxy.addEventListener("stop", () => {
-          // This will be called when TTS is stopped/interrupted
-          Logger.log("VirtualAssistant", "TTS stopped, returning to idle");
-          if (manager) {
-            manager.returnToIdle();
-          }
-        });
-
-        Logger.log("VirtualAssistant", "TTS Service integrated with lip sync");
-
         emotePlayerService.setAnimationManager(manager);
         Logger.log(
           "VirtualAssistant",
@@ -270,6 +244,55 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
       },
       [onReady],
     );
+
+    useEffect(() => {
+      if (!animationManager || isPreview) return;
+
+      const handleSpeak = (...args: unknown[]) => {
+        const event = args[0];
+        if (
+          !(event instanceof CustomEvent) ||
+          !event.detail ||
+          typeof event.detail !== "object"
+        ) {
+          return;
+        }
+        const { text, bvmdUrl } = event.detail as {
+          text?: string;
+          bvmdUrl?: string;
+        };
+        if (typeof text === "string" && typeof bvmdUrl === "string") {
+          Logger.log(
+            "VirtualAssistant",
+            "Generated lip sync fallback is driving the speaking animation",
+          );
+          void animationManager.speak(text, bvmdUrl, "talking");
+        }
+      };
+
+      const handleStop = () => {
+        liveLipSyncService.detach();
+        const state = animationManager.getCurrentState();
+        if (
+          state === AssistantState.COMPOSITE ||
+          state === AssistantState.SPEAKING ||
+          state === AssistantState.SPEAKING_HOLD
+        ) {
+          void animationManager.returnToIdle();
+        }
+      };
+
+      liveLipSyncService.setAnimationTarget(animationManager);
+      TTSServiceProxy.addEventListener("speak", handleSpeak);
+      TTSServiceProxy.addEventListener("stop", handleStop);
+      Logger.log("VirtualAssistant", "Live TTS lip sync target connected");
+
+      return () => {
+        TTSServiceProxy.removeEventListener("speak", handleSpeak);
+        TTSServiceProxy.removeEventListener("stop", handleStop);
+        liveLipSyncService.clearAnimationTarget(animationManager);
+      };
+    }, [animationManager, isPreview]);
 
     /**
      * Save position when model is dragged

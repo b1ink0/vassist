@@ -95,6 +95,8 @@ export type VAssistSettingsFieldId =
   | "llm.routing.visionModel"
   | "llm.routing.routerModel"
   | "tts.enabled"
+  | "tts.accurateLipSync"
+  | "tts.legacyLipSync"
   | "tts.provider.select"
   | "tts.openai.apiKey"
   | "tts.openai.model"
@@ -653,6 +655,8 @@ export const VASSIST_SETTINGS_FIELDS: readonly VAssistSettingsFieldId[] = [
   "llm.routing.visionModel",
   "llm.routing.routerModel",
   "tts.enabled",
+  "tts.accurateLipSync",
+  "tts.legacyLipSync",
   "tts.provider.select",
   "tts.openai.apiKey",
   "tts.openai.model",

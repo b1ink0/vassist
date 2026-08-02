@@ -19,7 +19,8 @@
     "src/types/env.d.ts",
     "src/types/android.d.ts",
     "src/types/electron.d.ts",
-    "src/types/gpt-sovits-bootstrap.d.ts"
+    "src/types/gpt-sovits-bootstrap.d.ts",
+    "src/types/headaudio.d.ts"
   ],
   "exclude": ["dist", "build", "node_modules"]
 }

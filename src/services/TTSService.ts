@@ -11,6 +11,7 @@ import { audioWorkerClient } from "../workers/AudioWorkerClient";
 import Logger from "./LoggerService";
 import voiceStorageService from "./VoiceStorageService";
 import { isExtension } from "../utils/PlatformUtils";
+import liveLipSyncService from "./audio/LiveLipSyncService";
 
 type TTSState = {
   client: any;
@@ -143,6 +144,12 @@ class TTSService {
       : "[TTSService]";
 
     state.enabled = enabled;
+    if (!this.isExtensionMode) {
+      liveLipSyncService.setAccurateLipSyncEnabled(
+        config.accurateLipSync !== false,
+      );
+      liveLipSyncService.setLegacyLipSyncEnabled(config.legacyLipSync === true);
+    }
 
     if (!enabled) {
       Logger.log("other", `${logPrefix} - TTS is disabled`);
@@ -449,6 +456,20 @@ class TTSService {
 
     if (state.isStopped) return null;
 
+    const accurateLipSyncRequested =
+      generateLipSync &&
+      state.lipSyncEnabled &&
+      !this.isExtensionMode &&
+      liveLipSyncService.isAccurateLipSyncEnabled();
+    const legacyLipSyncRequested =
+      accurateLipSyncRequested && liveLipSyncService.isLegacyLipSyncEnabled();
+    const liveLipSyncReady =
+      accurateLipSyncRequested &&
+      !legacyLipSyncRequested &&
+      (await liveLipSyncService.prepare());
+    const generateRecordedLipSync =
+      legacyLipSyncRequested || (accurateLipSyncRequested && !liveLipSyncReady);
+
     // Handle Kokoro TTS generation
     if (state.provider === TTSProviders.KOKORO) {
       // Auto-initialize Kokoro if not initialized
@@ -460,7 +481,11 @@ class TTSService {
         await this.initializeKokoro(null, tabId);
       }
 
-      return await this.generateKokoroSpeech(text, generateLipSync, tabId);
+      return await this.generateKokoroSpeech(
+        text,
+        generateRecordedLipSync,
+        tabId,
+      );
     }
 
     // Handle OpenAI, OpenAI-compatible, and Android Local TTS generation
@@ -634,7 +659,7 @@ class TTSService {
     try {
       Logger.log(
         "other",
-        `${logPrefix} - Generating speech (${text.length} chars)${generateLipSync && state.lipSyncEnabled ? " with lip sync" : ""}`,
+        `${logPrefix} - Generating speech (${text.length} chars)${generateRecordedLipSync && state.lipSyncEnabled ? " with generated lip sync" : liveLipSyncReady ? " with live lip sync" : ""}`,
       );
 
       let arrayBuffer;
@@ -770,7 +795,7 @@ class TTSService {
       const blob = new Blob([arrayBuffer], { type: contentType });
 
       let bvmdUrl = null;
-      if (generateLipSync && state.lipSyncEnabled) {
+      if (generateRecordedLipSync && state.lipSyncEnabled) {
         try {
           if (state.isStopped) return null;
 
@@ -1148,6 +1173,8 @@ class TTSService {
 
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
+      let usingLiveLipSync = false;
+      let usingGenericLipSync = false;
 
       // Trigger events when audio starts playing
       audio.addEventListener(
@@ -1177,6 +1204,7 @@ class TTSService {
 
       audio.onended = () => {
         Logger.log("TTSService", "Audio playback finished");
+        liveLipSyncService.detach(audio);
         this.currentAudio = null;
 
         // Check if there's more in queue FIRST
@@ -1220,16 +1248,31 @@ class TTSService {
 
       audio.onerror = (error: Event | string) => {
         Logger.error("TTSService", "Audio playback error:", error);
+        liveLipSyncService.detach(audio);
         this.currentAudio = null;
 
         reject(error);
       };
 
-      audio.play().catch(reject);
-      Logger.log(
-        "TTSService",
-        "Audio playback started" + (bvmdUrl ? " with lip sync" : ""),
-      );
+      const startPlayback = async () => {
+        // A generated BVMD means live initialization failed earlier, so keep
+        // the original animation path. Otherwise analyze the actual media
+        // element in real time and delay only the audible output slightly.
+        if (!bvmdUrl) {
+          usingLiveLipSync = await liveLipSyncService.attach(audio);
+          usingGenericLipSync = !usingLiveLipSync;
+        }
+        await audio.play();
+        Logger.log(
+          "TTSService",
+          `Audio playback started${usingLiveLipSync ? " with accurate live lip sync" : usingGenericLipSync ? " with generic lip sync" : bvmdUrl ? " with generated lip sync" : ""}`,
+        );
+      };
+
+      void startPlayback().catch((error) => {
+        liveLipSyncService.detach(audio);
+        reject(error);
+      });
     });
   }
 
@@ -1317,6 +1360,7 @@ class TTSService {
 
     // Stop current audio and clean up
     if (this.currentAudio) {
+      liveLipSyncService.detach(this.currentAudio);
       this.currentAudio.pause();
       // Force the audio to end to resolve any pending Promise
       this.currentAudio.currentTime = 0;

@@ -7,6 +7,7 @@
 /* global chrome */
 
 import Logger from "../../src/services/LoggerService";
+import { MessageTypes } from "../shared/MessageTypes";
 
 type OffscreenValue = string | number | boolean | null | undefined | object;
 type OffscreenMessage = Record<
@@ -18,6 +19,7 @@ interface OffscreenResponse {
   type?: string;
   requestId?: string;
   data?: Record<string, OffscreenValue> | null;
+  error?: string;
   [key: string]:
     | OffscreenValue
     | Record<string, OffscreenValue>
@@ -139,10 +141,10 @@ export class OffscreenManager {
         target: "offscreen",
       };
 
-      const response = (await chrome.runtime.sendMessage(
-        offscreenMessage,
-      )) as OffscreenResponse;
-      return response;
+      const response = (await chrome.runtime.sendMessage(offscreenMessage)) as
+        | OffscreenResponse
+        | undefined;
+      return this.validateResponse(response);
     } catch (error) {
       Logger.error("OffscreenManager", "Failed to send message:", error);
       const errorText = error instanceof Error ? error.message : String(error);
@@ -160,8 +162,8 @@ export class OffscreenManager {
           };
           const response = (await chrome.runtime.sendMessage(
             offscreenMessage,
-          )) as OffscreenResponse;
-          return response;
+          )) as OffscreenResponse | undefined;
+          return this.validateResponse(response);
         } catch (retryError) {
           Logger.error("OffscreenManager", "Retry failed:", retryError);
           throw retryError;
@@ -170,6 +172,20 @@ export class OffscreenManager {
 
       throw error;
     }
+  }
+
+  private validateResponse(
+    response: OffscreenResponse | undefined,
+  ): OffscreenResponse {
+    if (!response) {
+      throw new Error("Offscreen document returned no response");
+    }
+
+    if (response.type === MessageTypes.ERROR || response.error) {
+      throw new Error(response.error || "Offscreen operation failed");
+    }
+
+    return response;
   }
 
   /**

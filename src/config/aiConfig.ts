@@ -449,6 +449,8 @@ export const DefaultAIConfig = {
  */
 export const DefaultTTSConfig = {
   enabled: false,
+  accurateLipSync: true,
+  legacyLipSync: false,
   remoteProfiles: [] as TTSRemoteProviderProfile[],
 
   provider: isAndroidMode

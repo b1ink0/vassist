@@ -10,8 +10,8 @@ const rootDir = path.join(__dirname, "..", "..");
 
 /**
  * Plugin to copy runtime assets required by packaged builds.
- * Copies VAD worklet/ONNX assets to assets/ and mirrors public/res into dist/res.
- * Also serves VAD assets during dev mode.
+ * Copies VAD and live lip-sync assets to assets/ and mirrors public/res into dist/res.
+ * Also serves those assets during dev mode.
  * @param {string} outDir - Output directory (e.g., 'dist', 'dist-desktop', 'dist-android', 'dist-extension')
  */
 export function vadAssetsPlugin(outDir: string): Plugin {
@@ -33,14 +33,21 @@ export function vadAssetsPlugin(outDir: string): Plugin {
         "onnxruntime-web",
         "dist",
       );
+      const headAudioDistPath = path.join(
+        rootDir,
+        "node_modules",
+        "@met4citizen",
+        "headaudio",
+        "dist",
+      );
 
       // Middleware to serve VAD assets from node_modules
       server.middlewares.use(
         (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-          // Match /assets/*.onnx, /assets/*.wasm, /assets/*.mjs, /assets/vad.worklet.bundle.min.js
+          // Match the binary/model and worklet assets used by VAD and HeadAudio.
           const requestUrl = req.url ?? "";
           const match = requestUrl.match(
-            /^\/assets\/(.*\.(onnx|wasm|mjs)|vad\.worklet\.bundle\.min\.js)$/,
+            /^\/assets\/(.*\.(onnx|wasm|mjs|bin)|vad\.worklet\.bundle\.min\.js)$/,
           );
 
           if (match) {
@@ -57,6 +64,10 @@ export function vadAssetsPlugin(outDir: string): Plugin {
               // Check ONNX Runtime dist
               filePath = path.join(onnxDistPath, filename);
             }
+            if (!fs.existsSync(filePath)) {
+              // Check HeadAudio dist
+              filePath = path.join(headAudioDistPath, filename);
+            }
 
             if (fs.existsSync(filePath)) {
               // Set appropriate content type
@@ -66,6 +77,7 @@ export function vadAssetsPlugin(outDir: string): Plugin {
                 ".wasm": "application/wasm",
                 ".mjs": "application/javascript",
                 ".js": "application/javascript",
+                ".bin": "application/octet-stream",
               };
 
               res.setHeader(
@@ -85,7 +97,7 @@ export function vadAssetsPlugin(outDir: string): Plugin {
       );
 
       console.log(
-        "[vad-assets] Dev server configured to serve VAD assets from node_modules",
+        "[vad-assets] Dev server configured to serve runtime audio assets from node_modules",
       );
     },
 
@@ -101,6 +113,13 @@ export function vadAssetsPlugin(outDir: string): Plugin {
         rootDir,
         "node_modules",
         "onnxruntime-web",
+        "dist",
+      );
+      const headAudioDistPath = path.join(
+        rootDir,
+        "node_modules",
+        "@met4citizen",
+        "headaudio",
         "dist",
       );
 
@@ -152,12 +171,27 @@ export function vadAssetsPlugin(outDir: string): Plugin {
         });
       }
 
+      // Copy HeadAudio's processor and pretrained viseme model. The node class
+      // itself is bundled with the application; these two files are fetched by
+      // AudioWorklet/model-loading APIs at runtime.
+      if (fs.existsSync(headAudioDistPath)) {
+        const headAudioFiles = ["headworklet.min.mjs", "model-en-mixed.bin"];
+        for (const file of headAudioFiles) {
+          const srcFile = path.join(headAudioDistPath, file);
+          const destFile = path.join(distDir, file);
+          if (fs.existsSync(srcFile)) {
+            fs.copyFileSync(srcFile, destFile);
+            console.log(`[vad-assets] Copied ${file}`);
+          }
+        }
+      }
+
       if (fs.existsSync(publicResPath)) {
         fs.cpSync(publicResPath, runtimeResDir, { recursive: true });
         console.log(`[vad-assets] ✓ Copied public/res to ${outDir}/res`);
       }
 
-      console.log("[vad-assets] VAD assets copied successfully");
+      console.log("[vad-assets] Runtime audio assets copied successfully");
     },
   };
 }

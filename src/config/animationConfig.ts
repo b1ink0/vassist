@@ -335,16 +335,16 @@ export const AnimationRegistry = {
 
   lipSync: [
     {
-      id: "audio_1",
-      name: "Audio Test",
-      filePath: "res/private_test/motion/audio.bvmd",
-      transitionFrames: TransitionSettings.DEFAULT_TRANSITION_FRAMES,
-      loop: false,
-      loopTransition: true,
+      id: "generic_mouth",
+      name: "Generic Mouth Loop",
+      filePath: "res/assets/motion/generic-mouth.bvmd",
+      transitionFrames: TransitionSettings.QUICK_TRANSITION_FRAMES,
+      loop: true,
+      loopTransition: false,
       weight: 1.0,
       metadata: {
-        description: "Test lip sync animation (debug only)",
-        tags: ["lip-sync", "mouth", "facial", "debug"],
+        description: "Reusable lightweight mouth-only lip sync loop",
+        tags: ["lip-sync", "mouth", "facial", "built-in"],
       },
     },
   ],
