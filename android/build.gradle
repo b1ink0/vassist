@@ -25,7 +25,9 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' } // For sherpa-onnx
+        maven { url 'https://jitpack.io' }
+        // Official Sherpa-ONNX repository
+        maven { url "https://k2-fsa.github.io/sherpa-onnx/maven/" }
     }
 }
 

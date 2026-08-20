@@ -230,6 +230,76 @@ class LocalAIBridge(
         }
     }
 
+    @JavascriptInterface
+    fun searchOllamaModelsAsync(query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.searchOllamaModels(query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "searchOllamaModelsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun listOllamaModelTagsAsync(modelId: String, query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.listOllamaModelTags(modelId, query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "listOllamaModelTagsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun searchHuggingFaceModelsAsync(query: String, cursor: String, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.searchHuggingFaceModels(query, cursor, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "searchHuggingFaceModelsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun listHuggingFaceFilesAsync(repoId: String, query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.listHuggingFaceFiles(repoId, query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "listHuggingFaceFilesAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    private fun invokeCallback(callbackId: String, resultJson: String) {
+        GlobalScope.launch(Dispatchers.Main) {
+            try {
+                // Properly escape JSON for string interpolation in JS
+                val escapedJson = resultJson
+                    .replace("\\", "\\\\")
+                    .replace("'", "\\'")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                val js = "if(window.AndroidAICallbacks && window.AndroidAICallbacks['${callbackId}']) { window.AndroidAICallbacks['${callbackId}']('${escapedJson}'); }"
+                webView.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to invoke JS callback $callbackId", e)
+            }
+        }
+    }
+
     /**
      * Download model from URL (async)
      * Use downloadProgress callback to track progress
@@ -326,7 +396,7 @@ class LocalAIBridge(
      * Emit download complete event to JavaScript
      * Calls window.AndroidAI._onDownloadComplete(result)
      */
-    private fun emitDownloadComplete(result: Map<String, Any>) {
+    private fun emitDownloadComplete(result: Map<String, Any?>) {
         val jsCode = """
             if (window.AndroidAI && window.AndroidAI._onDownloadComplete) {
                 window.AndroidAI._onDownloadComplete(${gson.toJson(result)});
@@ -407,14 +477,14 @@ class LocalAIBridge(
      * @param fileName Original file name
      * @return Result map
      */
-    fun handleModelImport(sourceUri: android.net.Uri, fileName: String): Map<String, Any> {
+    fun handleModelImport(sourceUri: android.net.Uri, fileName: String): Map<String, Any?> {
         return modelManager.importFromUri(sourceUri, fileName)
     }
 
     /**
      * Emit import completion event to JavaScript
      */
-    fun emitImportComplete(result: Map<String, Any>) {
+    fun emitImportComplete(result: Map<String, Any?>) {
         val json = gson.toJson(result)
         val jsCode = """
             if (window.AndroidAI && window.AndroidAI._onImportComplete) {

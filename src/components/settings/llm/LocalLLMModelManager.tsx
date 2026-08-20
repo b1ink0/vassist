@@ -282,10 +282,13 @@ const OllamaBrowser = ({
   useEffect(() => {
     const nextModelId = value.includes(":") ? value.split(":")[0] || "" : value;
     setSelectedModelId(nextModelId);
-    if (nextModelId && nextModelId !== query) {
-      setQuery(nextModelId);
-    }
-  }, [query, value]);
+    setQuery((prevQuery) => {
+      if (nextModelId && nextModelId !== prevQuery) {
+        return nextModelId;
+      }
+      return prevQuery;
+    });
+  }, [value]);
 
   useEffect(() => {
     if (!storageService || disabled) {
@@ -326,7 +329,7 @@ const OllamaBrowser = ({
           setLoading(false);
         }
       }
-    }, 250);
+    }, 600);
 
     return () => {
       cancelled = true;
@@ -377,7 +380,7 @@ const OllamaBrowser = ({
           setTagLoading(false);
         }
       }
-    }, 200);
+    }, 600);
 
     return () => {
       cancelled = true;
@@ -571,7 +574,7 @@ const HuggingFaceBrowser = ({
           setLoading(false);
         }
       }
-    }, 250);
+    }, 600);
 
     return () => {
       cancelled = true;
@@ -622,7 +625,7 @@ const HuggingFaceBrowser = ({
           setFilesLoading(false);
         }
       }
-    }, 200);
+    }, 600);
 
     return () => {
       cancelled = true;

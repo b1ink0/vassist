@@ -103,7 +103,7 @@ class LLMModelManager(private val context: Context) {
         return models
     }
 
-    private fun paginateItems(items: List<CatalogItem>, page: Int, pageSize: Int): Map<String, Any> {
+    private fun paginateItems(items: List<CatalogItem>, page: Int, pageSize: Int): Map<String, Any?> {
         val normalizedPage = page.coerceAtLeast(1)
         val normalizedPageSize = pageSize.coerceIn(1, 50)
         val startIndex = (normalizedPage - 1) * normalizedPageSize
@@ -161,7 +161,7 @@ class LLMModelManager(private val context: Context) {
         }
     }
 
-    suspend fun searchOllamaModels(query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+    suspend fun searchOllamaModels(query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             val connection = createConnection("https://ollama.com/library", "text/html")
             val html = connection.inputStream.bufferedReader().use { it.readText() }
@@ -196,7 +196,7 @@ class LLMModelManager(private val context: Context) {
         }
     }
 
-    suspend fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+    suspend fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             val normalizedModelId = modelId.trim().lowercase()
             if (normalizedModelId.isBlank()) {
@@ -237,7 +237,7 @@ class LLMModelManager(private val context: Context) {
         }
     }
 
-    suspend fun searchHuggingFaceModels(query: String, cursor: String?, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+    suspend fun searchHuggingFaceModels(query: String, cursor: String?, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
                 .appendQueryParameter("filter", "gguf")
@@ -293,7 +293,7 @@ class LLMModelManager(private val context: Context) {
         }
     }
 
-    suspend fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): Map<String, Any> = withContext(Dispatchers.IO) {
+    suspend fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             val normalizedRepoId = repoId.trim()
             if (normalizedRepoId.isBlank()) {
@@ -343,7 +343,7 @@ class LLMModelManager(private val context: Context) {
     suspend fun downloadFromUrl(
         url: String, 
         progressListener: DownloadProgressListener? = null
-    ): Map<String, Any> = withContext(Dispatchers.IO) {
+    ): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "Downloading model from URL: $url")
             
@@ -597,7 +597,7 @@ class LLMModelManager(private val context: Context) {
     suspend fun pullFromOllama(
         modelName: String,
         progressListener: DownloadProgressListener? = null
-    ): Map<String, Any> = withContext(Dispatchers.IO) {
+    ): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "Pulling model from Ollama registry: $modelName")
             
@@ -919,7 +919,7 @@ class LLMModelManager(private val context: Context) {
      * @param fileName Original file name (should be .gguf)
      * @return Map with success status, path, and error (if any)
      */
-    fun importFromUri(sourceUri: android.net.Uri, fileName: String): Map<String, Any> {
+    fun importFromUri(sourceUri: android.net.Uri, fileName: String): Map<String, Any?> {
         return try {
             // Validate filename
             if (!fileName.endsWith(".gguf", ignoreCase = true)) {
@@ -979,7 +979,7 @@ class LLMModelManager(private val context: Context) {
      * @param filename Model filename to delete
      * @return Map with success status and error (if any)
      */
-    fun deleteModel(filename: String): Map<String, Any> {
+    fun deleteModel(filename: String): Map<String, Any?> {
         return try {
             val modelsDir = getModelsDirectory()
             val file = File(modelsDir, filename)

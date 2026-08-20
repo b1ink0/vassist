@@ -479,11 +479,15 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
         jsize length = env->GetArrayLength(image_bytes);
         
         if (bytes && length > 0) {
-            mtmd_bitmap * bmp = mtmd_helper_bitmap_init_from_buf(
+            // FIX: mtmd_helper_bitmap_init_from_buf now requires 4 arguments and returns a wrapper struct
+            auto wrapper = mtmd_helper_bitmap_init_from_buf(
                 mtmd_ctx, 
                 (const unsigned char *)bytes, 
-                length
+                length,
+                false // placeholder
             );
+            mtmd_bitmap * bmp = wrapper.bitmap;
+            
             if (bmp != nullptr) {
                 bitmaps.push_back(bmp);
                 LOGi("Loaded image %d: %d bytes", i, length);
@@ -553,4 +557,3 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
     
     return (jint)n_past;
 }
-

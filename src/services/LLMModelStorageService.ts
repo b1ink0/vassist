@@ -617,30 +617,58 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     });
   }
 
+  private callAndroidAsync<T>(method: string, ...args: any[]): Promise<T> {
+    return new Promise((resolve) => {
+      const globalWindow = window as any;
+      if (!globalWindow.AndroidAICallbacks) {
+        globalWindow.AndroidAICallbacks = {};
+      }
+      const callbackId = "cb_" + Math.random().toString(36).substring(2, 11);
+      globalWindow.AndroidAICallbacks[callbackId] = (resultJson: string) => {
+        delete globalWindow.AndroidAICallbacks[callbackId];
+        try {
+          resolve(parseJsonRecord<T>(resultJson) as T);
+        } catch (e) {
+          resolve({ success: false, error: "Parse error" } as unknown as T);
+        }
+      };
+
+      const androidApi = this.api as any;
+      if (androidApi && androidApi[method + "Async"]) {
+        androidApi[method + "Async"](...args, callbackId);
+      } else if (androidApi && androidApi[method]) {
+        // Fallback to sync
+        try {
+          const resultJson = androidApi[method](...args);
+          resolve(parseJsonRecord<T>(resultJson) as T);
+        } catch (e) {
+          resolve({ success: false, error: toErrorMessage(e) } as unknown as T);
+        }
+      } else {
+        resolve({
+          success: false,
+          items: [],
+          error: "AndroidAI interface not available",
+        } as unknown as T);
+      }
+    });
+  }
+
   async searchOllamaModels(
     query: string,
     page = 1,
     pageSize = 20,
   ): Promise<DiscoveryResult> {
-    try {
-      if (!this.api?.searchOllamaModels) {
-        return {
-          success: false,
-          items: [],
-          error: "AndroidAI interface not available",
-        };
-      }
-
-      const resultJson = this.api.searchOllamaModels(query, page, pageSize);
-      const result = parseJsonRecord<DiscoveryResult>(resultJson);
-      return {
-        ...result,
-        items: Array.isArray(result.items) ? result.items : [],
-      };
-    } catch (error) {
-      console.error("[Android LLM Storage] searchOllamaModels error:", error);
-      return { success: false, items: [], error: toErrorMessage(error) };
-    }
+    const result = await this.callAndroidAsync<DiscoveryResult>(
+      "searchOllamaModels",
+      query,
+      page,
+      pageSize,
+    );
+    return {
+      ...result,
+      items: Array.isArray(result.items) ? result.items : [],
+    };
   }
 
   async listOllamaModelTags(
@@ -649,30 +677,17 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     page = 1,
     pageSize = 20,
   ): Promise<DiscoveryResult> {
-    try {
-      if (!this.api?.listOllamaModelTags) {
-        return {
-          success: false,
-          items: [],
-          error: "AndroidAI interface not available",
-        };
-      }
-
-      const resultJson = this.api.listOllamaModelTags(
-        modelId,
-        query,
-        page,
-        pageSize,
-      );
-      const result = parseJsonRecord<DiscoveryResult>(resultJson);
-      return {
-        ...result,
-        items: Array.isArray(result.items) ? result.items : [],
-      };
-    } catch (error) {
-      console.error("[Android LLM Storage] listOllamaModelTags error:", error);
-      return { success: false, items: [], error: toErrorMessage(error) };
-    }
+    const result = await this.callAndroidAsync<DiscoveryResult>(
+      "listOllamaModelTags",
+      modelId,
+      query,
+      page,
+      pageSize,
+    );
+    return {
+      ...result,
+      items: Array.isArray(result.items) ? result.items : [],
+    };
   }
 
   async searchHuggingFaceModels(
@@ -680,32 +695,16 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     cursor = "",
     pageSize = 20,
   ): Promise<DiscoveryResult> {
-    try {
-      if (!this.api?.searchHuggingFaceModels) {
-        return {
-          success: false,
-          items: [],
-          error: "AndroidAI interface not available",
-        };
-      }
-
-      const resultJson = this.api.searchHuggingFaceModels(
-        query,
-        cursor,
-        pageSize,
-      );
-      const result = parseJsonRecord<DiscoveryResult>(resultJson);
-      return {
-        ...result,
-        items: Array.isArray(result.items) ? result.items : [],
-      };
-    } catch (error) {
-      console.error(
-        "[Android LLM Storage] searchHuggingFaceModels error:",
-        error,
-      );
-      return { success: false, items: [], error: toErrorMessage(error) };
-    }
+    const result = await this.callAndroidAsync<DiscoveryResult>(
+      "searchHuggingFaceModels",
+      query,
+      cursor,
+      pageSize,
+    );
+    return {
+      ...result,
+      items: Array.isArray(result.items) ? result.items : [],
+    };
   }
 
   async listHuggingFaceFiles(
@@ -714,30 +713,17 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     page = 1,
     pageSize = 20,
   ): Promise<DiscoveryResult> {
-    try {
-      if (!this.api?.listHuggingFaceFiles) {
-        return {
-          success: false,
-          items: [],
-          error: "AndroidAI interface not available",
-        };
-      }
-
-      const resultJson = this.api.listHuggingFaceFiles(
-        repoId,
-        query,
-        page,
-        pageSize,
-      );
-      const result = parseJsonRecord<DiscoveryResult>(resultJson);
-      return {
-        ...result,
-        items: Array.isArray(result.items) ? result.items : [],
-      };
-    } catch (error) {
-      console.error("[Android LLM Storage] listHuggingFaceFiles error:", error);
-      return { success: false, items: [], error: toErrorMessage(error) };
-    }
+    const result = await this.callAndroidAsync<DiscoveryResult>(
+      "listHuggingFaceFiles",
+      repoId,
+      query,
+      page,
+      pageSize,
+    );
+    return {
+      ...result,
+      items: Array.isArray(result.items) ? result.items : [],
+    };
   }
 
   async deleteModel(
