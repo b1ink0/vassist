@@ -29,6 +29,12 @@ class LlamaService(private val context: Context) {
     
     var isInitialized = false
         private set
+        
+    val supportsVision: Boolean
+        get() = if (isInitialized) llama.supportsVision() else false
+        
+    val isVisionBackendAvailable: Boolean
+        get() = if (isInitialized) llama.isVisionBackendAvailable() else false
     
     var modelName: String = "unknown"
         private set
@@ -127,6 +133,14 @@ class LlamaService(private val context: Context) {
     }
     
     /**
+     * Stop any ongoing generation immediately.
+     * Safe to call even if no generation is in progress.
+     */
+    suspend fun stopGeneration() {
+        llama.stopGeneration()
+    }
+    
+    /**
      * Generate text completion (streaming)
      */
     fun complete(prompt: String, maxTokens: Int = DEFAULT_MAX_TOKENS): Flow<String> {
@@ -162,9 +176,18 @@ class LlamaService(private val context: Context) {
                 }
                 "assistant" -> {
                     sb.append("<|im_start|>assistant\n")
-                    sb.append(msg.content)
+                    // Strip raw image placeholders from assistant history - these are injected
+                    // when the previous response had an image but multimodal failed. Leaving them
+                    // in the context causes repetitive looping because the model tries to "continue"
+                    // generating around an image marker with no actual image embedding.
+                    val cleanedContent = msg.content
+                        .replace("<__image__>", "")
+                        .replace(Regex("\\[image]"), "")
+                        .trim()
+                    sb.append(cleanedContent)
                     sb.append("<|im_end|>\n")
                 }
+
             }
         }
         

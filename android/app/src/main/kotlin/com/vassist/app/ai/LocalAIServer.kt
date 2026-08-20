@@ -286,6 +286,10 @@ class LocalAIServer(
                 // LLM - Chat completion
                 uri == "/v1/chat/completions" && method == Method.POST -> handleChatCompletion(session)
                 
+                // Stop/abort generation - called by stop button
+                uri == "/v1/generation/stop" && method == Method.POST -> handleStopGeneration()
+                uri == "/v1/chat/completions" && method == Method.DELETE -> handleStopGeneration()
+                
                 // Model status
                 uri == "/v1/models/status" && method == Method.GET -> handleModelStatus()
                 
@@ -316,6 +320,20 @@ class LocalAIServer(
     }
 
     /**
+     * POST /v1/generation/stop or DELETE /v1/chat/completions - Stop generation
+     * Sets the native abort flag so the next completion_loop call returns null.
+     */
+    private fun handleStopGeneration(): Response {
+        Log.d(TAG, "Stop generation requested")
+        runBlocking(aiDispatcher) {
+            llamaService?.stopGeneration()
+        }
+        return jsonResponse(JsonObject().apply {
+            addProperty("stopped", true)
+        })
+    }
+
+    /**
      * GET /v1/models - List available models (OpenAI-compatible)
      */
     private fun handleListModels(): Response {
@@ -337,7 +355,9 @@ class LocalAIServer(
                     "id" to currentModelName,
                     "object" to "model",
                     "owned_by" to "local",
-                    "permission" to emptyList<String>()
+                    "permission" to emptyList<String>(),
+                    "supportsVision" to (llamaService?.supportsVision == true),
+                    "visionBackendAvailable" to (llamaService?.isVisionBackendAvailable == true)
                 )
             )
         }
@@ -585,8 +605,34 @@ class LocalAIServer(
                                     val imageData = part.image_url.url
                                     if (imageData.startsWith("data:image")) {
                                         val base64Data = imageData.substringAfter("base64,")
-                                        val imageBytes = Base64.getDecoder().decode(base64Data)
-                                        images.add(imageBytes)
+                                        val originalBytes = java.util.Base64.getDecoder().decode(base64Data)
+                                        
+                                        // Downscale image to max 512x512 for mobile CPU processing
+                                        val bitmap = android.graphics.BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size)
+                                        if (bitmap != null) {
+                                            val maxDim = 512
+                                            val width = bitmap.width
+                                            val height = bitmap.height
+                                            
+                                            if (width > maxDim || height > maxDim) {
+                                                val ratio = Math.min(maxDim.toFloat() / width, maxDim.toFloat() / height)
+                                                val newWidth = (width * ratio).toInt()
+                                                val newHeight = (height * ratio).toInt()
+                                                val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                                                
+                                                val out = java.io.ByteArrayOutputStream()
+                                                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+                                                images.add(out.toByteArray())
+                                                scaled.recycle()
+                                                Log.i(TAG, "Downscaled image from ${width}x${height} to ${newWidth}x${newHeight}")
+                                            } else {
+                                                images.add(originalBytes)
+                                            }
+                                            bitmap.recycle()
+                                        } else {
+                                            images.add(originalBytes)
+                                        }
+                                        
                                         // Add mtmd default image marker - gets replaced with media_marker during tokenization
                                         textParts.add("<__image__>")
                                     }
@@ -683,8 +729,8 @@ class LocalAIServer(
         val chunkQueue = LinkedBlockingQueue<ByteArray>()
         val END_MARKER = ByteArray(0)
         
-        // Launch streaming in background
-        scope.launch(aiDispatcher) {
+        // Launch streaming in background — save job ref so we can cancel on client disconnect
+        val streamingJob = scope.launch(aiDispatcher) {
             try {
                 val llama = getLlamaService()
                 
@@ -810,8 +856,8 @@ class LocalAIServer(
                         return chunk[position++].toInt() and 0xFF
                     }
                     
-                    // Need next chunk
-                    val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                    // Need next chunk - allow up to 10 minutes for vision/prefill processing
+                    val next = chunkQueue.poll(600, TimeUnit.SECONDS) ?: return -1
                     if (next.isEmpty()) return -1 // END_MARKER
                     
                     currentChunk = next
@@ -832,8 +878,8 @@ class LocalAIServer(
                     return toRead
                 }
                 
-                // Need next chunk
-                val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                // Need next chunk - allow up to 10 minutes for vision/prefill processing
+                val next = chunkQueue.poll(600, TimeUnit.SECONDS) ?: return -1
                 if (next.isEmpty()) return -1 // END_MARKER
                 
                 currentChunk = next
@@ -849,6 +895,22 @@ class LocalAIServer(
             override fun available(): Int {
                 // Always return 0 to force NanoHTTPD to send what it has
                 return 0
+            }
+
+            override fun close() {
+                // Only abort if the job is still actively generating.
+                // If generation already finished (EOG token), this fires after the
+                // END_MARKER is consumed — don't poison the abort flag for the next request.
+                if (streamingJob.isActive) {
+                    Log.d(TAG, "SSE stream closed mid-generation — aborting")
+                    streamingJob.cancel()
+                    scope.launch(aiDispatcher) {
+                        llamaService?.stopGeneration()
+                    }
+                } else {
+                    Log.d(TAG, "SSE stream closed normally — generation already complete")
+                }
+                super.close()
             }
         }
         

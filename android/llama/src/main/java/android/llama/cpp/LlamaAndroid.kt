@@ -44,6 +44,7 @@ class LlamaAndroid private constructor() {
     private external fun log_to_android()
     private external fun load_model(filename: String): Long
     private external fun free_model(model: Long)
+    private external fun is_model_multimodal(model: Long): Boolean
     private external fun new_context(model: Long, nCtx: Int): Long
     private external fun free_context(context: Long)
     private external fun backend_init()
@@ -79,6 +80,7 @@ class LlamaAndroid private constructor() {
     private external fun free_multimodal()
     private external fun is_multimodal_enabled(): Boolean
     private external fun get_image_marker(): String
+    private external fun abort_generation()
 
     /**
      * Load a GGUF model from file
@@ -134,17 +136,28 @@ class LlamaAndroid private constructor() {
                     val mmprojFilename = "mmproj-$modelFilename"
                     val mmprojFile = java.io.File(modelFile.parentFile, mmprojFilename)
                     
+                    val isVLM = is_model_multimodal(model)
+                    Log.i(tag, "Model dynamic multimodal detection: $isVLM")
+
                     var loadedMmprojPath: String? = null
                     if (mmprojFile.exists()) {
                         Log.i(tag, "Found mmproj file: ${mmprojFile.absolutePath}")
                         if (init_multimodal(mmprojFile.absolutePath, model)) {
-                            Log.i(tag, "Multimodal enabled successfully")
+                            Log.i(tag, "Multimodal enabled successfully from mmproj")
                             loadedMmprojPath = mmprojFile.absolutePath
                         } else {
                             Log.w(tag, "Failed to load mmproj file")
                         }
+                    } else if (isVLM) {
+                        Log.d(tag, "No mmproj file found, but model has vision capabilities. Attempting to load vision from main model...")
+                        if (init_multimodal(pathToModel, model)) {
+                            Log.i(tag, "Multimodal enabled successfully from main model")
+                            loadedMmprojPath = pathToModel
+                        } else {
+                            Log.w(tag, "Failed to load vision from main model")
+                        }
                     } else {
-                        Log.d(tag, "No mmproj file found at: ${mmprojFile.absolutePath}")
+                        Log.d(tag, "Model is not a known VLM and no mmproj file found. Skipping multimodal init.")
                     }
                     
                     threadLocalState.set(State.Loaded(model, context, batch, sampler, loadedMmprojPath))
@@ -270,7 +283,8 @@ class LlamaAndroid private constructor() {
                     if (!images.isNullOrEmpty()) {
                         Log.w(tag, "Images provided but multimodal not enabled - ignoring images")
                     }
-                    IntVar(completion_init(state.context, state.batch, prompt, maxNewTokens))
+                    val safePrompt = prompt.replace("<__image__>", "[image]")
+                    IntVar(completion_init(state.context, state.batch, safePrompt, maxNewTokens))
                 }
                 
                 while (ncur.value <= maxNewTokens) {
@@ -367,6 +381,17 @@ class LlamaAndroid private constructor() {
     }
 
     /**
+     * Abort the current generation immediately.
+     * This sets a native flag that causes completion_loop to return null on the next call,
+     * stopping generation without waiting for an EOG token.
+     */
+    suspend fun stopGeneration() {
+        withContext(runLoop) {
+            abort_generation()
+        }
+    }
+
+    /**
      * Clean up backend resources
      */
     suspend fun shutdown() {
@@ -413,6 +438,24 @@ class LlamaAndroid private constructor() {
             val sampler: Long,
             val mmprojPath: String? = null  // Track loaded mmproj file
         ) : State
+    }
+
+    /**
+     * Check if the currently loaded model natively supports vision/multimodal capabilities
+     * based on its architecture and GGUF metadata.
+     */
+    fun supportsVision(): Boolean {
+        return when (val state = threadLocalState.get()) {
+            is State.Loaded -> is_model_multimodal(state.model)
+            else -> false
+        }
+    }
+    
+    /**
+     * Check if the vision backend was successfully initialized and is available for inference.
+     */
+    fun isVisionBackendAvailable(): Boolean {
+        return is_multimodal_enabled()
     }
 
     companion object {

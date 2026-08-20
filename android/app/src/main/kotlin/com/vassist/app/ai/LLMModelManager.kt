@@ -11,7 +11,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.net.URL
@@ -88,19 +91,116 @@ class LLMModelManager(private val context: Context) {
             file.extension.equals("gguf", ignoreCase = true) &&
             !file.name.startsWith("mmproj-", ignoreCase = true)
         }?.map { file ->
-            // Check if corresponding mmproj file exists
+            // Check if corresponding mmproj file exists (for traditional LLaVA models)
             val mmprojFile = File(modelsDir, "mmproj-${file.name}")
+            
+            // Check if the model is a known single-file vision model by parsing GGUF metadata natively!
+            val isNativeVisionModel = isVisionModelGguf(file)
             
             mapOf(
                 "name" to file.name,
                 "size" to file.length(),
                 "modified" to file.lastModified(),
-                "hasImageSupport" to mmprojFile.exists()
+                "hasImageSupport" to (mmprojFile.exists() || isNativeVisionModel)
             )
         } ?: emptyList()
         
         Log.i(TAG, "Found ${models.size} models in ${modelsDir.absolutePath}")
         return models
+    }
+
+    /**
+     * Parses the GGUF metadata header locally to definitively check if the model supports vision natively.
+     */
+    private fun isVisionModelGguf(file: File): Boolean {
+        if (!file.exists() || file.length() < 24) return false
+
+        try {
+            RandomAccessFile(file, "r").use { raf ->
+                val headerBytes = ByteArray(24)
+                raf.readFully(headerBytes)
+                val buffer = ByteBuffer.wrap(headerBytes).order(ByteOrder.LITTLE_ENDIAN)
+
+                val magic = buffer.getInt()
+                if (magic != 0x46554747) { // "GGUF" in ASCII
+                    return false
+                }
+
+                val version = buffer.getInt()
+                val tensorCount = buffer.getLong()
+                val kvCount = buffer.getLong()
+
+                // Safe limit to avoid reading the whole file if something is wrong
+                val maxKvsToRead = minOf(kvCount, 100L)
+
+                for (i in 0 until maxKvsToRead) {
+                    val keyLenBytes = ByteArray(8)
+                    raf.readFully(keyLenBytes)
+                    val keyLen = ByteBuffer.wrap(keyLenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+
+                    if (keyLen < 0 || keyLen > 1024) break // Sanity check
+
+                    val keyBytes = ByteArray(keyLen.toInt())
+                    raf.readFully(keyBytes)
+                    val key = String(keyBytes, Charsets.UTF_8)
+
+                    val valueTypeBytes = ByteArray(4)
+                    raf.readFully(valueTypeBytes)
+                    val valueType = ByteBuffer.wrap(valueTypeBytes).order(ByteOrder.LITTLE_ENDIAN).getInt()
+
+                    if (key == "general.architecture" && valueType == 8) { // 8 is STRING
+                        val strLenBytes = ByteArray(8)
+                        raf.readFully(strLenBytes)
+                        val strLen = ByteBuffer.wrap(strLenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+
+                        if (strLen in 1..256) {
+                            val strBytes = ByteArray(strLen.toInt())
+                            raf.readFully(strBytes)
+                            val arch = String(strBytes, Charsets.UTF_8).lowercase()
+                            
+                            Log.d(TAG, "Parsed GGUF architecture for ${file.name}: $arch")
+                            
+                            // Known multimodal architectures supported by llama.cpp
+                            return arch in listOf("mllama", "qwen2vl", "qwen35", "llava", "clip", "minicpmv")
+                        }
+                    }
+
+                    // Skip value data based on type to reach the next KV pair
+                    skipGgufValue(raf, valueType)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing GGUF header for ${file.name}", e)
+        }
+        return false
+    }
+
+    private fun skipGgufValue(raf: RandomAccessFile, type: Int) {
+        when (type) {
+            0, 1, 7 -> raf.skipBytes(1) // UINT8, INT8, BOOL
+            2, 3 -> raf.skipBytes(2) // UINT16, INT16
+            4, 5, 6 -> raf.skipBytes(4) // UINT32, INT32, FLOAT32
+            10, 11, 12 -> raf.skipBytes(8) // UINT64, INT64, FLOAT64
+            8 -> { // STRING
+                val lenBytes = ByteArray(8)
+                raf.readFully(lenBytes)
+                val len = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+                raf.skipBytes(len.toInt())
+            }
+            9 -> { // ARRAY
+                val typeBytes = ByteArray(4)
+                raf.readFully(typeBytes)
+                val itemType = ByteBuffer.wrap(typeBytes).order(ByteOrder.LITTLE_ENDIAN).getInt()
+                
+                val lenBytes = ByteArray(8)
+                raf.readFully(lenBytes)
+                val len = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+                
+                for (i in 0 until len) {
+                    skipGgufValue(raf, itemType)
+                }
+            }
+        }
     }
 
     private fun paginateItems(items: List<CatalogItem>, page: Int, pageSize: Int): Map<String, Any?> {

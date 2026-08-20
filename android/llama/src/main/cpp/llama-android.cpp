@@ -14,6 +14,8 @@
 #define TAG "llama-android.cpp"
 #define LOGi(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGe(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#define LOGw(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
+#define LOGd(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
 
 // Cache for JNI method IDs
 jclass la_int_var;
@@ -25,6 +27,10 @@ static std::string cached_token_chars;
 
 // Global multimodal context (vision encoder)
 static mtmd_context * mtmd_ctx = nullptr;
+
+// Abort flag - set to true to interrupt ongoing generation
+static volatile bool g_abort_generation = false;
+
 
 // Check if string is valid UTF-8
 bool is_valid_utf8(const char * string) {
@@ -116,6 +122,38 @@ Java_android_llama_cpp_LlamaAndroid_free_1model(JNIEnv *, jobject, jlong model) 
 }
 
 extern "C"
+JNIEXPORT jboolean JNICALL
+Java_android_llama_cpp_LlamaAndroid_is_1model_1multimodal(JNIEnv *env, jobject, jlong model_pointer) {
+    auto model = reinterpret_cast<llama_model *>(model_pointer);
+    if (!model) return JNI_FALSE;
+    
+    char arch[128];
+    if (llama_model_meta_val_str(model, "general.architecture", arch, sizeof(arch)) >= 0) {
+        std::string s_arch(arch);
+        if (s_arch == "qwen2vl" || s_arch == "qwen3vl" || s_arch == "qwen3vlmoe" || s_arch == "llava" || s_arch == "minicpmv") {
+            return JNI_TRUE;
+        }
+    }
+    
+    int32_t count = llama_model_meta_count(model);
+    for (int32_t i = 0; i < count; i++) {
+        char key[256];
+        if (llama_model_meta_key_by_index(model, i, key, sizeof(key)) >= 0) {
+            std::string s_key(key);
+            if (s_key.find("clip.vision.") == 0 || 
+                s_key.find("vision.") == 0 || 
+                s_key.find("qwen35.vision.") == 0 || 
+                s_key.find("qwen3vl.vision.") == 0 ||
+                s_key == "clip.has_vision_encoder") {
+                return JNI_TRUE;
+            }
+        }
+    }
+    
+    return JNI_FALSE;
+}
+
+extern "C"
 JNIEXPORT jlong JNICALL
 Java_android_llama_cpp_LlamaAndroid_new_1context(JNIEnv *env, jobject, jlong jmodel, jint n_ctx) {
     auto model = reinterpret_cast<llama_model *>(jmodel);
@@ -126,8 +164,8 @@ Java_android_llama_cpp_LlamaAndroid_new_1context(JNIEnv *env, jobject, jlong jmo
         return 0;
     }
     
-    // Use optimal thread count for mobile
-    int n_threads = std::max(1, std::min(4, (int)sysconf(_SC_NPROCESSORS_ONLN) - 2));
+    // Use optimal thread count for mobile (more threads for vision evaluation)
+    int n_threads = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN) - 1);
     LOGi("Using %d threads, context size: %d", n_threads, n_ctx);
     
     llama_context_params ctx_params = llama_context_default_params();
@@ -303,8 +341,12 @@ Java_android_llama_cpp_LlamaAndroid_completion_1loop(
     const auto new_token_id = llama_sampler_sample(sampler, context, -1);
     const auto n_cur = env->CallIntMethod(intvar_ncur, la_int_var_value);
     
-    // Check for end of generation
-    if (llama_vocab_is_eog(vocab, new_token_id) || n_cur >= n_len) {
+    // Check for end of generation or abort request
+    if (g_abort_generation || llama_vocab_is_eog(vocab, new_token_id) || n_cur >= n_len) {
+        if (g_abort_generation) {
+            LOGi("completion_loop: generation aborted by user");
+            g_abort_generation = false;  // reset for next generation
+        }
         return nullptr;
     }
     
@@ -432,8 +474,14 @@ Java_android_llama_cpp_LlamaAndroid_is_1multimodal_1enabled(JNIEnv *, jobject) {
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_android_llama_cpp_LlamaAndroid_get_1image_1marker(JNIEnv *env, jobject) {
+    if (mtmd_ctx != nullptr) {
+        const char * marker = mtmd_get_marker(mtmd_ctx);
+        if (marker != nullptr) {
+            return env->NewStringUTF(marker);
+        }
+    }
     const char * marker = mtmd_default_marker();
-    return env->NewStringUTF(marker);
+    return env->NewStringUTF(marker != nullptr ? marker : "<__media__>");
 }
 
 extern "C"
@@ -445,7 +493,7 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
         jlong batch_pointer,
         jobjectArray image_bytes_array,
         jstring jtext,
-        jint n_len
+        jint max_tokens
 ) {
     cached_token_chars.clear();
     
@@ -465,7 +513,21 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
     std::string prompt_str(text);
     env->ReleaseStringUTFChars(jtext, text);
     
-    LOGi("Prompt (%zu chars): %s", prompt_str.length(), prompt_str.c_str());
+    // Determine the expected mtmd media marker
+    const char * marker = mtmd_get_marker(mtmd_ctx);
+    if (!marker || strlen(marker) == 0) {
+        marker = mtmd_default_marker();
+    }
+    std::string media_marker = (marker && strlen(marker) > 0) ? marker : "<__media__>";
+    
+    // Replace <__image__> placeholder with mtmd media marker
+    size_t pos = 0;
+    while ((pos = prompt_str.find("<__image__>", pos)) != std::string::npos) {
+        prompt_str.replace(pos, 11, media_marker);
+        pos += media_marker.length();
+    }
+    
+    LOGi("Resolved Prompt (%zu chars, marker '%s'): %s", prompt_str.length(), media_marker.c_str(), prompt_str.c_str());
     
     // Create bitmaps from image bytes
     std::vector<mtmd_bitmap *> bitmaps;
@@ -499,9 +561,38 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
         env->ReleaseByteArrayElements(image_bytes, bytes, JNI_ABORT);
     }
     
+    // Count how many media markers exist in prompt_str
+    size_t marker_count = 0;
+    pos = 0;
+    while ((pos = prompt_str.find(media_marker, pos)) != std::string::npos) {
+        marker_count++;
+        pos += media_marker.length();
+    }
+    
+    // If there are fewer markers than bitmaps, append missing markers
+    if (marker_count < bitmaps.size()) {
+        size_t missing = bitmaps.size() - marker_count;
+        LOGw("Prompt has %zu markers but %zu images provided. Appending %zu missing markers.", marker_count, bitmaps.size(), missing);
+        
+        // Find assistant header if present to insert before it, otherwise append to end
+        size_t assistant_pos = prompt_str.rfind("<|im_start|>assistant");
+        std::string markers_to_add;
+        for (size_t k = 0; k < missing; k++) {
+            markers_to_add += "\n" + media_marker;
+        }
+        markers_to_add += "\n";
+        
+        if (assistant_pos != std::string::npos) {
+            prompt_str.insert(assistant_pos, markers_to_add);
+        } else {
+            prompt_str += markers_to_add;
+        }
+    }
+    
     // Prepare mtmd input text
     mtmd_input_text input_text;
     input_text.text = prompt_str.c_str();
+    input_text.text_len = prompt_str.length();
     input_text.add_special = true;
     input_text.parse_special = true;
     
@@ -513,25 +604,34 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
         bitmaps_c_ptr[i] = bitmaps[i];
     }
     
-    int32_t res = mtmd_tokenize(
-        mtmd_ctx,
-        chunks,
-        &input_text,
-        bitmaps_c_ptr.data(),
-        bitmaps_c_ptr.size()
-    );
+    int32_t res = 0;
+    try {
+        res = mtmd_tokenize(
+            mtmd_ctx,
+            chunks,
+            &input_text,
+            bitmaps_c_ptr.data(),
+            bitmaps_c_ptr.size()
+        );
+    } catch (const std::exception & e) {
+        LOGe("mtmd_tokenize threw exception: %s", e.what());
+        for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
+        mtmd_input_chunks_free(chunks);
+        return 0;
+    }
     
     if (res != 0) {
-        LOGe("mtmd_tokenize failed: %d", res);
+        LOGe("mtmd_tokenize failed with code: %d", res);
         // Clean up
         for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
         mtmd_input_chunks_free(chunks);
         return 0;
     }
     
-    LOGi("Tokenized into %zu chunks", mtmd_input_chunks_size(chunks));
+    LOGi("Tokenized into %zu chunks. Beginning multimodal evaluation...", mtmd_input_chunks_size(chunks));
     
     // Evaluate all chunks (this handles both text and image encoding/decoding)
+    int64_t t_eval_start = ggml_time_ms();
     llama_pos n_past = 0;
     int32_t eval_res = mtmd_helper_eval_chunks(
         mtmd_ctx,
@@ -543,17 +643,29 @@ Java_android_llama_cpp_LlamaAndroid_completion_1init_1with_1images(
         true,  // logits_last
         &n_past
     );
+    int64_t t_eval_end = ggml_time_ms();
     
     // Clean up
     for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
     mtmd_input_chunks_free(chunks);
     
     if (eval_res != 0) {
-        LOGe("mtmd_helper_eval_chunks failed: %d", eval_res);
+        LOGe("mtmd_helper_eval_chunks failed with code %d (took %" PRId64 " ms)", eval_res, t_eval_end - t_eval_start);
         return 0;
     }
     
-    LOGi("Images and prompt processed, n_past = %d", n_past);
+    LOGi("Images and prompt processed successfully in %" PRId64 " ms, n_past = %d", t_eval_end - t_eval_start, n_past);
     
     return (jint)n_past;
+}
+
+// ============================================================================
+// GENERATION CONTROL
+// ============================================================================
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_android_llama_cpp_LlamaAndroid_abort_1generation(JNIEnv *, jobject) {
+    LOGi("abort_generation: stopping generation");
+    g_abort_generation = true;
 }
