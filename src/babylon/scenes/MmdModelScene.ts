@@ -52,6 +52,13 @@ import { pmxConverterService } from "../../services/PMXConverterService";
 import { modelStorageService } from "../../services/ModelStorageService";
 import { stageStorageService } from "../../services/StageStorageService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import { ARSessionController } from "../ar/ARSessionController";
+import { NativeAndroidARProvider } from "../ar/NativeAndroidARProvider";
+import {
+  isARModeRequested,
+  notifyARError,
+  setARModeRequested,
+} from "../ar/ARModeLifecycle";
 import type {
   AnimationLoaderLike,
   CameraMode,
@@ -172,6 +179,7 @@ export const buildMmdModelScene = async (
   config: SceneBuildConfig,
 ): Promise<SceneWithMetadata> => {
   const finalConfig: SceneBuildConfig = config;
+  const isDedicatedARScene = isAndroid && isARModeRequested();
 
   // Check if Portrait Mode is enabled (used in multiple places)
   const isPortraitMode = finalConfig.uiConfig?.enablePortraitMode || false;
@@ -268,8 +276,12 @@ export const buildMmdModelScene = async (
   const initialCameraLocked = finalConfig.uiConfig?.camera?.locked ?? true;
   let cameraSaveEnabled = finalConfig.uiConfig?.camera?.savePosition ?? false;
 
+  const isARActive = (): boolean =>
+    scene.metadata?.arController?.isActive() ?? false;
+
   // Helper functions for camera controls
   const applyZoom = (delta: number): void => {
+    if (isARActive()) return;
     const positionManager = scene.metadata?.positionManager;
     if (!positionManager) {
       Logger.warn("MmdModelScene", "PositionManager not initialized yet");
@@ -318,6 +330,7 @@ export const buildMmdModelScene = async (
   };
 
   const applyPan = (deltaX: number, deltaY: number): void => {
+    if (isARActive()) return;
     if (mmdCamera.position) {
       const panSpeed =
         Math.abs(mmdCamera.distance) * CAMERA_PAN_SPEED_MULTIPLIER;
@@ -328,12 +341,14 @@ export const buildMmdModelScene = async (
   };
 
   const applyRotation = (deltaX: number, deltaY: number): void => {
+    if (isARActive()) return;
     mmdCamera.rotation.y -= deltaX * CAMERA_ROTATION_SENSITIVITY;
     mmdCamera.rotation.x -= deltaY * CAMERA_ROTATION_SENSITIVITY;
     saveCameraState();
   };
 
   const saveCameraState = (): void => {
+    if (isARActive()) return;
     if (!finalConfig.updateUIConfig) return;
     if (!cameraSaveEnabled) return;
 
@@ -690,6 +705,19 @@ export const buildMmdModelScene = async (
     return true;
   };
 
+  scene.metadata.rotateCameraBy = (degrees: number) => {
+    if (isARActive()) return;
+    mmdCamera.rotation.y += (degrees * Math.PI) / 180;
+    saveCameraState();
+  };
+
+  scene.metadata.resetCameraRotation = () => {
+    if (isARActive()) return;
+    mmdCamera.rotation.x = 0;
+    mmdCamera.rotation.y = 0;
+    saveCameraState();
+  };
+
   scene.metadata.toggleCameraSave = () => {
     const newSaveState = !cameraSaveEnabled;
     cameraSaveEnabled = newSaveState;
@@ -802,6 +830,8 @@ export const buildMmdModelScene = async (
   // Store ground in scene metadata so we can toggle it later
   scene.metadata = scene.metadata || {};
   scene.metadata.defaultGround = ground;
+  scene.metadata.directionalLight = directionalLight;
+  scene.metadata.shadowGenerator = shadowGenerator;
 
   // ========================================
   // MMD RUNTIME INITIALIZATION
@@ -954,7 +984,7 @@ export const buildMmdModelScene = async (
       pluginOptions: {
         mmdmodel: {
           materialBuilder: materialBuilder,
-          boundingBoxMargin: 60,
+          boundingBoxMargin: isDedicatedARScene ? 0 : 60,
           loggingEnabled: true,
         },
       },
@@ -1093,7 +1123,12 @@ export const buildMmdModelScene = async (
   };
 
   try {
-    if (finalConfig.stageUrl === null) {
+    if (isDedicatedARScene) {
+      Logger.log(
+        "MmdModelScene",
+        "Stage loading skipped for dedicated AR scene",
+      );
+    } else if (finalConfig.stageUrl === null) {
       Logger.log(
         "MmdModelScene",
         "Stage loading skipped by embed configuration",
@@ -1876,6 +1911,41 @@ export const buildMmdModelScene = async (
   scene.metadata.renderPipeline = defaultPipeline;
 
   // ========================================
+  // AR SESSION INITIALIZATION
+  // ========================================
+  let arController: ARSessionController | null = null;
+  if (isAndroid) {
+    try {
+      const arProvider = new NativeAndroidARProvider();
+      arController = new ARSessionController(scene, arProvider);
+      arController.initialize().then((supported) => {
+        if (supported && arController) {
+          scene.metadata.arController = arController;
+          Logger.log("MmdModelScene", "AR Controller initialized successfully");
+          if (isARModeRequested()) {
+            notifyARError(null);
+            console.info("[VASSIST_AR] lifecycle:fresh-scene-entering");
+            void arController.enterAR().catch((error) => {
+              setARModeRequested(false);
+              notifyARError(getErrorMessage(error));
+              Logger.error(
+                "MmdModelScene",
+                "Failed to enter AR on fresh scene",
+                error,
+              );
+            });
+          }
+        } else {
+          Logger.log("MmdModelScene", "AR not supported on this device");
+          if (isARModeRequested()) setARModeRequested(false);
+        }
+      });
+    } catch (e) {
+      Logger.error("MmdModelScene", "Failed to initialize AR Controller", e);
+    }
+  }
+
+  // ========================================
   // CLEANUP
   // ========================================
 
@@ -1896,6 +1966,11 @@ export const buildMmdModelScene = async (
     animationManager.dispose();
     positionManager.dispose();
     interactionManager.dispose();
+    if (arController) {
+      void arController.exitAR();
+      arController.dispose();
+      arController = null;
+    }
 
     // Dispose stage mesh if loaded
     if (scene.metadata.stageMesh) {

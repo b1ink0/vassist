@@ -167,6 +167,18 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html.ar-active,
+body.ar-active {
+  background-color: transparent !important;
+}
+
+html.ar-active #root,
+body.ar-active #root,
+html.ar-active .vassist-theme-root,
+body.ar-active .vassist-theme-root {
+  background-color: transparent !important;
+}
+
 .vassist-theme-root {
   color: var(--vassist-text-primary);
   font-family: var(

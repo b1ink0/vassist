@@ -36,6 +36,7 @@ import EmotePlaybackBar from "./EmotePlaybackBar";
 import { modelStorageService } from "../../services/ModelStorageService";
 import { stageStorageService } from "../../services/StageStorageService";
 import ZoomControl from "../common/ZoomControl";
+import { ARPlacementGuide } from "../ar/ARPlacementGuide";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import {
   PositionPresets,
@@ -48,6 +49,11 @@ import type {
   PositionPresetLike,
   SceneWithMetadata,
 } from "../../babylon/types";
+import {
+  isARModeRequested,
+  onARModeStateChanged,
+  setARModeRequested,
+} from "../../babylon/ar/ARModeLifecycle";
 
 interface ButtonPosition {
   x: number;
@@ -97,6 +103,8 @@ interface SceneMetadataCameraControls {
   toggleCameraLock?: () => void;
   isCameraLocked?: () => boolean;
   resetCameraPosition?: () => void;
+  rotateCameraBy?: (degrees: number) => void;
+  resetCameraRotation?: () => void;
   toggleCameraSave?: () => void;
   isCameraSaveEnabled?: () => boolean;
 }
@@ -195,7 +203,7 @@ const ChatButton = ({
 }: ChatButtonProps) => {
   const positionManagerRef = usePositionManagerRef();
   const sceneRef = useSceneRef();
-  const { reloadScene } = useSceneActions();
+  const { reloadScene, recreateScene } = useSceneActions();
   const buttonPos = useButtonPosition();
   const {
     updateButtonPosition: setButtonPos,
@@ -240,6 +248,8 @@ const ChatButton = ({
   const [panelMode, setPanelMode] = useState("avatar"); // 'avatar' or 'stage'
   const [stages, setStages] = useState<StoredStageItem[]>([]);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  const [isARMode, setIsARMode] = useState(isARModeRequested);
+  const [isARToggling, setIsARToggling] = useState(false);
   const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
   const buttonRef = useRef<HTMLDivElement | null>(null);
   const buttonDragAnimationFrameRef = useRef<number | null>(null);
@@ -250,6 +260,17 @@ const ChatButton = ({
 
   // Background detection state
   const [isLightBackground, setIsLightBackground] = useState(false);
+
+  useEffect(
+    () =>
+      onARModeStateChanged(({ requested, active }) => {
+        setIsARMode(active ?? requested);
+        if (!requested || typeof active === "boolean") {
+          setIsARToggling(false);
+        }
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (isEmotePanelOpen) {
@@ -1101,6 +1122,14 @@ const ChatButton = ({
    */
   const handleZoom = useCallback(
     (zoomType: "in" | "out" | "reset") => {
+      const arController = sceneRef.current?.metadata?.arController;
+      if (arController?.isActive()) {
+        arController.resizeModel(zoomType);
+        return;
+      }
+      if (zoomType === "reset") {
+        sceneRef.current?.metadata?.resetCameraRotation?.();
+      }
       const positionManager = positionManagerRef.current;
       if (!positionManager) return;
 
@@ -1265,10 +1294,17 @@ const ChatButton = ({
         positionManager.updateCameraFrustum();
       }
     },
-    [positionManagerRef, updateUIConfig, desktopAPI, uiConfig.position],
+    [
+      sceneRef,
+      positionManagerRef,
+      updateUIConfig,
+      desktopAPI,
+      uiConfig.position,
+    ],
   );
 
   const isAtDefaultSize = useCallback(() => {
+    if (sceneRef.current?.metadata?.arController?.isActive()) return false;
     const positionManager = positionManagerRef.current;
     if (!positionManager) return true;
 
@@ -1280,11 +1316,25 @@ const ChatButton = ({
 
     const currentSize = positionManager.modelHeightPx || defaultHeight;
     return currentSize <= defaultHeight;
-  }, [positionManagerRef, uiConfig.modelSizePx, uiConfig.position]);
+  }, [sceneRef, positionManagerRef, uiConfig.modelSizePx, uiConfig.position]);
 
   const handleZoomIn = useCallback(() => handleZoom("in"), [handleZoom]);
   const handleZoomOut = useCallback(() => handleZoom("out"), [handleZoom]);
   const handleZoomReset = useCallback(() => handleZoom("reset"), [handleZoom]);
+  const handleRotate = useCallback(
+    (degrees: number) => {
+      const scene = sceneRef.current;
+      const arController = scene?.metadata?.arController;
+      if (arController?.isActive()) {
+        arController.rotateModel(degrees);
+        return;
+      }
+      scene?.metadata?.rotateCameraBy?.(degrees);
+    },
+    [sceneRef],
+  );
+  const handleRotateLeft = useCallback(() => handleRotate(-10), [handleRotate]);
+  const handleRotateRight = useCallback(() => handleRotate(10), [handleRotate]);
 
   const handleAutoPlayToggle = useCallback(async () => {
     try {
@@ -1465,6 +1515,33 @@ const ChatButton = ({
     setForceUpdate((prev) => prev + 1);
   }, [sceneRef]);
 
+  const handleARToggle = useCallback(async () => {
+    if (!sceneRef?.current || isARToggling) return;
+    const arController = sceneRef.current.metadata?.arController;
+
+    setIsAvatarPanelOpen(false);
+    setIsEmotePanelOpen(false);
+    setIsARToggling(true);
+    try {
+      if (isARModeRequested()) {
+        setARModeRequested(false);
+        if (arController?.isActive()) await arController.exitAR();
+        setIsARMode(false);
+        recreateScene();
+      } else {
+        setARModeRequested(true);
+        setIsARMode(true);
+        recreateScene();
+      }
+    } catch (error) {
+      Logger.error("ChatButton", "Failed to toggle AR mode", error);
+      setARModeRequested(false);
+      setIsARMode(false);
+    } finally {
+      if (!isARModeRequested()) setIsARToggling(false);
+    }
+  }, [sceneRef, isARToggling, recreateScene]);
+
   const selectedAutoPlayCategory =
     uiConfig.emotePlayback?.autoPlayCategory || "all";
   const autoPlayCategoryOptions = useMemo(() => {
@@ -1577,7 +1654,7 @@ const ChatButton = ({
   if (isAndroid) {
     const androidButtonX = 20;
     const androidButtonY = window.innerHeight - 20 - buttonWidth;
-    const androidButtonOffset = TOTAL_BUTTON_OFFSET;
+    const androidButtonOffset = TOTAL_BUTTON_OFFSET + 56;
 
     emotePanelLeft = androidButtonX;
     emotePanelTop =
@@ -1640,6 +1717,8 @@ const ChatButton = ({
 
   return (
     <>
+      {isAndroid && <ARPlacementGuide />}
+
       <EmotePlaybackBar
         isVisible={showEmotePlaybackBar}
         progress={emoteProgress}
@@ -1918,7 +1997,7 @@ const ChatButton = ({
             zIndex: isAndroid ? 201 : 10001,
           }}
           variant="none"
-          className="fixed w-[135px] flex flex-col gap-1 p-1"
+          className="fixed w-fit flex flex-col gap-1 p-1"
         >
           <div className="flex gap-1 justify-between">
             {/* 3D/2D Toggle Button */}
@@ -2127,11 +2206,47 @@ const ChatButton = ({
               />
             </Button>
 
+            {/* AR is a top-level avatar mode, not a camera-panel setting. */}
+            {isAndroid && (
+              <Button
+                onClick={handleARToggle}
+                disabled={isARToggling}
+                variant={isLightBackground ? "dark" : "default"}
+                className={cn(
+                  "w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-all duration-200",
+                  isLightBackground ? "hover:bg-black/30" : "hover:bg-white/30",
+                  isAppearing
+                    ? "animate-fade-in"
+                    : !isVisible && "animate-fade-out",
+                  isARMode && "ring-2 ring-white/60 bg-white/10",
+                  isARToggling && "opacity-60 scale-95",
+                )}
+                aria-label={isARMode ? "Exit AR mode" : "Enter AR mode"}
+                aria-pressed={isARMode}
+                title={isARMode ? "Exit AR Mode" : "View Avatar in AR"}
+              >
+                <Icon
+                  name={isARToggling ? "loading" : "view-in-ar"}
+                  size={24}
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "drop-shadow-lg",
+                    isARToggling && "animate-spin",
+                    isARMode &&
+                      !isARToggling &&
+                      "animate-pulse motion-reduce:animate-none",
+                  )}
+                />
+              </Button>
+            )}
+
             {/* Zoom Control */}
             <ZoomControl
               onZoomIn={handleZoomIn}
               onZoomOut={handleZoomOut}
               onReset={handleZoomReset}
+              onRotateLeft={handleRotateLeft}
+              onRotateRight={handleRotateRight}
               isZoomOutDisabled={isAtDefaultSize()}
               isLeftSide={isLeftSide}
               isLightBackground={isLightBackground}

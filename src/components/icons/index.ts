@@ -104,4 +104,5 @@ export const iconNames = [
   "shuffle",
   "question",
   "formal",
+  "view-in-ar",
 ];

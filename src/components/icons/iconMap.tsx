@@ -8,6 +8,7 @@ import * as HeroIconsOutline from "@heroicons/react/24/outline";
 import { FaGithub } from "react-icons/fa";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { LuScreenShare, LuScreenShareOff } from "react-icons/lu";
+import { MdViewInAr } from "react-icons/md";
 
 export const iconMap = {
   close: HeroIconsSolid.XMarkIcon,
@@ -80,6 +81,8 @@ export const iconMap = {
   "arrow-right": HeroIconsSolid.ArrowRightIcon,
   undo: HeroIconsSolid.ArrowUturnLeftIcon,
   redo: HeroIconsSolid.ArrowUturnRightIcon,
+  "rotate-left": HeroIconsSolid.ArrowUturnLeftIcon,
+  "rotate-right": HeroIconsSolid.ArrowUturnRightIcon,
   bidirectional: HeroIconsSolid.ArrowsRightLeftIcon,
   walking: HeroIconsSolid.UserIcon,
   meditation: HeroIconsSolid.UserIcon,
@@ -154,6 +157,7 @@ export const iconMap = {
   lock: HeroIconsSolid.LockClosedIcon,
   unlock: HeroIconsSolid.LockOpenIcon,
   box: HeroIconsSolid.CubeIcon,
+  "view-in-ar": MdViewInAr,
 };
 
 export default iconMap;

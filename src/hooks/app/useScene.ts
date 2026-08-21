@@ -24,6 +24,7 @@ export const useSceneActions = () =>
       setShowModelLoadingOverlay: state.setShowModelLoadingOverlay,
       setSavedModelPosition: state.setSavedModelPosition,
       reloadScene: state.reloadScene,
+      recreateScene: state.recreateScene,
       forceChatOnlyMode: state.forceChatOnlyMode,
     })),
   );

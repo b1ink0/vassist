@@ -4,6 +4,7 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { MmdAnimationSpan } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 import type { ElectronAPI } from "../types/electron";
+import type { ARSessionController } from "./ar/ARSessionController";
 
 export type CameraMode = "2D" | "3D";
 
@@ -331,10 +332,13 @@ export interface SceneMetadataLike {
   toggleCameraMode?: () => CameraMode;
   getCameraMode?: () => CameraMode;
   resetCameraPosition?: () => boolean;
+  rotateCameraBy?: (degrees: number) => void;
+  resetCameraRotation?: () => void;
   toggleCameraSave?: () => boolean;
   isCameraSaveEnabled?: () => boolean;
   toggleCameraLock?: () => boolean;
   isCameraLocked?: () => boolean;
+  arController?: ARSessionController;
   [key: string]: unknown;
 }
 

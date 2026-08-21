@@ -204,6 +204,7 @@ export interface AppStoreState {
   ) => Promise<string>;
   handleAddToChat: (data: PendingDropData | null, autoSend?: boolean) => void;
   reloadScene: () => void;
+  recreateScene: () => void;
   forceChatOnlyMode: (reason?: string) => void;
 }
 
@@ -1131,6 +1132,10 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               savedModelPosition: null,
               sceneKey: state.sceneKey + 1,
             }));
+          },
+          recreateScene: () => {
+            Logger.log("AppStore", "Recreating 3D scene");
+            set((state) => ({ sceneKey: state.sceneKey + 1 }));
           },
           forceChatOnlyMode: (reason = "3d-scene-error") => {
             Logger.error(

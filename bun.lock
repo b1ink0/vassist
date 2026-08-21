@@ -7,6 +7,7 @@
       "dependencies": {
         "@babylonjs/core": "^8.56.2",
         "@babylonjs/havok": "^1.3.12",
+        "@babylonjs/materials": "8.56.2",
         "@base-ui/react": "^1.4.1",
         "@capacitor/android": "^7.6.1",
         "@capacitor/cli": "^7.6.1",
@@ -148,6 +149,8 @@
     "@babylonjs/core": ["@babylonjs/core@8.56.2", "", {}, "sha512-UShs1pt8tSTLYOoITWclXPNrUZUpuHvB2Ur2L1D+uM8c9qaAYOi9gjkurOkQwIlbPGqwQHWImGEyiyix0mQ1dg=="],
 
     "@babylonjs/havok": ["@babylonjs/havok@1.3.12", "", { "dependencies": { "@types/emscripten": "^1.39.6" } }, "sha512-KR5Z7DBkVEgdvHLMDh2VWe/nHvUG8+MdLBiAE0iM19KIHAPqPRVITPAZKx4SQusK5nqm4ZXDcKv5OYtViIxLzA=="],
+
+    "@babylonjs/materials": ["@babylonjs/materials@8.56.2", "", { "peerDependencies": { "@babylonjs/core": "^8.6.0" } }, "sha512-uBcw0fT3NdQlm/2dG7vmaDyK3yl/MrKWEJVAW64O1oU3KPPvprHAA7r1yhDidHPEFKYmwO9fCazDqW9NN8Z6gQ=="],
 
     "@base-ui/react": ["@base-ui/react@1.4.1", "", { "dependencies": { "@babel/runtime": "^7.29.2", "@base-ui/utils": "0.2.8", "@floating-ui/react-dom": "^2.1.8", "@floating-ui/utils": "^0.2.11", "use-sync-external-store": "^1.6.0" }, "peerDependencies": { "@date-fns/tz": "^1.2.0", "@types/react": "^17 || ^18 || ^19", "date-fns": "^4.0.0", "react": "^17 || ^18 || ^19", "react-dom": "^17 || ^18 || ^19" }, "optionalPeers": ["@date-fns/tz", "@types/react", "date-fns"] }, "sha512-Ab5/LIhcmL8BQcsBUYiOfkSDRdLpvgUBzMK30cu684JPcLclYlztharvCZyNNgzJtbAiREzI9q0pI5erHCMgCw=="],
 
