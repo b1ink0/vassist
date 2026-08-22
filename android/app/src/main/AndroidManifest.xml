@@ -75,6 +75,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Qualcomm DSP bridge libs: required for QNN/Hexagon NPU inference.
+             Without this declaration the app linker namespace cannot resolve
+             libcdsprpc.so and QnnDeviceCreate fails (error 14001). -->
+        <uses-native-library
+            android:name="libcdsprpc.so"
+            android:required="false" />
     </application>
 
     <!-- Permissions -->

@@ -237,7 +237,8 @@ const Select = ({
               </BaseSelect.ScrollUpArrow>
               <BaseSelect.List
                 className={cn(
-                  "max-h-64 min-w-[var(--anchor-width)] overflow-y-auto scrollbar-glass [font-family:inherit]",
+                  // Never grow wider than the trigger: long labels truncate
+                  "max-h-64 min-w-[var(--anchor-width)] max-w-[calc(var(--anchor-width)+1rem)] overflow-y-auto scrollbar-glass [font-family:inherit]",
                   listClassName,
                 )}
               >

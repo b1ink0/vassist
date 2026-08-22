@@ -540,20 +540,30 @@ class LocalAIBridge(
 
     /**
      * Download Whisper STT model (async with progress)
+     * Defaults to tiny.en for backward compatibility
      * @return JSON string: {"success": true, "downloading": true}
      */
     @JavascriptInterface
-    fun downloadWhisperModel(): String {
+    fun downloadWhisperModel(): String = downloadWhisperVariant(STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID)
+
+    /**
+     * Download a specific Whisper STT variant (async with progress)
+     * @param variantId One of: tiny.en, tiny, base.en, base ("tiny"/"base" are multilingual)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadWhisperVariant(variantId: String): String {
+        val id = variantId.ifBlank { STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID }
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                val result = sttTtsManager.downloadWhisperModel(
+                val result = sttTtsManager.downloadWhisperModel(id,
                     object : STTTTSModelManager.DownloadProgressListener {
                         override fun onProgress(percent: Int, status: String) {
                             emitSTTTTSProgress("whisper", percent, status)
                         }
                     }
                 )
-                
+
                 val success = result["success"] as? Boolean ?: false
                 if (success) {
                     emitSTTTTSComplete("whisper", result)
@@ -561,11 +571,11 @@ class LocalAIBridge(
                     emitSTTTTSError("whisper", result["error"] as? String ?: "Download failed")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "downloadWhisperModel failed", e)
+                Log.e(TAG, "downloadWhisperVariant($id) failed", e)
                 emitSTTTTSError("whisper", e.message ?: "Download failed")
             }
         }
-        
+
         return gson.toJson(mapOf(
             "success" to true,
             "downloading" to true
@@ -608,17 +618,194 @@ class LocalAIBridge(
 
     /**
      * Delete Whisper model files
+     * Deletes the default (tiny.en) variant for backward compatibility
      * @return JSON string: {"success": true/false}
      */
     @JavascriptInterface
-    fun deleteWhisperModel(): String {
+    fun deleteWhisperModel(): String = deleteWhisperVariant(STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID)
+
+    /**
+     * Delete a specific Whisper variant's files
+     * @param variantId One of: tiny.en, tiny, base.en, base
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteWhisperVariant(variantId: String): String {
         return try {
-            val success = sttTtsManager.deleteWhisperModel()
+            val success = sttTtsManager.deleteWhisperModel(variantId)
             gson.toJson(mapOf(
                 "success" to success
             ))
         } catch (e: Exception) {
-            Log.e(TAG, "deleteWhisperModel failed", e)
+            Log.e(TAG, "deleteWhisperVariant($variantId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download SenseVoice multilingual model (async with progress)
+     * Supports zh/en/ja/ko/yue; best pick for Chinese/Japanese.
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadSenseVoiceModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadSenseVoiceModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("sensevoice", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("sensevoice", result)
+                } else {
+                    emitSTTTTSError("sensevoice", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadSenseVoiceModel failed", e)
+                emitSTTTTSError("sensevoice", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete the SenseVoice model files
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteSenseVoiceModel(): String {
+        return try {
+            val success = sttTtsManager.deleteSenseVoiceModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteSenseVoiceModel failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download a Dolphin CTC multilingual model (async with progress)
+     * @param variantId "dolphin-base" (~99 MB) or "dolphin-small" (~239 MB)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadDolphinModel(variantId: String): String {
+        val id = variantId.ifBlank { STTTTSModelManager.DOLPHIN_BASE_ID }
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadDolphinModel(id,
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("dolphin", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("dolphin", result)
+                } else {
+                    emitSTTTTSError("dolphin", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadDolphinModel($id) failed", e)
+                emitSTTTTSError("dolphin", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete a Dolphin variant's files
+     * @param variantId "dolphin-base" or "dolphin-small"
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteDolphinModel(variantId: String): String {
+        return try {
+            val success = sttTtsManager.deleteDolphinModel(variantId)
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteDolphinModel($variantId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download the SenseVoice QNN (Qualcomm NPU) context binary for this SoC
+     * (async with progress). Requires a supported Snapdragon and the QNN
+     * runtime libs bundled in the APK.
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadSenseVoiceQnnModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadSenseVoiceQnnModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("sensevoice-qnn", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("sensevoice-qnn", result)
+                } else {
+                    emitSTTTTSError("sensevoice-qnn", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadSenseVoiceQnnModel failed", e)
+                emitSTTTTSError("sensevoice-qnn", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete the SenseVoice QNN context binary
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteSenseVoiceQnnModel(): String {
+        return try {
+            val success = sttTtsManager.deleteSenseVoiceQnnModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteSenseVoiceQnnModel failed", e)
             gson.toJson(mapOf(
                 "success" to false,
                 "error" to e.message

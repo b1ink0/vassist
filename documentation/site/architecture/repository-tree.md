@@ -4,47 +4,47 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 156
-- Files: 548
-- Text files counted for metrics: 463
-- Total text lines: 142881
-- Code files counted for metrics: 367
-- Total code lines: 128150
+- Directories: 160
+- Files: 568
+- Text files counted for metrics: 483
+- Total text lines: 148786
+- Code files counted for metrics: 385
+- Total code lines: 133725
 
 ## Line Counts by File Type
 
 | File Type    | Extensions              | Files | Lines |
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1285 |
-| CSS          | .css, .scss, .less      |     7 |  2029 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1400 |
+| CSS          | .css, .scss, .less      |     7 |  2041 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
-| Kotlin       | .kt                     |    13 |  6485 |
-| Shell Script | (no extension)          |     2 |   260 |
-| TSX          | .tsx                    |    98 | 47844 |
-| TypeScript   | .ts, .mts, .cts         |   233 | 69918 |
-| Gradle       | .gradle                 |     7 |   242 |
-| JSON         | .json                   |    17 |   571 |
-| Markdown     | .md                     |    34 |  5944 |
-| Other Text   | mixed                   |    10 |  3193 |
-| Plain Text   | (no extension)          |    10 |  4015 |
+| Kotlin       | .kt                     |    17 |  9391 |
+| Shell Script | (no extension)          |     4 |   546 |
+| TSX          | .tsx                    |    99 | 48553 |
+| TypeScript   | .ts, .mts, .cts         |   244 | 71465 |
+| Gradle       | .gradle                 |     7 |   453 |
+| JSON         | .json                   |    17 |   572 |
+| Markdown     | .md                     |    35 |  6033 |
+| Other Text   | mixed                   |    11 |  3225 |
+| Plain Text   | (no extension)          |    10 |  4000 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
-| XML          | .xml                    |    12 |   395 |
+| XML          | .xml                    |    12 |   407 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 52 directories, 74 files
+- android/: 54 directories, 81 files
 - android-src/: 1 directories, 3 files
-- documentation/: 13 directories, 49 files
+- documentation/: 13 directories, 50 files
 - electron/: 14 directories, 50 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 47 directories, 227 files
+- src/: 49 directories, 239 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -98,6 +98,7 @@ vassist/
 │   │   │   │   │       └── vassist/
 │   │   │   │   │           └── app/
 │   │   │   │   │               ├── ai/
+│   │   │   │   │               │   ├── ComputeBackendManager.kt
 │   │   │   │   │               │   ├── LlamaService.kt
 │   │   │   │   │               │   ├── LLMModelManager.kt
 │   │   │   │   │               │   ├── LocalAIBridge.kt
@@ -105,6 +106,10 @@ vassist/
 │   │   │   │   │               │   ├── STTTTSModelManager.kt
 │   │   │   │   │               │   ├── VitsService.kt
 │   │   │   │   │               │   └── WhisperService.kt
+│   │   │   │   │               ├── ar/
+│   │   │   │   │               │   ├── ARCoreSessionManager.kt
+│   │   │   │   │               │   ├── CameraBackgroundRenderer.kt
+│   │   │   │   │               │   └── NativeARBridge.kt
 │   │   │   │   │               ├── service/
 │   │   │   │   │               │   └── VAssistWallpaperService.kt
 │   │   │   │   │               ├── webview/
@@ -181,6 +186,8 @@ vassist/
 │   │   ├── build.gradle
 │   │   ├── capacitor.build.gradle
 │   │   └── proguard-rules.pro
+│   ├── docker/
+│   │   └── Dockerfile
 │   ├── gradle/
 │   │   └── wrapper/
 │   │       ├── gradle-wrapper.jar
@@ -202,8 +209,10 @@ vassist/
 │   │   ├── consumer-rules.pro
 │   │   └── proguard-rules.pro
 │   ├── .gitignore
+│   ├── build-sherpa-android.sh
 │   ├── build.gradle
 │   ├── capacitor.settings.gradle
+│   ├── docker-build-sherpa.sh
 │   ├── gradle.properties
 │   ├── gradlew
 │   ├── gradlew.bat
@@ -274,6 +283,7 @@ vassist/
 │   │   │   └── ui.md
 │   │   ├── index.md
 │   │   └── intro.md
+│   ├── android-qnn.md
 │   └── README.md
 ├── electron/
 │   ├── assets/
@@ -418,6 +428,17 @@ vassist/
 │   │   ├── VA.png
 │   │   └── VA.svg
 │   ├── babylon/
+│   │   ├── ar/
+│   │   │   ├── ARAnchorManager.ts
+│   │   │   ├── ARCameraController.ts
+│   │   │   ├── ARGestureController.ts
+│   │   │   ├── ARLightingController.ts
+│   │   │   ├── ARModeLifecycle.ts
+│   │   │   ├── ARProvider.ts
+│   │   │   ├── ARReticle.ts
+│   │   │   ├── ARSessionController.ts
+│   │   │   ├── ARTypes.ts
+│   │   │   └── NativeAndroidARProvider.ts
 │   │   ├── camera/
 │   │   │   └── MmdCameraAutoFocus.ts
 │   │   ├── managers/
@@ -430,6 +451,8 @@ vassist/
 │   ├── components/
 │   │   ├── android/
 │   │   │   └── AndroidBackground.tsx
+│   │   ├── ar/
+│   │   │   └── ARPlacementGuide.tsx
 │   │   ├── assistant/
 │   │   │   ├── BabylonScene.tsx
 │   │   │   ├── LiveAssistantShell.tsx
@@ -533,6 +556,7 @@ vassist/
 │   │   └── SettingsPanel.tsx
 │   ├── config/
 │   │   ├── aiConfig.ts
+│   │   ├── androidWhisperModels.ts
 │   │   ├── animationConfig.ts
 │   │   ├── promptConfig.ts
 │   │   ├── sceneConfig.ts

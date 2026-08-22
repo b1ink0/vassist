@@ -564,6 +564,9 @@ export const DefaultSTTConfig = {
     endpoint: ANDROID_LOCAL_SERVER.baseUrl,
     model: "whisper-local",
     language: "en",
+    // Compute backend for on-device whisper: auto (benchmark cpu/nnapi),
+    // cpu, nnapi, or qnn (experimental, SenseVoice on Snapdragon NPU)
+    provider: "auto",
   },
 
   "desktop-local": {

@@ -205,6 +205,7 @@ class STTService {
         state.config = {
           model: androidConfig.model || "whisper-local",
           language: androidConfig.language || "en",
+          provider: (androidConfig as { provider?: string }).provider || "auto",
         };
         state.provider = provider;
 
@@ -494,6 +495,14 @@ class STTService {
       }
       if (state.config.temperature !== undefined) {
         params.temperature = state.config.temperature;
+      }
+      // Android local: optional compute provider hint (auto/cpu/xnnpack/qnn)
+      if (
+        (state.provider === STTProviders.ANDROID_LOCAL ||
+          state.provider === "android-local") &&
+        state.config.provider
+      ) {
+        params.provider = state.config.provider;
       }
 
       if (!state.client) {

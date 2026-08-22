@@ -377,7 +377,35 @@ class LocalAIServer(
             add("whisper", JsonObject().apply {
                 addProperty("initialized", whisperService?.isInitialized == true)
                 addProperty("model", whisperService?.modelName ?: "whisper-tiny.en")
+                whisperService?.backendInfo?.let { info ->
+                    addProperty("backend", info.provider)
+                    addProperty("backend_source", info.source)
+                    if (info.cpuMs != null) addProperty("cpu_ms", info.cpuMs)
+                    if (info.nnapiMs != null) addProperty("nnapi_ms", info.nnapiMs)
+                    if (info.xnnpackMs != null) addProperty("xnnpack_ms", info.xnnpackMs)
+                    if (info.detail.isNotBlank()) addProperty("backend_note", info.detail)
+                }
             })
+            run {
+                val qnn = ComputeBackendManager.getQnnCapability()
+                add("qnn", JsonObject().apply {
+                    addProperty("soc", qnn.socModel)
+                    addProperty("manufacturer", qnn.socManufacturer)
+                    addProperty("board_platform", qnn.boardPlatform)
+                    qnn.htpVersion?.let { addProperty("htp", it) }
+                    addProperty("runtime_available", qnn.runtimeAvailable)
+                    addProperty("device_capable", qnn.deviceCapable)
+                    // Tells you exactly which gate failed so it can be fixed
+                    addProperty("reason", qnn.reason)
+                    addProperty(
+                        "sensevoice_qnn_ready",
+                        java.io.File(
+                            java.io.File(context.filesDir, "models/sensevoice"),
+                            "qnn/model.bin"
+                        ).exists()
+                    )
+                })
+            }
             add("vits", JsonObject().apply {
                 addProperty("initialized", vitsService?.isInitialized == true)
                 addProperty("model", vitsService?.modelName ?: "vits-vctk")
@@ -397,7 +425,7 @@ class LocalAIServer(
      * 
      * Request: multipart/form-data with:
      * - file: audio file (required)
-     * - model: model name (optional, ignored - uses local whisper)
+     * - model: model hint (optional, e.g. "whisper-tiny" / "auto"; falls back to any downloaded variant)
      * - language: language code (optional)
      * - response_format: "json", "text", "verbose_json" (optional)
      * 
@@ -416,6 +444,8 @@ class LocalAIServer(
         // Get optional parameters
         val params = session.parms
         val language = params["language"]
+        val model = params["model"]
+        val provider = params["provider"]
         val responseFormat = params["response_format"] ?: "json"
         
         // Run on dedicated AI thread to avoid mutex conflicts with WebView/HWUI
@@ -425,7 +455,7 @@ class LocalAIServer(
                 val whisper = getWhisperService()
                 
                 val audioData = File(audioFile).readBytes()
-                val transcription = whisper.transcribe(audioData, language)
+                val transcription = whisper.transcribe(audioData, language, model, provider)
                 
                 when (responseFormat) {
                     "text" -> newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, transcription)
