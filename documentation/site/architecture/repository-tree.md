@@ -4,31 +4,31 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 160
-- Files: 568
-- Text files counted for metrics: 483
-- Total text lines: 148786
-- Code files counted for metrics: 385
-- Total code lines: 133725
+- Directories: 163
+- Files: 576
+- Text files counted for metrics: 491
+- Total text lines: 151018
+- Code files counted for metrics: 391
+- Total code lines: 135782
 
 ## Line Counts by File Type
 
 | File Type    | Extensions              | Files | Lines |
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1400 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1454 |
 | CSS          | .css, .scss, .less      |     7 |  2041 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
-| Kotlin       | .kt                     |    17 |  9391 |
-| Shell Script | (no extension)          |     4 |   546 |
-| TSX          | .tsx                    |    99 | 48553 |
-| TypeScript   | .ts, .mts, .cts         |   244 | 71465 |
-| Gradle       | .gradle                 |     7 |   453 |
+| Kotlin       | .kt                     |    18 | 10239 |
+| Shell Script | (no extension)          |     5 |   643 |
+| TSX          | .tsx                    |   101 | 49426 |
+| TypeScript   | .ts, .mts, .cts         |   246 | 71650 |
+| Gradle       | .gradle                 |     7 |   477 |
 | JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6033 |
-| Other Text   | mixed                   |    11 |  3225 |
-| Plain Text   | (no extension)          |    10 |  4000 |
+| Markdown     | .md                     |    35 |  6059 |
+| Other Text   | mixed                   |    12 |  3340 |
+| Plain Text   | (no extension)          |    11 |  4010 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   407 |
@@ -36,7 +36,7 @@ VAssist repository tree and file metrics.
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 54 directories, 81 files
+- android/: 57 directories, 85 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
 - electron/: 14 directories, 50 files
@@ -44,7 +44,7 @@ VAssist repository tree and file metrics.
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 239 files
+- src/: 49 directories, 243 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -104,6 +104,7 @@ vassist/
 │   │   │   │   │               │   ├── LocalAIBridge.kt
 │   │   │   │   │               │   ├── LocalAIServer.kt
 │   │   │   │   │               │   ├── STTTTSModelManager.kt
+│   │   │   │   │               │   ├── TtsModelManager.kt
 │   │   │   │   │               │   ├── VitsService.kt
 │   │   │   │   │               │   └── WhisperService.kt
 │   │   │   │   │               ├── ar/
@@ -193,6 +194,8 @@ vassist/
 │   │       ├── gradle-wrapper.jar
 │   │       └── gradle-wrapper.properties
 │   ├── llama/
+│   │   ├── snapdragon/
+│   │   │   └── apply-vassist-patches.py
 │   │   ├── src/
 │   │   │   └── main/
 │   │   │       ├── cpp/
@@ -203,6 +206,9 @@ vassist/
 │   │   │       │       └── llama/
 │   │   │       │           └── cpp/
 │   │   │       │               └── LlamaAndroid.kt
+│   │   │       ├── jniLibs/
+│   │   │       │   └── arm64-v8a/
+│   │   │       │       └── PREBUILT_SNAPDRAGON.txt
 │   │   │       └── AndroidManifest.xml
 │   │   ├── .gitignore
 │   │   ├── build.gradle
@@ -212,6 +218,7 @@ vassist/
 │   ├── build-sherpa-android.sh
 │   ├── build.gradle
 │   ├── capacitor.settings.gradle
+│   ├── docker-build-llama.sh
 │   ├── docker-build-sherpa.sh
 │   ├── gradle.properties
 │   ├── gradlew
@@ -499,6 +506,7 @@ vassist/
 │   │   │   └── AudioPlayer.tsx
 │   │   ├── settings/
 │   │   │   ├── llm/
+│   │   │   │   ├── ComputeUnitCard.tsx
 │   │   │   │   ├── DesktopLLMConfig.tsx
 │   │   │   │   ├── LocalLLMModelManager.tsx
 │   │   │   │   └── STTTTSModelManager.tsx
@@ -512,6 +520,7 @@ vassist/
 │   │   │   │   ├── OpenAISTTConfig.tsx
 │   │   │   │   └── WhisperModelDownloader.tsx
 │   │   │   ├── tts/
+│   │   │   │   ├── AndroidTtsPackDownloader.tsx
 │   │   │   │   ├── GPTSoVITSConfig.tsx
 │   │   │   │   ├── GPTSoVITSSetup.tsx
 │   │   │   │   ├── KokoroTTSConfig.tsx
@@ -556,6 +565,7 @@ vassist/
 │   │   └── SettingsPanel.tsx
 │   ├── config/
 │   │   ├── aiConfig.ts
+│   │   ├── androidTtsModels.ts
 │   │   ├── androidWhisperModels.ts
 │   │   ├── animationConfig.ts
 │   │   ├── promptConfig.ts
@@ -636,6 +646,7 @@ vassist/
 │   │   ├── ScreenShareService.ts
 │   │   ├── StageStorageService.ts
 │   │   ├── STTService.ts
+│   │   ├── SttTtsEventService.ts
 │   │   ├── SummarizerService.ts
 │   │   ├── TranslatorService.ts
 │   │   ├── TTSService.ts

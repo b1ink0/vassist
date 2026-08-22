@@ -37,6 +37,7 @@ class LocalAIBridge(
     private val gson = Gson()
     private val modelManager = LLMModelManager(context)
     private val sttTtsManager = STTTTSModelManager(context)
+    private val ttsModelManager = TtsModelManager(context)
 
     /**
      * Get the base URL of the local AI server
@@ -524,7 +525,14 @@ class LocalAIBridge(
     @JavascriptInterface
     fun getSTTTTSStatus(): String {
         return try {
-            val status = sttTtsManager.getModelStatus()
+            // Fold TTS language-pack info into the existing "vits" key
+            // additively - never rename or remove STT keys (web consumers).
+            val status = sttTtsManager.getModelStatus().toMutableMap()
+            val vitsStatus = (status["vits"] as? Map<String, Any>)?.toMutableMap()
+            if (vitsStatus != null) {
+                vitsStatus["packs"] = ttsModelManager.getPacksStatus()
+                status["vits"] = vitsStatus
+            }
             gson.toJson(mapOf(
                 "success" to true,
                 "status" to status
@@ -614,6 +622,65 @@ class LocalAIBridge(
             "success" to true,
             "downloading" to true
         ))
+    }
+
+    /**
+     * Download a TTS language pack (async with progress).
+     * The progress-event type string is the pack id itself
+     * ("tts-en-kitten", "tts-ja-supertonic") - unique across all engines.
+     * @param packId One of TtsModelManager.TTS_PACKS.keys (non-legacy)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadTtsPack(packId: String): String {
+        val id = packId.trim()
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = ttsModelManager.downloadPack(id,
+                    object : TtsModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress(id, percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete(id, result)
+                } else {
+                    emitSTTTTSError(id, result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadTtsPack($id) failed", e)
+                emitSTTTTSError(id, e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete a TTS language pack's files
+     * @param packId One of TtsModelManager.TTS_PACKS.keys (non-legacy)
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteTtsPack(packId: String): String {
+        return try {
+            val success = ttsModelManager.deletePack(packId.trim())
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteTtsPack($packId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
     }
 
     /**

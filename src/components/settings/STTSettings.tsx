@@ -32,6 +32,8 @@ import { Button, Input, Select, Card, SettingsRow } from "../ui";
 interface STTSettingsProps {
   isLightBackground?: boolean;
   hasChromeAI?: boolean;
+  onRequestDeleteSttModel?: ((variantId: string) => void) | undefined;
+  externalDeleteTick?: number | undefined;
 }
 
 type STTProviderKey =
@@ -56,6 +58,8 @@ const STT_PROVIDER_LABELS: Record<string, string> = {
 const STTSettings = ({
   isLightBackground = false,
   hasChromeAI = false,
+  onRequestDeleteSttModel,
+  externalDeleteTick,
 }: STTSettingsProps) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
@@ -390,6 +394,8 @@ const STTSettings = ({
               <WhisperModelDownloader
                 androidAPI={androidAPI}
                 isLightBackground={isLightBackground}
+                onRequestDeleteDialog={onRequestDeleteSttModel}
+                externalDeleteTick={externalDeleteTick}
               />
 
               <h4 className="text-sm font-semibold text-white/90">

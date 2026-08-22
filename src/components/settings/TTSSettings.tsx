@@ -30,7 +30,7 @@ import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import TTSServiceProxy from "../../services/proxies/TTSServiceProxy";
 import KokoroTTSConfig from "./tts/KokoroTTSConfig";
 import GPTSoVITSConfig from "./tts/GPTSoVITSConfig";
-import VitsModelDownloader from "./tts/VitsModelDownloader";
+import AndroidTtsPackDownloader from "./tts/AndroidTtsPackDownloader";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
 import Logger from "../../services/LoggerService";
@@ -39,6 +39,8 @@ import { Button, Input, Select, Card, SettingsRow } from "../ui";
 interface TTSSettingsProps {
   isLightBackground?: boolean;
   onRequestDeleteVoiceDialog?: ((voiceId: string) => void) | undefined;
+  onRequestDeleteTtsPack?: ((packId: string) => void) | undefined;
+  externalDeleteTick?: number | undefined;
   refreshTrigger?: unknown;
 }
 
@@ -58,6 +60,8 @@ const TTS_PROVIDER_LABELS: Record<string, string> = {
 const TTSSettings = ({
   isLightBackground = false,
   onRequestDeleteVoiceDialog,
+  onRequestDeleteTtsPack,
+  externalDeleteTick,
   refreshTrigger,
 }: TTSSettingsProps) => {
   const [clearingCache, setClearingCache] = useState(false);
@@ -404,43 +408,26 @@ const TTSSettings = ({
           {/* Android Local TTS Configuration */}
           {ttsConfig.provider === TTSProviders.ANDROID_LOCAL && (
             <>
-              {/* VITS Model Downloader */}
-              <VitsModelDownloader
+              {/* TTS language packs: install/delete + active voice picker */}
+              <AndroidTtsPackDownloader
                 androidAPI={androidAPI}
                 isLightBackground={isLightBackground}
+                activePackId={ttsConfig["android-local"]?.model}
+                onActivePackChange={(packId) =>
+                  updateTTSConfig("android-local.model", packId)
+                }
+                speakerId={ttsConfig["android-local"]?.speakerId || 0}
+                onSpeakerIdChange={(speakerId) =>
+                  updateTTSConfig("android-local.speakerId", speakerId)
+                }
+                onRequestDeleteDialog={onRequestDeleteTtsPack}
+                externalDeleteTick={externalDeleteTick}
               />
 
               <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
                 <h4 className="text-sm font-semibold text-white/90">
                   Android Local TTS
                 </h4>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">
-                    Voice
-                  </label>
-                  <p className="text-sm text-white/70">
-                    VCTK (Multi-speaker, 109 voices, English)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-white/60">
-                      Speaker ID (0-108):
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="108"
-                      value={ttsConfig["android-local"]?.speakerId || 0}
-                      onChange={(e) =>
-                        updateTTSConfig(
-                          "android-local.speakerId",
-                          parseInt(e.target.value) || 0,
-                        )
-                      }
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-20 text-sm"
-                    />
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-white/90">
                     Speed
@@ -464,7 +451,8 @@ const TTSSettings = ({
                   </span>
                 </div>
                 <p className="text-xs text-white/50">
-                  Powered by VITS VCTK running locally on your device
+                  Offline voices running locally on your device (CPU via
+                  sherpa-onnx)
                 </p>
               </div>
             </>

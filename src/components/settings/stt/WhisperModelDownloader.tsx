@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
+import SttTtsEventService from "../../../services/SttTtsEventService";
 import { ANDROID_WHISPER_VARIANTS } from "../../../config/androidWhisperModels";
 
 interface VariantStatus {
@@ -33,6 +34,10 @@ interface AndroidApiLike {
 interface WhisperModelDownloaderProps {
   androidAPI: AndroidApiLike | null;
   isLightBackground?: boolean;
+  /** Hoist delete confirmation to the host via TypedDialog instead of inline Dialog */
+  onRequestDeleteDialog?: ((variantId: string) => void) | undefined;
+  /** Incremented by the host after an externally-confirmed delete to reload status */
+  externalDeleteTick?: number | undefined;
 }
 
 const formatBytes = (bytes: number) => {
@@ -154,6 +159,8 @@ const ModelCard = ({
  */
 const WhisperModelDownloader = ({
   androidAPI,
+  onRequestDeleteDialog,
+  externalDeleteTick,
 }: WhisperModelDownloaderProps) => {
   const [variantsStatus, setVariantsStatus] = useState<
     Record<string, VariantStatus>
@@ -225,6 +232,11 @@ const WhisperModelDownloader = ({
   }, [loadStatus]);
 
   useEffect(() => {
+    if (!externalDeleteTick) return;
+    loadStatus();
+  }, [externalDeleteTick, loadStatus]);
+
+  useEffect(() => {
     if (!androidAPI) return;
 
     const sttEventTypes = [
@@ -234,43 +246,33 @@ const WhisperModelDownloader = ({
       "sensevoice-qnn",
     ];
 
-    androidAPI._onSTTTTSProgress = (
-      type: string,
-      percent: number,
-      statusText: string,
-    ) => {
-      if (sttEventTypes.includes(type)) {
-        setProgress({ percent, status: statusText });
-      }
-    };
-
-    androidAPI._onSTTTTSComplete = (type: string) => {
-      if (sttEventTypes.includes(type)) {
-        setDownloadingId(null);
-        setProgress(null);
-        setSuccessMessage(
-          `${type === "sensevoice-qnn" ? "NPU" : "Model"} download complete`,
-        );
-        setTimeout(() => setSuccessMessage(""), 5000);
-        loadStatus();
-      }
-    };
-
-    androidAPI._onSTTTTSError = (type: string, errorMsg: string) => {
-      if (sttEventTypes.includes(type)) {
-        setDownloadingId(null);
-        setProgress(null);
-        setError(`Download failed: ${errorMsg}`);
-      }
-    };
-
-    return () => {
-      if (androidAPI) {
-        androidAPI._onSTTTTSProgress = null;
-        androidAPI._onSTTTTSComplete = null;
-        androidAPI._onSTTTTSError = null;
-      }
-    };
+    // Fan-out service: SettingsPanel keeps every tab mounted, so components
+    // must not overwrite each other's window.AndroidAI callback slots.
+    return SttTtsEventService.subscribe({
+      onProgress: (type, percent, statusText) => {
+        if (sttEventTypes.includes(type)) {
+          setProgress({ percent, status: statusText });
+        }
+      },
+      onComplete: (type) => {
+        if (sttEventTypes.includes(type)) {
+          setDownloadingId(null);
+          setProgress(null);
+          setSuccessMessage(
+            `${type === "sensevoice-qnn" ? "NPU" : "Model"} download complete`,
+          );
+          setTimeout(() => setSuccessMessage(""), 5000);
+          loadStatus();
+        }
+      },
+      onError: (type, errorMsg) => {
+        if (sttEventTypes.includes(type)) {
+          setDownloadingId(null);
+          setProgress(null);
+          setError(`Download failed: ${errorMsg}`);
+        }
+      },
+    });
   }, [androidAPI, loadStatus]);
 
   const handleDownload = (variantId: string) => {
@@ -358,6 +360,14 @@ const WhisperModelDownloader = ({
     }
   };
 
+  const requestDelete = (variantId: string) => {
+    if (onRequestDeleteDialog) {
+      onRequestDeleteDialog(variantId);
+      return;
+    }
+    setPendingDeleteId(variantId);
+  };
+
   const buildItems = (): CardItem[] => {
     const items: CardItem[] = ANDROID_WHISPER_VARIANTS.map((v) => {
       const vs =
@@ -425,7 +435,7 @@ const WhisperModelDownloader = ({
             progress={progress}
             anyDownloading={downloadingId !== null}
             onDownload={handleDownload}
-            onDelete={setPendingDeleteId}
+            onDelete={requestDelete}
           />
         ))}
       </div>
@@ -436,7 +446,7 @@ const WhisperModelDownloader = ({
 
       {error && <p className="text-xs text-red-300/80 px-0.5">{error}</p>}
 
-      {pendingDeleteId && (
+      {!onRequestDeleteDialog && pendingDeleteId && (
         <Dialog
           type="confirm"
           title={`Delete ${pendingItem?.title ?? "model"}?`}

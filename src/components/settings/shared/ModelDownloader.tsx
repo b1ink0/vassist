@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
 import { Button, Card } from "../../ui";
+import SttTtsEventService from "../../../services/SttTtsEventService";
 
 interface ModelStatus {
   downloaded?: boolean;
@@ -34,6 +35,8 @@ interface ModelDownloaderProps {
   downloadSize: string;
   deleteConfirmMsg: string;
   successMsg: string;
+  /** Hoist delete confirmation to the host via TypedDialog instead of inline Dialog */
+  onRequestDeleteDialog?: (() => void) | undefined;
 }
 
 /**
@@ -49,6 +52,7 @@ interface ModelDownloaderProps {
  * @param {string} downloadSize - Human-readable size (e.g. '~145 MB')
  * @param {string} deleteConfirmMsg - Second line of the confirm prompt
  * @param {string} successMsg - Toast message shown on successful download
+ * @param {Function} onRequestDeleteDialog - Optional host callback to hoist delete confirmation
  */
 const ModelDownloader = ({
   androidAPI,
@@ -61,6 +65,7 @@ const ModelDownloader = ({
   downloadSize,
   deleteConfirmMsg,
   successMsg,
+  onRequestDeleteDialog,
 }: ModelDownloaderProps) => {
   const [status, setStatus] = useState<ModelStatus | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -95,33 +100,31 @@ const ModelDownloader = ({
   useEffect(() => {
     if (!androidAPI) return;
 
-    androidAPI._onSTTTTSProgress = (
-      type: string,
-      percent: number,
-      statusText: string,
-    ) => {
-      if (type === modelType) {
-        setProgress({ percent, status: statusText });
-      }
-    };
-
-    androidAPI._onSTTTTSComplete = (type: string) => {
-      if (type === modelType) {
-        setProgress(null);
-        setDownloading(false);
-        setSuccess(successMsg);
-        setTimeout(() => setSuccess(""), 5000);
-        loadStatus();
-      }
-    };
-
-    androidAPI._onSTTTTSError = (type: string, errorMsg: string) => {
-      if (type === modelType) {
-        setProgress(null);
-        setDownloading(false);
-        setError(`Download failed: ${errorMsg}`);
-      }
-    };
+    // Fan-out service: SettingsPanel keeps every tab mounted, so components
+    // must not overwrite each other's window.AndroidAI callback slots.
+    return SttTtsEventService.subscribe({
+      onProgress: (type, percent, statusText) => {
+        if (type === modelType) {
+          setProgress({ percent, status: statusText });
+        }
+      },
+      onComplete: (type) => {
+        if (type === modelType) {
+          setProgress(null);
+          setDownloading(false);
+          setSuccess(successMsg);
+          setTimeout(() => setSuccess(""), 5000);
+          loadStatus();
+        }
+      },
+      onError: (type, errorMsg) => {
+        if (type === modelType) {
+          setProgress(null);
+          setDownloading(false);
+          setError(`Download failed: ${errorMsg}`);
+        }
+      },
+    });
   }, [androidAPI, loadStatus, modelType, successMsg]);
 
   const handleDownload = async () => {
@@ -147,6 +150,10 @@ const ModelDownloader = ({
   };
 
   const handleDelete = () => {
+    if (onRequestDeleteDialog) {
+      onRequestDeleteDialog();
+      return;
+    }
     setShowDeleteDialog(true);
   };
 
@@ -241,7 +248,7 @@ const ModelDownloader = ({
         </div>
       )}
 
-      {showDeleteDialog && (
+      {!onRequestDeleteDialog && showDeleteDialog && (
         <Dialog
           type="confirm"
           title={`Delete ${title}?`}

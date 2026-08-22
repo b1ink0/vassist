@@ -83,7 +83,12 @@ class LocalAIServer(
     @Volatile
     private var llamaService: LlamaService? = null
     private val llmModelManager by lazy { LLMModelManager(context) }
-    
+    private val ttsModelManager by lazy { TtsModelManager(context) }
+
+    // Pack id of the currently loaded vitsService (null = legacy vits-vctk)
+    @Volatile
+    private var loadedTtsPackId: String? = null
+
     // Coroutine mutexes for initialization (non-blocking)
     private val whisperMutex = Mutex()
     private val vitsMutex = Mutex()
@@ -183,22 +188,40 @@ class LocalAIServer(
     /**
      * Get or initialize VITS service (thread-safe, non-blocking)
      */
-    private suspend fun getVitsService(): VitsService {
-        vitsService?.let { if (it.isInitialized) return it }
-        
+    private suspend fun getVitsService(): VitsService = getVitsService(null)
+
+    /**
+     * Get or initialize the VITS service for a specific TTS pack.
+     *
+     * @param pack Resolved pack, or null for the legacy vits-vctk behaviour.
+     *             If a different pack is currently loaded it is released and
+     *             swapped (only one TTS engine is kept in memory).
+     */
+    private suspend fun getVitsService(pack: TtsPack?): VitsService {
+        // Null hint and the registered legacy pack share one cache entry
+        val requestedPackId = pack?.id ?: TtsModelManager.LEGACY_VCTK_ID
+        vitsService?.let { svc ->
+            if (svc.isInitialized && loadedTtsPackId == requestedPackId) return svc
+        }
+
         return vitsMutex.withLock {
             // Double-check after acquiring lock
-            vitsService?.let { if (it.isInitialized) return it }
-            
+            vitsService?.let { svc ->
+                if (svc.isInitialized && loadedTtsPackId == requestedPackId) return svc
+            }
+
             withContext(aiDispatcher) {
-                Log.i(TAG, "Lazy-loading VITS service on dedicated thread...")
-                val service = VitsService(context)
+                Log.i(TAG, "Lazy-loading TTS service (pack=${pack?.id ?: "vits-vctk"})...")
+                // Release the previously loaded pack's engine first
+                vitsService?.releaseBlocking()
+                val service = VitsService(context, pack)
                 service.initialize()
                 vitsService = service
+                loadedTtsPackId = requestedPackId
                 if (!service.isInitialized) {
-                    Log.w(TAG, "VITS service failed to initialize - models may not be downloaded")
+                    Log.w(TAG, "TTS service failed to initialize - models may not be downloaded")
                 } else {
-                    Log.i(TAG, "VITS service initialized successfully")
+                    Log.i(TAG, "TTS service initialized successfully (pack=${pack?.id ?: "vits-vctk"})")
                 }
                 service
             }
@@ -409,8 +432,15 @@ class LocalAIServer(
             add("vits", JsonObject().apply {
                 addProperty("initialized", vitsService?.isInitialized == true)
                 addProperty("model", vitsService?.modelName ?: "vits-vctk")
-                addProperty("numSpeakers", vitsService?.getNumSpeakers() ?: 109)
+                addProperty(
+                    "numSpeakers",
+                    vitsService?.getNumSpeakers()
+                        ?: (TtsModelManager.TTS_PACKS[TtsModelManager.LEGACY_VCTK_ID]?.knownNumSpeakers ?: 109)
+                )
                 addProperty("currentSpeaker", vitsService?.getSpeakerId() ?: 0)
+                addProperty("activePack", loadedTtsPackId ?: "vits-vctk")
+                // Downloadable TTS language packs (additive; web UI reads this)
+                add("packs", gson.toJsonTree(ttsModelManager.getPacksStatus()))
             })
             add("llama", JsonObject().apply {
                 addProperty("initialized", llamaService?.isInitialized == true)
@@ -480,9 +510,12 @@ class LocalAIServer(
      * 
      * Request: application/json with:
      * - input: text to synthesize (required)
-     * - model: model name (optional, ignored - uses local vits)
-     * - voice: voice ID (optional)
+     * - model: TTS pack hint (optional; resolved via TtsModelManager,
+     *          falls back to the legacy vits-vctk pack)
+     * - voice: voice ID (optional, "speaker_<id>" or "<id>")
      * - speed: playback speed 0.25-4.0 (optional)
+     * - language: language override for engines that need one
+     *             (optional, e.g. "ja" for Supertonic)
      * - response_format: "mp3", "wav", "opus" (optional, default: wav)
      * 
      * Response: audio/wav binary data
@@ -507,18 +540,25 @@ class LocalAIServer(
         // Run on dedicated AI thread to avoid mutex conflicts with WebView/HWUI
         return runBlocking(aiDispatcher) {
             try {
-                // Lazy-load VITS on first request
-                val vits = getVitsService()
-                
-                // Parse speaker ID from voice parameter (e.g., "speaker_42" or just "42")
-                val speakerId = request.voice?.let { voice ->
-                    voice.replace("speaker_", "").toIntOrNull()?.coerceIn(0, 108)
+                // Resolve the requested TTS pack from the model hint (falls
+                // back to the legacy vits-vctk experience when unset/unknown)
+                val pack = TtsModelManager.resolveTtsPack(request.model) { p ->
+                    ttsModelManager.isPackDownloaded(p)
                 }
-                
-                val audioData = vits.synthesize(
+                val tts = getVitsService(pack)
+
+                // Parse speaker ID from voice parameter (e.g., "speaker_42" or just "42");
+                // coerced into the loaded pack's speaker range
+                val speakerId = request.voice?.let { voice ->
+                    voice.replace("speaker_", "").toIntOrNull()
+                        ?.coerceIn(0, (tts.getNumSpeakers() - 1).coerceAtLeast(0))
+                }
+
+                val audioData = tts.synthesize(
                     text = request.input,
                     speed = request.speed ?: 1.0f,
-                    speakerId = speakerId
+                    speakerId = speakerId,
+                    lang = request.language ?: pack?.languageTag
                 )
                 
                 // Return audio as binary response
@@ -1083,7 +1123,8 @@ class LocalAIServer(
         val model: String? = null,
         val voice: String? = null,
         val speed: Float? = null,
-        val response_format: String? = null
+        val response_format: String? = null,
+        val language: String? = null
     )
     
     /**

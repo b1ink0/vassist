@@ -289,6 +289,12 @@ interface DesktopApiLike {
 
 interface AndroidApiLike {
   deleteLLMModel?: (filename: string) => string;
+  deleteWhisperVariant?: (variantId: string) => string;
+  deleteSenseVoiceModel?: () => string;
+  deleteSenseVoiceQnnModel?: () => string;
+  deleteDolphinModel?: (variantId: string) => string;
+  deleteVitsModel?: () => string;
+  deleteTtsPack?: (packId: string) => string;
 }
 
 const storageService = StorageServiceProxy as StorageServiceLike;
@@ -410,6 +416,14 @@ const ChatContainer = ({
   >(null);
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
   const [deletingLLMModel, setDeletingLLMModel] = useState<string | null>(null);
+  const [deletingSttModelId, setDeletingSttModelId] = useState<string | null>(
+    null,
+  );
+  const [deletingTtsPackId, setDeletingTtsPackId] = useState<string | null>(
+    null,
+  );
+  const [sttExternalDeleteTick, setSttExternalDeleteTick] = useState(0);
+  const [ttsExternalDeleteTick, setTtsExternalDeleteTick] = useState(0);
   const [settingsErrorMessage, setSettingsErrorMessage] = useState<
     string | null
   >(null);
@@ -426,6 +440,10 @@ const ChatContainer = ({
   const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] =
     useState(false);
   const [isDeleteLLMModelDialogClosing, setIsDeleteLLMModelDialogClosing] =
+    useState(false);
+  const [isDeleteSttModelDialogClosing, setIsDeleteSttModelDialogClosing] =
+    useState(false);
+  const [isDeleteTtsPackDialogClosing, setIsDeleteTtsPackDialogClosing] =
     useState(false);
   const [isSettingsConfirmDialogClosing, setIsSettingsConfirmDialogClosing] =
     useState(false);
@@ -1250,6 +1268,128 @@ const ChatContainer = ({
     setTimeout(() => {
       setDeletingLLMModel(null);
       setIsDeleteLLMModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteSttModel = useCallback((variantId: string) => {
+    setDeletingSttModelId(variantId);
+  }, []);
+
+  const handleDeleteSttModelConfirm = useCallback(
+    async (variantId: string) => {
+      try {
+        let resultJson: string | undefined;
+        if (variantId === "sensevoice-qnn") {
+          resultJson = androidAPI?.deleteSenseVoiceQnnModel?.();
+        } else if (variantId === "sensevoice") {
+          resultJson = androidAPI?.deleteSenseVoiceModel?.();
+        } else if (variantId.startsWith("dolphin-")) {
+          resultJson = androidAPI?.deleteDolphinModel?.(variantId);
+        } else {
+          resultJson = androidAPI?.deleteWhisperVariant?.(variantId);
+        }
+
+        if (!resultJson) {
+          Logger.error("ChatContainer", "No STT deletion API available");
+          return;
+        }
+
+        const result = JSON.parse(resultJson) as {
+          success?: boolean;
+          error?: string;
+        };
+
+        if (result?.success) {
+          Logger.log("ChatContainer", "Deleted STT model:", variantId);
+
+          // Trigger refresh inside the downloader components
+          setSttExternalDeleteTick((prev) => prev + 1);
+        } else {
+          Logger.error("ChatContainer", "Delete failed:", result?.error);
+        }
+
+        setIsDeleteSttModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingSttModelId(null);
+          setIsDeleteSttModelDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete STT model:", error);
+        setIsDeleteSttModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingSttModelId(null);
+          setIsDeleteSttModelDialogClosing(false);
+        }, 200);
+      }
+    },
+    [androidAPI],
+  );
+
+  const handleDeleteSttModelCancel = useCallback(() => {
+    setIsDeleteSttModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingSttModelId(null);
+      setIsDeleteSttModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteTtsPack = useCallback((packId: string) => {
+    setDeletingTtsPackId(packId);
+  }, []);
+
+  const handleDeleteTtsPackConfirm = useCallback(
+    async (packId: string) => {
+      try {
+        const resultJson =
+          packId === "vits-vctk"
+            ? androidAPI?.deleteVitsModel?.()
+            : androidAPI?.deleteTtsPack?.(packId);
+
+        if (!resultJson) {
+          Logger.error("ChatContainer", "No TTS deletion API available");
+          return;
+        }
+
+        const result = JSON.parse(resultJson) as {
+          success?: boolean;
+          error?: string;
+        };
+
+        if (result?.success) {
+          Logger.log("ChatContainer", "Deleted TTS voice pack:", packId);
+
+          // Trigger refresh inside the downloader components
+          setTtsExternalDeleteTick((prev) => prev + 1);
+        } else {
+          Logger.error("ChatContainer", "Delete failed:", result?.error);
+        }
+
+        setIsDeleteTtsPackDialogClosing(true);
+        setTimeout(() => {
+          setDeletingTtsPackId(null);
+          setIsDeleteTtsPackDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error(
+          "ChatContainer",
+          "Failed to delete TTS voice pack:",
+          error,
+        );
+        setIsDeleteTtsPackDialogClosing(true);
+        setTimeout(() => {
+          setDeletingTtsPackId(null);
+          setIsDeleteTtsPackDialogClosing(false);
+        }, 200);
+      }
+    },
+    [androidAPI],
+  );
+
+  const handleDeleteTtsPackCancel = useCallback(() => {
+    setIsDeleteTtsPackDialogClosing(true);
+    setTimeout(() => {
+      setDeletingTtsPackId(null);
+      setIsDeleteTtsPackDialogClosing(false);
     }, 200);
   }, []);
 
@@ -2450,6 +2590,10 @@ const ChatContainer = ({
               onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
               onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
               onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+              onRequestDeleteSttModel={handleRequestDeleteSttModel}
+              onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
+              sttExternalDeleteTick={sttExternalDeleteTick}
+              ttsExternalDeleteTick={ttsExternalDeleteTick}
               onRequestResetSetupDialog={handleRequestResetSetupDialog}
               onRequestSettingsErrorDialog={handleRequestSettingsErrorDialog}
               refreshTrigger={settingsRefreshTrigger}
@@ -2656,6 +2800,50 @@ const ChatContainer = ({
               confirmStyle="error"
               onConfirm={handleDeleteLLMModelConfirm}
               onCancel={handleDeleteLLMModelCancel}
+            />
+          </div>
+        )}
+
+        {/* STT Model Delete Dialog - renders outside SettingsPanel */}
+        {deletingSttModelId && (
+          <div className="absolute inset-0 z-20">
+            <TypedDialog
+              type="delete"
+              title="Delete Model?"
+              message="This will delete this STT model and free up storage on your device. The model can be re-downloaded later if needed."
+              itemId={deletingSttModelId}
+              isLightBackground={isLightBackground}
+              animationClass={
+                isDeleteSttModelDialogClosing
+                  ? "animate-fade-out"
+                  : "animate-slide-up-fade-in"
+              }
+              confirmLabel="Delete"
+              confirmStyle="error"
+              onConfirm={handleDeleteSttModelConfirm}
+              onCancel={handleDeleteSttModelCancel}
+            />
+          </div>
+        )}
+
+        {/* TTS Voice Pack Delete Dialog - renders outside SettingsPanel */}
+        {deletingTtsPackId && (
+          <div className="absolute inset-0 z-20">
+            <TypedDialog
+              type="delete"
+              title="Delete Voice Pack?"
+              message="This will delete this voice pack and free up storage on your device. The voice pack can be re-downloaded later if needed."
+              itemId={deletingTtsPackId}
+              isLightBackground={isLightBackground}
+              animationClass={
+                isDeleteTtsPackDialogClosing
+                  ? "animate-fade-out"
+                  : "animate-slide-up-fade-in"
+              }
+              confirmLabel="Delete"
+              confirmStyle="error"
+              onConfirm={handleDeleteTtsPackConfirm}
+              onCancel={handleDeleteTtsPackCancel}
             />
           </div>
         )}
