@@ -26,6 +26,20 @@ class LlamaAndroid private constructor() {
             System.loadLibrary("llama-android")
 
             log_to_android()
+
+            // Register accelerator backends BEFORE backend_init(): the Hexagon
+            // backend opens its FastRPC session at registration time and needs
+            // ADSP_LIBRARY_PATH (staged skels) already set.
+            if (!backendsLoaded && pendingNativeLibDir != null && pendingAdsplibDir != null) {
+                try {
+                    Log.i(tag, "Loading ggml backends (opencl/hexagon)...")
+                    load_backends(pendingAdsplibDir!!, pendingNativeLibDir!!)
+                } catch (e: Throwable) {
+                    Log.w(tag, "Backend loading failed (CPU-only runtime?)", e)
+                }
+                backendsLoaded = true
+            }
+
             backend_init()
 
             Log.d(tag, system_info())
@@ -40,9 +54,29 @@ class LlamaAndroid private constructor() {
 
     private var maxTokens: Int = 2048
 
+    // Last requested compute unit ("cpu" | "gpu" | "npu" | "auto") and the
+    // backend registry reported by native code after loading
+    @Volatile
+    var requestedDevice: String = "cpu"
+        private set
+
+    @Volatile
+    private var backendsLoaded: Boolean = false
+
+    /** Registered ggml backends/devices, e.g. "cpu|CPU,opencl|Adreno..." */
+    fun backendsInfo(): String {
+        return try {
+            get_backends_info()
+        } catch (e: Throwable) {
+            "unavailable"
+        }
+    }
+
     // Native method declarations
     private external fun log_to_android()
-    private external fun load_model(filename: String): Long
+    private external fun load_model(filename: String, n_gpu_layers: Int): Long
+    private external fun load_backends(adsplib_dir: String, native_lib_dir: String)
+    private external fun get_backends_info(): String
     private external fun free_model(model: Long)
     private external fun is_model_multimodal(model: Long): Boolean
     private external fun new_context(model: Long, nCtx: Int): Long
@@ -84,24 +118,48 @@ class LlamaAndroid private constructor() {
 
     /**
      * Load a GGUF model from file
-     * 
+     *
      * @param pathToModel Absolute path to the GGUF model file
      * @param contextSize Context window size (default: 2048)
      * @param temperature Sampling temperature (default: 0.7)
      * @param topK Top-K sampling parameter (default: 40)
      * @param topP Top-P (nucleus) sampling parameter (default: 0.9)
+     * @param device Compute unit: "cpu" | "gpu" (Adreno OpenCL) | "npu"
+     *               (Hexagon HTP) | "auto" (any accelerator, CPU fallback)
+     * @param nativeLibDir applicationInfo.nativeLibraryDir (for backend dlopen)
+     * @param adsplibDir real-files dir with staged libggml-htp-v*.so skels
      */
     suspend fun load(
         pathToModel: String,
         contextSize: Int = 2048,
         temperature: Float = 0.7f,
         topK: Int = 40,
-        topP: Float = 0.9f
+        topP: Float = 0.9f,
+        device: String = "cpu",
+        nativeLibDir: String? = null,
+        adsplibDir: String? = null
     ) {
         withContext(runLoop) {
             when (threadLocalState.get()) {
                 is State.Idle -> {
-                    val model = load_model(pathToModel)
+                    requestedDevice = device
+
+                    // One-time Snapdragon backend registration (OpenCL/Hexagon).
+                    // No-op on builds without the extra .so files present.
+                    if (!backendsLoaded && nativeLibDir != null && adsplibDir != null) {
+                        try {
+                            Log.i(tag, "Loading ggml backends (opencl/hexagon)...")
+                            load_backends(adsplibDir, nativeLibDir)
+                        } catch (e: Throwable) {
+                            Log.w(tag, "Backend loading failed (CPU-only runtime?)", e)
+                        }
+                        backendsLoaded = true
+                    }
+
+                    // Hexagon/OpenCL behave like GPU devices for offload
+                    // semantics; 0 layers = pure CPU, 99 = offload everything.
+                    val nGpuLayers = if (device == "cpu") 0 else 99
+                    val model = load_model(pathToModel, nGpuLayers)
                     if (model == 0L) throw IllegalStateException("load_model() failed")
 
                     val context = new_context(model, contextSize)
@@ -169,7 +227,7 @@ class LlamaAndroid private constructor() {
     
     /**
      * Initialize multimodal (vision) support by loading mmproj file
-     * 
+     *
      * @param mmprojPath Absolute path to the mmproj GGUF file
      * @return True if successful, false otherwise
      */
@@ -459,6 +517,24 @@ class LlamaAndroid private constructor() {
     }
 
     companion object {
+        // Backend paths captured before the native thread starts (the Hexagon
+        // backend needs ADSP_LIBRARY_PATH set before backend_init registers it)
+        @Volatile
+        private var pendingNativeLibDir: String? = null
+
+        @Volatile
+        private var pendingAdsplibDir: String? = null
+
+        /**
+         * Provide the directories needed to register accelerator backends.
+         * MUST be called before the first [instance] access (i.e. before the
+         * runLoop thread spins up and runs backend_init).
+         */
+        fun setBackendPaths(nativeLibDir: String, adsplibDir: String) {
+            pendingNativeLibDir = nativeLibDir
+            pendingAdsplibDir = adsplibDir
+        }
+
         // Singleton instance
         private val _instance: LlamaAndroid = LlamaAndroid()
 

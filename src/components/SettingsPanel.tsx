@@ -61,6 +61,10 @@ interface SettingsPanelProps {
   }) => void;
   onRequestDeleteVoiceDialog?: (voiceId: string) => void;
   onRequestDeleteLLMModel?: (modelName: string) => void;
+  onRequestDeleteSttModel?: (variantId: string) => void;
+  onRequestDeleteTtsPack?: (packId: string) => void;
+  sttExternalDeleteTick?: number | undefined;
+  ttsExternalDeleteTick?: number | undefined;
   onRequestResetSetupDialog?: (onConfirm: () => Promise<void> | void) => void;
   onRequestSettingsErrorDialog?: (message: string) => void;
   refreshTrigger: number;
@@ -118,6 +122,10 @@ const getSettingsTabFromTarget = (
  * @param {Function} props.onRequestDeleteMotionDialog - Callback to show delete motion dialog
  * @param {Function} props.onRequestDeleteVoiceDialog - Callback to show delete voice dialog
  * @param {Function} props.onRequestDeleteLLMModel - Callback to show delete LLM model dialog
+ * @param {Function} props.onRequestDeleteSttModel - Callback to show delete STT model dialog
+ * @param {Function} props.onRequestDeleteTtsPack - Callback to show delete TTS voice pack dialog
+ * @param {number} props.sttExternalDeleteTick - Incremented after external STT delete to refresh status
+ * @param {number} props.ttsExternalDeleteTick - Incremented after external TTS delete to refresh status
  * @param {number} props.refreshTrigger - Trigger to refresh lists after delete
  * @returns {JSX.Element} Settings panel component
  */
@@ -134,6 +142,10 @@ const SettingsPanel = ({
   onRequestDeleteEmoteDialog,
   onRequestDeleteVoiceDialog,
   onRequestDeleteLLMModel,
+  onRequestDeleteSttModel,
+  onRequestDeleteTtsPack,
+  sttExternalDeleteTick,
+  ttsExternalDeleteTick,
   onRequestResetSetupDialog,
   onRequestSettingsErrorDialog,
   refreshTrigger,
@@ -269,6 +281,8 @@ const SettingsPanel = ({
             <TTSSettings
               isLightBackground={isLightBackground}
               onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
+              {...(onRequestDeleteTtsPack ? { onRequestDeleteTtsPack } : {})}
+              externalDeleteTick={ttsExternalDeleteTick}
               refreshTrigger={refreshTrigger}
             />
           ),
@@ -282,6 +296,8 @@ const SettingsPanel = ({
             <STTSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
+              {...(onRequestDeleteSttModel ? { onRequestDeleteSttModel } : {})}
+              externalDeleteTick={sttExternalDeleteTick}
             />
           ),
         },
@@ -304,10 +320,14 @@ const SettingsPanel = ({
       onRequestDeleteMotionDialog,
       onRequestDeleteStageDialog,
       onRequestDeleteVoiceDialog,
+      onRequestDeleteSttModel,
+      onRequestDeleteTtsPack,
       onRequestResetSetupDialog,
       onRequestSettingsErrorDialog,
       requestedView?.subTab,
       refreshTrigger,
+      sttExternalDeleteTick,
+      ttsExternalDeleteTick,
     ],
   );
 

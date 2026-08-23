@@ -82,6 +82,24 @@
         <uses-native-library
             android:name="libcdsprpc.so"
             android:required="false" />
+
+        <!-- Adreno OpenCL: lets libggml-opencl.so (llama.cpp GPU backend)
+             resolve vendor libOpenCL.so in the app linker namespace. Optional:
+             devices without OpenCL fall back to CPU. -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
+
+        <!-- FastRPC user-space driver used by the Hexagon backend session -->
+        <uses-native-library
+            android:name="libadsprpc.so"
+            android:required="false" />
+
+        <!-- Cross-vendor GPU: lets the llama.cpp Vulkan backend run on Mali /
+             Xclipse / Adreno GPUs on MediaTek, Exynos and other devices -->
+        <uses-native-library
+            android:name="libvulkan.so"
+            android:required="false" />
     </application>
 
     <!-- Permissions -->

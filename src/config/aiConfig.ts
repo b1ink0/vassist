@@ -360,6 +360,10 @@ export const DefaultAIConfig = {
     model: "qwen3-local",
     temperature: 0.7,
     maxTokens: 2048,
+    // Snapdragon compute unit for the on-device llama.cpp runtime:
+    // "auto" = any accelerator with CPU fallback, "cpu" = CPU only,
+    // "gpu" = Adreno OpenCL, "npu" = Hexagon HTP
+    computeUnit: "auto",
     systemPromptType: "default",
     systemPrompt: "",
     selectedSystemPromptProfileId: "default",

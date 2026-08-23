@@ -150,6 +150,40 @@ class LocalAIBridge(
         return url
     }
 
+    // ============================================================================
+    // LLM Compute Unit (Snapdragon GPU/NPU)
+    // ============================================================================
+
+    /**
+     * Set the on-device LLM compute unit ("auto" | "cpu" | "gpu" | "npu").
+     * Releases the currently loaded model so the next chat request re-loads
+     * it on the requested device (silently falls back to CPU when the
+     * accelerator is unavailable).
+     */
+    @JavascriptInterface
+    fun setLLMComputeUnit(unit: String) {
+        val normalized = unit.trim().lowercase().ifBlank { "auto" }
+        Log.i(TAG, "setLLMComputeUnit($normalized)")
+        server.setLLMComputeUnit(normalized)
+    }
+
+    /** Currently requested compute unit for the on-device LLM. */
+    @JavascriptInterface
+    fun getLLMComputeUnit(): String = server.getLLMComputeUnit()
+
+    /**
+     * Registered ggml backends/devices, e.g.
+     * "cpu|CPU,opencl|Adreno750...,hexagon|Hexagon"
+     */
+    @JavascriptInterface
+    fun getLLMBackendInfo(): String {
+        return try {
+            android.llama.cpp.LlamaAndroid.instance().backendsInfo()
+        } catch (e: Exception) {
+            "unavailable"
+        }
+    }
+
     /**
      * Get all endpoint URLs as JSON
      * @return JSON object with all endpoint URLs

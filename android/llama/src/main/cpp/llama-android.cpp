@@ -4,12 +4,14 @@
 #include <cmath>
 #include <string>
 #include <unistd.h>
+#include <cstdlib>
 #include <sstream>
 #include <vector>
 #include "llama.h"
 #include "common.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "ggml-backend.h"
 
 #define TAG "llama-android.cpp"
 #define LOGi(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -92,26 +94,85 @@ static void log_callback(ggml_log_level level, const char * fmt, void * data) {
 
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_android_llama_cpp_LlamaAndroid_load_1model(JNIEnv *env, jobject, jstring filename) {
+Java_android_llama_cpp_LlamaAndroid_load_1model(JNIEnv *env, jobject, jstring filename, jint n_gpu_layers) {
     llama_model_params model_params = llama_model_default_params();
-    
-    // Use fewer GPU layers on mobile - CPU is often faster for small models
-    model_params.n_gpu_layers = 0;
-    
+
+    // 0 = CPU only; 99 = offload every layer onto registered GPU/NPU devices
+    // (Hexagon behaves like a GPU device for offload semantics). The ggml
+    // scheduler splits layers across whatever devices are available.
+    model_params.n_gpu_layers = n_gpu_layers;
+
     auto path_to_model = env->GetStringUTFChars(filename, 0);
-    LOGi("Loading model from %s", path_to_model);
-    
+    LOGi("Loading model from %s (n_gpu_layers=%d)", path_to_model, n_gpu_layers);
+
     auto model = llama_model_load_from_file(path_to_model, model_params);
     env->ReleaseStringUTFChars(filename, path_to_model);
-    
+
     if (!model) {
         LOGe("load_model() failed");
         env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), "load_model() failed");
         return 0;
     }
-    
+
     LOGi("Model loaded successfully");
     return reinterpret_cast<jlong>(model);
+}
+
+// Load the dynamically-built Snapdragon backends (Adreno OpenCL GPU +
+// Hexagon NPU). Called once per process before the first model load.
+//
+// - adsplib_dir: real-files dir (filesDir/llama-adsplib) holding the staged
+//   libggml-htp-v*.so FastRPC skels - the CDSP loader cannot read through the
+//   linker's APK mapping, same constraint as sherpa's QNN staging.
+// - native_lib_dir: applicationInfo.nativeLibraryDir - CPU-side dlopen of
+//   libggml-opencl.so / libggml-hexagon.so works from here.
+extern "C"
+JNIEXPORT void JNICALL
+Java_android_llama_cpp_LlamaAndroid_load_1backends(JNIEnv *env, jobject, jstring adsplib_dir, jstring native_lib_dir) {
+    const char * adsp = env->GetStringUTFChars(adsplib_dir, nullptr);
+    const char * natlib = env->GetStringUTFChars(native_lib_dir, nullptr);
+
+    setenv("ADSP_LIBRARY_PATH",
+           (std::string(adsp) + ";/vendor/dsp/cdsp;/vendor/lib/rfsa/adsp").c_str(), 1);
+    LOGi("ADSP_LIBRARY_PATH=%s", getenv("ADSP_LIBRARY_PATH"));
+
+    std::string opencl_path = std::string(natlib) + "/libggml-opencl.so";
+    std::string vulkan_path = std::string(natlib) + "/libggml-vulkan.so";
+    std::string hexagon_path = std::string(natlib) + "/libggml-hexagon.so";
+
+    // GGML_BACKEND_DL builds: nothing is hard-linked, so every load failure
+    // here is graceful (null reg) and the app stays CPU-only. Ensure CPU is
+    // registered first - it is a separate .so in DL mode.
+    ggml_backend_reg_t cpu = ggml_backend_load((std::string(natlib) + "/libggml-cpu.so").c_str());
+    ggml_backend_reg_t ocl = ggml_backend_load(opencl_path.c_str());
+    ggml_backend_reg_t vk = ggml_backend_load(vulkan_path.c_str());
+    ggml_backend_reg_t hex = ggml_backend_load(hexagon_path.c_str());
+    LOGi("[LLM-backend] backend load: cpu=%s opencl=%s vulkan=%s hexagon=%s registry=%zu",
+         cpu ? "ok" : "FAILED", ocl ? "ok" : "unavailable",
+         vk ? "ok" : "unavailable", hex ? "ok" : "unavailable",
+         ggml_backend_reg_count());
+
+    env->ReleaseStringUTFChars(adsplib_dir, adsp);
+    env->ReleaseStringUTFChars(native_lib_dir, natlib);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_android_llama_cpp_LlamaAndroid_get_1backends_1info(JNIEnv *env, jobject) {
+    std::string out;
+    size_t n = ggml_backend_reg_count();
+    for (size_t i = 0; i < n; i++) {
+        auto * reg = ggml_backend_reg_get(i);
+        if (i > 0) out += ",";
+        out += ggml_backend_reg_name(reg);
+        if (reg == nullptr) continue;
+        for (size_t d = 0; d < ggml_backend_reg_dev_count(reg); d++) {
+            auto * dev = ggml_backend_reg_dev_get(reg, d);
+            out += "|";
+            out += ggml_backend_dev_name(dev);
+        }
+    }
+    return env->NewStringUTF(out.c_str());
 }
 
 extern "C"
@@ -416,31 +477,39 @@ Java_android_llama_cpp_LlamaAndroid_get_1chat_1template(JNIEnv *env, jobject, jl
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_android_llama_cpp_LlamaAndroid_init_1multimodal(
-    JNIEnv *env, 
-    jobject, 
-    jstring mmproj_path, 
+    JNIEnv *env,
+    jobject,
+    jstring mmproj_path,
     jlong model_pointer
 ) {
     const char * path = env->GetStringUTFChars(mmproj_path, 0);
     auto model = reinterpret_cast<llama_model *>(model_pointer);
-    
+
     if (!model) {
         LOGe("init_multimodal: model cannot be null");
         env->ReleaseStringUTFChars(mmproj_path, path);
         return JNI_FALSE;
     }
-    
+
     LOGi("Loading mmproj from: %s", path);
-    
+
     // Free existing mtmd context if any
     if (mtmd_ctx != nullptr) {
         mtmd_free(mtmd_ctx);
         mtmd_ctx = nullptr;
     }
-    
+
     // Initialize mtmd context params with defaults
     mtmd_context_params ctx_params = mtmd_context_params_default();
-    
+
+    // Vision tower runs on GPU (OpenCL) - ~3-4x faster image encoding than
+    // CPU. Verified working on Adreno 840 once all native libs ship from the
+    // same consistent build (the earlier clip_init segfaults were caused by
+    // stale/mismatched lib versions, not by GPU vision itself). The LLM
+    // layers keep their own GPU/NPU offload independently.
+    ctx_params.use_gpu = true;
+    ctx_params.warmup = false;
+
     // Initialize mtmd context from mmproj file with text model
     mtmd_ctx = mtmd_init_from_file(path, model, ctx_params);
     

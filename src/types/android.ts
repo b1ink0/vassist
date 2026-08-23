@@ -45,6 +45,12 @@ export interface AndroidAPI {
   downloadVitsModel?: () => string;
   deleteVitsModel?: () => string;
 
+  /** Snapdragon compute unit for the on-device llama.cpp runtime */
+  setLLMComputeUnit?: (unit: string) => void;
+  getLLMComputeUnit?: () => string;
+  /** Registered ggml backends/devices, e.g. "cpu|CPU,opencl|Adreno..." */
+  getLLMBackendInfo?: () => string;
+
   _onDownloadComplete?: ((result: unknown) => void) | null;
   _onDownloadError?: ((error: string) => void) | null;
   _onImportComplete?: ((result: unknown) => void) | null;

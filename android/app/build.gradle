@@ -29,6 +29,11 @@ android {
     packagingOptions {
         jniLibs {
             pickFirsts += ['lib/arm64-v8a/libsherpa-onnx.so', 'lib/arm64-v8a/libonnxruntime.so']
+            // Extracted native libs: the llama.cpp Snapdragon stack dlopens
+            // libggml-opencl.so / libggml-hexagon.so from nativeLibraryDir and
+            // stages the Hexagon FastRPC skels to real files - both need
+            // extraction instead of in-APK mapping (mirrors :llama module).
+            useLegacyPackaging = true
         }
     }
 

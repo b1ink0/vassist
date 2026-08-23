@@ -5,38 +5,38 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 163
-- Files: 576
-- Text files counted for metrics: 491
-- Total text lines: 151018
+- Files: 577
+- Text files counted for metrics: 492
+- Total text lines: 151193
 - Code files counted for metrics: 391
-- Total code lines: 135782
+- Total code lines: 135853
 
 ## Line Counts by File Type
 
 | File Type    | Extensions              | Files | Lines |
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1454 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1469 |
 | CSS          | .css, .scss, .less      |     7 |  2041 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     2 |    44 |
-| Kotlin       | .kt                     |    18 | 10239 |
-| Shell Script | (no extension)          |     5 |   643 |
-| TSX          | .tsx                    |   101 | 49426 |
-| TypeScript   | .ts, .mts, .cts         |   246 | 71650 |
+| Kotlin       | .kt                     |    18 | 10278 |
+| Shell Script | (no extension)          |     5 |   654 |
+| TSX          | .tsx                    |   101 | 49431 |
+| TypeScript   | .ts, .mts, .cts         |   246 | 71651 |
 | Gradle       | .gradle                 |     7 |   477 |
 | JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6059 |
-| Other Text   | mixed                   |    12 |  3340 |
+| Markdown     | .md                     |    35 |  6070 |
+| Other Text   | mixed                   |    13 |  3415 |
 | Plain Text   | (no extension)          |    11 |  4010 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
-| XML          | .xml                    |    12 |   407 |
+| XML          | .xml                    |    12 |   425 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 57 directories, 85 files
+- android/: 57 directories, 86 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
 - electron/: 14 directories, 50 files
@@ -188,7 +188,8 @@ vassist/
 │   │   ├── capacitor.build.gradle
 │   │   └── proguard-rules.pro
 │   ├── docker/
-│   │   └── Dockerfile
+│   │   ├── Dockerfile
+│   │   └── Dockerfile.llama
 │   ├── gradle/
 │   │   └── wrapper/
 │   │       ├── gradle-wrapper.jar

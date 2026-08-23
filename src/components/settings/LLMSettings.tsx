@@ -27,6 +27,7 @@ import type {
 import { PromptConfig } from "../../config/promptConfig";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import { useAndroidApi } from "../../hooks/useAndroidStore";
+import ComputeUnitCard from "./llm/ComputeUnitCard";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import DesktopLLMConfig from "./llm/DesktopLLMConfig";
 import LocalLLMModelManager from "./llm/LocalLLMModelManager";
@@ -1874,6 +1875,15 @@ const LLMSettings = ({
               className="w-full"
             />
           </div>
+
+          <ComputeUnitCard
+            androidAPI={androidAPI}
+            value={aiConfig["android-local"]?.computeUnit || "auto"}
+            onChange={(unit) => {
+              updateAIConfig("android-local.computeUnit", unit);
+              androidAPI?.setLLMComputeUnit?.(unit);
+            }}
+          />
 
           <LocalLLMModelManager
             storageService={androidStorageService}

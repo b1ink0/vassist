@@ -1,6 +1,7 @@
 package com.vassist.app.ai
 
 import android.content.Context
+import android.llama.cpp.LlamaAndroid
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -233,19 +234,44 @@ class LocalAIServer(
      */
     private suspend fun getLlamaService(): LlamaService {
         llamaService?.let { if (it.isInitialized) return it }
-        
+
         return llamaMutex.withLock {
             // Double-check after acquiring lock
             llamaService?.let { if (it.isInitialized) return it }
-            
+
             withContext(aiDispatcher) {
                 Log.i(TAG, "Lazy-loading Llama service on dedicated thread...")
                 val service = LlamaService(context)
-                val modelPath = service.initialize()
+                val modelPath = service.initialize(device = getLLMComputeUnit())
                 llamaService = service
                 currentModelPath = modelPath
                 Log.i(TAG, "Llama service initialized with model: $modelPath")
                 service
+            }
+        }
+    }
+
+    // Compute-unit preference (auto | cpu | gpu | npu), written by the
+    // web layer via LocalAIBridge.setLLMComputeUnit
+    private val llmDevicePrefs by lazy {
+        context.getSharedPreferences("llm_device_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    /** Requested compute unit for the on-device LLM. */
+    fun getLLMComputeUnit(): String = llmDevicePrefs.getString("compute_unit", "auto") ?: "auto"
+
+    /**
+     * Update the compute unit and release the loaded model so the next chat
+     * request re-loads it on the requested device.
+     */
+    fun setLLMComputeUnit(unit: String) {
+        llmDevicePrefs.edit().putString("compute_unit", unit).apply()
+        Log.i(TAG, "[LLM-backend] compute unit set to $unit - releasing model for reload")
+        scope.launch(aiDispatcher) {
+            llamaMutex.withLock {
+                llamaService?.release()
+                llamaService = null
+                currentModelPath = null
             }
         }
     }
@@ -445,6 +471,10 @@ class LocalAIServer(
             add("llama", JsonObject().apply {
                 addProperty("initialized", llamaService?.isInitialized == true)
                 addProperty("model", llamaService?.modelName ?: "not loaded")
+                // Snapdragon compute-unit plumbing (auto | cpu | gpu | npu)
+                addProperty("compute_unit", getLLMComputeUnit())
+                addProperty("requested_device", LlamaAndroid.instance().requestedDevice)
+                addProperty("backends", LlamaAndroid.instance().backendsInfo())
             })
         }
         return jsonResponse(status)
@@ -631,7 +661,7 @@ class LocalAIServer(
                             currentModelPath = null
                             
                             val service = LlamaService(context)
-                            service.initialize(modelPath)
+                            service.initialize(modelPath, device = getLLMComputeUnit())
                             llamaService = service
                             currentModelPath = modelPath
                             Log.i(TAG, "Model switched successfully")
