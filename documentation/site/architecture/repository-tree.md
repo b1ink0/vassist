@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 163
-- Files: 577
-- Text files counted for metrics: 492
-- Total text lines: 151193
-- Code files counted for metrics: 391
-- Total code lines: 135853
+- Directories: 165
+- Files: 582
+- Text files counted for metrics: 495
+- Total text lines: 152073
+- Code files counted for metrics: 394
+- Total code lines: 136622
 
 ## Line Counts by File Type
 
@@ -19,24 +19,24 @@ VAssist repository tree and file metrics.
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1469 |
 | CSS          | .css, .scss, .less      |     7 |  2041 |
 | HTML         | .html                   |     5 |   191 |
-| Java         | .java                   |     2 |    44 |
-| Kotlin       | .kt                     |    18 | 10278 |
+| Java         | .java                   |     3 |   185 |
+| Kotlin       | .kt                     |    20 | 10905 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   101 | 49431 |
+| TSX          | .tsx                    |   101 | 49432 |
 | TypeScript   | .ts, .mts, .cts         |   246 | 71651 |
-| Gradle       | .gradle                 |     7 |   477 |
+| Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6070 |
+| Markdown     | .md                     |    35 |  6071 |
 | Other Text   | mixed                   |    13 |  3415 |
-| Plain Text   | (no extension)          |    11 |  4010 |
+| Plain Text   | (no extension)          |    11 |  4013 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
-| XML          | .xml                    |    12 |   425 |
+| XML          | .xml                    |    12 |   430 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 57 directories, 86 files
+- android/: 59 directories, 91 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
 - electron/: 14 directories, 50 files
@@ -98,7 +98,9 @@ vassist/
 │   │   │   │   │       └── vassist/
 │   │   │   │   │           └── app/
 │   │   │   │   │               ├── ai/
+│   │   │   │   │               │   ├── AudioConverter.kt
 │   │   │   │   │               │   ├── ComputeBackendManager.kt
+│   │   │   │   │               │   ├── LiteRtLmService.kt
 │   │   │   │   │               │   ├── LlamaService.kt
 │   │   │   │   │               │   ├── LLMModelManager.kt
 │   │   │   │   │               │   ├── LocalAIBridge.kt
@@ -183,6 +185,11 @@ vassist/
 │   │   │               └── getcapacitor/
 │   │   │                   └── myapp/
 │   │   │                       └── ExampleUnitTest.java
+│   │   ├── tools/
+│   │   │   └── litert-patcher/
+│   │   │       ├── asm-tree.jar
+│   │   │       ├── asm.jar
+│   │   │       └── PatchLiteRt.java
 │   │   ├── .gitignore
 │   │   ├── build.gradle
 │   │   ├── capacitor.build.gradle

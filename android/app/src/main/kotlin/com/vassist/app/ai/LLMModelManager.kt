@@ -88,7 +88,8 @@ class LLMModelManager(private val context: Context) {
         val modelsDir = getModelsDirectory()
         
         val models = modelsDir.listFiles { file -> 
-            file.extension.equals("gguf", ignoreCase = true) &&
+            (file.extension.equals("gguf", ignoreCase = true) ||
+             file.extension.equals("litertlm", ignoreCase = true)) &&
             !file.name.startsWith("mmproj-", ignoreCase = true)
         }?.map { file ->
             // Check if corresponding mmproj file exists (for traditional LLaVA models)
@@ -339,53 +340,138 @@ class LLMModelManager(private val context: Context) {
 
     suspend fun searchHuggingFaceModels(query: String, cursor: String?, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
-            val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
-                .appendQueryParameter("filter", "gguf")
-                .appendQueryParameter("limit", pageSize.coerceIn(1, 50).toString())
-                .appendQueryParameter("sort", "trendingScore")
+            // Search both GGUF- and LiteRT-LM-tagged repos and merge results.
+            // The opaque pagination cursor encodes both underlying cursors.
+            data class PageResult(val items: List<Pair<String, JsonObject?>>, val next: String?, val total: Int?)
 
-            if (query.trim().isNotBlank()) {
-                uriBuilder.appendQueryParameter("search", query.trim())
+            fun fetch(filter: String, cursorPart: String?): PageResult {
+                val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
+                    .appendQueryParameter("filter", filter)
+                    .appendQueryParameter("limit", pageSize.coerceIn(1, 50).toString())
+                    .appendQueryParameter("sort", "trendingScore")
+                if (query.trim().isNotBlank()) {
+                    uriBuilder.appendQueryParameter("search", query.trim())
+                }
+                if (!cursorPart.isNullOrBlank()) {
+                    uriBuilder.appendQueryParameter("cursor", cursorPart)
+                }
+                val connection = createConnection(uriBuilder.build().toString())
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val linkHeader = connection.getHeaderField("Link")
+                val totalHeader = connection.getHeaderField("X-Total-Count")
+                connection.disconnect()
+
+                val payload = gson.fromJson(body, JsonArray::class.java)
+                val items = payload.mapNotNull { element ->
+                    val obj = element as? JsonObject ?: return@mapNotNull null
+                    val repoId = obj.get("id")?.asString ?: return@mapNotNull null
+                    repoId to obj
+                }
+                return PageResult(items, parseNextCursor(linkHeader), totalHeader?.toIntOrNull())
             }
+
+            // Decode merged cursor: Base64 of "ggufCursor|litertCursor" (either side may be empty)
+            var ggufCursor: String? = null
+            var litertCursor: String? = null
             if (!cursor.isNullOrBlank()) {
-                uriBuilder.appendQueryParameter("cursor", cursor)
+                try {
+                    val decoded = String(java.util.Base64.getUrlDecoder().decode(cursor), Charsets.UTF_8)
+                    ggufCursor = decoded.substringBefore("|").ifBlank { null }
+                    litertCursor = decoded.substringAfter("|").ifBlank { null }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decode merged HF cursor", e)
+                }
             }
 
-            val connection = createConnection(uriBuilder.build().toString())
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val linkHeader = connection.getHeaderField("Link")
-            val totalHeader = connection.getHeaderField("X-Total-Count")
-            connection.disconnect()
+            val halfLimit = (pageSize.coerceIn(1, 50) + 1) / 2
 
-            val payload = gson.fromJson(body, JsonArray::class.java)
-            val items = payload.mapNotNull { element ->
-                val obj = element as? JsonObject ?: return@mapNotNull null
-                val repoId = obj.get("id")?.asString ?: return@mapNotNull null
-                val downloads = obj.get("downloads")?.takeIf { !it.isJsonNull }?.asLong
-                val likes = obj.get("likes")?.takeIf { !it.isJsonNull }?.asLong
-                val pipelineTag = obj.get("pipeline_tag")?.takeIf { !it.isJsonNull }?.asString
+            fun fetchWithLimit(filter: String, cursorPart: String?): PageResult {
+                val savedLimit = pageSize
+                // temporarily respect half limit per source so merged page ~= pageSize
+                val result = if (halfLimit < pageSize) {
+                    try {
+                        val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
+                            .appendQueryParameter("filter", filter)
+                            .appendQueryParameter("limit", halfLimit.toString())
+                            .appendQueryParameter("sort", "trendingScore")
+                        if (query.trim().isNotBlank()) uriBuilder.appendQueryParameter("search", query.trim())
+                        if (!cursorPart.isNullOrBlank()) uriBuilder.appendQueryParameter("cursor", cursorPart)
+                        val connection = createConnection(uriBuilder.build().toString())
+                        val body = connection.inputStream.bufferedReader().use { it.readText() }
+                        val linkHeader = connection.getHeaderField("Link")
+                        val totalHeader = connection.getHeaderField("X-Total-Count")
+                        connection.disconnect()
+                        val payload = gson.fromJson(body, JsonArray::class.java)
+                        PageResult(payload.mapNotNull { element ->
+                            val obj = element as? JsonObject ?: return@mapNotNull null
+                            val repoId = obj.get("id")?.asString ?: return@mapNotNull null
+                            repoId to obj
+                        }, parseNextCursor(linkHeader), totalHeader?.toIntOrNull())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "HF sub-search failed for filter=$filter", e)
+                        PageResult(emptyList(), null, null)
+                    }
+                } else fetch(filter, cursorPart)
+                return result
+            }
+
+            val ggufPage = fetchWithLimit("gguf", ggufCursor)
+            val litertPage = fetchWithLimit("litert-lm", litertCursor)
+
+            // Merge, dedupe by repo id (prefer first occurrence), derive label from tags
+            data class MergedItem(val item: CatalogItem)
+
+            val seen = LinkedHashMap<String, CatalogItem>()
+            fun register(repoId: String, obj: JsonObject?, defaultTag: String) {
+                if (seen.containsKey(repoId)) {
+                    // Enrich existing label if the other tag also matches this repo
+                    return
+                }
+                val downloads = obj?.get("downloads")?.takeIf { !it.isJsonNull }?.asLong
+                val likes = obj?.get("likes")?.takeIf { !it.isJsonNull }?.asLong
+                val pipelineTag = obj?.get("pipeline_tag")?.takeIf { !it.isJsonNull }?.asString
+                val tags = obj?.getAsJsonArray("tags")
+                val hasGguf = tags?.any { it.isJsonPrimitive && it.asString == "gguf" } == true || defaultTag == "GGUF"
+                val hasLitert = tags?.any { it.isJsonPrimitive && (it.asString == "litertlm" || it.asString == "litert-lm") } == true || defaultTag == "LiteRT-LM"
+                val formatLabel = when {
+                    hasGguf && hasLitert -> "GGUF + LiteRT-LM"
+                    hasLitert -> "LiteRT-LM"
+                    else -> "GGUF"
+                }
                 val descriptionParts = listOfNotNull(
                     downloads?.let { "${String.format("%,d", it)} downloads" },
                     likes?.let { "${String.format("%,d", it)} likes" },
-                    pipelineTag
+                    pipelineTag,
+                    formatLabel
                 )
-
-                CatalogItem(
+                seen[repoId] = CatalogItem(
                     id = repoId,
                     label = repoId,
                     value = repoId,
                     description = descriptionParts.joinToString(" • ").ifBlank { null },
-                    secondaryLabel = "GGUF",
+                    secondaryLabel = formatLabel,
                     downloads = downloads,
                     likes = likes
                 )
             }
 
+            ggufPage.items.forEach { (id, obj) -> register(id, obj, "GGUF") }
+            litertPage.items.forEach { (id, obj) -> register(id, obj, "LiteRT-LM") }
+
+            val items = seen.values.toList()
+
+            // Re-encode both cursors for the next page
+            val nextCursor = if (ggufPage.next != null || litertPage.next != null) {
+                java.util.Base64.getUrlEncoder().encodeToString(
+                    "${ggufPage.next.orEmpty()}|${litertPage.next.orEmpty()}".toByteArray(Charsets.UTF_8)
+                )
+            } else null
+
             mapOf(
                 "success" to true,
                 "items" to items,
-                "nextCursor" to parseNextCursor(linkHeader),
-                "total" to totalHeader?.toIntOrNull()
+                "nextCursor" to nextCursor,
+                "total" to (ggufPage.total ?: 0) + (litertPage.total ?: 0)
             )
         } catch (e: Exception) {
             Log.e(TAG, "searchHuggingFaceModels failed", e)
@@ -413,7 +499,8 @@ class LLMModelManager(private val context: Context) {
                 val obj = element as? JsonObject ?: return@mapNotNull null
                 val filePath = obj.get("rfilename")?.takeIf { !it.isJsonNull }?.asString ?: return@mapNotNull null
                 val lowerFilePath = filePath.lowercase()
-                if (!lowerFilePath.endsWith(".gguf") || lowerFilePath.contains("mmproj") || (normalizedQuery.isNotBlank() && !lowerFilePath.contains(normalizedQuery))) {
+                val isModelFile = lowerFilePath.endsWith(".gguf") || lowerFilePath.endsWith(".litertlm")
+                if (!isModelFile || lowerFilePath.contains("mmproj") || (normalizedQuery.isNotBlank() && !lowerFilePath.contains(normalizedQuery))) {
                     return@mapNotNull null
                 }
 
@@ -450,10 +537,11 @@ class LLMModelManager(private val context: Context) {
             // Extract filename from URL
             var filename = url.substringAfterLast("/").substringBefore("?")
             
-            if (!filename.endsWith(".gguf", ignoreCase = true)) {
+            if (!filename.endsWith(".gguf", ignoreCase = true) &&
+                !filename.endsWith(".litertlm", ignoreCase = true)) {
                 return@withContext mapOf(
                     "success" to false,
-                    "error" to "Invalid file: must be a .gguf model file"
+                    "error" to "Invalid file: must be a .gguf or .litertlm model file"
                 )
             }
             

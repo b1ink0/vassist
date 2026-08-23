@@ -607,7 +607,7 @@ const HuggingFaceBrowser = ({
         setNextFilePage(result.nextCursor || null);
         setFilesError(
           result.success === false
-            ? result.error || "Unable to load GGUF files"
+            ? result.error || "Unable to load model files"
             : "",
         );
       } catch (error) {
@@ -617,7 +617,7 @@ const HuggingFaceBrowser = ({
           setFilesError(
             error instanceof Error
               ? error.message
-              : "Unable to load GGUF files",
+              : "Unable to load model files",
           );
         }
       } finally {
@@ -689,12 +689,12 @@ const HuggingFaceBrowser = ({
       setNextFilePage(result.nextCursor || null);
       setFilesError(
         result.success === false
-          ? result.error || "Unable to load GGUF files"
+          ? result.error || "Unable to load model files"
           : "",
       );
     } catch (error) {
       setFilesError(
-        error instanceof Error ? error.message : "Unable to load GGUF files",
+        error instanceof Error ? error.message : "Unable to load model files",
       );
     } finally {
       setFilesLoading(false);
@@ -705,12 +705,12 @@ const HuggingFaceBrowser = ({
     <div className="space-y-3">
       <div className="space-y-2">
         <label className="block text-xs font-medium text-white/80">
-          Search Hugging Face GGUF Repositories
+          Search Hugging Face Model Repositories
         </label>
         <SearchInput
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search GGUF repos like qwen, mistral, llama"
+          placeholder="Search repos like qwen, gemma, litert-community"
           disabled={disabled}
           loading={loading}
           isLightBackground={isLightBackground}

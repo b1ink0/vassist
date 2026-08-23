@@ -83,6 +83,12 @@ class LocalAIServer(
     private var vitsService: VitsService? = null
     @Volatile
     private var llamaService: LlamaService? = null
+    @Volatile
+    private var liteRtService: LiteRtLmService? = null
+    /** Which runtime the currently loaded model uses: "llama" | "litert" */
+    @Volatile
+    private var activeRuntime: String = "llama"
+    private val liteRtMutex = Mutex()
     private val llmModelManager by lazy { LLMModelManager(context) }
     private val ttsModelManager by lazy { TtsModelManager(context) }
 
@@ -277,6 +283,12 @@ class LocalAIServer(
     }
 
     /**
+     * Get the active LiteRT-LM service (only valid when activeRuntime=="litert").
+     */
+    private fun getLiteRtService(): LiteRtLmService =
+        liteRtService ?: throw IllegalStateException("LiteRT-LM service not initialized")
+
+    /**
      * Initialize server (models are lazy-loaded on first request)
      */
     suspend fun initialize(
@@ -376,6 +388,7 @@ class LocalAIServer(
         Log.d(TAG, "Stop generation requested")
         runBlocking(aiDispatcher) {
             llamaService?.stopGeneration()
+            liteRtService?.stopGeneration()
         }
         return jsonResponse(JsonObject().apply {
             addProperty("stopped", true)
@@ -475,6 +488,11 @@ class LocalAIServer(
                 addProperty("compute_unit", getLLMComputeUnit())
                 addProperty("requested_device", LlamaAndroid.instance().requestedDevice)
                 addProperty("backends", LlamaAndroid.instance().backendsInfo())
+            })
+            add("litert", JsonObject().apply {
+                addProperty("initialized", liteRtService?.isInitialized == true)
+                addProperty("model", liteRtService?.modelName ?: "not loaded")
+                addProperty("backend", if (activeRuntime == "litert") liteRtService?.activeBackend else null)
             })
         }
         return jsonResponse(status)
@@ -652,19 +670,36 @@ class LocalAIServer(
             
             if (modelPath != currentModelPath) {
                 Log.i(TAG, "Model switch requested: $currentModelPath -> $modelPath")
+                val runtime = if (modelPath.endsWith(".litertlm", ignoreCase = true)) "litert" else "llama"
                 try {
-                    // Reload LlamaService with new model
+                    // Reload the appropriate runtime with the new model
                     runBlocking(aiDispatcher) {
                         llamaMutex.withLock {
-                            llamaService?.release()
-                            llamaService = null
-                            currentModelPath = null
-                            
-                            val service = LlamaService(context)
-                            service.initialize(modelPath, device = getLLMComputeUnit())
-                            llamaService = service
-                            currentModelPath = modelPath
-                            Log.i(TAG, "Model switched successfully")
+                            liteRtMutex.withLock {
+                                if (runtime == "litert") {
+                                    llamaService?.release()
+                                    llamaService = null
+                                    liteRtService?.release()
+                                    liteRtService = null
+
+                                    val service = LiteRtLmService(context)
+                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    liteRtService = service
+                                    Log.i(TAG, "[LLM-backend] LiteRT-LM model switched: $modelPath (backend=${service.activeBackend})")
+                                } else {
+                                    liteRtService?.release()
+                                    liteRtService = null
+                                    llamaService?.release()
+                                    llamaService = null
+
+                                    val service = LlamaService(context)
+                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    llamaService = service
+                                }
+                                activeRuntime = runtime
+                                currentModelPath = modelPath
+                                Log.i(TAG, "Model switched successfully (runtime=$runtime)")
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -677,6 +712,7 @@ class LocalAIServer(
         // Convert to LlamaService format
         val llamaMessages = mutableListOf<LlamaService.ChatMessage>()
         val images = mutableListOf<ByteArray>()
+        val audios = mutableListOf<Pair<ByteArray, String>>()  // bytes + format
         
         // Only collect images from the LAST message to avoid re-processing old images on Android
         val lastMessageIndex = request.messages.size - 1
@@ -699,6 +735,19 @@ class LocalAIServer(
                     for (part in content.parts) {
                         when (part) {
                             is ContentPart.TextPart -> textParts.add(part.text)
+                            is ContentPart.AudioPart -> {
+                                if (isLastMessage) {
+                                    try {
+                                        val audioBytes =
+                                            java.util.Base64.getDecoder().decode(part.data)
+                                        audios.add(audioBytes to part.format)
+                                        Log.i(TAG, "Audio attachment: ${audioBytes.size} bytes (${part.format})")
+                                    } catch (e: IllegalArgumentException) {
+                                        Log.w(TAG, "Failed to decode audio attachment", e)
+                                    }
+                                }
+                                textParts.add("[audio]")
+                            }
                             is ContentPart.ImagePart -> {
                                 if (isLastMessage) {
                                     // Only decode and process images from the latest message
@@ -760,9 +809,9 @@ class LocalAIServer(
         }
         
         return if (stream) {
-            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios)
         } else {
-            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios)
         }
     }
     
@@ -773,12 +822,17 @@ class LocalAIServer(
         messages: List<LlamaService.ChatMessage>,
         images: List<ByteArray>,
         maxTokens: Int,
-        model: String
+        model: String,
+        audios: List<Pair<ByteArray, String>> = emptyList()
     ): Response {
         return runBlocking(aiDispatcher) {
             try {
-                val llama = getLlamaService()
-                var response = llama.chatCompletionSync(messages, maxTokens, images.ifEmpty { null })
+                var response = if (activeRuntime == "litert") {
+                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null })
+                } else {
+                    if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
+                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null })
+                }
                 
                 // Strip <think>...</think> blocks from response
                 response = stripThinkBlocks(response)
@@ -820,7 +874,8 @@ class LocalAIServer(
         messages: List<LlamaService.ChatMessage>,
         images: List<ByteArray>,
         maxTokens: Int,
-        model: String
+        model: String,
+        audios: List<Pair<ByteArray, String>> = emptyList()
     ): Response {
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val created = System.currentTimeMillis() / 1000
@@ -832,7 +887,12 @@ class LocalAIServer(
         // Launch streaming in background — save job ref so we can cancel on client disconnect
         val streamingJob = scope.launch(aiDispatcher) {
             try {
-                val llama = getLlamaService()
+                val tokenFlow = if (activeRuntime == "litert") {
+                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null })
+                } else {
+                    if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
+                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null })
+                }
                 
                 // Buffer for detecting and stripping <think> blocks
                 val buffer = StringBuilder()
@@ -842,7 +902,7 @@ class LocalAIServer(
                 
                 Log.d(TAG, "Starting streaming chat completion...")
                 
-                llama.chatCompletion(messages, maxTokens, images.ifEmpty { null }).collect { token ->
+                tokenFlow.collect { token ->
                     totalTokens++
                     
                     // Log every 20 tokens for debugging
@@ -1182,6 +1242,13 @@ class LocalAIServer(
     sealed class ContentPart {
         data class TextPart(val type: String, val text: String) : ContentPart()
         data class ImagePart(val type: String, val image_url: ImageUrl) : ContentPart()
+        data class AudioPart(
+            val type: String,
+            /** Base64-encoded audio payload (no data-url prefix) */
+            val data: String,
+            /** e.g. "wav", "mp3", "ogg" */
+            val format: String
+        ) : ContentPart()
     }
     
     data class ImageUrl(val url: String)
@@ -1205,6 +1272,14 @@ class LocalAIServer(
                             "image_url" -> {
                                 val imageUrl = obj.getAsJsonObject("image_url")
                                 parts.add(ContentPart.ImagePart(type, ImageUrl(imageUrl.get("url").asString)))
+                            }
+                            "input_audio" -> {
+                                val audioObj = obj.getAsJsonObject("input_audio")
+                                val audioData = audioObj?.get("data")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                                val audioFmt = audioObj?.get("format")?.takeIf { !it.isJsonNull }?.asString ?: "wav"
+                                if (audioData.isNotBlank()) {
+                                    parts.add(ContentPart.AudioPart(type, audioData, audioFmt))
+                                }
                             }
                         }
                     }

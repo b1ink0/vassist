@@ -68,3 +68,6 @@ test-results
 .vercel
 .env*
 __pycache__
+
+# LiteRT-LM patcher build output
+app/tools/litert-patcher/*.class

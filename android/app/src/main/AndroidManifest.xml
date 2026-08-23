@@ -100,6 +100,11 @@
         <uses-native-library
             android:name="libvulkan.so"
             android:required="false" />
+
+        <!-- LiteRT-LM GPU delegate support -->
+        <uses-native-library
+            android:name="libvndksupport.so"
+            android:required="false" />
     </application>
 
     <!-- Permissions -->
