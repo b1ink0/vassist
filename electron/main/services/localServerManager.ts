@@ -15,9 +15,12 @@ type ServerRuntimeConfig = {
   stt?: {
     model?: string;
     language?: string;
+    engine?: string;
+    variant?: string;
   };
   tts?: {
     enabled?: boolean;
+    engine?: string;
     pytorchBackend?: string;
   };
 };
@@ -38,10 +41,13 @@ type LocalAIServerLike = {
       proxyUrl?: string;
       model?: string;
       language?: string;
+      engine?: "python" | "whispercpp";
+      variant?: string;
     };
     tts: {
       proxyUrl?: string;
       enabled?: boolean;
+      engine?: string;
     };
     server: {
       shareOnNetwork?: boolean;
@@ -62,6 +68,14 @@ type LocalServerManagerDeps = {
     loadLlamaApi?: () => Promise<unknown>;
     ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
     restartTTSBackend?: ((reason: string) => void | Promise<void>) | null;
+    ensureSupertonicRunning?: (() => void | Promise<void>) | null;
+    restartSupertonicBackend?:
+      | ((reason: string) => void | Promise<void>)
+      | null;
+    ensureWhisperCppRunning?: ((variant?: string) => Promise<void>) | null;
+    restartWhisperCppBackend?:
+      | ((reason: string) => void | Promise<void>)
+      | null;
     onTTSRequestStart?: (() => void) | null;
     onTTSRequestComplete?: (() => void) | null;
   }) => LocalAIServerLike;
@@ -76,6 +90,13 @@ type LocalServerManagerDeps = {
   onTTSRequestComplete?: (() => void) | null;
   stopTTSBackend?: (() => void) | null;
   setTTSBackend?: ((backend: string | undefined | null) => void) | null;
+  ensureSupertonicRunning?: (() => void | Promise<void>) | null;
+  restartSupertonicBackend?: ((reason: string) => void | Promise<void>) | null;
+  ensureWhisperCppRunning?: (() => void | Promise<void>) | null;
+  restartWhisperCppBackend?: ((reason: string) => void | Promise<void>) | null;
+  ensureSttBackendRunning?: (() => void | Promise<void>) | null;
+  onSTTRequestStart?: (() => void) | null;
+  onSTTRequestComplete?: (() => void) | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -98,6 +119,13 @@ export function createLocalServerManager({
   onTTSRequestComplete,
   stopTTSBackend,
   setTTSBackend,
+  ensureSupertonicRunning,
+  restartSupertonicBackend,
+  ensureWhisperCppRunning,
+  restartWhisperCppBackend,
+  ensureSttBackendRunning,
+  onSTTRequestStart,
+  onSTTRequestComplete,
 }: LocalServerManagerDeps) {
   let server: LocalAIServerLike | null = null;
   let restartPromise: Promise<void> | null = null;
@@ -117,9 +145,45 @@ export function createLocalServerManager({
               restartTTSBackend?:
                 | ((reason: string) => void | Promise<void>)
                 | null;
+              ensureSupertonicRunning?: (() => void | Promise<void>) | null;
+              restartSupertonicBackend?:
+                | ((reason: string) => void | Promise<void>)
+                | null;
+              ensureWhisperCppRunning?:
+                | ((variant?: string) => Promise<void>)
+                | null;
+              restartWhisperCppBackend?:
+                | ((reason: string) => void | Promise<void>)
+                | null;
+              ensureSttBackendRunning?: (() => void | Promise<void>) | null;
+              onSTTRequestStart?: (() => void) | null;
+              onSTTRequestComplete?: (() => void) | null;
               onTTSRequestStart?: (() => void) | null;
               onTTSRequestComplete?: (() => void) | null;
             } = {};
+            if (ensureSttBackendRunning !== undefined) {
+              serverDeps.ensureSttBackendRunning = ensureSttBackendRunning;
+            }
+            if (onSTTRequestStart !== undefined) {
+              serverDeps.onSTTRequestStart = onSTTRequestStart;
+            }
+            if (onSTTRequestComplete !== undefined) {
+              serverDeps.onSTTRequestComplete = onSTTRequestComplete;
+            }
+            if (ensureSupertonicRunning !== undefined) {
+              serverDeps.ensureSupertonicRunning = ensureSupertonicRunning;
+            }
+            if (restartSupertonicBackend !== undefined) {
+              serverDeps.restartSupertonicBackend = restartSupertonicBackend;
+            }
+            if (ensureWhisperCppRunning !== undefined) {
+              serverDeps.ensureWhisperCppRunning = ensureWhisperCppRunning as
+                | ((variant?: string) => Promise<void>)
+                | null;
+            }
+            if (restartWhisperCppBackend !== undefined) {
+              serverDeps.restartWhisperCppBackend = restartWhisperCppBackend;
+            }
             if (loadLlamaApi) {
               serverDeps.loadLlamaApi = loadLlamaApi;
             }
@@ -186,10 +250,15 @@ export function createLocalServerManager({
             proxyUrl: "http://127.0.0.1:9881",
             model: config.stt?.model || "tiny",
             language: config.stt?.language || "auto",
+            engine:
+              config.stt?.engine === "whispercpp" ? "whispercpp" : "python",
+            ...(config.stt?.variant ? { variant: config.stt.variant } : {}),
           },
           tts: {
             proxyUrl: "http://127.0.0.1:9880",
             enabled: desktopTtsEnabled,
+            engine:
+              config.tts?.engine === "supertonic" ? "supertonic" : "gpt-sovits",
           },
           server: {
             shareOnNetwork,

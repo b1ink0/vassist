@@ -285,6 +285,9 @@ interface DesktopLlmApiLike {
 
 interface DesktopApiLike {
   llm?: DesktopLlmApiLike;
+  whisperCpp?: {
+    deleteModel?: (options: { modelId: string }) => Promise<unknown>;
+  };
 }
 
 interface AndroidApiLike {
@@ -1279,6 +1282,26 @@ const ChatContainer = ({
     async (variantId: string) => {
       try {
         let resultJson: string | undefined;
+        if (variantId.startsWith("whispercpp:")) {
+          // Desktop whisper.cpp GGML model (async IPC, no JSON envelope)
+          const modelId = variantId.slice("whispercpp:".length);
+          await api?.whisperCpp
+            ?.deleteModel?.({ modelId })
+            .catch((error: unknown) => {
+              Logger.error(
+                "ChatContainer",
+                "whisper.cpp model delete failed:",
+                error,
+              );
+            });
+          setSttExternalDeleteTick((prev) => prev + 1);
+          setIsDeleteSttModelDialogClosing(true);
+          setTimeout(() => {
+            setDeletingSttModelId(null);
+            setIsDeleteSttModelDialogClosing(false);
+          }, 200);
+          return;
+        }
         if (variantId === "sensevoice-qnn") {
           resultJson = androidAPI?.deleteSenseVoiceQnnModel?.();
         } else if (variantId === "sensevoice") {
@@ -1322,7 +1345,7 @@ const ChatContainer = ({
         }, 200);
       }
     },
-    [androidAPI],
+    [androidAPI, api?.whisperCpp],
   );
 
   const handleDeleteSttModelCancel = useCallback(() => {

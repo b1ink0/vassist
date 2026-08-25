@@ -462,7 +462,7 @@ const TTSSettings = ({
           {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && isDesktop && (
             <>
               <h4 className="text-sm font-semibold text-white/90 mb-3">
-                Desktop Local TTS (GPT-SoVITS)
+                Desktop Local TTS
               </h4>
               <GPTSoVITSConfig
                 config={ttsConfig["desktop-local"] || {}}

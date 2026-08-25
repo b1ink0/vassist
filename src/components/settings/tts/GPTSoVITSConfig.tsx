@@ -31,7 +31,13 @@ interface VoiceItem {
   metadata: Record<string, unknown>;
 }
 
+import SupertonicEngineSection from "./SupertonicEngineSection";
+
 interface GPTSoVITSConfigShape {
+  engine?: string;
+  supertonicVoice?: string;
+  supertonicLang?: string;
+  supertonicSteps?: number;
   referenceVoiceId?: string | null;
   referenceText?: string;
   referenceLanguage?: string;
@@ -87,6 +93,9 @@ const GPTSoVITSConfig = ({
   errorMessage: externalErrorMessage,
   setErrorMessage: externalSetErrorMessage,
 }: GPTSoVITSConfigProps) => {
+  const [engine, setEngine] = useState<"gpt-sovits" | "supertonic">(
+    (config?.engine as "gpt-sovits" | "supertonic") || "gpt-sovits",
+  );
   const [voices, setVoices] = useState<VoiceItem[]>([]);
   const [uploadingVoice, setUploadingVoice] = useState(false);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -285,22 +294,72 @@ const GPTSoVITSConfig = ({
 
   return (
     <div className="space-y-6">
-      {/* Setup section (desktop only) - skip for remote servers */}
-      {isDesktop && !skipSetup && (
-        <div>
-          <h4 className="text-sm font-semibold text-white mb-3">
-            Installation
-          </h4>
-          <GPTSoVITSSetup
-            isLightBackground={isLightBackground}
-            config={config}
-            {...(onChange ? { onConfigChange: onChange } : {})}
+      {isDesktop && (
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-white mb-2">TTS Engine</h4>
+          <Select
+            data-testid="desktop-tts-engine-select"
+            value={engine}
+            onChange={(e) => {
+              const nextEngine = e.target.value as "gpt-sovits" | "supertonic";
+              setEngine(nextEngine);
+              onChange?.("engine", nextEngine);
+              // Keep model in sync so backend routing has one canonical field
+              onChange?.("model", nextEngine);
+            }}
+            variant={isLightBackground ? "dark" : "default"}
+            options={[
+              {
+                value: "gpt-sovits",
+                label: "GPT-SoVITS (Clone Voice, reference audio)",
+              },
+              {
+                value: "supertonic",
+                label: "Supertonic 3 (Local Voice, fast, built-in voices)",
+              },
+            ]}
           />
+
+          {engine === "supertonic" ? (
+            <SupertonicEngineSection
+              engine={engine}
+              supertonicVoice={config?.supertonicVoice || "F1"}
+              supertonicLang={config?.supertonicLang || "en"}
+              supertonicSteps={config?.supertonicSteps ?? 8}
+              isLightBackground={isLightBackground}
+              onChange={(updates: Record<string, unknown>) => {
+                for (const [key, value] of Object.entries(updates)) {
+                  onChange?.(key, value as string | number | null);
+                }
+              }}
+            />
+          ) : (
+            <>
+              {/* Setup section (desktop only) - skip for remote servers */}
+              {!skipSetup && (
+                <div>
+                  <h4 className="text-sm font-semibold text-white mb-3">
+                    Installation
+                  </h4>
+                  <GPTSoVITSSetup
+                    isLightBackground={isLightBackground}
+                    config={config}
+                    {...(onChange ? { onConfigChange: onChange } : {})}
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {/* Voice configuration section */}
-      <div className="space-y-4">
+      {/* Voice configuration section (GPT-SoVITS only — Supertonic uses built-in voices) */}
+      <div
+        className={cn(
+          "space-y-4",
+          isDesktop && engine === "supertonic" && "hidden",
+        )}
+      >
         {showTitle && (
           <h4 className="text-sm font-semibold text-white mb-3">
             Reference Voices

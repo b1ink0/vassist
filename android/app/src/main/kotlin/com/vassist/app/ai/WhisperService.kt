@@ -26,6 +26,7 @@ class WhisperService(private val context: Context) {
         private const val TAG = "WhisperService"
         private const val SAMPLE_RATE = 16000
         private const val DEFAULT_LANGUAGE = "en"
+        private const val WHISPER_AUTO_DETECT_LANGUAGE = ""
 
         // The SenseVoice QNN binary is exported with fixed 30-second input
         // shapes; longer input gets truncated by sherpa. When running on QNN we
@@ -178,9 +179,12 @@ class WhisperService(private val context: Context) {
                     normalizedLanguage in STTTTSModelManager.SENSEVOICE_LANGUAGES
                 ) normalizedLanguage else "auto"
             else ->
-                // Whisper: language only applies to multilingual variants
-                if (variant?.multilingual == true && normalizedLanguage != null) normalizedLanguage
-                else DEFAULT_LANGUAGE
+                // Whisper: language only applies to multilingual variants.
+                // null (Auto Detect) maps to "" which makes sherpa-onnx run
+                // per-utterance language detection instead of forcing English.
+                if (variant?.multilingual == true) {
+                    normalizedLanguage ?: WHISPER_AUTO_DETECT_LANGUAGE
+                } else DEFAULT_LANGUAGE
         }
 
         val choice = selectProvider(selection, providerHint)

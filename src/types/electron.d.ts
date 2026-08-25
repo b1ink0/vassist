@@ -109,6 +109,8 @@ export interface ElectronAPI {
   server?: ElectronServerAPI;
   llm?: ElectronLLMAPI;
   whisperSetup?: ElectronSetupAPI;
+  whisperCpp?: Record<string, ((...args: unknown[]) => unknown) | undefined>;
+  supertonicSetup?: ElectronSetupAPI;
   gptSovitsSetup?: ElectronSetupAPI;
 }
 

@@ -509,7 +509,11 @@ export const DefaultTTSConfig = {
   "desktop-local": {
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: "gpt-sovits",
+    engine: "gpt-sovits" as string,
     pytorchBackend: "auto", // auto | cpu | cuda | rocm | sycl | metal
+    supertonicVoice: "F1",
+    supertonicLang: "en",
+    supertonicSteps: 8,
     // Voice cloning reference
     referenceVoiceId: null, // Voice ID from IndexedDB
     referenceAudio: null, // Path to reference audio file
@@ -590,6 +594,8 @@ export const DefaultSTTConfig = {
     model: "tiny",
     language: "auto",
     threads: 4,
+    engine: "whispercpp" as "python" | "whispercpp",
+    whisperCppVariant: undefined as string | undefined,
   },
 
   recordingFormat: "webm",

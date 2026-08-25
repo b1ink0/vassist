@@ -9,6 +9,56 @@ interface DesktopSTTConfigShape {
   model?: string;
   language?: string;
   threads?: number;
+  engine?: "python" | "whispercpp";
+  whisperCppVariant?: string | undefined;
+}
+
+interface WhisperCppVariant {
+  id: string;
+  label: string;
+  sizeHint: string;
+  installed: boolean;
+}
+
+interface WhisperCppModel {
+  id: string;
+  label: string;
+  file: string;
+  sizeHint: string;
+  downloaded: boolean;
+  active: boolean;
+  sizeBytes: number;
+}
+
+interface WhisperCppStatus {
+  engine: string;
+  port: number;
+  variants: WhisperCppVariant[];
+  models: WhisperCppModel[];
+  running: boolean;
+}
+
+interface WhisperCppApi {
+  getStatus?: () => Promise<WhisperCppStatus>;
+  setEngine?: (engine: string) => Promise<unknown>;
+  startSetup?: (options: { variantId: string }) => Promise<unknown>;
+  downloadModel?: (options: { modelId: string }) => Promise<unknown>;
+  deleteModel?: (options: { modelId: string }) => Promise<{ deleted: boolean }>;
+  onLog?: (
+    cb: (log: { message?: string; type?: string }) => void,
+  ) => (() => void) | undefined;
+  onSetupProgress?: (
+    cb: (progress: { percent?: number; status?: string }) => void,
+  ) => (() => void) | undefined;
+  onComplete?: (
+    cb: (result: { success?: boolean; error?: string }) => void,
+  ) => (() => void) | undefined;
+  onModelProgress?: (
+    cb: (progress: { id?: string; percent?: number; status?: string }) => void,
+  ) => (() => void) | undefined;
+  onModelComplete?: (
+    cb: (result: { id?: string; success?: boolean; error?: string }) => void,
+  ) => (() => void) | undefined;
 }
 
 interface SetupStatus {
@@ -44,6 +94,8 @@ interface DesktopSTTConfigProps {
   onChange: (updates: Record<string, unknown>) => void;
   isSetupMode?: boolean;
   isLightBackground?: boolean;
+  onRequestDeleteDialog?: ((modelId: string) => void) | undefined;
+  externalDeleteTick?: number | undefined;
 }
 
 /**
@@ -61,13 +113,129 @@ const DesktopSTTConfig = ({
   onChange,
   isSetupMode = false,
   isLightBackground = false,
+  onRequestDeleteDialog,
+  externalDeleteTick,
 }: DesktopSTTConfigProps) => {
   const desktopAPI = useDesktopApi();
   const whisperSetup = desktopAPI?.whisperSetup as WhisperSetupApi | undefined;
+  const whisperCpp = desktopAPI?.whisperCpp as WhisperCppApi | undefined;
+  const [cppStatus, setCppStatus] = useState<WhisperCppStatus | null>(null);
+  const [cppLog, setCppLog] = useState<string[]>([]);
+  const [cppInstalling, setCppInstalling] = useState(false);
+  const [cppProgress, setCppProgress] = useState("");
+  const [downloadingModels, setDownloadingModels] = useState<
+    Record<string, string>
+  >({});
+  const [cppProgressVariantId, setCppProgressVariantId] = useState<
+    string | null
+  >(null);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupComplete, setSetupComplete] = useState(false);
+
+  // ── whisper.cpp engine state ──
+  const refreshCppStatus = () => {
+    if (!whisperCpp?.getStatus) return;
+    whisperCpp
+      .getStatus()
+      .then((status) => setCppStatus(status))
+      .catch(() => setCppStatus(null));
+  };
+
+  // Live progress per item, driven by IPC events + getStatus polling
+  const modelProgressRef = useRef<Record<string, number>>({});
+  // Ref mirror so the status poller reads live values without re-subscribing
+  const activityRef = useRef({ installing: false, downloading: false });
+  const [cppProgressPct, setCppProgressPct] = useState<number | null>(null);
+  const [modelProgressPct, setModelProgressPct] = useState<
+    Record<string, number>
+  >({});
+
+  useEffect(() => {
+    refreshCppStatus();
+    if (!whisperCpp?.onLog || !whisperCpp?.onComplete) return;
+    const unsubLog = whisperCpp.onLog((log) => {
+      const message =
+        typeof log?.message === "string" ? log.message : String(log ?? "");
+      setCppLog((prev) => [...prev.slice(-40), message]);
+    });
+    const unsubProgress = whisperCpp.onSetupProgress?.((progress) => {
+      const pct =
+        typeof progress?.percent === "number"
+          ? Math.max(0, Math.min(100, progress.percent))
+          : null;
+      const text =
+        `${progress?.status ?? ""} ${pct != null ? `${pct}%` : ""}`.trim();
+      setCppProgress(text);
+      if (pct != null) setCppProgressPct(pct);
+    });
+    const unsubComplete = whisperCpp.onComplete((result) => {
+      setCppInstalling(false);
+      setCppProgress("");
+      setCppProgressVariantId(null);
+      setCppProgressPct(null);
+      if (!result?.success && result?.error) {
+        setCppLog((prev) => [...prev.slice(-5), `Error: ${result.error}`]);
+      }
+      refreshCppStatus();
+    });
+    const unsubModelProgress = whisperCpp.onModelProgress?.((progress) => {
+      if (!progress?.id) return;
+      const id = progress.id as string;
+      const pct =
+        typeof progress.percent === "number"
+          ? Math.max(0, Math.min(100, progress.percent))
+          : 0;
+      modelProgressRef.current[id] = pct;
+      setModelProgressPct({ ...modelProgressRef.current });
+      setDownloadingModels((prev) => ({
+        ...prev,
+        [id]: `${progress.status ?? ""} ${progress.percent != null ? `${Math.round(progress.percent)}%` : ""}`.trim(),
+      }));
+    });
+    const unsubModelComplete = whisperCpp.onModelComplete?.((result) => {
+      if (result?.id) {
+        setDownloadingModels((prev) => {
+          const next = { ...prev };
+          delete next[result.id as string];
+          return next;
+        });
+      }
+      refreshCppStatus();
+    });
+
+    // Poll real backend state while any activity is in flight — never rely
+    // on event state alone.
+    const poll = setInterval(() => {
+      if (activityRef.current.installing || activityRef.current.downloading) {
+        refreshCppStatus();
+      }
+    }, 1500);
+
+    return () => {
+      unsubLog?.();
+      unsubProgress?.();
+      unsubComplete?.();
+      unsubModelProgress?.();
+      unsubModelComplete?.();
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    activityRef.current.installing = cppInstalling;
+    activityRef.current.downloading = Object.keys(downloadingModels).length > 0;
+  }, [cppInstalling, downloadingModels]);
+
+  useEffect(() => {
+    if (externalDeleteTick) {
+      refreshCppStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalDeleteTick]);
+
   const [logs, setLogs] = useState<string[]>([]);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -326,6 +494,239 @@ const DesktopSTTConfig = ({
           )}
         </div>
       )}
+
+      {/* ── STT Engine selector ── */}
+      <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
+        <div>
+          <label className="block text-xs font-medium text-white/90 mb-1">
+            STT Engine
+          </label>
+          <Select
+            value={config.engine || "python"}
+            onChange={(e) => {
+              const engine = e.target.value as "python" | "whispercpp";
+              handleChange("engine", engine);
+              whisperCpp?.setEngine?.(engine);
+              refreshCppStatus();
+            }}
+            variant={isLightBackground ? "dark" : "default"}
+            options={[
+              {
+                value: "python",
+                label: "faster-whisper (Python · CUDA on NVIDIA)",
+              },
+              {
+                value: "whispercpp",
+                label: "whisper.cpp (CPU / CUDA / Vulkan packs)",
+              },
+            ]}
+          />
+          <p className="text-[10px] text-white/50 mt-1">
+            Both engines can be installed side by side — this selects which one
+            serves speech-to-text.
+          </p>
+        </div>
+
+        {config.engine === "whispercpp" && (
+          <div className="space-y-4 pt-1">
+            {/* Runtime variants — same card language as the Android STT downloader */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/80">
+                Runtime{cppStatus?.running ? " (server running)" : ""}
+              </p>
+              {(cppStatus?.variants ?? []).map((variant) => {
+                const installingThis =
+                  cppInstalling && cppProgressVariantId === variant.id;
+                return (
+                  <div
+                    key={variant.id}
+                    className={cn(
+                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
+                      installingThis ? "border-white/30" : "border-white/10",
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-white/90 truncate">
+                          {variant.label}
+                        </span>
+                        {variant.id === config.whisperCppVariant && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {installingThis ? (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/70">
+                            {cppProgress.replace(/\s*\d+%$/, "")}
+                          </span>
+                          <span className="text-white/70">
+                            {cppProgressPct != null ? `${cppProgressPct}%` : ""}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white/40 transition-all duration-300"
+                            style={{ width: `${cppProgressPct ?? 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-white/50 truncate">
+                          {variant.installed
+                            ? "Installed"
+                            : `Download ${variant.sizeHint}`}
+                        </span>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {variant.installed &&
+                            variant.id !== config.whisperCppVariant && (
+                              <button
+                                onClick={() => {
+                                  onChange({ whisperCppVariant: variant.id });
+                                }}
+                                className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                              >
+                                <Icon name="check" size={11} />
+                                <span>Use</span>
+                              </button>
+                            )}
+                          <button
+                            onClick={async () => {
+                              setCppInstalling(true);
+                              setCppProgressVariantId(variant.id);
+                              setCppLog([]);
+                              try {
+                                await whisperCpp?.startSetup?.({
+                                  variantId: variant.id,
+                                });
+                              } catch (error) {
+                                setCppInstalling(false);
+                                setCppProgressVariantId(null);
+                                setCppLog((prev) => [
+                                  ...prev,
+                                  `Error: ${String(error)}`,
+                                ]);
+                              }
+                            }}
+                            disabled={cppInstalling}
+                            className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
+                          >
+                            <Icon name="download" size={11} />
+                            <span>
+                              {variant.installed ? "Reinstall" : "Install"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {(cppLog.length > 0 || cppProgress) && (
+                <div className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap">
+                  {cppLog.slice(-12).map((line, index) => (
+                    <div key={`${index}-${line.slice(0, 8)}`}>{line}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* GGML models */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/80">Models</p>
+              {(cppStatus?.models ?? []).map((model) => {
+                const progress = downloadingModels[model.id];
+                return (
+                  <div
+                    key={model.id}
+                    className={cn(
+                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
+                      progress ? "border-white/30" : "border-white/10",
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-white/90 truncate">
+                          {model.label}
+                        </span>
+                        {model.active && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {progress ? (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/70">
+                            {progress.replace(/\s*\d+%$/, "")}
+                          </span>
+                          <span className="text-white/70">
+                            {modelProgressPct[model.id] != null
+                              ? `${modelProgressPct[model.id]}%`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white/40 transition-all duration-300"
+                            style={{
+                              width: `${modelProgressPct[model.id] ?? 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-white/50 truncate">
+                          {model.downloaded
+                            ? `Installed (${(model.sizeBytes / 1024 / 1024).toFixed(0)} MB)`
+                            : `Download ${model.sizeHint}`}
+                        </span>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {model.downloaded ? (
+                            <button
+                              onClick={() =>
+                                onRequestDeleteDialog?.(
+                                  `whispercpp:${model.id}`,
+                                )
+                              }
+                              data-testid={`stt-cpp-model-delete-${model.id}`}
+                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                            >
+                              <Icon name="trash" size={11} />
+                              <span>Delete</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                whisperCpp?.downloadModel?.({
+                                  modelId: model.id,
+                                })
+                              }
+                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                            >
+                              <Icon name="download" size={11} />
+                              <span>Download</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Core model settings */}
       <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">

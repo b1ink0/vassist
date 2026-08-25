@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 170
-- Files: 585
-- Text files counted for metrics: 498
-- Total text lines: 152976
-- Code files counted for metrics: 397
-- Total code lines: 137518
+- Directories: 171
+- Files: 589
+- Text files counted for metrics: 502
+- Total text lines: 155784
+- Code files counted for metrics: 400
+- Total code lines: 140217
 
 ## Line Counts by File Type
 
@@ -20,15 +20,15 @@ VAssist repository tree and file metrics.
 | CSS          | .css, .scss, .less      |     7 |  2115 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
-| Kotlin       | .kt                     |    20 | 10984 |
+| Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   102 | 49730 |
-| TypeScript   | .ts, .mts, .cts         |   247 | 72066 |
+| TSX          | .tsx                    |   103 | 50549 |
+| TypeScript   | .ts, .mts, .cts         |   249 | 73942 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6078 |
-| Other Text   | mixed                   |    13 |  3415 |
-| Plain Text   | (no extension)          |    11 |  4013 |
+| Markdown     | .md                     |    35 |  6091 |
+| Other Text   | mixed                   |    14 |  3509 |
+| Plain Text   | (no extension)          |    11 |  4015 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   430 |
@@ -39,12 +39,12 @@ VAssist repository tree and file metrics.
 - android/: 64 directories, 92 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
-- electron/: 14 directories, 50 files
+- electron/: 15 directories, 53 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 245 files
+- src/: 49 directories, 246 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -336,7 +336,8 @@ vassist/
 │   │   ├── services/
 │   │   │   ├── llmBackendManager.ts
 │   │   │   ├── localServerManager.ts
-│   │   │   └── pythonServerManager.ts
+│   │   │   ├── pythonServerManager.ts
+│   │   │   └── whisperCppManager.ts
 │   │   ├── system/
 │   │   │   ├── devTools.ts
 │   │   │   └── permissionsProtocol.ts
@@ -359,6 +360,9 @@ vassist/
 │   │   │   ├── server.cpp
 │   │   │   ├── stt.cpp
 │   │   │   └── tts.cpp
+│   │   ├── supertonic/
+│   │   │   ├── setup-runner.ts
+│   │   │   └── setup.py
 │   │   ├── whisper-stt/
 │   │   │   ├── requirements.txt
 │   │   │   ├── server.py
@@ -539,6 +543,7 @@ vassist/
 │   │   │   │   ├── GPTSoVITSConfig.tsx
 │   │   │   │   ├── GPTSoVITSSetup.tsx
 │   │   │   │   ├── KokoroTTSConfig.tsx
+│   │   │   │   ├── SupertonicEngineSection.tsx
 │   │   │   │   └── VitsModelDownloader.tsx
 │   │   │   ├── AIFeaturesSettings.tsx
 │   │   │   ├── BackgroundSettings.tsx

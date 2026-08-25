@@ -201,6 +201,72 @@ contextBridge.exposeInMainWorld("electron", {
   },
 
   // Whisper STT Setup
+  supertonicSetup: {
+    start: (options: Record<string, unknown> = {}) =>
+      ipcRenderer.invoke("supertonic:setup:start", options),
+    cancel: () => ipcRenderer.invoke("supertonic:setup:cancel"),
+    getStatus: () => ipcRenderer.invoke("supertonic:setup:status"),
+    onLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) =>
+        callback(log);
+      ipcRenderer.on("supertonic:setup:log", subscription);
+      return () =>
+        ipcRenderer.removeListener("supertonic:setup:log", subscription);
+    },
+    onComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) =>
+        callback(result);
+      ipcRenderer.on("supertonic:setup:complete", subscription);
+      return () =>
+        ipcRenderer.removeListener("supertonic:setup:complete", subscription);
+    },
+  },
+  whisperCpp: {
+    getStatus: () => ipcRenderer.invoke("whispercpp:getStatus"),
+    setEngine: (engine: string) =>
+      ipcRenderer.invoke("whispercpp:setEngine", engine),
+    startSetup: (options: { variantId: string }) =>
+      ipcRenderer.invoke("whispercpp:setup:start", options),
+    downloadModel: (options: { modelId: string }) =>
+      ipcRenderer.invoke("whispercpp:model:download", options),
+    deleteModel: (options: { modelId: string }) =>
+      ipcRenderer.invoke("whispercpp:model:delete", options),
+    onLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) =>
+        callback(log);
+      ipcRenderer.on("whispercpp:setup:log", subscription);
+      return () =>
+        ipcRenderer.removeListener("whispercpp:setup:log", subscription);
+    },
+    onSetupProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) =>
+        callback(progress);
+      ipcRenderer.on("whispercpp:setup:progress", subscription);
+      return () =>
+        ipcRenderer.removeListener("whispercpp:setup:progress", subscription);
+    },
+    onComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) =>
+        callback(result);
+      ipcRenderer.on("whispercpp:setup:complete", subscription);
+      return () =>
+        ipcRenderer.removeListener("whispercpp:setup:complete", subscription);
+    },
+    onModelProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) =>
+        callback(progress);
+      ipcRenderer.on("whispercpp:model:progress", subscription);
+      return () =>
+        ipcRenderer.removeListener("whispercpp:model:progress", subscription);
+    },
+    onModelComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) =>
+        callback(result);
+      ipcRenderer.on("whispercpp:model:complete", subscription);
+      return () =>
+        ipcRenderer.removeListener("whispercpp:model:complete", subscription);
+    },
+  },
   whisperSetup: {
     start: (options: Record<string, unknown> = {}) =>
       ipcRenderer.invoke("whisper:setup:start", options),

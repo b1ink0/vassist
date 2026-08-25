@@ -39,6 +39,7 @@ import {
 import { registerUIIPCHandlers } from "./main/ipc/uiHandlers";
 import { createLocalServerManager } from "./main/services/localServerManager";
 import { createPythonServerManager } from "./main/services/pythonServerManager";
+import { createWhisperCppManager } from "./main/services/whisperCppManager";
 import { createLLMBackendManager } from "./main/services/llmBackendManager";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,6 +117,14 @@ const pythonServerManager = createPythonServerManager({
   getGPTSoVITSDataDir: runtimePaths.getGPTSoVITSDataDir,
 });
 
+const whisperCppManager = createWhisperCppManager({
+  ipcMain,
+  fs,
+  path,
+  processEnv: process.env,
+  getRuntimeServerBasePath: runtimePaths.getRuntimeServerBasePath,
+});
+
 const localServerManager = createLocalServerManager({
   LocalAIServer,
   path,
@@ -125,6 +134,13 @@ const localServerManager = createLocalServerManager({
   loadLlamaApi: llmBackendManager.loadRuntimeLlamaApi,
   ensureTTSBackendRunning: pythonServerManager.startGPTSoVITSServer,
   restartTTSBackend: pythonServerManager.restartGPTSoVITSServer,
+  ensureSupertonicRunning: pythonServerManager.startSupertonicServer,
+  restartSupertonicBackend: pythonServerManager.restartSupertonicServer,
+  ensureWhisperCppRunning: whisperCppManager.ensureRunning,
+  restartWhisperCppBackend: whisperCppManager.restart,
+  ensureSttBackendRunning: pythonServerManager.ensureWhisperServerRunning,
+  onSTTRequestStart: pythonServerManager.markWhisperRequestStart,
+  onSTTRequestComplete: pythonServerManager.markWhisperRequestComplete,
   onTTSRequestStart: pythonServerManager.markGPTSoVITSTTSRequestStart,
   onTTSRequestComplete: pythonServerManager.markGPTSoVITSTTSRequestComplete,
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
@@ -154,6 +170,7 @@ registerUIIPCHandlers({
 
 localServerManager.registerIPCHandlers(ipcMain);
 pythonServerManager.registerSetupIPCHandlers(ipcMain, localServerManager);
+whisperCppManager.registerIPCHandlers();
 registerLLMHandlers({
   ipcMain,
   fs,
@@ -182,10 +199,6 @@ app.whenReady().then(() => {
   }
   windowManager.createMainWindow();
 
-  if (!isElectronTestMode) {
-    pythonServerManager.startWhisperServer();
-  }
-
   app.on("activate", () => {
     windowManager.showMainWindowFromActivate();
   });
@@ -197,4 +210,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   pythonServerManager.cleanupBeforeQuit(localServerManager);
+  whisperCppManager.cleanupBeforeQuit();
 });

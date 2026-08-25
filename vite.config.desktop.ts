@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
             const filesToCopy = [
               { src: "http-server.js", dest: "http-server.js" },
               { src: "whisper-stt", dest: "whisper-stt", isDir: true },
+              { src: "supertonic", dest: "supertonic", isDir: true },
             ];
 
             // Create dest directory

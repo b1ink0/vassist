@@ -818,10 +818,15 @@ const syncDesktopServerForProviders = async (
       stt: {
         model: desktopSttConfig.model,
         language: desktopSttConfig.language,
+        engine: desktopSttConfig.engine,
       },
       tts: {
         enabled: Boolean(ttsConfig?.enabled && ttsUsesDesktopLocal),
         pytorchBackend: desktopTtsConfig.pytorchBackend || "auto",
+        engine:
+          desktopTtsConfig.engine === "supertonic"
+            ? "supertonic"
+            : "gpt-sovits",
       },
     })) as DesktopServerStartResult;
 

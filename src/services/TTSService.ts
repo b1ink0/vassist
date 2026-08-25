@@ -268,11 +268,15 @@ class TTSService {
 
         state.config = {
           model: desktopConfig.model || "gpt-sovits",
+          engine: desktopConfig.engine || "gpt-sovits",
           voice: desktopConfig.voice || "default",
           speed: desktopConfig.speed || 1.0,
           referenceVoiceId: desktopConfig.referenceVoiceId || null,
           referenceText: desktopConfig.referenceText || "",
           referenceLanguage: desktopConfig.referenceLanguage || "en",
+          supertonicVoice: desktopConfig.supertonicVoice || "F1",
+          supertonicLang: desktopConfig.supertonicLang || "en",
+          supertonicSteps: desktopConfig.supertonicSteps || 8,
         };
         state.provider = provider;
 
@@ -556,26 +560,41 @@ class TTSService {
             }
           }
 
-          if (!referenceAudioBase64 || !refText) {
+          const isSupertonic =
+            state.provider === TTSProviders.DESKTOP_LOCAL &&
+            (state.config as any).engine === "supertonic";
+
+          if (!isSupertonic && (!referenceAudioBase64 || !refText)) {
             throw new Error(
               "GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.",
             );
           }
 
+          const requestBody = isSupertonic
+            ? {
+                input: text,
+                model: "supertonic",
+                voice: state.config.supertonicVoice || "F1",
+                lang: state.config.supertonicLang || refLang || "en",
+                speed: state.config.speed || 1.0,
+                steps: state.config.supertonicSteps || 8,
+              }
+            : {
+                input: text,
+                reference_audio: referenceAudioBase64,
+                reference_text: refText,
+                reference_language: refLang,
+              };
+
           Logger.log(
             "other",
-            `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang})`,
+            `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., engine: ${isSupertonic ? "supertonic" : "gpt-sovits"}, voice: ${isSupertonic ? state.config.supertonicVoice : "-"}, lang: ${isSupertonic ? state.config.supertonicLang : "-"})`,
           );
 
           const response = await fetch(`${state.client}/audio/speech`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              input: text,
-              reference_audio: referenceAudioBase64,
-              reference_text: refText,
-              reference_language: refLang,
-            }),
+            body: JSON.stringify(requestBody),
           });
 
           Logger.log(
@@ -673,76 +692,93 @@ class TTSService {
         let refText = state.config.referenceText;
         let refLang = state.config.referenceLanguage;
 
-        if (state.config.referenceVoiceId) {
-          try {
-            Logger.log(
-              "other",
-              `${logPrefix} - Loading voice ${state.config.referenceVoiceId} from IndexedDB...`,
-            );
-            const voiceData = await voiceStorageService.getVoice(
-              state.config.referenceVoiceId,
-            );
-            if (!voiceData) {
+        const isSupertonic =
+          state.provider === TTSProviders.DESKTOP_LOCAL &&
+          (state.config as any).engine === "supertonic";
+
+        if (!isSupertonic) {
+          if (state.config.referenceVoiceId) {
+            try {
+              Logger.log(
+                "other",
+                `${logPrefix} - Loading voice ${state.config.referenceVoiceId} from IndexedDB...`,
+              );
+              const voiceData = await voiceStorageService.getVoice(
+                state.config.referenceVoiceId,
+              );
+              if (!voiceData) {
+                throw new Error(
+                  `Voice ${state.config.referenceVoiceId} not found in IndexedDB`,
+                );
+              }
+              const voice = voiceData as {
+                audioData?: Blob;
+                referenceText?: string;
+                language?: string;
+              };
+              if (!voice.audioData) {
+                throw new Error("Voice data missing audioData blob");
+              }
+              Logger.log(
+                "other",
+                `${logPrefix} - Converting blob to base64 (${voice.audioData.size} bytes)...`,
+              );
+              const audioArrayBuffer = await voice.audioData.arrayBuffer();
+              const audioBytes = new Uint8Array(audioArrayBuffer);
+              const binaryString = Array.from(audioBytes)
+                .map((b) => String.fromCharCode(b))
+                .join("");
+              referenceAudioBase64 = btoa(binaryString);
+              refText = voice.referenceText;
+              refLang = voice.language;
+              Logger.log(
+                "other",
+                `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`,
+              );
+            } catch (error) {
+              Logger.error(
+                "other",
+                `${logPrefix} - Failed to load reference audio from IndexedDB:`,
+                error,
+              );
               throw new Error(
-                `Voice ${state.config.referenceVoiceId} not found in IndexedDB`,
+                `Failed to load reference voice: ${asError(error).message}`,
               );
             }
-            const voice = voiceData as {
-              audioData?: Blob;
-              referenceText?: string;
-              language?: string;
-            };
-            if (!voice.audioData) {
-              throw new Error("Voice data missing audioData blob");
-            }
-            Logger.log(
-              "other",
-              `${logPrefix} - Converting blob to base64 (${voice.audioData.size} bytes)...`,
-            );
-            const audioArrayBuffer = await voice.audioData.arrayBuffer();
-            const audioBytes = new Uint8Array(audioArrayBuffer);
-            const binaryString = Array.from(audioBytes)
-              .map((b) => String.fromCharCode(b))
-              .join("");
-            referenceAudioBase64 = btoa(binaryString);
-            refText = voice.referenceText;
-            refLang = voice.language;
-            Logger.log(
-              "other",
-              `${logPrefix} - Reference audio loaded and encoded (base64 length: ${referenceAudioBase64.length})`,
-            );
-          } catch (error) {
-            Logger.error(
-              "other",
-              `${logPrefix} - Failed to load reference audio from IndexedDB:`,
-              error,
-            );
+          }
+
+          if (!referenceAudioBase64 || !refText) {
             throw new Error(
-              `Failed to load reference voice: ${asError(error).message}`,
+              "GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.",
             );
           }
         }
 
-        if (!referenceAudioBase64 || !refText) {
-          throw new Error(
-            "GPT-SoVITS requires a reference voice. Please upload and select a voice in TTS settings.",
-          );
-        }
+        const requestBody = isSupertonic
+          ? {
+              input: text,
+              model: "supertonic",
+              voice: state.config.supertonicVoice || "F1",
+              lang: state.config.supertonicLang || refLang || "en",
+              speed: state.config.speed || 1.0,
+              steps: state.config.supertonicSteps || 8,
+            }
+          : {
+              input: text,
+              reference_audio: referenceAudioBase64,
+              reference_text: refText,
+              reference_language: refLang,
+            };
 
         Logger.log(
           "other",
-          `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., ref lang: ${refLang})`,
+          `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., engine: ${isSupertonic ? "supertonic" : "gpt-sovits"}, voice: ${isSupertonic ? state.config.supertonicVoice : "-"}, lang: ${isSupertonic ? state.config.supertonicLang : "-"})`,
         );
 
         const response = await fetch(`${state.client}/audio/speech`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: text,
-            reference_audio: referenceAudioBase64,
-            reference_text: refText,
-            reference_language: refLang,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         Logger.log(

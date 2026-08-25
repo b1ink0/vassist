@@ -1,5 +1,7 @@
 /**
- * @fileoverview Setup Runner - Orchestrates Whisper-only STT installation
+ * @fileoverview Setup Runner - Orchestrates Supertonic 3 TTS installation.
+ * Mirrors the whisper-stt setup-runner: embedded Python bootstrap + pip
+ * install of the official supertonic package + one-time model download.
  */
 
 import { spawn } from "child_process";
@@ -46,7 +48,7 @@ function resolveSitePackagesDirs(pythonDir: string): string[] {
     return sitePackages;
   }
 
-  let pythonVersions = [];
+  let pythonVersions: fs.Dirent[] = [];
   try {
     pythonVersions = fs.readdirSync(libDir, { withFileTypes: true });
   } catch {
@@ -74,17 +76,15 @@ function moduleExists(sitePackagesDir: string, moduleName: string): boolean {
   return candidates.some((candidate) => fs.existsSync(candidate));
 }
 
-class WhisperSetupRunner {
+class SupertonicSetupRunner {
   process: ChildProcessWithoutNullStreams | null;
   logCallback: ((logData: Record<string, unknown>) => void) | null;
   cancelled: boolean;
-  model: string;
 
   constructor() {
     this.process = null;
     this.logCallback = null;
     this.cancelled = false;
-    this.model = "base";
   }
 
   getPythonExe() {
@@ -97,15 +97,11 @@ class WhisperSetupRunner {
     return fs.existsSync(py3Path) ? py3Path : pyPath;
   }
 
-  getWhisperModelDir() {
-    return path.join(path.dirname(getBaseDir()), "models", "whisper");
-  }
-
-  getWhisperSetupDir() {
-    const envDir = process.env.WHISPER_SETUP_DIR;
+  getSupertonicSetupDir() {
+    const envDir = process.env.SUPERTONIC_SETUP_DIR;
     const fallbackRuntimeDir = path.join(
       path.dirname(getBaseDir()),
-      "whisper-stt",
+      "supertonic",
     );
     const candidateDirs = [envDir, fallbackRuntimeDir, SCRIPT_DIR].filter(
       (candidate): candidate is string => Boolean(candidate),
@@ -129,76 +125,17 @@ class WhisperSetupRunner {
     return fallbackRuntimeDir;
   }
 
-  hasWhisperModelArtifacts() {
-    const modelDir = this.getWhisperModelDir();
-    if (!fs.existsSync(modelDir)) {
-      return false;
-    }
+  hasModelArtifacts() {
+    // The supertonic package caches model assets under ~/.cache/supertonic3
+    // (or %USERPROFILE%\.cache\supertonic3 on Windows).
+    const home = process.env.USERPROFILE || process.env.HOME;
+    if (!home) return false;
+    const cacheDir = path.join(home, ".cache", "supertonic3");
+    if (!fs.existsSync(cacheDir)) return false;
 
-    // Keep status checks lightweight: inspect a small, predictable subset of paths.
-    let rootEntries = [];
-    try {
-      rootEntries = fs.readdirSync(modelDir, { withFileTypes: true });
-    } catch {
-      return false;
-    }
-
-    for (const entry of rootEntries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-
-      // Direct named model folders (some deployments use this layout).
-      if (
-        ["tiny", "tiny.en", "base", "base.en", "small", "small.en"].includes(
-          entry.name,
-        )
-      ) {
-        return true;
-      }
-
-      // Hugging Face cache layout: models--<org>--<repo>/snapshots/<hash>/model.bin
-      if (!entry.name.startsWith("models--")) {
-        continue;
-      }
-
-      const hfModelRoot = path.join(modelDir, entry.name);
-      const snapshotsDir = path.join(hfModelRoot, "snapshots");
-      const refsDir = path.join(hfModelRoot, "refs");
-
-      if (fs.existsSync(refsDir)) {
-        return true;
-      }
-
-      if (!fs.existsSync(snapshotsDir)) {
-        continue;
-      }
-
-      let snapshots = [];
-      try {
-        snapshots = fs.readdirSync(snapshotsDir, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
-      for (const snapshot of snapshots) {
-        if (!snapshot.isDirectory()) {
-          continue;
-        }
-
-        const snapshotDir = path.join(snapshotsDir, snapshot.name);
-        const hasCoreArtifact =
-          fs.existsSync(path.join(snapshotDir, "model.bin")) ||
-          fs.existsSync(path.join(snapshotDir, "config.json")) ||
-          fs.existsSync(path.join(snapshotDir, "tokenizer.json"));
-
-        if (hasCoreArtifact) {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    // Any ONNX asset or voice style present counts as downloaded.
+    const markers = ["onnx", "voice_styles"];
+    return markers.some((marker) => fs.existsSync(path.join(cacheDir, marker)));
   }
 
   checkDependenciesInstalledFilesystem() {
@@ -212,16 +149,8 @@ class WhisperSetupRunner {
       return false;
     }
 
-    const requiredModules = [
-      "fastapi",
-      "uvicorn",
-      "faster_whisper",
-      "ctranslate2",
-      "av",
-      "soundfile",
-    ];
+    const requiredModules = ["supertonic", "onnxruntime", "soundfile"];
 
-    // Any valid site-packages layout that contains all required modules is accepted.
     return sitePackagesDirs.some((sitePackagesDir) =>
       requiredModules.every((moduleName) =>
         moduleExists(sitePackagesDir, moduleName),
@@ -234,7 +163,7 @@ class WhisperSetupRunner {
     const pythonExists =
       fs.existsSync(pythonDir) && fs.existsSync(this.getPythonExe());
     const dependenciesInstalled = this.checkDependenciesInstalledFilesystem();
-    const modelExists = this.hasWhisperModelArtifacts();
+    const modelExists = this.hasModelArtifacts();
 
     return {
       isSetup: pythonExists && dependenciesInstalled && modelExists,
@@ -260,12 +189,12 @@ class WhisperSetupRunner {
   async runSetup() {
     this.log({
       type: "info",
-      message: "\n=== PHASE 2: WHISPER DEPENDENCIES & MODEL ===\n",
+      message: "\n=== PHASE 2: SUPERTONIC PACKAGE & MODEL ===\n",
     });
 
     const pythonExe = this.getPythonExe();
-    const whisperSetupDir = this.getWhisperSetupDir();
-    const setupScript = path.join(whisperSetupDir, "setup.py");
+    const setupDir = this.getSupertonicSetupDir();
+    const setupScript = path.join(setupDir, "setup.py");
 
     if (!fs.existsSync(pythonExe)) {
       throw new Error(
@@ -274,22 +203,18 @@ class WhisperSetupRunner {
     }
 
     if (!fs.existsSync(setupScript)) {
-      throw new Error(`Whisper setup.py not found at ${setupScript}`);
+      throw new Error(`Supertonic setup.py not found at ${setupScript}`);
     }
 
     return new Promise<void>((resolve, reject) => {
       this.process = spawn(pythonExe, [setupScript], {
-        cwd: whisperSetupDir,
+        cwd: setupDir,
         env: {
           ...process.env,
           PYTHONUNBUFFERED: "1",
           PYTHONIOENCODING: "utf-8",
           GPTSOVITS_DATA_DIR: getBaseDir(),
-          WHISPER_SETUP_DIR: whisperSetupDir,
-          WHISPER_SETUP_MODEL: this.model,
-          // Work around mixed OpenMP runtimes on Windows (libiomp + libomp) during faster-whisper import.
-          KMP_DUPLICATE_LIB_OK: "TRUE",
-          // Keep setup logs clean from known non-fatal Windows cache/symlink and Xet warnings.
+          SUPERTONIC_SETUP_DIR: setupDir,
           HF_HUB_DISABLE_SYMLINKS_WARNING: "1",
           HF_HUB_DISABLE_XET: "1",
         },
@@ -313,11 +238,11 @@ class WhisperSetupRunner {
         } else if (code === 0) {
           this.log({
             type: "info",
-            message: "\n✓ Whisper setup completed successfully!\n",
+            message: "\nSupertonic setup completed successfully!\n",
           });
           resolve();
         } else {
-          reject(new Error(`Whisper setup failed with exit code ${code}`));
+          reject(new Error(`Supertonic setup failed with exit code ${code}`));
         }
       });
 
@@ -330,22 +255,21 @@ class WhisperSetupRunner {
 
   async run(
     logCallback: (logData: Record<string, unknown>) => void,
-    options: { model?: string } = {},
+    _options: { model?: string } = {},
   ) {
     this.logCallback = logCallback;
     this.cancelled = false;
-    this.model = (options?.model || "tiny").toString().trim() || "tiny";
 
     try {
       this.log({ type: "info", message: "=".repeat(60) + "\n" });
       this.log({
         type: "info",
-        message: "Whisper STT Installation Starting\n",
+        message: "Supertonic TTS Installation Starting\n",
       });
-      this.log({ type: "info", message: "=".repeat(60) + "\n" });
       this.log({
         type: "info",
-        message: `This installs embedded Python, Whisper dependencies, and ${this.model} model\n`,
+        message:
+          "This installs the Supertonic-3 engine and downloads its ~400MB model\n",
       });
       this.log({ type: "info", message: "=".repeat(60) + "\n\n" });
 
@@ -365,7 +289,7 @@ class WhisperSetupRunner {
       await this.runSetup();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.log({ type: "error", message: `\n✗ Setup failed: ${message}\n` });
+      this.log({ type: "error", message: `\nSetup failed: ${message}\n` });
       throw error;
     }
   }
@@ -374,7 +298,7 @@ class WhisperSetupRunner {
     this.cancelled = true;
 
     if (this.process) {
-      this.log({ type: "info", message: "\n⚠ Cancelling setup...\n" });
+      this.log({ type: "info", message: "\nCancelling setup...\n" });
       this.process.kill();
       this.process = null;
     }
@@ -387,4 +311,4 @@ class WhisperSetupRunner {
   }
 }
 
-export default WhisperSetupRunner;
+export default SupertonicSetupRunner;

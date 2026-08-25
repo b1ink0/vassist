@@ -63,6 +63,8 @@ electron/server/gpt-sovits/models/
 electron/server/models/
 electron/server/whisper-stt/models/
 models/whisper
+electron/server/whisper-cpp/
+electron/server/supertonic/models/
 playwright-report
 test-results
 .vercel

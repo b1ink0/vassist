@@ -7,6 +7,7 @@ import type * as fsType from "fs";
 import type * as pathType from "path";
 import GPTSoVITSSetupRunner from "../../server/gpt-sovits/setup-runner";
 import WhisperSetupRunnerClass from "../../server/whisper-stt/setup-runner";
+import SupertonicSetupRunnerClass from "../../server/supertonic/setup-runner";
 
 type SetupLog = Record<string, unknown>;
 
@@ -55,9 +56,13 @@ export function createPythonServerManager({
   getGPTSoVITSDataDir,
 }: PythonServerManagerDeps) {
   let gptsovitsProcess: ChildProcessWithoutNullStreams | null = null;
+  let supertonicProcess: ChildProcessWithoutNullStreams | null = null;
+  let supertonicAdoptedPid: number | null = null;
+  let supertonicStartupPromise: Promise<void> | null = null;
   let whisperProcess: ChildProcessWithoutNullStreams | null = null;
   let setupRunner: SetupRunnerLike | null = null;
   let whisperSetupRunner: SetupRunnerLike | null = null;
+  let supertonicSetupRunner: SetupRunnerLike | null = null;
   let gptsovitsStartupPromise: Promise<void> | null = null;
   let gptsovitsRecyclePromise: Promise<void> | null = null;
   let gptsovitsRestartPromise: Promise<void> | null = null;
@@ -586,12 +591,209 @@ export function createPythonServerManager({
     await gptsovitsRestartPromise;
   }
 
+  const SUPERTONIC_PORT = 9882;
+
+  async function getSupertonicHealth(timeoutMs = 2500) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      for (const path of ["/health", "/docs"]) {
+        try {
+          const response = await fetch(
+            `http://127.0.0.1:${SUPERTONIC_PORT}${path}`,
+            { signal: controller.signal },
+          );
+          if (response.ok) {
+            return {
+              healthy: true,
+              pid: supertonicProcess?.pid ?? supertonicAdoptedPid,
+            };
+          }
+        } catch {
+          // try next probe path
+        }
+      }
+      return { healthy: false, pid: null };
+    } catch {
+      return { healthy: false, pid: null };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function waitForSupertonicReady(
+    expectedProcess: ChildProcessWithoutNullStreams,
+    timeoutMs = 120000,
+  ) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (
+        supertonicProcess !== expectedProcess ||
+        expectedProcess.exitCode !== null ||
+        expectedProcess.signalCode !== null
+      ) {
+        throw new Error("Supertonic process exited before becoming ready");
+      }
+      if ((await getSupertonicHealth()).healthy) {
+        return;
+      }
+      await delay(500);
+    }
+    throw new Error("Timed out waiting for Supertonic to become ready");
+  }
+
+  async function startSupertonicAttempt() {
+    if (supertonicProcess) {
+      if ((await getSupertonicHealth()).healthy) {
+        console.log("[Supertonic] Managed server is healthy");
+        return;
+      }
+      console.warn("[Supertonic] Managed process unhealthy; replacing it");
+      await stopSupertonicServer("unhealthy process");
+    }
+
+    const existingHealth = await getSupertonicHealth();
+    if (existingHealth.healthy) {
+      supertonicAdoptedPid = existingHealth.pid;
+      console.log(
+        "[Supertonic] Adopted healthy existing server",
+        existingHealth.pid ? `(pid=${existingHealth.pid})` : "",
+      );
+      return;
+    }
+
+    ensureRuntimeServerScripts();
+
+    const gptsovitsDataDir = getGPTSoVITSDataDir();
+    const pythonExe = resolveEmbeddedPythonExecutable(gptsovitsDataDir);
+    if (!fs.existsSync(pythonExe)) {
+      throw new Error(
+        "Embedded Python not found. Install the GPT-SoVITS/Whisper backend first.",
+      );
+    }
+
+    const scriptExe =
+      process.platform === "win32"
+        ? path.join(gptsovitsDataDir, "python312", "Scripts", "supertonic.exe")
+        : path.join(gptsovitsDataDir, "python", "bin", "supertonic");
+    const useScriptExe = fs.existsSync(scriptExe);
+
+    console.log("[Supertonic] Starting TTS server on port", SUPERTONIC_PORT);
+    console.log(
+      "[Supertonic] Launcher:",
+      useScriptExe ? scriptExe : `${pythonExe} -m supertonic`,
+    );
+
+    const serveArgs = [
+      "serve",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(SUPERTONIC_PORT),
+    ];
+    const spawnedProcess = useScriptExe
+      ? spawn(scriptExe, serveArgs, {})
+      : spawn(pythonExe, ["-m", "supertonic", ...serveArgs], {});
+
+    spawnedProcess.stdout.on("data", (data: Buffer) => {
+      console.log(`[Supertonic] ${data.toString().trim()}`);
+    });
+    spawnedProcess.stderr.on("data", (data: Buffer) => {
+      console.error(`[Supertonic] ${data.toString().trim()}`);
+    });
+    spawnedProcess.on("error", (error: Error) => {
+      console.error("[Supertonic] Failed to start:", error);
+      if (supertonicProcess === spawnedProcess) {
+        supertonicProcess = null;
+      }
+    });
+    spawnedProcess.on("exit", (code, signal) => {
+      console.log(`[Supertonic] Process exited code=${code} signal=${signal}`);
+      if (supertonicProcess === spawnedProcess) {
+        supertonicProcess = null;
+      }
+      if (supertonicAdoptedPid === spawnedProcess.pid) {
+        supertonicAdoptedPid = null;
+      }
+    });
+
+    supertonicProcess = spawnedProcess;
+    supertonicAdoptedPid = null;
+
+    await waitForSupertonicReady(spawnedProcess);
+    console.log(
+      `[Supertonic] Server ready on http://127.0.0.1:${SUPERTONIC_PORT}`,
+    );
+  }
+
+  async function startSupertonicServer() {
+    if (supertonicStartupPromise) {
+      await supertonicStartupPromise;
+      return;
+    }
+    const startupAttempt = startSupertonicAttempt();
+    supertonicStartupPromise = startupAttempt;
+    try {
+      await startupAttempt;
+    } finally {
+      if (supertonicStartupPromise === startupAttempt) {
+        supertonicStartupPromise = null;
+      }
+    }
+  }
+
+  async function stopSupertonicServer(reason = "requested stop") {
+    supertonicStartupPromise = null;
+    const processToStop = supertonicProcess;
+    const adoptedPid = supertonicAdoptedPid;
+
+    if (!processToStop && !adoptedPid) {
+      return;
+    }
+
+    console.log(`[Supertonic] Stopping server (${reason})...`);
+    supertonicProcess = null;
+    supertonicAdoptedPid = null;
+
+    try {
+      if (processToStop) {
+        processToStop.kill("SIGTERM");
+      } else if (adoptedPid) {
+        process.kill(adoptedPid, "SIGTERM");
+      }
+    } catch (error) {
+      console.warn("[Supertonic] Graceful stop failed:", error);
+    }
+
+    const exitedGracefully = await waitForProcessExit(
+      processToStop,
+      adoptedPid,
+      5000,
+    );
+    if (!exitedGracefully) {
+      try {
+        if (processToStop) {
+          processToStop.kill("SIGKILL");
+        } else if (adoptedPid) {
+          process.kill(adoptedPid, "SIGKILL");
+        }
+      } catch {
+        // best effort
+      }
+      await waitForProcessExit(processToStop, adoptedPid, 2000);
+    }
+  }
+
+  async function restartSupertonicServer(reason = "request recovery") {
+    await stopSupertonicServer(reason);
+    await startSupertonicServer();
+  }
+
   function startWhisperServer() {
     if (whisperProcess) {
       console.log("[Whisper] Server already running");
       return;
     }
-
     try {
       ensureRuntimeServerScripts();
 
@@ -671,6 +873,93 @@ export function createPythonServerManager({
       whisperProcess.kill("SIGTERM");
       whisperProcess = null;
     }
+  }
+
+  // ── On-demand lifecycle for the Python STT server (TTS-style) ──
+  let whisperStartupPromise: Promise<void> | null = null;
+  let whisperActiveRequests = 0;
+  let whisperLastUsedAt = 0;
+  let whisperIdleTimer: NodeJS.Timeout | null = null;
+  const WHISPER_IDLE_STOP_MS = 5 * 60 * 1000;
+
+  async function getWhisperHealth(timeoutMs = 2500): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch("http://127.0.0.1:9881/health", {
+        signal: controller.signal,
+      });
+      const data = (await response.json().catch(() => null)) as {
+        status?: string;
+      } | null;
+      return data?.status === "ok";
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function clearWhisperIdleTimer() {
+    if (whisperIdleTimer) {
+      clearTimeout(whisperIdleTimer);
+      whisperIdleTimer = null;
+    }
+  }
+
+  function scheduleWhisperIdleStop() {
+    clearWhisperIdleTimer();
+    if (whisperActiveRequests > 0) return;
+    whisperIdleTimer = setTimeout(async () => {
+      if (
+        whisperActiveRequests === 0 &&
+        Date.now() - whisperLastUsedAt >= WHISPER_IDLE_STOP_MS - 1000
+      ) {
+        console.log("[Whisper] Idle timeout — stopping server");
+        stopWhisperServer();
+      }
+    }, WHISPER_IDLE_STOP_MS);
+  }
+
+  function markWhisperRequestStart() {
+    whisperActiveRequests += 1;
+    whisperLastUsedAt = Date.now();
+    clearWhisperIdleTimer();
+  }
+
+  function markWhisperRequestComplete() {
+    whisperActiveRequests = Math.max(0, whisperActiveRequests - 1);
+    whisperLastUsedAt = Date.now();
+    scheduleWhisperIdleStop();
+  }
+
+  async function ensureWhisperServerRunning(): Promise<void> {
+    whisperLastUsedAt = Date.now();
+    if (await getWhisperHealth()) {
+      return;
+    }
+    if (whisperStartupPromise) {
+      await whisperStartupPromise;
+      return;
+    }
+    whisperStartupPromise = (async () => {
+      startWhisperServer();
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 120000) {
+        if (!whisperProcess && !(await getWhisperHealth())) {
+          throw new Error("Python STT server exited during startup");
+        }
+        if (await getWhisperHealth()) {
+          console.log("[Whisper] Server ready on http://127.0.0.1:9881");
+          return;
+        }
+        await delay(500);
+      }
+      throw new Error("Timed out waiting for Python STT server");
+    })().finally(() => {
+      whisperStartupPromise = null;
+    });
+    await whisperStartupPromise;
   }
 
   function setGPTSoVITSTorchBackend(backend: string | undefined | null) {
@@ -851,6 +1140,136 @@ export function createPythonServerManager({
       },
     );
 
+    ipcMain.handle(
+      "supertonic:setup:start",
+      async (
+        event: IpcMainInvokeEvent,
+        _options: Record<string, unknown> = {},
+      ) => {
+        ensureRuntimeServerScripts();
+
+        const gptSovitsDataDir = getGPTSoVITSDataDir();
+        const supertonicSetupDir = path.join(
+          getRuntimeServerBasePath(),
+          "supertonic",
+        );
+        fs.mkdirSync(gptSovitsDataDir, { recursive: true });
+        fs.mkdirSync(supertonicSetupDir, { recursive: true });
+        process.env.GPTSOVITS_DATA_DIR = gptSovitsDataDir;
+        process.env.SUPERTONIC_SETUP_DIR = supertonicSetupDir;
+
+        if (supertonicSetupRunner) {
+          throw new Error("Supertonic setup already running");
+        }
+        if (setupRunner) {
+          throw new Error(
+            "GPT-SoVITS setup is running. Please wait for it to finish first.",
+          );
+        }
+
+        console.log("[Supertonic] Starting setup...");
+        supertonicSetupRunner = new SupertonicSetupRunnerClass();
+
+        supertonicSetupRunner
+          .run((log: SetupLog) => {
+            event.sender.send("supertonic:setup:log", log);
+          })
+          .then(async () => {
+            console.log("[Supertonic] Setup complete");
+            event.sender.send("supertonic:setup:complete", { success: true });
+            supertonicSetupRunner = null;
+
+            console.log("[Supertonic] Restarting TTS server...");
+            stopSupertonicServer();
+            setTimeout(async () => {
+              await startSupertonicServer();
+              await localServerManager.restartIfRunning();
+            }, 1500);
+          })
+          .catch((error: unknown) => {
+            console.error("[Supertonic] Setup failed:", error);
+            event.sender.send("supertonic:setup:complete", {
+              success: false,
+              error: getErrorMessage(error),
+            });
+            supertonicSetupRunner = null;
+          });
+
+        return { started: true };
+      },
+    );
+
+    ipcMain.handle("supertonic:setup:status", async () => {
+      // Check embedded python for the supertonic module + model cache
+      const gptSovitsDataDir = getGPTSoVITSDataDir();
+      const candidates =
+        process.platform === "win32"
+          ? [
+              path.join(gptSovitsDataDir, "python312"),
+              path.join(gptSovitsDataDir, "python"),
+            ]
+          : [path.join(gptSovitsDataDir, "python")];
+
+      let dependenciesInstalled = false;
+      for (const pythonDir of candidates) {
+        const siteRel =
+          process.platform === "win32" ? ["Lib", "site-packages"] : ["lib"];
+        if (process.platform !== "win32") {
+          // unix: lib/python3.X/site-packages
+          try {
+            const libDir = path.join(pythonDir, "lib");
+            const versions = fs.readdirSync(libDir, { withFileTypes: true });
+            for (const version of versions) {
+              if (
+                version.isDirectory() &&
+                version.name.startsWith("python") &&
+                fs.existsSync(
+                  path.join(
+                    libDir,
+                    version.name,
+                    "site-packages",
+                    "supertonic",
+                  ),
+                )
+              ) {
+                dependenciesInstalled = true;
+                break;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        } else if (
+          fs.existsSync(path.join(pythonDir, ...siteRel, "supertonic"))
+        ) {
+          dependenciesInstalled = true;
+        }
+        if (dependenciesInstalled) break;
+      }
+
+      const home = process.env.USERPROFILE || process.env.HOME || "";
+      const cacheDir = path.join(home, ".cache", "supertonic3");
+      const modelExists =
+        fs.existsSync(path.join(cacheDir, "onnx")) ||
+        fs.existsSync(path.join(cacheDir, "voice_styles"));
+
+      return {
+        isSetup: dependenciesInstalled && modelExists,
+        dependenciesInstalled,
+        modelExists,
+      };
+    });
+
+    ipcMain.handle("supertonic:setup:cancel", async () => {
+      if (supertonicSetupRunner) {
+        console.log("[Supertonic] Cancelling setup...");
+        supertonicSetupRunner.cancel();
+        supertonicSetupRunner = null;
+        return { cancelled: true };
+      }
+      return { cancelled: false, message: "No setup running" };
+    });
+
     ipcMain.handle("whisper:setup:cancel", async () => {
       if (whisperSetupRunner) {
         console.log("[Whisper] Cancelling setup...");
@@ -913,13 +1332,30 @@ export function createPythonServerManager({
       whisperSetupRunner = null;
     }
 
+    if (supertonicSetupRunner) {
+      console.log("[Supertonic] Cancelling setup on app quit...");
+      try {
+        supertonicSetupRunner.cancel();
+      } catch (error) {
+        console.error("[Supertonic] Setup cancel error:", error);
+      }
+      supertonicSetupRunner = null;
+    }
+
     stopGPTSoVITSServer();
+    stopSupertonicServer();
     stopWhisperServer();
     localServerManager.stopIfRunning();
   }
 
   return {
     startGPTSoVITSServer,
+    ensureWhisperServerRunning,
+    markWhisperRequestStart,
+    markWhisperRequestComplete,
+    startSupertonicServer,
+    restartSupertonicServer,
+    stopSupertonicServer,
     restartGPTSoVITSServer,
     stopGPTSoVITSServer,
     setGPTSoVITSTorchBackend,

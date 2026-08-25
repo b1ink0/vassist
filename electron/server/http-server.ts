@@ -39,10 +39,14 @@ type ServerConfig = {
     proxyUrl: string;
     model?: string;
     language?: string;
+    engine?: "python" | "whispercpp";
+    variant?: string;
   };
   tts: {
     proxyUrl: string;
     enabled: boolean;
+    supertonicUrl?: string;
+    engine?: "gpt-sovits" | "supertonic";
   };
   server: {
     shareOnNetwork: boolean;
@@ -88,6 +92,13 @@ type LocalAIServerDeps = {
   loadLlamaApi?: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
   restartTTSBackend?: ((reason: string) => void | Promise<void>) | null;
+  ensureSupertonicRunning?: (() => void | Promise<void>) | null;
+  restartSupertonicBackend?: ((reason: string) => void | Promise<void>) | null;
+  ensureWhisperCppRunning?: ((variant?: string) => Promise<void>) | null;
+  restartWhisperCppBackend?: ((reason: string) => void | Promise<void>) | null;
+  ensureSttBackendRunning?: (() => void | Promise<void>) | null;
+  onSTTRequestStart?: (() => void) | null;
+  onSTTRequestComplete?: (() => void) | null;
   onTTSRequestStart?: (() => void) | null;
   onTTSRequestComplete?: (() => void) | null;
 };
@@ -280,6 +291,13 @@ export class LocalAIServer {
   loadLlamaApi: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning: (() => void | Promise<void>) | null;
   restartTTSBackend: ((reason: string) => void | Promise<void>) | null;
+  ensureSupertonicRunning: (() => void | Promise<void>) | null;
+  restartSupertonicBackend: ((reason: string) => void | Promise<void>) | null;
+  ensureWhisperCppRunning: ((variant?: string) => Promise<void>) | null;
+  restartWhisperCppBackend: ((reason: string) => void | Promise<void>) | null;
+  ensureSttBackendRunning: (() => void | Promise<void>) | null;
+  onSTTRequestStart: (() => void) | null;
+  onSTTRequestComplete: (() => void) | null;
   onTTSRequestStart: (() => void) | null;
   onTTSRequestComplete: (() => void) | null;
   isLoadingModel: boolean;
@@ -294,6 +312,13 @@ export class LocalAIServer {
     loadLlamaApi,
     ensureTTSBackendRunning,
     restartTTSBackend,
+    ensureSupertonicRunning,
+    restartSupertonicBackend,
+    ensureWhisperCppRunning,
+    restartWhisperCppBackend,
+    ensureSttBackendRunning,
+    onSTTRequestStart,
+    onSTTRequestComplete,
     onTTSRequestStart,
     onTTSRequestComplete,
   }: LocalAIServerDeps = {}) {
@@ -316,6 +341,30 @@ export class LocalAIServer {
         : null;
     this.restartTTSBackend =
       typeof restartTTSBackend === "function" ? restartTTSBackend : null;
+    this.ensureSupertonicRunning =
+      typeof ensureSupertonicRunning === "function"
+        ? ensureSupertonicRunning
+        : null;
+    this.restartSupertonicBackend =
+      typeof restartSupertonicBackend === "function"
+        ? restartSupertonicBackend
+        : null;
+    this.ensureWhisperCppRunning =
+      typeof ensureWhisperCppRunning === "function"
+        ? ensureWhisperCppRunning
+        : null;
+    this.restartWhisperCppBackend =
+      typeof restartWhisperCppBackend === "function"
+        ? restartWhisperCppBackend
+        : null;
+    this.ensureSttBackendRunning =
+      typeof ensureSttBackendRunning === "function"
+        ? ensureSttBackendRunning
+        : null;
+    this.onSTTRequestStart =
+      typeof onSTTRequestStart === "function" ? onSTTRequestStart : null;
+    this.onSTTRequestComplete =
+      typeof onSTTRequestComplete === "function" ? onSTTRequestComplete : null;
     this.onTTSRequestStart =
       typeof onTTSRequestStart === "function" ? onTTSRequestStart : null;
     this.onTTSRequestComplete =
@@ -781,12 +830,127 @@ export class LocalAIServer {
     }
   }
 
-  async handleTranscription(req: Request, res: Response) {
-    try {
-      console.log(
-        "[STT] Proxying to Faster Whisper server:",
-        this.config.stt.proxyUrl,
+  /**
+   * Proxy transcription to the bundled whisper.cpp server
+   * (`whisper-server` on port 9883). Accepts the same multipart form and
+   * returns OpenAI-compatible JSON ({text}).
+   */
+  async handleWhisperCppTranscription(
+    req: Request,
+    res: Response,
+    requestedVariant?: string,
+  ) {
+    const whisperCppUrl = "http://127.0.0.1:9883";
+    const forwardOnce = async () => {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: "No audio file provided" });
+      }
+      if (this.ensureWhisperCppRunning) {
+        // Carry the persisted runtime selection with the request itself so
+        // the manager resolves it even before any server:start sync ran.
+        console.log(
+          `[WhisperCpp] Request routing with variant =`,
+          requestedVariant ?? this.config.stt?.variant ?? "<undefined>",
+        );
+        await this.ensureWhisperCppRunning(
+          requestedVariant ?? this.config.stt?.variant,
+        );
+      }
+      const formData = new FormData();
+      formData.append("file", req.file.buffer, {
+        filename: "audio.wav",
+        contentType: req.file.mimetype || "audio/wav",
+      });
+      // whisper-server /inference params
+      formData.append("response_format", "json");
+      const language =
+        typeof req.body?.language === "string" && req.body.language.trim()
+          ? req.body.language.trim()
+          : typeof this.config.stt?.language === "string"
+            ? this.config.stt.language.trim()
+            : "";
+
+      let effectiveLanguage =
+        language && language.length > 0 ? language : "auto";
+
+      const sttModel =
+        typeof req.body?.model === "string"
+          ? req.body.model
+          : this.config.stt?.model || "";
+      if (/\.en(\.bin)?$/.test(sttModel.toLowerCase())) {
+        effectiveLanguage = "en";
+      }
+
+      formData.append("language", effectiveLanguage);
+      formData.append("temperature", "0.0");
+      formData.append("beam_size", "-1");
+
+      const response = await axios.post(
+        `${whisperCppUrl}/inference`,
+        formData,
+        {
+          headers: formData.getHeaders(),
+          timeout: 60000,
+        },
       );
+      return response.data;
+    };
+
+    try {
+      let data;
+      try {
+        data = await forwardOnce();
+      } catch (error) {
+        if (!this.restartWhisperCppBackend) throw error;
+        console.warn(
+          "[STT] whisper.cpp request failed; restarting backend:",
+          getErrorMessage(error),
+        );
+        await this.restartWhisperCppBackend("request failure");
+        data = await forwardOnce();
+      }
+
+      // Normalize to OpenAI shape
+      const text =
+        typeof data?.text === "string"
+          ? data.text
+          : Array.isArray(data?.transcription)
+            ? data.transcription
+                .map((t: { text?: string }) => t.text ?? "")
+                .join("")
+                .trim()
+            : "";
+      res.json({ text });
+    } catch (error) {
+      console.error("[STT] whisper.cpp error:", getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  }
+
+  async handleTranscription(req: Request, res: Response) {
+    // ── whisper.cpp engine (stateless: request body wins over config) ─
+    const bodyEngine =
+      typeof req.body?.engine === "string" ? req.body.engine : undefined;
+    const bodyVariant =
+      typeof req.body?.variant === "string" ? req.body.variant : undefined;
+    if (
+      bodyEngine === "whispercpp" ||
+      (!bodyEngine && this.config.stt?.engine === "whispercpp")
+    ) {
+      return await this.handleWhisperCppTranscription(req, res, bodyVariant);
+    }
+
+    console.log(
+      "[STT] Proxying to Faster Whisper server:",
+      this.config.stt.proxyUrl,
+    );
+
+    try {
+      this.onSTTRequestStart?.();
+
+      if (this.ensureSttBackendRunning) {
+        await this.ensureSttBackendRunning();
+      }
 
       if (!req.file || !req.file.buffer) {
         return res.status(400).json({ error: "No audio file provided" });
@@ -845,9 +1009,11 @@ export class LocalAIServer {
         },
       );
 
+      this.onSTTRequestComplete?.();
       res.json(response.data);
     } catch (error) {
       console.error("[STT] Proxy error:", getErrorMessage(error));
+      this.onSTTRequestComplete?.();
       if (axios.isAxiosError(error) && error.response) {
         return res.status(error.response.status).json(error.response.data);
       }
@@ -858,12 +1024,92 @@ export class LocalAIServer {
     }
   }
 
+  /**
+   * Proxy TTS to the bundled Supertonic 3 server (`supertonic serve`,
+   * port 9882). Fixed built-in voices (M1–M5 / F1–F5) across 31 languages,
+   * CPU-fast, no reference audio required.
+   */
+  async handleSupertonicSpeech(
+    req: Request,
+    res: Response,
+    params: {
+      input: string;
+      voice: string;
+      lang: string;
+      speed?: number | undefined;
+    },
+  ) {
+    const supertonicUrl =
+      this.config.tts?.supertonicUrl || "http://127.0.0.1:9882";
+
+    const forward = async () => {
+      if (this.ensureSupertonicRunning) {
+        await this.ensureSupertonicRunning();
+      }
+
+      console.log("[TTS] Forwarding to Supertonic:", {
+        textLength: params.input.length,
+        voice: params.voice,
+        lang: params.lang,
+        speed: params.speed ?? 1.0,
+      });
+
+      const response = await axios.post(
+        `${supertonicUrl}/v1/tts`,
+        {
+          text: params.input,
+          voice: params.voice,
+          lang: params.lang,
+          speed: params.speed ?? 1.0,
+          response_format: "wav",
+        },
+        {
+          headers: { "Content-Type": "application/json" },
+          responseType: "arraybuffer",
+          timeout: 60000,
+        },
+      );
+      return validateTTSAudioResponse(response.data);
+    };
+
+    let audio;
+    try {
+      audio = await forward();
+    } catch (error) {
+      if (
+        !isRetryableTTSBackendError(error) ||
+        !this.restartSupertonicBackend
+      ) {
+        throw error;
+      }
+      console.warn(
+        "[TTS] Supertonic request failed; restarting backend and retrying once:",
+        getErrorMessage(error),
+      );
+      await this.restartSupertonicBackend("request failure");
+      audio = await forward();
+    }
+
+    res.set({
+      "Content-Type": "audio/wav",
+      "Content-Length": String(audio.length),
+    });
+    res.end(audio);
+
+    this.onTTSRequestComplete?.();
+    console.log("[TTS] Supertonic response sent:", audio.length, "bytes");
+  }
+
   async handleTextToSpeech(req: Request, res: Response) {
     const {
       input,
       reference_audio,
       reference_text,
       reference_language = "en",
+      model: ttsModel,
+      voice: ttsVoice,
+      lang: ttsLang,
+      speed: ttsSpeed,
     } = req.body;
 
     if (!input) {
@@ -879,6 +1125,24 @@ export class LocalAIServer {
 
     try {
       this.onTTSRequestStart?.();
+
+      const wantsSupertonic =
+        ttsModel === "supertonic" || this.config.tts?.engine === "supertonic";
+
+      if (wantsSupertonic) {
+        await this.handleSupertonicSpeech(req, res, {
+          input,
+          voice: typeof ttsVoice === "string" ? ttsVoice : "F1",
+          lang:
+            typeof ttsLang === "string" && ttsLang
+              ? ttsLang
+              : typeof reference_language === "string"
+                ? reference_language
+                : "en",
+          speed: typeof ttsSpeed === "number" ? ttsSpeed : undefined,
+        });
+        return;
+      }
 
       if (this.ensureTTSBackendRunning) {
         await this.ensureTTSBackendRunning();

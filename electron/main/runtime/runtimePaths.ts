@@ -37,10 +37,12 @@ export function createRuntimePaths({
     const runtimeGPTDir = path.join(runtimeServerDir, "gpt-sovits");
     const runtimeGPTUtilsDir = path.join(runtimeGPTDir, "utils");
     const runtimeWhisperDir = path.join(runtimeServerDir, "whisper-stt");
+    const runtimeSupertonicDir = path.join(runtimeServerDir, "supertonic");
 
     fs.mkdirSync(runtimeGPTDir, { recursive: true });
     fs.mkdirSync(runtimeGPTUtilsDir, { recursive: true });
     fs.mkdirSync(runtimeWhisperDir, { recursive: true });
+    fs.mkdirSync(runtimeSupertonicDir, { recursive: true });
 
     const filesToCopy = [
       {
@@ -79,6 +81,10 @@ export function createRuntimePaths({
       {
         src: path.join(serverBasePath, "whisper-stt", "requirements.txt"),
         dest: path.join(runtimeWhisperDir, "requirements.txt"),
+      },
+      {
+        src: path.join(serverBasePath, "supertonic", "setup.py"),
+        dest: path.join(runtimeSupertonicDir, "setup.py"),
       },
     ];
 

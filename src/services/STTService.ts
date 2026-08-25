@@ -229,6 +229,8 @@ class STTService {
         state.config = {
           model: desktopConfig.model || "tiny",
           language: desktopConfig.language || "auto",
+          engine: desktopConfig.engine || "python",
+          variant: desktopConfig.whisperCppVariant || undefined,
         };
         state.provider = provider;
 
@@ -495,6 +497,18 @@ class STTService {
       }
       if (state.config.temperature !== undefined) {
         params.temperature = state.config.temperature;
+      }
+      if (
+        state.provider === STTProviders.DESKTOP_LOCAL ||
+        state.provider === "desktop-local"
+      ) {
+        const desktopState = state.config as any;
+        if (desktopState.engine) {
+          params.engine = desktopState.engine;
+        }
+        if (desktopState.variant) {
+          params.variant = desktopState.variant;
+        }
       }
       // Android local: optional compute provider hint (auto/cpu/xnnpack/qnn)
       if (

@@ -526,6 +526,10 @@ const STTSettings = ({
                     updateSTTConfig(`desktop-local.${key}`, value);
                   });
                 }}
+                onRequestDeleteDialog={(modelId) =>
+                  onRequestDeleteSttModel?.(modelId)
+                }
+                externalDeleteTick={externalDeleteTick}
                 isSetupMode={false}
                 isLightBackground={isLightBackground}
               />
