@@ -418,20 +418,22 @@ class VitsService(
                     )
                     ttsEngine.generateWithConfigAndCallback(
                         text = text,
-                        config = genConfig
-                    ) { _ ->
-                        if (firstAudioMs < 0) firstAudioMs = SystemClock.elapsedRealtime() - synthStartMs
-                        1  // continue generating
-                    }
+                        config = genConfig,
+                        callback = TtsStepCallback { _ ->
+                            if (firstAudioMs < 0) firstAudioMs = SystemClock.elapsedRealtime() - synthStartMs
+                            1  // continue generating
+                        }
+                    )
                 } else {
                     ttsEngine.generateWithCallback(
                         text = text,
                         sid = sid,
-                        speed = speed
-                    ) { _ ->
-                        if (firstAudioMs < 0) firstAudioMs = SystemClock.elapsedRealtime() - synthStartMs
-                        1  // continue generating
-                    }
+                        speed = speed,
+                        callback = TtsStepCallback { _ ->
+                            if (firstAudioMs < 0) firstAudioMs = SystemClock.elapsedRealtime() - synthStartMs
+                            1  // continue generating
+                        }
+                    )
                 }
 
                 val wallMs = SystemClock.elapsedRealtime() - synthStartMs

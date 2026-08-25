@@ -660,6 +660,16 @@ class LocalAIServer(
         
         val maxTokens = request.max_tokens ?: 2048
         val stream = request.stream ?: false
+        // Accept all industry conventions for toggling thinking:
+        //   enable_thinking (ours/llama.cpp), chat_template_kwargs.enable_thinking
+        //   (vLLM/llama.cpp Jinja kwarg), reasoning_effort (OpenAI-style; "none"/"off"=disabled)
+        val enableThinking = request.enable_thinking
+            ?: request.chat_template_kwargs?.enable_thinking
+            ?: when (request.reasoning_effort?.lowercase()) {
+                "none", "off" -> false
+                null -> false
+                else -> true
+            }
         val requestedModel = request.model
         
         // Load/swap model if needed (on-demand like Desktop)
@@ -809,9 +819,9 @@ class LocalAIServer(
         }
         
         return if (stream) {
-            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios)
+            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios, enableThinking)
         } else {
-            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios)
+            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios, enableThinking)
         }
     }
     
@@ -823,19 +833,41 @@ class LocalAIServer(
         images: List<ByteArray>,
         maxTokens: Int,
         model: String,
-        audios: List<Pair<ByteArray, String>> = emptyList()
+        audios: List<Pair<ByteArray, String>> = emptyList(),
+        enableThinking: Boolean = false
     ): Response {
         return runBlocking(aiDispatcher) {
             try {
                 var response = if (activeRuntime == "litert") {
-                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null })
+                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
                 } else {
                     if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
-                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null })
+                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, enableThinking)
                 }
                 
-                // Strip <think>...</think> blocks from response
-                response = stripThinkBlocks(response)
+                // Split reasoning into the standard message.reasoning_content
+                // field (DeepSeek/llama.cpp convention); content stays clean.
+                // When thinking is OFF, reasoning is dropped entirely.
+                var reasoningContent: String? = null
+                val thinkStart = response.indexOf("<think>")
+                if (thinkStart != -1) {
+                    val thinkEnd = response.indexOf("</think>", thinkStart)
+                    if (thinkEnd != -1) {
+                        reasoningContent = response.substring(thinkStart + 7, thinkEnd)
+                            .trim()
+                            .ifEmpty { null }
+                        response = (response.substring(0, thinkStart) +
+                            response.substring(thinkEnd + 8)).trim()
+                    } else {
+                        // Unterminated block: everything after <think> is reasoning
+                        reasoningContent = response.substring(thinkStart + 7).trim()
+                        response = response.substring(0, thinkStart).trim()
+                    }
+                }
+                if (!enableThinking) {
+                    reasoningContent = null
+                    response = stripThinkBlocks(response)
+                }
                 
                 val result = JsonObject().apply {
                     addProperty("id", "chatcmpl-${UUID.randomUUID()}")
@@ -848,6 +880,9 @@ class LocalAIServer(
                             add("message", JsonObject().apply {
                                 addProperty("role", "assistant")
                                 addProperty("content", response)
+                                if (reasoningContent != null) {
+                                    addProperty("reasoning_content", reasoningContent)
+                                }
                             })
                             addProperty("finish_reason", "stop")
                         })
@@ -875,7 +910,8 @@ class LocalAIServer(
         images: List<ByteArray>,
         maxTokens: Int,
         model: String,
-        audios: List<Pair<ByteArray, String>> = emptyList()
+        audios: List<Pair<ByteArray, String>> = emptyList(),
+        enableThinking: Boolean = false
     ): Response {
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val created = System.currentTimeMillis() / 1000
@@ -888,10 +924,10 @@ class LocalAIServer(
         val streamingJob = scope.launch(aiDispatcher) {
             try {
                 val tokenFlow = if (activeRuntime == "litert") {
-                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null })
+                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
                 } else {
                     if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
-                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null })
+                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, enableThinking)
                 }
                 
                 // Buffer for detecting and stripping <think> blocks
@@ -900,7 +936,7 @@ class LocalAIServer(
                 var totalTokens = 0
                 var sentChars = 0
                 
-                Log.d(TAG, "Starting streaming chat completion...")
+                Log.d(TAG, "Starting streaming chat completion... (thinking=$enableThinking)")
                 
                 tokenFlow.collect { token ->
                     totalTokens++
@@ -918,23 +954,42 @@ class LocalAIServer(
                         return@collect
                     }
                     
-                    // If in think block, accumulate until </think>
+                    // Inside a think block: emit as reasoning_content (standard
+                    // DeepSeek/llama.cpp field) when thinking is enabled; swallow when OFF
                     if (inThinkBlock) {
                         buffer.append(token)
-                        if (buffer.toString().contains("</think>")) {
-                            val bufStr = buffer.toString()
+                        val bufStr = buffer.toString()
+                        if (bufStr.contains("</think>")) {
                             val idx = bufStr.indexOf("</think>")
+                            val reasoning = bufStr.substring(0, idx)
                             val afterThink = bufStr.substring(idx + 8)
                             buffer.clear()
                             inThinkBlock = false
                             Log.d(TAG, "Exited think block at token $totalTokens")
                             
+                            if (enableThinking && reasoning.isNotEmpty()) {
+                                queueStreamChunk(chunkQueue, completionId, created, model, reasoning, isReasoning = true)
+                            }
                             // Send content after </think> and disable future checks
                             if (afterThink.isNotEmpty()) {
                                 Log.d(TAG, "Streaming after think: '$afterThink'")
                                 queueStreamChunk(chunkQueue, completionId, created, model, afterThink)
                                 sentChars += afterThink.length
                             }
+                        } else if (enableThinking) {
+                            // Flush what we can; hold back a possible partial "</think>"
+                            var keep = 0
+                            for (len in minOf(8, bufStr.length) downTo 1) {
+                                if (bufStr.endsWith("</think>".substring(0, len))) { keep = len; break }
+                            }
+                            val emit = bufStr.substring(0, bufStr.length - keep)
+                            if (emit.isNotEmpty()) {
+                                buffer.clear()
+                                buffer.append(bufStr.substring(bufStr.length - keep))
+                                queueStreamChunk(chunkQueue, completionId, created, model, emit, isReasoning = true)
+                            }
+                        } else if (buffer.length > 64 * 1024) {
+                            buffer.clear() // safety valve when dropping reasoning
                         }
                         return@collect
                     }
@@ -976,6 +1031,9 @@ class LocalAIServer(
                 if (!inThinkBlock && buffer.isNotEmpty()) {
                     queueStreamChunk(chunkQueue, completionId, created, model, buffer.toString())
                     sentChars += buffer.length
+                } else if (inThinkBlock && enableThinking && buffer.isNotEmpty()) {
+                    // Stream ended inside an unterminated think block: flush as reasoning
+                    queueStreamChunk(chunkQueue, completionId, created, model, buffer.toString(), isReasoning = true)
                 }
                 
                 Log.d(TAG, "Streaming complete: $totalTokens tokens, $sentChars chars sent")
@@ -1153,8 +1211,16 @@ class LocalAIServer(
         completionId: String,
         created: Long,
         model: String,
-        content: String
+        content: String,
+        isReasoning: Boolean = false
     ) {
+        val delta = JsonObject()
+        if (isReasoning) {
+            // DeepSeek/llama.cpp convention: separate reasoning field
+            delta.addProperty("reasoning_content", content)
+        } else {
+            delta.addProperty("content", content)
+        }
         val chunk = JsonObject().apply {
             addProperty("id", completionId)
             addProperty("object", "chat.completion.chunk")
@@ -1163,9 +1229,7 @@ class LocalAIServer(
             add("choices", JsonArray().apply {
                 add(JsonObject().apply {
                     addProperty("index", 0)
-                    add("delta", JsonObject().apply {
-                        addProperty("content", content)
-                    })
+                    add("delta", delta)
                     addProperty("finish_reason", null as String?)
                 })
             })
@@ -1224,8 +1288,17 @@ class LocalAIServer(
         val messages: List<ChatMessage>?,
         val model: String? = null,
         val max_tokens: Int? = null,
+        val enable_thinking: Boolean? = null,
+        // llama.cpp / vLLM convention: chat_template_kwargs { enable_thinking }
+        val chat_template_kwargs: ChatTemplateKwargs? = null,
+        // OpenAI convention: "none"/"off" disables thinking; levels imply enabled
+        val reasoning_effort: String? = null,
         val temperature: Float? = null,
         val stream: Boolean? = null
+    )
+
+    data class ChatTemplateKwargs(
+        val enable_thinking: Boolean? = null
     )
     
     data class ChatMessage(

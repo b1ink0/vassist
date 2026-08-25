@@ -10,7 +10,7 @@ type BridgeOptions = { timeout?: number };
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  onChunk?: (chunk: string) => void;
+  onChunk?: (token: string, channel?: string) => void;
   timeoutId?: ReturnType<typeof setTimeout>;
   timeout?: number;
 };
@@ -77,7 +77,7 @@ class ExtensionBridge {
 
       // Check for streaming token
       if (event.data && event.data.__VASSIST_STREAM_TOKEN__) {
-        const { requestId, token } = event.data;
+        const { requestId, token, channel } = event.data;
 
         const pending = this.pending.get(requestId);
         if (pending && pending.onChunk) {
@@ -96,7 +96,7 @@ class ExtensionBridge {
           }
 
           // Call chunk callback
-          pending.onChunk(token);
+          pending.onChunk(token, channel);
         } else {
           Logger.warn(
             "ExtensionBridge",
@@ -204,7 +204,7 @@ class ExtensionBridge {
   async sendStreamingMessage(
     type: string,
     payload: unknown,
-    onChunk: (chunk: string) => void,
+    onChunk: (token: string, channel?: string) => void,
     options: BridgeOptions = {},
   ): Promise<void> {
     return new Promise((resolve, reject) => {

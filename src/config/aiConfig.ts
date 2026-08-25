@@ -243,6 +243,8 @@ export interface AIRemoteProviderProfile {
   threads?: number;
   enableImageSupport?: boolean;
   enableAudioSupport?: boolean;
+  thinkingEnabled?: boolean;
+  thinkingEffort?: "low" | "medium" | "high" | "xhigh";
 }
 
 export interface AIRoutingModelConfig {
@@ -301,6 +303,8 @@ export const DefaultAIConfig = {
     systemPrompt: "", // Custom system prompt (only used when systemPromptType is 'custom')
     selectedSystemPromptProfileId: "default",
     systemPromptProfiles: [],
+    thinkingEnabled: false,
+    thinkingEffort: undefined,
   },
 
   openai: {
@@ -308,6 +312,8 @@ export const DefaultAIConfig = {
     model: "gpt-4-turbo-preview",
     temperature: 0.7,
     maxTokens: 2000,
+    thinkingEnabled: false,
+    thinkingEffort: undefined,
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: "default", // Personality type from PromptConfig.systemPrompts
@@ -334,6 +340,8 @@ export const DefaultAIConfig = {
     model: "llama2",
     temperature: 0.7,
     maxTokens: 2000,
+    thinkingEnabled: false, // Let reasoning models emit <think> blocks (rendered collapsibly)
+    thinkingEffort: undefined,
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: "default", // Personality type from PromptConfig.systemPrompts
@@ -364,6 +372,8 @@ export const DefaultAIConfig = {
     // "auto" = any accelerator with CPU fallback, "cpu" = CPU only,
     // "gpu" = Adreno OpenCL, "npu" = Hexagon HTP
     computeUnit: "auto",
+    thinkingEnabled: false,
+    thinkingEffort: undefined,
     systemPromptType: "default",
     systemPrompt: "",
     selectedSystemPromptProfileId: "default",
@@ -395,6 +405,8 @@ export const DefaultAIConfig = {
     contextSize: 4096,
     gpuLayers: 99, // Use GPU acceleration
     threads: 4,
+    thinkingEnabled: false,
+    thinkingEffort: undefined,
     systemPromptType: "default",
     systemPrompt: "",
     selectedSystemPromptProfileId: "default",

@@ -37,6 +37,10 @@ import {
 } from "../../services/LLMModelStorageService";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
+import {
+  useUIConfig,
+  useConfigUIActions,
+} from "../../hooks/config/useConfigUI";
 import StatusMessage from "../common/StatusMessage";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
@@ -1426,6 +1430,14 @@ const LLMSettings = ({
   const aiConfig = useAIConfig();
   const aiTesting = useAITesting();
   const { updateAIConfig, testAIConnection } = useConfigAIActions();
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
+  const activeSectionKey =
+    aiConfig.provider === AIProviders.CHROME_AI
+      ? "chromeAi"
+      : aiConfig.provider;
+  const thinkingEffort = (aiConfig as Record<string, any>)[activeSectionKey]
+    ?.thinkingEffort;
 
   const androidAPI = useAndroidApi();
   const desktopAPI = useDesktopApi();
@@ -1729,6 +1741,43 @@ const LLMSettings = ({
               label: PROVIDER_LABELS[value] || key,
             }))}
           />
+        </SettingsRow>
+
+        <SettingsRow label="Thinking Effort" layout="stacked">
+          <Select
+            data-testid="llm-thinking-effort-select"
+            value={thinkingEffort ?? ""}
+            onChange={(e) =>
+              updateAIConfig(
+                `${activeSectionKey}.thinkingEffort`,
+                e.target.value || undefined,
+              )
+            }
+            variant={isLightBackground ? "dark" : "default"}
+            options={[
+              { value: "", label: "Auto (model default)" },
+              { value: "low", label: "Low" },
+              { value: "medium", label: "Medium" },
+              { value: "high", label: "High" },
+              { value: "xhigh", label: "Max" },
+            ]}
+          />
+        </SettingsRow>
+
+        <SettingsRow label="Auto-expand Thinking" layout="stacked">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+            <p className="text-xs text-white/50 mt-0.5">
+              Keep the thought process panel open while reasoning streams. When
+              off it collapses to a one-line live preview.
+            </p>
+            <Toggle
+              data-testid="llm-thinking-autoexpand-toggle"
+              checked={uiConfig.thinkingPanelAutoExpand === true}
+              onChange={(checked) =>
+                updateUIConfig("thinkingPanelAutoExpand", checked)
+              }
+            />
+          </div>
         </SettingsRow>
       </div>
 

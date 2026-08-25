@@ -50,9 +50,11 @@ interface AIServiceResponse {
   response: string | null;
   cancelled: boolean;
   error: unknown;
+  thinking?: string;
 }
 
 interface BridgeAIResponse {
+  thinking?: string;
   success?: boolean;
   response?: string;
   text?: string;
@@ -252,10 +254,28 @@ class AIServiceProxy extends ServiceProxy {
           throw new Error("AIServiceProxy: Streaming bridge is not available");
         }
 
+        // Flag for the background to rebuild an onReasoning callback
+        // (functions cannot cross the bridge)
+        const wantsThinking = typeof options.onReasoning === "function";
+        let fullThinking = "";
         await bridge.sendStreamingMessage(
           MessageTypes.AI_SEND_MESSAGE,
-          { messages, options: { ...options, streaming: true } }, // Mark as streaming request
-          (chunk: string) => {
+          {
+            messages,
+            options: {
+              ...options,
+              streaming: true,
+              ...(wantsThinking ? { thinkingStream: true } : {}),
+            },
+          }, // Mark as streaming request
+          (chunk: string, channel?: string) => {
+            if (channel === "reasoning") {
+              fullThinking += chunk;
+              (options.onReasoning as ((c: string) => void) | undefined)?.(
+                chunk,
+              );
+              return;
+            }
             fullResponse += chunk;
             onStream(chunk);
           },
@@ -268,6 +288,7 @@ class AIServiceProxy extends ServiceProxy {
           response: fullResponse,
           cancelled: false,
           error: null,
+          ...(fullThinking ? { thinking: fullThinking } : {}),
         };
       } else {
         // Non-streaming mode - explicitly mark as non-streaming
@@ -292,6 +313,7 @@ class AIServiceProxy extends ServiceProxy {
           response: response?.response || "",
           cancelled: false,
           error: null,
+          ...(response?.thinking ? { thinking: response.thinking } : {}),
         };
       }
     } catch (error: unknown) {

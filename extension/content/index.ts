@@ -289,6 +289,7 @@ class VirtualAssistantInjector {
                 __VASSIST_STREAM_TOKEN__: true,
                 requestId: mainRequestId,
                 token: message.data.token,
+                channel: message.data.channel,
               },
               "*",
             );

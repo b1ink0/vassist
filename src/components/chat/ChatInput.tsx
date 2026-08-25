@@ -41,6 +41,10 @@ import {
   useToolingActions,
 } from "../../hooks/app/useTooling";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
+import {
+  useAIConfig,
+  useConfigAIActions,
+} from "../../hooks/config/useConfigAI";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/LoggerService";
@@ -149,6 +153,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     } = useToolingActions();
 
     const uiConfig = useUIConfig();
+    const aiConfig = useAIConfig();
+    const { updateAIConfig } = useConfigAIActions();
     const api = useDesktopApi();
     const resolvedEmbedConfig =
       embedConfig ?? contextEmbedConfig ?? normalizeVAssistEmbedConfig();
@@ -160,6 +166,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       voiceCallEnabled &&
       resolvedEmbedConfig.features.screenShare &&
       !isAndroid;
+
+    const activeSectionKey =
+      aiConfig.provider === "chrome-ai" ? "chromeAi" : aiConfig.provider;
+    const thinkingEnabled =
+      (aiConfig as Record<string, any>)[activeSectionKey]?.thinkingEnabled ===
+      true;
+    const toggleThinking = (checked: boolean) =>
+      updateAIConfig(`${activeSectionKey}.thinkingEnabled`, checked);
 
     // Local state for input window (synced from main window)
     const [localPendingDropData, setLocalPendingDropData] =
@@ -2373,6 +2387,20 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleThinking(!thinkingEnabled)}
+                        data-testid="chat-thinking-toggle"
+                        className={cn(
+                          iconButtonClass(),
+                          !thinkingEnabled && "opacity-50",
+                        )}
+                        title={thinkingEnabled ? "Thinking on" : "Thinking off"}
+                        aria-label="Toggle thinking mode"
+                        aria-pressed={thinkingEnabled}
+                      >
+                        <Icon name="bulb" size={18} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => imageInputRef.current?.click()}

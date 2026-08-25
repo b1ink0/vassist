@@ -17,6 +17,7 @@ export interface ChatNode {
   timestamp: number;
   images?: ChatAttachment[];
   audios?: ChatAttachment[];
+  thinking?: string;
   imageFileIds?: string[];
   audioFileIds?: string[];
   isEdit?: boolean;
@@ -39,6 +40,7 @@ export interface FlatChatMessage {
   audios: ChatAttachment[];
   imageFileIds: string[];
   audioFileIds: string[];
+  thinking?: string;
   timestamp: number;
   parentId: string | null;
   branchInfo: BranchInfo | null;
@@ -138,6 +140,7 @@ export class ChatService {
     content: string,
     images: ChatAttachment[] | null = null,
     audios: ChatAttachment[] | null = null,
+    thinking: string | null = null,
   ): string {
     const parentId = this.activePath[this.activePath.length - 1] ?? "root";
     const parent = this._findNode(parentId);
@@ -155,6 +158,7 @@ export class ChatService {
       audios: audios || [],
       imageFileIds: [],
       audioFileIds: [],
+      thinking: thinking || "",
       branches: [],
       currentBranchIndex: 0,
       timestamp: Date.now(),
@@ -195,6 +199,7 @@ export class ChatService {
           audios: node.audios || [],
           imageFileIds: node.imageFileIds || [],
           audioFileIds: node.audioFileIds || [],
+          thinking: node.thinking || "",
           timestamp: node.timestamp,
           parentId: node.parentId,
           branchInfo: this._getBranchInfo(node),
@@ -209,7 +214,7 @@ export class ChatService {
    * Update the content of the last message in the active path (for streaming)
    * @param {string} content - New content for the last message
    */
-  updateLastMessage(content: string): void {
+  updateLastMessage(content: string, thinking?: string): void {
     if (this.activePath.length < 2) {
       Logger.warn("ChatService", "No messages to update");
       return;
@@ -223,6 +228,9 @@ export class ChatService {
 
     if (node) {
       node.content = content;
+      if (thinking !== undefined) {
+        node.thinking = thinking;
+      }
       node.timestamp = Date.now();
     }
   }

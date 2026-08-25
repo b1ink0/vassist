@@ -354,3 +354,53 @@
     transform: none;
   }
 }
+
+/* Thinking panel: collapsed ticker line slides up from below */
+@keyframes thinkingTickerLineIn {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-thinking-ticker-line {
+  animation: thinkingTickerLineIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Thinking scroll area: slim themed scrollbar (matches chat container) */
+.thinking-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vassist-border-color) transparent;
+}
+.thinking-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+.thinking-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thinking-scroll-area::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--vassist-border-color);
+}
+.thinking-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--vassist-border-strong-color);
+}
+
+/* ThinkingPanel: "Thinking..." label breathes while reasoning streams */
+@keyframes thinkingLabelPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.thinking-label-pulse {
+  animation: thinkingLabelPulse 1.6s ease-in-out infinite;
+}

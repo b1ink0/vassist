@@ -20,6 +20,8 @@ import AudioPlayer from "../media/AudioPlayer";
 import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
 import Logger from "../../services/LoggerService";
+import ThinkingPanel from "./ThinkingPanel";
+import { useUIConfig } from "../../hooks/config/useConfigUI";
 
 interface MessageBranchInfo {
   currentIndex?: number;
@@ -35,6 +37,7 @@ interface ChatMessageModel {
   content: string;
   images?: string[];
   audios?: string[];
+  thinking?: string;
   branchInfo?: MessageBranchInfo;
 }
 
@@ -123,6 +126,12 @@ const ChatMessage = ({
 
   const isUser = message.role === "user";
   const isError = message.content.toLowerCase().startsWith("error:");
+  const hasThinking =
+    !isUser &&
+    typeof message.thinking === "string" &&
+    message.thinking.trim().length > 0;
+  const uiConfig = useUIConfig();
+  const thinkingAutoExpand = uiConfig.thinkingPanelAutoExpand === true;
   const isPlaying = playingMessageIndex === messageIndex;
   const isLoading = loadingMessageIndex === messageIndex;
   const hasAudio = isUser && message.audios && message.audios.length > 0;
@@ -441,6 +450,15 @@ const ChatMessage = ({
                 </div>
               ) : (
                 <>
+                  {hasThinking && (
+                    <ThinkingPanel
+                      thinking={message.thinking ?? ""}
+                      messageIndex={messageIndex}
+                      isStreamingMessage={isStreamingMessage}
+                      hasContent={message.content.length > 0}
+                      autoExpand={thinkingAutoExpand}
+                    />
+                  )}
                   {!isUser && !isError ? (
                     isStreamingMessage ? (
                       <StreamingContainer

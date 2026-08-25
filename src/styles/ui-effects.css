@@ -763,3 +763,27 @@
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
+
+.thinking-collapse-panel {
+  height: 0;
+  overflow: hidden;
+  transition: height 300ms ease-in-out;
+}
+
+.thinking-collapse-panel[data-open] {
+  height: var(--collapsible-panel-height);
+}
+
+.thinking-collapse-panel[data-starting-style] {
+  height: 0;
+}
+
+.thinking-chevron {
+  display: inline-flex;
+  transition: transform 300ms ease-in-out;
+}
+
+.thinking-chevron[data-panel-open],
+[data-panel-open] > .thinking-chevron {
+  transform: rotate(90deg);
+}

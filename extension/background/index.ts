@@ -980,7 +980,7 @@ async function registerHandlers() {
       if (!tabId) throw new Error("Tab ID required");
 
       const messagesRaw = message.data.messages;
-      const options = asMessageData(message.data.options);
+      let options = asMessageData(message.data.options);
       const messages = Array.isArray(messagesRaw) ? messagesRaw : [];
 
       // Check if streaming is requested (if message has streaming flag or isStreaming option)
@@ -988,20 +988,28 @@ async function registerHandlers() {
         message.streaming || options.streaming === true;
 
       // Only provide streaming callback if actually needed
+      const sendToken = (token: string, channel?: string) => {
+        chrome.tabs
+          .sendMessage(requireSenderTabId(sender), {
+            type: MessageTypes.AI_STREAM_TOKEN,
+            requestId: message.requestId,
+            data: channel ? { token, channel } : { token },
+          })
+          .catch((err) =>
+            Logger.error("Background", "Failed to send stream token:", err),
+          );
+      };
       const streamCallback = isStreamingRequest
-        ? (token: string) => {
-            // Send streaming token back to content script
-            chrome.tabs
-              .sendMessage(requireSenderTabId(sender), {
-                type: MessageTypes.AI_STREAM_TOKEN,
-                requestId: message.requestId,
-                data: { token },
-              })
-              .catch((err) =>
-                Logger.error("Background", "Failed to send stream token:", err),
-              );
-          }
+        ? (token: string) => sendToken(token)
         : null;
+
+      const reasoningCallback =
+        isStreamingRequest && options.thinkingStream === true
+          ? (token: string) => sendToken(token, "reasoning")
+          : undefined;
+      if (reasoningCallback) {
+        options = { ...options, onReasoning: reasoningCallback };
+      }
 
       if (isFakeAiTestMode) {
         const response = buildFakeAiResponse(messages);
@@ -1017,7 +1025,9 @@ async function registerHandlers() {
         options,
       );
 
-      return result.success ? { response: result.response } : result;
+      return result.success
+        ? { response: result.response, thinking: result.thinking }
+        : result;
     },
   );
 

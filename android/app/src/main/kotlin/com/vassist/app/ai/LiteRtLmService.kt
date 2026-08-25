@@ -135,7 +135,8 @@ class LiteRtLmService(private val context: Context) {
         messages: List<LlamaService.ChatMessage>,
         maxTokens: Int = 2048,
         images: List<ByteArray>? = null,
-        audios: List<Pair<ByteArray, String>>? = null
+        audios: List<Pair<ByteArray, String>>? = null,
+        enableThinking: Boolean = false
     ): Flow<String> = flow {
         val e = engine ?: throw IllegalStateException("LiteRT-LM not initialized")
 
@@ -228,10 +229,11 @@ class LiteRtLmService(private val context: Context) {
         messages: List<LlamaService.ChatMessage>,
         maxTokens: Int = 2048,
         images: List<ByteArray>? = null,
-        audios: List<Pair<ByteArray, String>>? = null
+        audios: List<Pair<ByteArray, String>>? = null,
+        enableThinking: Boolean = false
     ): String {
         val sb = StringBuilder()
-        chatCompletion(messages, maxTokens, images, audios).collect { sb.append(it) }
+        chatCompletion(messages, maxTokens, images, audios, enableThinking).collect { sb.append(it) }
         return sb.toString()
     }
 

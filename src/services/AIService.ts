@@ -11,6 +11,7 @@ import ChromeAIValidator from "./ChromeAIValidator";
 import Logger from "./LoggerService";
 import FrameCaptureService from "./FrameCaptureService";
 import { isExtension } from "../utils/PlatformUtils";
+import { ThinkStreamSplitter } from "../utils/thinking";
 
 type AIMessage = Record<string, any>;
 type SendResult = {
@@ -18,6 +19,7 @@ type SendResult = {
   response: string | null;
   cancelled: boolean;
   error: Error | null;
+  thinking?: string;
 };
 type RemoteModelListConfig = {
   provider: "openai" | "ollama" | "android-local" | "desktop-local";
@@ -121,6 +123,8 @@ class AIService {
           maxTokens: providerConfig.maxTokens,
           enableImageSupport: providerConfig.enableImageSupport !== false,
           enableAudioSupport: providerConfig.enableAudioSupport !== false,
+          thinkingEnabled: providerConfig.thinkingEnabled === true,
+          thinkingEffort: providerConfig.thinkingEffort,
           routing: providerConfig.routing || { enabled: false },
         },
       };
@@ -143,6 +147,8 @@ class AIService {
           maxTokens: providerConfig.maxTokens,
           enableImageSupport: providerConfig.enableImageSupport !== false,
           enableAudioSupport: providerConfig.enableAudioSupport !== false,
+          thinkingEnabled: providerConfig.thinkingEnabled === true,
+          thinkingEffort: providerConfig.thinkingEffort,
           routing: providerConfig.routing || { enabled: false },
         },
       };
@@ -166,6 +172,8 @@ class AIService {
           model: providerConfig.model || "qwen3-local",
           temperature: providerConfig.temperature || 0.7,
           maxTokens: providerConfig.maxTokens || 2048,
+          thinkingEnabled: providerConfig.thinkingEnabled === true,
+          thinkingEffort: providerConfig.thinkingEffort,
           enableImageSupport: false,
           routing: providerConfig.routing || { enabled: false },
           enableAudioSupport: false,
@@ -192,6 +200,8 @@ class AIService {
           temperature: providerConfig.temperature || 0.7,
           maxTokens: providerConfig.maxTokens || 2048,
           customModelsPath: providerConfig.customModelsPath || null,
+          thinkingEnabled: providerConfig.thinkingEnabled === true,
+          thinkingEffort: providerConfig.thinkingEffort,
           enableImageSupport: false,
           routing: providerConfig.routing || { enabled: false },
           enableAudioSupport: false,
@@ -709,6 +719,23 @@ class AIService {
       stream: true,
     };
 
+    const cfg = state.config as any;
+    const thinkingOn = cfg.thinkingEnabled === true;
+    if (state.provider !== AIProviders.OPENAI && state.provider !== "openai") {
+      body.enable_thinking = thinkingOn;
+      // vLLM/llama.cpp Jinja kwarg convention (harmless no-op elsewhere)
+      body.chat_template_kwargs = { enable_thinking: thinkingOn };
+      // Effort levels for endpoints that support reasoning_effort
+      if (thinkingOn && cfg.thinkingEffort) {
+        body.reasoning_effort = cfg.thinkingEffort;
+      }
+    } else {
+      // Official OpenAI: reasoning_effort is the native knob
+      body.reasoning_effort = thinkingOn
+        ? cfg.thinkingEffort || "medium"
+        : "none";
+    }
+
     if (
       (state.provider === AIProviders.DESKTOP_LOCAL ||
         state.provider === "desktop-local") &&
@@ -1225,6 +1252,7 @@ class AIService {
     tabId: number | null = null,
     options: any = {},
   ): Promise<SendResult> {
+    options = options || {};
     const state = this._getState(tabId);
 
     if (!this.isConfigured(tabId)) {
@@ -1321,6 +1349,11 @@ class AIService {
       });
 
       let fullResponse = "";
+      let fullThinking = "";
+      const thinkingEnabled = (requestConfig as any).thinkingEnabled === true;
+      const onReasoning: ((chunk: string) => void) | undefined =
+        options.onReasoning;
+      const splitter = new ThinkStreamSplitter();
 
       // Process streaming chunks
       for await (const chunk of stream) {
@@ -1333,11 +1366,27 @@ class AIService {
             response: fullResponse,
             cancelled: true,
             error: null,
+            thinking: fullThinking,
           };
         }
 
-        const content = chunk.choices[0]?.delta?.content || "";
+        const delta = chunk.choices[0]?.delta || {};
+        let reasoning: string =
+          delta.reasoning_content || delta.reasoning || "";
+        let content: string = delta.content || "";
 
+        if (content) {
+          const d = splitter.push(content);
+          reasoning += d.thinking;
+          content = d.content;
+        }
+
+        if (reasoning) {
+          fullThinking += reasoning;
+          if (thinkingEnabled && onReasoning) {
+            onReasoning(reasoning);
+          }
+        }
         if (content) {
           fullResponse += content;
 
@@ -1348,9 +1397,25 @@ class AIService {
         }
       }
 
+      const tail = splitter.finish();
+      if (tail.thinking) {
+        fullThinking += tail.thinking;
+        if (thinkingEnabled && onReasoning) {
+          onReasoning(tail.thinking);
+        }
+      }
+      if (tail.content) {
+        fullResponse += tail.content;
+        if (onStream) {
+          onStream(tail.content);
+        }
+      }
+
       Logger.log(
         "other",
-        `${logPrefix} - Response received (${fullResponse.length} chars)`,
+        `${logPrefix} - Response received (${fullResponse.length} chars${
+          fullThinking ? `, ${fullThinking.length} thinking` : ""
+        })`,
       );
       state.abortController = null;
 
@@ -1359,6 +1424,7 @@ class AIService {
         response: fullResponse,
         cancelled: false,
         error: null,
+        thinking: fullThinking,
       };
     } catch (error) {
       state.abortController = null;

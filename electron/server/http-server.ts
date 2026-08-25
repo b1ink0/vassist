@@ -99,6 +99,74 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Strip complete <think>...</think> blocks from a full response text,
+ * including an unclosed trailing block (token-limit cutoff).
+ */
+function stripThinkBlocks(text: string): string {
+  let out = text.replace(/<think>[\s\S]*?<\/think>/g, "");
+  const openIdx = out.indexOf("<think>");
+  if (openIdx !== -1 && out.indexOf("</think>", openIdx) === -1) {
+    out = out.slice(0, openIdx);
+  }
+  return out.replace(/^\s+/, "");
+}
+
+/**
+ * Streaming-safe think-tag suppressor. Buffers potential partial tags
+ * (e.g. "<thi") so false positives never reach the client.
+ */
+class ThinkTagStripper {
+  private buffer = "";
+  private insideThink = false;
+
+  push(chunk: string): string {
+    this.buffer += chunk;
+    let out = "";
+    for (;;) {
+      if (this.insideThink) {
+        const close = this.buffer.indexOf("</think>");
+        if (close !== -1) {
+          this.buffer = this.buffer.slice(close + "</think>".length);
+          this.insideThink = false;
+          continue;
+        }
+        const keep = this.partialSuffix(this.buffer, "</think>");
+        out += this.buffer.slice(0, this.buffer.length - keep);
+        this.buffer = this.buffer.slice(this.buffer.length - keep);
+        break;
+      } else {
+        const open = this.buffer.indexOf("<think>");
+        if (open !== -1) {
+          out += this.buffer.slice(0, open);
+          this.buffer = this.buffer.slice(open + "<think>".length);
+          this.insideThink = true;
+          continue;
+        }
+        const keep = this.partialSuffix(this.buffer, "<think>");
+        out += this.buffer.slice(0, this.buffer.length - keep);
+        this.buffer = this.buffer.slice(this.buffer.length - keep);
+        break;
+      }
+    }
+    return out;
+  }
+
+  finish(): string {
+    const rest = this.insideThink ? "" : this.buffer;
+    this.buffer = "";
+    return rest;
+  }
+
+  private partialSuffix(text: string, tag: string): number {
+    const max = Math.min(text.length, tag.length - 1);
+    for (let len = max; len > 0; len--) {
+      if (text.endsWith(tag.slice(0, len))) return len;
+    }
+    return 0;
+  }
+}
+
 class InvalidTTSAudioResponseError extends Error {
   constructor(message: string) {
     super(message);
@@ -200,6 +268,11 @@ export class LocalAIServer {
         temperature: number;
         maxTokens: number;
         onTextChunk?: (chunk: string) => void;
+        onResponseChunk?: (chunk: {
+          type?: undefined | string;
+          segmentType?: undefined | string;
+          text?: string;
+        }) => void;
       },
     ) => Promise<{ response: string }>;
   } | null;
@@ -438,7 +511,21 @@ export class LocalAIServer {
       max_tokens,
       model,
       customModelsPath,
+      enable_thinking: enableThinkingRaw,
+      chat_template_kwargs: chatTemplateKwargs,
+      reasoning_effort: reasoningEffort,
     } = req.body;
+
+    // Accept all industry conventions for toggling thinking
+    const enableThinking =
+      enableThinkingRaw ??
+      (chatTemplateKwargs as { enable_thinking?: boolean } | undefined)
+        ?.enable_thinking ??
+      (() => {
+        const effort = (reasoningEffort as string | undefined)?.toLowerCase();
+        if (effort === null || effort === undefined) return false;
+        return effort !== "none" && effort !== "off";
+      })() === true;
 
     console.log("[LLM] Request received:");
     console.log("[LLM]   model:", model);
@@ -544,6 +631,30 @@ export class LocalAIServer {
     });
 
     if (stream) {
+      const streamThinkStripper = new ThinkTagStripper();
+      const writeDelta = (text: string, isReasoning = false) => {
+        if (!text) return;
+        const delta: Record<string, string> = {};
+        if (isReasoning) {
+          delta.reasoning_content = text;
+        } else {
+          delta.content = text;
+        }
+        const chunkData = {
+          id: `chatcmpl-${Date.now()}`,
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: path.basename(this.config.llm.modelPath ?? "local-model.gguf"),
+          choices: [
+            {
+              index: 0,
+              delta,
+              finish_reason: null,
+            },
+          ],
+        };
+        res.write(`data: ${JSON.stringify(chunkData)}\n\n`);
+      };
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -552,26 +663,43 @@ export class LocalAIServer {
         await this.llamaChat.generateResponse(chatHistory, {
           temperature: temperature ?? this.config.llm.temperature,
           maxTokens: max_tokens ?? this.config.llm.maxTokens,
-          onTextChunk: (chunk: string) => {
-            const chunkData = {
-              id: `chatcmpl-${Date.now()}`,
-              object: "chat.completion.chunk",
-              created: Math.floor(Date.now() / 1000),
-              model: path.basename(
-                this.config.llm.modelPath ?? "local-model.gguf",
-              ),
-              choices: [
-                {
-                  index: 0,
-                  delta: { content: chunk },
-                  finish_reason: null,
-                },
-              ],
-            };
+          onResponseChunk: (chunk: {
+            segmentType?: undefined | string;
+            text?: string;
+          }) => {
+            const text = chunk.text ?? "";
+            const isThought = chunk.segmentType === "thought";
 
-            res.write(`data: ${JSON.stringify(chunkData)}\n\n`);
+            if (isThought) {
+              if (!enableThinking) return;
+              writeDelta(text, true);
+              return;
+            }
+
+            const out = enableThinking ? text : streamThinkStripper.push(text);
+            writeDelta(out);
           },
         });
+
+        const tail = enableThinking ? "" : streamThinkStripper.finish();
+        if (tail) {
+          const tailChunk = {
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: path.basename(
+              this.config.llm.modelPath ?? "local-model.gguf",
+            ),
+            choices: [
+              {
+                index: 0,
+                delta: { content: tail },
+                finish_reason: null,
+              },
+            ],
+          };
+          res.write(`data: ${JSON.stringify(tailChunk)}\n\n`);
+        }
 
         const finalChunk = {
           id: `chatcmpl-${Date.now()}`,
@@ -603,7 +731,28 @@ export class LocalAIServer {
         maxTokens: max_tokens ?? this.config.llm.maxTokens,
       });
 
-      const responseText = result.response;
+      const rawResponse = result.response;
+
+      let reasoningContent: string | undefined;
+      let responseText = rawResponse;
+      const thinkStart = rawResponse.indexOf("<think>");
+      if (thinkStart !== -1) {
+        const thinkEnd = rawResponse.indexOf("</think>", thinkStart);
+        if (thinkEnd !== -1) {
+          reasoningContent =
+            rawResponse.slice(thinkStart + 7, thinkEnd).trim() || undefined;
+          responseText = (
+            rawResponse.slice(0, thinkStart) + rawResponse.slice(thinkEnd + 8)
+          ).trim();
+        } else {
+          reasoningContent = rawResponse.slice(thinkStart + 7).trim();
+          responseText = rawResponse.slice(0, thinkStart).trim();
+        }
+      }
+      if (!enableThinking) {
+        reasoningContent = undefined;
+        responseText = stripThinkBlocks(responseText);
+      }
 
       res.json({
         id: `chatcmpl-${Date.now()}`,
@@ -616,6 +765,9 @@ export class LocalAIServer {
             message: {
               role: "assistant",
               content: responseText,
+              ...(reasoningContent
+                ? { reasoning_content: reasoningContent }
+                : {}),
             },
             finish_reason: "stop",
           },

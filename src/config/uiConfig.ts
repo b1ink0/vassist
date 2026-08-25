@@ -116,6 +116,7 @@ export interface UIConfig {
     showDebug: boolean;
   };
   smoothStreamingAnimation: boolean;
+  thinkingPanelAutoExpand: boolean;
   shortcuts: {
     enabled: boolean;
     openChat: string;
@@ -431,6 +432,8 @@ export const DefaultUIConfig: UIConfig = {
   },
 
   smoothStreamingAnimation: false,
+
+  thinkingPanelAutoExpand: false,
 
   shortcuts: {
     enabled: false,

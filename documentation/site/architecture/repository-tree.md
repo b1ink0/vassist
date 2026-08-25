@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 165
-- Files: 582
-- Text files counted for metrics: 495
-- Total text lines: 152073
-- Code files counted for metrics: 394
-- Total code lines: 136622
+- Directories: 170
+- Files: 585
+- Text files counted for metrics: 498
+- Total text lines: 152976
+- Code files counted for metrics: 397
+- Total code lines: 137518
 
 ## Line Counts by File Type
 
@@ -17,16 +17,16 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1469 |
-| CSS          | .css, .scss, .less      |     7 |  2041 |
+| CSS          | .css, .scss, .less      |     7 |  2115 |
 | HTML         | .html                   |     5 |   191 |
-| Java         | .java                   |     3 |   185 |
-| Kotlin       | .kt                     |    20 | 10905 |
+| Java         | .java                   |     4 |   215 |
+| Kotlin       | .kt                     |    20 | 10984 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   101 | 49432 |
-| TypeScript   | .ts, .mts, .cts         |   246 | 71651 |
+| TSX          | .tsx                    |   102 | 49730 |
+| TypeScript   | .ts, .mts, .cts         |   247 | 72066 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6071 |
+| Markdown     | .md                     |    35 |  6078 |
 | Other Text   | mixed                   |    13 |  3415 |
 | Plain Text   | (no extension)          |    11 |  4013 |
 | Properties   | .properties             |     2 |    29 |
@@ -36,7 +36,7 @@ VAssist repository tree and file metrics.
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 59 directories, 91 files
+- android/: 64 directories, 92 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
 - electron/: 14 directories, 50 files
@@ -44,7 +44,7 @@ VAssist repository tree and file metrics.
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 243 files
+- src/: 49 directories, 245 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -93,6 +93,12 @@ vassist/
 │   │   │   │               └── myapp/
 │   │   │   │                   └── ExampleInstrumentedTest.java
 │   │   │   ├── main/
+│   │   │   │   ├── java/
+│   │   │   │   │   └── com/
+│   │   │   │   │       └── vassist/
+│   │   │   │   │           └── app/
+│   │   │   │   │               └── ai/
+│   │   │   │   │                   └── TtsStepCallback.java
 │   │   │   │   ├── kotlin/
 │   │   │   │   │   └── com/
 │   │   │   │   │       └── vassist/
@@ -480,7 +486,8 @@ vassist/
 │   │   │   ├── ChatHistoryPanel.tsx
 │   │   │   ├── ChatInput.tsx
 │   │   │   ├── ChatMessage.tsx
-│   │   │   └── EmotePlaybackBar.tsx
+│   │   │   ├── EmotePlaybackBar.tsx
+│   │   │   └── ThinkingPanel.tsx
 │   │   ├── common/
 │   │   │   ├── AIFeaturesConfig.tsx
 │   │   │   ├── Dialog.tsx
@@ -710,6 +717,7 @@ vassist/
 │   │   ├── PlatformUtils.ts
 │   │   ├── resolvePortalContainer.ts
 │   │   ├── ResourceLoader.ts
+│   │   ├── thinking.ts
 │   │   ├── VAssistDomIds.ts
 │   │   └── ZipExtractor.ts
 │   ├── workers/

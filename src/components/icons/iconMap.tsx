@@ -6,11 +6,13 @@
 import * as HeroIconsSolid from "@heroicons/react/24/solid";
 import * as HeroIconsOutline from "@heroicons/react/24/outline";
 import { FaGithub } from "react-icons/fa";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { AiFillBulb, AiOutlineLoading3Quarters } from "react-icons/ai";
 import { LuScreenShare, LuScreenShareOff } from "react-icons/lu";
+
 import { MdViewInAr } from "react-icons/md";
 
 export const iconMap = {
+  bulb: AiFillBulb,
   close: HeroIconsSolid.XMarkIcon,
   x: HeroIconsSolid.XMarkIcon,
   stop: HeroIconsSolid.StopIcon,

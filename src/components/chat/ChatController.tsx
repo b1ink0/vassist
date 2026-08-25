@@ -560,6 +560,7 @@ const ChatController = ({
 
     let fullResponse = "";
     let fullResponseRaw = "";
+    let fullThinking = "";
     let previousDisplayLength = 0;
     let hasSwitchedToSpeaking = false;
     let textBuffer = "";
@@ -567,6 +568,33 @@ const ChatController = ({
     let nextChunkToGenerate = 0;
     const MAX_QUEUED_AUDIO = 3;
     let isGeneratingChunk = false;
+
+    let thinkingFramePending = false;
+    const flushThinkingDelta = () => {
+      thinkingFramePending = false;
+      const currentMessages = chatService.getMessages();
+      if (
+        currentMessages.length > 0 &&
+        currentMessages[currentMessages.length - 1]?.role === "assistant"
+      ) {
+        chatService.updateLastMessage(fullResponse, fullThinking);
+      } else {
+        chatService.addMessage(
+          "assistant",
+          fullResponse,
+          null,
+          null,
+          fullThinking,
+        );
+      }
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
+    };
+    const applyThinkingDelta = (thinkingChunk: string) => {
+      fullThinking += thinkingChunk;
+      if (thinkingFramePending) return;
+      thinkingFramePending = true;
+      requestAnimationFrame(flushThinkingDelta);
+    };
 
     const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -721,6 +749,7 @@ const ChatController = ({
           }
         }
       },
+      { onReasoning: (chunk: string) => applyThinkingDelta(chunk) },
     );
 
     if (result.cancelled) {
@@ -1642,8 +1671,36 @@ const ChatController = ({
     }
 
     let fullResponse = "";
-    let fullResponseRaw = ""; // Raw response with <think> tags (for tracking)
-    let previousDisplayLength = 0; // Track how much we've already processed for TTS
+    let fullResponseRaw = "";
+    let fullThinking = "";
+    let previousDisplayLength = 0;
+
+    let thinkingFramePending = false;
+    const flushThinkingDelta = () => {
+      thinkingFramePending = false;
+      const currentMessages = chatService.getMessages();
+      if (
+        currentMessages.length > 0 &&
+        currentMessages[currentMessages.length - 1]?.role === "assistant"
+      ) {
+        chatService.updateLastMessage(fullResponse, fullThinking);
+      } else {
+        chatService.addMessage(
+          "assistant",
+          fullResponse,
+          null,
+          null,
+          fullThinking,
+        );
+      }
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
+    };
+    const applyThinkingDelta = (thinkingChunk: string) => {
+      fullThinking += thinkingChunk;
+      if (thinkingFramePending) return;
+      thinkingFramePending = true;
+      requestAnimationFrame(flushThinkingDelta);
+    };
     let hasSwitchedToSpeaking = false;
     let textBuffer = "";
     const allChunks: string[] = [];
@@ -1874,6 +1931,7 @@ const ChatController = ({
           }
         }
       },
+      { onReasoning: (chunk: string) => applyThinkingDelta(chunk) },
     );
 
     if (result.cancelled) {

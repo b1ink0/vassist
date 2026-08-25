@@ -290,6 +290,7 @@ export const toChatMessageItems = (
       branchInfo: message.branchInfo,
       imageFileIds: message.imageFileIds,
       audioFileIds: message.audioFileIds,
+      thinking: (message as any).thinking || "",
     };
 
     if (images && images.length > 0) {

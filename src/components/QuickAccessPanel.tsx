@@ -239,6 +239,13 @@ const QuickAccessPanel = ({
   const providerConfigKey =
     provider === AIProviders.CHROME_AI ? "chromeAi" : provider;
 
+  const thinkingEnabled =
+    (aiConfig as Record<string, any>)[providerConfigKey]?.thinkingEnabled ===
+    true;
+
+  const thinkingEffort = (aiConfig as Record<string, any>)[providerConfigKey]
+    ?.thinkingEffort;
+
   const providerConfig = useMemo(
     () =>
       (aiConfig as Record<string, unknown>)[providerConfigKey] as {
@@ -418,6 +425,44 @@ const QuickAccessPanel = ({
               options={systemPromptOptions}
             />
           </SettingsRow>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-white leading-none flex items-center gap-1.5">
+              <Icon name="bulb" size={16} className="text-white/70" />
+              Thinking
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {thinkingEnabled && (
+                <Select
+                  data-testid="quick-thinking-effort-select"
+                  value={thinkingEffort ?? ""}
+                  onChange={(event) =>
+                    updateAIConfig(
+                      `${providerConfigKey}.thinkingEffort`,
+                      event.target.value || undefined,
+                    )
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  options={[
+                    { value: "", label: "Auto" },
+                    { value: "low", label: "Low" },
+                    { value: "medium", label: "Medium" },
+                    { value: "high", label: "High" },
+                    { value: "xhigh", label: "Max" },
+                  ]}
+                />
+              )}
+              <Toggle
+                data-testid="quick-thinking-toggle"
+                checked={thinkingEnabled}
+                onChange={(checked) =>
+                  updateAIConfig(
+                    `${providerConfigKey}.thinkingEnabled`,
+                    checked,
+                  )
+                }
+              />
+            </div>
+          </div>
         </div>
 
         {/* Text-to-Speech */}
@@ -513,6 +558,18 @@ const QuickAccessPanel = ({
                 checked={uiConfig.enableAIToolbar !== false}
                 onChange={(checked) =>
                   updateUIConfig("enableAIToolbar", checked)
+                }
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="Auto-expand Thinking"
+              description="Keep the thought panel open while reasoning streams"
+            >
+              <Toggle
+                data-testid="quick-thinking-autexpand-toggle"
+                checked={uiConfig.thinkingPanelAutoExpand === true}
+                onChange={(checked) =>
+                  updateUIConfig("thinkingPanelAutoExpand", checked)
                 }
               />
             </SettingsRow>

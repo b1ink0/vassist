@@ -147,13 +147,14 @@ class LlamaService(private val context: Context) {
     fun chatCompletion(
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        enableThinking: Boolean = false
     ): Flow<String> {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
-        val prompt = formatChatPrompt(messages)
+        val prompt = formatChatPrompt(messages, enableThinking)
         Log.d(TAG, "Chat prompt (${prompt.length} chars): ${prompt.take(200)}...")
         
         return llama.complete(prompt, maxTokens, images)
@@ -170,13 +171,14 @@ class LlamaService(private val context: Context) {
     suspend fun chatCompletionSync(
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        enableThinking: Boolean = false
     ): String {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
-        val prompt = formatChatPrompt(messages)
+        val prompt = formatChatPrompt(messages, enableThinking)
         return llama.generate(prompt, maxTokens, images)
     }
     
