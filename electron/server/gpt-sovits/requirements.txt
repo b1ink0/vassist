@@ -11,7 +11,8 @@ numba
 pytorch-lightning>=2.4
 gradio<5
 ffmpeg-python
-onnxruntime-gpu
+onnxruntime-gpu; platform_system != "Darwin"
+onnxruntime; platform_system == "Darwin"
 tqdm
 cn2an
 pypinyin

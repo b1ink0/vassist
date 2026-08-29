@@ -1,4 +1,19 @@
 @import "tailwindcss";
+@source "../node_modules/streamdown/dist/*.js";
+
+@theme inline {
+  --color-background: var(--sd-background);
+  --color-foreground: var(--sd-foreground);
+  --color-card: var(--sd-card);
+  --color-card-foreground: var(--sd-card-foreground);
+  --color-muted: var(--sd-muted);
+  --color-muted-foreground: var(--sd-muted-foreground);
+  --color-border: var(--sd-border);
+  --color-input: var(--sd-input);
+  --color-primary: var(--sd-primary);
+  --color-primary-foreground: var(--sd-primary-foreground);
+  --color-sidebar: var(--sd-sidebar);
+}
 
 /* Shadow DOM fix: Re-establish CSS variables after :host { all: initial } */
 /* These come after Tailwind's base but with same specificity, so they restore defaults */
@@ -79,12 +94,68 @@
 }
 
 @import "./styles/ui-effects.css";
+@import "./styles/markdown.css";
 @import "./styles/streaming-animations.css";
 
 :root {
+  --vassist-font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --vassist-mono-font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+
+  --vassist-surface-base: rgba(255, 255, 255, 0.12);
+  --vassist-surface-elevated: rgba(255, 255, 255, 0.18);
+  --vassist-surface-interactive: rgba(255, 255, 255, 0.22);
+  --vassist-surface-overlay: rgba(10, 10, 14, 0.62);
+  --vassist-surface-highlight: rgba(255, 255, 255, 0.16);
+  --vassist-text-primary: rgba(255, 255, 255, 0.96);
+  --vassist-text-secondary: rgba(255, 255, 255, 0.78);
+  --vassist-text-muted: rgba(255, 255, 255, 0.58);
+  --vassist-border-color: rgba(255, 255, 255, 0.24);
+  --vassist-border-strong-color: rgba(255, 255, 255, 0.34);
+  --vassist-accent-color: rgba(96, 165, 250, 0.82);
+  --vassist-accent-text-color: #ffffff;
+  --vassist-shadow-color: rgba(0, 0, 0, 0.35);
+  --vassist-input-placeholder-color: rgba(255, 255, 255, 0.46);
+  --vassist-focus-ring-color: rgba(96, 165, 250, 0.45);
+  --vassist-status-error: rgba(239, 68, 68, 0.34);
+  --vassist-status-success: rgba(34, 197, 94, 0.28);
+  --vassist-status-warning: rgba(251, 191, 36, 0.3);
+  --vassist-inverse-surface-base: rgba(10, 10, 14, 0.78);
+  --vassist-inverse-surface-elevated: rgba(10, 10, 14, 0.86);
+  --vassist-inverse-surface-interactive: rgba(22, 22, 30, 0.9);
+  --vassist-inverse-surface-overlay: rgba(0, 0, 0, 0.58);
+  --vassist-inverse-surface-highlight: rgba(255, 255, 255, 0.12);
+  --vassist-inverse-text-primary: rgba(255, 255, 255, 0.98);
+  --vassist-inverse-text-secondary: rgba(255, 255, 255, 0.82);
+  --vassist-inverse-text-muted: rgba(255, 255, 255, 0.62);
+  --vassist-inverse-border-color: rgba(255, 255, 255, 0.18);
+  --vassist-inverse-border-strong-color: rgba(255, 255, 255, 0.28);
+  --vassist-inverse-accent-color: rgba(96, 165, 250, 0.88);
+  --vassist-inverse-accent-text-color: #ffffff;
+  --vassist-inverse-shadow-color: rgba(0, 0, 0, 0.5);
+  --vassist-inverse-input-placeholder-color: rgba(255, 255, 255, 0.44);
+  --vassist-inverse-focus-ring-color: rgba(96, 165, 250, 0.5);
+  --vassist-inverse-status-error: rgba(239, 68, 68, 0.38);
+  --vassist-inverse-status-success: rgba(34, 197, 94, 0.32);
+  --vassist-inverse-status-warning: rgba(251, 191, 36, 0.34);
+  --vassist-dark-glass-base: rgba(12, 12, 12, 0.72);
+  --vassist-dark-glass-elevated: rgba(16, 16, 16, 0.8);
+  --vassist-dark-glass-interactive: rgba(20, 20, 20, 0.84);
+  --vassist-dark-glass-highlight: rgba(255, 255, 255, 0.08);
+  --vassist-dark-glass-border: rgba(255, 255, 255, 0.18);
+  --vassist-dark-glass-border-strong: rgba(255, 255, 255, 0.26);
+  --vassist-backdrop-blur: 16px;
+  --vassist-surface-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  --vassist-surface-shadow-strong: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+  --vassist-ambient-overlay-opacity: 1;
+  --vassist-modal-backdrop: rgba(0, 0, 0, 0.54);
+  --vassist-overlay-scrim: rgba(10, 10, 14, 0.62);
+  --vassist-panel-radius: 0.75rem;
+  --vassist-panel-radius-large: 1.5rem;
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
@@ -96,16 +167,207 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html.ar-active,
+body.ar-active {
+  background-color: transparent !important;
+}
+
+html.ar-active #root,
+body.ar-active #root,
+html.ar-active .vassist-theme-root,
+body.ar-active .vassist-theme-root {
+  background-color: transparent !important;
+}
+
+.vassist-theme-root {
+  color: var(--vassist-text-primary);
+  font-family: var(
+    --vassist-font-family,
+    system-ui,
+    Avenir,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+}
+
+.vassist-theme-root code,
+.vassist-theme-root pre,
+.vassist-theme-root kbd,
+.vassist-theme-root samp {
+  font-family: var(
+    --vassist-mono-font-family,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
+}
+
+.vassist-card-surface {
+  background: var(--vassist-surface-base);
+  border-color: var(--vassist-border-color);
+  color: var(--vassist-text-primary);
+}
+
+.vassist-card-surface-elevated {
+  background: var(--vassist-surface-elevated);
+  border-color: var(--vassist-border-strong-color);
+  color: var(--vassist-text-primary);
+}
+
+.vassist-text-primary {
+  color: var(--vassist-text-primary);
+}
+
+.vassist-text-secondary {
+  color: var(--vassist-text-secondary);
+}
+
+.vassist-text-muted {
+  color: var(--vassist-text-muted);
+}
+
+.vassist-inverse-text-primary {
+  color: var(--vassist-inverse-text-primary);
+}
+
+.vassist-inverse-text-secondary {
+  color: var(--vassist-inverse-text-secondary);
+}
+
+.vassist-inverse-text-muted {
+  color: var(--vassist-inverse-text-muted);
+}
+
+.vassist-ghost-button {
+  color: var(--vassist-text-secondary);
+}
+
+.vassist-ghost-button:hover {
+  background: var(--vassist-surface-highlight);
+  color: var(--vassist-text-primary);
+}
+
+.vassist-link-button {
+  color: var(--vassist-text-secondary);
+}
+
+.vassist-link-button:hover {
+  color: var(--vassist-text-primary);
+}
+
+.vassist-loading-surface {
+  border: 1px solid var(--vassist-border-color);
+  background: var(--vassist-surface-base);
+  color: var(--vassist-text-primary);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  box-shadow: var(--vassist-surface-shadow);
+}
+
+.vassist-modal-backdrop {
+  background: var(--vassist-modal-backdrop);
+}
+
+.vassist-dialog-error {
+  background: var(--vassist-status-error);
+  border: 1px solid
+    color-mix(in srgb, var(--vassist-status-error) 75%, white 25%);
+}
+
+.vassist-popup-surface {
+  background: var(--vassist-surface-elevated);
+  border-color: var(--vassist-border-strong-color);
+  color: var(--vassist-text-primary);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  box-shadow: var(--vassist-surface-shadow);
+}
+
+.vassist-popup-surface-inverse {
+  background: var(--vassist-inverse-surface-elevated);
+  border-color: var(--vassist-inverse-border-strong-color);
+  color: var(--vassist-inverse-text-primary);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  box-shadow: var(--vassist-surface-shadow-strong);
+}
+
+.vassist-select-group-label {
+  color: var(--vassist-text-muted);
+}
+
+.vassist-select-group-label-inverse {
+  color: var(--vassist-inverse-text-muted);
+}
+
+.vassist-select-item,
+.vassist-select-item-single {
+  color: var(--vassist-text-primary);
+}
+
+.vassist-select-item-inverse,
+.vassist-select-item-single-inverse {
+  color: var(--vassist-inverse-text-primary);
+}
+
+.vassist-select-item[data-highlighted],
+.vassist-select-item-single[data-highlighted] {
+  background: var(--vassist-surface-highlight);
+}
+
+.vassist-select-item-inverse[data-highlighted],
+.vassist-select-item-single-inverse[data-highlighted] {
+  background: var(--vassist-inverse-surface-highlight);
+}
+
+.vassist-select-item[data-disabled],
+.vassist-select-item-single[data-disabled],
+.vassist-select-item-inverse[data-disabled],
+.vassist-select-item-single-inverse[data-disabled] {
+  opacity: 0.4;
+}
+
+.vassist-select-indicator {
+  color: var(--vassist-text-secondary);
+}
+
+.vassist-select-indicator-inverse {
+  color: var(--vassist-inverse-text-secondary);
+}
+
 button {
   cursor: pointer;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
 }
 
 button:disabled {
   cursor: not-allowed;
 }
 
-a, 
+a,
 .clickable,
 [role="button"] {
   cursor: pointer;
+}
+
+/* Replaces repeated inline style={{ scrollbarWidth, scrollbarColor }} in panels */
+@layer utilities {
+  .scrollbar-glass {
+    scrollbar-width: thin;
+    scrollbar-color: var(--vassist-border-strong-color)
+      var(--vassist-surface-base);
+  }
 }

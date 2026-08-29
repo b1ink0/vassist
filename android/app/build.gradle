@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
     namespace "com.vassist.app"
@@ -20,12 +21,23 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        
+        ndk {
+            abiFilters 'arm64-v8a'
         }
     }
+
+    packagingOptions {
+        jniLibs {
+            pickFirsts += ['lib/arm64-v8a/libsherpa-onnx.so', 'lib/arm64-v8a/libonnxruntime.so']
+            // Extracted native libs: the llama.cpp Snapdragon stack dlopens
+            // libggml-opencl.so / libggml-hexagon.so from nativeLibraryDir and
+            // stages the Hexagon FastRPC skels to real files - both need
+            // extraction instead of in-APK mapping (mirrors :llama module).
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -33,20 +45,338 @@ android {
         }
     }
     
-    // Enable Kotlin source directories
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        // Qualcomm QNN HTP runtime libs are fetched automatically by the
+        // fetchQnnLibs task below (pinned QAIRT Community archive) and staged
+        // into build/generated/qnnJniLibs. See documentation/android-qnn.md
+        main.jniLibs.srcDirs += 'libs/qnn'
+        main.jniLibs.srcDirs += "${buildDir}/generated/qnnJniLibs"
     }
 }
 
-repositories {
-    flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+// ---------------------------------------------------------------------------
+// Qualcomm QAIRT (QNN) runtime libraries - automatic, pinned, no manual steps
+//
+// Downloads the PUBLIC Qualcomm_AI_Runtime_Community archive (no account
+// needed - same URL sherpa-onnx documents) and stages the 5 libs required by
+// sherpa's QNN backend into jniLibs:
+//   lib/aarch64-android/libQnnHtp.so, libQnnHtpPrepare.so, libQnnSystem.so,
+//   libQnnHtpV<htp>Stub.so
+//   lib/hexagon-v<htp>/unsigned/libQnnHtpV<htp>Skel.so
+//
+// Configure via:  -Pqnn.htp=v81            (target Hexagon arch; default v81 = SM8850)
+//                 -Pqnn.sha256=<hex>       (optional integrity pin for the zip)
+//                 -Pqnn.version=2.40.0.251030
+// NOTE: sherpa's published sense-voice model.bin was built with 2.40.0.251030;
+//       keep them matched.
+// ---------------------------------------------------------------------------
+def qairtVersion = (providers.gradleProperty('qnn.version').orElse('2.40.0.251030')).get()
+def qairtUrl = "https://softwarecenter.qualcomm.com/api/download/software/sdks/" +
+    "Qualcomm_AI_Runtime_Community/All/${qairtVersion}/v${qairtVersion}.zip"
+def qairtZip = file("${buildDir}/qnn-cache/v${qairtVersion}.zip")
+def qairtSha256 = providers.gradleProperty('qnn.sha256').orElse('').get()
+def qnnHtp = (providers.gradleProperty('qnn.htp').orElse('v81')).get()
+def qnnOutDir = file("${buildDir}/generated/qnnJniLibs/arm64-v8a")
+def qnnRequiredLibs = ['libQnnHtp.so', 'libQnnHtpPrepare.so', 'libQnnSystem.so',
+                       "libQnnHtp${qnnHtp.toUpperCase()}Stub.so",
+                       "libQnnHtp${qnnHtp.toUpperCase()}Skel.so"]
+
+tasks.register('fetchQnnLibs') {
+    group = 'vassist'
+    description = "Downloads pinned QAIRT ${qairtVersion} (public Community archive) " +
+        "and stages Qualcomm QNN HTP runtime libs (${qnnHtp}) into jniLibs."
+    outputs.dir(qnnOutDir)
+    onlyIf {
+        !qnnRequiredLibs.every { new File(qnnOutDir, it).exists() }
+    }
+    doLast {
+        if (!qairtZip.exists() || qairtZip.length() < 1_000_000L) {
+            if (qairtZip.exists()) {
+                println "[qnn] Cached zip is invalid (${qairtZip.length()} bytes) - redownloading"
+                qairtZip.delete()
+            }
+            println "[qnn] Downloading QAIRT ${qairtVersion} (large, ~2 GB, one-time; " +
+                "cached at ${qairtZip})..."
+            qairtZip.parentFile.mkdirs()
+            def url = qairtUrl
+            // Manual redirect loop: the QSC gateway needs a browser-ish
+            // User-Agent and may 301 through multiple hops.
+            for (int hop = 0; hop < 6; hop++) {
+                def conn = new URL(url).openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.setRequestProperty('User-Agent', 'curl/8.7.1')
+                conn.connectTimeout = 30000
+                conn.readTimeout = 120000
+                def code = conn.responseCode
+                if (code in [301, 302, 303, 307, 308]) {
+                    url = conn.getHeaderField('Location')
+                    conn.disconnect()
+                    continue
+                }
+                if (code != 200) {
+                    conn.disconnect()
+                    throw new GradleException("[qnn] QAIRT download failed: HTTP ${code} for ${url}")
+                }
+                def len = conn.contentLengthLong
+                println "[qnn] GET ${url}\n[qnn] ${len > 0 ? "${len / (1024 * 1024)} MB" : 'unknown size'}"
+                def tmpPart = new File("${qairtZip}.part")
+                if (tmpPart.exists()) { tmpPart.delete() }
+                def ins = conn.inputStream
+                tmpPart.withOutputStream { outs ->
+                    def buf = new byte[1 << 16]
+                    int n
+                    while ((n = ins.read(buf)) > 0) { outs.write(buf, 0, n) }
+                }
+                ins.close()
+                conn.disconnect()
+                if (tmpPart.length() < 1_000_000L) {
+                    tmpPart.delete()
+                    throw new GradleException(
+                        "[qnn] Downloaded file is only ${tmpPart.length()} bytes - " +
+                        "gateway refused the transfer. Try again or download " +
+                        "${qairtUrl} manually into app/build/qnn-cache/")
+                }
+                tmpPart.renameTo(qairtZip)
+                break
+            }
+        } else {
+            println "[qnn] Using cached ${qairtZip.name}"
+        }
+
+        if (qairtSha256) {
+            def md = java.security.MessageDigest.getInstance('SHA-256')
+            qairtZip.withInputStream { is ->
+                def buf = new byte[1 << 16]
+                int n
+                while ((n = is.read(buf)) > 0) { md.update(buf, 0, n) }
+            }
+            def actual = md.digest().collect { String.format('%02x', it) }.join()
+            if (actual != qairtSha256.toLowerCase()) {
+                throw new GradleException(
+                    "[qnn] QAIRT zip SHA256 mismatch!\n expected=${qairtSha256}\n actual=  ${actual}")
+            }
+            println "[qnn] SHA256 verified"
+        } else {
+            println "[qnn] (no -Pqnn.sha256 given - skipping integrity check)"
+        }
+
+        println "[qnn] Extracting QNN HTP (${qnnHtp}) runtime libs..."
+        def extractTmp = file("${buildDir}/qnn-cache/extract-${qairtVersion}")
+        delete extractTmp
+        ant.unzip(src: qairtZip, dest: extractTmp) {
+            patternset {
+                include(name: "**/aarch64-android/libQnnHtp.so")
+                include(name: "**/aarch64-android/libQnnHtpPrepare.so")
+                include(name: "**/aarch64-android/libQnnSystem.so")
+                include(name: "**/aarch64-android/libQnnHtp${qnnHtp.toUpperCase()}Stub.so")
+                include(name: "**/hexagon-v${qnnHtp.substring(1).toLowerCase()}/unsigned/libQnnHtp${qnnHtp.toUpperCase()}Skel.so")
+            }
+        }
+
+        qnnOutDir.mkdirs()
+        def found = []
+        extractTmp.eachFileRecurse { f ->
+            if (f.name.startsWith('libQnn')) {
+                copy {
+                    from f
+                    into qnnOutDir
+                }
+                found << f.name
+            }
+        }
+        delete extractTmp
+
+        def missing = qnnRequiredLibs - found
+        if (!missing.isEmpty()) {
+            throw new GradleException("[qnn] Missing libs after extraction: ${missing}. " +
+                "Check the -Pqnn.htp value matches an arch present in the QAIRT archive.")
+        }
+        println "[qnn] Staged ${found.size()} libs -> ${qnnOutDir}"
+    }
+}
+preBuild.dependsOn fetchQnnLibs
+
+// ---------------------------------------------------------------------------
+// sherpa-onnx AAR: fully automatic provisioning
+//
+// Priority:
+//   1. app/libs/sherpa-onnx-custom-xnnpack.aar  (built by buildSherpaAar)
+//   2. stock AAR, auto-downloaded from the pinned GitHub release if missing
+//
+// - Default `gradlew assembleDebug` just works: downloads stock AAR on first run.
+// - To get real XNNPACK, run ONCE:  gradlew assembleDebug -Psherpa.custom=true
+//   (builds ORT+sherpa locally, ~30-90 min first time; cached afterwards in
+//   android/.sherpa-build). Every later build reuses it automatically.
+// ---------------------------------------------------------------------------
+// Custom build is requested ONLY via -Psherpa.custom=true or SHERPA_CUSTOM=1.
+// If the custom AAR already exists, it is used automatically without rebuilding
+// (delete app/libs/sherpa-onnx-custom-xnnpack.aar to force a rebuild).
+def sherpaVersion = '1.13.6'
+def sherpaLibsDir = file('libs')
+def customSherpaAar = new File(sherpaLibsDir, 'sherpa-onnx-custom-xnnpack.aar')
+def stockSherpaAar = new File(sherpaLibsDir, "sherpa-onnx-${sherpaVersion}.aar")
+def wantCustom = providers.gradleProperty('sherpa.custom').isPresent() ||
+    System.getenv('SHERPA_CUSTOM') == '1'
+
+tasks.register('downloadSherpaAar') {
+    group = 'vassist'
+    description = "Downloads the pinned sherpa-onnx ${sherpaVersion} AAR if not present."
+    onlyIf { !stockSherpaAar.exists() && !customSherpaAar.exists() }
+    doLast {
+        def url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${sherpaVersion}/sherpa-onnx-${sherpaVersion}.aar"
+        println "[deps] Downloading ${url}"
+        stockSherpaAar.parentFile.mkdirs()
+        new URL(url).withInputStream { ins ->
+            stockSherpaAar.withOutputStream { outs -> outs << ins }
+        }
+        println "[deps] Saved ${stockSherpaAar}"
+    }
+}
+
+def isWindows = org.gradle.internal.os.OperatingSystem.current().isWindows()
+
+// Convert a Windows path to a WSL path (/mnt/c/...)
+String wslPath(File f) {
+    def p = f.absolutePath.replace('\\', '/')
+    return "/mnt/${p.charAt(0).toLowerCase()}${p.substring(2)}"
+}
+
+tasks.register('buildSherpaAar', Exec) {
+    group = 'vassist'
+    description = 'Builds a custom sherpa-onnx AAR with XNNPACK-enabled ONNX Runtime. ' +
+        'On Windows this runs automatically inside WSL.'
+    outputs.file(customSherpaAar)
+    onlyIf { !customSherpaAar.exists() }   // skip when already built
+    if (isWindows) {
+        // Route through WSL transparently; ANDROID_NDK is translated into WSL
+        // via WSLENV. Requires WSL + an Android NDK accessible from inside WSL.
+        def wslScriptDir = wslPath(rootDir as File)
+        commandLine 'wsl.exe', 'bash', '-c',
+            "cd '${wslScriptDir}' && ./build-sherpa-android.sh"
+        environment 'WSLENV', 'ANDROID_NDK/u'
+        environment 'ANDROID_NDK', System.getenv('ANDROID_NDK') ?: ''
+    } else {
+        commandLine 'bash', new File(rootDir, 'build-sherpa-android.sh').absolutePath
+    }
+}
+
+if (wantCustom) {
+    preBuild.dependsOn buildSherpaAar
+} else {
+    preBuild.dependsOn downloadSherpaAar
+}
+
+def chosenSherpaAar = customSherpaAar.exists() ? customSherpaAar : stockSherpaAar
+println "[deps] sherpa-onnx AAR -> ${chosenSherpaAar.name}" +
+    (customSherpaAar.exists() ? "  (custom XNNPACK build)" : "  (stock, auto-downloaded if missing)")
+
+// ============================================================================
+// LiteRT-LM AAR patching pipeline (reproducible)
+//
+// Upstream litertlm-android 0.12+ ships Conversation.kt bytecode referencing
+// kotlinx.coroutines.channels.SendChannel.close$default - a synthetic that no
+// released kotlinx-coroutines provides -> NoSuchMethodError when a generation
+// completes. PatchLiteRt.java rewrites those call sites into direct
+// ProducerScope.close(cause) calls, which exist in every coroutines version.
+//
+// Flow: resolve original AAR from Google Maven -> compile patcher (ASM jars
+// are committed under tools/litert-patcher) -> emit patched AAR into
+// build/litertlm/ -> consumed by the files() dependency above.
+// ============================================================================
+
+def litertlmVersion = "0.16.1"
+def litertlmPatcherDir = file("tools/litert-patcher")
+def litertlmPatchedAar = layout.buildDirectory.file(
+        "litertlm/litertlm-android-" + litertlmVersion + "-patched.aar")
+
+configurations {
+    litertlmOriginal {
+        transitive = false
     }
 }
 
 dependencies {
-    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    litertlmOriginal "com.google.ai.edge.litertlm:litertlm-android:" + litertlmVersion
+}
+
+tasks.register("compileLitertlmPatcher") {
+    def srcFile = new File(litertlmPatcherDir, "PatchLiteRt.java")
+    def asmJars = fileTree(dir: litertlmPatcherDir, include: "asm*.jar")
+    def outDir = layout.buildDirectory.dir("litertlm-patcher-classes")
+
+    inputs.file(srcFile)
+    inputs.files(asmJars)
+    outputs.dir(outDir)
+
+    doLast {
+        def dest = outDir.get().asFile
+        dest.mkdirs()
+        def cp = ([dest.absolutePath] +
+                asmJars.files.collect { it.absolutePath }).join(File.pathSeparator)
+        def javaHome = System.getenv("JAVA_HOME")
+        def javacExe = javaHome ? javaHome + "/bin/javac" : "javac"
+        def proc = new ProcessBuilder(javacExe, "-cp", cp,
+                "-d", dest.absolutePath, srcFile.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+        def outText = proc.inputStream.text
+        proc.waitFor()
+        if (proc.exitValue() != 0) throw new GradleException("javac failed:\n" + outText)
+        println "[litertlm] patcher compiled"
+    }
+}
+
+tasks.register("patchLitertlmAar") {
+    dependsOn "compileLitertlmPatcher", configurations.litertlmOriginal
+
+    def originalAar = configurations.litertlmOriginal.singleFile
+    def patcherClasses = layout.buildDirectory.dir("litertlm-patcher-classes")
+    def asmJars = fileTree(dir: litertlmPatcherDir, include: "asm*.jar")
+    def outFile = litertlmPatchedAar
+
+    inputs.file(originalAar)
+    inputs.dir(patcherClasses)
+    inputs.files(asmJars)
+    outputs.file(outFile)
+
+    doLast {
+        def dest = outFile.get().asFile
+        dest.parentFile.mkdirs()
+        def cp = [patcherClasses.get().asFile.absolutePath] +
+                asmJars.files.collect { it.absolutePath }
+        def javaHome = System.getenv("JAVA_HOME")
+        def javaExe = javaHome ? javaHome + "/bin/java" : "java"
+        def proc = new ProcessBuilder(javaExe, "-cp", cp.join(File.pathSeparator),
+                "PatchLiteRt", originalAar.absolutePath, dest.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+        def outText = proc.inputStream.text
+        proc.waitFor()
+        println outText
+        if (proc.exitValue() != 0) throw new GradleException(
+                "LiteRT-LM patching failed:\n" + outText)
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn "patchLitertlmAar"
+}
+
+dependencies {
+    // Fix for "Null extracted folder": use explicit files instead of a broad
+    // fileTree pattern so the custom/stock selection above is honored.
+    implementation files(chosenSherpaAar)
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    // LiteRT-LM: cross-vendor accelerated LLM runtime (.litertlm models).
+    // GPU via LiteRT GPU delegate (Mali/Xclipse/Adreno), NPU on supported
+    // vendors. Used by LocalAIServer when the selected model is a .litertlm.
+    // Uses the PATCHED AAR generated by the patchLitertlmAar task below
+    // (upstream litertlm 0.12+ ships a SendChannel.close$default reference
+    // that no kotlinx-coroutines release provides - see PatchLiteRt.java).
+    implementation files(litertlmPatchedAar)
+    
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
@@ -54,19 +384,12 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation project(':capacitor-android')
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
     
-    // Sherpa-ONNX for native STT and TTS
-    implementation(files("libs/sherpa-onnx-1.12.18.aar"))
     implementation 'com.google.code.gson:gson:2.10.1'
-    
-    // Apache Commons Compress for tar.bz2 extraction (STT/TTS model downloads)
     implementation 'org.apache.commons:commons-compress:1.26.0'
-    
-    // Llama.cpp for local LLM inference
     implementation project(':llama')
     
-    // Jetpack Compose
     implementation platform('androidx.compose:compose-bom:2024.02.00')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
@@ -76,21 +399,12 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-tooling'
     
     testImplementation "junit:junit:$junitVersion"
+    implementation "com.google.ar:core:$arCoreVersion"
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
-    
-    // WebView Asset Loader for proper HTTPS serving of local assets
     implementation 'androidx.webkit:webkit:1.8.0'
 }
 
 apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}

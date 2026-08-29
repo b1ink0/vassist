@@ -1,6 +1,7 @@
 package com.vassist.app.ai
 
 import android.content.Context
+import android.llama.cpp.LlamaAndroid
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -82,7 +83,19 @@ class LocalAIServer(
     private var vitsService: VitsService? = null
     @Volatile
     private var llamaService: LlamaService? = null
-    
+    @Volatile
+    private var liteRtService: LiteRtLmService? = null
+    /** Which runtime the currently loaded model uses: "llama" | "litert" */
+    @Volatile
+    private var activeRuntime: String = "llama"
+    private val liteRtMutex = Mutex()
+    private val llmModelManager by lazy { LLMModelManager(context) }
+    private val ttsModelManager by lazy { TtsModelManager(context) }
+
+    // Pack id of the currently loaded vitsService (null = legacy vits-vctk)
+    @Volatile
+    private var loadedTtsPackId: String? = null
+
     // Coroutine mutexes for initialization (non-blocking)
     private val whisperMutex = Mutex()
     private val vitsMutex = Mutex()
@@ -182,22 +195,40 @@ class LocalAIServer(
     /**
      * Get or initialize VITS service (thread-safe, non-blocking)
      */
-    private suspend fun getVitsService(): VitsService {
-        vitsService?.let { if (it.isInitialized) return it }
-        
+    private suspend fun getVitsService(): VitsService = getVitsService(null)
+
+    /**
+     * Get or initialize the VITS service for a specific TTS pack.
+     *
+     * @param pack Resolved pack, or null for the legacy vits-vctk behaviour.
+     *             If a different pack is currently loaded it is released and
+     *             swapped (only one TTS engine is kept in memory).
+     */
+    private suspend fun getVitsService(pack: TtsPack?): VitsService {
+        // Null hint and the registered legacy pack share one cache entry
+        val requestedPackId = pack?.id ?: TtsModelManager.LEGACY_VCTK_ID
+        vitsService?.let { svc ->
+            if (svc.isInitialized && loadedTtsPackId == requestedPackId) return svc
+        }
+
         return vitsMutex.withLock {
             // Double-check after acquiring lock
-            vitsService?.let { if (it.isInitialized) return it }
-            
+            vitsService?.let { svc ->
+                if (svc.isInitialized && loadedTtsPackId == requestedPackId) return svc
+            }
+
             withContext(aiDispatcher) {
-                Log.i(TAG, "Lazy-loading VITS service on dedicated thread...")
-                val service = VitsService(context)
+                Log.i(TAG, "Lazy-loading TTS service (pack=${pack?.id ?: "vits-vctk"})...")
+                // Release the previously loaded pack's engine first
+                vitsService?.releaseBlocking()
+                val service = VitsService(context, pack)
                 service.initialize()
                 vitsService = service
+                loadedTtsPackId = requestedPackId
                 if (!service.isInitialized) {
-                    Log.w(TAG, "VITS service failed to initialize - models may not be downloaded")
+                    Log.w(TAG, "TTS service failed to initialize - models may not be downloaded")
                 } else {
-                    Log.i(TAG, "VITS service initialized successfully")
+                    Log.i(TAG, "TTS service initialized successfully (pack=${pack?.id ?: "vits-vctk"})")
                 }
                 service
             }
@@ -209,15 +240,15 @@ class LocalAIServer(
      */
     private suspend fun getLlamaService(): LlamaService {
         llamaService?.let { if (it.isInitialized) return it }
-        
+
         return llamaMutex.withLock {
             // Double-check after acquiring lock
             llamaService?.let { if (it.isInitialized) return it }
-            
+
             withContext(aiDispatcher) {
                 Log.i(TAG, "Lazy-loading Llama service on dedicated thread...")
                 val service = LlamaService(context)
-                val modelPath = service.initialize()
+                val modelPath = service.initialize(device = getLLMComputeUnit())
                 llamaService = service
                 currentModelPath = modelPath
                 Log.i(TAG, "Llama service initialized with model: $modelPath")
@@ -225,6 +256,37 @@ class LocalAIServer(
             }
         }
     }
+
+    // Compute-unit preference (auto | cpu | gpu | npu), written by the
+    // web layer via LocalAIBridge.setLLMComputeUnit
+    private val llmDevicePrefs by lazy {
+        context.getSharedPreferences("llm_device_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    /** Requested compute unit for the on-device LLM. */
+    fun getLLMComputeUnit(): String = llmDevicePrefs.getString("compute_unit", "auto") ?: "auto"
+
+    /**
+     * Update the compute unit and release the loaded model so the next chat
+     * request re-loads it on the requested device.
+     */
+    fun setLLMComputeUnit(unit: String) {
+        llmDevicePrefs.edit().putString("compute_unit", unit).apply()
+        Log.i(TAG, "[LLM-backend] compute unit set to $unit - releasing model for reload")
+        scope.launch(aiDispatcher) {
+            llamaMutex.withLock {
+                llamaService?.release()
+                llamaService = null
+                currentModelPath = null
+            }
+        }
+    }
+
+    /**
+     * Get the active LiteRT-LM service (only valid when activeRuntime=="litert").
+     */
+    private fun getLiteRtService(): LiteRtLmService =
+        liteRtService ?: throw IllegalStateException("LiteRT-LM service not initialized")
 
     /**
      * Initialize server (models are lazy-loaded on first request)
@@ -285,6 +347,10 @@ class LocalAIServer(
                 // LLM - Chat completion
                 uri == "/v1/chat/completions" && method == Method.POST -> handleChatCompletion(session)
                 
+                // Stop/abort generation - called by stop button
+                uri == "/v1/generation/stop" && method == Method.POST -> handleStopGeneration()
+                uri == "/v1/chat/completions" && method == Method.DELETE -> handleStopGeneration()
+                
                 // Model status
                 uri == "/v1/models/status" && method == Method.GET -> handleModelStatus()
                 
@@ -315,30 +381,51 @@ class LocalAIServer(
     }
 
     /**
+     * POST /v1/generation/stop or DELETE /v1/chat/completions - Stop generation
+     * Sets the native abort flag so the next completion_loop call returns null.
+     */
+    private fun handleStopGeneration(): Response {
+        Log.d(TAG, "Stop generation requested")
+        runBlocking(aiDispatcher) {
+            llamaService?.stopGeneration()
+            liteRtService?.stopGeneration()
+        }
+        return jsonResponse(JsonObject().apply {
+            addProperty("stopped", true)
+        })
+    }
+
+    /**
      * GET /v1/models - List available models (OpenAI-compatible)
      */
     private fun handleListModels(): Response {
-        val models = JsonObject().apply {
-            add("data", gson.toJsonTree(listOf(
+        val installedLlmModels = llmModelManager.listModels().mapNotNull { model ->
+            (model["name"] as? String)?.takeIf { it.isNotBlank() }?.let { modelName ->
                 mapOf(
-                    "id" to "whisper-local",
-                    "object" to "model",
-                    "owned_by" to "local",
-                    "permission" to emptyList<String>()
-                ),
-                mapOf(
-                    "id" to "vits-local", 
-                    "object" to "model",
-                    "owned_by" to "local",
-                    "permission" to emptyList<String>()
-                ),
-                mapOf(
-                    "id" to "llama-local",
+                    "id" to modelName,
                     "object" to "model",
                     "owned_by" to "local",
                     "permission" to emptyList<String>()
                 )
-            )))
+            }
+        }.toMutableList()
+
+        val currentModelName = currentModelPath?.let { File(it).name }
+        if (currentModelName != null && installedLlmModels.none { it["id"] == currentModelName }) {
+            installedLlmModels.add(
+                mapOf(
+                    "id" to currentModelName,
+                    "object" to "model",
+                    "owned_by" to "local",
+                    "permission" to emptyList<String>(),
+                    "supportsVision" to (llamaService?.supportsVision == true),
+                    "visionBackendAvailable" to (llamaService?.isVisionBackendAvailable == true)
+                )
+            )
+        }
+
+        val models = JsonObject().apply {
+            add("data", gson.toJsonTree(installedLlmModels))
             addProperty("object", "list")
         }
         return jsonResponse(models)
@@ -352,16 +439,60 @@ class LocalAIServer(
             add("whisper", JsonObject().apply {
                 addProperty("initialized", whisperService?.isInitialized == true)
                 addProperty("model", whisperService?.modelName ?: "whisper-tiny.en")
+                whisperService?.backendInfo?.let { info ->
+                    addProperty("backend", info.provider)
+                    addProperty("backend_source", info.source)
+                    if (info.cpuMs != null) addProperty("cpu_ms", info.cpuMs)
+                    if (info.nnapiMs != null) addProperty("nnapi_ms", info.nnapiMs)
+                    if (info.xnnpackMs != null) addProperty("xnnpack_ms", info.xnnpackMs)
+                    if (info.detail.isNotBlank()) addProperty("backend_note", info.detail)
+                }
             })
+            run {
+                val qnn = ComputeBackendManager.getQnnCapability()
+                add("qnn", JsonObject().apply {
+                    addProperty("soc", qnn.socModel)
+                    addProperty("manufacturer", qnn.socManufacturer)
+                    addProperty("board_platform", qnn.boardPlatform)
+                    qnn.htpVersion?.let { addProperty("htp", it) }
+                    addProperty("runtime_available", qnn.runtimeAvailable)
+                    addProperty("device_capable", qnn.deviceCapable)
+                    // Tells you exactly which gate failed so it can be fixed
+                    addProperty("reason", qnn.reason)
+                    addProperty(
+                        "sensevoice_qnn_ready",
+                        java.io.File(
+                            java.io.File(context.filesDir, "models/sensevoice"),
+                            "qnn/model.bin"
+                        ).exists()
+                    )
+                })
+            }
             add("vits", JsonObject().apply {
                 addProperty("initialized", vitsService?.isInitialized == true)
                 addProperty("model", vitsService?.modelName ?: "vits-vctk")
-                addProperty("numSpeakers", vitsService?.getNumSpeakers() ?: 109)
+                addProperty(
+                    "numSpeakers",
+                    vitsService?.getNumSpeakers()
+                        ?: (TtsModelManager.TTS_PACKS[TtsModelManager.LEGACY_VCTK_ID]?.knownNumSpeakers ?: 109)
+                )
                 addProperty("currentSpeaker", vitsService?.getSpeakerId() ?: 0)
+                addProperty("activePack", loadedTtsPackId ?: "vits-vctk")
+                // Downloadable TTS language packs (additive; web UI reads this)
+                add("packs", gson.toJsonTree(ttsModelManager.getPacksStatus()))
             })
             add("llama", JsonObject().apply {
                 addProperty("initialized", llamaService?.isInitialized == true)
                 addProperty("model", llamaService?.modelName ?: "not loaded")
+                // Snapdragon compute-unit plumbing (auto | cpu | gpu | npu)
+                addProperty("compute_unit", getLLMComputeUnit())
+                addProperty("requested_device", LlamaAndroid.instance().requestedDevice)
+                addProperty("backends", LlamaAndroid.instance().backendsInfo())
+            })
+            add("litert", JsonObject().apply {
+                addProperty("initialized", liteRtService?.isInitialized == true)
+                addProperty("model", liteRtService?.modelName ?: "not loaded")
+                addProperty("backend", if (activeRuntime == "litert") liteRtService?.activeBackend else null)
             })
         }
         return jsonResponse(status)
@@ -372,7 +503,7 @@ class LocalAIServer(
      * 
      * Request: multipart/form-data with:
      * - file: audio file (required)
-     * - model: model name (optional, ignored - uses local whisper)
+     * - model: model hint (optional, e.g. "whisper-tiny" / "auto"; falls back to any downloaded variant)
      * - language: language code (optional)
      * - response_format: "json", "text", "verbose_json" (optional)
      * 
@@ -391,6 +522,8 @@ class LocalAIServer(
         // Get optional parameters
         val params = session.parms
         val language = params["language"]
+        val model = params["model"]
+        val provider = params["provider"]
         val responseFormat = params["response_format"] ?: "json"
         
         // Run on dedicated AI thread to avoid mutex conflicts with WebView/HWUI
@@ -400,7 +533,7 @@ class LocalAIServer(
                 val whisper = getWhisperService()
                 
                 val audioData = File(audioFile).readBytes()
-                val transcription = whisper.transcribe(audioData, language)
+                val transcription = whisper.transcribe(audioData, language, model, provider)
                 
                 when (responseFormat) {
                     "text" -> newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, transcription)
@@ -425,9 +558,12 @@ class LocalAIServer(
      * 
      * Request: application/json with:
      * - input: text to synthesize (required)
-     * - model: model name (optional, ignored - uses local vits)
-     * - voice: voice ID (optional)
+     * - model: TTS pack hint (optional; resolved via TtsModelManager,
+     *          falls back to the legacy vits-vctk pack)
+     * - voice: voice ID (optional, "speaker_<id>" or "<id>")
      * - speed: playback speed 0.25-4.0 (optional)
+     * - language: language override for engines that need one
+     *             (optional, e.g. "ja" for Supertonic)
      * - response_format: "mp3", "wav", "opus" (optional, default: wav)
      * 
      * Response: audio/wav binary data
@@ -452,18 +588,25 @@ class LocalAIServer(
         // Run on dedicated AI thread to avoid mutex conflicts with WebView/HWUI
         return runBlocking(aiDispatcher) {
             try {
-                // Lazy-load VITS on first request
-                val vits = getVitsService()
-                
-                // Parse speaker ID from voice parameter (e.g., "speaker_42" or just "42")
-                val speakerId = request.voice?.let { voice ->
-                    voice.replace("speaker_", "").toIntOrNull()?.coerceIn(0, 108)
+                // Resolve the requested TTS pack from the model hint (falls
+                // back to the legacy vits-vctk experience when unset/unknown)
+                val pack = TtsModelManager.resolveTtsPack(request.model) { p ->
+                    ttsModelManager.isPackDownloaded(p)
                 }
-                
-                val audioData = vits.synthesize(
+                val tts = getVitsService(pack)
+
+                // Parse speaker ID from voice parameter (e.g., "speaker_42" or just "42");
+                // coerced into the loaded pack's speaker range
+                val speakerId = request.voice?.let { voice ->
+                    voice.replace("speaker_", "").toIntOrNull()
+                        ?.coerceIn(0, (tts.getNumSpeakers() - 1).coerceAtLeast(0))
+                }
+
+                val audioData = tts.synthesize(
                     text = request.input,
                     speed = request.speed ?: 1.0f,
-                    speakerId = speakerId
+                    speakerId = speakerId,
+                    lang = request.language ?: pack?.languageTag
                 )
                 
                 // Return audio as binary response
@@ -517,6 +660,16 @@ class LocalAIServer(
         
         val maxTokens = request.max_tokens ?: 2048
         val stream = request.stream ?: false
+        // Accept all industry conventions for toggling thinking:
+        //   enable_thinking (ours/llama.cpp), chat_template_kwargs.enable_thinking
+        //   (vLLM/llama.cpp Jinja kwarg), reasoning_effort (OpenAI-style; "none"/"off"=disabled)
+        val enableThinking = request.enable_thinking
+            ?: request.chat_template_kwargs?.enable_thinking
+            ?: when (request.reasoning_effort?.lowercase()) {
+                "none", "off" -> false
+                null -> false
+                else -> true
+            }
         val requestedModel = request.model
         
         // Load/swap model if needed (on-demand like Desktop)
@@ -527,19 +680,36 @@ class LocalAIServer(
             
             if (modelPath != currentModelPath) {
                 Log.i(TAG, "Model switch requested: $currentModelPath -> $modelPath")
+                val runtime = if (modelPath.endsWith(".litertlm", ignoreCase = true)) "litert" else "llama"
                 try {
-                    // Reload LlamaService with new model
+                    // Reload the appropriate runtime with the new model
                     runBlocking(aiDispatcher) {
                         llamaMutex.withLock {
-                            llamaService?.release()
-                            llamaService = null
-                            currentModelPath = null
-                            
-                            val service = LlamaService(context)
-                            service.initialize(modelPath)
-                            llamaService = service
-                            currentModelPath = modelPath
-                            Log.i(TAG, "Model switched successfully")
+                            liteRtMutex.withLock {
+                                if (runtime == "litert") {
+                                    llamaService?.release()
+                                    llamaService = null
+                                    liteRtService?.release()
+                                    liteRtService = null
+
+                                    val service = LiteRtLmService(context)
+                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    liteRtService = service
+                                    Log.i(TAG, "[LLM-backend] LiteRT-LM model switched: $modelPath (backend=${service.activeBackend})")
+                                } else {
+                                    liteRtService?.release()
+                                    liteRtService = null
+                                    llamaService?.release()
+                                    llamaService = null
+
+                                    val service = LlamaService(context)
+                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    llamaService = service
+                                }
+                                activeRuntime = runtime
+                                currentModelPath = modelPath
+                                Log.i(TAG, "Model switched successfully (runtime=$runtime)")
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -552,6 +722,7 @@ class LocalAIServer(
         // Convert to LlamaService format
         val llamaMessages = mutableListOf<LlamaService.ChatMessage>()
         val images = mutableListOf<ByteArray>()
+        val audios = mutableListOf<Pair<ByteArray, String>>()  // bytes + format
         
         // Only collect images from the LAST message to avoid re-processing old images on Android
         val lastMessageIndex = request.messages.size - 1
@@ -574,14 +745,53 @@ class LocalAIServer(
                     for (part in content.parts) {
                         when (part) {
                             is ContentPart.TextPart -> textParts.add(part.text)
+                            is ContentPart.AudioPart -> {
+                                if (isLastMessage) {
+                                    try {
+                                        val audioBytes =
+                                            java.util.Base64.getDecoder().decode(part.data)
+                                        audios.add(audioBytes to part.format)
+                                        Log.i(TAG, "Audio attachment: ${audioBytes.size} bytes (${part.format})")
+                                    } catch (e: IllegalArgumentException) {
+                                        Log.w(TAG, "Failed to decode audio attachment", e)
+                                    }
+                                }
+                                textParts.add("[audio]")
+                            }
                             is ContentPart.ImagePart -> {
                                 if (isLastMessage) {
                                     // Only decode and process images from the latest message
                                     val imageData = part.image_url.url
                                     if (imageData.startsWith("data:image")) {
                                         val base64Data = imageData.substringAfter("base64,")
-                                        val imageBytes = Base64.getDecoder().decode(base64Data)
-                                        images.add(imageBytes)
+                                        val originalBytes = java.util.Base64.getDecoder().decode(base64Data)
+                                        
+                                        // Downscale image to max 512x512 for mobile CPU processing
+                                        val bitmap = android.graphics.BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size)
+                                        if (bitmap != null) {
+                                            val maxDim = 512
+                                            val width = bitmap.width
+                                            val height = bitmap.height
+                                            
+                                            if (width > maxDim || height > maxDim) {
+                                                val ratio = Math.min(maxDim.toFloat() / width, maxDim.toFloat() / height)
+                                                val newWidth = (width * ratio).toInt()
+                                                val newHeight = (height * ratio).toInt()
+                                                val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                                                
+                                                val out = java.io.ByteArrayOutputStream()
+                                                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+                                                images.add(out.toByteArray())
+                                                scaled.recycle()
+                                                Log.i(TAG, "Downscaled image from ${width}x${height} to ${newWidth}x${newHeight}")
+                                            } else {
+                                                images.add(originalBytes)
+                                            }
+                                            bitmap.recycle()
+                                        } else {
+                                            images.add(originalBytes)
+                                        }
+                                        
                                         // Add mtmd default image marker - gets replaced with media_marker during tokenization
                                         textParts.add("<__image__>")
                                     }
@@ -609,9 +819,9 @@ class LocalAIServer(
         }
         
         return if (stream) {
-            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionStreaming(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios, enableThinking)
         } else {
-            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local")
+            handleChatCompletionSync(llamaMessages, images, maxTokens, request.model ?: "llama-local", audios, enableThinking)
         }
     }
     
@@ -622,15 +832,42 @@ class LocalAIServer(
         messages: List<LlamaService.ChatMessage>,
         images: List<ByteArray>,
         maxTokens: Int,
-        model: String
+        model: String,
+        audios: List<Pair<ByteArray, String>> = emptyList(),
+        enableThinking: Boolean = false
     ): Response {
         return runBlocking(aiDispatcher) {
             try {
-                val llama = getLlamaService()
-                var response = llama.chatCompletionSync(messages, maxTokens, images.ifEmpty { null })
+                var response = if (activeRuntime == "litert") {
+                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
+                } else {
+                    if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
+                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, enableThinking)
+                }
                 
-                // Strip <think>...</think> blocks from response
-                response = stripThinkBlocks(response)
+                // Split reasoning into the standard message.reasoning_content
+                // field (DeepSeek/llama.cpp convention); content stays clean.
+                // When thinking is OFF, reasoning is dropped entirely.
+                var reasoningContent: String? = null
+                val thinkStart = response.indexOf("<think>")
+                if (thinkStart != -1) {
+                    val thinkEnd = response.indexOf("</think>", thinkStart)
+                    if (thinkEnd != -1) {
+                        reasoningContent = response.substring(thinkStart + 7, thinkEnd)
+                            .trim()
+                            .ifEmpty { null }
+                        response = (response.substring(0, thinkStart) +
+                            response.substring(thinkEnd + 8)).trim()
+                    } else {
+                        // Unterminated block: everything after <think> is reasoning
+                        reasoningContent = response.substring(thinkStart + 7).trim()
+                        response = response.substring(0, thinkStart).trim()
+                    }
+                }
+                if (!enableThinking) {
+                    reasoningContent = null
+                    response = stripThinkBlocks(response)
+                }
                 
                 val result = JsonObject().apply {
                     addProperty("id", "chatcmpl-${UUID.randomUUID()}")
@@ -643,6 +880,9 @@ class LocalAIServer(
                             add("message", JsonObject().apply {
                                 addProperty("role", "assistant")
                                 addProperty("content", response)
+                                if (reasoningContent != null) {
+                                    addProperty("reasoning_content", reasoningContent)
+                                }
                             })
                             addProperty("finish_reason", "stop")
                         })
@@ -669,7 +909,9 @@ class LocalAIServer(
         messages: List<LlamaService.ChatMessage>,
         images: List<ByteArray>,
         maxTokens: Int,
-        model: String
+        model: String,
+        audios: List<Pair<ByteArray, String>> = emptyList(),
+        enableThinking: Boolean = false
     ): Response {
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val created = System.currentTimeMillis() / 1000
@@ -678,10 +920,15 @@ class LocalAIServer(
         val chunkQueue = LinkedBlockingQueue<ByteArray>()
         val END_MARKER = ByteArray(0)
         
-        // Launch streaming in background
-        scope.launch(aiDispatcher) {
+        // Launch streaming in background — save job ref so we can cancel on client disconnect
+        val streamingJob = scope.launch(aiDispatcher) {
             try {
-                val llama = getLlamaService()
+                val tokenFlow = if (activeRuntime == "litert") {
+                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
+                } else {
+                    if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
+                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, enableThinking)
+                }
                 
                 // Buffer for detecting and stripping <think> blocks
                 val buffer = StringBuilder()
@@ -689,9 +936,9 @@ class LocalAIServer(
                 var totalTokens = 0
                 var sentChars = 0
                 
-                Log.d(TAG, "Starting streaming chat completion...")
+                Log.d(TAG, "Starting streaming chat completion... (thinking=$enableThinking)")
                 
-                llama.chatCompletion(messages, maxTokens, images.ifEmpty { null }).collect { token ->
+                tokenFlow.collect { token ->
                     totalTokens++
                     
                     // Log every 20 tokens for debugging
@@ -707,23 +954,42 @@ class LocalAIServer(
                         return@collect
                     }
                     
-                    // If in think block, accumulate until </think>
+                    // Inside a think block: emit as reasoning_content (standard
+                    // DeepSeek/llama.cpp field) when thinking is enabled; swallow when OFF
                     if (inThinkBlock) {
                         buffer.append(token)
-                        if (buffer.toString().contains("</think>")) {
-                            val bufStr = buffer.toString()
+                        val bufStr = buffer.toString()
+                        if (bufStr.contains("</think>")) {
                             val idx = bufStr.indexOf("</think>")
+                            val reasoning = bufStr.substring(0, idx)
                             val afterThink = bufStr.substring(idx + 8)
                             buffer.clear()
                             inThinkBlock = false
                             Log.d(TAG, "Exited think block at token $totalTokens")
                             
+                            if (enableThinking && reasoning.isNotEmpty()) {
+                                queueStreamChunk(chunkQueue, completionId, created, model, reasoning, isReasoning = true)
+                            }
                             // Send content after </think> and disable future checks
                             if (afterThink.isNotEmpty()) {
                                 Log.d(TAG, "Streaming after think: '$afterThink'")
                                 queueStreamChunk(chunkQueue, completionId, created, model, afterThink)
                                 sentChars += afterThink.length
                             }
+                        } else if (enableThinking) {
+                            // Flush what we can; hold back a possible partial "</think>"
+                            var keep = 0
+                            for (len in minOf(8, bufStr.length) downTo 1) {
+                                if (bufStr.endsWith("</think>".substring(0, len))) { keep = len; break }
+                            }
+                            val emit = bufStr.substring(0, bufStr.length - keep)
+                            if (emit.isNotEmpty()) {
+                                buffer.clear()
+                                buffer.append(bufStr.substring(bufStr.length - keep))
+                                queueStreamChunk(chunkQueue, completionId, created, model, emit, isReasoning = true)
+                            }
+                        } else if (buffer.length > 64 * 1024) {
+                            buffer.clear() // safety valve when dropping reasoning
                         }
                         return@collect
                     }
@@ -765,6 +1031,9 @@ class LocalAIServer(
                 if (!inThinkBlock && buffer.isNotEmpty()) {
                     queueStreamChunk(chunkQueue, completionId, created, model, buffer.toString())
                     sentChars += buffer.length
+                } else if (inThinkBlock && enableThinking && buffer.isNotEmpty()) {
+                    // Stream ended inside an unterminated think block: flush as reasoning
+                    queueStreamChunk(chunkQueue, completionId, created, model, buffer.toString(), isReasoning = true)
                 }
                 
                 Log.d(TAG, "Streaming complete: $totalTokens tokens, $sentChars chars sent")
@@ -805,8 +1074,8 @@ class LocalAIServer(
                         return chunk[position++].toInt() and 0xFF
                     }
                     
-                    // Need next chunk
-                    val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                    // Need next chunk - allow up to 10 minutes for vision/prefill processing
+                    val next = chunkQueue.poll(600, TimeUnit.SECONDS) ?: return -1
                     if (next.isEmpty()) return -1 // END_MARKER
                     
                     currentChunk = next
@@ -827,8 +1096,8 @@ class LocalAIServer(
                     return toRead
                 }
                 
-                // Need next chunk
-                val next = chunkQueue.poll(30, TimeUnit.SECONDS) ?: return -1
+                // Need next chunk - allow up to 10 minutes for vision/prefill processing
+                val next = chunkQueue.poll(600, TimeUnit.SECONDS) ?: return -1
                 if (next.isEmpty()) return -1 // END_MARKER
                 
                 currentChunk = next
@@ -844,6 +1113,22 @@ class LocalAIServer(
             override fun available(): Int {
                 // Always return 0 to force NanoHTTPD to send what it has
                 return 0
+            }
+
+            override fun close() {
+                // Only abort if the job is still actively generating.
+                // If generation already finished (EOG token), this fires after the
+                // END_MARKER is consumed — don't poison the abort flag for the next request.
+                if (streamingJob.isActive) {
+                    Log.d(TAG, "SSE stream closed mid-generation — aborting")
+                    streamingJob.cancel()
+                    scope.launch(aiDispatcher) {
+                        llamaService?.stopGeneration()
+                    }
+                } else {
+                    Log.d(TAG, "SSE stream closed normally — generation already complete")
+                }
+                super.close()
             }
         }
         
@@ -926,8 +1211,16 @@ class LocalAIServer(
         completionId: String,
         created: Long,
         model: String,
-        content: String
+        content: String,
+        isReasoning: Boolean = false
     ) {
+        val delta = JsonObject()
+        if (isReasoning) {
+            // DeepSeek/llama.cpp convention: separate reasoning field
+            delta.addProperty("reasoning_content", content)
+        } else {
+            delta.addProperty("content", content)
+        }
         val chunk = JsonObject().apply {
             addProperty("id", completionId)
             addProperty("object", "chat.completion.chunk")
@@ -936,9 +1229,7 @@ class LocalAIServer(
             add("choices", JsonArray().apply {
                 add(JsonObject().apply {
                     addProperty("index", 0)
-                    add("delta", JsonObject().apply {
-                        addProperty("content", content)
-                    })
+                    add("delta", delta)
                     addProperty("finish_reason", null as String?)
                 })
             })
@@ -986,7 +1277,8 @@ class LocalAIServer(
         val model: String? = null,
         val voice: String? = null,
         val speed: Float? = null,
-        val response_format: String? = null
+        val response_format: String? = null,
+        val language: String? = null
     )
     
     /**
@@ -996,8 +1288,17 @@ class LocalAIServer(
         val messages: List<ChatMessage>?,
         val model: String? = null,
         val max_tokens: Int? = null,
+        val enable_thinking: Boolean? = null,
+        // llama.cpp / vLLM convention: chat_template_kwargs { enable_thinking }
+        val chat_template_kwargs: ChatTemplateKwargs? = null,
+        // OpenAI convention: "none"/"off" disables thinking; levels imply enabled
+        val reasoning_effort: String? = null,
         val temperature: Float? = null,
         val stream: Boolean? = null
+    )
+
+    data class ChatTemplateKwargs(
+        val enable_thinking: Boolean? = null
     )
     
     data class ChatMessage(
@@ -1014,6 +1315,13 @@ class LocalAIServer(
     sealed class ContentPart {
         data class TextPart(val type: String, val text: String) : ContentPart()
         data class ImagePart(val type: String, val image_url: ImageUrl) : ContentPart()
+        data class AudioPart(
+            val type: String,
+            /** Base64-encoded audio payload (no data-url prefix) */
+            val data: String,
+            /** e.g. "wav", "mp3", "ogg" */
+            val format: String
+        ) : ContentPart()
     }
     
     data class ImageUrl(val url: String)
@@ -1037,6 +1345,14 @@ class LocalAIServer(
                             "image_url" -> {
                                 val imageUrl = obj.getAsJsonObject("image_url")
                                 parts.add(ContentPart.ImagePart(type, ImageUrl(imageUrl.get("url").asString)))
+                            }
+                            "input_audio" -> {
+                                val audioObj = obj.getAsJsonObject("input_audio")
+                                val audioData = audioObj?.get("data")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                                val audioFmt = audioObj?.get("format")?.takeIf { !it.isJsonNull }?.asString ?: "wav"
+                                if (audioData.isNotBlank()) {
+                                    parts.add(ContentPart.AudioPart(type, audioData, audioFmt))
+                                }
                             }
                         }
                     }

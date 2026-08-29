@@ -1,0 +1,940 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Icon } from "../../icons";
+import { useDesktopApi } from "../../../hooks/useDesktopStore";
+import { isDesktop } from "../../../utils/PlatformUtils";
+import { Button, Select, Input } from "../../ui";
+import { cn } from "../../../utils/cn";
+import LocalLLMModelManager from "./LocalLLMModelManager";
+import {
+  getLLMModelStorage,
+  type DiscoveryResult,
+} from "../../../services/LLMModelStorageService";
+
+interface DesktopLLMConfigShape {
+  endpoint?: string;
+  model?: string;
+  customModelsPath?: string | null;
+  backend?: string;
+  temperature?: number;
+  maxTokens?: number;
+  contextSize?: number;
+  gpuLayers?: number;
+  threads?: number;
+  llmEngine?: string;
+  llmBackend?: string;
+}
+
+interface BackendItem {
+  name: string;
+  supported?: boolean;
+}
+
+interface BackendStatus {
+  success?: boolean;
+  error?: string;
+  selectedInstalled?: boolean;
+  supportedBackends?: BackendItem[];
+}
+
+interface BackendProgress {
+  downloadedBytes?: number;
+  totalBytes?: number;
+  percent?: number;
+  stage?: string;
+  status?: string;
+}
+
+interface DesktopLlmBridge {
+  listModels: (customPath?: string | null) => Promise<unknown>;
+  pullModel: (
+    modelName: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
+  downloadModel: (url: string, customPath?: string | null) => Promise<unknown>;
+  deleteModel: (
+    filename: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
+  chooseModelFile: () => Promise<unknown>;
+  importModel: (
+    filePath: string,
+    customPath?: string | null,
+  ) => Promise<unknown>;
+  chooseModelsFolder: () => Promise<unknown>;
+  onDownloadProgress: (
+    callback: (progress: { percent: number; status: string }) => void,
+  ) => (() => void) | undefined;
+  getBackendStatus: (backend?: string) => Promise<unknown>;
+  installBackend: (backend: string) => Promise<unknown>;
+  cancelBackendInstall: () => Promise<unknown>;
+  onBackendInstallProgress: (
+    callback: (progress: Record<string, unknown>) => void,
+  ) => (() => void) | undefined;
+}
+
+interface ModelEntry {
+  name: string;
+  size: number;
+  modified: Date;
+}
+
+const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.listModels === "function" &&
+    typeof record.pullModel === "function" &&
+    typeof record.downloadModel === "function" &&
+    typeof record.deleteModel === "function" &&
+    typeof record.chooseModelFile === "function" &&
+    typeof record.importModel === "function" &&
+    typeof record.chooseModelsFolder === "function" &&
+    typeof record.onDownloadProgress === "function" &&
+    typeof record.getBackendStatus === "function" &&
+    typeof record.installBackend === "function" &&
+    typeof record.cancelBackendInstall === "function" &&
+    typeof record.onBackendInstallProgress === "function"
+  );
+};
+
+interface DesktopLLMConfigProps {
+  config?: DesktopLLMConfigShape;
+  onChange: (updates: Record<string, unknown>) => void;
+  isLightBackground?: boolean;
+  isSetupMode?: boolean;
+  onRequestDeleteModel?: ((modelName: string) => void) | null;
+  refreshTrigger?: unknown;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const LLAMA_RUNTIME_PACKS: Record<
+  string,
+  Array<{
+    id: string;
+    title: string;
+    size: string;
+    requiresLink?: { label: string; url: string };
+  }>
+> = {
+  "win-x64": [
+    { id: "cpu", title: "CPU", size: "~18 MB" },
+    { id: "vulkan", title: "Vulkan (any GPU)", size: "~34 MB" },
+    { id: "cuda", title: "NVIDIA CUDA 12.4", size: "~640 MB incl. runtime" },
+    {
+      id: "rocm",
+      title: "AMD ROCm 7.14",
+      size: "~196 MB",
+      requiresLink: {
+        label: "ROCm 7.14 setup guide",
+        url: "https://github.com/ggml-org/llama.cpp/discussions/27047",
+      },
+    },
+  ],
+  "linux-x64": [
+    { id: "cpu", title: "CPU", size: "~16 MB" },
+    { id: "vulkan", title: "Vulkan (any GPU)", size: "~33 MB" },
+    { id: "rocm", title: "AMD ROCm 7.14", size: "~213 MB" },
+  ],
+  "mac-arm64": [
+    { id: "metal", title: "Metal (Apple Silicon)", size: "~11 MB" },
+  ],
+};
+
+/**
+ * Reusable Desktop LLM Configuration Component
+ * Used in both setup wizard and settings panel for desktop-local LLM provider
+ *
+ * @param {Object} config - Current LLM configuration (endpoint, model, etc.)
+ * @param {Function} onChange - Callback when configuration changes
+ * @param {boolean} isLightBackground - Whether component is on light background
+ * @param {boolean} showTitle - Whether to show section title
+ * @param {boolean} isSetupMode - Whether in setup wizard (affects UI slightly)
+ */
+const DesktopLLMConfig = ({
+  config = {},
+  onChange,
+  isLightBackground = false,
+  isSetupMode = false,
+  onRequestDeleteModel,
+  refreshTrigger,
+}: DesktopLLMConfigProps) => {
+  const api = useDesktopApi();
+  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(
+    null,
+  );
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendError, setBackendError] = useState("");
+  const [backendProgress, setBackendProgress] =
+    useState<BackendProgress | null>(null);
+
+  const handleChange = (key: string, value: string | number | null) => {
+    onChange({ [key]: value });
+  };
+
+  const llamaServerApi = (
+    api as unknown as {
+      llamaServer?: {
+        getStatus?: () => Promise<{
+          installedBackends?: string[];
+          build?: string;
+          running?: boolean;
+          platformKey?: string;
+        }>;
+        install?: (backend: string) => Promise<unknown>;
+        onInstallLog?: (
+          cb: (log: { message?: string; type?: string }) => void,
+        ) => (() => void) | undefined;
+        onInstallProgress?: (
+          cb: (progress: { percent: number; status: string }) => void,
+        ) => (() => void) | undefined;
+        onInstallComplete?: (
+          cb: (result: { success?: boolean; error?: string }) => void,
+        ) => (() => void) | undefined;
+      };
+    }
+  ).llamaServer;
+  const [llamaStatus, setLlamaStatus] = useState<{
+    installedBackends?: string[];
+    build?: string;
+    running?: boolean;
+    platformKey?: string;
+  } | null>(null);
+  const [llamaInstalling, setLlamaInstalling] = useState<string | null>(null);
+  const [cppLlamaLogs, setCppLlamaLogs] = useState<string[]>([]);
+  const [llamaProgress, setLlamaProgress] = useState<{
+    percent: number;
+    status: string;
+  } | null>(null);
+  const fallbackPlatformKey = navigator.userAgent.includes("Mac")
+    ? "mac-arm64"
+    : navigator.userAgent.includes("Linux")
+      ? "linux-x64"
+      : "win-x64";
+  const platformKey = llamaStatus?.platformKey ?? fallbackPlatformKey;
+
+  useEffect(() => {
+    if (!llamaServerApi?.getStatus) return;
+    let cancelled = false;
+    const refresh = () =>
+      llamaServerApi
+        .getStatus?.()
+        .then((s) => {
+          if (!cancelled) setLlamaStatus(s);
+        })
+        .catch(() => {});
+    refresh();
+    const offLog = llamaServerApi.onInstallLog?.((log) => {
+      if (log?.message) {
+        setCppLlamaLogs((prev) => [...prev.slice(-30), String(log.message)]);
+      }
+    });
+    const offProg = llamaServerApi.onInstallProgress?.((progress) => {
+      if (progress && typeof progress === "object" && "percent" in progress) {
+        setLlamaProgress(progress as { percent: number; status: string });
+      }
+    });
+    const offDone = llamaServerApi.onInstallComplete?.((result) => {
+      setLlamaInstalling(null);
+      setLlamaProgress(null);
+      if (result?.success) refresh();
+    });
+    return () => {
+      cancelled = true;
+      offLog?.();
+      offProg?.();
+      offDone?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (refreshTrigger === undefined || !llamaServerApi?.getStatus) return;
+    llamaServerApi
+      .getStatus()
+      .then((s) => setLlamaStatus(s))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
+
+  const handleModelSelect = (modelName: string) => {
+    handleChange("model", modelName);
+  };
+
+  const handleCustomPathChange = (path: string | null) => {
+    handleChange("customModelsPath", path);
+  };
+
+  const desktopLlmBridge = isDesktopLlmBridge(api?.llm) ? api.llm : null;
+  const desktopLlmApi = useMemo(() => {
+    if (!desktopLlmBridge) {
+      return null;
+    }
+
+    const unsupportedDiscovery = async (): Promise<DiscoveryResult> => ({
+      success: false,
+      items: [],
+      error:
+        "Desktop model discovery is unavailable. Restart the desktop app to reload preload APIs.",
+    });
+
+    return {
+      listModels: (customPath?: string | null) =>
+        desktopLlmBridge.listModels(customPath) as Promise<{
+          success: boolean;
+          models?: ModelEntry[];
+        }>,
+      pullModel: (modelName: string, customPath?: string | null) =>
+        desktopLlmBridge.pullModel(modelName, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      downloadModel: (url: string, customPath?: string | null) =>
+        desktopLlmBridge.downloadModel(url, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      searchOllamaModels: (query: string, page = 1, pageSize = 20) =>
+        desktopLlmBridge.searchOllamaModels
+          ? (desktopLlmBridge.searchOllamaModels(
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      listOllamaModelTags: (
+        modelId: string,
+        query = "",
+        page = 1,
+        pageSize = 20,
+      ) =>
+        desktopLlmBridge.listOllamaModelTags
+          ? (desktopLlmBridge.listOllamaModelTags(
+              modelId,
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      searchHuggingFaceModels: (query: string, cursor = "", pageSize = 20) =>
+        desktopLlmBridge.searchHuggingFaceModels
+          ? (desktopLlmBridge.searchHuggingFaceModels(
+              query,
+              cursor,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      listHuggingFaceFiles: (
+        repoId: string,
+        query = "",
+        page = 1,
+        pageSize = 20,
+      ) =>
+        desktopLlmBridge.listHuggingFaceFiles
+          ? (desktopLlmBridge.listHuggingFaceFiles(
+              repoId,
+              query,
+              page,
+              pageSize,
+            ) as Promise<DiscoveryResult>)
+          : unsupportedDiscovery(),
+      deleteModel: (filename: string, customPath?: string | null) =>
+        desktopLlmBridge.deleteModel(filename, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      chooseModelFile: () =>
+        desktopLlmBridge.chooseModelFile() as Promise<{
+          canceled?: boolean;
+          path?: string;
+        }>,
+      importModel: (filePath: string, customPath?: string | null) =>
+        desktopLlmBridge.importModel(filePath, customPath) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+      chooseModelsFolder: () =>
+        desktopLlmBridge.chooseModelsFolder() as Promise<{
+          success: boolean;
+          error?: string;
+          path?: string;
+        }>,
+      onDownloadProgress: (
+        callback: (progress: { percent: number; status: string }) => void,
+      ) => {
+        const unsubscribe = desktopLlmBridge.onDownloadProgress(callback);
+        return () => unsubscribe?.();
+      },
+      getBackendStatus: (backend = "auto") =>
+        desktopLlmBridge.getBackendStatus(backend) as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      installBackend: (backend: string) =>
+        desktopLlmBridge.installBackend(backend) as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      cancelBackendInstall: () =>
+        desktopLlmBridge.cancelBackendInstall() as Promise<
+          { success: boolean } & Record<string, unknown>
+        >,
+      onBackendInstallProgress: (
+        callback: (progress: Record<string, unknown>) => void,
+      ) => {
+        const unsubscribe = desktopLlmBridge.onBackendInstallProgress(callback);
+        return () => unsubscribe?.();
+      },
+    };
+  }, [desktopLlmBridge]);
+  const storageService = useMemo(
+    () =>
+      isDesktop && desktopLlmApi
+        ? getLLMModelStorage({ llm: desktopLlmApi })
+        : null,
+    [desktopLlmApi],
+  );
+  const selectedBackend = config.backend || "auto";
+  const backendProgressBytes = useMemo(() => {
+    if (!backendProgress) return null;
+    const downloaded =
+      typeof backendProgress.downloadedBytes === "number"
+        ? backendProgress.downloadedBytes
+        : null;
+    const total =
+      typeof backendProgress.totalBytes === "number"
+        ? backendProgress.totalBytes
+        : null;
+    if (downloaded === null) return null;
+    return {
+      downloadedMB: (downloaded / 1024 / 1024).toFixed(1),
+      totalMB: total !== null ? (total / 1024 / 1024).toFixed(1) : null,
+    };
+  }, [backendProgress]);
+
+  const backendItems = useMemo(() => {
+    return backendStatus?.supportedBackends || [];
+  }, [backendStatus]);
+
+  const loadBackendStatus = useCallback(async () => {
+    if (!storageService) return;
+    try {
+      const status = await storageService.getBackendStatus(selectedBackend);
+      if (status?.success) {
+        setBackendStatus(status);
+      } else if (status?.error) {
+        setBackendError(status.error);
+      }
+    } catch (error: unknown) {
+      setBackendError(
+        getErrorMessage(error) || "Failed to load backend status",
+      );
+    }
+  }, [selectedBackend, storageService]);
+
+  useEffect(() => {
+    if (!storageService) return;
+
+    loadBackendStatus();
+
+    const unsubscribe = storageService.onBackendInstallProgress(
+      (progress: BackendProgress) => {
+        setBackendProgress(progress);
+        if (progress?.stage === "done") {
+          setBackendLoading(false);
+          setBackendError("");
+          loadBackendStatus();
+        } else if (progress?.stage === "error") {
+          setBackendLoading(false);
+          setBackendError(progress.status || "Backend installation failed");
+        }
+      },
+    );
+
+    return () => unsubscribe?.();
+  }, [storageService, selectedBackend, loadBackendStatus]);
+
+  const installSelectedBackend = async () => {
+    if (!storageService) return;
+
+    setBackendLoading(true);
+    setBackendError("");
+    setBackendProgress({
+      percent: 0,
+      stage: "install",
+      status: "Starting backend setup...",
+    });
+
+    try {
+      const result = await storageService.installBackend(selectedBackend);
+      if (!result?.success) {
+        setBackendLoading(false);
+        setBackendError(result?.error || "Backend installation failed");
+      }
+    } catch (error: unknown) {
+      setBackendLoading(false);
+      setBackendError(getErrorMessage(error) || "Backend installation failed");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Info Banner */}
+      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+        <div className="flex items-start gap-2">
+          <Icon
+            name="cpu"
+            size={18}
+            className="text-white/90 shrink-0 mt-0.5"
+          />
+          <p className="text-xs text-white/90">
+            <span className="font-semibold">Desktop Local AI</span> - On-device
+            language model using llama.cpp. GPU-accelerated and runs entirely on
+            your desktop!
+          </p>
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-2 h-2 rounded-full bg-green-400"></div>
+          <span className="text-sm font-semibold text-white/90">
+            Ready to use!
+          </span>
+        </div>
+        <p className="text-xs text-white/60">
+          Model: {config.model || "No model selected"} • llama.cpp via Electron
+          • GPU accelerated
+        </p>
+        {!config.model && (
+          <p className="text-[10px] text-yellow-400 mt-1">
+            ⚠ Select a model below to enable LLM features
+          </p>
+        )}
+      </div>
+
+      {/* Inference Engine */}
+      <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+        <h3 className="text-sm font-semibold text-white/90">
+          Inference Engine
+        </h3>
+        <Select
+          data-testid="desktop-llm-engine-select"
+          value={config.llmEngine || "node-llama"}
+          onChange={(e) => handleChange("llmEngine", e.target.value)}
+          variant={isLightBackground ? "dark" : "default"}
+          options={[
+            {
+              value: "llama-server",
+              label: "llama-server (recommended)",
+            },
+            { value: "node-llama", label: "node-llama-cpp" },
+          ]}
+        />
+
+        {config.llmEngine === "llama-server" && (
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-white/90 mb-1">
+              llama.cpp Runtime Backend ({llamaStatus?.build ?? "pin pending"})
+            </label>
+            <Select
+              data-testid="desktop-llama-backend-select"
+              value={config.llmBackend || "auto"}
+              onChange={(e) => handleChange("llmBackend", e.target.value)}
+              variant={isLightBackground ? "dark" : "default"}
+              options={[
+                { value: "auto", label: "Auto" },
+                ...(["cpu", "vulkan", "cuda", "rocm"] as const)
+                  .filter(
+                    (b) =>
+                      !(
+                        (b === "cuda" && platformKey !== "win-x64") ||
+                        platformKey === "mac-arm64"
+                      ),
+                  )
+                  .map((b) => ({
+                    value: b,
+                    label:
+                      b === "cpu"
+                        ? "CPU (~18 MB)"
+                        : b === "vulkan"
+                          ? platformKey === "win-x64"
+                            ? "Vulkan, any GPU (~34 MB)"
+                            : "Vulkan (~33 MB)"
+                          : b === "cuda"
+                            ? "NVIDIA CUDA 12.4 (~640 MB incl. runtime)"
+                            : "AMD ROCm (~196 MB, requires HIP SDK)",
+                  })),
+                ...(platformKey === "mac-arm64"
+                  ? [{ value: "metal", label: "Metal, Apple Silicon" }]
+                  : []),
+              ]}
+            />
+
+            {/* Runtime pack cards — downloader style, one per backend */}
+            <div className="space-y-2">
+              {(LLAMA_RUNTIME_PACKS[platformKey] ?? []).map((pack) => {
+                const installed = (
+                  llamaStatus?.installedBackends ?? []
+                ).includes(pack.id);
+                const isActive =
+                  installed && (config.llmBackend || "cpu") === pack.id;
+                const installingThis = llamaInstalling === pack.id;
+                return (
+                  <div
+                    key={pack.id}
+                    className={cn(
+                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
+                      installingThis ? "border-white/30" : "border-white/10",
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-white/90 truncate">
+                          {pack.title}
+                        </span>
+                        {isActive && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {installingThis ? (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/70">
+                            {llamaProgress?.status || "Downloading..."}
+                          </span>
+                          <span className="text-white/70">
+                            {llamaProgress?.percent != null
+                              ? `${Math.round(llamaProgress.percent)}%`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white/40 transition-all duration-300"
+                            style={{
+                              width: `${llamaProgress?.percent ?? 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-white/50 truncate">
+                          {installed ? "Installed" : `Download ${pack.size}`}
+                        </span>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {installed ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onRequestDeleteModel?.(
+                                  `llama-backend:${pack.id}`,
+                                )
+                              }
+                              disabled={!onRequestDeleteModel}
+                              data-testid={`llama-backend-delete-${pack.id}`}
+                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
+                            >
+                              <Icon name="trash" size={11} />
+                              <span>Delete</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLlamaInstalling(pack.id);
+                                setCppLlamaLogs([]);
+                                void llamaServerApi?.install?.(pack.id);
+                              }}
+                              data-testid={`llama-backend-download-${pack.id}`}
+                              className="px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 bg-white/10 hover:bg-white/20 text-white/90"
+                            >
+                              <Icon name="download" size={11} />
+                              <span>Download</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {pack.requiresLink && (
+                      <a
+                        href={pack.requiresLink.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className={cn(
+                          "inline-block mt-1.5 text-[11px] underline opacity-75 hover:opacity-100",
+                          isLightBackground ? "text-black/70" : "glass-text",
+                        )}
+                      >
+                        {pack.requiresLink.label}
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+              {(cppLlamaLogs.length > 0 || llamaProgress) && (
+                <div className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap">
+                  {(llamaProgress
+                    ? [
+                        `[progress] ${llamaProgress.status} ${Math.round(llamaProgress.percent ?? 0)}%`,
+                      ]
+                    : []
+                  )
+                    .concat(cppLlamaLogs.slice(-8))
+                    .map((line, index) => (
+                      <div key={`${index}-${line.slice(0, 10)}`}>{line}</div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Backend Manager (node-llama-cpp engine only) */}
+      {config.llmEngine !== "llama-server" && (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-white/90">
+                Runtime Backend
+              </h3>
+              <p className="text-[11px] text-white/60">
+                Choose and install llama.cpp compute backend
+              </p>
+            </div>
+            <button
+              onClick={loadBackendStatus}
+              className="text-xs text-white/70 hover:text-white/90"
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <Select
+            value={selectedBackend}
+            onChange={(e) => handleChange("backend", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            options={
+              backendItems.length > 0
+                ? backendItems.map((item) => ({
+                    value: item.name,
+                    label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
+                    disabled: !item.supported,
+                  }))
+                : [
+                    { value: "auto", label: "AUTO" },
+                    { value: "cpu", label: "CPU" },
+                    { value: "cuda", label: "CUDA" },
+                    { value: "vulkan", label: "VULKAN" },
+                    { value: "metal", label: "METAL" },
+                  ]
+            }
+          />
+
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-white/60">
+              {backendStatus?.selectedInstalled
+                ? `Selected backend (${selectedBackend}) is installed`
+                : `Selected backend (${selectedBackend}) is not installed`}
+            </p>
+            <Button
+              onClick={installSelectedBackend}
+              disabled={backendLoading || selectedBackend === "auto"}
+              variant={isLightBackground ? "dark" : "default"}
+              size="sm"
+              type="button"
+            >
+              {backendLoading
+                ? "Installing..."
+                : backendStatus?.selectedInstalled
+                  ? "Reinstall"
+                  : "Install"}
+            </Button>
+          </div>
+
+          {backendProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-white/70">{backendProgress.status}</span>
+                <span className="text-white/70">
+                  {Math.round(backendProgress.percent || 0)}%
+                </span>
+              </div>
+              {backendProgressBytes && (
+                <div className="text-xs text-white/70">
+                  {backendProgressBytes.totalMB
+                    ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
+                    : `${backendProgressBytes.downloadedMB}MB downloaded`}
+                </div>
+              )}
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {backendError && (
+            <p className="text-[11px] text-red-300">{backendError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Advanced Config */}
+      <details className="group" open={isSetupMode}>
+        <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
+          <span>Advanced Settings</span>
+          <Icon
+            name="arrow-down"
+            size={14}
+            className="group-open:rotate-180 transition-transform"
+          />
+        </summary>
+        <div className="mt-2 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-white/90 mb-1">
+              Endpoint URL
+            </label>
+            <Input
+              type="text"
+              value={config.endpoint || "http://127.0.0.1:11438"}
+              onChange={(e) => handleChange("endpoint", e.target.value)}
+              placeholder="http://127.0.0.1:11438"
+              variant={isLightBackground ? "dark" : "default"}
+            />
+            <p className="text-[10px] text-white/50 mt-1">
+              Local AI server endpoint
+            </p>
+          </div>
+
+          {/* Additional Advanced Parameters */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-white/90 mb-1">
+                Temperature (
+                {config.temperature !== undefined ? config.temperature : 0.7})
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={
+                  config.temperature !== undefined ? config.temperature : 0.7
+                }
+                onChange={(e) =>
+                  handleChange("temperature", parseFloat(e.target.value))
+                }
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/90 mb-1">
+                Max Tokens ({config.maxTokens || 2048})
+              </label>
+              <Input
+                type="number"
+                min="256"
+                max="8192"
+                step="256"
+                value={config.maxTokens || 2048}
+                onChange={(e) =>
+                  handleChange("maxTokens", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/90 mb-1">
+                Context Size ({config.contextSize || 4096})
+              </label>
+              <Input
+                type="number"
+                min="512"
+                max="32768"
+                step="512"
+                value={config.contextSize || 4096}
+                onChange={(e) =>
+                  handleChange("contextSize", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/90 mb-1">
+                GPU Layers (
+                {config.gpuLayers !== undefined ? config.gpuLayers : 33})
+              </label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={config.gpuLayers !== undefined ? config.gpuLayers : 33}
+                onChange={(e) =>
+                  handleChange("gpuLayers", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
+              />
+              <p className="text-[10px] text-white/50 mt-1">
+                Offload layers to GPU (0 = CPU only)
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/90 mb-1">
+                Threads ({config.threads || 4})
+              </label>
+              <Input
+                type="number"
+                min="1"
+                max="32"
+                value={config.threads || 4}
+                onChange={(e) =>
+                  handleChange("threads", parseInt(e.target.value))
+                }
+                variant={isLightBackground ? "dark" : "default"}
+              />
+            </div>
+          </div>
+        </div>
+      </details>
+
+      {/* Model Management Section */}
+      {!isSetupMode && isDesktop && storageService && (
+        <LocalLLMModelManager
+          storageService={storageService}
+          selectedModel={config.model ?? null}
+          onModelSelect={handleModelSelect}
+          customModelsPath={config.customModelsPath || null}
+          onCustomPathChange={handleCustomPathChange}
+          isLightBackground={isLightBackground}
+          onRequestDeleteModel={onRequestDeleteModel}
+          refreshTrigger={refreshTrigger}
+          supportsCustomFolder={true}
+        />
+      )}
+    </div>
+  );
+};
+
+export default DesktopLLMConfig;

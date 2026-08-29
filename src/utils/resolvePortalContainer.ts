@@ -1,0 +1,33 @@
+import { VASSIST_REACT_ROOT_ID } from "./VAssistDomIds";
+
+export type PortalContainer = HTMLElement | ShadowRoot | null | undefined;
+
+export function resolvePortalContainer(
+  portalContainer: PortalContainer,
+  ownerNode: Node | null,
+): PortalContainer {
+  if (portalContainer !== undefined) {
+    return portalContainer;
+  }
+
+  if (!ownerNode) {
+    return undefined;
+  }
+
+  const ownerElement =
+    ownerNode instanceof Element ? ownerNode : ownerNode.parentElement;
+  const themedAncestor = ownerElement?.closest<HTMLElement>(
+    ".vassist-theme-root",
+  );
+
+  if (themedAncestor) {
+    return themedAncestor;
+  }
+
+  const rootNode = ownerNode.getRootNode();
+  if (typeof ShadowRoot === "undefined" || !(rootNode instanceof ShadowRoot)) {
+    return undefined;
+  }
+
+  return rootNode.getElementById(VASSIST_REACT_ROOT_ID) ?? rootNode;
+}
