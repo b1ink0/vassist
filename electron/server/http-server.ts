@@ -26,9 +26,12 @@ type LLMBackend = "auto" | "cpu" | "cuda" | "vulkan" | "metal" | "rocm";
 
 type ServerConfig = {
   llm: {
+    llmServerBackend?: string;
     modelPath: string | null;
     defaultModelsDir: string | null;
     backend: LLMBackend;
+    engine?: string;
+    ctxSize?: number;
     temperature: number;
     maxTokens: number;
     contextSize: number;
@@ -101,6 +104,14 @@ type LocalAIServerDeps = {
   onSTTRequestComplete?: (() => void) | null;
   onTTSRequestStart?: (() => void) | null;
   onTTSRequestComplete?: (() => void) | null;
+  llamaProxy?: {
+    ensureForRequest: (req: {
+      modelPath: string;
+      mmprojPath?: string;
+      backend?: string;
+    }) => Promise<string>;
+    markRequestComplete: () => void;
+  } | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -297,6 +308,15 @@ export class LocalAIServer {
   restartWhisperCppBackend: ((reason: string) => void | Promise<void>) | null;
   ensureSttBackendRunning: (() => void | Promise<void>) | null;
   onSTTRequestStart: (() => void) | null;
+  llamaProxy?: {
+    ensureForRequest: (req: {
+      modelPath: string;
+      mmprojPath?: string;
+      ctxSize?: number;
+      backend?: string;
+    }) => Promise<string>;
+    markRequestComplete: () => void;
+  } | null;
   onSTTRequestComplete: (() => void) | null;
   onTTSRequestStart: (() => void) | null;
   onTTSRequestComplete: (() => void) | null;
@@ -321,7 +341,12 @@ export class LocalAIServer {
     onSTTRequestComplete,
     onTTSRequestStart,
     onTTSRequestComplete,
+    llamaProxy,
   }: LocalAIServerDeps = {}) {
+    this.llamaProxy =
+      llamaProxy && typeof llamaProxy.ensureForRequest === "function"
+        ? llamaProxy
+        : null;
     this.app = express();
     this.server = null;
     this.port = 11438;
@@ -553,6 +578,14 @@ export class LocalAIServer {
   }
 
   async handleChatCompletion(req: Request, res: Response) {
+    const llmEngine =
+      (typeof req.body?.llmEngine === "string" && req.body.llmEngine) ||
+      this.config.llm?.engine ||
+      "node-llama";
+    if (llmEngine === "llama-server") {
+      return await this.handleLlamaServerCompletion(req, res);
+    }
+
     const {
       messages,
       stream = false,
@@ -924,6 +957,109 @@ export class LocalAIServer {
     } catch (error) {
       console.error("[STT] whisper.cpp error:", getErrorMessage(error));
       res.status(500).json({ error: getErrorMessage(error) });
+    }
+  }
+
+  /**
+   * Proxy chat completions to the on-demand llama-server (port 11439).
+   */
+  async handleLlamaServerCompletion(req: Request, res: Response) {
+    if (!this.llamaProxy) {
+      return res.status(503).json({ error: "llama-server engine unavailable" });
+    }
+
+    // Resolve model path using the same search rules as node-llama path
+    const requestedModel =
+      typeof req.body?.model === "string" ? req.body.model : "";
+    let modelPath = this.config.llm.modelPath || "";
+    const modelsDir = this.config.llm.defaultModelsDir;
+    if (requestedModel && modelsDir && fs.existsSync(modelsDir)) {
+      const exact = path.join(modelsDir, requestedModel);
+      if (fs.existsSync(exact)) {
+        modelPath = exact;
+      } else {
+        const match = fs
+          .readdirSync(modelsDir)
+          .find(
+            (f) =>
+              f.toLowerCase().endsWith(".gguf") &&
+              f.toLowerCase().includes(requestedModel.toLowerCase()),
+          );
+        if (match) modelPath = path.join(modelsDir, match);
+      }
+    }
+    if (!modelPath || !fs.existsSync(modelPath)) {
+      return res
+        .status(400)
+        .json({ error: "Model not found: " + requestedModel });
+    }
+
+    let requestLeaseAcquired = false;
+    try {
+      const upstreamModel = await this.llamaProxy.ensureForRequest({
+        modelPath,
+        ctxSize: this.config.llm?.ctxSize ?? 4096,
+        backend:
+          (typeof req.body?.llmBackend === "string"
+            ? req.body.llmBackend
+            : undefined) ??
+          this.config.llm?.llmServerBackend ??
+          "auto",
+      });
+      requestLeaseAcquired = true;
+
+      const upstreamBody: Record<string, unknown> = { ...req.body };
+      delete upstreamBody.llmEngine;
+      delete upstreamBody.llmBackend;
+      delete upstreamBody.customModelsPath;
+      upstreamBody.model = upstreamModel;
+      // Thinking toggle via llama-server template kwargs (no prompt prefill)
+      upstreamBody.chat_template_kwargs = {
+        ...(upstreamBody.chat_template_kwargs as
+          | Record<string, unknown>
+          | undefined),
+        enable_thinking:
+          (upstreamBody.enable_thinking as boolean | undefined) ?? false,
+      };
+
+      const controller = new AbortController();
+      req.on("close", () => controller.abort());
+
+      const upstream = await fetch(
+        `http://127.0.0.1:11439/v1/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(upstreamBody),
+          signal: controller.signal,
+        },
+      );
+
+      const contentType = upstream.headers.get("content-type") || "";
+      res.status(upstream.status);
+      res.setHeader("Content-Type", contentType);
+      if (!upstream.body) {
+        return res.end();
+      }
+      const reader = upstream.body.getReader();
+      const pump = async (): Promise<void> => {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!res.writableEnded) res.write(Buffer.from(value));
+        }
+        res.end();
+      };
+      await pump();
+    } catch (error) {
+      console.error("[LLM] llama-server error:", getErrorMessage(error));
+      if (!res.headersSent) {
+        res.status(500).json({ error: getErrorMessage(error) });
+      } else {
+        res.end();
+      }
+    } finally {
+      if (requestLeaseAcquired) this.llamaProxy.markRequestComplete();
     }
   }
 

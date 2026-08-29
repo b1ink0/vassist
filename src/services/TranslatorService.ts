@@ -7,6 +7,7 @@
 
 import OpenAI from "openai";
 import Logger from "./LoggerService";
+import { createLocalOpenAiClient } from "./LocalLlmClientFactory";
 import { isExtension } from "../utils/PlatformUtils";
 
 type TranslatorProvider = "chrome-ai" | "openai" | "ollama" | "desktop-local";
@@ -271,6 +272,23 @@ class TranslatorService {
         Logger.log(
           "other",
           `${logPrefix} Desktop Local configured for translation`,
+        );
+      } else if (
+        provider === "android-local" ||
+        provider === "openai-compatible"
+      ) {
+        const local = createLocalOpenAiClient(provider, config);
+        if (!local) throw new Error(`Unknown provider: ${provider}`);
+        state.llmClient = local.client;
+        state.config = {
+          provider: "openai",
+          model: local.model,
+          temperature: 0.3,
+        };
+        state.provider = "openai";
+        Logger.log(
+          "other",
+          `${logPrefix} ${provider} configured for translation`,
         );
       } else {
         throw new Error(`Unknown provider: ${provider}`);

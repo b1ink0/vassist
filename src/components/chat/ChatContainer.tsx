@@ -288,6 +288,9 @@ interface DesktopApiLike {
   whisperCpp?: {
     deleteModel?: (options: { modelId: string }) => Promise<unknown>;
   };
+  llamaServer?: {
+    deleteBackend?: (backend: string) => Promise<void>;
+  };
 }
 
 interface AndroidApiLike {
@@ -1214,6 +1217,26 @@ const ChatContainer = ({
     async (filename: string) => {
       try {
         let result;
+
+        if (filename.startsWith("llama-backend:")) {
+          const backend = filename.slice("llama-backend:".length);
+          await api?.llamaServer
+            ?.deleteBackend?.(backend)
+            .catch((error: unknown) => {
+              Logger.error(
+                "ChatContainer",
+                "llama-server backend delete failed:",
+                error,
+              );
+            });
+          setSettingsRefreshTrigger((prev) => prev + 1);
+          setIsDeleteLLMModelDialogClosing(true);
+          setTimeout(() => {
+            setDeletingLLMModel(null);
+            setIsDeleteLLMModelDialogClosing(false);
+          }, 200);
+          return;
+        }
 
         if (isDesktop && api?.llm) {
           // Get custom models path from aiConfig

@@ -13,7 +13,8 @@
     "tools/**/*.ts",
     "vite.config*.ts",
     "playwright.config.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "src/utils/VAssistDomIds.ts"
   ],
   "exclude": ["dist", "build", "node_modules"]
 }

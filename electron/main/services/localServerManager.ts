@@ -3,6 +3,8 @@ import type * as fsType from "fs";
 import type * as pathType from "path";
 
 type ServerRuntimeConfig = {
+  llmEngine?: string;
+  llmBackend?: string;
   backend?: string;
   model?: string;
   customModelsPath?: string;
@@ -28,9 +30,11 @@ type ServerRuntimeConfig = {
 type LocalAIServerLike = {
   config: {
     llm: {
+      llmServerBackend?: string;
       modelPath: string | null;
       defaultModelsDir?: string | null;
       backend?: string;
+      engine?: string;
       temperature?: number;
       maxTokens?: number;
       contextSize?: number;
@@ -90,6 +94,15 @@ type LocalServerManagerDeps = {
   onTTSRequestComplete?: (() => void) | null;
   stopTTSBackend?: (() => void) | null;
   setTTSBackend?: ((backend: string | undefined | null) => void) | null;
+  llamaProxy?: {
+    ensureForRequest: (req: {
+      modelPath: string;
+      mmprojPath?: string;
+      ctxSize?: number;
+      backend?: string;
+    }) => Promise<string>;
+    markRequestComplete: () => void;
+  } | null;
   ensureSupertonicRunning?: (() => void | Promise<void>) | null;
   restartSupertonicBackend?: ((reason: string) => void | Promise<void>) | null;
   ensureWhisperCppRunning?: (() => void | Promise<void>) | null;
@@ -119,6 +132,7 @@ export function createLocalServerManager({
   onTTSRequestComplete,
   stopTTSBackend,
   setTTSBackend,
+  llamaProxy,
   ensureSupertonicRunning,
   restartSupertonicBackend,
   ensureWhisperCppRunning,
@@ -160,7 +174,19 @@ export function createLocalServerManager({
               onSTTRequestComplete?: (() => void) | null;
               onTTSRequestStart?: (() => void) | null;
               onTTSRequestComplete?: (() => void) | null;
+              llamaProxy?: {
+                ensureForRequest: (req: {
+                  modelPath: string;
+                  mmprojPath?: string;
+                  ctxSize?: number;
+                  backend?: string;
+                }) => Promise<string>;
+                markRequestComplete: () => void;
+              } | null;
             } = {};
+            if (llamaProxy !== undefined) {
+              serverDeps.llamaProxy = llamaProxy;
+            }
             if (ensureSttBackendRunning !== undefined) {
               serverDeps.ensureSttBackendRunning = ensureSttBackendRunning;
             }
@@ -239,6 +265,11 @@ export function createLocalServerManager({
             modelPath: null,
             defaultModelsDir: getModelsDir(),
             backend: config.backend || "auto",
+            engine:
+              config.llmEngine === "llama-server"
+                ? "llama-server"
+                : "node-llama",
+            llmServerBackend: config.llmBackend || "auto",
             temperature: config.temperature || 0.7,
             maxTokens: config.maxTokens || 2048,
             contextSize: config.contextSize || 4096,

@@ -40,6 +40,7 @@ import { registerUIIPCHandlers } from "./main/ipc/uiHandlers";
 import { createLocalServerManager } from "./main/services/localServerManager";
 import { createPythonServerManager } from "./main/services/pythonServerManager";
 import { createWhisperCppManager } from "./main/services/whisperCppManager";
+import { createLlamaServerManager } from "./main/services/llamaServerManager";
 import { createLLMBackendManager } from "./main/services/llmBackendManager";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -117,6 +118,12 @@ const pythonServerManager = createPythonServerManager({
   getGPTSoVITSDataDir: runtimePaths.getGPTSoVITSDataDir,
 });
 
+const llamaServerManager = createLlamaServerManager({
+  fs,
+  path,
+  app: app as unknown as { getPath: (name: string) => string },
+});
+
 const whisperCppManager = createWhisperCppManager({
   ipcMain,
   fs,
@@ -139,6 +146,14 @@ const localServerManager = createLocalServerManager({
   ensureWhisperCppRunning: whisperCppManager.ensureRunning,
   restartWhisperCppBackend: whisperCppManager.restart,
   ensureSttBackendRunning: pythonServerManager.ensureWhisperServerRunning,
+  llamaProxy: {
+    ensureForRequest: (r) =>
+      llamaServerManager.ensureForRequest({
+        ...r,
+        backend: r.backend as never,
+      }),
+    markRequestComplete: () => llamaServerManager.markRequestComplete(),
+  },
   onSTTRequestStart: pythonServerManager.markWhisperRequestStart,
   onSTTRequestComplete: pythonServerManager.markWhisperRequestComplete,
   onTTSRequestStart: pythonServerManager.markGPTSoVITSTTSRequestStart,
@@ -170,6 +185,16 @@ registerUIIPCHandlers({
 
 localServerManager.registerIPCHandlers(ipcMain);
 pythonServerManager.registerSetupIPCHandlers(ipcMain, localServerManager);
+
+ipcMain.handle("llamaServer:getStatus", () => llamaServerManager.getStatus());
+ipcMain.handle(
+  "llamaServer:install",
+  async (event: Electron.IpcMainInvokeEvent, backend: string) =>
+    llamaServerManager.installBackend(backend, event.sender),
+);
+ipcMain.handle("llamaServer:deleteBackend", (_event, backend: string) =>
+  llamaServerManager.deleteBackend(backend),
+);
 whisperCppManager.registerIPCHandlers();
 registerLLMHandlers({
   ipcMain,
@@ -208,7 +233,19 @@ app.on("window-all-closed", () => {
   // Keep app alive for tray-driven workflow.
 });
 
-app.on("before-quit", () => {
+let quitCleanupStarted = false;
+app.on("before-quit", (event) => {
+  if (quitCleanupStarted) return;
+
+  event.preventDefault();
+  quitCleanupStarted = true;
   pythonServerManager.cleanupBeforeQuit(localServerManager);
   whisperCppManager.cleanupBeforeQuit();
+
+  void llamaServerManager
+    .stop("app quit")
+    .catch((error) => {
+      console.error("[LlamaServer] Graceful app-exit cleanup failed:", error);
+    })
+    .finally(() => app.quit());
 });

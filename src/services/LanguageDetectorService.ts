@@ -172,6 +172,38 @@ class LanguageDetectorService {
           "other",
           `${logPrefix} OpenAI configured for language detection`,
         );
+      } else if (
+        provider === "desktop-local" ||
+        provider === "android-local" ||
+        provider === "openai-compatible"
+      ) {
+        const section =
+          config[
+            provider as "desktop-local" | "android-local" | "openai-compatible"
+          ] || {};
+        const endpoint =
+          (section as { endpoint?: string }).endpoint ||
+          (provider === "desktop-local"
+            ? "http://127.0.0.1:11438"
+            : provider === "android-local"
+              ? "http://127.0.0.1:8765"
+              : "");
+        state.llmClient = new OpenAI({
+          apiKey: "local",
+          baseURL: endpoint + "/v1",
+          dangerouslyAllowBrowser: !this.isExtensionMode,
+        });
+
+        state.config = {
+          provider: "openai",
+          model: (section as { model?: string }).model || "local",
+          temperature: 0.1,
+        };
+        state.provider = "openai";
+        Logger.log(
+          "other",
+          `${logPrefix} ${provider} configured for language detection`,
+        );
       } else if (provider === "ollama") {
         const ollamaConfig = config.ollama;
         state.llmClient = new OpenAI({

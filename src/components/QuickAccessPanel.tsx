@@ -434,6 +434,7 @@ const QuickAccessPanel = ({
               {thinkingEnabled && (
                 <Select
                   data-testid="quick-thinking-effort-select"
+                  className="shrink-0 h-7 max-w-[7.5rem]"
                   value={thinkingEffort ?? ""}
                   onChange={(event) =>
                     updateAIConfig(
@@ -454,6 +455,7 @@ const QuickAccessPanel = ({
               <Toggle
                 data-testid="quick-thinking-toggle"
                 checked={thinkingEnabled}
+                className="shrink-0"
                 onChange={(checked) =>
                   updateAIConfig(
                     `${providerConfigKey}.thinkingEnabled`,

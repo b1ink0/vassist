@@ -1765,14 +1765,15 @@ const LLMSettings = ({
         </SettingsRow>
 
         <SettingsRow label="Auto-expand Thinking" layout="stacked">
-          <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-            <p className="text-xs text-white/50 mt-0.5">
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+            <p className="text-xs text-white/50 flex-1 min-w-0">
               Keep the thought process panel open while reasoning streams. When
               off it collapses to a one-line live preview.
             </p>
             <Toggle
               data-testid="llm-thinking-autoexpand-toggle"
               checked={uiConfig.thinkingPanelAutoExpand === true}
+              className="shrink-0"
               onChange={(checked) =>
                 updateUIConfig("thinkingPanelAutoExpand", checked)
               }

@@ -221,6 +221,34 @@ contextBridge.exposeInMainWorld("electron", {
         ipcRenderer.removeListener("supertonic:setup:complete", subscription);
     },
   },
+  llamaServer: {
+    getStatus: () => ipcRenderer.invoke("llamaServer:getStatus"),
+    install: (backend: string) =>
+      ipcRenderer.invoke("llamaServer:install", backend),
+    deleteBackend: (backend: string) =>
+      ipcRenderer.invoke("llamaServer:deleteBackend", backend),
+    onInstallLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) =>
+        callback(log);
+      ipcRenderer.on("llamaServer:installLog", subscription);
+      return () =>
+        ipcRenderer.removeListener("llamaServer:installLog", subscription);
+    },
+    onInstallProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) =>
+        callback(progress);
+      ipcRenderer.on("llamaServer:installProgress", subscription);
+      return () =>
+        ipcRenderer.removeListener("llamaServer:installProgress", subscription);
+    },
+    onInstallComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) =>
+        callback(result);
+      ipcRenderer.on("llamaServer:installComplete", subscription);
+      return () =>
+        ipcRenderer.removeListener("llamaServer:installComplete", subscription);
+    },
+  },
   whisperCpp: {
     getStatus: () => ipcRenderer.invoke("whispercpp:getStatus"),
     setEngine: (engine: string) =>

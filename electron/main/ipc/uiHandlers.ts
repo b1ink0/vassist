@@ -286,6 +286,38 @@ export function registerUIIPCHandlers({
     },
   );
 
+  ipcMain.on(
+    "chatInput:thinkingChanged",
+    (event: IpcMainEvent, data: unknown) => {
+      const payload = data as { section?: unknown; enabled?: unknown } | null;
+      const validSections = new Set([
+        "chromeAi",
+        "openai",
+        "ollama",
+        "android-local",
+        "desktop-local",
+      ]);
+      const sentByInputWindow =
+        state.inputWindow &&
+        !state.inputWindow.isDestroyed() &&
+        event.sender === state.inputWindow.webContents;
+      const validPayload =
+        payload &&
+        typeof payload.section === "string" &&
+        validSections.has(payload.section) &&
+        typeof payload.enabled === "boolean";
+
+      if (
+        sentByInputWindow &&
+        validPayload &&
+        state.mainWindow &&
+        !state.mainWindow.isDestroyed()
+      ) {
+        state.mainWindow.webContents.send("chatInput:thinkingChanged", payload);
+      }
+    },
+  );
+
   ipcMain.on("chatInput:close", () => {
     closeInputWindow();
 

@@ -29,7 +29,7 @@ const Toggle = ({
       {...props}
       onClick={() => !disabled && onChange(!checked)}
       className={cn(
-        "relative inline-flex h-4 w-8 items-center rounded-full",
+        "relative inline-flex h-4 w-8 items-center rounded-full shrink-0",
         "transition-all duration-300 ease-in-out border border-white/20",
         "bg-white/10 backdrop-blur-xl",
         disabled

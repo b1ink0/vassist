@@ -815,6 +815,8 @@ const syncDesktopServerForProviders = async (
   try {
     const result = (await api.server.start({
       ...desktopLlmConfig,
+      llmEngine: (desktopLlmConfig as any).llmEngine,
+      llmBackend: (desktopLlmConfig as any).llmBackend,
       stt: {
         model: desktopSttConfig.model,
         language: desktopSttConfig.language,

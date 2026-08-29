@@ -58,6 +58,7 @@ import {
 import { useToolingActions } from "../../hooks/app/useTooling";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
+import { useConfigAIActions } from "../../hooks/config/useConfigAI";
 import Logger from "../../services/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 import MicrophoneService from "../../services/MicrophoneService";
@@ -331,6 +332,7 @@ const ChatController = ({
 }: ChatControllerProps) => {
   const { chatService, chatHistoryService } = useAppRuntimeServices();
   const api = useDesktopApi() as DesktopApiForChatController | null;
+  const { updateAIConfig } = useConfigAIActions();
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
@@ -2162,15 +2164,46 @@ const ChatController = ({
       },
     );
 
+    const unsubscribeConfig = api.ipc.on(
+      "chatInput:thinkingChanged",
+      (data: unknown) => {
+        if (!data || typeof data !== "object") return;
+        const payload = data as { section?: unknown; enabled?: unknown };
+        const validSections = new Set([
+          "chromeAi",
+          "openai",
+          "ollama",
+          "android-local",
+          "desktop-local",
+        ]);
+        if (
+          typeof payload.section !== "string" ||
+          !validSections.has(payload.section) ||
+          typeof payload.enabled !== "boolean"
+        ) {
+          Logger.warn("ChatController", "Ignored invalid thinking change");
+          return;
+        }
+        Logger.log(
+          "ChatController",
+          "Thinking change from input window:",
+          payload,
+        );
+        updateAIConfig(`${payload.section}.thinkingEnabled`, payload.enabled);
+      },
+    );
+
     return () => {
       unsubscribeSend?.();
       unsubscribePendingDrop?.();
       unsubscribeClose?.();
       unsubscribeQuickPanel?.();
+      unsubscribeConfig?.();
     };
   }, [
     setPendingDropData,
     api,
+    updateAIConfig,
     handleDesktopChatInputClose,
     handleDesktopQuickPanelToggle,
     handleDesktopChatInputSend,

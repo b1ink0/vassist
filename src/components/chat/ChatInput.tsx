@@ -169,11 +169,30 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     const activeSectionKey =
       aiConfig.provider === "chrome-ai" ? "chromeAi" : aiConfig.provider;
-    const thinkingEnabled =
+    const configuredThinkingEnabled =
       (aiConfig as Record<string, any>)[activeSectionKey]?.thinkingEnabled ===
       true;
-    const toggleThinking = (checked: boolean) =>
+    const [inputThinkingOverride, setInputThinkingOverride] = useState<
+      boolean | null
+    >(null);
+    useEffect(() => {
+      setInputThinkingOverride(null);
+    }, [activeSectionKey]);
+    const thinkingEnabled =
+      isInputWindow && inputThinkingOverride !== null
+        ? inputThinkingOverride
+        : configuredThinkingEnabled;
+    const toggleThinking = (checked: boolean) => {
+      if (isInputWindow && isDesktop && api?.ipc) {
+        setInputThinkingOverride(checked);
+        api.ipc.send("chatInput:thinkingChanged", {
+          section: activeSectionKey,
+          enabled: checked,
+        });
+        return;
+      }
       updateAIConfig(`${activeSectionKey}.thinkingEnabled`, checked);
+    };
 
     // Local state for input window (synced from main window)
     const [localPendingDropData, setLocalPendingDropData] =

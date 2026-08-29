@@ -179,7 +179,7 @@ const Select = ({
     : cn(selectVariants({ variant }), "relative", className);
 
   return (
-    <div ref={setPortalAnchor} style={{ display: "contents" }}>
+    <div ref={setPortalAnchor}>
       <BaseSelect.Root
         value={selectedValue || undefined}
         onValueChange={triggerChange}
@@ -197,7 +197,7 @@ const Select = ({
         >
           {!trigger && (
             <>
-              <span className={cn("block truncate pr-2", textClass)}>
+              <span className={cn("block truncate pr-5", textClass)}>
                 {optionItems.find((opt) => String(opt.value) === selectedValue)
                   ?.label ??
                   (placeholder || "Select")}

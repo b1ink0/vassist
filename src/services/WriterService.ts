@@ -5,6 +5,7 @@
  * Works in both extension mode (multi-tab) and dev mode (single instance).
  */
 
+import { createLocalOpenAiClient } from "./LocalLlmClientFactory";
 import OpenAI from "openai";
 import Logger from "./LoggerService";
 import { isExtension } from "../utils/PlatformUtils";
@@ -187,7 +188,16 @@ class WriterService {
         state.provider = "ollama";
         Logger.log("other", `${logPrefix} Ollama configured for writing`);
       } else {
-        throw new Error(`Unknown provider: ${provider}`);
+        const local = createLocalOpenAiClient(provider, config);
+        if (!local) throw new Error(`Unknown provider: ${provider}`);
+        state.llmClient = local.client;
+        state.config = {
+          provider: "openai",
+          model: local.model,
+          temperature: 0.5,
+        };
+        state.provider = "openai";
+        Logger.log("other", `${logPrefix} ${provider} configured for writing`);
       }
 
       return true;

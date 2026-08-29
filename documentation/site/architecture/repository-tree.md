@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 171
-- Files: 589
-- Text files counted for metrics: 502
-- Total text lines: 155784
-- Code files counted for metrics: 400
-- Total code lines: 140217
+- Files: 591
+- Text files counted for metrics: 504
+- Total text lines: 157555
+- Code files counted for metrics: 402
+- Total code lines: 141985
 
 ## Line Counts by File Type
 
@@ -22,11 +22,11 @@ VAssist repository tree and file metrics.
 | Java         | .java                   |     4 |   215 |
 | Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   103 | 50549 |
-| TypeScript   | .ts, .mts, .cts         |   249 | 73942 |
+| TSX          | .tsx                    |   103 | 50933 |
+| TypeScript   | .ts, .mts, .cts         |   251 | 75326 |
 | Gradle       | .gradle                 |     7 |   579 |
-| JSON         | .json                   |    17 |   572 |
-| Markdown     | .md                     |    35 |  6091 |
+| JSON         | .json                   |    17 |   573 |
+| Markdown     | .md                     |    35 |  6093 |
 | Other Text   | mixed                   |    14 |  3509 |
 | Plain Text   | (no extension)          |    11 |  4015 |
 | Properties   | .properties             |     2 |    29 |
@@ -39,12 +39,12 @@ VAssist repository tree and file metrics.
 - android/: 64 directories, 92 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
-- electron/: 15 directories, 53 files
+- electron/: 15 directories, 54 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 246 files
+- src/: 49 directories, 247 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -334,6 +334,7 @@ vassist/
 │   │   ├── runtime/
 │   │   │   └── runtimePaths.ts
 │   │   ├── services/
+│   │   │   ├── llamaServerManager.ts
 │   │   │   ├── llmBackendManager.ts
 │   │   │   ├── localServerManager.ts
 │   │   │   ├── pythonServerManager.ts
@@ -655,6 +656,7 @@ vassist/
 │   │   ├── FrameCaptureService.ts
 │   │   ├── LanguageDetectorService.ts
 │   │   ├── LLMModelStorageService.ts
+│   │   ├── LocalLlmClientFactory.ts
 │   │   ├── Logger.ts
 │   │   ├── LoggerService.ts
 │   │   ├── MediaExtractionService.ts

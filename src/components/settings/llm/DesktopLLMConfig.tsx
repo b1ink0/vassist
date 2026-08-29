@@ -3,6 +3,7 @@ import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { isDesktop } from "../../../utils/PlatformUtils";
 import { Button, Select, Input } from "../../ui";
+import { cn } from "../../../utils/cn";
 import LocalLLMModelManager from "./LocalLLMModelManager";
 import {
   getLLMModelStorage,
@@ -19,6 +20,8 @@ interface DesktopLLMConfigShape {
   contextSize?: number;
   gpuLayers?: number;
   threads?: number;
+  llmEngine?: string;
+  llmBackend?: string;
 }
 
 interface BackendItem {
@@ -112,6 +115,39 @@ const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
+const LLAMA_RUNTIME_PACKS: Record<
+  string,
+  Array<{
+    id: string;
+    title: string;
+    size: string;
+    requiresLink?: { label: string; url: string };
+  }>
+> = {
+  "win-x64": [
+    { id: "cpu", title: "CPU", size: "~18 MB" },
+    { id: "vulkan", title: "Vulkan (any GPU)", size: "~34 MB" },
+    { id: "cuda", title: "NVIDIA CUDA 12.4", size: "~640 MB incl. runtime" },
+    {
+      id: "rocm",
+      title: "AMD ROCm 7.14",
+      size: "~196 MB",
+      requiresLink: {
+        label: "ROCm 7.14 setup guide",
+        url: "https://github.com/ggml-org/llama.cpp/discussions/27047",
+      },
+    },
+  ],
+  "linux-x64": [
+    { id: "cpu", title: "CPU", size: "~16 MB" },
+    { id: "vulkan", title: "Vulkan (any GPU)", size: "~33 MB" },
+    { id: "rocm", title: "AMD ROCm 7.14", size: "~213 MB" },
+  ],
+  "mac-arm64": [
+    { id: "metal", title: "Metal (Apple Silicon)", size: "~11 MB" },
+  ],
+};
+
 /**
  * Reusable Desktop LLM Configuration Component
  * Used in both setup wizard and settings panel for desktop-local LLM provider
@@ -142,6 +178,91 @@ const DesktopLLMConfig = ({
   const handleChange = (key: string, value: string | number | null) => {
     onChange({ [key]: value });
   };
+
+  const llamaServerApi = (
+    api as unknown as {
+      llamaServer?: {
+        getStatus?: () => Promise<{
+          installedBackends?: string[];
+          build?: string;
+          running?: boolean;
+          platformKey?: string;
+        }>;
+        install?: (backend: string) => Promise<unknown>;
+        onInstallLog?: (
+          cb: (log: { message?: string; type?: string }) => void,
+        ) => (() => void) | undefined;
+        onInstallProgress?: (
+          cb: (progress: { percent: number; status: string }) => void,
+        ) => (() => void) | undefined;
+        onInstallComplete?: (
+          cb: (result: { success?: boolean; error?: string }) => void,
+        ) => (() => void) | undefined;
+      };
+    }
+  ).llamaServer;
+  const [llamaStatus, setLlamaStatus] = useState<{
+    installedBackends?: string[];
+    build?: string;
+    running?: boolean;
+    platformKey?: string;
+  } | null>(null);
+  const [llamaInstalling, setLlamaInstalling] = useState<string | null>(null);
+  const [cppLlamaLogs, setCppLlamaLogs] = useState<string[]>([]);
+  const [llamaProgress, setLlamaProgress] = useState<{
+    percent: number;
+    status: string;
+  } | null>(null);
+  const fallbackPlatformKey = navigator.userAgent.includes("Mac")
+    ? "mac-arm64"
+    : navigator.userAgent.includes("Linux")
+      ? "linux-x64"
+      : "win-x64";
+  const platformKey = llamaStatus?.platformKey ?? fallbackPlatformKey;
+
+  useEffect(() => {
+    if (!llamaServerApi?.getStatus) return;
+    let cancelled = false;
+    const refresh = () =>
+      llamaServerApi
+        .getStatus?.()
+        .then((s) => {
+          if (!cancelled) setLlamaStatus(s);
+        })
+        .catch(() => {});
+    refresh();
+    const offLog = llamaServerApi.onInstallLog?.((log) => {
+      if (log?.message) {
+        setCppLlamaLogs((prev) => [...prev.slice(-30), String(log.message)]);
+      }
+    });
+    const offProg = llamaServerApi.onInstallProgress?.((progress) => {
+      if (progress && typeof progress === "object" && "percent" in progress) {
+        setLlamaProgress(progress as { percent: number; status: string });
+      }
+    });
+    const offDone = llamaServerApi.onInstallComplete?.((result) => {
+      setLlamaInstalling(null);
+      setLlamaProgress(null);
+      if (result?.success) refresh();
+    });
+    return () => {
+      cancelled = true;
+      offLog?.();
+      offProg?.();
+      offDone?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (refreshTrigger === undefined || !llamaServerApi?.getStatus) return;
+    llamaServerApi
+      .getStatus()
+      .then((s) => setLlamaStatus(s))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   const handleModelSelect = (modelName: string) => {
     handleChange("model", modelName);
@@ -398,98 +519,283 @@ const DesktopLLMConfig = ({
         )}
       </div>
 
-      {/* Backend Manager */}
+      {/* Inference Engine */}
       <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-white/90">
-              Runtime Backend
-            </h3>
-            <p className="text-[11px] text-white/60">
-              Choose and install llama.cpp compute backend
-            </p>
-          </div>
-          <button
-            onClick={loadBackendStatus}
-            className="text-xs text-white/70 hover:text-white/90"
-            type="button"
-          >
-            Refresh
-          </button>
-        </div>
-
+        <h3 className="text-sm font-semibold text-white/90">
+          Inference Engine
+        </h3>
         <Select
-          value={selectedBackend}
-          onChange={(e) => handleChange("backend", e.target.value)}
+          data-testid="desktop-llm-engine-select"
+          value={config.llmEngine || "node-llama"}
+          onChange={(e) => handleChange("llmEngine", e.target.value)}
           variant={isLightBackground ? "dark" : "default"}
-          options={
-            backendItems.length > 0
-              ? backendItems.map((item) => ({
-                  value: item.name,
-                  label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
-                  disabled: !item.supported,
-                }))
-              : [
-                  { value: "auto", label: "AUTO" },
-                  { value: "cpu", label: "CPU" },
-                  { value: "cuda", label: "CUDA" },
-                  { value: "vulkan", label: "VULKAN" },
-                  { value: "metal", label: "METAL" },
-                ]
-          }
+          options={[
+            {
+              value: "llama-server",
+              label: "llama-server (recommended)",
+            },
+            { value: "node-llama", label: "node-llama-cpp" },
+          ]}
         />
 
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] text-white/60">
-            {backendStatus?.selectedInstalled
-              ? `Selected backend (${selectedBackend}) is installed`
-              : `Selected backend (${selectedBackend}) is not installed`}
-          </p>
-          <Button
-            onClick={installSelectedBackend}
-            disabled={backendLoading || selectedBackend === "auto"}
-            variant={isLightBackground ? "dark" : "default"}
-            size="sm"
-            type="button"
-          >
-            {backendLoading
-              ? "Installing..."
-              : backendStatus?.selectedInstalled
-                ? "Reinstall"
-                : "Install"}
-          </Button>
-        </div>
-
-        {backendProgress && (
+        {config.llmEngine === "llama-server" && (
           <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-white/70">{backendProgress.status}</span>
-              <span className="text-white/70">
-                {Math.round(backendProgress.percent || 0)}%
-              </span>
-            </div>
-            {backendProgressBytes && (
-              <div className="text-xs text-white/70">
-                {backendProgressBytes.totalMB
-                  ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
-                  : `${backendProgressBytes.downloadedMB}MB downloaded`}
-              </div>
-            )}
-            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
-                style={{
-                  width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
-                }}
-              />
+            <label className="block text-xs font-medium text-white/90 mb-1">
+              llama.cpp Runtime Backend ({llamaStatus?.build ?? "pin pending"})
+            </label>
+            <Select
+              data-testid="desktop-llama-backend-select"
+              value={config.llmBackend || "auto"}
+              onChange={(e) => handleChange("llmBackend", e.target.value)}
+              variant={isLightBackground ? "dark" : "default"}
+              options={[
+                { value: "auto", label: "Auto" },
+                ...(["cpu", "vulkan", "cuda", "rocm"] as const)
+                  .filter(
+                    (b) =>
+                      !(
+                        (b === "cuda" && platformKey !== "win-x64") ||
+                        platformKey === "mac-arm64"
+                      ),
+                  )
+                  .map((b) => ({
+                    value: b,
+                    label:
+                      b === "cpu"
+                        ? "CPU (~18 MB)"
+                        : b === "vulkan"
+                          ? platformKey === "win-x64"
+                            ? "Vulkan, any GPU (~34 MB)"
+                            : "Vulkan (~33 MB)"
+                          : b === "cuda"
+                            ? "NVIDIA CUDA 12.4 (~640 MB incl. runtime)"
+                            : "AMD ROCm (~196 MB, requires HIP SDK)",
+                  })),
+                ...(platformKey === "mac-arm64"
+                  ? [{ value: "metal", label: "Metal, Apple Silicon" }]
+                  : []),
+              ]}
+            />
+
+            {/* Runtime pack cards — downloader style, one per backend */}
+            <div className="space-y-2">
+              {(LLAMA_RUNTIME_PACKS[platformKey] ?? []).map((pack) => {
+                const installed = (
+                  llamaStatus?.installedBackends ?? []
+                ).includes(pack.id);
+                const isActive =
+                  installed && (config.llmBackend || "cpu") === pack.id;
+                const installingThis = llamaInstalling === pack.id;
+                return (
+                  <div
+                    key={pack.id}
+                    className={cn(
+                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
+                      installingThis ? "border-white/30" : "border-white/10",
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-white/90 truncate">
+                          {pack.title}
+                        </span>
+                        {isActive && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {installingThis ? (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/70">
+                            {llamaProgress?.status || "Downloading..."}
+                          </span>
+                          <span className="text-white/70">
+                            {llamaProgress?.percent != null
+                              ? `${Math.round(llamaProgress.percent)}%`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white/40 transition-all duration-300"
+                            style={{
+                              width: `${llamaProgress?.percent ?? 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-white/50 truncate">
+                          {installed ? "Installed" : `Download ${pack.size}`}
+                        </span>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {installed ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onRequestDeleteModel?.(
+                                  `llama-backend:${pack.id}`,
+                                )
+                              }
+                              disabled={!onRequestDeleteModel}
+                              data-testid={`llama-backend-delete-${pack.id}`}
+                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
+                            >
+                              <Icon name="trash" size={11} />
+                              <span>Delete</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLlamaInstalling(pack.id);
+                                setCppLlamaLogs([]);
+                                void llamaServerApi?.install?.(pack.id);
+                              }}
+                              data-testid={`llama-backend-download-${pack.id}`}
+                              className="px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 bg-white/10 hover:bg-white/20 text-white/90"
+                            >
+                              <Icon name="download" size={11} />
+                              <span>Download</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {pack.requiresLink && (
+                      <a
+                        href={pack.requiresLink.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className={cn(
+                          "inline-block mt-1.5 text-[11px] underline opacity-75 hover:opacity-100",
+                          isLightBackground ? "text-black/70" : "glass-text",
+                        )}
+                      >
+                        {pack.requiresLink.label}
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+              {(cppLlamaLogs.length > 0 || llamaProgress) && (
+                <div className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap">
+                  {(llamaProgress
+                    ? [
+                        `[progress] ${llamaProgress.status} ${Math.round(llamaProgress.percent ?? 0)}%`,
+                      ]
+                    : []
+                  )
+                    .concat(cppLlamaLogs.slice(-8))
+                    .map((line, index) => (
+                      <div key={`${index}-${line.slice(0, 10)}`}>{line}</div>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         )}
-
-        {backendError && (
-          <p className="text-[11px] text-red-300">{backendError}</p>
-        )}
       </div>
+
+      {/* Backend Manager (node-llama-cpp engine only) */}
+      {config.llmEngine !== "llama-server" && (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-white/90">
+                Runtime Backend
+              </h3>
+              <p className="text-[11px] text-white/60">
+                Choose and install llama.cpp compute backend
+              </p>
+            </div>
+            <button
+              onClick={loadBackendStatus}
+              className="text-xs text-white/70 hover:text-white/90"
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <Select
+            value={selectedBackend}
+            onChange={(e) => handleChange("backend", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            options={
+              backendItems.length > 0
+                ? backendItems.map((item) => ({
+                    value: item.name,
+                    label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
+                    disabled: !item.supported,
+                  }))
+                : [
+                    { value: "auto", label: "AUTO" },
+                    { value: "cpu", label: "CPU" },
+                    { value: "cuda", label: "CUDA" },
+                    { value: "vulkan", label: "VULKAN" },
+                    { value: "metal", label: "METAL" },
+                  ]
+            }
+          />
+
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-white/60">
+              {backendStatus?.selectedInstalled
+                ? `Selected backend (${selectedBackend}) is installed`
+                : `Selected backend (${selectedBackend}) is not installed`}
+            </p>
+            <Button
+              onClick={installSelectedBackend}
+              disabled={backendLoading || selectedBackend === "auto"}
+              variant={isLightBackground ? "dark" : "default"}
+              size="sm"
+              type="button"
+            >
+              {backendLoading
+                ? "Installing..."
+                : backendStatus?.selectedInstalled
+                  ? "Reinstall"
+                  : "Install"}
+            </Button>
+          </div>
+
+          {backendProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-white/70">{backendProgress.status}</span>
+                <span className="text-white/70">
+                  {Math.round(backendProgress.percent || 0)}%
+                </span>
+              </div>
+              {backendProgressBytes && (
+                <div className="text-xs text-white/70">
+                  {backendProgressBytes.totalMB
+                    ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
+                    : `${backendProgressBytes.downloadedMB}MB downloaded`}
+                </div>
+              )}
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {backendError && (
+            <p className="text-[11px] text-red-300">{backendError}</p>
+          )}
+        </div>
+      )}
 
       {/* Advanced Config */}
       <details className="group" open={isSetupMode}>
