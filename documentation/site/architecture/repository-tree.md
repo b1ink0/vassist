@@ -5,29 +5,29 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 171
-- Files: 591
-- Text files counted for metrics: 504
-- Total text lines: 157555
-- Code files counted for metrics: 402
-- Total code lines: 141985
+- Files: 592
+- Text files counted for metrics: 505
+- Total text lines: 158255
+- Code files counted for metrics: 403
+- Total code lines: 142668
 
 ## Line Counts by File Type
 
 | File Type    | Extensions              | Files | Lines |
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1469 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1477 |
 | CSS          | .css, .scss, .less      |     7 |  2115 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   103 | 50933 |
-| TypeScript   | .ts, .mts, .cts         |   251 | 75326 |
+| TSX          | .tsx                    |   103 | 51037 |
+| TypeScript   | .ts, .mts, .cts         |   252 | 75897 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   573 |
 | Markdown     | .md                     |    35 |  6093 |
-| Other Text   | mixed                   |    14 |  3509 |
+| Other Text   | mixed                   |    14 |  3526 |
 | Plain Text   | (no extension)          |    11 |  4015 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
@@ -44,7 +44,7 @@ VAssist repository tree and file metrics.
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 247 files
+- src/: 49 directories, 248 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -591,6 +591,7 @@ vassist/
 │   │   ├── animationConfig.ts
 │   │   ├── promptConfig.ts
 │   │   ├── sceneConfig.ts
+│   │   ├── serviceEndpoints.ts
 │   │   └── uiConfig.ts
 │   ├── contexts/
 │   │   ├── AnimationContext.tsx

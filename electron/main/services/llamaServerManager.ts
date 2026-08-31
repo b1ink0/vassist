@@ -21,6 +21,15 @@ import type * as fs from "fs";
 import type * as path from "path";
 import * as tar from "tar";
 import unzipper from "unzipper";
+import {
+  DEFAULT_SERVICE_PORTS,
+  EXTERNAL_SERVICE_ENDPOINTS,
+  LOOPBACK_HOST,
+  SERVICE_ROUTES,
+  endpointForPort,
+  isValidPort,
+  joinEndpointPath,
+} from "../../../src/config/serviceEndpoints";
 
 /**
  * Qualified llama.cpp runtime pin. To upgrade: pick a new upstream tag,
@@ -69,7 +78,6 @@ const RUNTIME_MANIFEST = {
   } as Record<string, string>,
 };
 
-const LLAMA_PORT = 11439;
 const ACTIVE_MODEL_ID = "vassist-active";
 const IDLE_SLEEP_SECONDS = 5 * 60;
 const PROCESS_EXIT_TIMEOUT_MS = 10_000;
@@ -118,6 +126,7 @@ export function createLlamaServerManager({
   let runningSignature: string | null = null;
   let currentModelId: string | null = null;
   let activeRequests = 0;
+  let llamaPort = DEFAULT_SERVICE_PORTS.llamaServer;
   let installing = false;
   let lifecycleQueue: Promise<void> = Promise.resolve();
   const requestDrainWaiters = new Set<() => void>();
@@ -314,7 +323,10 @@ export function createLlamaServerManager({
         const template: string | undefined = target[i];
         if (!template) continue;
         const filename = template.replace(/\{b\}/g, b);
-        const url = `https://github.com/ggml-org/llama.cpp/releases/download/${b}/${filename}`;
+        const url = joinEndpointPath(
+          EXTERNAL_SERVICE_ENDPOINTS.github,
+          `/ggml-org/llama.cpp/releases/download/${b}/${filename}`,
+        );
         sendLog(`[LlamaServer] Downloading ${filename}...`);
 
         const archivePath = path.join(
@@ -415,9 +427,12 @@ export function createLlamaServerManager({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`http://127.0.0.1:${LLAMA_PORT}/health`, {
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        joinEndpointPath(endpointForPort(llamaPort), SERVICE_ROUTES.health),
+        {
+          signal: controller.signal,
+        },
+      );
       return res.status === 200;
     } catch {
       return false;
@@ -434,10 +449,13 @@ export function createLlamaServerManager({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`http://127.0.0.1:${LLAMA_PORT}${route}`, {
-        ...init,
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        joinEndpointPath(endpointForPort(llamaPort), route),
+        {
+          ...init,
+          signal: controller.signal,
+        },
+      );
       const text = await response.text();
       if (!response.ok) {
         throw new Error(
@@ -451,7 +469,7 @@ export function createLlamaServerManager({
   }
 
   async function loadModel(modelId: string): Promise<void> {
-    await serverJson("/models/load", {
+    await serverJson(SERVICE_ROUTES.llamaServer.loadModel, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: modelId }),
@@ -459,7 +477,7 @@ export function createLlamaServerManager({
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < 300_000) {
-      const payload = (await serverJson("/models")) as {
+      const payload = (await serverJson(SERVICE_ROUTES.llamaServer.models)) as {
         data?: Array<{
           id?: string;
           status?: { value?: string; failed?: boolean; exit_code?: number };
@@ -483,7 +501,7 @@ export function createLlamaServerManager({
     if (!modelId || !(await isHealthy())) return;
     try {
       await serverJson(
-        "/models/unload",
+        SERVICE_ROUTES.llamaServer.unloadModel,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -836,9 +854,9 @@ export function createLlamaServerManager({
     const presetPath = writeActiveModelPreset(req);
     const args = [
       "--host",
-      "127.0.0.1",
+      LOOPBACK_HOST,
       "--port",
-      String(LLAMA_PORT),
+      String(llamaPort),
       "--ctx-size",
       String(req.ctxSize ?? 4096),
       "--sleep-idle-seconds",
@@ -896,7 +914,7 @@ export function createLlamaServerManager({
           throw error;
         }
         console.log(
-          `[LlamaServer] Ready on :${LLAMA_PORT} backend=${backend} model=${req.modelPath}`,
+          `[LlamaServer] Ready on :${llamaPort} backend=${backend} model=${req.modelPath}`,
         );
         activeRequests += 1;
         return ACTIVE_MODEL_ID;
@@ -944,12 +962,21 @@ export function createLlamaServerManager({
         ),
       running: Boolean(currentProcess),
       runningModel: runningSignature,
-      port: LLAMA_PORT,
+      port: llamaPort,
       installing,
     };
   }
 
   return {
+    setPort: async (port: number) => {
+      if (!isValidPort(port)) throw new Error("Invalid llama-server port");
+      await enqueueLifecycle(async () => {
+        if (llamaPort === port) return;
+        await stopLocked("port changed");
+        llamaPort = port;
+      });
+    },
+    getEndpoint: () => endpointForPort(llamaPort),
     ensureForRequest,
     installBackend,
     deleteBackend,

@@ -1,6 +1,6 @@
 /**
  * Local AI HTTP Server
- * OpenAI-compatible endpoints on http://127.0.0.1:11438
+ * OpenAI-compatible endpoints on the configured desktop gateway.
  *
  * Endpoints:
  *   POST /v1/chat/completions - LLM chat (streaming supported)
@@ -19,6 +19,14 @@ import multer from "multer";
 import type { Express, NextFunction, Request, Response } from "express";
 import type { Server } from "http";
 import type { Multer } from "multer";
+import {
+  DEFAULT_SERVICE_PORTS,
+  LOOPBACK_HOST,
+  SERVICE_ROUTES,
+  buildHttpEndpoint,
+  endpointForPort,
+  joinEndpointPath,
+} from "../../src/config/serviceEndpoints";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,10 +44,12 @@ type ServerConfig = {
     maxTokens: number;
     contextSize: number;
     gpuLayers: number | "auto";
+    llamaServerUrl?: string;
   };
   stt: {
     modelPath?: string | null;
     proxyUrl: string;
+    whisperCppUrl?: string;
     model?: string;
     language?: string;
     engine?: "python" | "whispercpp";
@@ -111,6 +121,7 @@ type LocalAIServerDeps = {
       backend?: string;
     }) => Promise<string>;
     markRequestComplete: () => void;
+    getEndpoint?: () => string;
   } | null;
 };
 
@@ -316,6 +327,7 @@ export class LocalAIServer {
       backend?: string;
     }) => Promise<string>;
     markRequestComplete: () => void;
+    getEndpoint?: () => string;
   } | null;
   onSTTRequestComplete: (() => void) | null;
   onTTSRequestStart: (() => void) | null;
@@ -349,8 +361,8 @@ export class LocalAIServer {
         : null;
     this.app = express();
     this.server = null;
-    this.port = 11438;
-    this.host = "127.0.0.1";
+    this.port = DEFAULT_SERVICE_PORTS.server;
+    this.host = LOOPBACK_HOST;
 
     // AI instances
     this.llama = null;
@@ -412,17 +424,19 @@ export class LocalAIServer {
         maxTokens: 2048,
         contextSize: 4096,
         gpuLayers: "auto",
+        llamaServerUrl: endpointForPort(DEFAULT_SERVICE_PORTS.llamaServer),
       },
       stt: {
-        proxyUrl: "http://127.0.0.1:9881",
+        proxyUrl: endpointForPort(DEFAULT_SERVICE_PORTS.fasterWhisper),
       },
       tts: {
-        proxyUrl: "http://127.0.0.1:9880",
+        proxyUrl: endpointForPort(DEFAULT_SERVICE_PORTS.gptSovits),
+        supertonicUrl: endpointForPort(DEFAULT_SERVICE_PORTS.supertonic),
         enabled: false,
       },
       server: {
         shareOnNetwork: false,
-        host: "127.0.0.1",
+        host: LOOPBACK_HOST,
       },
     };
 
@@ -458,7 +472,7 @@ export class LocalAIServer {
   }
 
   setupRoutes() {
-    this.app.get("/health", (_req: Request, res: Response) => {
+    this.app.get(SERVICE_ROUTES.health, (_req: Request, res: Response) => {
       res.json({
         status: "ok",
         llm: this.llamaModel !== null,
@@ -468,7 +482,7 @@ export class LocalAIServer {
     });
 
     this.app.post(
-      "/v1/chat/completions",
+      SERVICE_ROUTES.openai.chatCompletions,
       async (req: Request, res: Response) => {
         try {
           await this.handleChatCompletion(req, res);
@@ -480,7 +494,7 @@ export class LocalAIServer {
     );
 
     this.app.post(
-      "/v1/audio/transcriptions",
+      SERVICE_ROUTES.openai.audioTranscriptions,
       this.upload.single("file"),
       async (req: Request, res: Response) => {
         try {
@@ -492,27 +506,33 @@ export class LocalAIServer {
       },
     );
 
-    this.app.post("/v1/audio/speech", async (req: Request, res: Response) => {
-      try {
-        await this.handleTextToSpeech(req, res);
-      } catch (error) {
-        console.error("[TTS] Error:", error);
-        res.status(500).json({ error: getErrorMessage(error) });
-      }
-    });
+    this.app.post(
+      SERVICE_ROUTES.openai.audioSpeech,
+      async (req: Request, res: Response) => {
+        try {
+          await this.handleTextToSpeech(req, res);
+        } catch (error) {
+          console.error("[TTS] Error:", error);
+          res.status(500).json({ error: getErrorMessage(error) });
+        }
+      },
+    );
 
-    this.app.get("/v1/models", (_req: Request, res: Response) => {
-      const models = this.listAvailableLlmModels();
-      res.json({
-        object: "list",
-        data: models.map((modelId) => ({
-          id: modelId,
-          object: "model",
-          created: Date.now(),
-          owned_by: "local",
-        })),
-      });
-    });
+    this.app.get(
+      SERVICE_ROUTES.openai.models,
+      (_req: Request, res: Response) => {
+        const models = this.listAvailableLlmModels();
+        res.json({
+          object: "list",
+          data: models.map((modelId) => ({
+            id: modelId,
+            object: "model",
+            created: Date.now(),
+            owned_by: "local",
+          })),
+        });
+      },
+    );
   }
 
   listAvailableLlmModels(): string[] {
@@ -873,7 +893,9 @@ export class LocalAIServer {
     res: Response,
     requestedVariant?: string,
   ) {
-    const whisperCppUrl = "http://127.0.0.1:9883";
+    const whisperCppUrl =
+      this.config.stt?.whisperCppUrl ||
+      endpointForPort(DEFAULT_SERVICE_PORTS.whisperCpp);
     const forwardOnce = async () => {
       if (!req.file || !req.file.buffer) {
         return res.status(400).json({ error: "No audio file provided" });
@@ -919,7 +941,7 @@ export class LocalAIServer {
       formData.append("beam_size", "-1");
 
       const response = await axios.post(
-        `${whisperCppUrl}/inference`,
+        joinEndpointPath(whisperCppUrl, SERVICE_ROUTES.whisperCppInference),
         formData,
         {
           headers: formData.getHeaders(),
@@ -1025,8 +1047,15 @@ export class LocalAIServer {
       const controller = new AbortController();
       req.on("close", () => controller.abort());
 
+      const llamaServerEndpoint =
+        this.llamaProxy.getEndpoint?.() ||
+        this.config.llm.llamaServerUrl ||
+        endpointForPort(DEFAULT_SERVICE_PORTS.llamaServer);
       const upstream = await fetch(
-        `http://127.0.0.1:11439/v1/chat/completions`,
+        joinEndpointPath(
+          llamaServerEndpoint,
+          SERVICE_ROUTES.openai.chatCompletions,
+        ),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1137,7 +1166,10 @@ export class LocalAIServer {
       }
 
       const response = await axios.post(
-        `${this.config.stt.proxyUrl}/v1/audio/transcriptions`,
+        joinEndpointPath(
+          this.config.stt.proxyUrl,
+          SERVICE_ROUTES.openai.audioTranscriptions,
+        ),
         formData,
         {
           headers: formData.getHeaders(),
@@ -1176,7 +1208,8 @@ export class LocalAIServer {
     },
   ) {
     const supertonicUrl =
-      this.config.tts?.supertonicUrl || "http://127.0.0.1:9882";
+      this.config.tts?.supertonicUrl ||
+      endpointForPort(DEFAULT_SERVICE_PORTS.supertonic);
 
     const forward = async () => {
       if (this.ensureSupertonicRunning) {
@@ -1191,7 +1224,7 @@ export class LocalAIServer {
       });
 
       const response = await axios.post(
-        `${supertonicUrl}/v1/tts`,
+        joinEndpointPath(supertonicUrl, SERVICE_ROUTES.supertonicSpeech),
         {
           text: params.input,
           voice: params.voice,
@@ -1300,7 +1333,10 @@ export class LocalAIServer {
 
       const forwardRequest = async () => {
         const response = await axios.post(
-          `${this.config.tts.proxyUrl}/tts`,
+          joinEndpointPath(
+            this.config.tts.proxyUrl,
+            SERVICE_ROUTES.gptSovitsSpeech,
+          ),
           requestBody,
           {
             headers: { "Content-Type": "application/json" },
@@ -1387,11 +1423,11 @@ export class LocalAIServer {
     ) {
       this.port = configuredPort;
     } else {
-      this.port = 11438;
+      this.port = DEFAULT_SERVICE_PORTS.server;
     }
     this.host = this.config.server?.shareOnNetwork
       ? "0.0.0.0"
-      : this.config.server?.host || "127.0.0.1";
+      : this.config.server?.host || LOOPBACK_HOST;
 
     console.log(
       "[Server] Final this.config:",
@@ -1714,22 +1750,22 @@ export class LocalAIServer {
   _getAccessibleUrls() {
     const urls = [];
     if (this.host === "0.0.0.0") {
-      urls.push(`http://127.0.0.1:${this.port}`);
+      urls.push(endpointForPort(this.port));
       const nets = os.networkInterfaces();
       for (const ifName of Object.keys(nets)) {
         for (const net of nets[ifName] || []) {
           if (net && net.family === "IPv4" && !net.internal) {
-            urls.push(`http://${net.address}:${this.port}`);
+            urls.push(buildHttpEndpoint(net.address, this.port));
           }
         }
       }
       return Array.from(new Set(urls));
     }
 
-    if (this.host === "127.0.0.1" || this.host === "localhost") {
-      return [`http://127.0.0.1:${this.port}`];
+    if (this.host === LOOPBACK_HOST || this.host === "localhost") {
+      return [endpointForPort(this.port)];
     }
 
-    return [`http://${this.host}:${this.port}`];
+    return [buildHttpEndpoint(this.host, this.port)];
   }
 }

@@ -8,6 +8,14 @@ import type * as pathType from "path";
 import GPTSoVITSSetupRunner from "../../server/gpt-sovits/setup-runner";
 import WhisperSetupRunnerClass from "../../server/whisper-stt/setup-runner";
 import SupertonicSetupRunnerClass from "../../server/supertonic/setup-runner";
+import {
+  DEFAULT_SERVICE_PORTS,
+  LOOPBACK_HOST,
+  SERVICE_ROUTES,
+  endpointForPort,
+  isValidPort,
+  joinEndpointPath,
+} from "../../../src/config/serviceEndpoints";
 
 type SetupLog = Record<string, unknown>;
 
@@ -56,6 +64,9 @@ export function createPythonServerManager({
   getGPTSoVITSDataDir,
 }: PythonServerManagerDeps) {
   let gptsovitsProcess: ChildProcessWithoutNullStreams | null = null;
+  let gptSovitsPort = DEFAULT_SERVICE_PORTS.gptSovits;
+  let fasterWhisperPort = DEFAULT_SERVICE_PORTS.fasterWhisper;
+  let supertonicPort = DEFAULT_SERVICE_PORTS.supertonic;
   let supertonicProcess: ChildProcessWithoutNullStreams | null = null;
   let supertonicAdoptedPid: number | null = null;
   let supertonicStartupPromise: Promise<void> | null = null;
@@ -214,9 +225,10 @@ export function createPythonServerManager({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch("http://127.0.0.1:9880/health", {
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        joinEndpointPath(endpointForPort(gptSovitsPort), SERVICE_ROUTES.health),
+        { signal: controller.signal },
+      );
       if (!response.ok) {
         return { healthy: false, pid: null };
       }
@@ -422,7 +434,7 @@ export function createPythonServerManager({
         cwd: gptsovitsDataDir,
         env: {
           ...processEnv,
-          GPTSOVITS_PORT: "9880",
+          GPTSOVITS_PORT: String(gptSovitsPort),
           PYTHONUNBUFFERED: "1",
           GPTSOVITS_DATA_DIR: gptsovitsDataDir,
           GPTSOVITS_TORCH_BACKEND: currentGPTSoVITSTorchBackend,
@@ -479,7 +491,9 @@ export function createPythonServerManager({
       );
 
       await waitForGPTSoVITSReady(spawnedProcess);
-      console.log("[GPT-SoVITS] Server ready on http://127.0.0.1:9880");
+      console.log(
+        `[GPT-SoVITS] Server ready on ${endpointForPort(gptSovitsPort)}`,
+      );
     } catch (error) {
       console.error("[GPT-SoVITS] Start error:", error);
       throw error;
@@ -591,16 +605,14 @@ export function createPythonServerManager({
     await gptsovitsRestartPromise;
   }
 
-  const SUPERTONIC_PORT = 9882;
-
   async function getSupertonicHealth(timeoutMs = 2500) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      for (const path of ["/health", "/docs"]) {
+      for (const path of [SERVICE_ROUTES.health, SERVICE_ROUTES.docs]) {
         try {
           const response = await fetch(
-            `http://127.0.0.1:${SUPERTONIC_PORT}${path}`,
+            `${endpointForPort(supertonicPort)}${path}`,
             { signal: controller.signal },
           );
           if (response.ok) {
@@ -678,7 +690,7 @@ export function createPythonServerManager({
         : path.join(gptsovitsDataDir, "python", "bin", "supertonic");
     const useScriptExe = fs.existsSync(scriptExe);
 
-    console.log("[Supertonic] Starting TTS server on port", SUPERTONIC_PORT);
+    console.log("[Supertonic] Starting TTS server on port", supertonicPort);
     console.log(
       "[Supertonic] Launcher:",
       useScriptExe ? scriptExe : `${pythonExe} -m supertonic`,
@@ -687,9 +699,9 @@ export function createPythonServerManager({
     const serveArgs = [
       "serve",
       "--host",
-      "127.0.0.1",
+      LOOPBACK_HOST,
       "--port",
-      String(SUPERTONIC_PORT),
+      String(supertonicPort),
     ];
     const spawnedProcess = useScriptExe
       ? spawn(scriptExe, serveArgs, {})
@@ -722,7 +734,7 @@ export function createPythonServerManager({
 
     await waitForSupertonicReady(spawnedProcess);
     console.log(
-      `[Supertonic] Server ready on http://127.0.0.1:${SUPERTONIC_PORT}`,
+      `[Supertonic] Server ready on ${endpointForPort(supertonicPort)}`,
     );
   }
 
@@ -832,6 +844,7 @@ export function createPythonServerManager({
           ...processEnv,
           PYTHONUNBUFFERED: "1",
           PYTHONIOENCODING: "utf-8",
+          WHISPER_PORT: String(fasterWhisperPort),
           WHISPER_MODEL_DIR: whisperModelsDir,
           // ROCm ships libiomp5md.dll; faster-whisper ships libomp140. Allow both to coexist.
           KMP_DUPLICATE_LIB_OK: "TRUE",
@@ -861,7 +874,9 @@ export function createPythonServerManager({
         },
       );
 
-      console.log("[Whisper] Server started on http://127.0.0.1:9881");
+      console.log(
+        `[Whisper] Server started on ${endpointForPort(fasterWhisperPort)}`,
+      );
     } catch (error) {
       console.error("[Whisper] Start error:", error);
     }
@@ -872,6 +887,14 @@ export function createPythonServerManager({
       console.log("[Whisper] Stopping server...");
       whisperProcess.kill("SIGTERM");
       whisperProcess = null;
+    }
+  }
+
+  async function stopWhisperServerAndWait() {
+    const processToStop = whisperProcess;
+    stopWhisperServer();
+    if (processToStop) {
+      await waitForProcessExit(processToStop, null, 5000);
     }
   }
 
@@ -886,9 +909,15 @@ export function createPythonServerManager({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch("http://127.0.0.1:9881/health", {
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        joinEndpointPath(
+          endpointForPort(fasterWhisperPort),
+          SERVICE_ROUTES.health,
+        ),
+        {
+          signal: controller.signal,
+        },
+      );
       const data = (await response.json().catch(() => null)) as {
         status?: string;
       } | null;
@@ -950,7 +979,9 @@ export function createPythonServerManager({
           throw new Error("Python STT server exited during startup");
         }
         if (await getWhisperHealth()) {
-          console.log("[Whisper] Server ready on http://127.0.0.1:9881");
+          console.log(
+            `[Whisper] Server ready on ${endpointForPort(fasterWhisperPort)}`,
+          );
           return;
         }
         await delay(500);
@@ -967,6 +998,26 @@ export function createPythonServerManager({
       .trim()
       .toLowerCase();
     process.env.GPTSOVITS_TORCH_BACKEND = currentGPTSoVITSTorchBackend;
+  }
+
+  async function setPorts(ports: {
+    gptSovits?: number;
+    fasterWhisper?: number;
+    supertonic?: number;
+  }) {
+    const nextGpt = ports.gptSovits ?? gptSovitsPort;
+    const nextWhisper = ports.fasterWhisper ?? fasterWhisperPort;
+    const nextSupertonic = ports.supertonic ?? supertonicPort;
+    if (![nextGpt, nextWhisper, nextSupertonic].every(isValidPort)) {
+      throw new Error("Invalid Python service port");
+    }
+    if (nextGpt !== gptSovitsPort) await stopGPTSoVITSServer("port changed");
+    if (nextWhisper !== fasterWhisperPort) await stopWhisperServerAndWait();
+    if (nextSupertonic !== supertonicPort)
+      await stopSupertonicServer("port changed");
+    gptSovitsPort = nextGpt;
+    fasterWhisperPort = nextWhisper;
+    supertonicPort = nextSupertonic;
   }
 
   function registerSetupIPCHandlers(
@@ -1359,6 +1410,7 @@ export function createPythonServerManager({
     restartGPTSoVITSServer,
     stopGPTSoVITSServer,
     setGPTSoVITSTorchBackend,
+    setPorts,
     startWhisperServer,
     markGPTSoVITSTTSRequestStart,
     markGPTSoVITSTTSRequestComplete,

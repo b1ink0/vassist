@@ -2,6 +2,53 @@ import type { App, IpcMain, IpcMainInvokeEvent } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
 import type { IncomingMessage } from "http";
+import {
+  EXTERNAL_SERVICE_ENDPOINTS,
+  joinEndpointPath,
+} from "../../../src/config/serviceEndpoints";
+
+const MODEL_SOURCE_URLS = {
+  ollamaLibrary: (modelId?: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.ollamaCatalog,
+      modelId ? `/library/${encodeURIComponent(modelId)}` : "/library",
+    ),
+  huggingFaceSearch: (query: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.huggingFace,
+      `/api/models?${query}`,
+    ),
+  huggingFaceModel: (repoId: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.huggingFace,
+      `/api/models/${encodeRepoId(repoId)}`,
+    ),
+  huggingFaceTree: (repoId: string, revision: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.huggingFace,
+      `/api/models/${encodeRepoId(repoId)}/tree/${encodeURIComponent(revision)}`,
+    ),
+  huggingFaceResolve: (
+    repoId: string,
+    revision: string,
+    filePath: string,
+    download = false,
+  ) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.huggingFace,
+      `/${encodeRepoId(repoId)}/resolve/${encodeURIComponent(revision)}/${encodePathSegments(filePath)}${download ? "?download=true" : ""}`,
+    ),
+  ollamaManifest: (namespace: string, tag: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.ollamaRegistry,
+      `/v2/${namespace}/manifests/${tag}`,
+    ),
+  ollamaBlob: (namespace: string, digest: string) =>
+    joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.ollamaRegistry,
+      `/v2/${namespace}/blobs/${digest}`,
+    ),
+} as const;
 
 type ModelDirDeps = {
   app: App;
@@ -203,7 +250,7 @@ export function registerLLMHandlers({
     "llm:search-ollama-models",
     async (_event: IpcMainInvokeEvent, query = "", page = 1, pageSize = 20) => {
       try {
-        const html = await fetchText("https://ollama.com/library");
+        const html = await fetchText(MODEL_SOURCE_URLS.ollamaLibrary());
         const matches = [...html.matchAll(/\/library\/([a-z0-9._-]+)/gi)];
         const seen = new Set<string>();
         const filtered = matches
@@ -264,7 +311,7 @@ export function registerLLMHandlers({
         }
 
         const html = await fetchText(
-          `https://ollama.com/library/${encodeURIComponent(normalizedModelId)}`,
+          MODEL_SOURCE_URLS.ollamaLibrary(normalizedModelId),
         );
         const tagPattern = new RegExp(
           `${escapeRegex(normalizedModelId)}:([a-z0-9._-]+)`,
@@ -341,7 +388,7 @@ export function registerLLMHandlers({
         }
 
         const response = await fetch(
-          `https://huggingface.co/api/models?${params.toString()}`,
+          MODEL_SOURCE_URLS.huggingFaceSearch(params.toString()),
           {
             headers: {
               "User-Agent": "VAssist/1.0",
@@ -431,7 +478,7 @@ export function registerLLMHandlers({
         }
 
         const response = await fetch(
-          `https://huggingface.co/api/models/${encodeRepoId(normalizedRepoId)}`,
+          MODEL_SOURCE_URLS.huggingFaceModel(normalizedRepoId),
           {
             headers: {
               "User-Agent": "VAssist/1.0",
@@ -475,7 +522,12 @@ export function registerLLMHandlers({
           .map((filePath) => ({
             id: filePath,
             label: filePath.split("/").pop() || filePath,
-            value: `https://huggingface.co/${normalizedRepoId}/resolve/${revision}/${encodePathSegments(filePath)}?download=true`,
+            value: MODEL_SOURCE_URLS.huggingFaceResolve(
+              normalizedRepoId,
+              revision,
+              filePath,
+              true,
+            ),
             secondaryLabel: filePath,
             description: normalizedRepoId,
           }));
@@ -561,7 +613,7 @@ export function registerLLMHandlers({
           percent: 0,
         });
 
-        const manifestUrl = `https://registry.ollama.ai/v2/${namespace}/manifests/${tag}`;
+        const manifestUrl = MODEL_SOURCE_URLS.ollamaManifest(namespace, tag);
         const manifestRes = await fetch(manifestUrl, {
           headers: {
             Accept: "application/vnd.docker.distribution.manifest.v2+json",
@@ -727,7 +779,7 @@ export function registerLLMHandlers({
           const digest = layer.digest;
           const size = layer.size;
 
-          const blobUrl = `https://registry.ollama.ai/v2/${namespace}/blobs/${digest}`;
+          const blobUrl = MODEL_SOURCE_URLS.ollamaBlob(namespace, digest);
           const tempFileName = `${model.replace("/", "_")}-${tag}-model-${digest.replace("sha256:", "").substring(0, 12)}.tmp`;
           const tempFilePath = path.join(modelsDir, tempFileName);
 
@@ -758,7 +810,7 @@ export function registerLLMHandlers({
             const digest = layer.digest;
             const size = layer.size;
 
-            const blobUrl = `https://registry.ollama.ai/v2/${namespace}/blobs/${digest}`;
+            const blobUrl = MODEL_SOURCE_URLS.ollamaBlob(namespace, digest);
             const tempFileName = `${model.replace("/", "_")}-${tag}-mmproj-${digest.replace("sha256:", "").substring(0, 12)}.tmp`;
             const tempFilePath = path.join(modelsDir, tempFileName);
 
@@ -923,7 +975,7 @@ export function registerLLMHandlers({
           });
 
           try {
-            // Parse Hugging Face URL: https://huggingface.co/{org}/{repo}/resolve/{branch}/{file}
+            // Parse the standard Hugging Face resolve URL shape.
             const match = url.match(
               /huggingface\.co\/([^\/]+)\/([^\/]+)\/resolve\/([^\/]+)\//,
             );
@@ -937,7 +989,10 @@ export function registerLLMHandlers({
               }
 
               // Try to find mmproj in the same repo
-              const apiUrl = `https://huggingface.co/api/models/${org}/${repo}/tree/${branch}`;
+              const apiUrl = MODEL_SOURCE_URLS.huggingFaceTree(
+                `${org}/${repo}`,
+                branch,
+              );
               const apiRes = await fetch(apiUrl);
 
               if (apiRes.ok) {
@@ -949,14 +1004,22 @@ export function registerLLMHandlers({
                     /mmproj.*\.gguf$/i.test(f.path),
                 );
 
-                if (mmprojFile) {
+                if (typeof mmprojFile?.path === "string") {
                   mmprojFilename = `mmproj-${filename}`;
-                  mmprojUrl = `https://huggingface.co/${org}/${repo}/resolve/${branch}/${mmprojFile.path}`;
+                  mmprojUrl = MODEL_SOURCE_URLS.huggingFaceResolve(
+                    `${org}/${repo}`,
+                    branch,
+                    mmprojFile.path,
+                  );
                   console.log("[LLM] Found mmproj in repo:", mmprojFile.path);
                 } else {
                   // Fallback: try ggml-org/{model}-GGUF repo
                   const modelName = repo.replace(/-GGUF$/i, "");
-                  const fallbackApiUrl = `https://huggingface.co/api/models/ggml-org/${modelName}-GGUF/tree/main`;
+                  const fallbackRepoId = `ggml-org/${modelName}-GGUF`;
+                  const fallbackApiUrl = MODEL_SOURCE_URLS.huggingFaceTree(
+                    fallbackRepoId,
+                    "main",
+                  );
 
                   try {
                     const fallbackRes = await fetch(fallbackApiUrl);
@@ -969,9 +1032,13 @@ export function registerLLMHandlers({
                           /mmproj.*\.gguf$/i.test(f.path),
                       );
 
-                      if (fallbackMmproj) {
+                      if (typeof fallbackMmproj?.path === "string") {
                         mmprojFilename = `mmproj-${filename}`;
-                        mmprojUrl = `https://huggingface.co/ggml-org/${modelName}-GGUF/resolve/main/${fallbackMmproj.path}`;
+                        mmprojUrl = MODEL_SOURCE_URLS.huggingFaceResolve(
+                          fallbackRepoId,
+                          "main",
+                          fallbackMmproj.path,
+                        );
                         console.log(
                           "[LLM] Found mmproj in fallback repo:",
                           fallbackMmproj.path,

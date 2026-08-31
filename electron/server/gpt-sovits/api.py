@@ -1,7 +1,7 @@
 """
 GPT-SoVITS TTS API Server
 FastAPI server for zero-shot and fine-tuned voice synthesis
-Runs on http://127.0.0.1:9880
+Runs on the configured loopback port.
 """
 
 import os
@@ -35,6 +35,9 @@ import soundfile as sf
 import io
 import base64
 import tempfile
+
+LOOPBACK_HOST = "127.0.0.1"
+DEFAULT_GPTSOVITS_PORT = 9880
 
 # The embedded Python distribution uses an isolated sys.path and does not add
 # the directory containing this script automatically.
@@ -1393,13 +1396,13 @@ if __name__ == "__main__":
     import uvicorn
     
     # Get port from environment or default
-    port = int(os.getenv("GPTSOVITS_PORT", "9880"))
+    port = int(os.getenv("GPTSOVITS_PORT", str(DEFAULT_GPTSOVITS_PORT)))
     
-    logger.info(f"Starting server on http://127.0.0.1:{port}")
+    logger.info(f"Starting server on http://{LOOPBACK_HOST}:{port}")
     
     uvicorn.run(
         app,
-        host="127.0.0.1",
+        host=LOOPBACK_HOST,
         port=port,
         log_level="info",
         access_log=False

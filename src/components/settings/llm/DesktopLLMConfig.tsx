@@ -4,6 +4,7 @@ import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { isDesktop } from "../../../utils/PlatformUtils";
 import { Button, Select, Input } from "../../ui";
 import { cn } from "../../../utils/cn";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 import LocalLLMModelManager from "./LocalLLMModelManager";
 import {
   getLLMModelStorage,
@@ -814,9 +815,9 @@ const DesktopLLMConfig = ({
             </label>
             <Input
               type="text"
-              value={config.endpoint || "http://127.0.0.1:11438"}
+              value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
               onChange={(e) => handleChange("endpoint", e.target.value)}
-              placeholder="http://127.0.0.1:11438"
+              placeholder={DEFAULT_ENDPOINTS.desktopLocal}
               variant={isLightBackground ? "dark" : "default"}
             />
             <p className="text-[10px] text-white/50 mt-1">

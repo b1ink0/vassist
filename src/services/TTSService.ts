@@ -7,6 +7,12 @@
 
 import OpenAI from "openai";
 import { TTSProviders } from "../config/aiConfig";
+import {
+  DEFAULT_ENDPOINTS,
+  SERVICE_ROUTES,
+  joinOpenAIBasePath,
+  normalizeOpenAIBaseUrl,
+} from "../config/serviceEndpoints";
 import { audioWorkerClient } from "../workers/AudioWorkerClient";
 import Logger from "./LoggerService";
 import voiceStorageService from "./VoiceStorageService";
@@ -207,11 +213,10 @@ class TTSService {
         );
       } else if (provider === TTSProviders.OPENAI_COMPATIBLE) {
         // Normalize endpoint URL - ensure it ends with /v1 (SDK appends /audio/speech)
-        let endpoint = config["openai-compatible"].endpoint;
-        if (!endpoint.endsWith("/v1")) {
-          // Remove trailing slash if present, then add /v1
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          config["openai-compatible"].endpoint,
+          DEFAULT_ENDPOINTS.openaiCompatible,
+        );
 
         state.client = new OpenAI({
           apiKey: config["openai-compatible"].apiKey || "default",
@@ -231,11 +236,10 @@ class TTSService {
         });
       } else if (provider === TTSProviders.ANDROID_LOCAL) {
         const androidConfig = config["android-local"] || {};
-        let endpoint = androidConfig.endpoint || "http://127.0.0.1:8765";
-
-        if (!endpoint.endsWith("/v1")) {
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          androidConfig.endpoint,
+          DEFAULT_ENDPOINTS.androidLocal,
+        );
 
         state.client = new OpenAI({
           apiKey: "android-local",
@@ -258,11 +262,10 @@ class TTSService {
         });
       } else if (provider === TTSProviders.DESKTOP_LOCAL) {
         const desktopConfig = config["desktop-local"] || {};
-        let endpoint = desktopConfig.endpoint || "http://127.0.0.1:11438";
-
-        if (!endpoint.endsWith("/v1")) {
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          desktopConfig.endpoint,
+          DEFAULT_ENDPOINTS.desktopLocal,
+        );
 
         state.client = endpoint;
 
@@ -286,7 +289,7 @@ class TTSService {
         });
       } else if (provider === TTSProviders.GPTSOVITS_REMOTE) {
         const remoteConfig = config["gptsovits-remote"] || {};
-        let endpoint = remoteConfig.endpoint || "http://localhost:11438";
+        let endpoint = remoteConfig.endpoint || DEFAULT_ENDPOINTS.desktopLocal;
 
         if (!endpoint.endsWith("/v1")) {
           endpoint = endpoint.replace(/\/$/, "") + "/v1";
@@ -591,11 +594,14 @@ class TTSService {
             `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., engine: ${isSupertonic ? "supertonic" : "gpt-sovits"}, voice: ${isSupertonic ? state.config.supertonicVoice : "-"}, lang: ${isSupertonic ? state.config.supertonicLang : "-"})`,
           );
 
-          const response = await fetch(`${state.client}/audio/speech`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          });
+          const response = await fetch(
+            joinOpenAIBasePath(state.client, SERVICE_ROUTES.openai.audioSpeech),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            },
+          );
 
           Logger.log(
             "other",
@@ -775,11 +781,14 @@ class TTSService {
           `${logPrefix} - Sending TTS request to ${state.client}/audio/speech (text: ${text.substring(0, 50)}..., engine: ${isSupertonic ? "supertonic" : "gpt-sovits"}, voice: ${isSupertonic ? state.config.supertonicVoice : "-"}, lang: ${isSupertonic ? state.config.supertonicLang : "-"})`,
         );
 
-        const response = await fetch(`${state.client}/audio/speech`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
+        const response = await fetch(
+          joinOpenAIBasePath(state.client, SERVICE_ROUTES.openai.audioSpeech),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          },
+        );
 
         Logger.log(
           "other",

@@ -20,6 +20,7 @@ import Logger from "../../../services/LoggerService";
 import { Icon } from "../../icons";
 import { Button, Card, Input, Select } from "../../ui";
 import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 interface TestResultState {
   success: boolean;
@@ -202,12 +203,12 @@ const TTSProviderStep = ({
   const [selectedProvider, setSelectedProvider] =
     useState<TTSProviderId>("disabled");
   const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState(
-    "http://127.0.0.1:8765",
+    DEFAULT_ENDPOINTS.androidLocal,
   );
 
   // Desktop TTS state
   const [desktopTTSEndpoint, setDesktopTTSEndpoint] = useState(
-    "http://127.0.0.1:11438",
+    DEFAULT_ENDPOINTS.desktopLocal,
   );
   const [desktopReferenceAudio] = useState<string | null>(null);
   const [desktopReferenceText, setDesktopReferenceText] = useState("");
@@ -259,10 +260,10 @@ const TTSProviderStep = ({
   const [selectedSTTProvider, setSelectedSTTProvider] =
     useState<string>("disabled");
   const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState(
-    "http://127.0.0.1:8765",
+    DEFAULT_ENDPOINTS.androidLocal,
   );
   const [desktopSTTEndpoint, setDesktopSTTEndpoint] = useState(
-    "http://127.0.0.1:11438",
+    DEFAULT_ENDPOINTS.desktopLocal,
   );
   const [desktopSTTModel, setDesktopSTTModel] = useState("tiny");
   const [desktopSTTLanguage, setDesktopSTTLanguage] = useState("auto");
@@ -1014,7 +1015,7 @@ const TTSProviderStep = ({
                   type="text"
                   value={androidTTSEndpoint}
                   onChange={(e) => setAndroidTTSEndpoint(e.target.value)}
-                  placeholder="http://127.0.0.1:8765"
+                  placeholder={DEFAULT_ENDPOINTS.androidLocal}
                   className="w-full text-xs sm:text-sm"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
@@ -1182,7 +1183,7 @@ const TTSProviderStep = ({
                 type="text"
                 value={customEndpoint}
                 onChange={(e) => setCustomEndpoint(e.target.value)}
-                placeholder="http://localhost:8000"
+                placeholder={DEFAULT_ENDPOINTS.openaiCompatible}
                 className="w-full text-xs sm:text-sm"
               />
               <p className="text-[10px] sm:text-xs text-white/70 mt-1">
@@ -1356,7 +1357,7 @@ const TTSProviderStep = ({
                       type="text"
                       value={androidSTTEndpoint}
                       onChange={(e) => setAndroidSTTEndpoint(e.target.value)}
-                      placeholder="http://127.0.0.1:8765"
+                      placeholder={DEFAULT_ENDPOINTS.androidLocal}
                       className="w-full text-xs sm:text-sm"
                     />
                     <p className="text-[10px] text-white/50 mt-1">

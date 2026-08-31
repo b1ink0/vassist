@@ -9,6 +9,10 @@
 #include <atomic>
 #include <memory>
 
+namespace {
+constexpr int kDefaultServerPort = 11438;
+}
+
 /**
  * Server - Unified HTTP server on http://127.0.0.1:11438
  * Endpoints:
@@ -46,7 +50,7 @@ private:
     std::atomic<bool> running{false};
     std::thread http_thread;
     std::unique_ptr<HTTPServerInterface> http_server;
-    int port = 11438;
+    int port = kDefaultServerPort;
 };
 
 Napi::FunctionReference Server::constructor;

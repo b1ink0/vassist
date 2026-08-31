@@ -5,10 +5,28 @@ import * as tar from "tar";
 import type { App, IpcMainInvokeEvent } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
+import {
+  EXTERNAL_SERVICE_ENDPOINTS,
+  joinEndpointPath,
+} from "../../../src/config/serviceEndpoints";
 
 const SUPPORTED_BACKENDS = ["auto", "cpu", "cuda", "vulkan", "metal"] as const;
 const NODE_LLAMA_CPP_VERSION = "3.18.1";
 const NODE_LLAMA_CORE_BUNDLE_FILENAME = "node-llama-core.tgz";
+
+function createBackendPackage(
+  packageName: string,
+  version: string,
+): BackendPackage {
+  const archiveName = packageName.split("/").pop();
+  return {
+    packageName,
+    url: joinEndpointPath(
+      EXTERNAL_SERVICE_ENDPOINTS.npmRegistry,
+      `/${packageName}/-/${archiveName}-${version}.tgz`,
+    ),
+  };
+}
 
 type BackendName = (typeof SUPPORTED_BACKENDS)[number];
 type InstallableBackend = Exclude<BackendName, "auto">;
@@ -110,18 +128,9 @@ function getBackendPackageMap(
     if (arch === "x64") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/win-x64",
-          url: `https://registry.npmjs.org/@node-llama-cpp/win-x64/-/win-x64-${v}.tgz`,
-        },
-        cuda: {
-          packageName: "@node-llama-cpp/win-x64-cuda",
-          url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-cuda/-/win-x64-cuda-${v}.tgz`,
-        },
-        vulkan: {
-          packageName: "@node-llama-cpp/win-x64-vulkan",
-          url: `https://registry.npmjs.org/@node-llama-cpp/win-x64-vulkan/-/win-x64-vulkan-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/win-x64", v),
+        cuda: createBackendPackage("@node-llama-cpp/win-x64-cuda", v),
+        vulkan: createBackendPackage("@node-llama-cpp/win-x64-vulkan", v),
         metal: null,
       };
     }
@@ -129,10 +138,7 @@ function getBackendPackageMap(
     if (arch === "arm64") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/win-arm64",
-          url: `https://registry.npmjs.org/@node-llama-cpp/win-arm64/-/win-arm64-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/win-arm64", v),
         cuda: null,
         vulkan: null,
         metal: null,
@@ -144,18 +150,9 @@ function getBackendPackageMap(
     if (arch === "x64") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/linux-x64",
-          url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64/-/linux-x64-${v}.tgz`,
-        },
-        cuda: {
-          packageName: "@node-llama-cpp/linux-x64-cuda",
-          url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-cuda/-/linux-x64-cuda-${v}.tgz`,
-        },
-        vulkan: {
-          packageName: "@node-llama-cpp/linux-x64-vulkan",
-          url: `https://registry.npmjs.org/@node-llama-cpp/linux-x64-vulkan/-/linux-x64-vulkan-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/linux-x64", v),
+        cuda: createBackendPackage("@node-llama-cpp/linux-x64-cuda", v),
+        vulkan: createBackendPackage("@node-llama-cpp/linux-x64-vulkan", v),
         metal: null,
       };
     }
@@ -163,10 +160,7 @@ function getBackendPackageMap(
     if (arch === "arm64") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/linux-arm64",
-          url: `https://registry.npmjs.org/@node-llama-cpp/linux-arm64/-/linux-arm64-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/linux-arm64", v),
         cuda: null,
         vulkan: null,
         metal: null,
@@ -176,10 +170,7 @@ function getBackendPackageMap(
     if (arch === "arm") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/linux-armv7l",
-          url: `https://registry.npmjs.org/@node-llama-cpp/linux-armv7l/-/linux-armv7l-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/linux-armv7l", v),
         cuda: null,
         vulkan: null,
         metal: null,
@@ -194,20 +185,14 @@ function getBackendPackageMap(
         cpu: null,
         cuda: null,
         vulkan: null,
-        metal: {
-          packageName: "@node-llama-cpp/mac-arm64-metal",
-          url: `https://registry.npmjs.org/@node-llama-cpp/mac-arm64-metal/-/mac-arm64-metal-${v}.tgz`,
-        },
+        metal: createBackendPackage("@node-llama-cpp/mac-arm64-metal", v),
       };
     }
 
     if (arch === "x64") {
       return {
         auto: null,
-        cpu: {
-          packageName: "@node-llama-cpp/mac-x64",
-          url: `https://registry.npmjs.org/@node-llama-cpp/mac-x64/-/mac-x64-${v}.tgz`,
-        },
+        cpu: createBackendPackage("@node-llama-cpp/mac-x64", v),
         cuda: null,
         vulkan: null,
         metal: null,

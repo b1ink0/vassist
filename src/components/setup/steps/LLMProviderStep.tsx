@@ -10,6 +10,7 @@ import { cn } from "../../../utils/cn";
 import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
 import FlagCopyButton from "../../common/FlagCopyButton";
 import { Button, Input } from "../../ui";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 type LLMProviderId =
   | "android-local"
@@ -101,14 +102,14 @@ const LLMProviderStep = ({
   );
   const [apiKey, setApiKey] = useState("");
   const [ollamaEndpoint, setOllamaEndpoint] = useState(
-    "http://localhost:11434",
+    DEFAULT_ENDPOINTS.ollama,
   );
   const [ollamaModel, setOllamaModel] = useState("llama2");
   const [androidEndpoint, setAndroidEndpoint] = useState(
-    "http://127.0.0.1:8765",
+    DEFAULT_ENDPOINTS.androidLocal,
   );
   const [desktopEndpoint, setDesktopEndpoint] = useState(
-    "http://127.0.0.1:11438",
+    DEFAULT_ENDPOINTS.desktopLocal,
   );
   const [desktopModel, setDesktopModel] = useState("qwen3:0.6b");
   const [testing, setTesting] = useState(false);
@@ -607,7 +608,7 @@ const LLMProviderStep = ({
                   type="text"
                   value={androidEndpoint}
                   onChange={(e) => setAndroidEndpoint(e.target.value)}
-                  placeholder="http://127.0.0.1:8765"
+                  placeholder={DEFAULT_ENDPOINTS.androidLocal}
                   className="w-full text-xs sm:text-sm"
                 />
                 <p className="text-[10px] text-white/50 mt-1">
@@ -682,7 +683,7 @@ const LLMProviderStep = ({
                 type="text"
                 value={ollamaEndpoint}
                 onChange={(e) => setOllamaEndpoint(e.target.value)}
-                placeholder="http://localhost:11434"
+                placeholder={DEFAULT_ENDPOINTS.ollama}
                 className="w-full text-xs sm:text-sm"
               />
             </div>

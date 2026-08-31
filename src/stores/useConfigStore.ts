@@ -38,6 +38,13 @@ import {
 import { getErrorMessage, setConfigValueAtPath } from "./storeUtils";
 import { useDesktopStore } from "./useDesktopStore";
 import type { SetupData } from "./createSetupStore";
+import {
+  DEFAULT_ENDPOINTS,
+  DEFAULT_SERVICE_PORTS,
+  LOOPBACK_HOST,
+  buildHttpEndpoint,
+  resolveDesktopInternalPorts,
+} from "../config/serviceEndpoints";
 
 export interface ChromeAiStatus {
   checking: boolean;
@@ -280,6 +287,9 @@ const normalizeAIConfig = (
   "desktop-local": {
     ...DefaultAIConfig["desktop-local"],
     ...(savedConfig?.["desktop-local"] ?? {}),
+    internalPorts: resolveDesktopInternalPorts(
+      savedConfig?.["desktop-local"]?.internalPorts,
+    ),
     routing: {
       ...DefaultAIConfig["desktop-local"].routing,
       ...(savedConfig?.["desktop-local"]?.routing ?? {}),
@@ -437,7 +447,7 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
     },
     ollama: {
       ...DefaultAIConfig.ollama,
-      endpoint: setupData.llm?.ollama?.endpoint || "http://localhost:11434",
+      endpoint: setupData.llm?.ollama?.endpoint || DEFAULT_ENDPOINTS.ollama,
       model: setupData.llm?.ollama?.model || "llama3.2",
     },
     aiFeatures: {
@@ -484,7 +494,7 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       ...DefaultTTSConfig["openai-compatible"],
       endpoint:
         setupData.tts?.["openai-compatible"]?.endpoint ||
-        "http://localhost:8000",
+        DEFAULT_ENDPOINTS.openaiCompatible,
       apiKey: setupData.tts?.["openai-compatible"]?.apiKey || "",
       model: setupData.tts?.["openai-compatible"]?.model || "tts",
       voice: setupData.tts?.["openai-compatible"]?.voice || "default",
@@ -511,7 +521,7 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       ...DefaultSTTConfig["openai-compatible"],
       endpoint:
         setupData.sttConfig?.["openai-compatible"]?.endpoint ||
-        "http://localhost:8000",
+        DEFAULT_ENDPOINTS.openaiCompatible,
       apiKey: setupData.sttConfig?.["openai-compatible"]?.apiKey || "",
       model: "whisper",
       language: setupData.sttConfig?.["openai-compatible"]?.language || "en",
@@ -661,7 +671,9 @@ const syncDesktopLocalEndpoints = (
   ttsConfig: TTSConfig,
   sttConfig: STTConfig,
 ) => {
-  const port = Number(aiConfig?.["desktop-local"]?.serverPort || 11438);
+  const port = Number(
+    aiConfig?.["desktop-local"]?.serverPort || DEFAULT_SERVICE_PORTS.server,
+  );
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return {
       aiConfig,
@@ -671,7 +683,7 @@ const syncDesktopLocalEndpoints = (
     };
   }
 
-  const sharedEndpoint = `http://127.0.0.1:${port}`;
+  const sharedEndpoint = buildHttpEndpoint(LOOPBACK_HOST, port);
   let nextAiConfig = aiConfig;
   let nextTtsConfig = ttsConfig;
   let nextSttConfig = sttConfig;
@@ -815,6 +827,9 @@ const syncDesktopServerForProviders = async (
   try {
     const result = (await api.server.start({
       ...desktopLlmConfig,
+      internalPorts: resolveDesktopInternalPorts(
+        desktopLlmConfig.internalPorts,
+      ),
       llmEngine: (desktopLlmConfig as any).llmEngine,
       llmBackend: (desktopLlmConfig as any).llmBackend,
       stt: {

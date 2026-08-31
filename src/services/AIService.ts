@@ -12,6 +12,12 @@ import Logger from "./LoggerService";
 import FrameCaptureService from "./FrameCaptureService";
 import { isExtension } from "../utils/PlatformUtils";
 import { ThinkStreamSplitter } from "../utils/thinking";
+import {
+  DEFAULT_ENDPOINTS,
+  SERVICE_ROUTES,
+  joinEndpointPath,
+  normalizeOpenAIBaseUrl,
+} from "../config/serviceEndpoints";
 
 type AIMessage = Record<string, any>;
 type SendResult = {
@@ -87,27 +93,41 @@ class AIService {
   }
 
   _normalizeEndpoint(endpoint: string | undefined, fallback: string): string {
-    let resolved = (endpoint || fallback).trim() || fallback;
-    if (!resolved.endsWith("/v1")) {
-      resolved = resolved.replace(/\/$/, "") + "/v1";
-    }
-    return resolved;
+    return normalizeOpenAIBaseUrl(endpoint, fallback);
   }
 
   _resolveRemoteModelListUrl(config: RemoteModelListConfig): string {
     if (config.provider === "openai") {
-      return "https://api.openai.com/v1/models";
+      return joinEndpointPath(
+        DEFAULT_ENDPOINTS.openaiApi,
+        SERVICE_ROUTES.openai.models,
+      );
     }
 
     if (config.provider === "android-local") {
-      return `${this._normalizeEndpoint(config.endpoint, "http://127.0.0.1:8765")}/models`;
+      return joinEndpointPath(
+        this._normalizeEndpoint(
+          config.endpoint,
+          DEFAULT_ENDPOINTS.androidLocal,
+        ),
+        "models",
+      );
     }
 
     if (config.provider === "desktop-local") {
-      return `${this._normalizeEndpoint(config.endpoint, "http://127.0.0.1:11438")}/models`;
+      return joinEndpointPath(
+        this._normalizeEndpoint(
+          config.endpoint,
+          DEFAULT_ENDPOINTS.desktopLocal,
+        ),
+        "models",
+      );
     }
 
-    return `${this._normalizeEndpoint(config.endpoint, "http://localhost:11434")}/models`;
+    return joinEndpointPath(
+      this._normalizeEndpoint(config.endpoint, DEFAULT_ENDPOINTS.ollama),
+      "models",
+    );
   }
 
   _buildProviderRuntime(provider: string, providerConfig: any) {
@@ -133,7 +153,7 @@ class AIService {
     if (provider === AIProviders.OLLAMA || provider === "ollama") {
       const endpoint = this._normalizeEndpoint(
         providerConfig.endpoint,
-        "http://localhost:11434",
+        DEFAULT_ENDPOINTS.ollama,
       );
       return {
         client: new OpenAI({
@@ -160,7 +180,7 @@ class AIService {
     ) {
       const endpoint = this._normalizeEndpoint(
         providerConfig.endpoint,
-        "http://127.0.0.1:8765",
+        DEFAULT_ENDPOINTS.androidLocal,
       );
       return {
         client: new OpenAI({
@@ -187,7 +207,7 @@ class AIService {
     ) {
       const endpoint = this._normalizeEndpoint(
         providerConfig.endpoint,
-        "http://127.0.0.1:11438",
+        DEFAULT_ENDPOINTS.desktopLocal,
       );
       return {
         client: new OpenAI({
@@ -422,7 +442,7 @@ class AIService {
         Logger.log("other", `${logPrefix} - Android local LLM configured:`, {
           endpoint: this._normalizeEndpoint(
             androidConfig.endpoint,
-            "http://127.0.0.1:8765",
+            DEFAULT_ENDPOINTS.androidLocal,
           ),
           model: state.config.model,
         });
@@ -438,7 +458,7 @@ class AIService {
         Logger.log("other", `${logPrefix} - Desktop local LLM configured:`, {
           endpoint: this._normalizeEndpoint(
             desktopConfig.endpoint,
-            "http://127.0.0.1:11438",
+            DEFAULT_ENDPOINTS.desktopLocal,
           ),
           model: state.config.model,
         });

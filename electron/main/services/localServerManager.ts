@@ -1,6 +1,14 @@
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
+import {
+  DEFAULT_SERVICE_PORTS,
+  DESKTOP_BIND_HOST,
+  LOOPBACK_HOST,
+  buildHttpEndpoint,
+  resolveDesktopInternalPorts,
+  validateDesktopServicePorts,
+} from "../../../src/config/serviceEndpoints";
 
 type ServerRuntimeConfig = {
   llmEngine?: string;
@@ -14,6 +22,13 @@ type ServerRuntimeConfig = {
   gpuLayers?: number | "auto";
   shareOnNetwork?: boolean;
   serverPort?: number;
+  internalPorts?: Partial<{
+    llamaServer: number;
+    gptSovits: number;
+    fasterWhisper: number;
+    supertonic: number;
+    whisperCpp: number;
+  }>;
   stt?: {
     model?: string;
     language?: string;
@@ -39,10 +54,12 @@ type LocalAIServerLike = {
       maxTokens?: number;
       contextSize?: number;
       gpuLayers?: number | "auto";
+      llamaServerUrl?: string;
     };
     stt: {
       modelPath?: string | null;
       proxyUrl?: string;
+      whisperCppUrl?: string;
       model?: string;
       language?: string;
       engine?: "python" | "whispercpp";
@@ -50,6 +67,7 @@ type LocalAIServerLike = {
     };
     tts: {
       proxyUrl?: string;
+      supertonicUrl?: string;
       enabled?: boolean;
       engine?: string;
     };
@@ -57,6 +75,8 @@ type LocalAIServerLike = {
       shareOnNetwork?: boolean;
       host?: string;
       port?: number;
+      llamaServerUrl?: string;
+      supertonicUrl?: string;
     };
   };
   host: string;
@@ -94,6 +114,15 @@ type LocalServerManagerDeps = {
   onTTSRequestComplete?: (() => void) | null;
   stopTTSBackend?: (() => void) | null;
   setTTSBackend?: ((backend: string | undefined | null) => void) | null;
+  setLlamaServerPort?: ((port: number) => Promise<void>) | null;
+  setPythonServicePorts?:
+    | ((ports: {
+        gptSovits: number;
+        fasterWhisper: number;
+        supertonic: number;
+      }) => Promise<void>)
+    | null;
+  setWhisperCppPort?: ((port: number) => Promise<void>) | null;
   llamaProxy?: {
     ensureForRequest: (req: {
       modelPath: string;
@@ -102,6 +131,7 @@ type LocalServerManagerDeps = {
       backend?: string;
     }) => Promise<string>;
     markRequestComplete: () => void;
+    getEndpoint?: () => string;
   } | null;
   ensureSupertonicRunning?: (() => void | Promise<void>) | null;
   restartSupertonicBackend?: ((reason: string) => void | Promise<void>) | null;
@@ -132,6 +162,9 @@ export function createLocalServerManager({
   onTTSRequestComplete,
   stopTTSBackend,
   setTTSBackend,
+  setLlamaServerPort,
+  setPythonServicePorts,
+  setWhisperCppPort,
   llamaProxy,
   ensureSupertonicRunning,
   restartSupertonicBackend,
@@ -182,6 +215,7 @@ export function createLocalServerManager({
                   backend?: string;
                 }) => Promise<string>;
                 markRequestComplete: () => void;
+                getEndpoint?: () => string;
               } | null;
             } = {};
             if (llamaProxy !== undefined) {
@@ -248,12 +282,32 @@ export function createLocalServerManager({
         }
 
         const shareOnNetwork = Boolean(config.shareOnNetwork);
-        const desiredHost = shareOnNetwork ? "0.0.0.0" : "127.0.0.1";
-        const parsedPort = Number(config.serverPort);
+        const desiredHost = shareOnNetwork ? DESKTOP_BIND_HOST : LOOPBACK_HOST;
         const desiredPort =
-          Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
-            ? parsedPort
-            : 11438;
+          config.serverPort === undefined
+            ? DEFAULT_SERVICE_PORTS.server
+            : Number(config.serverPort);
+        const internalPorts = resolveDesktopInternalPorts(config.internalPorts);
+        const portErrors = validateDesktopServicePorts(
+          desiredPort,
+          config.internalPorts,
+        );
+        if (portErrors.length > 0) {
+          lastServerError = portErrors.join("; ");
+          return { success: false, error: lastServerError };
+        }
+        try {
+          await setLlamaServerPort?.(internalPorts.llamaServer);
+          await setPythonServicePorts?.({
+            gptSovits: internalPorts.gptSovits,
+            fasterWhisper: internalPorts.fasterWhisper,
+            supertonic: internalPorts.supertonic,
+          });
+          await setWhisperCppPort?.(internalPorts.whisperCpp);
+        } catch (error) {
+          lastServerError = getErrorMessage(error);
+          return { success: false, error: lastServerError };
+        }
 
         const serverConfig: {
           llm: LocalAIServerLike["config"]["llm"];
@@ -275,10 +329,21 @@ export function createLocalServerManager({
             contextSize: config.contextSize || 4096,
             gpuLayers:
               config.gpuLayers === 99 ? "auto" : config.gpuLayers || "auto",
+            llamaServerUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              internalPorts.llamaServer,
+            ),
           },
           stt: {
             modelPath: null,
-            proxyUrl: "http://127.0.0.1:9881",
+            proxyUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              internalPorts.fasterWhisper,
+            ),
+            whisperCppUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              internalPorts.whisperCpp,
+            ),
             model: config.stt?.model || "tiny",
             language: config.stt?.language || "auto",
             engine:
@@ -286,7 +351,11 @@ export function createLocalServerManager({
             ...(config.stt?.variant ? { variant: config.stt.variant } : {}),
           },
           tts: {
-            proxyUrl: "http://127.0.0.1:9880",
+            proxyUrl: buildHttpEndpoint(LOOPBACK_HOST, internalPorts.gptSovits),
+            supertonicUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              internalPorts.supertonic,
+            ),
             enabled: desktopTtsEnabled,
             engine:
               config.tts?.engine === "supertonic" ? "supertonic" : "gpt-sovits",
@@ -498,10 +567,16 @@ export function createLocalServerManager({
             gpuLayers: "auto",
           },
           stt: {
-            proxyUrl: "http://127.0.0.1:9881",
+            proxyUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              DEFAULT_SERVICE_PORTS.fasterWhisper,
+            ),
           },
           tts: {
-            proxyUrl: "http://127.0.0.1:9880",
+            proxyUrl: buildHttpEndpoint(
+              LOOPBACK_HOST,
+              DEFAULT_SERVICE_PORTS.gptSovits,
+            ),
           },
         };
 
@@ -512,7 +587,9 @@ export function createLocalServerManager({
 
         await server.initialize(serverConfig);
         await server.start();
-        console.log("[Server] HTTP proxy server started on port 11438");
+        console.log(
+          `[Server] HTTP proxy server started on port ${server.port}`,
+        );
       } catch (error) {
         console.error("[Server] Failed to auto-start:", getErrorMessage(error));
       }
@@ -550,7 +627,9 @@ export function createLocalServerManager({
           "code" in err &&
           (err as { code?: string }).code === "EADDRINUSE"
         ) {
-          console.warn("[Server] Restart skipped: port 11438 already in use");
+          console.warn(
+            `[Server] Restart skipped: port ${server.port} already in use`,
+          );
           return;
         }
         console.error("[Server] Restart error:", err);

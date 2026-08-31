@@ -10,6 +10,7 @@ import Logger from "../services/LoggerService";
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { getErrorMessage } from "./storeUtils";
 import { useConfigStore } from "./useConfigStore";
+import { DEFAULT_ENDPOINTS } from "../config/serviceEndpoints";
 
 const DEFAULT_LLM_PROVIDER = isAndroid
   ? "android-local"
@@ -45,7 +46,7 @@ export const DEFAULT_SETUP_STATE = {
         model: "gpt-4o-mini",
       },
       ollama: {
-        endpoint: "http://localhost:11434",
+        endpoint: DEFAULT_ENDPOINTS.ollama,
         model: "llama3.2",
       },
     },
@@ -62,7 +63,7 @@ export const DEFAULT_SETUP_STATE = {
         voice: "nova",
       },
       "openai-compatible": {
-        endpoint: "http://localhost:8000",
+        endpoint: DEFAULT_ENDPOINTS.openaiCompatible,
         apiKey: "",
         model: "tts",
         voice: "default",
@@ -82,7 +83,7 @@ export const DEFAULT_SETUP_STATE = {
         temperature: 0,
       },
       "openai-compatible": {
-        endpoint: "http://localhost:8000",
+        endpoint: DEFAULT_ENDPOINTS.openaiCompatible,
         apiKey: "",
         model: "whisper",
         language: "en",

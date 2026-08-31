@@ -26,6 +26,7 @@ import {
   GPTSoVITSLanguages,
   type TTSRemoteProviderProfile,
 } from "../../config/aiConfig";
+import { DEFAULT_ENDPOINTS } from "../../config/serviceEndpoints";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import TTSServiceProxy from "../../services/proxies/TTSServiceProxy";
 import KokoroTTSConfig from "./tts/KokoroTTSConfig";
@@ -495,7 +496,7 @@ const TTSSettings = ({
                   onChange={(e) =>
                     updateTTSConfig("gptsovits-remote.endpoint", e.target.value)
                   }
-                  placeholder="http://localhost:11438"
+                  placeholder={DEFAULT_ENDPOINTS.desktopLocal}
                   variant={isLightBackground ? "dark" : "default"}
                 />
               </SettingsRow>
@@ -693,7 +694,7 @@ const TTSSettings = ({
                       e.target.value,
                     )
                   }
-                  placeholder="http://localhost:8000"
+                  placeholder={DEFAULT_ENDPOINTS.openaiCompatible}
                   variant={isLightBackground ? "dark" : "default"}
                 />
               </SettingsRow>

@@ -15,6 +15,9 @@ from fastapi.responses import JSONResponse
 import uvicorn
 from pydantic import BaseModel
 
+LOOPBACK_HOST = "127.0.0.1"
+DEFAULT_WHISPER_PORT = 9881
+
 # Initialize FastAPI app
 app = FastAPI(title="Faster Whisper STT API", version="1.0.0")
 
@@ -234,9 +237,10 @@ if __name__ == "__main__":
     whisper_log("Starting Faster Whisper STT Server")
     whisper_log("="*60)
     
+    port = int(os.getenv("WHISPER_PORT", str(DEFAULT_WHISPER_PORT)))
     uvicorn.run(
         app,
-        host="127.0.0.1",
-        port=9881,
+        host=LOOPBACK_HOST,
+        port=port,
         log_level="info"
     )

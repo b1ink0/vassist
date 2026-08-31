@@ -8,6 +8,7 @@
 import OpenAI from "openai";
 import Logger from "./LoggerService";
 import { isExtension } from "../utils/PlatformUtils";
+import { DEFAULT_ENDPOINTS } from "../config/serviceEndpoints";
 
 type DetectorProvider = "chrome-ai" | "openai" | "ollama";
 type DetectorAvailability =
@@ -184,9 +185,9 @@ class LanguageDetectorService {
         const endpoint =
           (section as { endpoint?: string }).endpoint ||
           (provider === "desktop-local"
-            ? "http://127.0.0.1:11438"
+            ? DEFAULT_ENDPOINTS.desktopLocal
             : provider === "android-local"
-              ? "http://127.0.0.1:8765"
+              ? DEFAULT_ENDPOINTS.androidLocal
               : "");
         state.llmClient = new OpenAI({
           apiKey: "local",

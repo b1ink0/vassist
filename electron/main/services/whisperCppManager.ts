@@ -3,8 +3,8 @@
  *
  * Downloads official whisper.cpp release packs on demand (never bundled),
  * manages GGML model files (download/delete/list like Android), and runs
- * `whisper-server` on 127.0.0.1:9883 as an alternative STT engine alongside
- * the Python faster-whisper server (:9881). The user explicitly selects the
+ * `whisper-server` on a configurable private port as an alternative STT engine
+ * alongside the Python faster-whisper server. The user explicitly selects the
  * runtime variant and engine — nothing is auto-selected.
  *
  * Pinned upstream: ggml-org/whisper.cpp nightly tag b4938 (verified assets).
@@ -16,8 +16,17 @@ import unzipper from "unzipper";
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
+import {
+  DEFAULT_SERVICE_PORTS,
+  EXTERNAL_SERVICE_ENDPOINTS,
+  LOOPBACK_HOST,
+  SERVICE_ROUTES,
+  endpointForPort,
+  isValidPort,
+  joinEndpointPath,
+} from "../../../src/config/serviceEndpoints";
 const WHISPERCPP_VERSION = "b4938";
-const WHISPERCPP_PORT = 9883;
+const DEFAULT_WHISPERCPP_PORT = DEFAULT_SERVICE_PORTS.whisperCpp;
 
 type RuntimeVariant = "cpu" | "cuda" | "vulkan" | "metal";
 
@@ -31,11 +40,16 @@ interface RuntimePack {
   layout: "release-dir" | "flat" | "xcframework";
 }
 
-const RELEASE_BASE = `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPERCPP_VERSION}`;
+const RELEASE_BASE = joinEndpointPath(
+  EXTERNAL_SERVICE_ENDPOINTS.github,
+  `/ggml-org/whisper.cpp/releases/download/${WHISPERCPP_VERSION}`,
+);
 
 // Community Vulkan builds (no official Windows Vulkan asset upstream).
-const VULKAN_URL =
-  "https://github.com/jerryshell/whisper.cpp-windows-vulkan-bin/releases/latest/download/whisper.cpp-windows-vulkan.zip";
+const VULKAN_URL = joinEndpointPath(
+  EXTERNAL_SERVICE_ENDPOINTS.github,
+  "/jerryshell/whisper.cpp-windows-vulkan-bin/releases/latest/download/whisper.cpp-windows-vulkan.zip",
+);
 
 const RUNTIME_PACKS: RuntimePack[] = [
   {
@@ -107,8 +121,10 @@ const GGML_MODELS: GgmlModel[] = [
   },
 ];
 
-const HF_MODEL_BASE =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const HF_MODEL_BASE = joinEndpointPath(
+  EXTERNAL_SERVICE_ENDPOINTS.huggingFace,
+  "/ggerganov/whisper.cpp/resolve/main",
+);
 
 export function createWhisperCppManager({
   ipcMain,
@@ -123,6 +139,7 @@ export function createWhisperCppManager({
   processEnv: NodeJS.ProcessEnv;
   getRuntimeServerBasePath: () => string;
 }) {
+  let whisperCppPort = DEFAULT_WHISPERCPP_PORT;
   type ChildProcessLike = {
     pid?: number | undefined;
     exitCode?: number | null;
@@ -422,9 +439,10 @@ export function createWhisperCppManager({
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       // whisper-server responds on its HTTP port; any response counts.
-      const response = await fetch(`http://127.0.0.1:${WHISPERCPP_PORT}/`, {
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        joinEndpointPath(endpointForPort(whisperCppPort), SERVICE_ROUTES.root),
+        { signal: controller.signal },
+      );
       void response;
       return true;
     } catch {
@@ -487,9 +505,9 @@ export function createWhisperCppManager({
       "-m",
       currentModelPath,
       "--host",
-      "127.0.0.1",
+      LOOPBACK_HOST,
       "--port",
-      String(WHISPERCPP_PORT),
+      String(whisperCppPort),
       // convert audio to 16kHz mono internally
       "--convert",
     ];
@@ -529,7 +547,7 @@ export function createWhisperCppManager({
       }
       if (await isHealthy()) {
         console.log(
-          `[WhisperCpp] Server ready on :${WHISPERCPP_PORT} (model: ${currentModelPath})`,
+          `[WhisperCpp] Server ready on :${whisperCppPort} (model: ${currentModelPath})`,
         );
         return;
       }
@@ -562,7 +580,7 @@ export function createWhisperCppManager({
     const packs = listInstalledVariants();
     return {
       engine: activeEngine,
-      port: WHISPERCPP_PORT,
+      port: whisperCppPort,
       variants: packs,
       models: listModels(),
       running: Boolean(currentProcess),
@@ -632,6 +650,12 @@ export function createWhisperCppManager({
   void processEnv; // reserved for future env overrides
 
   return {
+    setPort: async (port: number) => {
+      if (!isValidPort(port)) throw new Error("Invalid whisper.cpp port");
+      if (whisperCppPort === port) return;
+      await stopServer("port changed");
+      whisperCppPort = port;
+    },
     registerIPCHandlers,
     ensureRunning: (variantHint?: string) => ensureRunning(variantHint),
     restart: async () => {

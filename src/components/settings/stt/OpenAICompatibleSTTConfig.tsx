@@ -5,6 +5,7 @@
 
 import { Input, Select, SettingsRow } from "../../ui";
 import RemoteModelPicker from "../shared/RemoteModelPicker";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 interface OpenAICompatibleSTTConfigShape {
   endpoint?: string;
@@ -54,7 +55,7 @@ const OpenAICompatibleSTTConfig = ({
           type="text"
           value={config.endpoint || ""}
           onChange={(e) => handleFieldChange("endpoint", e.target.value)}
-          placeholder="http://localhost:8000"
+          placeholder={DEFAULT_ENDPOINTS.openaiCompatible}
           variant={isLightBackground ? "dark" : "default"}
         />
       </SettingsRow>

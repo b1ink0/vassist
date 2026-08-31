@@ -6,6 +6,7 @@ import AIServiceProxy from "../../../services/proxies/AIServiceProxy";
 import { cn } from "../../../utils/cn";
 import { resolvePortalContainer } from "../../../utils/resolvePortalContainer";
 import { Icon } from "../../icons";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 interface RemoteModelPickerProps {
   value: string;
@@ -41,13 +42,13 @@ const RemoteModelPicker = ({
   const connectionKey = useMemo(() => {
     const fallbackEndpoint =
       provider === "android-local"
-        ? "http://127.0.0.1:8765"
+        ? DEFAULT_ENDPOINTS.androidLocal
         : provider === "desktop-local"
-          ? "http://127.0.0.1:11438"
-          : "http://localhost:11434";
+          ? DEFAULT_ENDPOINTS.desktopLocal
+          : DEFAULT_ENDPOINTS.ollama;
     const resolvedEndpoint =
       provider === "openai"
-        ? "https://api.openai.com"
+        ? DEFAULT_ENDPOINTS.openaiApi
         : (endpoint || fallbackEndpoint).trim() || fallbackEndpoint;
     return [provider, resolvedEndpoint, apiKey?.trim() || ""].join("::");
   }, [apiKey, endpoint, provider]);

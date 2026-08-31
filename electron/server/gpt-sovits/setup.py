@@ -47,6 +47,16 @@ TORCH_INDEX_URLS = {
     'sycl': 'https://download.pytorch.org/whl/xpu',
 }
 
+PYTHON_EMBED_URLS = {
+    '3.10': 'https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip',
+    '3.12': 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip',
+}
+GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py'
+GPT_SOVITS_ARCHIVE_URL = 'https://github.com/RVC-Boss/GPT-SoVITS/archive/{commit_hash}.zip'
+GPT_SOVITS_MODEL_BASE_URL = 'https://huggingface.co/lj1995/GPT-SoVITS/resolve/main'
+FASTTEXT_LANGUAGE_MODEL_URL = 'https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin'
+WHISPER_TINY_EN_MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin'
+
 # AMD ROCm Windows direct wheel repository
 ROCM_WINDOWS_BASE_URL = "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1"
 ROCM_WINDOWS_SDK_WHEELS = [
@@ -190,11 +200,11 @@ def setup_python_runtime():
     
     if IS_WINDOWS:
         if IS_ROCM_WINDOWS:
-            python_url = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip"
+            python_url = PYTHON_EMBED_URLS['3.12']
             pth_filename = "python312._pth"
             log("[PYTHON] Setting up embedded Python 3.12 for Windows (ROCm)...")
         else:
-            python_url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
+            python_url = PYTHON_EMBED_URLS['3.10']
             pth_filename = "python310._pth"
             log("[PYTHON] Setting up embedded Python 3.10 for Windows...")
 
@@ -221,7 +231,7 @@ def setup_python_runtime():
         # Get pip
         log("[PYTHON] Installing pip...")
         get_pip = PYTHON_DIR / "get-pip.py"
-        download_file("https://bootstrap.pypa.io/get-pip.py", get_pip)
+        download_file(GET_PIP_URL, get_pip)
         
         python_exe = get_python_exe()
         subprocess.run([str(python_exe), str(get_pip)], check=True)
@@ -757,7 +767,7 @@ def clone_gptsovits_repo():
 
     # Download as ZIP from GitHub (no git required)
     commit_hash = "bfca0f6b2dd9f846c76366be807f01a8873140a0"
-    zip_url = f"https://github.com/RVC-Boss/GPT-SoVITS/archive/{commit_hash}.zip"
+    zip_url = GPT_SOVITS_ARCHIVE_URL.format(commit_hash=commit_hash)
     zip_path = BASE_DIR / "gptsovits_source.zip"
     
     try:
@@ -816,7 +826,7 @@ def download_models():
     log("="*60)
     
     # Base URL for Hugging Face
-    hf_base = "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main"
+    hf_base = GPT_SOVITS_MODEL_BASE_URL
     
     # Models to download (English & Japanese support)
     models = {
@@ -1055,7 +1065,7 @@ def download_fast_langdetect_model():
     log("="*60)
     
     # Facebook FastText language detection model (~130MB)
-    model_url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin"
+    model_url = FASTTEXT_LANGUAGE_MODEL_URL
     model_path = langdetect_dir / "lid.176.bin"
     
     if model_path.exists():
@@ -1080,7 +1090,7 @@ def download_whisper_models():
     log("="*60)
     
     # Download tiny.en model (~75MB, English only, 4x faster than base)
-    model_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin"
+    model_url = WHISPER_TINY_EN_MODEL_URL
     model_path = whisper_dir / "ggml-tiny.en.bin"
     
     if model_path.exists():

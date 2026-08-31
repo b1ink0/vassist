@@ -9,6 +9,10 @@
  */
 
 import OpenAI from "openai";
+import {
+  DEFAULT_ENDPOINTS,
+  normalizeOpenAIBaseUrl,
+} from "../config/serviceEndpoints";
 
 const LOCAL_PROVIDERS = new Set([
   "desktop-local",
@@ -16,10 +20,10 @@ const LOCAL_PROVIDERS = new Set([
   "openai-compatible",
 ]);
 
-const DEFAULT_ENDPOINTS: Record<string, string> = {
-  "desktop-local": "http://127.0.0.1:11438",
-  "android-local": "http://127.0.0.1:8765",
-  "openai-compatible": "http://localhost:8000",
+const LOCAL_ENDPOINTS: Record<string, string> = {
+  "desktop-local": DEFAULT_ENDPOINTS.desktopLocal,
+  "android-local": DEFAULT_ENDPOINTS.androidLocal,
+  "openai-compatible": DEFAULT_ENDPOINTS.openaiCompatible,
 };
 
 export interface LocalOpenAiClient {
@@ -43,16 +47,13 @@ export function createLocalOpenAiClient(
     model?: string;
   } = config[provider] || {};
 
-  let endpoint = section.endpoint || DEFAULT_ENDPOINTS[provider] || "";
+  const endpoint = section.endpoint || LOCAL_ENDPOINTS[provider] || "";
   if (!endpoint) return null;
-  if (!endpoint.endsWith("/v1")) {
-    endpoint = endpoint.replace(/\/$/, "") + "/v1";
-  }
 
   return {
     client: new OpenAI({
       apiKey: "local",
-      baseURL: endpoint,
+      baseURL: normalizeOpenAIBaseUrl(endpoint, endpoint),
       dangerouslyAllowBrowser: true,
     }),
     model: section.model || "local",

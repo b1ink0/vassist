@@ -153,6 +153,7 @@ const localServerManager = createLocalServerManager({
         backend: r.backend as never,
       }),
     markRequestComplete: () => llamaServerManager.markRequestComplete(),
+    getEndpoint: () => llamaServerManager.getEndpoint(),
   },
   onSTTRequestStart: pythonServerManager.markWhisperRequestStart,
   onSTTRequestComplete: pythonServerManager.markWhisperRequestComplete,
@@ -160,6 +161,9 @@ const localServerManager = createLocalServerManager({
   onTTSRequestComplete: pythonServerManager.markGPTSoVITSTTSRequestComplete,
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
   setTTSBackend: pythonServerManager.setGPTSoVITSTorchBackend,
+  setLlamaServerPort: llamaServerManager.setPort,
+  setPythonServicePorts: pythonServerManager.setPorts,
+  setWhisperCppPort: whisperCppManager.setPort,
 });
 
 app.commandLine.appendSwitch("force_high_performance_gpu");

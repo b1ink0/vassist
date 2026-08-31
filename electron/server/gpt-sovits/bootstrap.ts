@@ -16,6 +16,17 @@ const __dirname = dirname(__filename);
 
 const IS_WINDOWS = process.platform === "win32";
 const IS_MACOS = process.platform === "darwin";
+const PYTHON_BOOTSTRAP_URLS = {
+  windows310:
+    "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip",
+  windows312:
+    "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip",
+  pip: "https://bootstrap.pypa.io/get-pip.py",
+  macArm64:
+    "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-aarch64-apple-darwin-install_only.tar.gz",
+  macX64:
+    "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-x86_64-apple-darwin-install_only.tar.gz",
+} as const;
 
 type BootstrapOptions = {
   backend?: string;
@@ -160,8 +171,7 @@ class PythonBootstrap {
     this.log("=".repeat(60));
 
     // Download embedded Python
-    const pythonUrl =
-      "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip";
+    const pythonUrl = PYTHON_BOOTSTRAP_URLS.windows310;
     const zipPath = path.join(getBaseDir(), "python.zip");
 
     await this.downloadFile(pythonUrl, zipPath);
@@ -184,7 +194,7 @@ class PythonBootstrap {
     }
 
     // Download and install pip
-    const getPipUrl = "https://bootstrap.pypa.io/get-pip.py";
+    const getPipUrl = PYTHON_BOOTSTRAP_URLS.pip;
     const getPipPath = path.join(this.pythonDir, "get-pip.py");
 
     await this.downloadFile(getPipUrl, getPipPath);
@@ -223,8 +233,8 @@ class PythonBootstrap {
     const isARM = process.arch === "arm64";
 
     const pythonUrl = isARM
-      ? "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-aarch64-apple-darwin-install_only.tar.gz"
-      : "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.10.13+20231002-x86_64-apple-darwin-install_only.tar.gz";
+      ? PYTHON_BOOTSTRAP_URLS.macArm64
+      : PYTHON_BOOTSTRAP_URLS.macX64;
 
     const tarPath = path.join(getBaseDir(), "python.tar.gz");
 
@@ -304,8 +314,7 @@ class PythonBootstrap {
     this.log("=".repeat(60));
 
     // Python 3.12.7 embeddable
-    const pythonUrl =
-      "https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip";
+    const pythonUrl = PYTHON_BOOTSTRAP_URLS.windows312;
     const zipPath = path.join(getBaseDir(), "python312.zip");
 
     this.log("[SETUP] Downloading Python 3.12 embedded (~11 MB)...");
@@ -325,7 +334,7 @@ class PythonBootstrap {
     }
 
     // Download and install pip
-    const getPipUrl = "https://bootstrap.pypa.io/get-pip.py";
+    const getPipUrl = PYTHON_BOOTSTRAP_URLS.pip;
     const getPipPath = path.join(this.pythonDir, "get-pip.py");
 
     await this.downloadFile(getPipUrl, getPipPath);

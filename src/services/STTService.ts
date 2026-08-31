@@ -7,6 +7,10 @@
 
 import OpenAI from "openai";
 import { STTProviders, DefaultSTTConfig } from "../config/aiConfig";
+import {
+  DEFAULT_ENDPOINTS,
+  normalizeOpenAIBaseUrl,
+} from "../config/serviceEndpoints";
 import storageManager from "../storage";
 import ChromeAIValidator from "./ChromeAIValidator";
 import Logger from "./LoggerService";
@@ -167,10 +171,10 @@ class STTService {
         );
       } else if (provider === STTProviders.OPENAI_COMPATIBLE) {
         // Normalize endpoint to ensure /v1 is present (OpenAI SDK appends /audio/transcriptions to baseURL)
-        let endpoint = config["openai-compatible"].endpoint;
-        if (!endpoint.endsWith("/v1")) {
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          config["openai-compatible"].endpoint,
+          DEFAULT_ENDPOINTS.openaiCompatible,
+        );
 
         state.client = new OpenAI({
           apiKey: config["openai-compatible"].apiKey || "default",
@@ -190,11 +194,10 @@ class STTService {
         });
       } else if (provider === STTProviders.ANDROID_LOCAL) {
         const androidConfig = config["android-local"] || {};
-        let endpoint = androidConfig.endpoint || "http://127.0.0.1:8765";
-
-        if (!endpoint.endsWith("/v1")) {
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          androidConfig.endpoint,
+          DEFAULT_ENDPOINTS.androidLocal,
+        );
 
         state.client = new OpenAI({
           apiKey: "android-local",
@@ -214,11 +217,10 @@ class STTService {
         });
       } else if (provider === STTProviders.DESKTOP_LOCAL) {
         const desktopConfig = config["desktop-local"] || {};
-        let endpoint = desktopConfig.endpoint || "http://127.0.0.1:11438";
-
-        if (!endpoint.endsWith("/v1")) {
-          endpoint = endpoint.replace(/\/$/, "") + "/v1";
-        }
+        const endpoint = normalizeOpenAIBaseUrl(
+          desktopConfig.endpoint,
+          DEFAULT_ENDPOINTS.desktopLocal,
+        );
 
         state.client = new OpenAI({
           apiKey: "desktop-local",

@@ -3,6 +3,7 @@ import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
 import SttTtsEventService from "../../../services/SttTtsEventService";
 import { ANDROID_WHISPER_VARIANTS } from "../../../config/androidWhisperModels";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 interface VariantStatus {
   downloaded?: boolean;
@@ -199,7 +200,9 @@ const WhisperModelDownloader = ({
       // (best-effort; everything else works without it)
       let qnnOk = false;
       try {
-        const resp = await fetch("http://127.0.0.1:8765/v1/models/status");
+        const resp = await fetch(
+          `${DEFAULT_ENDPOINTS.androidLocal}/v1/models/status`,
+        );
         if (resp.ok) {
           const data = (await resp.json()) as {
             qnn?: {

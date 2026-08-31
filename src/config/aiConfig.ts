@@ -5,6 +5,12 @@
  * All settings are editable via the Control Panel Config tab.
  */
 
+import {
+  DEFAULT_ENDPOINTS,
+  DEFAULT_SERVICE_PORTS,
+  validateDesktopServicePorts,
+} from "./serviceEndpoints";
+
 const isAndroidMode =
   typeof __ANDROID_MODE__ !== "undefined" && __ANDROID_MODE__;
 const isDesktopMode =
@@ -14,7 +20,7 @@ const isDesktopMode =
  * Android Local AI Server Configuration
  */
 const ANDROID_LOCAL_SERVER = {
-  baseUrl: "http://127.0.0.1:8765",
+  baseUrl: DEFAULT_ENDPOINTS.androidLocal,
 };
 
 /**
@@ -22,7 +28,7 @@ const ANDROID_LOCAL_SERVER = {
  * Single unified HTTP server (like Android) that proxies to native binaries
  */
 const DESKTOP_LOCAL_SERVER = {
-  baseUrl: "http://127.0.0.1:11438", // Unified endpoint - Electron handles internal routing
+  baseUrl: DEFAULT_ENDPOINTS.desktopLocal, // Unified endpoint - Electron handles internal routing
 };
 
 /**
@@ -336,7 +342,7 @@ export const DefaultAIConfig = {
   },
 
   ollama: {
-    endpoint: "http://localhost:11434",
+    endpoint: DEFAULT_ENDPOINTS.ollama,
     model: "llama2",
     temperature: 0.7,
     maxTokens: 2000,
@@ -398,7 +404,14 @@ export const DefaultAIConfig = {
     model: "qwen3:0.6b", // Default model name
     customModelsPath: null,
     shareOnNetwork: false,
-    serverPort: 11438,
+    serverPort: DEFAULT_SERVICE_PORTS.server,
+    internalPorts: {
+      llamaServer: DEFAULT_SERVICE_PORTS.llamaServer,
+      gptSovits: DEFAULT_SERVICE_PORTS.gptSovits,
+      fasterWhisper: DEFAULT_SERVICE_PORTS.fasterWhisper,
+      supertonic: DEFAULT_SERVICE_PORTS.supertonic,
+      whisperCpp: DEFAULT_SERVICE_PORTS.whisperCpp,
+    },
     backend: "auto",
     temperature: 0.7,
     maxTokens: 2048,
@@ -491,7 +504,7 @@ export const DefaultTTSConfig = {
   },
 
   "openai-compatible": {
-    endpoint: "http://localhost:8000",
+    endpoint: DEFAULT_ENDPOINTS.openaiCompatible,
     apiKey: "",
     model: "tts",
     voice: "default",
@@ -530,7 +543,7 @@ export const DefaultTTSConfig = {
   },
 
   "gptsovits-remote": {
-    endpoint: "http://localhost:11438", // Remote GPT-SoVITS server URL
+    endpoint: DEFAULT_ENDPOINTS.desktopLocal, // Remote GPT-SoVITS server URL
     model: "gpt-sovits",
     // Voice cloning reference (same as desktop-local)
     referenceVoiceId: null,
@@ -573,7 +586,7 @@ export const DefaultSTTConfig = {
   },
 
   "openai-compatible": {
-    endpoint: "http://localhost:8000",
+    endpoint: DEFAULT_ENDPOINTS.openaiCompatible,
     apiKey: "",
     model: "whisper",
     language: "auto",
@@ -607,7 +620,21 @@ export type AIProvider = (typeof AIProviders)[keyof typeof AIProviders];
 export type TTSProvider = (typeof TTSProviders)[keyof typeof TTSProviders];
 export type STTProvider = (typeof STTProviders)[keyof typeof STTProviders];
 
-export type AIConfig = typeof DefaultAIConfig;
+type WidenConfigValue<T> = T extends string
+  ? string
+  : T extends number
+    ? number
+    : T extends readonly unknown[]
+      ? T
+      : T extends (...args: never[]) => unknown
+        ? T
+        : T extends object
+          ? { [K in keyof T]: WidenConfigValue<T[K]> }
+          : T;
+
+// Configuration loaded from IndexedDB may contain user-selected values, so
+// avoid making the inferred defaults into overly narrow literal types.
+export type AIConfig = WidenConfigValue<typeof DefaultAIConfig>;
 export type TTSConfig = typeof DefaultTTSConfig;
 export type STTConfig = typeof DefaultSTTConfig;
 
@@ -679,13 +706,14 @@ export function validateAIConfig(
     ) {
       errors.push("Desktop Local Endpoint cannot be empty");
     }
-    if (config["desktop-local"]?.serverPort !== undefined) {
-      const port = Number(config["desktop-local"].serverPort);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        errors.push(
-          "Desktop Local Shared Server Port must be between 1 and 65535",
-        );
-      }
+    const desktop = config["desktop-local"];
+    if (desktop) {
+      errors.push(
+        ...validateDesktopServicePorts(
+          desktop.serverPort,
+          desktop.internalPorts,
+        ),
+      );
     }
   }
 

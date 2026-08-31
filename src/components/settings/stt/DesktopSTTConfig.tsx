@@ -3,6 +3,7 @@ import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { cn } from "../../../utils/cn";
 import { Button, Input, Select } from "../../ui";
+import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 
 interface DesktopSTTConfigShape {
   endpoint?: string;
@@ -798,9 +799,9 @@ const DesktopSTTConfig = ({
             </label>
             <Input
               type="text"
-              value={config.endpoint || "http://127.0.0.1:11438"}
+              value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
               onChange={(e) => handleChange("endpoint", e.target.value)}
-              placeholder="http://127.0.0.1:11438"
+              placeholder={DEFAULT_ENDPOINTS.desktopLocal}
               variant={isLightBackground ? "dark" : "default"}
             />
             <p className="text-[10px] text-white/50 mt-1">

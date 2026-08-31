@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as React from "react";
+import { Accordion } from "@base-ui/react/accordion";
 import {
   useAIConfig,
   useAITesting,
@@ -45,6 +46,12 @@ import StatusMessage from "../common/StatusMessage";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
 import { Button, Input, Select, Card, SettingsRow, TabBar } from "../ui";
+import {
+  DEFAULT_SERVICE_PORTS,
+  DEFAULT_ENDPOINTS,
+  resolveDesktopInternalPorts,
+  validateDesktopServicePorts,
+} from "../../config/serviceEndpoints";
 
 interface RoutingModelConfig {
   useSameAsMain?: boolean;
@@ -1578,12 +1585,19 @@ const LLMSettings = ({
     unknown | null
   >(null);
   const desktopServerPort = Number(
-    aiConfig["desktop-local"]?.serverPort || 11438,
+    aiConfig["desktop-local"]?.serverPort || DEFAULT_SERVICE_PORTS.server,
   );
   const isDesktopServerPortValid =
     Number.isInteger(desktopServerPort) &&
     desktopServerPort >= 1 &&
     desktopServerPort <= 65535;
+  const desktopInternalPorts = resolveDesktopInternalPorts(
+    aiConfig["desktop-local"]?.internalPorts,
+  );
+  const desktopPortErrors = validateDesktopServicePorts(
+    desktopServerPort,
+    desktopInternalPorts,
+  );
 
   useEffect(() => {
     if (!isDesktop || !desktopAPI?.server?.getStatus) {
@@ -1723,6 +1737,85 @@ const LLMSettings = ({
               </p>
             )}
           </div>
+
+          <Accordion.Root className="mt-3">
+            <Accordion.Item
+              value="internal-ports"
+              className="rounded-lg border border-white/10 bg-white/5"
+            >
+              <Accordion.Header className="m-0">
+                <Accordion.Trigger className="group flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-white/90 outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-white/40">
+                  <span>Internal ports</span>
+                  <Icon
+                    name="chevron-right"
+                    size={16}
+                    className="shrink-0 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90 motion-reduce:transition-none"
+                  />
+                </Accordion.Trigger>
+              </Accordion.Header>
+              <Accordion.Panel className="h-[var(--accordion-panel-height)] overflow-hidden transition-[height] duration-200 ease-out data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none">
+                <div className="px-3 pb-3">
+                  <p className="text-xs text-white/50">
+                    Each port must be unique and between 1 and 65535.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {(
+                      [
+                        ["llamaServer", "llama-server", "Local LLM worker"],
+                        ["gptSovits", "GPT-SoVITS", "Local voice synthesis"],
+                        [
+                          "fasterWhisper",
+                          "faster-whisper",
+                          "Speech recognition",
+                        ],
+                        ["supertonic", "Supertonic", "Local TTS worker"],
+                        ["whisperCpp", "whisper.cpp", "Speech recognition"],
+                      ] as const
+                    ).map(([key, label, description]) => (
+                      <label
+                        key={key}
+                        className="space-y-1 text-xs text-white/70"
+                      >
+                        <span className="block font-medium text-white/90">
+                          {label}
+                        </span>
+                        <span className="block text-white/40">
+                          {description}
+                        </span>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="65535"
+                          step="1"
+                          value={desktopInternalPorts[key]}
+                          onChange={(e) => {
+                            const nextPort = Number.parseInt(
+                              e.target.value,
+                              10,
+                            );
+                            if (Number.isInteger(nextPort)) {
+                              updateAIConfig(
+                                `desktop-local.internalPorts.${key}`,
+                                nextPort,
+                              );
+                            }
+                          }}
+                          variant={isLightBackground ? "dark" : "default"}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  {desktopPortErrors.length > 0 && (
+                    <div className="mt-3 space-y-1 text-xs text-red-300">
+                      {desktopPortErrors.map((error) => (
+                        <p key={error}>{error}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion.Root>
         </Card>
       )}
 
@@ -1858,7 +1951,7 @@ const LLMSettings = ({
               onChange={(e) =>
                 updateAIConfig("ollama.endpoint", e.target.value)
               }
-              placeholder="http://localhost:11434"
+              placeholder={DEFAULT_ENDPOINTS.ollama}
               variant={isLightBackground ? "dark" : "default"}
               className="w-full"
             />
@@ -1915,12 +2008,13 @@ const LLMSettings = ({
             <Input
               type="text"
               value={
-                aiConfig["android-local"]?.endpoint ?? "http://127.0.0.1:8765"
+                aiConfig["android-local"]?.endpoint ??
+                DEFAULT_ENDPOINTS.androidLocal
               }
               onChange={(e) =>
                 updateAIConfig("android-local.endpoint", e.target.value)
               }
-              placeholder="http://127.0.0.1:8765"
+              placeholder={DEFAULT_ENDPOINTS.androidLocal}
               variant={isLightBackground ? "dark" : "default"}
               className="w-full"
             />
