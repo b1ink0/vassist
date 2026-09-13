@@ -24,9 +24,9 @@ import { STTServiceProxy } from "../../services/proxies";
 import { TTSServiceProxy } from "../../services/proxies";
 import VoiceConversationService, {
   ConversationStates,
-} from "../../services/VoiceConversationService";
+} from "../../services/audio/VoiceConversationService";
 import BackgroundDetector from "../../utils/BackgroundDetector";
-import DragDropService from "../../services/DragDropService";
+import DragDropService from "../../services/media/DragDropService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import {
   useChatActions,
@@ -45,14 +45,15 @@ import {
   useAIConfig,
   useConfigAIActions,
 } from "../../hooks/config/useConfigAI";
+import { useConfigStore } from "../../stores/useConfigStore";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import MicrophoneService from "../../services/MicrophoneService";
-import CameraService from "../../services/CameraService";
-import ScreenShareService from "../../services/ScreenShareService";
+import MicrophoneService from "../../services/audio/MicrophoneService";
+import CameraService from "../../services/media/CameraService";
+import ScreenShareService from "../../services/media/ScreenShareService";
 import { isVAssistTestMode } from "../../testing/runtime";
 import { cn } from "../../utils/cn";
 
@@ -303,6 +304,38 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     // Screen share state (Desktop only)
     const [isScreenShareActive, setIsScreenShareActive] = useState(false);
     const isDesktopInputWindow = isDesktop && isInputWindow;
+
+    useEffect(() => {
+      if (!isDesktopInputWindow || !api?.ipc) return;
+
+      const unsubscribe = api.ipc.on("state:uiThemeMode", (mode: unknown) => {
+        if (mode !== "adaptive" && mode !== "light" && mode !== "dark") {
+          Logger.warn(
+            "ChatInput",
+            "Ignored invalid theme mode from main window:",
+            mode,
+          );
+          return;
+        }
+
+        Logger.log("ChatInput", "Applying theme mode from main window", {
+          mode,
+        });
+        useConfigStore.setState((state) => ({
+          uiConfig: {
+            ...state.uiConfig,
+            backgroundDetection: {
+              ...state.uiConfig.backgroundDetection,
+              mode,
+            },
+          },
+        }));
+      });
+
+      api.ipc.send("state:uiThemeReady");
+
+      return unsubscribe;
+    }, [api, isDesktopInputWindow]);
 
     // IPC wrapper functions for input window
     const wrappedOnSend = useCallback(

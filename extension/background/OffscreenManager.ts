@@ -6,7 +6,7 @@
 
 /* global chrome */
 
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 import { MessageTypes } from "../shared/MessageTypes";
 
 type OffscreenValue = string | number | boolean | null | undefined | object;

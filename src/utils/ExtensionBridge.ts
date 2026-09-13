@@ -4,7 +4,7 @@
  * Uses window.postMessage for cross-world communication
  */
 
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 
 type BridgeOptions = { timeout?: number };
 type PendingRequest = {

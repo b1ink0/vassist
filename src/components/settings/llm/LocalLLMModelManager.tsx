@@ -9,7 +9,7 @@ import Dialog from "../../common/Dialog";
 import Toggle from "../../common/Toggle";
 import { Button, Input } from "../../ui";
 import { cn } from "../../../utils/cn";
-import type { DiscoveryItem } from "../../../services/LLMModelStorageService";
+import type { DiscoveryItem } from "../../../services/storage/LLMModelStorageService";
 
 interface ModelEntry {
   name: string;

@@ -9,7 +9,7 @@ import {
   useAIConfig,
   useConfigAIActions,
 } from "../../hooks/config/useConfigAI";
-import ChromeAIValidator from "../../services/ChromeAIValidator";
+import ChromeAIValidator from "../../services/ai/ChromeAIValidator";
 import React from "react";
 import AIFeaturesConfig from "../common/AIFeaturesConfig";
 

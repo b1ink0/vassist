@@ -10,7 +10,7 @@ import type { DebugOverlayPositionManagerLike } from "./DebugOverlay";
 import ResourceLoader from "../../utils/ResourceLoader";
 import { StorageServiceProxy } from "../../services/proxies";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type { Scene } from "@babylonjs/core";
 import type {
   AssistantHandle,

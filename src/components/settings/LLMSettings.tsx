@@ -35,7 +35,7 @@ import LocalLLMModelManager from "./llm/LocalLLMModelManager";
 import {
   getLLMModelStorage,
   type DiscoveryResult,
-} from "../../services/LLMModelStorageService";
+} from "../../services/storage/LLMModelStorageService";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
 import {

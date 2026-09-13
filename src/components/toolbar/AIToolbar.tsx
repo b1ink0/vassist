@@ -23,8 +23,8 @@ import { useAIConfig } from "../../hooks/config/useConfigAI";
 import { useTTSConfig } from "../../hooks/config/useConfigTTS";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import BackgroundDetector from "../../utils/BackgroundDetector";
-import MediaExtractionService from "../../services/MediaExtractionService";
-import UtilService from "../../services/UtilService";
+import MediaExtractionService from "../../services/media/MediaExtractionService";
+import UtilService from "../../services/common/UtilService";
 import {
   SummarizerServiceProxy,
   TranslatorServiceProxy,
@@ -33,14 +33,14 @@ import {
   RewriterServiceProxy,
   WriterServiceProxy,
 } from "../../services/proxies";
-import VoiceRecordingService from "../../services/VoiceRecordingService";
+import VoiceRecordingService from "../../services/audio/VoiceRecordingService";
 import { TranslationLanguages } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
 import ToolbarButton, { type ToolbarButtonProps } from "./ToolbarButton";
 import ToolbarSection from "./ToolbarSection";
 import ToolbarResultPanel from "./ToolbarResultPanel";
 import { Icon } from "../icons";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 
 type ToolbarPosition = { x: number; y: number };
 type ToolbarAction = string | null;

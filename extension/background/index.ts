@@ -13,16 +13,16 @@ import { MessageTypes } from "../shared/MessageTypes";
 
 // Import services directly from src (unified implementation)
 import storageManager from "../../src/storage/StorageManager";
-import aiService from "../../src/services/AIService";
-import ttsService from "../../src/services/TTSService";
-import sttService from "../../src/services/STTService";
-import translatorService from "../../src/services/TranslatorService";
-import languageDetectorService from "../../src/services/LanguageDetectorService";
-import summarizerService from "../../src/services/SummarizerService";
-import ChromeAIValidator from "../../src/services/ChromeAIValidator";
-import rewriterService from "../../src/services/RewriterService";
-import writerService from "../../src/services/WriterService";
-import Logger from "../../src/services/LoggerService";
+import aiService from "../../src/services/ai/AIService";
+import ttsService from "../../src/services/audio/TTSService";
+import sttService from "../../src/services/audio/STTService";
+import translatorService from "../../src/services/ai/TranslatorService";
+import languageDetectorService from "../../src/services/ai/LanguageDetectorService";
+import summarizerService from "../../src/services/ai/SummarizerService";
+import ChromeAIValidator from "../../src/services/ai/ChromeAIValidator";
+import rewriterService from "../../src/services/ai/RewriterService";
+import writerService from "../../src/services/ai/WriterService";
+import Logger from "../../src/services/common/LoggerService";
 import {
   DefaultAIConfig,
   DefaultTTSConfig,

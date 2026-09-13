@@ -34,7 +34,7 @@ import GPTSoVITSConfig from "./tts/GPTSoVITSConfig";
 import AndroidTtsPackDownloader from "./tts/AndroidTtsPackDownloader";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { Button, Input, Select, Card, SettingsRow } from "../ui";
 
 interface TTSSettingsProps {

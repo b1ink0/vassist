@@ -10,7 +10,7 @@ import {
   useAssistantRef,
   useHandleAssistantReady,
 } from "../src/hooks/app/useAssistant";
-import Logger from "../src/services/LoggerService";
+import Logger from "../src/services/common/LoggerService";
 import type {
   PositionManagerLike,
   SceneWithMetadata,

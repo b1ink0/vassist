@@ -17,7 +17,7 @@ import {
   AndroidPresetOverride,
   DesktopPresetOverride,
 } from "../../config/uiConfig";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import type {
   AnimationManagerOffsetLike,

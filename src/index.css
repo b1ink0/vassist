@@ -149,8 +149,10 @@
   --vassist-dark-glass-border: rgba(255, 255, 255, 0.18);
   --vassist-dark-glass-border-strong: rgba(255, 255, 255, 0.26);
   --vassist-backdrop-blur: 16px;
-  --vassist-surface-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
-  --vassist-surface-shadow-strong: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+  --vassist-surface-shadow:
+    0 2px 5px 0 rgba(0, 0, 0, 0.18), 0 8px 24px -8px rgba(0, 0, 0, 0.32);
+  --vassist-surface-shadow-strong:
+    0 3px 8px 0 rgba(0, 0, 0, 0.24), 0 14px 32px -10px rgba(0, 0, 0, 0.42);
   --vassist-ambient-overlay-opacity: 1;
   --vassist-modal-backdrop: rgba(0, 0, 0, 0.54);
   --vassist-overlay-scrim: rgba(10, 10, 14, 0.62);

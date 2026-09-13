@@ -1,4 +1,4 @@
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Node } from "@babylonjs/core/node";

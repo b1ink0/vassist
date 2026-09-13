@@ -6,9 +6,9 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import RewriterService from "../RewriterService";
+import RewriterService from "../ai/RewriterService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultAIConfig } from "../../config/aiConfig";
 

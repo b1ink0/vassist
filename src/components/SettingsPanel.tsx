@@ -15,7 +15,7 @@ import { useVAssistReactCustomizations } from "../embed/reactHostCustomizations"
 import { Icon } from "./icons";
 import { cn } from "../utils/cn";
 import TabBar from "./ui/TabBar";
-import ChromeAIValidator from "../services/ChromeAIValidator";
+import ChromeAIValidator from "../services/ai/ChromeAIValidator";
 import UISettings from "./settings/UISettings";
 import ThreeDSettings from "./settings/ThreeDSettings";
 import LLMSettings from "./settings/LLMSettings";
@@ -41,7 +41,7 @@ import {
   useTTSTesting,
 } from "../hooks/config/useConfigTTS";
 import { useUIConfigSaved } from "../hooks/config/useConfigUI";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 
 type SettingsTabId = VAssistSettingsTabId;
 
@@ -549,6 +549,7 @@ const SettingsPanel = ({
 
       <div className="relative">
         <div
+          data-vassist-tab-indicator
           className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
           style={{
             left: `${tabIndicatorStyle.left}px`,

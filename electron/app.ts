@@ -59,6 +59,7 @@ const state = {
   mainWindow: null,
   inputWindow: null,
   inputWindowOpen: false,
+  uiThemeMode: null,
   tray: null,
 };
 
@@ -94,6 +95,7 @@ const trayShortcutsManager = createTrayShortcutsManager({
   globalShortcut,
   Tray,
   Menu,
+  screen,
   nativeImage,
   fs,
   path,

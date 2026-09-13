@@ -3,7 +3,7 @@
  * Manages per-tab state and lifecycle
  */
 
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 
 interface TabState {
   id: number;

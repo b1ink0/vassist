@@ -12,7 +12,7 @@ import {
   useSceneKey,
   useSceneRef,
 } from "../../hooks/app/useScene";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type {
   PositionManagerLike,
   SceneWithMetadata,

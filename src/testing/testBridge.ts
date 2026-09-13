@@ -12,8 +12,8 @@ import ChatService, {
   type ChatNode,
   type ExportedChatTree,
   type FlatChatMessage,
-} from "../services/ChatService";
-import chatHistoryService from "../services/ChatHistoryService";
+} from "../services/chat/ChatService";
+import chatHistoryService from "../services/chat/ChatHistoryService";
 import StorageServiceProxy from "../services/proxies/StorageServiceProxy";
 import {
   AIServiceProxy,

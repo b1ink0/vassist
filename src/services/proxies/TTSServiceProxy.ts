@@ -6,9 +6,9 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import TTSService from "../TTSService";
+import TTSService from "../audio/TTSService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultTTSConfig } from "../../config/aiConfig";
 import liveLipSyncService from "../audio/LiveLipSyncService";

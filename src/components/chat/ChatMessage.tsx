@@ -19,7 +19,7 @@ import { TTSServiceProxy } from "../../services/proxies";
 import AudioPlayer from "../media/AudioPlayer";
 import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import ThinkingPanel from "./ThinkingPanel";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 

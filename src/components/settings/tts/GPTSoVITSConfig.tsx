@@ -15,8 +15,8 @@ const GPTSOVITS_LANG_OPTIONS = [
   { value: GPTSoVITSLanguages.KOREAN, label: "Korean" },
   { value: GPTSoVITSLanguages.CANTONESE, label: "Cantonese" },
 ];
-import voiceStorageService from "../../../services/VoiceStorageService";
-import Logger from "../../../services/LoggerService";
+import voiceStorageService from "../../../services/audio/VoiceStorageService";
+import Logger from "../../../services/common/LoggerService";
 import GPTSoVITSSetup from "./GPTSoVITSSetup";
 import { isDesktop } from "../../../utils/PlatformUtils";
 import { cn } from "../../../utils/cn";

@@ -125,6 +125,25 @@
   box-shadow: var(--vassist-surface-shadow);
 }
 
+/* Keep scrollable floating lists readable at both viewport edges. */
+.vassist-scroll-panel-mask {
+  padding-block: 16px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 32px,
+    black calc(100% - 32px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 32px,
+    black calc(100% - 32px),
+    transparent 100%
+  );
+}
+
 /* Input fields */
 .glass-input {
   background: var(--vassist-surface-base);

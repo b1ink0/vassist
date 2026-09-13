@@ -14,12 +14,12 @@ import ShortcutsConfig from "../common/ShortcutsConfig";
 import { useSetup } from "../../contexts/SetupContext";
 import { useRef, useState, type ChangeEvent } from "react";
 import Icon from "../icons/Icon";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop, isExtension } from "../../utils/PlatformUtils";
 import BackgroundSettings from "./BackgroundSettings";
 import appDataBackupService, {
   type BackupSelection,
-} from "../../services/AppDataBackupService";
+} from "../../services/storage/AppDataBackupService";
 import { Button, Select, Input, Card, SettingsRow } from "../ui";
 
 interface UISettingsProps {

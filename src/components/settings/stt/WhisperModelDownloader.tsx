@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
-import SttTtsEventService from "../../../services/SttTtsEventService";
+import SttTtsEventService from "../../../services/audio/SttTtsEventService";
 import { ANDROID_WHISPER_VARIANTS } from "../../../config/androidWhisperModels";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 

@@ -6,8 +6,8 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "../../utils/cn";
 import Icon from "../icons/Icon";
-import Logger from "../../services/LoggerService";
-import { backgroundStorageService } from "../../services/BackgroundStorageService";
+import Logger from "../../services/common/LoggerService";
+import { backgroundStorageService } from "../../services/storage/BackgroundStorageService";
 import { Button } from "../ui";
 
 interface BackgroundItem {

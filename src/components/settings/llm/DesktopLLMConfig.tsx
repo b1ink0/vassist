@@ -9,7 +9,7 @@ import LocalLLMModelManager from "./LocalLLMModelManager";
 import {
   getLLMModelStorage,
   type DiscoveryResult,
-} from "../../../services/LLMModelStorageService";
+} from "../../../services/storage/LLMModelStorageService";
 
 interface DesktopLLMConfigShape {
   endpoint?: string;

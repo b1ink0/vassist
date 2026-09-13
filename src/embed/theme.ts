@@ -106,10 +106,10 @@ export const getVAssistThemeRootAttributes = (
     "--vassist-mono-font-family": theme.monoFontFamily,
     "--vassist-backdrop-blur": `${backdropBlurPx}px`,
     "--vassist-surface-shadow": theme.effects.enableSurfaceShadows
-      ? `0 8px 32px 0 ${tokens.shadowColor}`
+      ? `0 2px 5px 0 ${tokens.shadowColor}, 0 8px 24px -8px ${tokens.shadowColor}`
       : "none",
     "--vassist-surface-shadow-strong": theme.effects.enableSurfaceShadows
-      ? `0 12px 40px 0 ${inverseTokens.shadowColor}`
+      ? `0 3px 8px 0 ${inverseTokens.shadowColor}, 0 14px 32px -10px ${inverseTokens.shadowColor}`
       : "none",
     "--vassist-ambient-overlay-opacity": theme.effects.enableAmbientOverlay
       ? "1"

@@ -5,7 +5,7 @@ import { getBrandedIconUrl } from "../../embed/branding";
 import { useEmbedHost } from "../../embed/EmbedHostContext";
 import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 
 type IconName = keyof typeof iconMap;
 type IconContext = "toolbar" | "chat" | "general";

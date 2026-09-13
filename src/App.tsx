@@ -2,8 +2,8 @@
  * @fileoverview Root application component with setup wizard and context providers.
  */
 
-import CameraService from "./services/CameraService";
-import ScreenShareService from "./services/ScreenShareService";
+import CameraService from "./services/media/CameraService";
+import ScreenShareService from "./services/media/ScreenShareService";
 import DemoSite from "./components/DemoSite";
 import LoadingIndicator from "./components/common/LoadingIndicator";
 import { AppRuntimeProvider } from "./contexts/AppRuntimeContext";
@@ -27,10 +27,12 @@ import { useRefreshAndroidApi } from "./hooks/useAndroidStore";
 import { useRefreshDesktopApi } from "./hooks/useDesktopStore";
 import {
   isAndroid,
+  isDesktop,
   isEmbed,
   isInputWindow,
   isScreenPicker,
 } from "./utils/PlatformUtils";
+import { useConfigStore } from "./stores/useConfigStore";
 import {
   lazy,
   Suspense,
@@ -87,6 +89,10 @@ function StoreBootstrapInner({
   useInitializeConfigStore(embedConfig);
   useInitializeAppStore(embedConfig);
 
+  const desktopThemeMode = useConfigStore(
+    (state) => state.uiConfig.backgroundDetection?.mode,
+  );
+
   const refreshDesktopApi = useRefreshDesktopApi();
   const refreshAndroidApi = useRefreshAndroidApi();
 
@@ -112,6 +118,7 @@ function StoreBootstrapInner({
         data-vassist-host-id={embedConfig.mount.hostId}
         data-vassist-theme-mode={themeRoot.mode}
         data-vassist-surface-style={themeRoot.surfaceStyle}
+        data-vassist-desktop-theme={isDesktop ? desktopThemeMode : undefined}
         style={themeRoot.style}
         onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
         onPointerDownCapture={() =>
@@ -130,9 +137,6 @@ const LazySetupWizard = lazy(() => import("./components/setup/SetupWizard"));
 const LazyChatInput = lazy(() => import("./components/chat/ChatInput"));
 const LazyVideoPreview = lazy(
   () => import("./components/desktop/VideoPreview"),
-);
-const LazyDesktopWindowControls = lazy(
-  () => import("./components/desktop/DesktopWindowControls"),
 );
 const LazyDesktopWindowInteractivityBridge = lazy(
   () => import("./components/desktop/DesktopWindowInteractivityBridge"),
@@ -418,9 +422,6 @@ function App({
           <AnimationProvider>
             <Suspense fallback={null}>
               <LazyDesktopWindowInteractivityBridge />
-            </Suspense>
-            <Suspense fallback={null}>
-              <LazyDesktopWindowControls />
             </Suspense>
             <div className="relative w-full h-screen overflow-hidden">
               <AppWithSetup

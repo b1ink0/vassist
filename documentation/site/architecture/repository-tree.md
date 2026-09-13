@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 171
-- Files: 592
-- Text files counted for metrics: 505
-- Total text lines: 158255
-- Code files counted for metrics: 403
-- Total code lines: 142668
+- Directories: 180
+- Files: 598
+- Text files counted for metrics: 511
+- Total text lines: 159572
+- Code files counted for metrics: 409
+- Total code lines: 143934
 
 ## Line Counts by File Type
 
@@ -17,17 +17,17 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1477 |
-| CSS          | .css, .scss, .less      |     7 |  2115 |
+| CSS          | .css, .scss, .less      |     7 |  2729 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   103 | 51037 |
-| TypeScript   | .ts, .mts, .cts         |   252 | 75897 |
+| TSX          | .tsx                    |   105 | 50949 |
+| TypeScript   | .ts, .mts, .cts         |   256 | 76637 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   573 |
-| Markdown     | .md                     |    35 |  6093 |
-| Other Text   | mixed                   |    14 |  3526 |
+| Markdown     | .md                     |    35 |  6109 |
+| Other Text   | mixed                   |    14 |  3561 |
 | Plain Text   | (no extension)          |    11 |  4015 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
@@ -44,7 +44,7 @@ VAssist repository tree and file metrics.
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 49 directories, 248 files
+- src/: 58 directories, 254 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -484,8 +484,17 @@ vassist/
 │   │   │   ├── LiveAssistantShell.tsx
 │   │   │   └── VirtualAssistant.tsx
 │   │   ├── chat/
+│   │   │   ├── assistant-controls/
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── AssistantControlPanels.tsx
+│   │   │   │   │   └── AssistantControlStack.tsx
+│   │   │   │   ├── hooks/
+│   │   │   │   │   ├── useAssistantControlDrag.ts
+│   │   │   │   │   └── useAssistantControlTheme.ts
+│   │   │   │   ├── positioning.ts
+│   │   │   │   └── types.ts
+│   │   │   ├── AssistantControlDock.tsx
 │   │   │   ├── ChatBubble.tsx
-│   │   │   ├── ChatButton.tsx
 │   │   │   ├── ChatContainer.tsx
 │   │   │   ├── ChatController.tsx
 │   │   │   ├── ChatHistoryPanel.tsx
@@ -629,8 +638,44 @@ vassist/
 │   │   ├── useDesktopWindowResize.ts
 │   │   └── useVisibilityUnmount.ts
 │   ├── services/
+│   │   ├── ai/
+│   │   │   ├── AIService.ts
+│   │   │   ├── ChromeAIValidator.ts
+│   │   │   ├── LanguageDetectorService.ts
+│   │   │   ├── LocalLlmClientFactory.ts
+│   │   │   ├── RewriterService.ts
+│   │   │   ├── SummarizerService.ts
+│   │   │   ├── TranslatorService.ts
+│   │   │   └── WriterService.ts
 │   │   ├── audio/
-│   │   │   └── LiveLipSyncService.ts
+│   │   │   ├── LiveLipSyncService.ts
+│   │   │   ├── MicrophoneService.ts
+│   │   │   ├── STTService.ts
+│   │   │   ├── SttTtsEventService.ts
+│   │   │   ├── TTSService.ts
+│   │   │   ├── VADService.ts
+│   │   │   ├── VoiceConversationService.ts
+│   │   │   ├── VoiceRecordingService.ts
+│   │   │   └── VoiceStorageService.ts
+│   │   ├── chat/
+│   │   │   ├── ChatHistoryService.ts
+│   │   │   ├── ChatService.ts
+│   │   │   └── DocumentInteractionService.ts
+│   │   ├── common/
+│   │   │   ├── Logger.ts
+│   │   │   ├── LoggerService.ts
+│   │   │   └── UtilService.ts
+│   │   ├── media/
+│   │   │   ├── CameraService.ts
+│   │   │   ├── DragDropService.ts
+│   │   │   ├── FrameCaptureService.ts
+│   │   │   ├── MediaExtractionService.ts
+│   │   │   └── ScreenShareService.ts
+│   │   ├── mmd/
+│   │   │   ├── EmotePlayerService.ts
+│   │   │   ├── PMXConverterService.ts
+│   │   │   ├── VMDConverterService.ts
+│   │   │   └── VMDHandler.ts
 │   │   ├── proxies/
 │   │   │   ├── AIServiceProxy.ts
 │   │   │   ├── index.ts
@@ -643,44 +688,14 @@ vassist/
 │   │   │   ├── TranslatorServiceProxy.ts
 │   │   │   ├── TTSServiceProxy.ts
 │   │   │   └── WriterServiceProxy.ts
-│   │   ├── AIService.ts
-│   │   ├── AppDataBackupService.ts
-│   │   ├── BackgroundStorageService.ts
-│   │   ├── CameraService.ts
-│   │   ├── ChatHistoryService.ts
-│   │   ├── ChatService.ts
-│   │   ├── ChromeAIValidator.ts
-│   │   ├── DocumentInteractionService.ts
-│   │   ├── DragDropService.ts
-│   │   ├── EmotePlayerService.ts
-│   │   ├── EmoteStorageService.ts
-│   │   ├── FrameCaptureService.ts
-│   │   ├── LanguageDetectorService.ts
-│   │   ├── LLMModelStorageService.ts
-│   │   ├── LocalLlmClientFactory.ts
-│   │   ├── Logger.ts
-│   │   ├── LoggerService.ts
-│   │   ├── MediaExtractionService.ts
-│   │   ├── MicrophoneService.ts
-│   │   ├── ModelStorageService.ts
-│   │   ├── MotionStorageService.ts
-│   │   ├── PMXConverterService.ts
-│   │   ├── RewriterService.ts
-│   │   ├── ScreenShareService.ts
-│   │   ├── StageStorageService.ts
-│   │   ├── STTService.ts
-│   │   ├── SttTtsEventService.ts
-│   │   ├── SummarizerService.ts
-│   │   ├── TranslatorService.ts
-│   │   ├── TTSService.ts
-│   │   ├── UtilService.ts
-│   │   ├── VADService.ts
-│   │   ├── VMDConverterService.ts
-│   │   ├── VMDHandler.ts
-│   │   ├── VoiceConversationService.ts
-│   │   ├── VoiceRecordingService.ts
-│   │   ├── VoiceStorageService.ts
-│   │   └── WriterService.ts
+│   │   └── storage/
+│   │       ├── AppDataBackupService.ts
+│   │       ├── BackgroundStorageService.ts
+│   │       ├── EmoteStorageService.ts
+│   │       ├── LLMModelStorageService.ts
+│   │       ├── ModelStorageService.ts
+│   │       ├── MotionStorageService.ts
+│   │       └── StageStorageService.ts
 │   ├── storage/
 │   │   ├── adapters/
 │   │   │   ├── DexieStorageAdapter.ts

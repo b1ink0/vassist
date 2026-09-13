@@ -36,9 +36,9 @@ import {
   getAnimationsByName,
   isValidTransition,
 } from "../../config/animationConfig";
-import TTSService from "../../services/TTSService";
+import TTSService from "../../services/audio/TTSService";
 import { resourceLoader } from "../../utils/ResourceLoader";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type { LiveLipSyncMouthWeights } from "../../services/audio/LiveLipSyncService";
 import type {
   AnimationLoaderLike,
@@ -743,7 +743,7 @@ export class AnimationManager {
         try {
           // Import MotionStorageService dynamically to avoid circular dependencies
           const { motionStorageService } =
-            await import("../../services/MotionStorageService");
+            await import("../../services/storage/MotionStorageService");
 
           // Get motion data from storage
           const motion = await motionStorageService.getMotion(customMotionId);

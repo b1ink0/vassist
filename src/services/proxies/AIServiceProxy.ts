@@ -6,9 +6,9 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import AIService from "../AIService";
+import AIService from "../ai/AIService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultAIConfig } from "../../config/aiConfig";
 
@@ -481,7 +481,8 @@ class AIServiceProxy extends ServiceProxy {
       return response;
     } else {
       // Direct access to ChromeAIValidator through AIService
-      const ChromeAIValidator = (await import("../ChromeAIValidator")).default;
+      const ChromeAIValidator = (await import("../ai/ChromeAIValidator"))
+        .default;
       return await ChromeAIValidator.checkAvailability();
     }
   }
@@ -501,7 +502,8 @@ class AIServiceProxy extends ServiceProxy {
       )) as BridgeAIResponse;
       return response.supported === true;
     } else {
-      const ChromeAIValidator = (await import("../ChromeAIValidator")).default;
+      const ChromeAIValidator = (await import("../ai/ChromeAIValidator"))
+        .default;
       return ChromeAIValidator.isSupported();
     }
   }
@@ -551,7 +553,8 @@ class AIServiceProxy extends ServiceProxy {
         }
       }
     } else {
-      const ChromeAIValidator = (await import("../ChromeAIValidator")).default;
+      const ChromeAIValidator = (await import("../ai/ChromeAIValidator"))
+        .default;
       return await ChromeAIValidator.monitorDownload(onProgress);
     }
   }

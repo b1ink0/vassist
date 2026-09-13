@@ -6,9 +6,9 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import TranslatorService from "../TranslatorService";
+import TranslatorService from "../ai/TranslatorService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultAIConfig } from "../../config/aiConfig";
 

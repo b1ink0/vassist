@@ -31,17 +31,17 @@ import { cn } from "../../utils/cn";
 import { TTSServiceProxy, StorageServiceProxy } from "../../services/proxies";
 import { DefaultTTSConfig } from "../../config/aiConfig";
 import BackgroundDetector from "../../utils/BackgroundDetector";
-import DragDropService from "../../services/DragDropService";
-import UtilService from "../../services/UtilService";
+import DragDropService from "../../services/media/DragDropService";
+import UtilService from "../../services/common/UtilService";
 import SettingsPanel from "../SettingsPanel";
 import QuickAccessPanel from "../QuickAccessPanel";
 import ChatHistoryPanel from "./ChatHistoryPanel";
 import Dialog from "../common/Dialog";
 import ChatMessage from "./ChatMessage";
-import { modelStorageService } from "../../services/ModelStorageService";
-import { motionStorageService } from "../../services/MotionStorageService";
-import { stageStorageService } from "../../services/StageStorageService";
-import emoteStorageService from "../../services/EmoteStorageService";
+import { modelStorageService } from "../../services/storage/ModelStorageService";
+import { motionStorageService } from "../../services/storage/MotionStorageService";
+import { stageStorageService } from "../../services/storage/StageStorageService";
+import emoteStorageService from "../../services/storage/EmoteStorageService";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import {
   useChatActions,
@@ -80,7 +80,7 @@ import {
 } from "../../hooks/config/useConfigUI";
 import { useAndroidApi } from "../../hooks/useAndroidStore";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isDesktop, isAndroid } from "../../utils/PlatformUtils";
 import type { PositionManagerLike } from "../../babylon/types";
 import type { ComponentType } from "react";
@@ -1175,7 +1175,7 @@ const ChatContainer = ({
     async (voiceId: string) => {
       try {
         const { default: voiceStorageService } =
-          await import("../../services/VoiceStorageService");
+          await import("../../services/audio/VoiceStorageService");
         await voiceStorageService.deleteVoice(voiceId);
         Logger.log("ChatContainer", "Deleted voice:", voiceId);
 
@@ -2173,14 +2173,17 @@ const ChatContainer = ({
             ? "rgba(59, 130, 246, 0.6)"
             : isDraggingButton || isDraggingModel
               ? "rgba(255, 255, 255, 0.4)"
-              : "transparent",
+              : undefined,
           boxShadow: isDragOver
             ? "0 4px 20px rgba(59, 130, 246, 0.3)"
             : isDraggingButton || isDraggingModel
               ? "0 4px 20px rgba(255, 255, 255, 0.2)"
-              : "none",
+              : undefined,
         }}
-        className="flex flex-col-reverse gap-3 w-[calc(100vw-16px)] max-w-[400px] h-[500px] rounded-[10px] border-2 p-[5px]"
+        className={cn(
+          "flex flex-col-reverse gap-3 w-[calc(100vw-16px)] max-w-[400px] rounded-[10px] border-2 border-transparent p-[5px]",
+          modelDisabled ? "h-[450px]" : "h-[500px]",
+        )}
       >
         {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
         <div
@@ -2455,7 +2458,10 @@ const ChatContainer = ({
           {/* Scrollable messages */}
           <div
             ref={scrollRef}
-            className="absolute inset-0 overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth"
+            className={cn(
+              "absolute inset-0 overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth",
+              isDesktop && "p-3",
+            )}
           >
             {messages.length === 0 ? (
               customEmptyState ? (

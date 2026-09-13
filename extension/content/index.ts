@@ -8,7 +8,7 @@
 
 import { ContentBridge } from "./ContentBridge";
 import { MessageTypes } from "../shared/MessageTypes";
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 import { VASSIST_REACT_ROOT_ID } from "../../src/utils/VAssistDomIds";
 
 type BridgeValue = string | number | boolean | null | undefined | object;

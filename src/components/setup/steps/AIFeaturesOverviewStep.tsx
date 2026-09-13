@@ -8,7 +8,7 @@ import { useSetup } from "../../../contexts/SetupContext";
 import { Icon } from "../../icons";
 import Toggle from "../../common/Toggle";
 import ShortcutsConfig from "../../common/ShortcutsConfig";
-import Logger from "../../../services/LoggerService";
+import Logger from "../../../services/common/LoggerService";
 import { Card } from "../../ui";
 import { isAndroid } from "../../../utils/PlatformUtils";
 

@@ -25,12 +25,12 @@ import {
 import { cn } from "../../utils/cn";
 import Toggle from "../common/Toggle";
 import Icon from "../icons/Icon";
-import { pmxConverterService } from "../../services/PMXConverterService";
-import { vmdConverterService } from "../../services/VMDConverterService";
-import { modelStorageService } from "../../services/ModelStorageService";
-import { stageStorageService } from "../../services/StageStorageService";
-import { motionStorageService } from "../../services/MotionStorageService";
-import emoteStorageService from "../../services/EmoteStorageService";
+import { pmxConverterService } from "../../services/mmd/PMXConverterService";
+import { vmdConverterService } from "../../services/mmd/VMDConverterService";
+import { modelStorageService } from "../../services/storage/ModelStorageService";
+import { stageStorageService } from "../../services/storage/StageStorageService";
+import { motionStorageService } from "../../services/storage/MotionStorageService";
+import emoteStorageService from "../../services/storage/EmoteStorageService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import JSZip from "jszip";
 import { Button, Input, Select, TabBar } from "../ui";

@@ -6,7 +6,7 @@
  */
 
 import JSZip from "jszip";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 
 class ZipExtractor {
   /**

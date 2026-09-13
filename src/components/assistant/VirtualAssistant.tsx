@@ -29,8 +29,8 @@ import {
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import Logger from "../../services/LoggerService";
-import emotePlayerService from "../../services/EmotePlayerService";
+import Logger from "../../services/common/LoggerService";
+import emotePlayerService from "../../services/mmd/EmotePlayerService";
 import liveLipSyncService, {
   type LiveLipSyncMouthWeights,
 } from "../../services/audio/LiveLipSyncService";

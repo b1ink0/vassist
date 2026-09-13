@@ -361,8 +361,13 @@ class PythonBootstrap {
    */
   async run() {
     try {
-      // Check if already set up
-      if (fs.existsSync(this.pythonDir)) {
+      // Check for the actual executable, not only the directory. A partial
+      // directory should be repaired instead of being treated as installed.
+      const pythonExe = path.join(
+        this.pythonDir,
+        IS_WINDOWS ? "python.exe" : "bin/python3",
+      );
+      if (fs.existsSync(pythonExe)) {
         this.log("[SETUP] Python runtime already exists");
         return;
       }

@@ -5,7 +5,7 @@
  * Used by both offscreen worker and SharedWorker
  */
 
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type { Scene } from "@babylonjs/core/scene";
 
 export class BVMDConversionCore {

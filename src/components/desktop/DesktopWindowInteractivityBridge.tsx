@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useIsDraggingModel } from "../../hooks/app/useDrag";
+import {
+  useIsDraggingButton,
+  useIsDraggingModel,
+} from "../../hooks/app/useDrag";
 import { useSceneRef } from "../../hooks/app/useScene";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 
 const ELECTRON_INTERACTIVE_SELECTOR = [
@@ -42,6 +45,7 @@ function isDomInteractiveTarget(target: Element | null): boolean {
 
 export default function DesktopWindowInteractivityBridge() {
   const api = useDesktopApi();
+  const isDraggingButton = useIsDraggingButton();
   const isDraggingModel = useIsDraggingModel();
   const sceneRef = useSceneRef();
   const latestPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -100,11 +104,19 @@ export default function DesktopWindowInteractivityBridge() {
       const shouldCaptureModel =
         !shouldCaptureDom && isModelInteractiveAtPoint(clientX, clientY);
       const shouldCaptureWindow =
-        isDraggingModel || shouldCaptureDom || shouldCaptureModel;
+        isDraggingModel ||
+        isDraggingButton ||
+        shouldCaptureDom ||
+        shouldCaptureModel;
 
       applyIgnoreState(!shouldCaptureWindow);
     },
-    [applyIgnoreState, isDraggingModel, isModelInteractiveAtPoint],
+    [
+      applyIgnoreState,
+      isDraggingButton,
+      isDraggingModel,
+      isModelInteractiveAtPoint,
+    ],
   );
 
   const scheduleEvaluation = useCallback(
@@ -233,7 +245,13 @@ export default function DesktopWindowInteractivityBridge() {
 
     reevaluateLatestPoint();
     void pollCursorInteractivity();
-  }, [api, isDraggingModel, pollCursorInteractivity, reevaluateLatestPoint]);
+  }, [
+    api,
+    isDraggingButton,
+    isDraggingModel,
+    pollCursorInteractivity,
+    reevaluateLatestPoint,
+  ]);
 
   return null;
 }

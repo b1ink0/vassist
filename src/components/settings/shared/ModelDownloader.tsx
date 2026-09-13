@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
 import { Button, Card } from "../../ui";
-import SttTtsEventService from "../../../services/SttTtsEventService";
+import SttTtsEventService from "../../../services/audio/SttTtsEventService";
 
 interface ModelStatus {
   downloaded?: boolean;

@@ -1,8 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import { getDefaultAnimationsByCategory } from "../config/animationConfig";
-import { motionStorageService } from "../services/MotionStorageService";
+import { motionStorageService } from "../services/storage/MotionStorageService";
 import { StorageServiceProxy } from "../services/proxies";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 
 interface MotionItem {
   id: string;

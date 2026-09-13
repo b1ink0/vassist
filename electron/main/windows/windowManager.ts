@@ -11,6 +11,7 @@ type WindowState = {
   mainWindow: BrowserWindowInstance | null;
   inputWindow: BrowserWindowInstance | null;
   inputWindowOpen: boolean;
+  uiThemeMode: string | null;
 };
 
 type WindowManagerDeps = {
@@ -69,6 +70,14 @@ export function createWindowManager({
     } else {
       inputWindow.loadURL("app://./electron/index.html?window=input");
     }
+    inputWindow.webContents.on("did-finish-load", () => {
+      if (state.uiThemeMode) {
+        console.log(
+          `[Main] Sending initial desktop theme to input window: ${state.uiThemeMode}`,
+        );
+        inputWindow.webContents.send("state:uiThemeMode", state.uiThemeMode);
+      }
+    });
     maybeOpenDevTools(inputWindow);
 
     inputWindow.once("ready-to-show", () => {

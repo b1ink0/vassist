@@ -7,7 +7,7 @@
 /* global chrome */
 
 import { MessageTypes } from "../shared/MessageTypes";
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 
 type BridgeValue = string | number | boolean | null | undefined | object;
 type BridgeData = Record<string, BridgeValue>;

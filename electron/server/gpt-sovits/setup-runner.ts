@@ -24,6 +24,7 @@ type SetupLog = {
 type SetupOptions = {
   torchBackend?: string;
   force?: boolean;
+  verify?: boolean;
 };
 
 type SetupStatus = {
@@ -166,6 +167,7 @@ class SetupRunner {
           GPTSOVITS_TORCH_BACKEND: selectedBackend,
           GPTSOVITS_DATA_DIR: baseDir,
           GPTSOVITS_FORCE_REINSTALL: forceReinstall,
+          GPTSOVITS_VERIFY_ONLY: options?.verify ? "1" : "0",
         },
       });
 
@@ -226,7 +228,9 @@ class SetupRunner {
       this.log({ type: "info", message: "=".repeat(60) + "\n" });
       this.log({
         type: "info",
-        message: "This will download ~5GB of data (Python, PyTorch, models)\n",
+        message: options?.verify
+          ? "Verification will reuse the existing Python and PyTorch runtimes. Missing dependencies/models may still be repaired.\n"
+          : "This will download ~5GB of data (Python, PyTorch, models)\n",
       });
       this.log({
         type: "info",
@@ -238,8 +242,19 @@ class SetupRunner {
       });
       this.log({ type: "info", message: "=".repeat(60) + "\n\n" });
 
-      // Phase 1: Bootstrap Python (if needed)
-      if (!fs.existsSync(this.getPythonDir())) {
+      // Phase 1: Bootstrap Python only when the selected runtime is missing.
+      // Verification must never download a replacement runtime.
+      if (options?.verify) {
+        if (!fs.existsSync(this.getPythonExe())) {
+          throw new Error(
+            "Verification cannot continue because the selected Python runtime is missing. Run Install or Re-install GPT-SoVITS.",
+          );
+        }
+        this.log({
+          type: "info",
+          message: "[VERIFY] Existing Python runtime found, skipping download\n",
+        });
+      } else if (!fs.existsSync(this.getPythonExe())) {
         await this.bootstrap();
       } else {
         this.log({

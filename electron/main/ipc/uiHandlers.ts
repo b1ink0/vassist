@@ -12,6 +12,7 @@ type WindowState = {
   mainWindow: BrowserWindowInstance | null;
   inputWindow: BrowserWindowInstance | null;
   inputWindowOpen: boolean;
+  uiThemeMode: string | null;
 };
 
 type UIHandlersDeps = {
@@ -45,6 +46,15 @@ export function registerUIIPCHandlers({
       state.inputWindow.show();
       state.inputWindow.setIgnoreMouseEvents(false);
       state.inputWindow.focus();
+      if (state.uiThemeMode) {
+        console.log(
+          `[Main] Syncing desktop theme while opening input window: ${state.uiThemeMode}`,
+        );
+        state.inputWindow.webContents.send(
+          "state:uiThemeMode",
+          state.uiThemeMode,
+        );
+      }
     }
   };
 
@@ -340,6 +350,44 @@ export function registerUIIPCHandlers({
       }
     },
   );
+
+  ipcMain.on("state:uiThemeMode", (event: IpcMainEvent, mode: unknown) => {
+    if (mode !== "adaptive" && mode !== "light" && mode !== "dark") {
+      console.warn(
+        `[Main] Ignored invalid desktop theme mode: ${String(mode)}`,
+      );
+      return;
+    }
+
+    state.uiThemeMode = mode;
+    console.log(
+      `[Main] Desktop theme changed; forwarding to input window: ${mode}`,
+    );
+
+    if (
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed() &&
+      event.sender !== state.inputWindow.webContents
+    ) {
+      state.inputWindow.webContents.send("state:uiThemeMode", mode);
+    }
+  });
+
+  ipcMain.on("state:uiThemeReady", (event: IpcMainEvent) => {
+    if (
+      !state.uiThemeMode ||
+      !state.inputWindow ||
+      state.inputWindow.isDestroyed() ||
+      event.sender !== state.inputWindow.webContents
+    ) {
+      return;
+    }
+
+    console.log(
+      `[Main] Input window requested current desktop theme: ${state.uiThemeMode}`,
+    );
+    event.sender.send("state:uiThemeMode", state.uiThemeMode);
+  });
 
   ipcMain.on("state:pendingDropData", (_event: IpcMainEvent, data: unknown) => {
     if (state.inputWindow && state.inputWindow.webContents) {

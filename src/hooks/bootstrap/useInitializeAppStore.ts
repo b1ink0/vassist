@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import VoiceConversationService, {
   ConversationStates,
-} from "../../services/VoiceConversationService";
+} from "../../services/audio/VoiceConversationService";
 import { TTSServiceProxy } from "../../services/proxies";
 import { useAppStore, useAppStoreApi } from "../../stores/useAppStore";
 import { useConfigStore } from "../../stores/useConfigStore";

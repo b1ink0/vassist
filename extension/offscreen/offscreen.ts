@@ -24,7 +24,7 @@ Logger.log(
 );
 
 import KokoroTTSCore from "../../src/workers/shared/KokoroTTSCore";
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 
 type MessageValue = string | number | boolean | null | undefined | object;
 type WorkerData = Record<string, MessageValue>;

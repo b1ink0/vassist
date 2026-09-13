@@ -1,4 +1,4 @@
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import { isDesktop, isEmbed, isExtension } from "../../utils/PlatformUtils";
 import type { HeadAudio } from "@met4citizen/headaudio/dist/headaudio.min.mjs";
 

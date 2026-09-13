@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { Icon } from "../../icons";
 import { ChromeAILanguages } from "../../../config/aiConfig";
 import StatusMessage from "../../common/StatusMessage";
-import Logger from "../../../services/LoggerService";
+import Logger from "../../../services/common/LoggerService";
 import { Button, Select } from "../../ui";
 
 interface ChromeAISTTConfigShape {

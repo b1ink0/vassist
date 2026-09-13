@@ -14,7 +14,7 @@ import {
   type RefAttributes,
   type SetStateAction,
 } from "react";
-import ChatButton from "./ChatButton";
+import AssistantControlDock from "./AssistantControlDock";
 import ChatInput from "./ChatInput";
 import ChatContainer from "./ChatContainer";
 import AIToolbar from "../toolbar/AIToolbar";
@@ -32,10 +32,10 @@ import {
   STTServiceProxy,
   StorageServiceProxy,
 } from "../../services/proxies";
-import DocumentInteractionService from "../../services/DocumentInteractionService";
+import DocumentInteractionService from "../../services/chat/DocumentInteractionService";
 import VoiceConversationService, {
   ConversationStates,
-} from "../../services/VoiceConversationService";
+} from "../../services/audio/VoiceConversationService";
 import { DefaultAIConfig, DefaultTTSConfig } from "../../config/aiConfig";
 import { PromptConfig } from "../../config/promptConfig";
 import {
@@ -59,11 +59,11 @@ import { useToolingActions } from "../../hooks/app/useTooling";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { useConfigAIActions } from "../../hooks/config/useConfigAI";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
-import MicrophoneService from "../../services/MicrophoneService";
-import CameraService from "../../services/CameraService";
-import ScreenShareService from "../../services/ScreenShareService";
+import MicrophoneService from "../../services/audio/MicrophoneService";
+import CameraService from "../../services/media/CameraService";
+import ScreenShareService from "../../services/media/ScreenShareService";
 
 type ConversationState =
   (typeof ConversationStates)[keyof typeof ConversationStates];
@@ -1365,9 +1365,9 @@ const ChatController = ({
   };
 
   /**
-   * Handles chat button click to toggle chat visibility.
+   * Handles the assistant control dock click to toggle chat visibility.
    */
-  const handleChatButtonClick = useCallback(() => {
+  const handleAssistantControlClick = useCallback(() => {
     if (!chatEnabled) {
       return;
     }
@@ -2426,11 +2426,11 @@ const ChatController = ({
 
       {chatEnabled ? (
         <>
-          {/* Chat Button visibility logic:
+          {/* Assistant control dock visibility logic:
               - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
               - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
-          <ChatButton
-            onClick={handleChatButtonClick}
+          <AssistantControlDock
+            onClick={handleAssistantControlClick}
             isVisible={
               modelDisabled
                 ? true

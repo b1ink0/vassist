@@ -9,7 +9,7 @@
  * Kokoro TTS Core Class
  * Singleton instance manages model lifecycle
  */
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 
 type KokoroDevice = "auto" | "webgpu" | "wasm";
 type KokoroRuntimeDevice = "webgpu" | "wasm";

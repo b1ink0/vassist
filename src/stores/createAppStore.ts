@@ -8,9 +8,9 @@ import defaultChatService, {
   type ChatService,
   type ExportedChatTree,
   type FlatChatMessage,
-} from "../services/ChatService";
-import defaultChatHistoryService from "../services/ChatHistoryService";
-import type { ChatHistoryService } from "../services/ChatHistoryService";
+} from "../services/chat/ChatService";
+import defaultChatHistoryService from "../services/chat/ChatHistoryService";
+import type { ChatHistoryService } from "../services/chat/ChatHistoryService";
 import {
   AIServiceProxy,
   LanguageDetectorServiceProxy,
@@ -20,8 +20,8 @@ import {
 } from "../services/proxies";
 import VoiceConversationService, {
   ConversationStates,
-} from "../services/VoiceConversationService";
-import Logger from "../services/LoggerService";
+} from "../services/audio/VoiceConversationService";
+import Logger from "../services/common/LoggerService";
 import {
   isDesktop,
   isInputWindow,

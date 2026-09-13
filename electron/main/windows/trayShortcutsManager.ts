@@ -26,6 +26,7 @@ type TrayShortcutsDeps = {
   globalShortcut: GlobalShortcut;
   Tray: typeof import("electron").Tray;
   Menu: typeof import("electron").Menu;
+  screen: typeof import("electron").screen;
   nativeImage: typeof import("electron").nativeImage;
   fs: typeof fsType;
   path: typeof pathType;
@@ -39,6 +40,7 @@ export function createTrayShortcutsManager({
   globalShortcut,
   Tray,
   Menu,
+  screen,
   nativeImage,
   fs,
   path,
@@ -110,6 +112,20 @@ export function createTrayShortcutsManager({
       state.inputWindow.show();
       state.inputWindow.setIgnoreMouseEvents(false);
     }
+  }
+
+  function resetMainWindowPosition() {
+    const mainWindow = state.mainWindow;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    const { workArea } = screen.getPrimaryDisplay();
+    const [windowWidth = 0, windowHeight = 0] = mainWindow.getSize();
+    const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
+    const y = Math.round(workArea.y + (workArea.height - windowHeight) / 2);
+
+    mainWindow.setPosition(x, y);
+    mainWindow.show();
+    mainWindow.focus();
   }
 
   function registerGlobalShortcuts(shortcuts: ShortcutConfig | undefined) {
@@ -267,6 +283,10 @@ export function createTrayShortcutsManager({
             toggleAppVisibility();
           }
         },
+      },
+      {
+        label: "Reset Window Position",
+        click: resetMainWindowPosition,
       },
       { type: "separator" },
       {

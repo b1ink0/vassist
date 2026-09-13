@@ -16,7 +16,7 @@ import {
   GPTSoVITSLanguages,
 } from "../../../config/aiConfig";
 import StatusMessage from "../../common/StatusMessage";
-import Logger from "../../../services/LoggerService";
+import Logger from "../../../services/common/LoggerService";
 import { Icon } from "../../icons";
 import { Button, Card, Input, Select } from "../../ui";
 import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
 import { Select } from "../../ui";
-import SttTtsEventService from "../../../services/SttTtsEventService";
+import SttTtsEventService from "../../../services/audio/SttTtsEventService";
 import {
   ANDROID_TTS_EVENT_TYPES,
   ANDROID_TTS_PACKS,

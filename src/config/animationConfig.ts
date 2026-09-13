@@ -15,7 +15,7 @@
  * Animation categories define the type/purpose of animations
  * Now we don't need this since categories are just the keys in AnimationRegistry
  */
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import {
   normalizeOptionalEmbedAssetBaseUrl,
   normalizeOptionalEmbedAssetValue,

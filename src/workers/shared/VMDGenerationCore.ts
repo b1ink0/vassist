@@ -11,7 +11,7 @@ import {
   type VowelAdjustmentConfig,
   type VowelRanges,
 } from "./AudioProcessingCore";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 
 interface VMDGenerationConfig extends VowelAdjustmentConfig {
   smoothness: number;

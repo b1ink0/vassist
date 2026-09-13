@@ -46,11 +46,11 @@ import { RigidBodyConstructionInfo } from "babylon-mmd/esm/Runtime/Optimized/Phy
 import { AnimationManager } from "../managers/AnimationManager";
 import { PositionManager } from "../managers/PositionManager";
 import { CanvasInteractionManager } from "../managers/CanvasInteractionManager";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { VmdLoader } from "babylon-mmd";
-import { pmxConverterService } from "../../services/PMXConverterService";
-import { modelStorageService } from "../../services/ModelStorageService";
-import { stageStorageService } from "../../services/StageStorageService";
+import { pmxConverterService } from "../../services/mmd/PMXConverterService";
+import { modelStorageService } from "../../services/storage/ModelStorageService";
+import { stageStorageService } from "../../services/storage/StageStorageService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import { ARSessionController } from "../ar/ARSessionController";
 import { NativeAndroidARProvider } from "../ar/NativeAndroidARProvider";
@@ -675,7 +675,7 @@ export const buildMmdModelScene = async (
     applyZoom(delta);
   };
 
-  // Camera control functions (exposed for UI components like ChatButton)
+  // Camera control functions exposed to the assistant control dock.
   scene.metadata.toggleCameraMode = () => {
     const currentMode =
       mmdCamera.mode === Camera.PERSPECTIVE_CAMERA ? "3D" : "2D";

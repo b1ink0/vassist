@@ -29,7 +29,7 @@ import {
 import { DefaultUIConfig, type UIConfig } from "../config/uiConfig";
 import { mergeDeep, type ResolvedVAssistEmbedConfig } from "../embed/config";
 import { getEmbedConfig } from "../embed/runtimeStore";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import { isDesktop } from "../utils/PlatformUtils";
 import {
   createDebouncedFunction,

@@ -13,7 +13,7 @@ import {
   normalizeOptionalEmbedAssetValue,
 } from "../embed/config";
 import { getEmbedConfig } from "../embed/runtimeStore";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import { isDesktop, isEmbed, isProduction } from "../utils/PlatformUtils";
 import type {
   PositionManagerOptionsLike,
@@ -296,7 +296,7 @@ export async function getSceneConfigAsync(): Promise<SceneConfigData> {
 
   try {
     const { modelStorageService } =
-      await import("../services/ModelStorageService");
+      await import("../services/storage/ModelStorageService");
     const customDefaultModel = await modelStorageService.getDefaultModel();
 
     if (customDefaultModel && customDefaultModel.modelData) {

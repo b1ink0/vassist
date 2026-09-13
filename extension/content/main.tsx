@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 import { extensionBridge } from "../../src/utils/ExtensionBridge";
 import { VASSIST_REACT_ROOT_ID } from "../../src/utils/VAssistDomIds";
 import App from "../../src/App";
-import Logger from "../../src/services/LoggerService";
+import Logger from "../../src/services/common/LoggerService";
 import { prepareVAssistTestRuntime } from "../../src/testing/testBridge";
 import { isVAssistTestMode } from "../../src/testing/runtime";
 import type { Root } from "react-dom/client";

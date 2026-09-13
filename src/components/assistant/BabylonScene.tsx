@@ -9,7 +9,7 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { getSceneConfigAsync } from "../../config/sceneConfig";
-import DragDropService from "../../services/DragDropService";
+import DragDropService from "../../services/media/DragDropService";
 import { useEmbedHost } from "../../embed/EmbedHostContext";
 import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
 import { cn } from "../../utils/cn";
@@ -26,7 +26,7 @@ import {
 } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { FPSLimitOptions } from "../../config/uiConfig";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import type {
   PixelSize,

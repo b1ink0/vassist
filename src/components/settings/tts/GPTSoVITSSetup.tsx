@@ -39,7 +39,11 @@ interface GPTSoVITSSetupApi {
   onComplete?: (
     callback: (result: SetupResult) => void,
   ) => (() => void) | undefined;
-  start?: (options: { torchBackend: string; force?: boolean }) => Promise<void>;
+  start?: (options: {
+    torchBackend: string;
+    force?: boolean;
+    verify?: boolean;
+  }) => Promise<void>;
   cancel?: () => Promise<void>;
 }
 
@@ -196,7 +200,7 @@ const GPTSoVITSSetup = ({
     setSetupError(null);
 
     try {
-      await setupApi?.start?.({ torchBackend: selectedBackend });
+      await setupApi?.start?.({ torchBackend: selectedBackend, verify: true });
     } catch (error: unknown) {
       setSetupError(getErrorMessage(error));
       setIsSetupRunning(false);

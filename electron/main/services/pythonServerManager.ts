@@ -1049,6 +1049,8 @@ export function createPythonServerManager({
         const selectedBackend = String(options.torchBackend ?? "auto")
           .trim()
           .toLowerCase();
+        const forceReinstall = options.force === true;
+        const verifyOnly = options.verify === true;
         currentGPTSoVITSTorchBackend = selectedBackend;
         process.env.GPTSOVITS_TORCH_BACKEND = selectedBackend;
 
@@ -1061,7 +1063,11 @@ export function createPythonServerManager({
             (log: SetupLog) => {
               event.sender.send("gptsovits:setup:log", log);
             },
-            { torchBackend: selectedBackend },
+            {
+              torchBackend: selectedBackend,
+              force: forceReinstall,
+              verify: verifyOnly,
+            },
           )
           .then(async () => {
             console.log("[GPT-SoVITS] Setup complete");

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ResolvedVAssistEmbedConfig } from "../../embed/config";
 import { TTSProviders } from "../../config/aiConfig";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { TTSServiceProxy } from "../../services/proxies";
 import { useConfigStore } from "../../stores/useConfigStore";
 

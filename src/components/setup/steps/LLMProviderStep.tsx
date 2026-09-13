@@ -5,7 +5,7 @@ import ProviderSelection from "../shared/ProviderSelection";
 import DesktopLLMConfig from "../../settings/llm/DesktopLLMConfig";
 import Icon from "../../icons/Icon";
 import StatusMessage from "../../common/StatusMessage";
-import Logger from "../../../services/LoggerService";
+import Logger from "../../../services/common/LoggerService";
 import { cn } from "../../../utils/cn";
 import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
 import FlagCopyButton from "../../common/FlagCopyButton";

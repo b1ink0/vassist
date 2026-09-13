@@ -6,12 +6,12 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import STTService from "../STTService";
+import STTService from "../audio/STTService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
-import Logger from "../LoggerService";
+import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultSTTConfig } from "../../config/aiConfig";
-import MicrophoneService from "../MicrophoneService";
+import MicrophoneService from "../audio/MicrophoneService";
 
 interface STTProxyConfig {
   enabled?: boolean;

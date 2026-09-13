@@ -17,7 +17,7 @@ import { Icon } from "../icons";
 import { Button, Input } from "../ui";
 import { cn } from "../../utils/cn";
 import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 
 const HISTORY_PAGE_SIZE = 30;

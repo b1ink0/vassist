@@ -6,7 +6,7 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
-import LanguageDetectorService from "../LanguageDetectorService";
+import LanguageDetectorService from "../ai/LanguageDetectorService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
 import StorageServiceProxy from "./StorageServiceProxy";
 import { DefaultAIConfig } from "../../config/aiConfig";

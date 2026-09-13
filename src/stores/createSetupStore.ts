@@ -6,7 +6,7 @@ import {
   type ResolvedVAssistEmbedConfig,
 } from "../embed/config";
 import StorageServiceProxy from "../services/proxies/StorageServiceProxy";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { getErrorMessage } from "./storeUtils";
 import { useConfigStore } from "./useConfigStore";

@@ -1,5 +1,5 @@
 import { getEmbedConfig } from "../embed/runtimeStore";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import { isDesktop, isEmbed, isProduction } from "./PlatformUtils";
 import type {
   ResourceLoaderAdapterLike,

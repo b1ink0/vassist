@@ -11,7 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import { Icon } from "../icons";
 import { isAndroid } from "../../utils/PlatformUtils";
 

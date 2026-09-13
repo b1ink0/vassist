@@ -11,7 +11,7 @@ import {
   MessageTypes,
   generateRequestId,
 } from "../../extension/shared/MessageTypes";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import { isAndroid } from "../utils/PlatformUtils";
 
 type AudioWorkerMode = "dev" | "android" | "extension";

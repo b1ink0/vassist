@@ -10,7 +10,7 @@ import { MessageTypes } from "../../extension/shared/MessageTypes";
 import { VMDGenerationCore } from "./shared/VMDGenerationCore";
 import { BVMDConversionCore } from "./shared/BVMDConversionCore";
 import KokoroTTSCore from "./shared/KokoroTTSCore";
-import Logger from "../services/LoggerService";
+import Logger from "../services/common/LoggerService";
 import type { Scene } from "@babylonjs/core/scene";
 
 interface IncomingWorkerMessage {

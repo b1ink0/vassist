@@ -10,7 +10,7 @@ import {
   useConfigUIActions,
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
-import Logger from "../../services/LoggerService";
+import Logger from "../../services/common/LoggerService";
 import type { PositionManagerLike as BabylonPositionManagerLike } from "../../babylon/types";
 
 export interface DebugOverlayPositionManagerLike extends BabylonPositionManagerLike {

@@ -38,6 +38,8 @@ PYTHON_DIR = BASE_DIR / ("python312" if IS_ROCM_WINDOWS else "python")
 
 # When True, skip-if-installed checks are bypassed (e.g. user clicked Reinstall).
 IS_FORCE_REINSTALL = os.environ.get('GPTSOVITS_FORCE_REINSTALL', '0') == '1'
+# Verification repairs missing pieces but must reuse installed runtimes.
+IS_VERIFY_ONLY = os.environ.get('GPTSOVITS_VERIFY_ONLY', '0') == '1'
 
 SUPPORTED_TORCH_BACKENDS = {'auto', 'cpu', 'cuda', 'rocm', 'sycl', 'metal'}
 TORCH_INDEX_URLS = {
@@ -192,6 +194,11 @@ def download_file(url, dest):
 
 def setup_python_runtime():
     """Download and setup Python runtime for current platform"""
+    if IS_VERIFY_ONLY and not PYTHON_DIR.exists():
+        raise RuntimeError(
+            f"Verification cannot download Python because the runtime is missing at {PYTHON_DIR}"
+        )
+
     if PYTHON_DIR.exists():
         log(f"[PYTHON] ✓ Runtime already exists at {PYTHON_DIR}")
         return
@@ -435,6 +442,25 @@ def install_pytorch_rocm_windows(python_exe):
 def install_pytorch(requested_backend='auto'):
     """Install PyTorch with platform-specific acceleration"""
     python_exe = get_python_exe()
+
+    # Verify should not reinstall a healthy PyTorch runtime. Missing PyTorch is
+    # still repaired below, so verification remains useful for partial installs.
+    site_packages = PYTHON_DIR / "Lib" / "site-packages"
+    torch_installed = any(
+        d.name.startswith('torch-') and d.name.endswith('.dist-info')
+        for d in site_packages.iterdir()
+        if d.is_dir()
+    ) if site_packages.exists() else False
+    if IS_VERIFY_ONLY and torch_installed:
+        install_info = inspect_torch_installation(python_exe)
+        if install_info:
+            log(
+                f"[PYTORCH] âœ“ Existing PyTorch retained: {install_info.get('version')} ({install_info.get('build')})"
+            )
+        else:
+            log("[PYTORCH] âœ“ Existing PyTorch retained")
+        log("[PYTORCH] Verification mode: skipping PyTorch download")
+        return
     
     log("\n" + "="*60)
     log("[PYTORCH] Installing PyTorch...")
@@ -734,6 +760,15 @@ def install_dependencies():
     log("[INSTALL] Skipping system Python compilation path")
     log("[INSTALL] Runtime setup uses embedded CPython only")
     log("[WARNING] opencc/jieba_fast native compile step is disabled in embedded-only mode")
+
+    # jieba_fast is a native speedup package and has no usable Windows wheel.
+    # The requirements file intentionally keeps the pure-Python `jieba`
+    # dependency, while the compile-only `jieba_fast` entry was skipped above.
+    # GPT-SoVITS imports the speedup package by name, so provide the same
+    # compatibility stub used by the ROCm Windows path for every Windows
+    # installation (CPU, CUDA, and other supported backends).
+    if IS_WINDOWS:
+        create_jieba_fast_stub(PYTHON_DIR)
     
     # Clean up temp file if it exists
     if requirements_no_pyopenjtalk.exists():

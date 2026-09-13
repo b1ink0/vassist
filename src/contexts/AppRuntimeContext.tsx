@@ -6,10 +6,10 @@ import {
   type ReactNode,
 } from "react";
 import { useStore } from "zustand";
-import defaultChatService, { ChatService } from "../services/ChatService";
+import defaultChatService, { ChatService } from "../services/chat/ChatService";
 import defaultChatHistoryService, {
   ChatHistoryService,
-} from "../services/ChatHistoryService";
+} from "../services/chat/ChatHistoryService";
 import {
   appStore,
   createAppStore,
