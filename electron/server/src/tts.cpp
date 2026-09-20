@@ -9,6 +9,10 @@
 
 using json = nlohmann::json;
 
+namespace {
+constexpr const char* kDefaultGptSoVitsEndpoint = "http://127.0.0.1:9880";
+}
+
 std::string HandleTTS(const json& request) {
     try {
         // Validate input
@@ -25,7 +29,7 @@ std::string HandleTTS(const json& request) {
         }
         
         // Create HTTP client for GPT-SoVITS Python server
-        httplib::Client client("http://127.0.0.1:9880");
+        httplib::Client client(kDefaultGptSoVitsEndpoint);
         client.set_connection_timeout(30);
         client.set_read_timeout(120);  // Longer timeout for TTS generation
         

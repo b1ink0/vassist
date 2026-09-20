@@ -1,8 +1,37 @@
 /* Import shared styles */
 @import "../src/index.css";
 
-/* Desktop mode overrides */
+/*
+ * Desktop
+ */
 :root {
+  color-scheme: dark;
+
+  --vassist-surface-base: rgba(18, 20, 26, 0.76);
+  --vassist-surface-elevated: rgba(24, 26, 32, 0.86);
+  --vassist-surface-interactive: rgba(32, 34, 42, 0.92);
+  --vassist-surface-overlay: rgba(8, 10, 14, 0.86);
+  --vassist-surface-highlight: rgba(255, 255, 255, 0.14);
+  --vassist-text-primary: rgba(255, 255, 255, 0.98);
+  --vassist-text-secondary: rgba(255, 255, 255, 0.84);
+  --vassist-text-muted: rgba(255, 255, 255, 0.66);
+  --vassist-border-color: rgba(255, 255, 255, 0.26);
+  --vassist-border-strong-color: rgba(255, 255, 255, 0.42);
+  --vassist-input-placeholder-color: rgba(255, 255, 255, 0.56);
+  --vassist-status-error: rgba(190, 58, 48, 0.9);
+  --vassist-status-success: rgba(35, 128, 72, 0.82);
+  --vassist-status-warning: rgba(180, 122, 20, 0.88);
+
+  --vassist-desktop-light-surface: rgba(250, 250, 250, 0.98);
+  --vassist-desktop-light-surface-elevated: rgba(255, 255, 255, 0.99);
+  --vassist-desktop-light-surface-interactive: rgba(238, 238, 238, 0.98);
+  --vassist-desktop-light-text: rgba(24, 24, 24, 0.94);
+  --vassist-desktop-light-text-secondary: rgba(24, 24, 24, 0.76);
+  --vassist-desktop-light-text-muted: rgba(24, 24, 24, 0.58);
+  --vassist-desktop-light-border: rgba(24, 24, 24, 0.22);
+  --vassist-desktop-light-border-strong: rgba(24, 24, 24, 0.32);
+  --vassist-desktop-light-placeholder: rgba(24, 24, 24, 0.52);
+
   background: transparent !important;
   background-color: transparent !important;
 }
@@ -12,4 +41,590 @@ body,
 #root {
   background: transparent !important;
   background-color: transparent !important;
+}
+
+/* App Mode is an opaque application surface. */
+html:has(.vassist-app-mode-window),
+body:has(.vassist-app-mode-window),
+#root:has(.vassist-app-mode-window) {
+  background: #252a2f !important;
+  background-color: #252a2f !important;
+}
+
+.vassist-app-mode-window {
+  background: #252a2f;
+  background-color: #252a2f;
+  color: var(--vassist-text-primary);
+}
+
+.app-region-drag {
+  -webkit-app-region: drag;
+}
+
+.app-region-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Keep portaled controls aligned with the active desktop theme. */
+:root:has(
+  .glass-container-dark,
+  .glass-message-dark,
+  .glass-message-user-dark,
+  .glass-button-dark,
+  .glass-input-dark
+) {
+  color-scheme: dark;
+  --vassist-inverse-surface-base: var(--vassist-surface-base);
+  --vassist-inverse-surface-elevated: var(--vassist-surface-elevated);
+  --vassist-inverse-surface-interactive: var(--vassist-surface-interactive);
+  --vassist-inverse-surface-overlay: var(--vassist-surface-overlay);
+  --vassist-inverse-text-primary: var(--vassist-text-primary);
+  --vassist-inverse-text-secondary: var(--vassist-text-secondary);
+  --vassist-inverse-text-muted: var(--vassist-text-muted);
+  --vassist-inverse-border-color: var(--vassist-border-color);
+  --vassist-inverse-border-strong-color: var(--vassist-border-strong-color);
+  --vassist-inverse-input-placeholder-color: var(
+    --vassist-input-placeholder-color
+  );
+}
+
+/* The base classes are the light UI branch. */
+:root:not(
+  :has(
+    .glass-container-dark,
+    .glass-message-dark,
+    .glass-message-user-dark,
+    .glass-button-dark,
+    .glass-input-dark
+  )
+) {
+  color-scheme: light;
+  --vassist-surface-base: var(--vassist-desktop-light-surface);
+  --vassist-surface-elevated: var(--vassist-desktop-light-surface-elevated);
+  --vassist-surface-interactive: var(
+    --vassist-desktop-light-surface-interactive
+  );
+  --vassist-surface-overlay: var(--vassist-desktop-light-surface);
+  --vassist-text-primary: var(--vassist-desktop-light-text);
+  --vassist-text-secondary: var(--vassist-desktop-light-text-secondary);
+  --vassist-text-muted: var(--vassist-desktop-light-text-muted);
+  --vassist-border-color: var(--vassist-desktop-light-border);
+  --vassist-border-strong-color: var(--vassist-desktop-light-border-strong);
+  --vassist-input-placeholder-color: var(--vassist-desktop-light-placeholder);
+  --vassist-inverse-surface-base: var(--vassist-desktop-light-surface);
+  --vassist-inverse-surface-elevated: var(
+    --vassist-desktop-light-surface-elevated
+  );
+  --vassist-inverse-surface-interactive: var(
+    --vassist-desktop-light-surface-interactive
+  );
+  --vassist-inverse-surface-overlay: var(--vassist-desktop-light-surface);
+  --vassist-inverse-text-primary: var(--vassist-desktop-light-text);
+  --vassist-inverse-text-secondary: var(--vassist-desktop-light-text-secondary);
+  --vassist-inverse-text-muted: var(--vassist-desktop-light-text-muted);
+  --vassist-inverse-border-color: var(--vassist-desktop-light-border);
+  --vassist-inverse-border-strong-color: var(
+    --vassist-desktop-light-border-strong
+  );
+  --vassist-inverse-input-placeholder-color: var(
+    --vassist-desktop-light-placeholder
+  );
+}
+
+/* Desktop defaults to the dark UI theme once the dark compatibility class is present. */
+.glass-base,
+.glass-container {
+  background: var(--vassist-surface-base);
+  border-color: var(--vassist-border-strong-color);
+  color: var(--vassist-text-primary);
+}
+
+.glass-message,
+.glass-message-user {
+  background: var(--vassist-surface-elevated);
+  border-color: var(--vassist-border-strong-color);
+  color: var(--vassist-text-primary);
+}
+
+.glass-button {
+  background: var(--vassist-surface-elevated);
+  border-color: var(--vassist-border-strong-color);
+  color: var(--vassist-text-primary);
+}
+
+.glass-input {
+  background: var(--vassist-surface-base);
+  border-color: var(--vassist-border-color);
+  color: var(--vassist-text-primary);
+}
+
+/*
+ * The resolved dark UI theme adds the *-dark compatibility classes. Keep
+ * those variants opaque enough for the transparent Electron window.
+ */
+.glass-container.glass-container-dark {
+  background: var(--vassist-dark-glass-base);
+  border-color: var(--vassist-dark-glass-border);
+  color: var(--vassist-text-primary);
+}
+
+.glass-message.glass-message-dark,
+.glass-message-user.glass-message-user-dark {
+  background: var(--vassist-dark-glass-base);
+  border-color: var(--vassist-dark-glass-border);
+  color: var(--vassist-text-primary);
+}
+
+.glass-button.glass-button-dark {
+  background: var(--vassist-dark-glass-elevated);
+  border-color: var(--vassist-dark-glass-border-strong);
+  color: var(--vassist-text-primary);
+}
+
+.glass-input.glass-input-dark {
+  background: var(--vassist-dark-glass-base);
+  border-color: var(--vassist-dark-glass-border);
+  color: var(--vassist-text-primary);
+}
+
+/* Keep text helpers readable on the dark compatibility variant. */
+.glass-container.glass-container-dark .glass-text,
+.glass-container.glass-container-dark .glass-text-black,
+.glass-message.glass-message-dark .glass-text,
+.glass-message.glass-message-dark .glass-text-black,
+.glass-message-user.glass-message-user-dark .glass-text,
+.glass-message-user.glass-message-user-dark .glass-text-black,
+.glass-button.glass-button-dark .glass-text,
+.glass-button.glass-button-dark .glass-text-black,
+.glass-input.glass-input-dark .glass-text,
+.glass-input.glass-input-dark .glass-text-black {
+  color: var(--vassist-text-primary);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/*
+ * The theme root receives inline token values from the shared web theme. Those
+ * inline values intentionally remain translucent for web/Android, but they
+ * are not suitable for Electron's transparent window. The desktop mode
+ * attribute is the source of truth here, so one light-mode panel cannot make
+ * the rest of the desktop renderer switch palettes through :has().
+ */
+.vassist-theme-root[data-vassist-desktop-theme="dark"] {
+  color-scheme: light !important;
+  --vassist-surface-base: var(--vassist-desktop-light-surface) !important;
+  --vassist-surface-elevated: var(
+    --vassist-desktop-light-surface-elevated
+  ) !important;
+  --vassist-surface-interactive: var(
+    --vassist-desktop-light-surface-interactive
+  ) !important;
+  --vassist-surface-overlay: var(--vassist-desktop-light-surface) !important;
+  --vassist-surface-highlight: rgba(24, 24, 24, 0.08) !important;
+  --vassist-text-primary: var(--vassist-desktop-light-text) !important;
+  --vassist-text-secondary: var(
+    --vassist-desktop-light-text-secondary
+  ) !important;
+  --vassist-text-muted: var(--vassist-desktop-light-text-muted) !important;
+  --vassist-border-color: var(--vassist-desktop-light-border) !important;
+  --vassist-border-strong-color: var(
+    --vassist-desktop-light-border-strong
+  ) !important;
+  --vassist-input-placeholder-color: var(
+    --vassist-desktop-light-placeholder
+  ) !important;
+  --vassist-inverse-surface-base: var(
+    --vassist-desktop-light-surface
+  ) !important;
+  --vassist-inverse-surface-elevated: var(
+    --vassist-desktop-light-surface-elevated
+  ) !important;
+  --vassist-inverse-surface-interactive: var(
+    --vassist-desktop-light-surface-interactive
+  ) !important;
+  --vassist-inverse-surface-overlay: var(
+    --vassist-desktop-light-surface
+  ) !important;
+  --vassist-inverse-text-primary: var(--vassist-desktop-light-text) !important;
+  --vassist-inverse-text-secondary: var(
+    --vassist-desktop-light-text-secondary
+  ) !important;
+  --vassist-inverse-text-muted: var(
+    --vassist-desktop-light-text-muted
+  ) !important;
+  --vassist-inverse-border-color: var(
+    --vassist-desktop-light-border
+  ) !important;
+  --vassist-inverse-border-strong-color: var(
+    --vassist-desktop-light-border-strong
+  ) !important;
+  --vassist-inverse-input-placeholder-color: var(
+    --vassist-desktop-light-placeholder
+  ) !important;
+}
+
+/* Make every desktop light-mode glass surface readable, including a stale
+ * compatibility class during the short transition after a mode change. */
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  :is(
+    .glass-base,
+    .glass-container,
+    .glass-container-dark,
+    .glass-input,
+    .glass-input-dark
+  ) {
+  background: var(--vassist-desktop-light-surface) !important;
+  border-color: var(--vassist-desktop-light-border-strong) !important;
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  :is(
+    .glass-message,
+    .glass-message-dark,
+    .glass-message-user,
+    .glass-message-user-dark,
+    .glass-button,
+    .glass-button-dark
+  ) {
+  background: var(--vassist-desktop-light-surface-elevated) !important;
+  border-color: var(--vassist-desktop-light-border-strong) !important;
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  :is(.glass-text, .glass-text-black, .glass-text-dark) {
+  color: var(--vassist-desktop-light-text) !important;
+  text-shadow: none;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  :is(input, textarea, select) {
+  color: var(--vassist-desktop-light-text) !important;
+  caret-color: var(--vassist-desktop-light-text);
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  :is(input, textarea, select)::placeholder {
+  color: var(--vassist-desktop-light-placeholder) !important;
+  opacity: 1;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  .icon[class*="text-gray"] {
+  color: var(--vassist-desktop-light-text-secondary) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class*="text-white"] {
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+/* Restore contrast for controls that use white utility colors in the shared
+ * components. These are intentionally scoped to desktop light mode. */
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class*="border-white"] {
+  border-color: var(--vassist-desktop-light-border) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class~="bg-white/5"] {
+  background-color: rgba(24, 24, 24, 0.05) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class~="bg-white/10"] {
+  background-color: rgba(24, 24, 24, 0.1) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class~="bg-white/15"] {
+  background-color: rgba(24, 24, 24, 0.14) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [class~="bg-white/20"] {
+  background-color: rgba(24, 24, 24, 0.18) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [class*="hover:bg-white"]:hover {
+  background-color: rgba(24, 24, 24, 0.14) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [class*="hover:border-white"]:hover {
+  border-color: var(--vassist-desktop-light-border-strong) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [class*="hover:text-white"]:hover {
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+/* Toggle tracks and knobs need their own contrast because both states use
+ * white utility classes in the shared Toggle component. */
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [role="switch"] {
+  background-color: rgba(24, 24, 24, 0.12) !important;
+  border-color: var(--vassist-desktop-light-border-strong) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [role="switch"]:hover {
+  background-color: rgba(24, 24, 24, 0.2) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [role="switch"][aria-checked="true"] {
+  background-color: rgba(24, 24, 24, 0.24) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [role="switch"] > span {
+  background-color: rgba(24, 24, 24, 0.42) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [role="switch"][aria-checked="true"]
+  > span {
+  background-color: rgba(24, 24, 24, 0.82) !important;
+}
+
+/* Settings tabs and their active indicator use literal white utility colors. */
+.vassist-theme-root[data-vassist-desktop-theme="dark"] [role="tablist"] {
+  border-color: var(--vassist-desktop-light-border) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [role="tab"][aria-selected="true"] {
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [role="tab"][aria-selected="false"]:hover {
+  color: var(--vassist-desktop-light-text-secondary) !important;
+  background-color: rgba(24, 24, 24, 0.08) !important;
+}
+
+.vassist-theme-root[data-vassist-desktop-theme="dark"]
+  [data-vassist-tab-indicator] {
+  background-color: var(--vassist-desktop-light-text) !important;
+}
+
+/*
+ * Desktop light mode has a large amount of legacy white utility text. On a
+ * white surface those utilities also control the default Icon color, making
+ * controls look disabled. Re-map them only while the light desktop branch is
+ * active; the dark branch above is left untouched.
+ */
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  ) {
+  color: var(--vassist-desktop-light-text);
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  .icon[class*="text-gray"] {
+  color: var(--vassist-desktop-light-text-secondary) !important;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  [class~="text-white"] {
+  color: var(--vassist-desktop-light-text) !important;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(
+    [class~="text-white/90"],
+    [class~="text-white/85"],
+    [class~="text-white/80"]
+  ) {
+  color: color-mix(
+    in srgb,
+    var(--vassist-desktop-light-text) 80%,
+    transparent
+  ) !important;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(
+    [class~="text-white/70"],
+    [class~="text-white/60"],
+    [class~="text-white/55"],
+    [class~="text-white/50"],
+    [class~="text-white/45"],
+    [class~="text-white/40"]
+  ) {
+  color: color-mix(
+    in srgb,
+    var(--vassist-desktop-light-text) 64%,
+    transparent
+  ) !important;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(
+    [class~="text-white/30"],
+    [class~="text-white/20"],
+    [class~="text-white/10"]
+  ) {
+  color: color-mix(
+    in srgb,
+    var(--vassist-desktop-light-text) 48%,
+    transparent
+  ) !important;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(input, textarea, select) {
+  color: var(--vassist-desktop-light-text) !important;
+  caret-color: var(--vassist-desktop-light-text);
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(input, textarea, select)::placeholder {
+  color: var(--vassist-desktop-light-placeholder) !important;
+  opacity: 1;
+}
+
+:root:not(
+    :has(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    )
+  )
+  :is(
+    .glass-base:not(.glass-base-dark),
+    .glass-container:not(.glass-container-dark),
+    .glass-message:not(.glass-message-dark),
+    .glass-message-user:not(.glass-message-user-dark),
+    .glass-button:not(.glass-button-dark),
+    .glass-input:not(.glass-input-dark)
+  )
+  :is(
+    [class~="placeholder-white"],
+    [class~="placeholder-white/40"]
+  )::placeholder {
+  color: var(--vassist-desktop-light-placeholder) !important;
+  opacity: 1;
 }

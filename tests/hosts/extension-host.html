@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VAssist Extension Test Host</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(
+            circle at top,
+            rgba(255, 255, 255, 0.1),
+            transparent 35%
+          ),
+          linear-gradient(180deg, #1f2937 0%, #111827 100%);
+        color: #f3f4f6;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 56px 24px 120px;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 4vw, 3.5rem);
+        margin: 0 0 16px;
+      }
+
+      p {
+        max-width: 52rem;
+        line-height: 1.6;
+        color: rgba(243, 244, 246, 0.82);
+      }
+
+      section {
+        margin-top: 32px;
+        padding: 24px;
+        border: 1px solid rgba(243, 244, 246, 0.12);
+        border-radius: 20px;
+        background: rgba(17, 24, 39, 0.55);
+        backdrop-filter: blur(12px);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.25rem;
+      }
+
+      textarea {
+        width: min(100%, 720px);
+        min-height: 120px;
+        margin-top: 12px;
+        padding: 14px 16px;
+        border: 1px solid rgba(243, 244, 246, 0.2);
+        border-radius: 16px;
+        background: rgba(3, 7, 18, 0.78);
+        color: #f9fafb;
+        font: inherit;
+        resize: vertical;
+      }
+
+      img {
+        display: block;
+        width: min(100%, 420px);
+        margin-top: 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(243, 244, 246, 0.18);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Extension Harness Host</h1>
+      <p id="host-intro-copy">
+        This page exists only so Playwright can exercise the content-script
+        runtime against a deterministic local document instead of a third-party
+        site.
+      </p>
+
+      <section aria-labelledby="host-selection-heading">
+        <h2 id="host-selection-heading">Page Selection Surface</h2>
+        <p id="host-selectable-text">
+          Selecting this host page paragraph should trigger extension-only
+          toolbar actions for regular page content, including summarize,
+          translate, and add to chat, without exposing editable rewrite actions.
+        </p>
+      </section>
+
+      <section aria-labelledby="host-editable-heading">
+        <h2 id="host-editable-heading">Editable Field Surface</h2>
+        <p>
+          This textarea stands in for an arbitrary page input that the extension
+          can rewrite in place.
+        </p>
+        <textarea id="host-editable-textarea">
+Please rewrite this page-level draft for clarity before I send it to the team.
+        </textarea>
+      </section>
+
+      <section aria-labelledby="host-image-heading">
+        <h2 id="host-image-heading">Image Hover Surface</h2>
+        <p>
+          Hovering this image should expose the extension-only image analysis
+          toolbar actions on normal page content.
+        </p>
+        <img
+          id="host-toolbar-image"
+          alt="Extension toolbar sample"
+          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 240'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop stop-color='%230f766e'/%3E%3Cstop offset='1' stop-color='%231d4ed8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='420' height='240' rx='24' fill='url(%23g)'/%3E%3Ccircle cx='92' cy='82' r='34' fill='rgba(255,255,255,0.28)'/%3E%3Cpath d='M48 190l82-76 54 46 60-62 128 92H48z' fill='rgba(255,255,255,0.35)'/%3E%3C/svg%3E"
+        />
+      </section>
+    </main>
+  </body>
+</html>

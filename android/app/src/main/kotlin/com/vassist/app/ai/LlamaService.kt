@@ -25,10 +25,24 @@ class LlamaService(private val context: Context) {
         private const val DEFAULT_TOP_P = 0.9f
     }
     
-    private val llama = LlamaAndroid.instance()
+    private val nativeLibDir: String = context.applicationInfo.nativeLibraryDir
+    private val adsplibDir: File by lazy { stageLlamaAdspLibs() }
+
+    private val llama by lazy {
+        // Backend paths must be set before the singleton spins up its native
+        // thread (Hexagon session opens during backend registration)
+        LlamaAndroid.setBackendPaths(nativeLibDir, adsplibDir.absolutePath)
+        LlamaAndroid.instance()
+    }
     
     var isInitialized = false
         private set
+        
+    val supportsVision: Boolean
+        get() = if (isInitialized) llama.supportsVision() else false
+        
+    val isVisionBackendAvailable: Boolean
+        get() = if (isInitialized) llama.isVisionBackendAvailable() else false
     
     var modelName: String = "unknown"
         private set
@@ -47,39 +61,79 @@ class LlamaService(private val context: Context) {
     suspend fun initialize(
         modelPath: String? = null,
         contextSize: Int = DEFAULT_CONTEXT_SIZE,
-        temperature: Float = DEFAULT_TEMPERATURE
+        temperature: Float = DEFAULT_TEMPERATURE,
+        device: String = "cpu"
     ): String {
         try {
             val modelFile = resolveModelPath(modelPath)
-            
+
             if (!modelFile.exists()) {
                 throw IllegalStateException("Model file not found: ${modelFile.absolutePath}")
             }
-            
-            Log.i(TAG, "Loading LLM model: ${modelFile.absolutePath}")
-            
+
+            Log.i(TAG, "Loading LLM model: ${modelFile.absolutePath} (device=$device)")
+
             llama.load(
                 pathToModel = modelFile.absolutePath,
                 contextSize = contextSize,
                 temperature = temperature,
                 topK = DEFAULT_TOP_K,
-                topP = DEFAULT_TOP_P
+                topP = DEFAULT_TOP_P,
+                device = device,
+                nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                adsplibDir = stageLlamaAdspLibs().absolutePath
             )
-            
+
             val info = llama.getModelInfo()
             modelName = info?.description ?: modelFile.name
             chatTemplate = info?.chatTemplate
-            
-            Log.i(TAG, "Model loaded: $modelName (${info?.sizeGB?.let { "%.2f".format(it) }}GB, ${info?.paramsB?.let { "%.2f".format(it) }}B params)")
-            
+
+            Log.i(TAG, "[LLM-backend] loaded model=$modelName device=$device " +
+                "backends=${llama.backendsInfo()}")
+
             isInitialized = true
-            
+
             return modelFile.absolutePath
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize LLM", e)
             throw e
         }
+    }
+
+    /**
+     * Stage the Hexagon FastRPC skels (libggml-htp-v*.so) into real files on
+     * disk - the CDSP loader cannot read through the linker's APK mapping
+     * (same constraint as sherpa's QNN staging). Returns the staging dir.
+     */    private fun stageLlamaAdspLibs(): File {
+        val dst = File(context.filesDir, "llama-adsplib")
+        dst.mkdirs()
+        try {
+            java.util.zip.ZipFile(context.applicationInfo.sourceDir).use { zip ->
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (!entry.isDirectory &&
+                        entry.name.startsWith("lib/arm64-v8a/") &&
+                        entry.name.contains("libggml-htp-")
+                    ) {
+                        val name = entry.name.substringAfterLast('/')
+                        val outFile = File(dst, name)
+                        if (!outFile.exists() || outFile.length() != entry.size) {
+                            zip.getInputStream(entry).use { input ->
+                                outFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            Log.i(TAG, "[LLM-backend] staged $name for ADSP")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[LLM-backend] failed to stage HTP skels (NPU unavailable?)", e)
+        }
+        return dst
     }
     
     /**
@@ -93,13 +147,14 @@ class LlamaService(private val context: Context) {
     fun chatCompletion(
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        enableThinking: Boolean = false
     ): Flow<String> {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
-        val prompt = formatChatPrompt(messages)
+        val prompt = formatChatPrompt(messages, enableThinking)
         Log.d(TAG, "Chat prompt (${prompt.length} chars): ${prompt.take(200)}...")
         
         return llama.complete(prompt, maxTokens, images)
@@ -116,14 +171,23 @@ class LlamaService(private val context: Context) {
     suspend fun chatCompletionSync(
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        enableThinking: Boolean = false
     ): String {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
-        val prompt = formatChatPrompt(messages)
+        val prompt = formatChatPrompt(messages, enableThinking)
         return llama.generate(prompt, maxTokens, images)
+    }
+    
+    /**
+     * Stop any ongoing generation immediately.
+     * Safe to call even if no generation is in progress.
+     */
+    suspend fun stopGeneration() {
+        llama.stopGeneration()
     }
     
     /**
@@ -162,9 +226,18 @@ class LlamaService(private val context: Context) {
                 }
                 "assistant" -> {
                     sb.append("<|im_start|>assistant\n")
-                    sb.append(msg.content)
+                    // Strip raw image placeholders from assistant history - these are injected
+                    // when the previous response had an image but multimodal failed. Leaving them
+                    // in the context causes repetitive looping because the model tries to "continue"
+                    // generating around an image marker with no actual image embedding.
+                    val cleanedContent = msg.content
+                        .replace("<__image__>", "")
+                        .replace(Regex("\\[image]"), "")
+                        .trim()
+                    sb.append(cleanedContent)
                     sb.append("<|im_end|>\n")
                 }
+
             }
         }
         

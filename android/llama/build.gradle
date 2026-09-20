@@ -1,3 +1,12 @@
+// When a Snapdragon (CPU + Adreno OpenCL + Hexagon NPU) prebuilt stack is
+// staged in src/main/jniLibs/arm64-v8a (see docker-build-llama.sh), package
+// those .so files directly and skip the CPU-only gradle/FetchContent build.
+// Delete the folder to go back to the CPU-only source build.
+def prebuiltSnapdragon = file("src/main/jniLibs/arm64-v8a/libllama-android.so").exists()
+if (prebuiltSnapdragon) {
+    println("[llama] using PREBUILT Snapdragon stack from jniLibs (OpenCL+Hexagon)")
+}
+
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
@@ -10,22 +19,44 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles "consumer-rules.pro"
 
         ndk {
             abiFilters 'arm64-v8a'
         }
-        
-        externalNativeBuild {
-            cmake {
-                arguments "-DLLAMA_CURL=OFF",
-                         "-DLLAMA_BUILD_COMMON=ON",
-                         "-DGGML_LLAMAFILE=OFF",
-                         "-DCMAKE_BUILD_TYPE=Release",
-                         "-DGGML_OPENMP=OFF"
-                cppFlags ""
+
+        if (!prebuiltSnapdragon) {
+            externalNativeBuild {
+                cmake {
+                    arguments "-DLLAMA_CURL=OFF",
+                             "-DLLAMA_BUILD_COMMON=ON",
+                             "-DGGML_LLAMAFILE=OFF",
+                             "-DCMAKE_BUILD_TYPE=Release",
+                             "-DGGML_OPENMP=OFF"
+                    cppFlags ""
+                }
             }
         }
+    }
+
+    if (!prebuiltSnapdragon) {
+        externalNativeBuild {
+            cmake {
+                path "src/main/cpp/CMakeLists.txt"
+                version "3.22.1"
+            }
+        }
+    }
+
+    // Legacy (extracted) native packaging: ggml_backend_load() dlopens
+    // libggml-opencl.so / libggml-hexagon.so from nativeLibraryDir at runtime,
+    // and the Hexagon FastRPC skels must exist as real files on disk - both
+    // require extraction instead of in-APK mapping.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        exclude 'META-INF/AL2.0'
+        exclude 'META-INF/LGPL2.1'
     }
 
     buildTypes {
@@ -34,32 +65,20 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
-        }
-    }
-    
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    
+
     kotlinOptions {
         jvmTarget = "1.8"
-    }
-
-    packagingOptions {
-        exclude 'META-INF/AL2.0'
-        exclude 'META-INF/LGPL2.1'
     }
 }
 
 dependencies {
     implementation "androidx.core:core-ktx:1.12.0"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     testImplementation "junit:junit:4.13.2"
     androidTestImplementation "androidx.test.ext:junit:1.1.5"

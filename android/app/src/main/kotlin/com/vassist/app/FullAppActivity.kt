@@ -57,6 +57,9 @@ class FullAppActivity : ComponentActivity() {
     private var aiBridge: LocalAIBridge? = null
     private var aiInitialized = false
     
+    private var arSessionManager: com.vassist.app.ar.ARCoreSessionManager? = null
+    private var arBridge: com.vassist.app.ar.NativeARBridge? = null
+
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var cameraPhotoUri: Uri? = null
@@ -132,7 +135,33 @@ class FullAppActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
+
+        // Create GLSurfaceView for AR
+        val glSurfaceView = android.opengl.GLSurfaceView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        // Keep the AR surface detached until an AR session actually starts.
+        val rootLayout = android.widget.FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(webView)
+        }
+
+        arSessionManager = com.vassist.app.ar.ARCoreSessionManager(
+            this,
+            glSurfaceView,
+            rootLayout
+        )
+        arBridge = com.vassist.app.ar.NativeARBridge(webView, arSessionManager)
+        arSessionManager?.bridge = arBridge
         
         // Custom PathHandler that serves assets from the public/ subfolder
         val publicAssetsPathHandler = object : WebViewAssetLoader.PathHandler {
@@ -350,7 +379,7 @@ class FullAppActivity : ComponentActivity() {
             }
         })
         
-        setContentView(webView)
+        setContentView(rootLayout)
         
         // Setup keyboard height detection using WindowInsets
         setupKeyboardListener()
@@ -567,7 +596,17 @@ class FullAppActivity : ComponentActivity() {
         webView.saveState(outState)
         Log.d(TAG, "Saved WebView state to Bundle")
     }
-    
+
+    override fun onPause() {
+        arSessionManager?.onHostPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        arSessionManager?.onHostResume()
+    }
+
     override fun onDestroy() {
         // Cancel any pending file chooser callback
         fileChooserCallback?.onReceiveValue(null)
@@ -580,6 +619,10 @@ class FullAppActivity : ComponentActivity() {
         }
         aiServer = null
         aiBridge = null
+
+        arSessionManager?.dispose()
+        arSessionManager = null
+        arBridge = null
         
         ViewCompat.setOnApplyWindowInsetsListener(webView, null)
         webView.destroy()

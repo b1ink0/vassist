@@ -1,0 +1,26 @@
+# Derivative of the snapdragon-toolchain image with the extra packages the
+# llama.cpp Vulkan backend needs at configure/build time:
+#   - spirv-headers / glslang-tools : SPIR-V CMake package + validator
+#   - libvulkan-dev                 : Vulkan headers
+#
+# One-time build (re-run only if you bump the base):
+#   docker build -t vassist-llama-builder - < android/docker/Dockerfile.llama
+#
+# Then build the Snapdragon llama stack with:
+#   docker run --rm -v "$(pwd)/android:/work" vassist-llama-builder bash /work/docker-build-llama.sh
+FROM ghcr.io/snapdragon-toolchain/arm64-android:v0.7
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        spirv-headers \
+        glslang-tools \
+        libvulkan-dev \
+        git ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && cp -r /usr/include/spirv "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/" 2>/dev/null || true \
+    && git clone --depth 1 --branch v1.3.290 https://github.com/KhronosGroup/Vulkan-Headers /tmp/vulkan-headers \
+    && cp -r /tmp/vulkan-headers/include/vulkan "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/" \
+    && cp -r /tmp/vulkan-headers/include/vk_video "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/" \
+    && rm -rf /tmp/vulkan-headers
+
+ENV VULKAN_SDK=/usr

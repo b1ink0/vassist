@@ -1,0 +1,36 @@
+/**
+ * @fileoverview Desktop application entry point.
+ * Renders the app in desktop mode (no demo site background, transparent window).
+ */
+
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "../src/App";
+import { prepareVAssistTestRuntime } from "../src/testing/testBridge";
+import { isVAssistTestMode } from "../src/testing/runtime";
+
+const renderApp = () => {
+  const rootElement = document.getElementById("root");
+
+  if (!rootElement) {
+    throw new Error("Missing root element for desktop renderer");
+  }
+
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App mode="desktop" />
+    </StrictMode>,
+  );
+};
+
+const bootstrapDesktopApp = async () => {
+  if (isVAssistTestMode) {
+    document.documentElement.dataset.vassistTestMode = "true";
+    await prepareVAssistTestRuntime();
+  }
+
+  renderApp();
+};
+
+void bootstrapDesktopApp();

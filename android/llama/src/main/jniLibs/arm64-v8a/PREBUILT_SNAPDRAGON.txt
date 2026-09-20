@@ -1,0 +1,5 @@
+Prebuilt Snapdragon llama.cpp stack (CPU + OpenCL GPU + Hexagon NPU).
+Source: llama.cpp @ bb4caa7540188872173c44d161602d9271386413
+Built inside ghcr.io/snapdragon-toolchain/arm64-android:v0.7 via docker-build-llama.sh.
+When this folder contains libllama-android.so, gradle skips the CPU-only
+externalNativeBuild and packages these libs instead.
